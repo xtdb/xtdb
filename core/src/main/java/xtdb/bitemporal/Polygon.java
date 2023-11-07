@@ -2,9 +2,29 @@ package xtdb.bitemporal;
 
 import com.carrotsearch.hppc.LongArrayList;
 
-public record Polygon(LongArrayList validTimes, LongArrayList sysTimeCeilings) {
+public record Polygon(LongArrayList validTimes, LongArrayList sysTimeCeilings) implements IPolygonReader {
     public Polygon() {
         this(new LongArrayList(), new LongArrayList());
+    }
+
+    @Override
+    public int getValidTimeRangeCount() {
+        return sysTimeCeilings.elementsCount;
+    }
+
+    @Override
+    public long getValidFrom(int rangeIdx) {
+        return validTimes.get(rangeIdx);
+    }
+
+    @Override
+    public long getValidTo(int rangeIdx) {
+        return validTimes.get(rangeIdx + 1);
+    }
+
+    @Override
+    public long getSystemTo(int rangeIdx) {
+        return sysTimeCeilings.get(rangeIdx);
     }
 
     public void calculateFor(Ceiling ceiling, long validFrom, long validTo) {

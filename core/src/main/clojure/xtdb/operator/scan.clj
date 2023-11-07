@@ -181,14 +181,14 @@
               (duplicate-ptr skip-iid-ptr current-iid-ptr)
               nil)
 
-            (let [system-from (.getSystemTime ev-ptr)]
+            (let [system-from (.getSystemFrom ev-ptr)]
               (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
                          (<= system-from (.upper (.systemFrom temporal-bounds))))
                 ;; HACK assumes only the original VT range
-                (let [idx (.getIndex ev-ptr)
-                      vts-idx (.getListStartIndex (.validTimesReader ev-ptr) idx)
-                      valid-from (.getLong (.validTimeReader ev-ptr) vts-idx)
-                      valid-to (.getLong (.validTimeReader ev-ptr) (inc vts-idx))]
+                (assert (= 1 (.getValidTimeRangeCount ev-ptr)))
+
+                (let [valid-from (.getValidFrom ev-ptr 0)
+                      valid-to (.getValidTo ev-ptr 0)]
                   (case leg
                     :put (do
                            (.calculateFor polygon ceiling valid-from valid-to)
@@ -250,14 +250,12 @@
     :live (:rel-rdr leaf-arg)))
 
 (defn- consume-polygon [^Polygon polygon, ^EventRowPointer ev-ptr, ^IRowConsumer row-consumer, ^TemporalBounds temporal-bounds]
-  (let [sys-from (.getSystemTime ev-ptr)
-        idx (.getIndex ev-ptr)
-        valid-times (.validTimes polygon)
-        sys-time-ceilings (.sysTimeCeilings polygon)]
-    (dotimes [i (.size sys-time-ceilings)]
-      (let [valid-from (.get valid-times i)
-            valid-to (.get valid-times (inc i))
-            sys-to (.get sys-time-ceilings i)]
+  (let [sys-from (.getSystemFrom ev-ptr)
+        idx (.getIndex ev-ptr)]
+    (dotimes [i (.getValidTimeRangeCount polygon)]
+      (let [valid-from (.getValidFrom polygon i)
+            valid-to (.getValidTo polygon i)
+            sys-to (.getSystemTo polygon i)]
         (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
                    (not (= valid-from valid-to))
                    (not (= sys-from sys-to)))

@@ -2,12 +2,13 @@ package xtdb.trie;
 
 import clojure.lang.Keyword;
 import org.apache.arrow.memory.util.ArrowBufPointer;
+import xtdb.bitemporal.IPolygonReader;
 import xtdb.vector.IVectorReader;
 import xtdb.vector.RelationReader;
 
 import java.util.Comparator;
 
-public class EventRowPointer {
+public class EventRowPointer implements IPolygonReader {
 
     private int idx;
 
@@ -17,10 +18,10 @@ public class EventRowPointer {
     private final IVectorReader sysFromReader;
     private final IVectorReader opReader;
 
-    public final IVectorReader validTimesReader;
-    public final IVectorReader validTimeReader;
-    public final IVectorReader systemTimeCeilingsReader;
-    public final IVectorReader systemTimeCeilingReader;
+    private final IVectorReader validTimesReader;
+    private final IVectorReader validTimeReader;
+    private final IVectorReader systemTimeCeilingsReader;
+    private final IVectorReader systemTimeCeilingReader;
 
     public EventRowPointer(RelationReader relReader, byte[] path) {
         this.relReader = relReader;
@@ -58,8 +59,28 @@ public class EventRowPointer {
         return iidReader.getPointer(idx, reuse);
     }
 
-    public long getSystemTime() {
+    public long getSystemFrom() {
         return sysFromReader.getLong(idx);
+    }
+
+    @Override
+    public int getValidTimeRangeCount() {
+        return systemTimeCeilingsReader.getListCount(idx);
+    }
+
+    @Override
+    public long getValidFrom(int rangeIdx) {
+        return validTimeReader.getLong(validTimesReader.getListStartIndex(idx) + rangeIdx);
+    }
+
+    @Override
+    public long getValidTo(int rangeIdx) {
+        return validTimeReader.getLong(validTimesReader.getListStartIndex(idx) + rangeIdx + 1);
+    }
+
+    @Override
+    public long getSystemTo(int rangeIdx) {
+        return systemTimeCeilingReader.getLong(systemTimeCeilingsReader.getListStartIndex(idx) + rangeIdx);
     }
 
     public Keyword getOp() {
@@ -73,7 +94,7 @@ public class EventRowPointer {
         return (l, r) -> {
             int cmp = l.getIidPointer(leftCmp).compareTo(r.getIidPointer(rightCmp));
             if (cmp != 0) return cmp;
-            return Long.compare(r.getSystemTime(), l.getSystemTime());
+            return Long.compare(r.getSystemFrom(), l.getSystemFrom());
         };
     }
 
