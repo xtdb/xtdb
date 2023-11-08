@@ -161,10 +161,10 @@
               (.close buffer)
               (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))))))))
 
-(t/deftest temporal-watermark-is-immutable-567
+(t/deftest temporal-watermark-is-immutable-2354
   (with-open [node (node/start-node {})]
-    (let [{tt :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
-                                          {:default-all-valid-time? false})]
+    (let [{tt :system-time, :as tx} (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
+                                                  {:default-all-valid-time? false})]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (util/->zdt tt)
                  :xt/valid-to nil
@@ -199,18 +199,17 @@
                                       xt/system-from, xt/system-to]]
                                    {:node node :default-all-valid-time? true}))))
 
-        #_ ; FIXME #567 this sees the updated xt/system-to of the first entry
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (util/->zdt tt)
                    :xt/valid-to nil
                    :xt/system-from (util/->zdt tt)
                    :xt/system-to nil}]
-                 (tu/query-ra '[:scan {:table :xt_docs}
-                                [id version
+                 (tu/query-ra '[:scan {:table xt_docs}
+                                [xt/id version
                                  xt/valid-from, xt/valid-to
                                  xt/system-from, xt/system-to]]
                               {:node node, :basis {:tx tx}}))
-              "re-using the original snapshot should see the same result")))))
+              "re-using the original tx basis should see the same result")))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
