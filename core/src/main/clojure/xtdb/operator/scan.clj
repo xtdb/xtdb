@@ -165,9 +165,14 @@
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
 
-(defn polygon-calculator ^xtdb.bitemporal.Polygon [^TemporalBounds temporal-bounds, {:keys [skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
-  (let [ceiling (Ceiling.)
+(defn polygon-calculator ^xtdb.bitemporal.Polygon [^TemporalBounds temporal-bounds]
+  (let [skip-iid-ptr (ArrowBufPointer.)
+        prev-iid-ptr (ArrowBufPointer.)
+        current-iid-ptr (ArrowBufPointer.)
+
+        ceiling (Ceiling.)
         polygon (Polygon.)]
+
     (fn calculate-polygon [^EventRowPointer ev-ptr]
       (when-not (= skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
         (when-not (= prev-iid-ptr current-iid-ptr)
@@ -261,8 +266,7 @@
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
                      ^Path table-path, col-names, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
-                     params, ^IPersistentMap picker-state
-                     vsr-cache, buffer-pool]
+                     params, vsr-cache, buffer-pool]
   ICursor
   (tryAdvance [_ c]
     (if (.hasNext merge-tasks)
@@ -271,7 +275,7 @@
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
-                calculate-polygon (polygon-calculator temporal-bounds picker-state)]
+                calculate-polygon (polygon-calculator temporal-bounds)]
 
             (doseq [leaf leaves
                     :when leaf
@@ -509,17 +513,10 @@
                                                                 (->path-pred iid-arrow-buf))
                                                  []))]
 
-                           ;; The consumers for different leafs need to share some state so the logic of how to advance
-                           ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
-                           ;; the skipping in another leaf consumer.
-
                            (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
                                          table-path col-names col-preds
                                          (->temporal-bounds params basis scan-opts)
                                          params
-                                         {:skip-iid-ptr (ArrowBufPointer.)
-                                          :prev-iid-ptr (ArrowBufPointer.)
-                                          :current-iid-ptr (ArrowBufPointer.)}
                                          (->vsr-cache buffer-pool allocator)
                                          buffer-pool)))))}))))
 
