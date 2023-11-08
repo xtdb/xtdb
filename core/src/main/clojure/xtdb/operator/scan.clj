@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.bitemporal :as bitemp]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.expression :as expr]
@@ -16,7 +17,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
-  (:import (clojure.lang IPersistentMap MapEntry)
+  (:import (clojure.lang MapEntry)
            (java.io Closeable)
            java.nio.ByteBuffer
            (java.nio.file Path)
@@ -29,7 +30,7 @@
            (org.apache.arrow.vector.types.pojo FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
-           (xtdb.bitemporal Ceiling Polygon IRowConsumer)
+           (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
@@ -162,44 +163,6 @@
 
           (.endRow out-rel))))))
 
-(defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
-  (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
-
-(defn polygon-calculator ^xtdb.bitemporal.Polygon [^TemporalBounds temporal-bounds]
-  (let [skip-iid-ptr (ArrowBufPointer.)
-        prev-iid-ptr (ArrowBufPointer.)
-        current-iid-ptr (ArrowBufPointer.)
-
-        ceiling (Ceiling.)
-        polygon (Polygon.)]
-
-    (fn calculate-polygon [^EventRowPointer ev-ptr]
-      (when-not (= skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
-        (when-not (= prev-iid-ptr current-iid-ptr)
-          (.reset ceiling)
-          (duplicate-ptr prev-iid-ptr current-iid-ptr))
-
-        (let [leg (.getOp ev-ptr)]
-          (if (= :evict leg)
-            (do
-              (.reset ceiling)
-              (duplicate-ptr skip-iid-ptr current-iid-ptr)
-              nil)
-
-            (let [system-from (.getSystemFrom ev-ptr)]
-              (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
-                         (<= system-from (.upper (.systemFrom temporal-bounds))))
-                (let [valid-from (.getValidFrom ev-ptr 0)
-                      valid-to (.getValidTo ev-ptr (dec (.getValidTimeRangeCount ev-ptr)))]
-                  (case leg
-                    :put (do
-                           (.calculateFor polygon ceiling ev-ptr)
-                           (.applyLog ceiling system-from valid-from valid-to)
-                           polygon)
-                    :delete (do
-                              (.applyLog ceiling system-from valid-from valid-to)
-                              nil)))))))))))
-
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify IRelationSelector
     (select [_ allocator rel-rdr _params]
@@ -275,7 +238,7 @@
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
-                calculate-polygon (polygon-calculator temporal-bounds)]
+                calculate-polygon (bitemp/polygon-calculator temporal-bounds)]
 
             (doseq [leaf leaves
                     :when leaf
@@ -289,8 +252,9 @@
 
             (loop []
               (when-let [{:keys [^EventRowPointer ev-ptr, row-consumer] :as q-obj} (.poll merge-q)]
-                (some-> (calculate-polygon ev-ptr)
-                        (consume-polygon ev-ptr row-consumer temporal-bounds))
+                (when-let [polygon (calculate-polygon ev-ptr)]
+                  (when (= :put (.getOp ev-ptr))
+                    (consume-polygon polygon ev-ptr row-consumer temporal-bounds)))
 
                 (.nextIndex ev-ptr)
                 (when (.isValid ev-ptr is-valid-ptr path)
