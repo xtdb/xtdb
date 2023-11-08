@@ -10,7 +10,7 @@
            (xtdb.operator PreparedQuery)
            xtdb.operator.PreparedQuery
            (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
-                       Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery
+                       Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery Expr$Exists
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$Table
                        TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
@@ -85,7 +85,7 @@
          ;; classic problem rearing its head again.
          (into {}))))
 
-(defn scalar-sub-query-placeholder [sub-query]
+(defn expr-subquery-placeholder [sub-query]
   (col-sym
    (str "xt$_" (*gensym* "sqp"))))
 
@@ -132,15 +132,30 @@
   (plan-expr [this]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
-    (let [placeholder (scalar-sub-query-placeholder this)]
+    (let [placeholder (expr-subquery-placeholder this)]
       (swap! *subqueries* conj
-             {:placeholder placeholder
+             {:type :scalar
+              :placeholder placeholder
               :subquery (plan-query (.query this))
               :args (mapv plan-arg-spec (.args this))})
       placeholder))
   (required-vars [this]
     ;; planning arg-specs here to get required vars, could call required-vars on the exprs
     ;; directly, but wanted to avoid duplicating that code.
+    (apply set/union (map (comp :required-vars plan-arg-spec) (.args this))))
+  Expr$Exists
+  (plan-expr [this]
+    ;;TODO combine with Expr$Subquery as identical, but after pull is implemented.
+    (when-not *subqueries*
+      (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
+    (let [placeholder (expr-subquery-placeholder this)]
+      (swap! *subqueries* conj
+             {:type :exists
+              :placeholder placeholder
+              :subquery (plan-query (.query this))
+              :args (mapv plan-arg-spec (.args this))})
+      placeholder))
+  (required-vars [this]
     (apply set/union (map (comp :required-vars plan-arg-spec) (.args this))))
   nil
   (plan-expr [_] nil)
@@ -379,29 +394,40 @@
   (plan-query [table]
     (plan-table table)))
 
-(defn- wrap-scalar-subquery [plan {:keys [placeholder subquery args] :as x}]
-  (let [{:keys [ra-plan provided-vars]} subquery
-        projected-subquery [:project [{placeholder (first provided-vars)}]
-                            ra-plan]]
-    (when-not (= (count provided-vars) 1)
-      (throw (err/illegal-arg
-              :xtql/invalid-scalar-subquery
-              {:subquery subquery :provided-vars provided-vars
-               ::err/message "Scalar subquery must only return a single column"})))
+(defn- wrap-expr-subquery [plan {:keys [placeholder subquery args type] :as x}]
+  (case type
+    :scalar
+    (let [{:keys [ra-plan provided-vars]} subquery
+          projected-subquery [:project [{placeholder (first provided-vars)}]
+                              ra-plan]]
+      (when-not (= (count provided-vars) 1)
+        (throw (err/illegal-arg
+                :xtql/invalid-scalar-subquery
+                {:subquery subquery :provided-vars provided-vars
+                 ::err/message "Scalar subquery must only return a single column"})))
+      (if (seq args)
+        [:apply
+         :single-join
+         (set/map-invert (args->apply-params args)) ;;TODO push this invert into args->apply-params?
+         plan
+         projected-subquery]
+        [:single-join [true]
+         plan
+         projected-subquery]))
+    :exists
     (if (seq args)
-      [:apply
-       :single-join
-       (set/map-invert (args->apply-params args)) ;;TODO push this invert into args->apply-params?
+      [:apply {:mark-join {placeholder true}}
+       (set/map-invert (args->apply-params args))
        plan
-       projected-subquery]
-      [:single-join [true]
+       (:ra-plan subquery)]
+      [:mark-join {placeholder [true]}
        plan
-       projected-subquery])))
+       (:ra-plan subquery)])))
 
-(defn- wrap-scalar-subqueries [plan subqueries]
+(defn- wrap-expr-subqueries [plan subqueries]
   (reduce
    (fn [plan sq]
-     (wrap-scalar-subquery plan sq))
+     (wrap-expr-subquery plan sq))
    plan
   subqueries))
 
@@ -417,7 +443,7 @@
 
     (let [planned-where-exprs (plan-where this)]
       {:ra-plan (-> ra-plan
-                    (wrap-scalar-subqueries (mapcat :subqueries planned-where-exprs))
+                    (wrap-expr-subqueries (mapcat :subqueries planned-where-exprs))
                     (wrap-select (map :expr planned-where-exprs))
                     (wrap-project (vec provided-vars)))
        :provided-vars provided-vars}))
@@ -438,7 +464,7 @@
        [:project (vec return-vars)
         [:map (mapv (fn [{:keys [var expr]}] {var expr}) projections)
          (-> ra-plan
-             (wrap-scalar-subqueries (mapcat :subqueries projections)))]]
+             (wrap-expr-subqueries (mapcat :subqueries projections)))]]
        :provided-vars return-vars}))
 
   Query$Without
@@ -504,7 +530,7 @@
 
 (defn wrap-wheres [{:keys [ra-plan provided-vars]} wheres]
   {:ra-plan (-> ra-plan
-                (wrap-scalar-subqueries (mapcat :subqueries wheres))
+                (wrap-expr-subqueries (mapcat :subqueries wheres))
                 (wrap-select (map :expr wheres))
                 (wrap-project (vec provided-vars)))
    :provided-vars provided-vars})
@@ -526,7 +552,7 @@
     (-> {:ra-plan [:map (vec (for [{:keys [expr renamed-provided-var]} renamed-withs]
                                {renamed-provided-var expr}))
                    (-> ra-plan
-                       (wrap-scalar-subqueries (mapcat :subqueries renamed-withs)))]}
+                       (wrap-expr-subqueries (mapcat :subqueries renamed-withs)))]}
         (wrap-unify var->cols))))
 
 (defn wrap-inner-join [acc-plan {:keys [args] :as join-plan}]

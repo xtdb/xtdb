@@ -2,7 +2,7 @@
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
            (java.util Date List)
-           (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$NotExists Expr$Obj Expr$Subquery
+           (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Table
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
@@ -87,12 +87,11 @@
       (map? expr) (if (contains? expr "@value")
                     (parse-literal expr)
 
-                    (let [{:strs [exists notExists q]} expr]
+                    (let [{:strs [exists q]} expr]
                       (letfn [(parse-args [{:strs [args]}]
                                 (some-> args (parse-arg-specs expr)))]
                         (cond
                           exists (Expr/exists (parse-query exists) (parse-args expr))
-                          notExists (Expr/notExists (parse-query notExists) (parse-args expr))
                           q (Expr/q (parse-query q) (parse-args expr))
 
                           (not= 1 (count expr)) (bad-expr expr)
@@ -134,13 +133,6 @@
     (let [q (unparse (.query e))
           args (.args e)]
       (cond-> {"exists" q}
-        args (assoc "args" (mapv unparse args)))))
-
-  Expr$NotExists
-  (unparse [e]
-    (let [q (unparse (.query e))
-          args (.args e)]
-      (cond-> {"notExists" q}
         args (assoc "args" (mapv unparse args)))))
 
   Expr$Subquery

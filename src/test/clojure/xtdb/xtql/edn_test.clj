@@ -49,9 +49,6 @@
   (t/is (= '(exists? (from :foo [a]) {:args [a {:b outer-b}]})
            (roundtrip-expr '(exists? (from :foo [a]) {:args [a {:b outer-b}]}))))
 
-  (t/is (= '(not-exists? (from :foo [a]))
-           (roundtrip-expr '(not-exists? (from :foo [a])))))
-
   (t/is (= '(q (from :foo [a]))
            (roundtrip-expr '(q (from :foo [a]))))))
 

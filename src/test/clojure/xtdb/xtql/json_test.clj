@@ -66,9 +66,6 @@
             {"exists" {"from" "foo", "bind" ["a"]}, "args" ["a" {"b" "outer-b"}]}]
            (roundtrip-expr {"exists" {"from" "foo", "bind" ["a"]}, "args" ["a" {"b" "outer-b"}]})))
 
-  (t/is (= ['(not-exists? (from :foo [a])) {"notExists" {"from" "foo", "bind" ["a"]}}]
-           (roundtrip-expr {"notExists" {"from" "foo", "bind" ["a"]}})))
-
   (t/is (= ['(q (from :foo [a])) {"q" {"from" "foo", "bind" ["a"]}}]
            (roundtrip-expr {"q" {"from" "foo", "bind" ["a"]}}))))
 
