@@ -712,47 +712,41 @@
                                              (where (= n 1)))
                                          [e]))))))
 
-#_
-(deftest test-semi-join
+;;TODO some generic tests for unavailable vars/missing params?
+
+(deftest test-exists
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :docs {:xt/id :ivan, :name "Ivan"}]
                             [:put :docs {:xt/id :petr, :name "Petr", :parent :ivan}]
                             [:put :docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
                             [:put :docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])]
 
+    (t/is (= #{{:x true}}
+             (set (xt/q tu/*node*
+
+                        '(unify
+                          (with {x (exists? (from :docs [{:xt/id :ivan}]))})))))
+          "uncorrelated, contrived and rarely useful")
+
     (t/is (= #{{:e :ivan} {:e :petr}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :where [(match :docs {:xt/id e, :name name})
-                                  (exists? {:find [e]
-                                            :where [(match :docs {:xt/id c})
-                                                    [c :parent e]]})]})))
+                        '(-> (from :docs [{:xt/id e}])
+                             (where (exists? (from :docs [{:parent $e}])
+                                             {:args [e]}))))))
 
           "find people who have children")
 
     (t/is (= #{{:e :sergei} {:e :jeff}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :where [(match :docs {:xt/id e, :name name, :parent p})
-                                  (exists? {:find [p]
-                                            :in [e]
-                                            :where [(match :docs {:xt/id s, :parent p})
-                                                    [(<> e s)]]})]})))
-          "find people who have siblings")
+                        '(-> (from :docs [{:xt/id e} parent])
+                             (where (exists? (-> (from :docs [{:xt/id s, :parent $parent}])
+                                                 (where (<> $e s)))
+                                             {:args [e parent]}))
+                             (without :parent)))))
+          "find people who have siblings")))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #":no-available-clauses"
-                            (xt/q tu/*node*
-                                  '{:find [e n]
-                                    :where [(match :docs {:xt/id e})
-                                            [e :foo n]
-                                            (exists? {:find [e]
-                                                      :where [(match :docs {:xt/id e})
-                                                              [e :first-name "Petr"]
-                                                              [(= n 1)]]})]})))))
 
-#_
-(deftest test-anti-join
+(deftest test-not-exists
   (let [_tx (xt/submit-tx
              tu/*node*
              '[[:put :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
@@ -761,176 +755,68 @@
 
     (t/is (= #{{:e :ivan} {:e :sergei}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :where [(match :docs {:xt/id e})
-                                  [e :foo 1]
-                                  (not-exists? {:find [e]
-                                                :where [(match :docs {:xt/id e})
-                                                        [e :first-name "Petr"]]})]}))))
-
-    (t/is (= #{{:e :ivan} {:e :sergei}}
-             (set (xt/q tu/*node*
-                        '{:find [e]
-                          :where [(match :docs {:xt/id e})
-                                  [e :foo n]
-                                  (not-exists? {:find [e n]
-                                                :where [(match :docs {:xt/id e})
-                                                        [e :first-name "Petr"]
-                                                        [e :foo n]]})]}))))
+                        '(-> (from :docs [{:xt/id e :foo 1}])
+                             (where (not (exists? (from :docs [{:xt/id $e} {:first-name "Petr"}])
+                                                  {:args [e]}))))
+                        ))))
 
     (t/is (= []
              (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :docs {:xt/id e})
-                             [e :foo n]
-                             (not-exists? {:find [e n]
-                                           :where [(match :docs {:xt/id e})
-                                                   [e :foo n]]})]})))
+                   '(-> (from :docs [{:xt/id e :foo n}])
+                        (where (not (exists? (from :docs [{:xt/id $e} {:foo $n}])
+                                             {:args [e n]})))))))
 
-    (t/is (= #{{:e :petr} {:e :sergei}}
+
+
+
+    (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :sergei}}
              (set (xt/q tu/*node*
-                        '{:find [e]
+                        '(-> (from :docs [{:xt/id e :foo n}])
+                             (where (not (exists? (-> (from :docs [{:xt/id $e :first-name "Petr"}])
+                                                      (where (= $n 1)))
+                                                  {:args [e n]}))))))))
+
+    (t/is (= #{{:n 1, :e :sergei, :not-exist true}
+               {:n 1, :e :petr, :not-exist true}
+               {:n 1, :e :ivan, :not-exist true}}
+             (set (xt/q tu/*node*
+                        '(-> (from :docs [{:xt/id e :foo n}])
+                             (with {:not-exist (not (not (exists? (-> (table [{}] [])
+                                                                      (where (= $n 1)))
+                                                                  {:args [n]})))}))))))
+
+    (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
+             (set (xt/q tu/*node*
+                        '{:find [e n]
                           :where [(match :docs {:xt/id e})
-                                  [e :foo 1]
-                                  (not-exists? {:find [e]
-                                                :where [(match :docs {:xt/id e})
-                                                        [e :last-name "Ivanov"]]})]}))))
+                                  [e :first-name n]
+                                  (not-exists? {:find []
+                                                :in [n]
+                                                :where [[(= "Ivan" n)]]})]}))))
 
-    (t/is (= #{{:e :ivan} {:e :petr} {:e :sergei}}
+
+    (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :where [(match :docs {:xt/id e})
-                                  [e :foo 1]
-                                  (not-exists? {:find [e]
-                                                :where [(match :docs {:xt/id e})
-                                                        [e :first-name "Jeff"]]})]}))))
-
-    (t/is (= #{{:e :ivan} {:e :petr}}
-             (set (xt/q tu/*node*
-                        '{:find [e]
-                          :where [(match :docs {:xt/id e})
-                                  [e :foo 1]
-                                  (not-exists? {:find [e]
-                                                :where [(match :docs {:xt/id e})
-                                                        [e :first-name n]
-                                                        [e :last-name n]]})]}))))
-
-    (t/is (= #{{:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
-               {:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
-               {:e :sergei, :first-name "Ivan", :last-name "Ivanov", :a "Sergei", :b "Sergei"}
-               {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}}
-             (set (xt/q tu/*node*
-                        ['{:find [e first-name last-name a b]
-                           :in [[[first-name last-name]]]
-                           :where [(match :docs {:xt/id e})
-                                   [e :foo 1]
-                                   [e :first-name a]
-                                   [e :last-name b]
-                                   (not-exists? {:find [e first-name last-name]
-                                                 :where [(match :docs {:xt/id e})
-                                                         [e :first-name first-name]
-                                                         [e :last-name last-name]]})]}
-                         [["Ivan" "Ivanov"]
-                          ["Petr" "Petrov"]]]))))
-
-    (t/testing "apply anti-joins"
-      (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}}
-               (set (xt/q tu/*node*
-                          '{:find [e n]
-                            :where [(match :docs {:xt/id e})
-                                    [e :foo n]
-                                    (not-exists? {:find [e]
-                                                  :in [n]
-                                                  :where [(match :docs {:xt/id e})
-                                                          [e :first-name "Petr"]
-                                                          [(= n 2)]]})]}))))
-
-      (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :sergei}}
-               (set (xt/q tu/*node*
-                          '{:find [e n]
-                            :where [(match :docs {:xt/id e})
-                                    [e :foo n]
-                                    (not-exists? {:find [e]
-                                                  :in [n]
-                                                  :where [(match :docs {:xt/id e})
-                                                          [e :first-name "Petr"]
-                                                          [(= n 1)]]})]}))))
-
-      (t/is (= []
-               (xt/q tu/*node*
-                     '{:find [e n]
-                       :where [(match :docs {:xt/id e})
-                               [e :foo n]
-                               (not-exists? {:find []
-                                             :in [n]
-                                             :where [[(= n 1)]]})]})))
-
-      (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
-               (set (xt/q tu/*node*
-                          '{:find [e n]
-                            :where [(match :docs {:xt/id e})
-                                    [e :first-name n]
-                                    (not-exists? {:find []
-                                                  :in [n]
-                                                  :where [[(= "Ivan" n)]]})]}))))
+                        '(unify
+                          (from :docs [{:xt/id e :first-name n}])
+                          (where (not (exists? (from :docs [{:first-name "Ivan"} {:first-name $n}]) {:args [n]}))))))))
 
 
-      (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
-               (set (xt/q tu/*node*
-                          '{:find [e n]
-                            :where [(match :docs {:xt/id e})
-                                    [e :first-name n]
-                                    (not-exists? {:find [n]
-                                                  :where [(match :docs {:xt/id e})
-                                                          [e :first-name n]
-                                                          [e :first-name "Ivan"]]})]}))))
-
-      (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :sergei}}
-               (set (xt/q tu/*node*
-                          '{:find [e n]
-                            :where [(match :docs {:xt/id e})
-                                    [e :foo n]
-                                    (not-exists? {:find [e n]
-                                                  :where [(match :docs {:xt/id e})
-                                                          [e :first-name "Petr"]
-                                                          [e :foo n]
-                                                          [(= n 1)]]})]}))))
 
 
-      (t/is (thrown-with-msg?
-             IllegalArgumentException
-             #":no-available-clauses"
+
+    (t/is (= [{:first-name "Petr", :e :petr}]
              (xt/q tu/*node*
-                   '{:find [e n]
-                     :where [(match :docs {:xt/id e})
-                             [e :foo n]
-                             (not-exists? {:find [e]
-                                           :where [(match :docs {:xt/id e})
-                                                   [e :first-name "Petr"]
-                                                   [(= n 1)]]})]})))
-
-      ;; TODO what to do if arg var isn't used, either remove it from the join
-      ;; or convert the anti-join to an apply and param all the args
-      #_(t/is (= [{:e :ivan} {:e :sergei}]
-                 (xt/q tu/*node*
-                       '{:find [e n]
-                         :where [[e :foo n]
-                                 (not-exists? {:find [e]
-                                               :in [n]
-                                               :where [[e :first-name "Petr"]]})]}))))
-
-    (t/testing "Multiple anti-joins"
-      (t/is (= [{:n "Petr", :e :petr}]
-               (xt/q tu/*node*
-                     '{:find [e n]
-                       :where [(match :docs {:xt/id e})
-                               [e :first-name n]
-                               (not-exists? {:find []
-                                             :in [n]
-                                             :where [[(= n "Ivan")]]})
-                               (not-exists? {:find [e]
-                                             :where [(match :docs {:xt/id e})
-                                                     [e :first-name "Sergei"]]})]}))))))
+                   '(unify
+                     (from :docs [{:xt/id e} first-name])
+                     (where (not (exists?
+                                  (-> (table [{}] [])
+                                      (where (= $first-name "Ivan")))
+                                  {:args [first-name]}))
+                            (not (exists?
+                                  (from :docs [{:xt/id $e :first-name "Sergei"}])
+                                  {:args [e]}))))))
+          "Multiple not exists")))
 
 #_
 (deftest test-simple-literals-in-find

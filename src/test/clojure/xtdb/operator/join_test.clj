@@ -274,6 +274,55 @@
                          [::tu/blocks
                           [[{:b 12}, {:b nil}]]]]))))
 
+(t/deftest test-exists-as-mark-join
+  ;;These are arguably not tests of mark-join functionality itself,
+  ;;but prove that exist/not-exists can be expressed via mark-join (and a negation)
+  (t/testing "exists"
+    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m true}]
+             (tu/query-ra [:mark-join '{m [true]}
+                           [::tu/blocks
+                            [[{:a 12}, {:a 14}, {:a nil}]]]
+                           [::tu/blocks
+                            [[{:b 1} {:c 2}]]]])))
+
+    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m true}]
+             (tu/query-ra [:mark-join '{m [true]}
+                           [::tu/blocks
+                            [[{:a 12}, {:a 14}, {:a nil}]]]
+                           [::tu/blocks
+                            [[{:a nil}]]]])))
+
+    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:a nil, :m false}]
+             (tu/query-ra [:mark-join '{m [true]}
+                           [::tu/blocks
+                            [[{:a 12}, {:a 14}, {:a nil}]]]
+                           [::tu/blocks
+                            [[]]]]))))
+  (t/testing "not-exists"
+    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:a nil, :m false}]
+             (tu/query-ra '[:project [a {m (not m)}]
+                            [:mark-join {m [true]}
+                            [::tu/blocks
+                             [[{:a 12}, {:a 14}, {:a nil}]]]
+                            [::tu/blocks
+                             [[{:b 1} {:c 2}]]]]])))
+
+    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:a nil, :m false}]
+             (tu/query-ra '[:project [a {m (not m)}]
+                            [:mark-join {m [true]}
+                             [::tu/blocks
+                              [[{:a 12}, {:a 14}, {:a nil}]]]
+                             [::tu/blocks
+                              [[{:a nil}]]]]])))
+
+    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m true}]
+             (tu/query-ra '[:project [a {m (not m)}]
+                            [:mark-join {m [true]}
+                             [::tu/blocks
+                              [[{:a 12}, {:a 14}, {:a nil}]]]
+                             [::tu/blocks
+                              [[]]]]])))))
+
 (t/deftest test-left-equi-join
   (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0, :b nil, :c nil} 1}
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]

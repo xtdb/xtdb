@@ -173,25 +173,6 @@ public interface Expr {
         return new Exists(query, args);
     }
 
-    final class NotExists implements Expr {
-        public final Query query;
-        public final List<ArgSpec> args;
-
-        private NotExists(Query query, List<ArgSpec> args) {
-            this.query = query;
-            this.args = unmodifiableList(args);
-        }
-
-        @Override
-        public String toString() {
-            return String.format("(not-exists? %s)", stringifyArgs(query, args));
-        }
-    }
-
-    static NotExists notExists(Query query, List<ArgSpec> args) {
-        return new NotExists(query, args);
-    }
-
     final class Pull implements Expr {
         public final Query query;
         public final List<ArgSpec> args;
