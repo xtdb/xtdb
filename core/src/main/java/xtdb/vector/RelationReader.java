@@ -15,18 +15,13 @@ public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
     }
 
     public static RelationReader from(List<IVectorReader> cols, int rowCount) {
-        try {
-            var colsMap = new LinkedHashMap<String, IVectorReader>();
+        var colsMap = new LinkedHashMap<String, IVectorReader>();
 
-            for (IVectorReader col : cols) {
-                colsMap.put(col.getName(), col);
-            }
-
-            return new RelationReader(colsMap, rowCount);
-        } catch (RuntimeException e) {
-            cols.forEach(c -> System.out.println(c.getName()));
-            throw e;
+        for (IVectorReader col : cols) {
+            colsMap.put(col.getName(), col);
         }
+
+        return new RelationReader(colsMap, rowCount);
     }
 
     private RelationReader(Map<String, IVectorReader> cols, int rowCount) {
