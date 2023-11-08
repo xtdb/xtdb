@@ -113,9 +113,9 @@
              (roundtrip-q json-q))
           "simple static table"))
 
-  (let [json-q {"->" [{"table" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
-                       "bind" ["first-name" "last-name"]}
-                      {"where" [{"=" [{"@value" "Petr"} "first-name"]}]}]}]
+  (let [json-q [{"table" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
+                 "bind" ["first-name" "last-name"]}
+                {"where" [{"=" [{"@value" "Petr"} "first-name"]}]}]]
     (t/is (= ['(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name last-name])
                    (where (= "Petr" first-name)))
               json-q]
@@ -132,15 +132,14 @@
              (roundtrip-q json-q))
           "table in unify")))
 
-
 (t/deftest test-pipe
   (t/is (= ['(-> (from :foo [a])
                  (where (> a 3)))
-            {"->" [{"from" "foo", "bind" ["a"]}
-                   {"where" [{">" ["a" 3]}]}]}]
+            [{"from" "foo", "bind" ["a"]}
+             {"where" [{">" ["a" 3]}]}]]
 
-           (roundtrip-q {"->" [{"from" "foo", "bind" ["a"]}
-                               {"where" [{">" ["a" 3]}]}]}))))
+           (roundtrip-q [{"from" "foo", "bind" ["a"]}
+                         {"where" [{">" ["a" 3]}]}]))))
 
 (t/deftest test-unify
   (t/is (= ['(unify (from :foo [a]) (from :bar [b]) (where (> a b)))
@@ -219,10 +218,10 @@
   (t/is (= ['(-> (from :foo [a b])
                  (order-by (+ a b) [b {:dir :desc}]))
 
-            {"->" [{"from" "foo", "bind" ["a" "b"]}
-                   {"orderBy" [{"+" ["a" "b"]}
-                               ["b" {"dir" "desc"}]]}]}]
+            [{"from" "foo", "bind" ["a" "b"]}
+             {"orderBy" [{"+" ["a" "b"]}
+                         ["b" {"dir" "desc"}]]}]]
 
-           (roundtrip-q {"->" [{"from" "foo", "bind" ["a" "b"]}
-                               {"orderBy" [{"+" ["a" "b"]}
-                                           ["b" {"dir" "desc"}]]}]}))))
+           (roundtrip-q [{"from" "foo", "bind" ["a" "b"]}
+                         {"orderBy" [{"+" ["a" "b"]}
+                                     ["b" {"dir" "desc"}]]}]))))

@@ -60,16 +60,14 @@ SELECT first_name, last_name FROM users WHERE xt$id = 'james'
 +
 [source,json]
 ----
-{
-  "->": [
-    {
-      "from": "users",
-      "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
-    },
-    { "orderBy": [ "last-name", "first-name" ] },
-    { "limit": 10 }
-  ]
-}
+[
+  {
+    "from": "users",
+    "bind": [{ "xt/id": "user-id" }, "first-name", "last-name"]
+  },
+  { "orderBy": ["last-name", "first-name"] },
+  { "limit": 10 }
+]
 ----
 +
 [source,sql]
@@ -168,26 +166,24 @@ WHERE u1.xt$id <> u2.xt$id
 +
 [source,json]
 ----
-{
-  "->": [
-    {
-      "unify": [
-        {
-          "from": "customers",
-          "bind": [ { "xt/id": "cid" } ]
+[
+  {
+    "unify": [
+      {
+        "from": "customers",
+        "bind": [{ "xt/id": "cid" }]
+      },
+      {
+        "leftJoin": {
+          "from": "orders",
+          "bind": [{ "xt/id": "oid", "customer-id": "cid" }, "currency", "order-value"]
         },
-        {
-          "leftJoin": {
-            "from": "orders",
-            "bind": [ { "xt/id": "oid", "customer-id": "cid" }, "currency", "order-value" ]
-          },
-          "bind": [ "cid", "currency", "order-value" ]
-        }
-      ]
-    },
-    { "limit": 100 }
-  ]
-}
+        "bind": ["cid", "currency", "order-value"]
+      }
+    ]
+  },
+  { "limit": 100 }
+]
 ----
 +
 [source,sql]
@@ -211,30 +207,28 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 +
 [source,json]
 ----
-{
-  "->": [
-    {
-      "unify": [
-        {
-          "from": "customers",
-          "bind": { "xt/id": "cid" }
-        },
-        {
-          "where": [
-            {
-              "notExists": {
-                "from": "orders",
-                "bind": [ { "customer-id": "cid" } ]
-              },
-              "args": [ "cid" ]
-            }
-          ]
-        }
-      ]
-    },
-    { "limit": 100 }
-  ]
-}
+[
+  {
+    "unify": [
+      {
+        "from": "customers",
+        "bind": { "xt/id": "cid" }
+      },
+      {
+        "where": [
+          {
+            "notExists": {
+              "from": "orders",
+              "bind": [ { "customer-id": "cid" } ]
+            },
+            "args": [ "cid" ]
+          }
+        ]
+      }
+    ]
+  },
+  { "limit": 100 }
+]
 ----
 +
 [source,sql]
@@ -259,23 +253,21 @@ LIMIT 100
 +
 [source,json]
 ----
-{
-  "->": [
-    {
-      "from": "users",
-      "bind": [ "first-name", "last-name" ]
-    },
-    {
-      "with": [
-        {
-          "full-name": {
-            "str": [ "first-name", { "@value": " " }, "last-name" ]
-          }
+[
+  {
+    "from": "users",
+    "bind": ["first-name", "last-name"]
+  },
+  {
+    "with": [
+      {
+        "full-name": {
+          "str": ["first-name", { "@value": " " }, "last-name"]
         }
-      ]
-    }
-  ]
-}
+      }
+    ]
+  }
+]
 ----
 +
 [source,sql]
@@ -298,31 +290,29 @@ We can also use `with` within `unify` - this creates new logic variables which w
 +
 [source,json]
 ----
-{
-  "->": [
-    {
-      "unify": [
-        {
-          "from": "users",
-          "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
-        },
-        {
-          "from": "articles",
-          "bind": [ { "author-id": "user-id" }, "title", "content" ]
+[
+  {
+    "unify": [
+      {
+        "from": "users",
+        "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+      },
+      {
+        "from": "articles",
+        "bind": [ { "author-id": "user-id" }, "title", "content" ]
+      }
+    ]
+  },
+  {
+    "return": [
+      {
+        "full-name": {
+          "str": [ "first-name", { "@value": " " }, "last-name" ]
         }
-      ]
-    },
-    {
-      "return": [
-        {
-          "full-name": {
-            "str": [ "first-name", { "@value": " " }, "last-name" ]
-          }
-        }
-      ]
-    }
-  ]
-}
+      }
+    ]
+  }
+]
 ----
 +
 [source,sql]
@@ -341,23 +331,21 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 +
 [source,json]
 ----
-{
-  "->": [
-    {
-      "unify": [
-        {
-          "from": "users",
-          "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
-        },
-        {
-          "from": "articles",
-          "bind": [ { "author-id": "user-id" }, "title", "content" ]
-        }
-      ]
-    },
-    { "without": [ "user-id" ] }
-  ]
-}
+[
+  {
+    "unify": [
+      {
+        "from": "users",
+        "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+      },
+      {
+        "from": "articles",
+        "bind": [ { "author-id": "user-id" }, "title", "content" ]
+      }
+    ]
+  },
+  { "without": [ "user-id" ] }
+]
 ----
 +
 [source,sql]
@@ -385,33 +373,31 @@ To count/sum/average values, we use `aggregate`:
 
 [source,json]
 ----
-{
-  "->": [
-    {
-      "unify": [
-        {
-          "from": "customers",
-          "bind": [ { "xt/id": "cid" } ]
+[
+  {
+    "unify": [
+      {
+        "from": "customers",
+        "bind": [ { "xt/id": "cid" } ]
+      },
+      {
+        "leftJoin": {
+          "from": "orders",
+          "bind": [ { "customer-id": "cid" }, "currency", "order-value" ]
         },
-        {
-          "leftJoin": {
-            "from": "orders",
-            "bind": [ { "customer-id": "cid" }, "currency", "order-value" ]
-          },
-          "bind": [ "cid", "currency", "order-value" ]
-        }
-      ]
-    },
-    {
-      "aggregate": [
-        { "order-count": { "count*": [] } },
-        { "total-value": { "sum": [ "order-value" ] } }
-      ]
-    },
-    { "orderBy": [ [ "order-value", { "dir": "desc" } ] ] },
-    { "limit": 100 }
-  ]
-}
+        "bind": [ "cid", "currency", "order-value" ]
+      }
+    ]
+  },
+  {
+    "aggregate": [
+      { "order-count": { "count*": [] } },
+      { "total-value": { "sum": [ "order-value" ] } }
+    ]
+  },
+  { "orderBy": [ [ "order-value", { "dir": "desc" } ] ] },
+  { "limit": 100 }
+]
 ----
 
 [source,sql]
@@ -457,47 +443,40 @@ For example, if a user is reading an article, we might also want to show them de
 
 [source,json]
 ----
-{
-  "->": [
-    {
-      "from": "articles",
-      "bind": [ { "xt/id": "article-id" }, "title", "content", "author-id" ]
-    },
-    {
-      "with": [
-        {
-          "author": {
-            "pull": {
-              "->": [
-                {
-                  "from": "authors",
-                  "bind": [ { "xt/id": "author-id" }, "first-name", "last-name" ]
-                },
-                { "without": [ "author-id" ] }
-              ]
+[
+  {
+    "from": "articles",
+    "bind": [{ "xt/id": "article-id" }, "title", "content", "author-id"]
+  },
+  {
+    "with": [
+      {
+        "author": {
+          "pull": [
+            {
+              "from": "authors",
+              "bind": [{ "xt/id": "author-id" }, "first-name", "last-name"]
             },
-            "args": [ "author-id" ]
-          },
-
-          "comments": {
-            "pullMany": {
-              "->": [
-                {
-                  "from": "comments",
-                  "bind": [ "article-id", "created-at", "comment" ]
-                },
-                { "without": [ "article-id" ] },
-                { "orderBy": [ [ "created-at", { "dir": "desc" } ] ] },
-                { "limit": 10 }
-              ]
+            { "without": ["author-id"] }
+          ],
+          "args": ["author-id"]
+        },
+        "comments": {
+          "pullMany": [
+            {
+              "from": "comments",
+              "bind": ["article-id", "created-at", "comment"]
             },
-            "args": [ "article-id" ]
-          }
+            { "without": ["article-id"] },
+            { "orderBy": [["created-at", { "dir": "desc" }]] },
+            { "limit": 10 }
+          ],
+          "args": ["article-id"]
         }
-      ]
-    }
-  ]
-}
+      }
+    ]
+  }
+]
 ----
 
 In this example, we use `pull` to pull back a single map - we know that there's only one author per article (in our system).

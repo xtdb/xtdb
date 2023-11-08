@@ -8,13 +8,15 @@
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defn- query-type [query]
-  (if-not (map? query)
-    (throw (err/illegal-arg :xtql/malformed-query {:query query}))
+  (cond
+    (vector? query) '->
 
-    (let [query (dissoc query "args" "bind" "forValidTime" "forSystemTime")]
-      (if-not (= 1 (count query))
-        (throw (err/illegal-arg :xtql/malformed-query {:query query}))
-        (symbol (key (first query)))))))
+    (map? query) (let [query (dissoc query "args" "bind" "forValidTime" "forSystemTime")]
+                   (if-not (= 1 (count query))
+                     (throw (err/illegal-arg :xtql/malformed-query {:query query}))
+                     (symbol (key (first query)))))
+
+    :else (throw (err/illegal-arg :xtql/malformed-query {:query query}))))
 
 (defmulti parse-query query-type)
 
@@ -280,11 +282,11 @@
         args (assoc "args" (mapv unparse args))
         bindings (assoc "bind" (mapv unparse bindings))))))
 
-(defmethod parse-query '-> [{pipe "->", :as query}]
-  (if-not (and (vector? pipe) (not-empty pipe))
+(defmethod parse-query '-> [query]
+  (if (empty? query)
     (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline query}))
 
-    (let [[head & tails] pipe]
+    (let [[head & tails] query]
       (Query/pipeline (parse-query head) (mapv parse-query-tail tails)))))
 
 (defmethod parse-query 'unify [{:strs [unify] :as query}]
@@ -354,7 +356,7 @@
 (defmethod parse-unify-clause 'table [this] (parse-table this))
 
 (extend-protocol Unparse
-  Query$Pipeline (unparse [q] {"->" (into [(unparse (.query q))] (mapv unparse (.tails q)))})
+  Query$Pipeline (unparse [q] (into [(unparse (.query q))] (mapv unparse (.tails q))))
   Query$Where (unparse [q] {"where" (mapv unparse (.preds q))})
   Query$With (unparse [q] {"with" (mapv unparse (.vars q))})
   Query$WithCols (unparse [q] {"with" (mapv unparse (.cols q))})
