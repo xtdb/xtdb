@@ -7,7 +7,8 @@
             [xtdb.sql.logic-test.runner :as slt]
             [xtdb.sql.parser :as p]
             [xtdb.sql.plan :as plan]
-            [xtdb.test-util :as tu])
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util])
   (:import [java.time Instant]
            [java.util HashMap UUID]
            xtdb.node.Node))
@@ -155,7 +156,7 @@
   ;;TODO no support for select * in SLT, outer-projection would require access to table-info
   (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
        (first)
-       (mapv #(or (:outer-name %) (plan/unqualified-projection-symbol %)))))
+       (mapv (comp util/symbol->normal-form-symbol #(or (:outer-name %) (plan/unqualified-projection-symbol %))))))
 
 (defn execute-query-expression [node from-subquery]
   (binding [r/*memo* (HashMap.)]

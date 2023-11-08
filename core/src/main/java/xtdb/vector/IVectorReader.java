@@ -50,6 +50,8 @@ public interface IVectorReader extends AutoCloseable {
 
     Object getObject(int idx);
 
+    Object getObject(int idx, IKeyFn keyFn);
+
     IVectorReader structKeyReader(String colName);
 
     Collection<String> structKeys();

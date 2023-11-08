@@ -10,7 +10,17 @@ public class NormalForm {
     }
 
     // TODO we could cache these? guessing they're probably not free.
-    
+
+    public static String snakeCase(String s) {
+       return s.toLowerCase(Locale.ROOT)
+               .replace("-", "_");
+    }
+
+    public static String camelCase(String s) {
+        return s.toLowerCase(Locale.ROOT)
+                .replace("_", "-");
+    }
+
     private static String normalise(String s) {
         return s.toLowerCase(Locale.ROOT)
                 .replace('.', '$')

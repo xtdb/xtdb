@@ -70,7 +70,8 @@
           {::tpch-ra/keys [params table-args]} (meta q)]
       (tu/with-allocator
         (fn []
-          (t/is (is-equal? res (tu/query-ra q {:node *node*, :params params, :table-args table-args}))
+          (t/is (is-equal? res (tu/query-ra q {:node *node*, :params params, :table-args table-args
+                                               :key-fn :sql}))
                 (format "Q%02d" (inc n))))))))
 
 (t/deftest test-001-ra
@@ -110,7 +111,7 @@
     (when (contains? *datalog-qs* q)
       (let [query @(nth tpch-datalog/queries n)
             {::tpch-datalog/keys [in-args]} (meta query)]
-        (t/is (is-equal? expected-res (xt/q *node* (into [query] in-args)))
+        (t/is (is-equal? expected-res (xt/q *node* (into [query] in-args) {:key-fn :sql}))
               (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-datalog

@@ -12,10 +12,10 @@
   (:import (clojure.lang MapEntry)
            (java.lang AutoCloseable)
            (org.apache.arrow.memory BufferAllocator)
-           xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.watermark IWatermarkSource Watermark)))
+           (xtdb.watermark IWatermarkSource Watermark)
+           (xtdb.vector KeyFn)))
 
 (s/def ::logic-var symbol?)
 
@@ -1182,7 +1182,8 @@
         (when (realized? wm-delay) (util/try-close @wm-delay))))))
 
 (defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
-                                           query {:keys [args default-all-valid-time? basis default-tz explain?]}]
+                                           query {:keys [args default-all-valid-time? basis default-tz explain? key-fn]
+                                                  :or {key-fn :datalog}}]
   (let [plan (compile-query query)
         {::keys [in-bindings]} (meta plan)
 
@@ -1207,4 +1208,4 @@
         (util/with-close-on-catch [^AutoCloseable params (vw/open-params allocator (args->params args in-bindings))]
           (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
               (.openCursor)
-              (op/cursor->result-set params)))))))
+              (op/cursor->result-set params (op/key-fn-kw->key-fn key-fn))))))))

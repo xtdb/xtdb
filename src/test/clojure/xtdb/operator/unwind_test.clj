@@ -35,7 +35,8 @@
              (tu/query-ra [:unwind '{b* b} '{:ordinality-column $ordinal}
                            [::tu/blocks '{a :i64, b [:list :i64]} in-vals]]
                           {:preserve-blocks? true
-                           :with-col-types? true})))))
+                           :with-col-types? true
+                           :key-fn :sql})))))
 
 (t/deftest test-unwind-operator
   (t/is (= [{:a 1, :b [1 2], :b* 1}
@@ -76,5 +77,6 @@
            (tu/query-ra '[:project [a b* $ordinal]
                           [:unwind {b* b} {:ordinality-column $ordinal}
                            [:table ?x]]]
-                        {:params '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
+                        {:params '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}
+                         :key-fn :sql}))
         "with ordinality"))

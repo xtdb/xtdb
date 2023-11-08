@@ -711,16 +711,21 @@
   (value->arrow-type [v]
     (if (every? keyword? (keys v))
       #xt.arrow/type :struct
-      (ArrowType$Map. false)))
+      #_                                ;TODO
+      (ArrowType$Map. false)
+
+      (throw (UnsupportedOperationException. "Arrow maps currently not supported"))))
 
   (value->col-type [v]
     (if (every? keyword? (keys v))
       [:struct (->> v
                     (into {} (map (juxt (comp symbol key)
                                         (comp value->col-type val)))))]
-      [:map
-       (apply types/merge-col-types (into #{} (map (comp value->col-type key)) v))
-       (apply types/merge-col-types (into #{} (map (comp value->col-type val)) v))]))
+
+      #_[:map
+         (apply types/merge-col-types (into #{} (map (comp value->col-type key)) v))
+         (apply types/merge-col-types (into #{} (map (comp value->col-type val)) v))]
+      (throw (UnsupportedOperationException. "Arrow Maps currently not supported"))))
 
   (write-value! [m ^IVectorWriter writer]
     (if (every? keyword? (keys m))
@@ -734,7 +739,7 @@
 
         (.endStruct writer))
 
-      (throw (UnsupportedOperationException.)))))
+      (throw (UnsupportedOperationException. "Arrow Maps currently not supported")))))
 
 (defn- duv-child-writer [^IVectorWriter w, write-value!]
   (reify IVectorWriter

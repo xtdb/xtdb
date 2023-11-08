@@ -251,15 +251,15 @@
                                      ?y [{:b 1}]}})))))
 
 (t/deftest test-project-row-number
-  (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
-           (tu/query-ra '[:project [a {$row-num (row-number)}]
+  (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
+           (tu/query-ra '[:project [a {row-num (row-number)}]
                           [:table ?a]]
 
                         {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-project-append-columns
-  (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
-           (tu/query-ra '[:project {:append-columns? true} [{$row-num (row-number)}]
+  (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
+           (tu/query-ra '[:project {:append-columns? true} [{row-num (row-number)}]
                           [:table ?a]]
 
                         {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))

@@ -830,12 +830,12 @@
                             [:put :xt_docs {:xt/id :slava, :age 37}]])
 
 
-  (t/is (= #{{:_column_0 1, :_column_1 "foo", :xt/id :ivan}
-             {:_column_0 1, :_column_1 "foo", :xt/id :petr}
-             {:_column_0 1, :_column_1 "foo", :xt/id :slava}}
+  (t/is (= #{{:-column-0 1, :-column-1 "foo", :xt/id :ivan}
+             {:-column-0 1, :-column-1 "foo", :xt/id :petr}
+             {:-column-0 1, :-column-1 "foo", :xt/id :slava}}
            (set (xt/q tu/*node*
                       '{:find [1 "foo" xt/id]
-                        :where [(match :xt_docs [xt/id])]})))))
+                        :where [(match :xt-docs [xt/id])]})))))
 
 (deftest calling-a-function-580
   (let [_tx (xt/submit-tx tu/*node*
@@ -1912,9 +1912,9 @@
                             [:put :xt_cats {:xt/id 2} {:for-valid-time [:in #inst "2016" #inst "2018"]}]])
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :xt_docs_app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :xt-docs-app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                                 :to #time/zoned-date-time "2020-01-01T00:00Z[UTC]"},
-             :xt_cats_app_time {:from #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
+             :xt-cats-app-time {:from #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
                                 :to #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}]
            (xt/q
             tu/*node*
@@ -1926,9 +1926,9 @@
                       [(contains? xt_docs_app_time xt_cats_app_time)]]})))
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :xt_docs_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :xt-docs-sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                                 :to nil},
-             :xt_cats_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :xt-cats-sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                                 :to nil}}]
            (xt/q
             tu/*node*
@@ -1970,7 +1970,7 @@
 
 
   (t/is (= [{:xt/id 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
              :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
              :app-time-to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
@@ -1985,9 +1985,9 @@
         "projecting both period and underlying cols")
 
   (t/is (= [{:xt/id 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                         :to nil}}]
            (xt/q
             tu/*node*
@@ -2011,9 +2011,9 @@
 
   (t/is (= [{:xt/id 1
              :id2 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                         :to nil}}]
            (xt/q
             tu/*node*

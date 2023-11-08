@@ -14,7 +14,8 @@
                        Expr$Pull Expr$PullMany
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$Table
-                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)
+           (xtdb.vector KeyFn)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -847,7 +848,8 @@
          (doto (lp/validate-plan)))]))
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
-                                        {:keys [args basis default-tz default-all-valid-time?]}]
+                                        {:keys [args basis default-tz default-all-valid-time? key-fn]
+                                         :or {key-fn :datalog}}]
   ;;TODO better error if args is a vector of maps, as this is supported in other places which take args (join etc.)
   (let [args (->> args
                   (into {} (map (fn [[k v]]
@@ -855,4 +857,4 @@
     (util/with-close-on-catch [params (vw/open-params allocator args)]
       (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
           (.openCursor)
-          (op/cursor->result-set params)))))
+          (op/cursor->result-set params (op/key-fn-kw->key-fn key-fn))))))

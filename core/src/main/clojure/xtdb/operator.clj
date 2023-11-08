@@ -34,7 +34,8 @@
            (xtdb ICursor IResultCursor IResultSet)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
-           xtdb.util.RefCounter))
+           xtdb.util.RefCounter
+           (xtdb.vector IKeyFn KeyFn)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
@@ -86,6 +87,13 @@
       (util/close al))
 
     (columnFields [_] fields)))
+
+(defn key-fn-kw->key-fn [kw]
+  (case kw
+    :datalog (KeyFn/datalog)
+    :sql (KeyFn/sql)
+    :snake_case (KeyFn/snakeCase)
+    (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn kw}))))
 
 (defn prepare-ra ^xtdb.operator.PreparedQuery
   ;; this one used from zero-dep tests
@@ -183,6 +191,7 @@
 
 (deftype CursorResultSet [^IResultCursor cursor
                           ^AutoCloseable params
+                          ^IKeyFn key-fn
                           ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
   (columnFields [_] (.columnFields cursor))
@@ -197,7 +206,7 @@
                                     (reify Consumer
                                       (accept [_ rel]
                                         (set! (.-next-values res)
-                                              (.iterator (vr/rel->rows rel))))))
+                                              (.iterator (vr/rel->rows rel key-fn))))))
                        (not (and next-values (.hasNext next-values)))))
            (and next-values (.hasNext next-values))))))
 
@@ -206,5 +215,5 @@
     (.close cursor)
     (.close params)))
 
-(defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
-  (CursorResultSet. cursor params nil))
+(defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params, ^IKeyFn key-fn]
+  (CursorResultSet. cursor params key-fn nil))

@@ -279,17 +279,17 @@
 
     (tu/finish-chunk! node)
 
-    (t/is (= #{{:last_updated "tx2",
+    (t/is (= #{{:last-updated "tx2",
                 :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/valid-to nil,
                 :xt/system-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/system-to nil}
-               {:last_updated "tx1",
+               {:last-updated "tx1",
                 :xt/valid-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
                 :xt/valid-to #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
                 :xt/system-to nil}
-               {:last_updated "tx1",
+               {:last-updated "tx1",
                 :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/valid-to nil,
                 :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
@@ -299,7 +299,7 @@
                                   {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
                                   xt/valid-from
                                   xt/valid-to
-                                  last_updated]]
+                                  last-updated]]
                                {:node node :default-all-valid-time? true}))))))
 
 (t/deftest test-for-valid-time-in-params
