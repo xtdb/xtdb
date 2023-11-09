@@ -72,17 +72,20 @@
   (rel-reader (map vec->reader (.getFieldVectors root))
               (.getRowCount root)))
 
+(defn ->absent-col [col-name allocator row-count]
+  (vec->reader (doto (-> (types/col-type->field col-name :absent)
+                         (.createVector allocator))
+                 (.setValueCount row-count))))
+
 ;; we don't allocate anything here, but we need it because BaseValueVector
 ;; (a distant supertype of AbsentVector) thinks it needs one.
 (defn with-absent-cols ^xtdb.vector.RelationReader [^RelationReader rel, ^BufferAllocator allocator, col-names]
   (let [row-count (.rowCount rel)
         available-col-names (into #{} (map #(.getName ^IVectorReader %)) rel)]
     (rel-reader (concat rel
-                          (for [absent-col-name (set/difference col-names available-col-names)]
-                            (vec->reader (doto (-> (types/col-type->field absent-col-name :absent)
-                                                   (.createVector allocator))
-                                           (.setValueCount row-count)))))
-                  (.rowCount rel))))
+                        (->> (set/difference col-names available-col-names)
+                             (map #(->absent-col % allocator row-count))))
+                (.rowCount rel))))
 
 (defn rel->rows ^java.lang.Iterable [^RelationReader rel]
   (let [col-ks (for [^IVectorReader col rel]
