@@ -344,8 +344,10 @@
         live-table-wm (conj (->LiveDataRel (.liveRelation live-table-wm)))))))
 
 (defn load-data-pages [data-rels trie-leaves]
-  (->> trie-leaves
-       (into [] (map-indexed (fn [ordinal trie-leaf]
-                               (when trie-leaf
-                                 (let [^IDataRel data-rel (nth data-rels ordinal)]
-                                   (.loadPage data-rel trie-leaf))))))))
+  (assert (= (count data-rels) (count trie-leaves)))
+
+  (mapv (fn [^IDataRel data-rel trie-leaf]
+          (when trie-leaf
+            (.loadPage data-rel trie-leaf)))
+        data-rels
+        trie-leaves))
