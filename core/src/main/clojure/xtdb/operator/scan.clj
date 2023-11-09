@@ -241,7 +241,6 @@
                 calculate-polygon (bitemp/polygon-calculator temporal-bounds)]
 
             (doseq [leaf leaves
-                    :when leaf
                     :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)
                           ^RelationReader leaf-rdr (cond-> data-rdr
                                                      iid-pred (.select (.select iid-pred allocator data-rdr params)))
@@ -339,12 +338,13 @@
                                       (.or cumulative-iid-bitmap (.iidBloomBitmap table-metadata page-idx)))
 
                                     (recur (or node-taken? take-node?)
-                                           (conj leaves (when (or take-node?
-                                                                  (when node-taken?
-                                                                    (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
-                                                                      (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
-                                                          [:arrow {:page-idx page-idx
-                                                                   :trie-key trie-key}]))))
+                                           (cond-> leaves
+                                             (or take-node?
+                                                 (when node-taken?
+                                                   (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
+                                                     (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
+                                             (conj [:arrow {:page-idx page-idx
+                                                            :trie-key trie-key}]))))
 
                                   LiveHashTrie$Leaf
                                   (recur true (conj leaves
@@ -352,7 +352,7 @@
                                                             (.select (.liveRelation live-table-wm)
                                                                      (.mergeSort ^LiveHashTrie$Leaf trie-node (.liveTrie live-table-wm)))}])))
 
-                                (recur node-taken? (conj leaves nil))))
+                                (recur node-taken? leaves)))
 
                             (when node-taken?
                               [{:path path
