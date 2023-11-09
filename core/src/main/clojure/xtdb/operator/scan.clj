@@ -117,51 +117,52 @@
       (.allTableColNames scan-emitter wm))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
+(defn- ->content-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
+  (let [op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+
+        row-copiers (object-array
+                     (for [^String col-name col-names
+                           :let [normalized-name (util/str->normal-form-str col-name)
+                                 copier (case normalized-name
+                                          "xt$iid"
+                                          (.rowCopier (.readerForName leaf-rel "xt$iid")
+                                                      (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
+                                          ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
+                                          (some-> (.structKeyReader put-rdr normalized-name)
+                                                  (.rowCopier (.colWriter out-rel col-name))))]
+                           :when copier]
+                       copier))]
+
+    (reify IRowConsumer
+      (accept [_ idx _valid-from _valid-to _sys-from _sys-to]
+        (dotimes [i (alength row-copiers)]
+          (let [^IRowCopier copier (aget row-copiers i)]
+            (.copyRow copier idx)))))))
+
+(defn- ->bitemporal-consumer ^xtdb.bitemporal.IRowConsumer [^IRelationWriter out-rel, col-names]
   (letfn [(writer-for [normalised-col-name]
-            (let [wtrs (->> col-names
-                            (into [] (keep (fn [^String col-name]
-                                             (when (= normalised-col-name (util/str->normal-form-str col-name))
-                                               (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type types/temporal-col-type))))))))]
+            (when-let [wtrs (not-empty
+                             (->> col-names
+                                  (into [] (keep (fn [^String col-name]
+                                                   (when (= normalised-col-name (util/str->normal-form-str col-name))
+                                                     (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))))))))]
               (reify IVectorWriter
                 (writeLong [_ l]
                   (doseq [^IVectorWriter wtr wtrs]
                     (.writeLong wtr l))))))]
-    (let [op-rdr (.readerForName leaf-rel "op")
-          put-rdr (.legReader op-rdr :put)
 
-          row-copiers (object-array
-                       (for [^String col-name col-names
-                             :let [normalized-name (util/str->normal-form-str col-name)
-                                   copier (case normalized-name
-                                            "xt$iid"
-                                            (.rowCopier (.readerForName leaf-rel "xt$iid")
-                                                        (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
-                                            ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
-                                            (some-> (.structKeyReader put-rdr normalized-name)
-                                                    (.rowCopier (.colWriter out-rel col-name))))]
-                             :when copier]
-                         copier))
-
-          ^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
+    (let [^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
           ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to")
           ^IVectorWriter sys-from-wtr (writer-for "xt$system_from")
           ^IVectorWriter sys-to-wtr (writer-for "xt$system_to")]
 
       (reify IRowConsumer
-        (accept [_ idx valid-from valid-to sys-from sys-to]
-          (.startRow out-rel)
-
-          (dotimes [i (alength row-copiers)]
-            (let [^IRowCopier copier (aget row-copiers i)]
-              (.copyRow copier idx)))
-
-          (.writeLong valid-from-wtr valid-from)
-          (.writeLong valid-to-wtr valid-to)
-          (.writeLong sys-from-wtr sys-from)
-          (.writeLong sys-to-wtr sys-to)
-
-          (.endRow out-rel))))))
+        (accept [_ _idx valid-from valid-to sys-from sys-to]
+          (some-> valid-from-wtr (.writeLong valid-from))
+          (some-> valid-to-wtr (.writeLong valid-to))
+          (some-> sys-from-wtr (.writeLong sys-from))
+          (some-> sys-to-wtr (.writeLong sys-to)))))))
 
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify IRelationSelector
@@ -214,18 +215,6 @@
 
     :live (:rel-rdr leaf-arg)))
 
-(defn- consume-polygon [^Polygon polygon, ^EventRowPointer ev-ptr, ^IRowConsumer row-consumer, ^TemporalBounds temporal-bounds]
-  (let [sys-from (.getSystemFrom ev-ptr)
-        idx (.getIndex ev-ptr)]
-    (dotimes [i (.getValidTimeRangeCount polygon)]
-      (let [valid-from (.getValidFrom polygon i)
-            valid-to (.getValidTo polygon i)
-            sys-to (.getSystemTo polygon i)]
-        (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
-                   (not (= valid-from valid-to))
-                   (not (= sys-from sys-to)))
-          (.accept row-consumer idx valid-from valid-to sys-from sys-to))))))
-
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
                      ^Path table-path, col-names, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
@@ -238,22 +227,34 @@
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
-                calculate-polygon (bitemp/polygon-calculator temporal-bounds)]
+                calculate-polygon (bitemp/polygon-calculator temporal-bounds)
+                bitemp-consumer (->bitemporal-consumer out-rel col-names)]
 
             (doseq [leaf leaves
                     :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)
                           ^RelationReader leaf-rdr (cond-> data-rdr
                                                      iid-pred (.select (.select iid-pred allocator data-rdr params)))
-                          rc (copy-row-consumer out-rel leaf-rdr col-names)
                           ev-ptr (EventRowPointer. leaf-rdr path)]]
               (when (.isValid ev-ptr is-valid-ptr path)
-                (.add merge-q {:ev-ptr ev-ptr, :row-consumer rc})))
+                (.add merge-q {:ev-ptr ev-ptr, :content-consumer (->content-consumer out-rel leaf-rdr col-names)})))
 
             (loop []
-              (when-let [{:keys [^EventRowPointer ev-ptr, row-consumer] :as q-obj} (.poll merge-q)]
-                (when-let [polygon (calculate-polygon ev-ptr)]
+              (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowConsumer content-consumer] :as q-obj} (.poll merge-q)]
+                (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
                   (when (= :put (.getOp ev-ptr))
-                    (consume-polygon polygon ev-ptr row-consumer temporal-bounds)))
+                    (let [sys-from (.getSystemFrom ev-ptr)
+                          idx (.getIndex ev-ptr)]
+                      (dotimes [i (.getValidTimeRangeCount polygon)]
+                        (let [valid-from (.getValidFrom polygon i)
+                              valid-to (.getValidTo polygon i)
+                              sys-to (.getSystemTo polygon i)]
+                          (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
+                                     (not (= valid-from valid-to))
+                                     (not (= sys-from sys-to)))
+                            (.startRow out-rel)
+                            (.accept content-consumer idx valid-from valid-to sys-from sys-to)
+                            (.accept bitemp-consumer idx valid-from valid-to sys-from sys-to)
+                            (.endRow out-rel)))))))
 
                 (.nextIndex ev-ptr)
                 (when (.isValid ev-ptr is-valid-ptr path)
