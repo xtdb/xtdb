@@ -1171,9 +1171,8 @@
                  (when (some #(= row-alias-sym %) scan-cols)
                    (let [table (:table scan-opts)
                          table-cols (table-col-names table)
-                         struct-keys (map keyword table-cols)
                          scan-row-cols (map symbol table-cols)]
-                     [:map [{row-alias-sym (into {} (zipmap struct-keys scan-row-cols))}]
+                     [:map [{row-alias-sym '*}]
                       [:scan scan-opts (into [] (comp cat (filter #(not= row-alias-sym %))) [scan-cols, scan-row-cols])]]))))]
         (->> plan
              (r/vector-zip)
