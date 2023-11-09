@@ -1776,33 +1776,3 @@
   (t/is (= :false (project1 '(if false :true :false) {})))
   (t/is (= :false (project1 '(if nil :true :false) {}))))
 
-(t/deftest large-xt-stars-2484
-  (letfn [(rand-str [l]
-            (apply str (repeatedly l #(rand-nth "abcdefghijklmnopqrstuvwxyz0123456789"))))]
-    (with-open [node (xtn/start-node {})]
-      ;; current limit appears to be ~200 cols, we'd obviously like it to be higher but this is a good start 🙂
-      (let [docs (for [id (range 20)]
-                   (let [data (repeatedly 10 #(rand-str 10))]
-                     (-> (zipmap (map keyword data) data)
-                         (assoc :xt/id id))))]
-
-        (xt/submit-tx node (for [doc docs]
-                             [:put :docs doc]))
-
-        (t/is (= (set docs)
-                 (->> (xt/q node '{:find [e] :where [(match :docs {:xt/* e})]})
-                      (into #{} (map :e)))))))
-
-    #_ ; FIXME #2484
-    (with-open [node (xtn/start-node {})]
-      (let [docs (for [id (range 100)]
-                   (let [data (repeatedly 10 #(rand-str 10))]
-                     (-> (zipmap (map keyword data) data)
-                         (assoc :xt/id id))))]
-
-        (xt/submit-tx node (for [doc docs]
-                             [:put :docs doc]))
-
-        (t/is (= (set docs)
-                 (->> (xt/q node '{:find [e] :where [(match :docs {:xt/* e})]})
-                      (into #{} (map :e)))))))))

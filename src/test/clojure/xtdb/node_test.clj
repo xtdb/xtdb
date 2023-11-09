@@ -1,6 +1,7 @@
 (ns xtdb.node-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import xtdb.types.ClojureForm))
@@ -503,3 +504,19 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            (xt/q tu/*node*
                  '{:find [bar]
                    :where [(match :foo [bar])]}))))
+
+(t/deftest large-xt-stars-2484
+  (letfn [(rand-str [l]
+            (apply str (repeatedly l #(rand-nth "abcdefghijklmnopqrstuvwxyz0123456789"))))]
+    (with-open [node (xtn/start-node {})]
+      (let [docs (for [id (range 100)]
+                   (let [data (repeatedly 10 #(rand-str 10))]
+                     (-> (zipmap (map keyword data) data)
+                         (assoc :xt/id id))))]
+
+        (xt/submit-tx node (for [doc docs]
+                             [:put :docs doc]))
+
+        (t/is (= (set docs)
+                 (->> (xt/q node '{:find [e] :where [(match :docs {:xt/* e})]})
+                      (into #{} (map :e)))))))))
