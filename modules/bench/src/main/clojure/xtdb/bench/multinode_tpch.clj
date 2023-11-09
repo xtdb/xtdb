@@ -12,7 +12,7 @@
            java.time.Duration
            java.util.UUID))
 
-(defn run-multinode [{:keys [scale-factor sleep-ms]} start-node]
+(defn run-multinode [{:keys [scale-factor ^long sleep-ms]} start-node]
   (log/info "Starting primary node")
   (with-open [^xtdb.node.Node primary-node (start-node)]
     (let [!last-tx (future
