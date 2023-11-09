@@ -39,6 +39,19 @@
                         {:preserve-blocks? true
                          :with-col-types? true}))))
 
+(t/deftest test-project-star
+  (t/is (= {:col-types '{ret [:struct {a :i64, b :i64}]}
+            :res [[{:ret {:a 12, :b 10}}
+                   {:ret {:a 0, :b 15}}]
+                  [{:ret {:a 100, :b 83}}]]}
+           (tu/query-ra [:project '[{ret *}]
+                         [::tu/blocks
+                          [[{:a 12, :b 10}
+                            {:a 0, :b 15}]
+                           [{:a 100, :b 83}]]]]
+                        {:preserve-blocks? true
+                         :with-col-types? true}))))
+
 (t/deftest test-identity-projection-not-closed
   (t/is (= [{:a nil, :b 12} {:a nil, :b 2} {:a 12, :b nil} {:a 0, :b nil}]
            (tu/query-ra

@@ -3,18 +3,21 @@
             [clojure.string :as str]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.types :as types])
+            [xtdb.vector.writer :as vw])
   (:import java.time.Clock
            java.util.ArrayList
-           java.util.List
            java.util.function.Consumer
+           java.util.List
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.BigIntVector
+           org.apache.arrow.vector.complex.StructVector
+           org.apache.arrow.vector.types.pojo.Field
            xtdb.ICursor
            xtdb.operator.IProjectionSpec
+           xtdb.vector.IVectorReader
            xtdb.vector.RelationReader))
 
 (s/def ::append-columns? boolean?)
@@ -24,6 +27,7 @@
          :opts (s/? (s/keys :req-un [::append-columns?]))
          :projections (s/coll-of (s/or :column ::lp/column
                                        :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
                                        ;; don't do this for params, because they aren't real cols
                                        ;; the EE handles these through `:extend`
                                        :rename (s/map-of ::lp/column (s/and ::lp/column #(not (str/starts-with? (name %) "?")))
@@ -34,6 +38,7 @@
 (defmethod lp/ra-expr :map [_]
   (s/cat :op #{:ⲭ :chi :map}
          :projections (s/coll-of (s/or :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
                                        :extend ::lp/column-expression)
                                  :min-count 1)
          :relation ::lp/ra-expression))
@@ -63,6 +68,28 @@
               (.writeLong row-num-wtr (+ idx start-row-num)))
             (aset row-num 0 (+ start-row-num row-count))
             (vw/vec-wtr->rdr row-num-wtr)))))))
+
+(defn ->star-projection-spec ^xtdb.operator.IProjectionSpec [col-name col-type]
+  (reify IProjectionSpec
+    (getColumnName [_] col-name)
+    (getColumnType [_] col-type)
+    (project [_ allocator in-rel _params]
+      (let [row-count (.rowCount in-rel)]
+        (util/with-close-on-catch [^StructVector struct-vec (-> ^Field (apply types/->field (str col-name) #xt.arrow/type :struct false
+                                                                              (for [^IVectorReader col in-rel]
+                                                                                (.getField col)))
+                                                                (.createVector allocator))]
+
+          ;; TODO can we quickly set all of these to 1?
+          (dotimes [idx row-count]
+            (.setIndexDefined struct-vec idx))
+
+          (doseq [^IVectorReader col in-rel]
+            (.copyTo col (.getChild struct-vec (.getName col))))
+
+          (.setValueCount struct-vec (.rowCount in-rel))
+
+          (vr/vec->reader struct-vec))))))
 
 (defrecord RenameProjectionSpec [to-name from-name col-type]
   IProjectionSpec
@@ -118,10 +145,16 @@
                                       (for [[p-type arg] projections]
                                         (case p-type
                                           :column (->identity-projection-spec arg (get inner-fields arg))
+
                                           :row-number-column (let [[col-name _form] (first arg)]
                                                                (->row-number-projection-spec col-name))
+
+                                          :star (let [[col-name _star] (first arg)]
+                                                  (->star-projection-spec col-name [:struct (update-vals inner-fields types/field->col-type)]))
+
                                           :rename (let [[to-name from-name] (first arg)]
                                                     (->rename-projection-spec to-name from-name (get inner-fields from-name)))
+
                                           :extend (let [[col-name form] (first arg)
                                                         input-types {:col-types (update-vals inner-fields types/field->col-type)
                                                                      :param-types (update-vals param-fields types/field->col-type)}
