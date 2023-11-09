@@ -81,6 +81,11 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
+    public boolean isAbsent(int idx) {
+        return false;
+    }
+
+    @Override
     public boolean getBoolean(int idx) {
         throw unsupported();
     }
@@ -296,9 +301,15 @@ public class ValueVectorReader implements IVectorReader {
 
     public static IVectorReader absentVector(AbsentVector v) {
         return new ValueVectorReader(v) {
+
+            @Override
+            public boolean isAbsent(int idx) {
+                return true;
+            }
+
             @Override
             public Object getObject(int idx) {
-                return ABSENT_KEYWORD;
+                return null;
             }
 
             @Override
@@ -776,8 +787,9 @@ public class ValueVectorReader implements IVectorReader {
                 var res = new HashMap<Keyword, Object>();
 
                 rdrs.forEach((k, v) -> {
-                    Object val = v.getObject(idx);
-                    if (!ABSENT_KEYWORD.equals(val)) res.put(ks.get(k), val);
+                    if (!v.isAbsent(idx)) {
+                        res.put(ks.get(k), v.getObject(idx));
+                    }
                 });
 
                 return PersistentArrayMap.create(res);
@@ -928,6 +940,12 @@ public class ValueVectorReader implements IVectorReader {
         @Override
         public boolean isNull(int idx) {
             return v.getVectorByType(getTypeId(idx)).isNull(v.getOffset(idx));
+        }
+
+        @Override
+        @SuppressWarnings("resource")
+        public boolean isAbsent(int idx) {
+            return legReader(getLeg(idx)).isAbsent(idx);
         }
 
         @Override

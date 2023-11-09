@@ -1,8 +1,9 @@
 (ns xtdb.vector.reader
   (:require [clojure.set :as set]
             [xtdb.types :as types])
-  (:import (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+  (:import clojure.lang.MapEntry
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (xtdb.vector IVectorReader RelationReader ValueVectorReader)
            (xtdb.vector.extensions AbsentVector ClojureFormVector KeywordVector SetVector UriVector UuidVector)))
@@ -10,9 +11,6 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defprotocol ReaderFactory
   (^xtdb.vector.IVectorReader vec->reader [arrow-vec]))
-
-(defn- arrow-vec->leg [^ValueVector v]
-  (types/col-type->leg (types/field->col-type (.getField v))))
 
 (extend-protocol ReaderFactory
   NullVector (vec->reader [arrow-vec] (ValueVectorReader/nullVector arrow-vec))
@@ -87,12 +85,12 @@
                   (.rowCount rel))))
 
 (defn rel->rows ^java.lang.Iterable [^RelationReader rel]
-  (let [ks (for [^IVectorReader col rel]
-             (keyword (.getName col)))]
+  (let [col-ks (for [^IVectorReader col rel]
+                 [col (keyword (.getName col))])]
     (mapv (fn [idx]
-            (->> (zipmap ks
-                         (for [^IVectorReader col rel]
-                           (.getObject col idx)))
-                 (into {} (remove (comp #(= :xtdb/absent %) val)))))
+            (->> col-ks
+                 (into {} (keep (fn [[^IVectorReader col k]]
+                                  (when-not (.isAbsent col idx)
+                                    (MapEntry/create k (.getObject col idx))))))))
           (range (.rowCount rel)))))
 

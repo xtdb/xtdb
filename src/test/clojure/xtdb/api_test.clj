@@ -238,9 +238,9 @@
 
     (xt/submit-tx *node*
                   [[:sql "INSERT INTO people (xt$id, renamed_name, xt$valid_from)
-                                SELECT users.id, users.name, users.xt$valid_from
-                                FROM users FOR VALID_TIME AS OF DATE '2019-06-01'
-                                WHERE users.name = 'Dave'"]])
+                            SELECT users.xt$id, users.name, users.xt$valid_from
+                            FROM users FOR VALID_TIME AS OF DATE '2019-06-01'
+                            WHERE users.name = 'Dave'"]])
 
     (t/is (= [{:renamed_name "Dave"}]
              (xt/q *node* "SELECT people.renamed_name FROM people FOR VALID_TIME AS OF DATE '2019-06-01'")))))

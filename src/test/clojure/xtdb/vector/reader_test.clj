@@ -239,16 +239,3 @@
         (t/is (= #{1 2 3}
                  (.readObject (.valueReader (vw/vec-wtr->rdr set-wrt) pos)))
               "valueReader testing for set")))))
-
-(deftest test-absent-reading
-  (with-open [absent-vec (.createVector (types/->field "absent" #xt.arrow/type :absent false) tu/*allocator*)]
-    (let [absent-wrt (vw/->writer absent-vec)]
-      (vw/write-value! nil absent-wrt)
-      (.writeNull absent-wrt)
-
-      (let [rdr (vw/vec-wtr->rdr absent-wrt)]
-        (t/is (= :xtdb/absent (.getObject rdr 0)))
-
-        (t/is (false? (.isNull rdr 0)))
-
-        (t/is (= [:xtdb/absent :xtdb/absent] (tu/vec->vals rdr)))))))
