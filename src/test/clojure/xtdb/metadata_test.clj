@@ -1,19 +1,15 @@
 (ns xtdb.metadata-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           (java.util.function IntPredicate)
-           [org.apache.arrow.vector VectorSchemaRoot]
            xtdb.IBufferPool
-           (xtdb.metadata IMetadataManager IMetadataPredicate)))
+           (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :each tu/with-node)
 (t/use-fixtures :once tu/with-allocator)
@@ -135,7 +131,7 @@
         (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)
               page-idx-pred (.build literal-selector table-metadata)]
 
-          (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}
+          (t/is (= #{"xt$iid" "xt$id" "xt$system_from"}
                    (.columnNames table-metadata)))
 
           (doseq [page-idx relevant-pages]
@@ -153,7 +149,7 @@
     (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
       (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)
             page-idx-pred (.build true-selector table-metadata)]
-        (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}
+        (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "boolean_or_int"}
                  (.columnNames table-metadata)))
 
         (t/is (true? (.test page-idx-pred 0)))))))

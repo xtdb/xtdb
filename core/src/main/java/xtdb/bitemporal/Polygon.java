@@ -2,46 +2,74 @@ package xtdb.bitemporal;
 
 import com.carrotsearch.hppc.LongArrayList;
 
-public record Polygon(LongArrayList validTimes, LongArrayList sysTimeCeilings) {
+public record Polygon(LongArrayList validTimes, LongArrayList sysTimeCeilings) implements IPolygonReader {
     public Polygon() {
         this(new LongArrayList(), new LongArrayList());
     }
 
-    public void calculateFor(Ceiling ceiling, long validFrom, long validTo) {
+    @Override
+    public int getValidTimeRangeCount() {
+        return sysTimeCeilings.elementsCount;
+    }
+
+    @Override
+    public long getValidFrom(int rangeIdx) {
+        return validTimes.get(rangeIdx);
+    }
+
+    @Override
+    public long getValidTo(int rangeIdx) {
+        return validTimes.get(rangeIdx + 1);
+    }
+
+    @Override
+    public long getSystemTo(int rangeIdx) {
+        return sysTimeCeilings.get(rangeIdx);
+    }
+
+    public void calculateFor(Ceiling ceiling, IPolygonReader inPolygon) {
         validTimes.clear();
         sysTimeCeilings.clear();
-        if (validFrom >= validTo)
-            throw new IllegalArgumentException("invalid range: %d -> %d".formatted(validFrom, validTo));
 
-        var ceilValidTimes = ceiling.validTimes();
-        var ceilSysTimeCeilings = ceiling.sysTimeCeilings();
+        var ceilIdx = 0;
 
-        // start at 1 because 0 is always `Long.MIN_VALUE`.
-        var startAdded = false;
-        assert (ceilValidTimes.get(0) == Long.MIN_VALUE);
-        for (int i = 1; i < ceilSysTimeCeilings.size(); i++) {
-            long validTime = ceilValidTimes.get(i);
-            if (validTime < validFrom) continue;
+        var validTimeRangeCount = inPolygon.getValidTimeRangeCount();
+        assert validTimeRangeCount > 0;
 
-            if (!startAdded) {
-                startAdded = true;
-                if (validTime != validFrom) {
-                    validTimes.add(validFrom);
-                    sysTimeCeilings.add(ceilSysTimeCeilings.get(i - 1));
+        int rangeIdx = 0;
+
+        var validTime = inPolygon.getValidFrom(rangeIdx);
+        var validTo = inPolygon.getValidTo(rangeIdx);
+        var systemTo = inPolygon.getSystemTo(rangeIdx);
+
+        while (true) {
+            if (systemTo != Long.MAX_VALUE) {
+                validTimes.add(validTime);
+                sysTimeCeilings.add(systemTo);
+                validTime = validTo;
+            } else {
+                long ceilValidTo;
+
+                while(true) {
+                    ceilValidTo = ceiling.getValidTo(ceilIdx);
+                    if (ceilValidTo > validTime) break;
+                    ceilIdx++;
                 }
+
+                validTimes.add(validTime);
+                sysTimeCeilings.add(ceiling.getSystemTime(ceilIdx));
+
+                validTime = Math.min(ceilValidTo, validTo);
             }
 
-            if (validTime >= validTo) break;
+            if (validTime == validTo) {
+                if (++rangeIdx == validTimeRangeCount) break;
 
-            validTimes.add(validTime);
-            sysTimeCeilings.add(ceilSysTimeCeilings.get(i));
+                validTo = inPolygon.getValidTo(rangeIdx);
+                systemTo = inPolygon.getSystemTo(rangeIdx);
+            }
         }
 
-        if (!startAdded) {
-            validTimes.add(validFrom);
-            sysTimeCeilings.add(ceilSysTimeCeilings.get(0));
-        }
-
-        validTimes.add(validTo);
+        validTimes.add(validTime);
     }
 }

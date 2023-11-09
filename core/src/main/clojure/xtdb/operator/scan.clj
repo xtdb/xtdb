@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.bitemporal :as bitemp]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.expression :as expr]
@@ -16,7 +17,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
-  (:import (clojure.lang IPersistentMap MapEntry)
+  (:import (clojure.lang MapEntry)
            (java.io Closeable)
            java.nio.ByteBuffer
            (java.nio.file Path)
@@ -29,7 +30,7 @@
            (org.apache.arrow.vector.types.pojo FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
-           (xtdb.bitemporal Ceiling Polygon IRowConsumer)
+           (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
@@ -128,7 +129,6 @@
                     (.writeLong wtr l))))))]
     (let [op-rdr (.readerForName leaf-rel "op")
           put-rdr (.legReader op-rdr :put)
-          doc-rdr (.structKeyReader put-rdr "xt$doc")
 
           row-copiers (object-array
                        (for [^String col-name col-names
@@ -138,7 +138,7 @@
                                             (.rowCopier (.readerForName leaf-rel "xt$iid")
                                                         (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
                                             ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
-                                            (some-> (.structKeyReader doc-rdr normalized-name)
+                                            (some-> (.structKeyReader put-rdr normalized-name)
                                                     (.rowCopier (.colWriter out-rel col-name))))]
                              :when copier]
                          copier))
@@ -162,46 +162,6 @@
           (.writeLong sys-to-wtr sys-to)
 
           (.endRow out-rel))))))
-
-(defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
-  (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
-
-(defn polygon-calculator ^xtdb.bitemporal.Polygon [^TemporalBounds temporal-bounds, {:keys [skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
-  (let [ceiling (Ceiling.)
-        polygon (Polygon.)]
-    (fn calculate-polygon [^EventRowPointer ev-ptr]
-      (when-not (= skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
-        (when-not (= prev-iid-ptr current-iid-ptr)
-          (.reset ceiling)
-          (duplicate-ptr prev-iid-ptr current-iid-ptr))
-
-        (let [idx (.getIndex ev-ptr)
-              leg (.getLeg (.opReader ev-ptr) idx)]
-          (if (= :evict leg)
-            (do
-              (.reset ceiling)
-              (duplicate-ptr skip-iid-ptr current-iid-ptr)
-              nil)
-
-            (let [system-from (.getSystemTime ev-ptr)]
-              (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
-                         (<= system-from (.upper (.systemFrom temporal-bounds))))
-                (case leg
-                  :put
-                  (let [valid-from (.getLong (.putValidFromReader ev-ptr) idx)
-                        valid-to (.getLong (.putValidToReader ev-ptr) idx)]
-                    (when (< valid-from valid-to)
-                      (.calculateFor polygon ceiling valid-from valid-to)
-                      (.applyLog ceiling system-from valid-from valid-to)
-                      polygon))
-
-                  :delete
-                  (let [valid-from (.getLong (.deleteValidFromReader ev-ptr) idx)
-                        valid-to (.getLong (.deleteValidToReader ev-ptr) idx)]
-                    (when (< valid-from valid-to)
-                      (.calculateFor polygon ceiling valid-from valid-to)
-                      (.applyLog ceiling system-from valid-from valid-to)
-                      nil)))))))))))
 
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify IRelationSelector
@@ -255,14 +215,12 @@
     :live (:rel-rdr leaf-arg)))
 
 (defn- consume-polygon [^Polygon polygon, ^EventRowPointer ev-ptr, ^IRowConsumer row-consumer, ^TemporalBounds temporal-bounds]
-  (let [sys-from (.getSystemTime ev-ptr)
-        idx (.getIndex ev-ptr)
-        valid-times (.validTimes polygon)
-        sys-time-ceilings (.sysTimeCeilings polygon)]
-    (dotimes [i (.size sys-time-ceilings)]
-      (let [valid-from (.get valid-times i)
-            valid-to (.get valid-times (inc i))
-            sys-to (.get sys-time-ceilings i)]
+  (let [sys-from (.getSystemFrom ev-ptr)
+        idx (.getIndex ev-ptr)]
+    (dotimes [i (.getValidTimeRangeCount polygon)]
+      (let [valid-from (.getValidFrom polygon i)
+            valid-to (.getValidTo polygon i)
+            sys-to (.getSystemTo polygon i)]
         (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
                    (not (= valid-from valid-to))
                    (not (= sys-from sys-to)))
@@ -271,8 +229,7 @@
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
                      ^Path table-path, col-names, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
-                     params, ^IPersistentMap picker-state
-                     vsr-cache, buffer-pool]
+                     params, vsr-cache, buffer-pool]
   ICursor
   (tryAdvance [_ c]
     (if (.hasNext merge-tasks)
@@ -281,7 +238,7 @@
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
-                calculate-polygon (polygon-calculator temporal-bounds picker-state)]
+                calculate-polygon (bitemp/polygon-calculator temporal-bounds)]
 
             (doseq [leaf leaves
                     :when leaf
@@ -295,8 +252,9 @@
 
             (loop []
               (when-let [{:keys [^EventRowPointer ev-ptr, row-consumer] :as q-obj} (.poll merge-q)]
-                (some-> (calculate-polygon ev-ptr)
-                        (consume-polygon ev-ptr row-consumer temporal-bounds))
+                (when-let [polygon (calculate-polygon ev-ptr)]
+                  (when (= :put (.getOp ev-ptr))
+                    (consume-polygon polygon ev-ptr row-consumer temporal-bounds)))
 
                 (.nextIndex ev-ptr)
                 (when (.isValid ev-ptr is-valid-ptr path)
@@ -519,17 +477,10 @@
                                                                 (->path-pred iid-arrow-buf))
                                                  []))]
 
-                           ;; The consumers for different leafs need to share some state so the logic of how to advance
-                           ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
-                           ;; the skipping in another leaf consumer.
-
                            (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
                                          table-path col-names col-preds
                                          (->temporal-bounds params basis scan-opts)
                                          params
-                                         {:skip-iid-ptr (ArrowBufPointer.)
-                                          :prev-iid-ptr (ArrowBufPointer.)
-                                          :current-iid-ptr (ArrowBufPointer.)}
                                          (->vsr-cache buffer-pool allocator)
                                          buffer-pool)))))}))))
 

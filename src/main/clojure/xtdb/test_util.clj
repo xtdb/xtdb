@@ -351,14 +351,15 @@
 (defn open-live-table [table-name]
   (li/->live-table *allocator* nil table-name))
 
-(defn index-tx! [^ILiveTable live-table, tx-key, docs]
+(defn index-tx! [^ILiveTable live-table, {:keys [system-time] :as tx-key}, docs]
   (let [live-table-tx (.startTx live-table tx-key true)]
     (try
       (let [doc-wtr (.docWriter live-table-tx)]
         (doseq [{eid :xt/id, :as doc} docs
-                :let [{:keys [:xt/valid-from :xt/valid-to], :or {valid-from 0, valid-to 0}} (meta doc)]]
+                :let [{:keys [:xt/valid-from :xt/valid-to],
+                       :or {valid-from system-time, valid-to (util/micros->instant Long/MAX_VALUE)}} (meta doc)]]
           (.logPut live-table-tx (trie/->iid eid)
-                   valid-from valid-to
+                   (util/instant->micros valid-from) (util/instant->micros valid-to)
                    (fn [] (vw/write-value! doc doc-wtr)))))
       (catch Throwable t
         (.abort live-table-tx)
