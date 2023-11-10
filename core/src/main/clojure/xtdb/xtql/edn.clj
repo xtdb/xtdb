@@ -6,7 +6,7 @@
            (java.util List)
            (xtdb.query ArgSpec ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param
-                       Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
+                       Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
@@ -94,7 +94,7 @@
                        (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
 
                      (case f
-                       (exists? q)
+                       (exists? q pull pull*)
                        (do
                          (when-not (and (<= 1 (count args) 2)
                                         (or (nil? (second args))
@@ -106,7 +106,9 @@
                                parsed-args (some-> args (parse-arg-specs expr))]
                            (case f
                              exists? (Expr/exists parsed-query parsed-args)
-                             q (Expr/q parsed-query parsed-args))))
+                             q (Expr/q parsed-query parsed-args)
+                             pull (Expr/pull parsed-query parsed-args)
+                             pull* (Expr/pullMany parsed-query parsed-args))))
 
                        (Expr/call (str f) (mapv parse-expr args)))))
 
@@ -141,6 +143,18 @@
 
 
   Expr$Subquery
+  (unparse [e]
+    (list* 'q (unparse (.query e))
+           (when-let [args (.args e)]
+             [{:args (mapv unparse args)}])))
+
+  Expr$Pull
+  (unparse [e]
+    (list* 'q (unparse (.query e))
+           (when-let [args (.args e)]
+             [{:args (mapv unparse args)}])))
+
+  Expr$PullMany
   (unparse [e]
     (list* 'q (unparse (.query e))
            (when-let [args (.args e)]

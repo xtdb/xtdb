@@ -783,7 +783,8 @@
       relation]]
     ;;=>
     (cond
-      (and (every? symbol? projections-2)
+      (and (every? symbol? projections-1)
+           (every? symbol? projections-2)
            (<= (count projections-1) (count projections-2)))
       [:project projections-1 relation]
 
