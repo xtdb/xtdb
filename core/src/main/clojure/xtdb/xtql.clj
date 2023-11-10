@@ -11,6 +11,7 @@
            xtdb.operator.PreparedQuery
            (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery Expr$Exists
+                       Expr$Pull Expr$PullMany
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$Table
                        TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
@@ -85,7 +86,7 @@
          ;; classic problem rearing its head again.
          (into {}))))
 
-(defn expr-subquery-placeholder [sub-query]
+(defn expr-subquery-placeholder []
   (col-sym
    (str "xt$_" (*gensym* "sqp"))))
 
@@ -132,7 +133,7 @@
   (plan-expr [this]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
-    (let [placeholder (expr-subquery-placeholder this)]
+    (let [placeholder (expr-subquery-placeholder)]
       (swap! *subqueries* conj
              {:type :scalar
               :placeholder placeholder
@@ -148,11 +149,44 @@
     ;;TODO combine with Expr$Subquery as identical, but after pull is implemented.
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
-    (let [placeholder (expr-subquery-placeholder this)]
+    (let [placeholder (expr-subquery-placeholder)]
       (swap! *subqueries* conj
              {:type :exists
               :placeholder placeholder
               :subquery (plan-query (.query this))
+              :args (mapv plan-arg-spec (.args this))})
+      placeholder))
+  (required-vars [this]
+    (apply set/union (map (comp :required-vars plan-arg-spec) (.args this))))
+  Expr$Pull
+  (plan-expr [this]
+    (when-not *subqueries*
+      (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
+    ;;TODO I think placeholder projection can be moved from the wrap to here
+    (let [placeholder (expr-subquery-placeholder)]
+      (swap! *subqueries* conj
+             {:type :scalar
+              :placeholder placeholder
+              :subquery {:ra-plan [:project [{placeholder '*}]
+                                   (:ra-plan (plan-query (.query this)))]
+                         :provided-vars #{placeholder}}
+              :args (mapv plan-arg-spec (.args this))})
+      placeholder))
+  (required-vars [this]
+    (apply set/union (map (comp :required-vars plan-arg-spec) (.args this))))
+  Expr$PullMany
+  (plan-expr [this]
+    (when-not *subqueries*
+      (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
+    (let [placeholder (expr-subquery-placeholder)
+          struct-col (expr-subquery-placeholder)]
+      (swap! *subqueries* conj
+             {:type :scalar
+              :placeholder placeholder
+              :subquery {:ra-plan [:group-by [{placeholder (list 'array-agg struct-col)}]
+                                   [:project [{struct-col '*}]
+                                    (:ra-plan (plan-query (.query this)))]]
+                         :provided-vars #{placeholder}}
               :args (mapv plan-arg-spec (.args this))})
       placeholder))
   (required-vars [this]

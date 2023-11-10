@@ -2432,3 +2432,28 @@
               :xtdb.error/message "Runtime error: ':xtdb.call/no-such-tx-fn'",
               :fn-id :non-existing-fn}
              (.getData ^xtdb.RuntimeException (.form ^ClojureForm (:xt/error (first txs))))))))
+
+(deftest test-pull
+  (xt/submit-tx tu/*node* [[:put :customers {:xt/id 0, :name "bob"}]
+                           [:put :customers {:xt/id 1, :name "alice"}]
+                           [:put :orders {:xt/id 0, :customer-id 0}]
+                           [:put :orders {:xt/id 1, :customer-id 0}]
+                           [:put :orders {:xt/id 2, :customer-id 1}]])
+
+
+  (t/is (=
+         #{{:customer-id 1, :customer {:name "alice"}, :id 2}
+           {:customer-id 0, :customer {:name "bob"}, :id 1}
+           {:customer-id 0, :customer {:name "bob"}, :id 0}}
+         (set (xt/q tu/*node*
+                    '(-> (from :orders [{:xt/id id} customer-id])
+                         (with {:customer (pull (from :customers [name {:xt/id $customer-id}])
+                                                {:args [customer-id]})}))))))
+
+  (t/is (=
+         #{{:orders [{:id 1} {:id 0}], :name "bob", :id 0}
+           {:orders [{:id 2}], :name "alice", :id 1}}
+         (set (xt/q tu/*node*
+                    '(-> (from :customers [{:xt/id id} name])
+                         (with {:orders (pull* (from :orders [{:customer-id $c-id} {:xt/id id}])
+                                               {:args [{:c-id id}]})})))))))
