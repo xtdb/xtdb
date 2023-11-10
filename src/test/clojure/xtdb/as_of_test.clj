@@ -12,7 +12,7 @@
     (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (tu/query-ra '[:scan {:table xt_docs} [last-updated]]
+             (set (tu/query-ra '[:scan {:table xt_docs} [last_updated]]
                                {:node tu/*node* :default-all-valid-time? true}))))
 
     (t/is (= #{{:last-updated "tx2"}}
@@ -23,7 +23,7 @@
 
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
-               (set (tu/query-ra '[:scan {:table xt_docs} [last-updated]]
+               (set (tu/query-ra '[:scan {:table xt_docs} [last_updated]]
                                  {:node tu/*node*, :basis {:tx tx1}}))))
 
       (t/is (= #{{:last-updated "tx1"}}
@@ -50,9 +50,9 @@
                                   :xt/system-from system-time
                                   :xt/system-to nil}}
              (->> (tu/query-ra '[:scan {:table xt_docs}
-                                 [xt/id
-                                  xt/valid-from xt/valid-to
-                                  xt/system-from xt/system-to]]
+                                 [xt$id
+                                  xt$valid_from xt$valid_to
+                                  xt$system_from xt$system_to]]
                                {:node tu/*node*})
                   (into {} (map (juxt :xt/id identity))))))))
 
@@ -83,17 +83,17 @@
 
     (t/is (= #{original-v0-doc v1-doc}
              (set (tu/query-ra '[:scan {:table xt_docs}
-                                 [xt/id version
-                                  xt/valid-from xt/valid-to
-                                  xt/system-from xt/system-to]]
+                                 [xt$id version
+                                  xt$valid_from xt$valid_to
+                                  xt$system_from xt$system_to]]
                                {:node tu/*node*, :default-all-valid-time? true})))
           "all app-time")
 
     (t/is (= #{original-v0-doc replaced-v0-doc v1-doc}
              (set (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
-                                 [xt/id version
-                                  xt/valid-from xt/valid-to
-                                  xt/system-from xt/system-to]]
+                                 [xt$id version
+                                  xt$valid_from xt$valid_to
+                                  xt$system_from xt$system_to]]
                                {:node tu/*node*
                                 :default-all-valid-time? true})))
           "all app, all sys")))
@@ -101,7 +101,7 @@
 (t/deftest test-evict
   (letfn [(all-time-docs []
             (->> (tu/query-ra '[:scan {:table xt_docs, :for-valid-time :all-time, :for-system-time :all-time}
-                                [xt/id xt/valid-from xt/valid-to xt/system-from xt/system-to]]
+                                [xt$id xt$valid_from xt$valid_to xt$system_from xt$system_to]]
                               {:node tu/*node*
                                :default-all-valid-time? true})
                  (map :xt/id)

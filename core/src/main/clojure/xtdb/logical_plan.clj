@@ -1,6 +1,7 @@
 (ns xtdb.logical-plan
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
+            [clojure.walk :as walk]
             [clojure.string :as str]
             [clojure.walk :as w]
             [xtdb.error :as err]
@@ -1404,3 +1405,16 @@
       (hasNext [_] (.hasNext it))
       (next [_] (.next it))
       (close [_]))))
+
+(defn is-column? [x]
+  (and (symbol? x)
+       (or (:column? (meta x))
+           (:correlated-column? (meta x))
+           (:param? (meta x)))))
+
+(defn normalize-plan [plan]
+  (walk/postwalk (fn [form]
+                   (if (is-column? form)
+                     (vary-meta (util/symbol->normal-form-symbol form) (meta form))
+                     form))
+                 plan))

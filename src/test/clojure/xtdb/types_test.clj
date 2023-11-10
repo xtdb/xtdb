@@ -12,7 +12,7 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType)
            (xtdb.types IntervalDayTime IntervalYearMonth)
-           (xtdb.vector KeyFn IVectorWriter)
+           (xtdb.vector KeyFnBuilder IVectorWriter)
            (xtdb.vector.extensions ClojureFormVector KeywordVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -27,7 +27,7 @@
 
       (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
         {:vs (vec (for [idx (range (count vs))]
-                    (.getObject duv-rdr idx (KeyFn/datalog))))
+                    (.getObject duv-rdr idx (KeyFnBuilder/datalog))))
          :vec-types (vec (for [idx (range (count vs))]
                            (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
 

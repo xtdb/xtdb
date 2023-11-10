@@ -2312,26 +2312,24 @@
              (q '{:find [x]
                   :where [($ :x {:xt/* x} {:for-valid-time [:at #time/instant "2023-01-17T00:00:00Z"]})]})))))
 
-#_
+
 (t/deftest test-normalisation
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id "doc" :Foo/Bar 1 :Bar.Foo/hELLo-wORLd 2}]])
-  (t/is (= [{:Foo/Bar 1, :Bar.Foo/Hello-World 2}]
-           (xt/q tu/*node* '{:find [Foo/Bar Bar.Foo/Hello-World]
-                             :where [(match :xt-docs [Foo/Bar Bar.Foo/Hello-World])]})))
+  (t/is (= [{:foo/bar 1, :bar.foo/hello-world 2}]
+           (xt/q tu/*node* '(from :xt-docs [Foo/Bar Bar.Foo/Hello-World]))))
   (t/is (= [{:bar 1, :foo 2}]
-           (xt/q tu/*node* '{:find [bar foo]
-                             :where [(match :xt-docs {:foo/bar bar :bar.foo/hello-world foo})]}))))
+           (xt/q tu/*node* '(from :xt-docs [{:foo/bar bar :bar.foo/hello-world foo}])))))
 
-#_
+
 (t/deftest test-table-normalisation
   (let [doc {:xt/id "doc" :foo "bar"}]
     (xt/submit-tx tu/*node* [[:put :xt/the-docs doc]])
     (t/is (= [{:id "doc"}]
-             (xt/q tu/*node* '{:find [id]
-                               :where [(match :xt/the-docs {:xt/id id})]})))
-    (t/is (= [{:doc doc}]
-             (xt/q tu/*node* '{:find [doc]
-                               :where [(match :xt/the-docs {:xt/* doc})]})))))
+             (xt/q tu/*node* '(from :xt/the-docs [{:xt/id id}]))))
+    (xt/submit-tx tu/*node* [[:put :xt.docs/the-docs doc]])
+    (t/is (= [{:id "doc"}]
+             (xt/q tu/*node* '(from :xt.docs/the-docs [{:xt/id id}])))
+          "with dots in namespace")))
 
 #_
 (t/deftest test-inconsistent-valid-time-range-2494
@@ -2481,15 +2479,15 @@
 (deftest normalisation-option
   (xt/submit-tx tu/*node* ivan+petr)
 
-  (t/is (= [{:first-name "Petr", :last-name "Petrov"}
-            {:first-name "Ivan", :last-name "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [first-name last-name])
+  (t/is (= [{:xt/id :petr :first-name "Petr", :last-name "Petrov"}
+            {:xt/id :ivan :first-name "Ivan", :last-name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :datalog}))
         "datalog key-fn")
 
-  (t/is (= [{:first_name "Petr", :last_name "Petrov"}
-            {:first_name "Ivan", :last_name "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [first-name last-name])
+  (t/is (= [{:xt$id :petr :first_name "Petr", :last_name "Petrov"}
+            {:xt$id :ivan :first_name "Ivan", :last_name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :sql})))
 
   (t/is (= [{:xt/id :petr :first_name "Petr", :last_name "Petrov"}

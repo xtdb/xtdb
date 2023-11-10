@@ -5,7 +5,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (xtdb.vector IVectorReader RelationReader ValueVectorReader IKeyFn KeyFn)
+           (xtdb.vector IVectorReader RelationReader ValueVectorReader IKeyFn KeyFnBuilder)
            (xtdb.vector.extensions AbsentVector ClojureFormVector KeywordVector SetVector UriVector UuidVector)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -88,7 +88,7 @@
                 (.rowCount rel))))
 
 (defn rel->rows
-  (^java.lang.Iterable [^RelationReader rel] (rel->rows rel (KeyFn/datalog)))
+  (^java.lang.Iterable [^RelationReader rel] (rel->rows rel (KeyFnBuilder/datalog)))
   (^java.lang.Iterable [^RelationReader rel ^IKeyFn key-fn]
    (let [col-ks (for [^IVectorReader col rel]
                   [col (.denormalize key-fn (.getName col))])]

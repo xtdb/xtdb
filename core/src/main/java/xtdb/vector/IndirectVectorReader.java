@@ -126,7 +126,7 @@ class IndirectVectorReader implements IVectorReader {
 
     @Override
     public Object getObject(int idx) {
-        return getObject(idx, KeyFn.identity());
+        return getObject(idx, (k) -> k);
     }
 
     @Override

@@ -6,7 +6,7 @@
             [xtdb.vector.writer :as vw])
   (:import [org.apache.arrow.vector.complex DenseUnionVector StructVector ListVector]
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.vector IVectorPosition KeyFn)))
+           (xtdb.vector IVectorPosition)))
 
 (t/use-fixtures :each tu/with-allocator)
 

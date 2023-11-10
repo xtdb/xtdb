@@ -14,7 +14,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
            (xtdb.vector RelationReader)
-           (xtdb.vector KeyFn)))
+           (xtdb.vector KeyFnBuilder)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -95,7 +95,7 @@
                        ;; TODO let's try not to copy this out and back in again
                        (.put out-row k-kw (fn [{:keys [^RelationReader params]}]
                                             (let [col (.readerForName params (name param))]
-                                              (.getObject col 0 (KeyFn/datalog))))))
+                                              (.getObject col 0 (KeyFnBuilder/datalog))))))
 
               ;; HACK: this is quite heavyweight to calculate a single value -
               ;; the EE doesn't yet have an efficient means to do so...
@@ -105,7 +105,7 @@
                 (.add field-set (types/col-type->field (.getColumnType projection-spec)))
                 (.put out-row k-kw (fn [{:keys [allocator params]}]
                                      (with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
-                                       (.getObject out-vec 0 (KeyFn/datalog)))))))))
+                                       (.getObject out-vec 0 (KeyFnBuilder/datalog)))))))))
         (.add out-rows out-row)))
 
     (let [fields (-> field-sets
@@ -147,11 +147,8 @@
                         el-struct-rdr (cond-> el-rdr
                                         (.legs el-rdr) (.legReader :struct))
                         res (vr/rel-reader (for [k (some-> el-struct-rdr .structKeys)
-                                                 :let [datalog-k (util/normal-form-str->datalog-form-str k)
-                                                       in-datalog-form? (contains? fields (symbol datalog-k))]
-                                                 :when (or (contains? fields (symbol k)) in-datalog-form?)]
-                                             (cond-> (.structKeyReader el-struct-rdr k)
-                                               in-datalog-form? (.withName datalog-k)))
+                                                 :when (contains? fields (symbol k)) ]
+                                             (.structKeyReader el-struct-rdr k))
                                            (.valueCount el-rdr))]
                     res))}))
 

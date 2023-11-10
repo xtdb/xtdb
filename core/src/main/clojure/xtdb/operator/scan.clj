@@ -275,12 +275,12 @@
     (util/close vsr-cache)))
 
 (defn- eid-select->eid [eid-select]
-  (if (= 'xt/id (second eid-select))
+  (if (= 'xt$id (second eid-select))
     (nth eid-select 2)
     (second eid-select)))
 
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
-  (when-let [eid-select (or (get selects "xt/id") (get selects "xt$id"))]
+  (when-let [eid-select (get selects "xt$id")]
     (when (= '= (first eid-select))
       (let [eid (eid-select->eid eid-select)]
         (cond
@@ -371,12 +371,11 @@
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
   (reify IScanEmitter
     (tableColNames [_ wm table-name]
-      (let [normalized-table (util/str->normal-form-str table-name)]
-        (into #{} cat [(keys (.columnFields metadata-mgr normalized-table))
-                       (some-> (.liveIndex wm)
-                               (.liveTable normalized-table)
-                               (.columnFields)
-                               keys)])))
+      (into #{} cat [(keys (.columnFields metadata-mgr table-name))
+                     (some-> (.liveIndex wm)
+                             (.liveTable table-name)
+                             (.columnFields)
+                             keys)]))
 
     (allTableColNames [_ wm]
       (merge-with set/union
@@ -388,16 +387,16 @@
 
     (scanFields [_ wm scan-cols]
       (letfn [(->field [[table col-name]]
-                (let [normalized-table (util/str->normal-form-str (str table))
-                      normalized-col-name (util/str->normal-form-str (str col-name))]
-                  (if (types/temporal-column? (util/str->normal-form-str (str col-name)))
+                (let [table (str table)
+                      col-name (str col-name)]
+                  (if (types/temporal-column? (str col-name))
                     ;; TODO move to fields here
                     (types/col-type->field [:timestamp-tz :micro "UTC"])
-                    (types/merge-fields (.columnField metadata-mgr normalized-table normalized-col-name)
+                    (types/merge-fields (.columnField metadata-mgr table col-name)
                                         (some-> (.liveIndex wm)
-                                                (.liveTable normalized-table)
+                                                (.liveTable table)
                                                 (.columnFields)
-                                                (get normalized-col-name))))))]
+                                                (get col-name))))))]
         (->> scan-cols
              (into {} (map (juxt identity ->field))))))
 
@@ -415,7 +414,7 @@
 
             col-names (into #{} (map str) col-names)
 
-            normalized-table-name (util/str->normal-form-str (str table))
+            table-name (str table)
 
             selects (->> (for [[tag arg] columns
                                :when (= tag :select)
@@ -433,11 +432,11 @@
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
-                                     :when (not (types/temporal-column? (util/str->normal-form-str col-name)))]
+                                     :when (not (types/temporal-column? col-name))]
                                  select))
 
             row-count (->> (for [{:keys [tables]} (vals (.chunksMetadata metadata-mgr))
-                                 :let [{:keys [row-count]} (get tables normalized-table-name)]
+                                 :let [{:keys [row-count]} (get tables table-name)]
                                  :when row-count]
                              row-count)
                            (reduce +))]
@@ -453,8 +452,8 @@
                                          (update :for-valid-time
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
-                           ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                           table-path (util/table-name->table-path normalized-table-name)
+                           ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
+                           table-path (util/table-name->table-path table-name)
                            current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
                                                    (trie/current-trie-files))]
 

@@ -146,7 +146,7 @@ public class ValueVectorReader implements IVectorReader {
 
     @Override
     public Object getObject(int idx) {
-        return getObject(idx, KeyFn.identity());
+        return getObject(idx, (k) -> k);
     }
 
     @Override
@@ -716,7 +716,7 @@ public class ValueVectorReader implements IVectorReader {
                     @Override
                     public PeriodDuration readObject() {
                         // return PeriodDuration as it's still required by the EE
-                        IntervalDayTime idt = getObject0(pos.getPosition(), KeyFn.identity());
+                        IntervalDayTime idt = getObject0(pos.getPosition(), (k) -> k);
                         return new PeriodDuration(idt.period(), idt.duration());
                     }
                 };

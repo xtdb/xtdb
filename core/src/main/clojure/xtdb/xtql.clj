@@ -14,8 +14,7 @@
                        Expr$Pull Expr$PullMany
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$Table
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)
-           (xtdb.vector KeyFn)))
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -54,12 +53,15 @@
 
 (defn- col-sym
   ([col]
-   (-> (symbol col) (vary-meta assoc :column? true)))
+   (-> (symbol col)
+       util/symbol->normal-form-symbol
+       (vary-meta assoc :column? true)))
   ([prefix col]
    (col-sym (str (format "%s_%s" prefix col)))))
 
 (defn- param-sym [v]
   (-> (symbol (str "?" v))
+      util/symbol->normal-form-symbol
       (with-meta {:param? true})))
 
 (defn- apply-param-sym
@@ -67,6 +69,7 @@
    (apply-param-sym nil v))
   ([v prefix]
    (-> (symbol (str "?" prefix v))
+       util/symbol->normal-form-symbol
        (with-meta {:correlated-column? true}))))
 
 (defn- args->apply-params [args]
@@ -105,7 +108,7 @@
 (extend-protocol ExprPlan
   Expr$LogicVar
   (plan-expr [this] (col-sym (.lv this)))
-  (required-vars [this] #{(symbol (.lv this))})
+  (required-vars [this] #{(col-sym (.lv this))})
 
   Expr$Param ;;TODO need to differentiate between query params and subquery/apply params
   (plan-expr [this] (param-sym (subs (.v this) 1)))
@@ -284,17 +287,17 @@
         expr (.expr bind-spec)]
     {:l var :r (plan-expr expr) :required-vars (required-vars expr)}))
 
-(def app-time-period-sym 'xt/valid-time)
-(def app-time-from-sym 'xt/valid-from)
-(def app-time-to-sym 'xt/valid-to)
+(def app-time-period-sym 'xt$valid_time)
+(def app-time-from-sym 'xt$valid_from)
+(def app-time-to-sym 'xt$valid_to)
 (def app-temporal-cols {:period app-time-period-sym
                         :from app-time-from-sym
                         :to app-time-to-sym})
 
 
-(def system-time-period-sym 'xt/system-time)
-(def system-time-from-sym 'xt/system-from)
-(def system-time-to-sym 'xt/system-to)
+(def system-time-period-sym 'xt$system_time)
+(def system-time-from-sym 'xt$system_from)
+(def system-time-to-sym 'xt$system_to)
 (def sys-temporal-cols {:period system-time-period-sym
                         :from system-time-from-sym
                         :to system-time-to-sym})
@@ -377,7 +380,7 @@
                                       (map #(assoc % :pred (list '= (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
-    (-> [:scan {:table (symbol (.table from))
+    (-> [:scan {:table (util/symbol->normal-form-symbol (symbol (.table from)))
                 :for-valid-time (plan-temporal-filter (.forValidTime from))
                 :for-system-time (plan-temporal-filter (.forSystemTime from))}
          (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
@@ -408,7 +411,7 @@
     {:ra-plan (wrap-out-binding-projection
                {:ra-plan
                 (if docs
-                  [:table (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (plan-expr v)))) %) docs)]
+                  [:table (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %) docs)]
                   [:table (plan-expr (.param table))])}
                out-bindings)
      :provided-vars (set (map :r out-bindings))}))
@@ -729,6 +732,7 @@
         #_(->> (binding [*print-meta* true]))
         (lp/rewrite-plan {})
         #_(doto clojure.pprint/pprint)
+        #_(->> (binding [*print-meta* true]))
         (doto (lp/validate-plan)))))
 
 (def ^:private extra-dml-bind-specs

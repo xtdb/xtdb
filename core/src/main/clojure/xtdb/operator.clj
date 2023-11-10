@@ -35,7 +35,7 @@
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter
-           (xtdb.vector IKeyFn KeyFn)))
+           (xtdb.vector IKeyFn KeyFnBuilder)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
@@ -55,13 +55,6 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRaQuerySource
   (^xtdb.operator.PreparedQuery prepareRaQuery [ra-query]))
-
-(defn- ->table-arg-fields [table-args]
-  (->> (for [[table-key rows] table-args]
-         (MapEntry/create
-          table-key
-          (vw/rows->fields rows)))
-       (into {})))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
                                         ^Clock clock, ^RefCounter ref-ctr fields]
@@ -90,9 +83,9 @@
 
 (defn key-fn-kw->key-fn [kw]
   (case kw
-    :datalog (KeyFn/datalog)
-    :sql (KeyFn/sql)
-    :snake_case (KeyFn/snakeCase)
+    :datalog (KeyFnBuilder/datalog)
+    :sql (KeyFnBuilder/sql)
+    :snake_case (KeyFnBuilder/snakeCase)
     (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn kw}))))
 
 (defn prepare-ra ^xtdb.operator.PreparedQuery

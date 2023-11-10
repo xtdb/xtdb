@@ -24,7 +24,7 @@
            xtdb.indexer.IIndexer
            (xtdb.operator BoundQuery IRaQuerySource PreparedQuery)
            [xtdb.tx Ops]
-           xtdb.vector.IVectorReader))
+           (xtdb.vector IVectorReader KeyFnBuilder)))
 
 ;;;; populate-root temporarily copied from test-util
 
@@ -131,7 +131,7 @@
                                      ;; HACK getting results in a Clojure data structure, putting them back in to a VSR
                                      ;; because we can get DUVs in the in-rel but the output just expects mono vecs.
 
-                                     (populate-root vsr (vr/rel->rows in-rel))
+                                     (populate-root vsr (vr/rel->rows in-rel (KeyFnBuilder/sql)))
                                      (.putNext listener))))
 
               (.completed listener)))]

@@ -9,8 +9,7 @@
   (:import clojure.lang.MapEntry
            java.util.HashMap
            org.apache.arrow.memory.BufferAllocator
-           xtdb.operator.PreparedQuery
-           (xtdb.vector KeyFn)))
+           xtdb.operator.PreparedQuery))
 
 (defn parse-query
   [query]
