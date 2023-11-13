@@ -8,7 +8,8 @@
             [xtdb.api :as xt]
             [xtdb.james-bond :as bond]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.node :as node])
   (:import (xtdb.types ClojureForm)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -2348,19 +2349,17 @@
                                   :where [($ :xt/txs {:xt/id tx-id,
                                                       :xt/committed? committed?})]})))))
 
-#_
 (deftest test-date-and-time-literals
   (t/is (= [{:a true, :b false, :c true, :d true}]
            (xt/q tu/*node*
-                 '{:find [a b c d]
-                   :where [[(= #time/date "2020-01-01" #time/date "2020-01-01") a]
-                           [(= #time/zoned-date-time "3000-01-01T08:12:13.366Z"
-                               #time/zoned-date-time "2020-01-01T08:12:13.366Z") b]
-                           [(= #time/date-time "2020-01-01T08:12:13.366"
-                               #time/date-time "2020-01-01T08:12:13.366") c]
-                           [(= #time/time "08:12:13.366" #time/time "08:12:13.366") d]]}))))
+                 '(-> (table [{}] [])
+                      (with {:a (= #time/date "2020-01-01" #time/date "2020-01-01")
+                             :b (= #time/zoned-date-time "3000-01-01T08:12:13.366Z"
+                                   #time/zoned-date-time "2020-01-01T08:12:13.366Z")
+                             :c (= #time/date-time "2020-01-01T08:12:13.366"
+                                   #time/date-time "2020-01-01T08:12:13.366")
+                             :d (= #time/time "08:12:13.366" #time/time "08:12:13.366")}))))))
 
-#_
 (t/deftest bug-temporal-queries-wrong-at-boundary-2531
   (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 10}
                                      :xtdb.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}
@@ -2389,10 +2388,9 @@
               :valid-time
               {:from #time/zoned-date-time "2020-01-05T00:00Z[UTC]",
                :to #time/zoned-date-time "2020-01-06T00:00Z[UTC]"}}}
-           (set (xt/q node '{:find [n valid-time] :where [($ :ints {:n n :xt/id 0 :xt/valid-time valid-time}
-                                                             {:for-valid-time [:in #inst "2020-01-01" #inst "2020-01-06"]})]}))))))
+           (set (xt/q node '(from :ints {:bind [{:n n :xt/id 0 :xt/valid-time valid-time}]
+                                         :for-valid-time (in #inst "2020-01-01" #inst "2020-01-06")})))))))
 
-#_
 (deftest test-no-zero-width-intervals
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 1 :v 1}]
                            [:put :xt-docs {:xt/id 1 :v 2}]
@@ -2400,17 +2398,16 @@
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 2 :v 2} {:for-valid-time [:in #inst "2020-01-01" #inst "2020-01-02"]}]])
   (t/is (= [{:v 2}]
            (xt/q tu/*node*
-                 '{:find [v]
-                   :where [(match :xt-docs [{:xt/id 1} v] {:for-system-time :all-time})]}))
+                 '(from :xt-docs {:bind [{:xt/id 1} v] :for-system-time :all-time})))
         "no zero width system time intervals")
   (t/is (= [{:v 2}]
            (xt/q tu/*node*
-                 '{:find [v]
-                   :where [(match :xt-docs [{:xt/id 2} v] {:for-valid-time :all-time})]}))
+                 '(from :xt-docs {:bind [{:xt/id 2} v] :for-valid-time :all-time})))
         "no zero width valid-time intervals"))
 
 #_
 (deftest row-alias-on-txs-tables-2809
+  ;;TODO from *
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 1 :v 1}]])
   (xt/submit-tx tu/*node* [[:call :non-existing-fn]])
 
