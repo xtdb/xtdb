@@ -226,7 +226,7 @@
                        (-> (select-keys query-opts [:basis :table-args :default-tz :default-all-valid-time?])
                            (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
-           (let [rows (-> (<-cursor res (op/key-fn-kw->key-fn key-fn))
+           (let [rows (-> (<-cursor res (op/parse-key-fn key-fn))
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
                {:res rows, :col-types (update-vals (.columnFields bq) types/field->col-type)}

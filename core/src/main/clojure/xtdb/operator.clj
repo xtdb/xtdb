@@ -78,12 +78,17 @@
 
     (columnFields [_] fields)))
 
-(defn key-fn-kw->key-fn [kw]
-  (case kw
+(defn parse-key-fn [key-fn]
+  (case key-fn
     :datalog IKeyFn/DATALOG
     :sql IKeyFn/SQL
     :snake_case IKeyFn/SNAKE_CASE
-    (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn kw}))))
+    (cond
+      (instance? IKeyFn key-fn) key-fn
+      (ifn? key-fn) (reify IKeyFn
+                      (denormalize [_ s]
+                        (key-fn s)))
+      :else (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn})))))
 
 (defn prepare-ra ^xtdb.operator.PreparedQuery
   ;; this one used from zero-dep tests
