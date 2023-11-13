@@ -147,7 +147,7 @@ jobs:
           context: docker
           platforms: linux/arm/v7,linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/xtdb/xtdb-local-standalone:latest
+          tags: ghcr.io/xtdb/xtdb-standalone-ea:latest
           build-args: |
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION="dev-SNAPSHOT"
