@@ -12,7 +12,7 @@
            (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb ICursor IKeyFn)
+           (xtdb ICursor)
            (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :table [_]
@@ -75,7 +75,8 @@
   (let [param-types (update-vals param-fields types/field->col-type)
         field-sets (HashMap.)
         row-count (count rows)
-        out-rows (ArrayList. row-count)]
+        out-rows (ArrayList. row-count)
+        key-fn (util/parse-key-fn :datalog)]
     (doseq [row rows]
       (let [out-row (HashMap.)]
         (doseq [[k v] row
@@ -94,7 +95,7 @@
                        ;; TODO let's try not to copy this out and back in again
                        (.put out-row k-kw (fn [{:keys [^RelationReader params]}]
                                             (let [col (.readerForName params (name param))]
-                                              (.getObject col 0 IKeyFn/DATALOG)))))
+                                              (.getObject col 0 key-fn)))))
 
               ;; HACK: this is quite heavyweight to calculate a single value -
               ;; the EE doesn't yet have an efficient means to do so...
@@ -104,7 +105,7 @@
                 (.add field-set (types/col-type->field (.getColumnType projection-spec)))
                 (.put out-row k-kw (fn [{:keys [allocator params]}]
                                      (with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
-                                       (.getObject out-vec 0 IKeyFn/DATALOG))))))))
+                                       (.getObject out-vec 0 key-fn))))))))
         (.add out-rows out-row)))
 
     (let [fields (-> field-sets

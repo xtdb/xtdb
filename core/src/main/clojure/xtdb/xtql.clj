@@ -861,4 +861,4 @@
     (util/with-close-on-catch [params (vw/open-params allocator args)]
       (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
           (.openCursor)
-          (op/cursor->result-set params (op/parse-key-fn key-fn))))))
+          (op/cursor->result-set params (util/parse-key-fn key-fn))))))

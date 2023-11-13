@@ -132,7 +132,7 @@
                                      ;; HACK getting results in a Clojure data structure, putting them back in to a VSR
                                      ;; because we can get DUVs in the in-rel but the output just expects mono vecs.
 
-                                     (populate-root vsr (vr/rel->rows in-rel IKeyFn/SQL))
+                                     (populate-root vsr (vr/rel->rows in-rel (IKeyFn/keyword IKeyFn/SQL)))
                                      (.putNext listener))))
 
               (.completed listener)))]

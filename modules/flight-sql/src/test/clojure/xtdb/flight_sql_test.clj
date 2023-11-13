@@ -47,7 +47,7 @@
         (while (.next stream)
           ;; if this were a real client chances are they wouldn't just
           ;; eagerly turn the roots into Clojure maps...
-          (swap! !res into (vr/rel->rows (vr/<-root root) IKeyFn/SQL)))
+          (swap! !res into (vr/rel->rows (vr/<-root root) (IKeyFn/keyword IKeyFn/SQL))))
 
         @!res))))
 

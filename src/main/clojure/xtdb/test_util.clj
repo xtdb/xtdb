@@ -189,14 +189,14 @@
                  (->cursor allocator schema blocks))}))
 
 (defn <-reader
-  ([^IVectorReader col] (<-reader col IKeyFn/DATALOG))
+  ([^IVectorReader col] (<-reader col (util/parse-key-fn :datalog)))
   ([^IVectorReader col ^IKeyFn key-fn]
    (mapv (fn [idx]
            (.getObject col idx key-fn))
          (range (.valueCount col)))))
 
 (defn <-cursor
-  ([^ICursor cursor] (<-cursor cursor IKeyFn/DATALOG))
+  ([^ICursor cursor] (<-cursor cursor (util/parse-key-fn :datalog)))
   ([^ICursor cursor ^IKeyFn key-fn]
    (let [!res (volatile! (transient []))]
      (.forEachRemaining cursor
@@ -226,7 +226,7 @@
                        (-> (select-keys query-opts [:basis :table-args :default-tz :default-all-valid-time?])
                            (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
-           (let [rows (-> (<-cursor res (op/parse-key-fn key-fn))
+           (let [rows (-> (<-cursor res (util/parse-key-fn key-fn))
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
                {:res rows, :col-types (update-vals (.columnFields bq) types/field->col-type)}
@@ -389,7 +389,7 @@
     (map new-uuid (range n))))
 
 (defn vec->vals
-  ([^IVectorReader rdr] (vec->vals rdr IKeyFn/DATALOG))
+  ([^IVectorReader rdr] (vec->vals rdr (util/parse-key-fn :datalog)))
   ([^IVectorReader rdr ^IKeyFn key-fn]
    (->> (for [i (range (.valueCount rdr))]
           (.getObject rdr i key-fn))
