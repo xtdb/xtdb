@@ -3,7 +3,8 @@
             [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.rewrite :as r]
-            [xtdb.sql.parser :as p]))
+            [xtdb.sql.parser :as p]
+            [xtdb.util :as util]))
 
 (defn- ->line-info-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
@@ -133,11 +134,11 @@
     (identifier (r/$ ag -1))
 
     :regular_identifier
-    (str/lower-case (r/lexeme ag 1))
+    (util/str->normal-form-str (r/lexeme ag 1))
 
     :delimited_identifier
     (let [lexeme (r/lexeme ag 1)]
-      (subs lexeme 1 (dec (count lexeme))))
+      (util/str->normal-form-str (subs lexeme 1 (dec (count lexeme)))))
 
     :correlation_name
     (identifier (r/$ ag 1))

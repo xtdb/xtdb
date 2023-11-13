@@ -171,9 +171,9 @@
                  :xt/system-from (util/->zdt tt)
                  :xt/system-to nil}]
                (tu/query-ra '[:scan {:table xt_docs}
-                              [xt/id version
-                               xt/valid-from, xt/valid-to
-                               xt/system-from, xt/system-to]]
+                              [xt$id version
+                               xt$valid_from, xt$valid_to
+                               xt$system_from, xt$system_to]]
                             {:node node})))
 
       (let [{tt2 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 1}]]
@@ -194,9 +194,9 @@
                     :xt/system-from (util/->zdt tt2)
                     :xt/system-to nil}}
                  (set (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
-                                     [xt/id version
-                                      xt/valid-from, xt/valid-to
-                                      xt/system-from, xt/system-to]]
+                                     [xt$id version
+                                      xt$valid_from, xt$valid_to
+                                      xt$system_from, xt$system_to]]
                                    {:node node :default-all-valid-time? true}))))
 
         (t/is (= [{:xt/id :foo, :version 0,
@@ -205,9 +205,9 @@
                    :xt/system-from (util/->zdt tt)
                    :xt/system-to nil}]
                  (tu/query-ra '[:scan {:table xt_docs}
-                                [xt/id version
-                                 xt/valid-from, xt/valid-to
-                                 xt/system-from, xt/system-to]]
+                                [xt$id version
+                                 xt$valid_from, xt$valid_to
+                                 xt$system_from, xt$system_to]]
                               {:node node, :basis {:tx tx}}))
               "re-using the original tx basis should see the same result")))))
 

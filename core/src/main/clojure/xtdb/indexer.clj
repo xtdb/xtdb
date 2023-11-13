@@ -159,7 +159,7 @@
         nil))))
 
 (defn- find-fn [allocator ^IRaQuerySource ra-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-id]
-  (let [lp '[:scan {:table xt/tx-fns} [{xt/id (= xt/id ?id)} xt/fn]]
+  (let [lp '[:scan {:table xt$tx_fns} [{xt$id (= xt$id ?id)} xt$fn]]
         ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?id [fn-id])

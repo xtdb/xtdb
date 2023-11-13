@@ -245,3 +245,33 @@
            (xt/q tu/*node*
                  '{:find [xt/id v]
                    :where [(match :docs [xt/id v])]}))))
+
+(t/deftest normalisation-in-tx-fn
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :first-name "Allan" :last-name "Turing"}]
+                           [:put-fn :my-fn '(fn []
+                                              (let [ks (->> (q '{:find [first-name last-name]
+                                                                 :where [(match :docs [first-name last-name])]}
+                                                               {:key-fn :sql})
+                                                            (mapcat keys)
+                                                            (into []))]
+                                                [[:put :the-keys {:xt/id 1 :keys ks}]]))]
+                           [:call :my-fn]])
+
+  (t/is (= [{:key :first_name} {:key :last_name}]
+           (xt/q tu/*node*
+                 '{:find [key]
+                   :where [(match :the-keys {:keys [key ...]})]}))
+        "testing `key-fn` in q")
+
+  (xt/submit-tx tu/*node* [[:put-fn :my-case-fn '(fn [{:keys [snake_case kebab-case]}]
+                                                   (cond-> []
+                                                     snake_case (conj [:put :casing {:xt/id snake_case}])
+                                                     kebab-case (conj [:put :casing {:xt/id kebab-case}])))]
+                           [:call :my-case-fn {:snake_case "foo"}]
+                           [:call :my-case-fn {:kebab-case "bar"}]
+                           [:call :my-case-fn {:snake_case "baz" :kebab-case "toto"}]])
+
+  (t/is (= [{:xt/id "baz"} {:xt/id "toto"} {:xt/id "bar"} {:xt/id "foo"}]
+           (xt/q tu/*node*
+                 '{:find [xt/id]
+                   :where [(match :casing [xt/id])]}))))

@@ -1936,9 +1936,9 @@
                             [:put :xt_cats {:xt/id 2} {:for-valid-time [:in #inst "2016" #inst "2018"]}]])
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :docs_app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :docs-app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                              :to #time/zoned-date-time "2020-01-01T00:00Z[UTC]"},
-             :xt_cats_app_time {:from #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
+             :xt-cats-app-time {:from #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
                                 :to #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}]
            (xt/q
             tu/*node*
@@ -1949,9 +1949,9 @@
                  (where (contains? docs_app_time xt_cats_app_time))))))
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :docs_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :docs-sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                              :to nil},
-             :xt_cats_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :xt-cats-sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                                 :to nil}}]
            (xt/q
             tu/*node*
@@ -1987,7 +1987,7 @@
 
 
   (t/is (= [{:xt/id 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
              :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
              :app-time-to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
@@ -2000,9 +2000,9 @@
         "projecting both period and underlying cols")
 
   (t/is (= [{:xt/id 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                         :to nil}}]
            (xt/q
             tu/*node*
@@ -2024,16 +2024,16 @@
 
   (t/is (= [{:xt/id 1
              :id2 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                         :to nil}}]
            (xt/q
             tu/*node*
             '(unify (from :docs {:bind [xt/id {:xt/valid-time app_time
-                                          :xt/system-time sys_time}]
-                                  :for-valid-time :all-time
-                                  :for-system-time :all-time})
+                                               :xt/system-time sys_time}]
+                                 :for-valid-time :all-time
+                                 :for-system-time :all-time})
                     (from :docs {:bind [{:xt/valid-time app_time
                                          :xt/system-time sys_time
                                          :xt/id id2}]
@@ -2312,26 +2312,24 @@
              (q '{:find [x]
                   :where [($ :x {:xt/* x} {:for-valid-time [:at #time/instant "2023-01-17T00:00:00Z"]})]})))))
 
-#_
+
 (t/deftest test-normalisation
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id "doc" :Foo/Bar 1 :Bar.Foo/hELLo-wORLd 2}]])
-  (t/is (= [{:Foo/Bar 1, :Bar.Foo/Hello-World 2}]
-           (xt/q tu/*node* '{:find [Foo/Bar Bar.Foo/Hello-World]
-                             :where [(match :xt-docs [Foo/Bar Bar.Foo/Hello-World])]})))
+  (t/is (= [{:foo/bar 1, :bar.foo/hello-world 2}]
+           (xt/q tu/*node* '(from :xt-docs [Foo/Bar Bar.Foo/Hello-World]))))
   (t/is (= [{:bar 1, :foo 2}]
-           (xt/q tu/*node* '{:find [bar foo]
-                             :where [(match :xt-docs {:foo/bar bar :bar.foo/hello-world foo})]}))))
+           (xt/q tu/*node* '(from :xt-docs [{:foo/bar bar :bar.foo/hello-world foo}])))))
 
-#_
+
 (t/deftest test-table-normalisation
   (let [doc {:xt/id "doc" :foo "bar"}]
     (xt/submit-tx tu/*node* [[:put :xt/the-docs doc]])
     (t/is (= [{:id "doc"}]
-             (xt/q tu/*node* '{:find [id]
-                               :where [(match :xt/the-docs {:xt/id id})]})))
-    (t/is (= [{:doc doc}]
-             (xt/q tu/*node* '{:find [doc]
-                               :where [(match :xt/the-docs {:xt/* doc})]})))))
+             (xt/q tu/*node* '(from :xt/the-docs [{:xt/id id}]))))
+    (xt/submit-tx tu/*node* [[:put :xt.docs/the-docs doc]])
+    (t/is (= [{:id "doc"}]
+             (xt/q tu/*node* '(from :xt.docs/the-docs [{:xt/id id}])))
+          "with dots in namespace")))
 
 #_
 (t/deftest test-inconsistent-valid-time-range-2494
@@ -2477,3 +2475,29 @@
          (xt/q tu/*node*
                '(unify
                  (with {orders (pull* (table [{}] []))}))))))
+
+(deftest normalisation-option
+  (xt/submit-tx tu/*node* ivan+petr)
+
+  (t/is (= [{:xt/id :petr :first-name "Petr", :last-name "Petrov"}
+            {:xt/id :ivan :first-name "Ivan", :last-name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
+                 {:key-fn :datalog}))
+        "datalog key-fn")
+
+  (t/is (= [{:xt$id :petr :first_name "Petr", :last_name "Petrov"}
+            {:xt$id :ivan :first_name "Ivan", :last_name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
+                 {:key-fn :sql})))
+
+  (t/is (= [{:xt/id :petr :first_name "Petr", :last_name "Petrov"}
+            {:xt/id :ivan :first_name "Ivan", :last_name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
+                 {:key-fn :snake_case})))
+
+  ;; TODO doesn't get caught
+  #_
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #""
+                          (xt/q tu/*node* '(from :docs [first-name last-name])
+                                {:key-fn :camelCase}))))

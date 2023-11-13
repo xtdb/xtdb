@@ -29,6 +29,7 @@
            (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
+           xtdb.IKeyFn
            xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -609,8 +610,18 @@
 (defn str->normal-form-str ^String [^String s]
   (NormalForm/normalForm s))
 
-(defn normal-form-str->datalog-form-str ^String [^String s]
-  (NormalForm/datalogForm s))
+(defn parse-key-fn [key-fn]
+  (IKeyFn/cached (case key-fn
+                   :datalog (IKeyFn/keyword IKeyFn/DATALOG)
+                   :sql (IKeyFn/keyword IKeyFn/SQL)
+                   :snake_case (IKeyFn/keyword IKeyFn/SNAKE_CASE)
+
+                   (cond
+                     (instance? IKeyFn key-fn) key-fn
+                     (ifn? key-fn) (reify IKeyFn
+                                     (denormalize [_ s]
+                                       (key-fn s)))
+                     :else (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))))
 
 (defn ->child-allocator [^BufferAllocator allocator name]
   (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))

@@ -12,7 +12,8 @@
 
 (defn q-now [node q+args]
   (xt/q node q+args
-        {:basis {:after-tx (:latest-completed-tx (xt/status node))}}))
+        {:basis {:after-tx (:latest-completed-tx (xt/status node))}
+         :key-fn :snake_case}))
 
 (defn random-price [worker] (.nextDouble (b2/rng worker)))
 
@@ -83,7 +84,8 @@
                              [id :u_sattr5 u_sattr5]
                              [id :u_sattr6 u_sattr6]
                              [id :u_sattr7 u_sattr7]]}
-                   u_id])]
+                   u_id]
+                  {:key-fn :snake_case})]
        (if u
          [[:put :user (update u :u_balance dec)]]
          []))))
@@ -127,12 +129,13 @@
                         u_id
                         i_buyer_id
                         bid
-                        max-bid
+                        max_bid
                         ;; pass in from ctr rather than select-max+1 so ctr gets incremented
-                        new-bid-id
+                        new_bid_id
                         ;; 'current timestamp'
                         now] :as params}]
-     (let [;; current max bid id
+     (let [q (fn [query] (q query {:key-fn :snake_case}))
+           ;; current max bid id
            {:keys [imb imb_ib_id] :as res}
            (-> (q ['{:find [imb, imb_ib_id]
                      :in [i_id]
@@ -142,7 +145,7 @@
                              [imb :imb_ib_id imb_ib_id]]}
                    i_id])
                first)
-           ;; _ (println res)
+           _ (println res)
 
 
            ;; current number of bids
@@ -155,23 +158,25 @@
                              [i :i_status :open]]}
                    i_id])
                first)
-           ;; _ (println res)
+           _ (println res)
 
            ;; current bid/max
-           {:keys [curr-bid, curr-max] :as res}
+           {:keys [curr_bid, curr_max] :as res}
            (when imb_ib_id
-             (-> (q ['{:find [curr-bid curr-max]
+             (-> (q ['{:find [curr_bid curr_max]
                        :in [imb_ib_id]
                        :where [(match :item-bid {:xt/id ib})
                                [ib :ib_id imb_ib_id]
-                               [ib :ib_bid curr-bid]
-                               [ib :ib_max_bid curr-max]]}
+                               [ib :ib_bid curr_bid]
+                               [ib :ib_max_bid curr_max]]}
                      imb_ib_id])
                  first))
 
-           new-bid-win (or (nil? imb_ib_id) (< curr-max max-bid))
-           new-bid (if (and new-bid-win curr-max (< bid curr-max) curr-max) curr-max bid)
-           upd-curr-bid (and curr-bid (not new-bid-win) (< curr-bid bid))
+           _ (print res)
+
+           new_bid_win (or (nil? imb_ib_id) (< curr_max max_bid))
+           new_bid (if (and new_bid_win curr_max (< bid curr_max) curr_max) curr_max bid)
+           upd_curr_bid (and curr_bid (not new_bid_win) (< curr_bid bid))
            composite-id-fn (fn [& ids] (apply str (butlast (interleave ids (repeat "-")))))
            item-query '{:find [xt/id i_id i_u_id i_c_id i_name i_description i_user_attributes i_initial_price
                                i_current_price i_num_bids i_num_images i_num_global_attrs i_start_date
@@ -209,23 +214,23 @@
                                   :i_num_bids (inc nbids))])
 
          ;; if new bid exceeds old, bump it
-         upd-curr-bid
+         upd_curr_bid
          (conj [:put :item-max-bid (assoc (first (q [item-max-bid-query imb]))
                                           :imb_bid bid)])
 
          ;; we exceed the old max, win the bid.
-         (and curr-bid new-bid-win)
+         (and curr_bid new_bid_win)
          (conj [:put :item-max-bid (assoc (first (q [item-max-bid-query imb]))
-                                          :imb_ib_id new-bid-id
+                                          :imb_ib_id new_bid_id
                                           :imb_ib_u_id u_id
                                           :imb_updated now)])
 
          ;; no previous max bid, insert new max bid
          (nil? imb_ib_id)
-         (conj [:put :item-max-bid {:xt/id (composite-id-fn new-bid-id i_id)
+         (conj [:put :item-max-bid {:xt/id (composite-id-fn new_bid_id i_id)
                                     :imb_i_id i_id
                                     :imb_u_id u_id
-                                    :imb_ib_id new-bid-id
+                                    :imb_ib_id new_bid_id
                                     :imb_ib_i_id i_id
                                     :imb_ib_u_id u_id
                                     :imb_created now
@@ -233,13 +238,13 @@
 
          :always
          ;; add new bid
-         (conj [:put :item-bid {:xt/id new-bid-id
-                                :ib_id new-bid-id
+         (conj [:put :item-bid {:xt/id new_bid_id
+                                :ib_id new_bid_id
                                 :ib_i_id i_id
                                 :ib_u_id u_id
                                 :ib_buyer_id i_buyer_id
-                                :ib_bid new-bid
-                                :ib_max_bid max-bid
+                                :ib_bid new_bid
+                                :ib_max_bid max_bid
                                 :ib_created_at now
                                 :ib_updated now}])))))
 
@@ -433,8 +438,8 @@
        :u_id i_u_id,
        :i_buyer_id i_buyer_id
        :bid (random-price worker)
-       :max-bid (random-price worker)
-       :new-bid-id (b2/increment worker item-bid-id)
+       :max_bid (random-price worker)
+       :new_bid_id (b2/increment worker item-bid-id)
        :now (b2/current-timestamp worker)})))
 
 (defn proc-new-bid [worker]

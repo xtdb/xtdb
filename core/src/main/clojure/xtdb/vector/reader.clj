@@ -1,10 +1,12 @@
 (ns xtdb.vector.reader
   (:require [clojure.set :as set]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           xtdb.IKeyFn
            (xtdb.vector IVectorReader RelationReader ValueVectorReader)
            (xtdb.vector.extensions AbsentVector ClojureFormVector KeywordVector SetVector UriVector UuidVector)))
 
@@ -87,13 +89,14 @@
                              (map #(->absent-col % allocator row-count))))
                 (.rowCount rel))))
 
-(defn rel->rows ^java.lang.Iterable [^RelationReader rel]
-  (let [col-ks (for [^IVectorReader col rel]
-                 [col (keyword (.getName col))])]
-    (mapv (fn [idx]
-            (->> col-ks
-                 (into {} (keep (fn [[^IVectorReader col k]]
-                                  (when-not (.isAbsent col idx)
-                                    (MapEntry/create k (.getObject col idx))))))))
-          (range (.rowCount rel)))))
-
+(defn rel->rows
+  (^java.lang.Iterable [^RelationReader rel] (rel->rows rel (util/parse-key-fn :datalog)))
+  (^java.lang.Iterable [^RelationReader rel ^IKeyFn key-fn]
+   (let [col-ks (for [^IVectorReader col rel]
+                  [col (.denormalize key-fn (.getName col))])]
+     (mapv (fn [idx]
+             (->> col-ks
+                  (into {} (keep (fn [[^IVectorReader col k]]
+                                   (when-not (.isAbsent col idx)
+                                     (MapEntry/create k (.getObject col idx key-fn))))))))
+           (range (.rowCount rel))))))

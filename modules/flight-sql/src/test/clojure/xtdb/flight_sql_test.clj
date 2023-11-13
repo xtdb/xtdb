@@ -9,7 +9,8 @@
   (:import (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.pojo.Schema))
+           org.apache.arrow.vector.types.pojo.Schema
+           xtdb.IKeyFn))
 
 (def ^:private ^:dynamic *port*)
 (def ^:private ^:dynamic ^FlightSqlClient *client*)
@@ -46,7 +47,7 @@
         (while (.next stream)
           ;; if this were a real client chances are they wouldn't just
           ;; eagerly turn the roots into Clojure maps...
-          (swap! !res into (vr/rel->rows (vr/<-root root))))
+          (swap! !res into (vr/rel->rows (vr/<-root root) (IKeyFn/keyword IKeyFn/SQL))))
 
         @!res))))
 

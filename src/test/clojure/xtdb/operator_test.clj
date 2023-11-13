@@ -38,11 +38,11 @@
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [xt/id {name (> name "Ivan")}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [xt$id {name (> name "Ivan")}]]
                                              {:node node, :basis {:tx tx}}))))
 
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [xt/id {name (> name ?name)}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [xt$id {name (> name ?name)}]]
                                              {:node node, :basis {:tx tx}, :params {'?name "Ivan"}})))))]
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
@@ -117,7 +117,7 @@
           {tt2 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time}
-                                   (into '[last-updated] temporal-constraints)]
+                                   (into '[last_updated] temporal-constraints)]
                                   {:node node, :params {'?system-time1 tt1, '?system-time2 tt2}
                                    :default-all-valid-time? true})
                      (into #{} (map :last-updated))))]
@@ -251,15 +251,15 @@
                                      ?y [{:b 1}]}})))))
 
 (t/deftest test-project-row-number
-  (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
-           (tu/query-ra '[:project [a {$row-num (row-number)}]
+  (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
+           (tu/query-ra '[:project [a {row-num (row-number)}]
                           [:table ?a]]
 
                         {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-project-append-columns
-  (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
-           (tu/query-ra '[:project {:append-columns? true} [{$row-num (row-number)}]
+  (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
+           (tu/query-ra '[:project {:append-columns? true} [{row-num (row-number)}]
                           [:table ?a]]
 
                         {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))

@@ -25,7 +25,7 @@
 
     (t/is (= #{{:xt/id :bar, :col1 "bar1", :col2 "bar2"}
                {:xt/id :foo, :col2 "baz2"}}
-             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id col1 col2]]
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt$id col1 col2]]
                                {:node node}))))))
 
 (t/deftest test-simple-scan-with-namespaced-attributes
@@ -36,7 +36,7 @@
 
     (t/is (= #{{:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}
                {:xt/id :foo}}
-             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id the-ns/col1 col2]]
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt$id the_ns$col1 col2]]
                                {:node node}))))))
 
 (t/deftest test-duplicates-in-scan-1
@@ -44,7 +44,7 @@
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
 
     (t/is (= [{:xt/id :foo}]
-             (tu/query-ra '[:scan {:table xt_docs} [xt/id xt/id]]
+             (tu/query-ra '[:scan {:table xt_docs} [xt$id xt$id]]
                           {:node node})))))
 
 (t/deftest test-chunk-boundary
@@ -55,7 +55,7 @@
          (mapv #(xt/submit-tx node %)))
 
     (t/is (= (set (for [i (range 110)] {:xt/id i}))
-             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt$id]]
                                {:node node}))))))
 
 (t/deftest test-smaller-page-limit
@@ -65,7 +65,7 @@
     (tu/finish-chunk! node)
 
     (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
-             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt$id]]
                                {:node node}))))))
 
 (t/deftest test-metadata
@@ -76,8 +76,8 @@
          (mapv #(xt/submit-tx node %)))
 
     (t/is (= (set (concat (for [i (range 20)] {:xt/id i}) (for [i (range 80 100)] {:xt/id i})))
-             (set (tu/query-ra '[:scan {:table xt_docs} [{xt/id (or (< xt/id 20)
-                                                                    (>= xt/id 80))}]]
+             (set (tu/query-ra '[:scan {:table xt_docs} [{xt$id (or (< xt$id 20)
+                                                                    (>= xt$id 80))}]]
                                {:node node})))
           "testing only getting some trie matches"))
 
@@ -86,7 +86,7 @@
     (xt/submit-tx node (for [i (range 20)] [:delete :xt_docs i]))
 
     (t/is (= []
-             (tu/query-ra '[:scan {:table xt_docs} [{xt/id (< xt/id 20)}]]
+             (tu/query-ra '[:scan {:table xt_docs} [{xt$id (< xt$id 20)}]]
                           {:node node}))
           "testing newer chunks relevant even if not matching")
 
@@ -101,7 +101,7 @@
     (tu/finish-chunk! node)
 
     (t/is (= [{:boolean-or-int true}]
-             (tu/query-ra '[:scan {:table xt_docs} [{boolean-or-int (= boolean-or-int true)}]]
+             (tu/query-ra '[:scan {:table xt_docs} [{boolean_or_int (= boolean_or_int true)}]]
                           {:node node}))
           "testing boolean metadata")))
 
@@ -119,37 +119,37 @@
       (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
-                                           [xt/id v]]
+                                           [xt$id v]]
                                          {:node node}))))
 
       (t/is (= {{:v 1, :xt/id :doc2} 1 {:v 2, :xt/id :doc1} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
-                                           [xt/id v]]
+                                           [xt$id v]]
                                          {:node node}))))
       ;; system-time
       (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1 {:v 1, :xt/id :doc3} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
-                                           [xt/id v]]
+                                           [xt$id v]]
                                          {:node node :basis {:tx tx1}}))))
 
       (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
-                                           [xt/id v]]
+                                           [xt$id v]]
                                          {:node node :basis {:tx tx1}}))))
 
       (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
-                                           [xt/id v]]
+                                           [xt$id v]]
                                          {:node node :basis {:tx tx2}}))))
 
       (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 2, :xt/id :doc2} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
-                                           [xt/id v]]
+                                           [xt$id v]]
                                          {:node node :basis {:tx tx2}})))))))
 
 (t/deftest test-past-point-point-queries-with-valid-time
@@ -171,7 +171,7 @@
                   :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2017"]}
-                                   [xt/id v xt/valid-from xt/valid-to]]
+                                   [xt$id v xt$valid_from xt$valid_to]]
                                  {:node node}))))
 
       (t/is (= #{{:v 2, :xt/id :doc1
@@ -183,7 +183,7 @@
                   :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2023"]}
-                                   [xt/id v xt/valid-from xt/valid-to]]
+                                   [xt$id v xt$valid_from xt$valid_to]]
                                  {:node node}))))
       ;; system-time
       (t/is (= #{{:v 1, :xt/id :doc1,
@@ -197,7 +197,7 @@
                   :xt/valid-to nil}}
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2023"]}
-                                   [xt/id v xt/valid-from xt/valid-to]]
+                                   [xt$id v xt$valid_from xt$valid_to]]
                                  {:node node :basis {:tx tx1}}))))
 
       (t/is (= #{{:v 1, :xt/id :doc1,
@@ -208,7 +208,7 @@
                   :xt/valid-to nil}}
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2017"]}
-                                   [xt/id v xt/valid-from xt/valid-to]]
+                                   [xt$id v xt$valid_from xt$valid_to]]
                                  {:node node :basis {:tx tx1}}))))
 
       (t/is (= #{{:v 2, :xt/id :doc1,
@@ -219,7 +219,7 @@
                   :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]",}}
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2023"]}
-                                   [xt/id v xt/valid-from xt/valid-to]]
+                                   [xt$id v xt$valid_from xt$valid_to]]
                                  {:node node :basis {:tx tx2}}))))
 
       (t/is (= #{{:v 2, :xt/id :doc1,
@@ -230,7 +230,7 @@
                   :xt/valid-to nil}}
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2100"]}
-                                   [xt/id v xt/valid-from xt/valid-to]]
+                                   [xt$id v xt$valid_from xt$valid_to]]
                                  {:node node :basis {:tx tx2}})))))))
 
 (t/deftest test-scanning-temporal-cols
@@ -239,9 +239,9 @@
                          {:for-valid-time [:in #inst "2021" #inst "3000"]}]])
 
     (let [res (first (tu/query-ra '[:scan {:table xt_docs}
-                                    [xt/id
-                                     xt/valid-from xt/valid-to
-                                     xt/system-from xt/system-to]]
+                                    [xt$id
+                                     xt$valid_from xt$valid_to
+                                     xt$system_from xt$system_to]]
                                   {:node node}))]
       (t/is (= #{:xt/id :xt/valid-from :xt/valid-to :xt/system-to :xt/system-from}
                (-> res keys set)))
@@ -250,11 +250,11 @@
                (dissoc res :xt/system-from :xt/system-to))))
 
     (t/is (= {:xt/id :doc, :app-time-start (util/->zdt #inst "2021"), :app-time-end (util/->zdt #inst "3000")}
-             (-> (first (tu/query-ra '[:project [xt/id
-                                                 {app-time-start xt/valid-from}
-                                                 {app-time-end xt/valid-to}]
+             (-> (first (tu/query-ra '[:project [xt$id
+                                                 {app_time_start xt$valid_from}
+                                                 {app_time_end xt$valid_to}]
                                        [:scan {:table xt_docs}
-                                        [xt/id xt/valid-from xt/valid-to]]]
+                                        [xt$id xt$valid_from xt$valid_to]]]
                                      {:node node}))
                  (dissoc :xt/system-from :xt/system-to))))))
 
@@ -267,8 +267,8 @@
                   :xt/system-from (util/->zdt tt),
                   :xt/system-to nil}}
                (set (tu/query-ra '[:scan {:table xt_docs}
-                                   [xt/valid-from xt/valid-to
-                                    xt/system-from xt/system-to]]
+                                   [xt$valid_from xt$valid_to
+                                    xt$system_from xt$system_to]]
                                  {:node node})))))))
 
 (t/deftest test-aligns-temporal-columns-correctly-363
@@ -279,26 +279,26 @@
 
     (tu/finish-chunk! node)
 
-    (t/is (= #{{:last_updated "tx2",
+    (t/is (= #{{:last-updated "tx2",
                 :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/valid-to nil,
                 :xt/system-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/system-to nil}
-               {:last_updated "tx1",
+               {:last-updated "tx1",
                 :xt/valid-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
                 :xt/valid-to #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
                 :xt/system-to nil}
-               {:last_updated "tx1",
+               {:last-updated "tx1",
                 :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/valid-to nil,
                 :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
                 :xt/system-to #time/zoned-date-time "3001-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
-                                 [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
-                                  {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
-                                  xt/valid-from
-                                  xt/valid-to
+                                 [{xt$system_from (< xt$system_from #time/zoned-date-time "3002-01-01T00:00Z")}
+                                  {xt$system_to (> xt$system_to #time/zoned-date-time "2999-01-01T00:00Z")}
+                                  xt$valid_from
+                                  xt$valid_to
                                   last_updated]]
                                {:node node :default-all-valid-time? true}))))))
 
@@ -314,14 +314,14 @@
       (t/is (= #{{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}}
                (set (tu/query-ra '[:scan {:table foo,
                                           :for-valid-time [:between ?_start ?_end]}
-                                   [xt/id version]]
+                                   [xt$id version]]
                                  {:node node :params {'?_start (util/->instant tt1)
                                                       '?_end nil}}))))
       (t/is (= #{{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}}
                (set
                 (tu/query-ra '[:scan {:table foo,
                                       :for-valid-time :all-time}
-                               [xt/id version]]
+                               [xt$id version]]
                              {:node node :params {'?_start (util/->instant tt1)
                                                   '?_end nil}})))))))
 
@@ -329,7 +329,7 @@
   (with-open [node (node/start-node {})]
     (let [^IRaQuerySource ra-src (util/component node :xtdb.operator/ra-query-source)]
       (letfn [(->col-types [tx]
-                (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt/id]])
+                (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt$id]])
                     (.bind (util/component node :xtdb/indexer) {:node node, :basis {:tx tx}})
                     (.columnFields)
                     (update-vals types/field->col-type)))]
@@ -338,13 +338,13 @@
                      (tu/then-await-tx node))]
           (tu/finish-chunk! node)
 
-          (t/is (= '{xt/id :keyword}
+          (t/is (= '{xt$id :keyword}
                    (->col-types tx))))
 
         (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:xt/id "foo"}]])
                      (tu/then-await-tx node))]
 
-          (t/is (= '{xt/id [:union #{:keyword :utf8}]}
+          (t/is (= '{xt$id [:union #{:keyword :utf8}]}
                    (->col-types tx))))))))
 
 #_ ; TODO adapt for scan/->temporal-bounds
@@ -415,7 +415,7 @@
     (t/is (= [{:first-name "Ivan", :xt/id :ivan}]
              (tu/query-ra '[:scan
                             {:table xt_docs,  :for-valid-time nil, :for-system-time nil}
-                            [{first-name (= first-name "Ivan")} xt/id]]
+                            [{first_name (= first_name "Ivan")} xt$id]]
                           {:node node})))))
 
 (t/deftest test-absent-columns
@@ -426,13 +426,13 @@
 
     ;; column not existent in all docs
     (t/is (= [{:col2 "bar2", :xt/id :bar}]
-             (tu/query-ra '[:scan {:table xt_docs} [xt/id {col2 (= col2 "bar2")}]]
+             (tu/query-ra '[:scan {:table xt_docs} [xt$id {col2 (= col2 "bar2")}]]
                           {:node node})))
 
     ;; column not existent at all
     (t/is (= []
              (tu/query-ra
-              '[:scan {:table xt_docs} [xt/id {col-x (= col-x "toto")}]]
+              '[:scan {:table xt_docs} [xt$id {col-x (= col-x "toto")}]]
               {:node node})))))
 
 (t/deftest test-iid-fast-path
@@ -448,19 +448,19 @@
       (t/is (nil? (scan/selects->iid-byte-buffer {} vw/empty-params)))
 
       (t/is (= (util/uuid->byte-buffer search-uuid)
-               (scan/selects->iid-byte-buffer {"xt/id" (list '= 'xt/id search-uuid)} vw/empty-params)))
+               (scan/selects->iid-byte-buffer {"xt$id" (list '= 'xt$id search-uuid)} vw/empty-params)))
 
-      (t/is (nil? (scan/selects->iid-byte-buffer {"xt/id" (list '< 'xt/id search-uuid)} vw/empty-params)))
+      (t/is (nil? (scan/selects->iid-byte-buffer {"xt$id" (list '< 'xt$id search-uuid)} vw/empty-params)))
 
       (with-open [^RelationReader params-rel (vw/open-params tu/*allocator* {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
         (t/is (= (util/uuid->byte-buffer search-uuid)
-                 (scan/selects->iid-byte-buffer '{"xt/id" (= xt/id ?search-uuid)}
+                 (scan/selects->iid-byte-buffer '{"xt$id" (= xt$id ?search-uuid)}
                                                 params-rel))))
 
       (with-open [search-uuid-vec (vw/open-vec tu/*allocator* (name '?search-uuid) [#uuid "00000000-0000-0000-0000-000000000000"
                                                                                     #uuid "80000000-0000-0000-0000-000000000000"])
                   ^RelationReader params-rel (vw/open-rel [search-uuid-vec])]
-        (t/is (nil? (scan/selects->iid-byte-buffer '{xt/id (= xt/id ?search-uuid)}
+        (t/is (nil? (scan/selects->iid-byte-buffer '{xt$id (= xt$id ?search-uuid)}
                                                    params-rel))))
 
       (let [old-select->iid-byte-buffer scan/selects->iid-byte-buffer]
@@ -471,22 +471,22 @@
                           iid-pred))]
 
           (t/is (= [{:version 2, :xt/id search-uuid}]
-                   (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                   (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt$id (list '= 'xt$id search-uuid)}]]
                                 {:node node})))
 
           (t/is (= [{:version 2, :xt/id search-uuid}]
-                   (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '=  search-uuid 'xt/id)}]]
+                   (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt$id (list '=  search-uuid 'xt$id)}]]
                                 {:node node})))
 
           (t/is (= [{:version 2, :xt/id search-uuid}]
-                   (tu/query-ra '[:scan {:table xt_docs} [version {xt/id (= xt/id ?search-uuid)}]]
+                   (tu/query-ra '[:scan {:table xt_docs} [version {xt$id (= xt$id ?search-uuid)}]]
                                 {:node node :params {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
 
           (t/is (= [{:version 2, :xt/id search-uuid}
                     {:version 1, :xt/id search-uuid}]
                    (tu/query-ra [:scan {:table 'xt_docs
                                         :for-valid-time :all-time}
-                                 ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                                 ['version {'xt$id (list '= 'xt$id search-uuid)}]]
                                 {:node node}))))))))
 
 (t/deftest test-iid-fast-path-chunk-boundary
@@ -504,13 +504,13 @@
            (mapv #(xt/submit-tx node %)))
 
       (t/is (= [{:version (last @!search-uuid-versions), :xt/id search-uuid}]
-               (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+               (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt$id (list '= 'xt$id search-uuid)}]]
                             {:node node})))
 
       (t/is (=  (into #{} @!search-uuid-versions)
                 (->> (tu/query-ra [:scan {:table 'xt_docs
                                           :for-valid-time :all-time}
-                                   ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                                   ['version {'xt$id (list '= 'xt$id search-uuid)}]]
                                   {:node node})
                      (map :version)
                      set))))))
@@ -525,7 +525,7 @@
       (tu/finish-chunk! node)
 
       (t/is (= [{:xt/id search-uuid}]
-               (tu/query-ra [:scan '{:table xt_docs} [{'xt/id (list '= 'xt/id search-uuid)}]]
+               (tu/query-ra [:scan '{:table xt_docs} [{'xt$id (list '= 'xt$id search-uuid)}]]
                             {:node node}))))))
 
 (t/deftest test-iid-selector
@@ -572,7 +572,7 @@
         (tu/then-await-tx node))
 
     (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
-             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt$id]]
                                {:node node}))))))
 
 (deftest test-pushdown-blooms
@@ -621,5 +621,5 @@
 
         (t/is (= (into #{} (concat first-page second-page))
                  (into #{} (map :xt/id) (tu/query-ra
-                                         '[:scan {:table docs} [xt/id]]
+                                         '[:scan {:table docs} [xt$id]]
                                          {:node node}))))))))

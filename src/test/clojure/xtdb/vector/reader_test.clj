@@ -50,6 +50,7 @@
               copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
           (.copyRow copier1 0)
           (.copyRow copier2 0))
+
         (t/is (= [{:my-column {:foo 42, :bar "forty-two"}}
                   {:my-column {:foo 42.0, :toto :my-keyword}}]
                  (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))

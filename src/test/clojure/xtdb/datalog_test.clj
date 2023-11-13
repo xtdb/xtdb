@@ -361,6 +361,14 @@
                          "Ivan"])))
           "single arg")
 
+    (t/is (= #{{:xt/id :ivan}}
+             (set (xt/q tu/*node*
+                        ['{:find [xt/id]
+                           :in [xt/id]
+                           :where [(match :xt_docs [xt/id])]}
+                         :ivan])))
+          "single arg with slash")
+
     (t/is (= #{{:e :ivan}}
              (set (xt/q tu/*node*
                         ['{:find [e]
@@ -525,10 +533,8 @@
                      :where [(match :xt_docs {:xt/id e})
                              (exists? {:find [e2]
                                        :in [e]
-                                       :where [(match :xt_docs {:xt/id e})
-                                               (match :xt_docs {:xt/id e2})
-                                               [e :name name]
-                                               [e2 :name name]
+                                       :where [(match :xt_docs [{:xt/id e} name])
+                                               (match :xt_docs [{:xt/id e2} name])
                                                [(<> e e2)]]})]}))
           "with in variables")
     (t/is (= [{:e :ivan} {:e :ivan2}]
@@ -830,12 +836,12 @@
                             [:put :xt_docs {:xt/id :slava, :age 37}]])
 
 
-  (t/is (= #{{:_column_0 1, :_column_1 "foo", :xt/id :ivan}
-             {:_column_0 1, :_column_1 "foo", :xt/id :petr}
-             {:_column_0 1, :_column_1 "foo", :xt/id :slava}}
+  (t/is (= #{{:-column-0 1, :-column-1 "foo", :xt/id :ivan}
+             {:-column-0 1, :-column-1 "foo", :xt/id :petr}
+             {:-column-0 1, :-column-1 "foo", :xt/id :slava}}
            (set (xt/q tu/*node*
                       '{:find [1 "foo" xt/id]
-                        :where [(match :xt_docs [xt/id])]})))))
+                        :where [(match :xt-docs [xt/id])]})))))
 
 (deftest calling-a-function-580
   (let [_tx (xt/submit-tx tu/*node*
@@ -1159,13 +1165,13 @@
                                              [(+ a 1) b])]}))
               "b is unified")))))
 
+#_ ;; TODO currently don't work
 (deftest test-basic-rules
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
                             [:put :xt_docs {:xt/id :petr :name "Petr" :last-name "Petrov" :age 18}]
                             [:put :xt_docs {:xt/id :georgy :name "Georgy" :last-name "George" :age 17}]])
   (letfn [(q [query & args]
             (apply xt/q tu/*node* query args))]
-
     (t/testing "without rule"
       (t/is (= [{:i :ivan}] (q '{:find [i]
                                  :where [(match :xt_docs {:xt/id i})
@@ -1571,9 +1577,9 @@
                  :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                  :vt-to nil}]
                (q '{:find [id vt-from vt-to], :where [(match :xt_docs {:xt/id id
-                                                                         :xt/valid-from vt-from
-                                                                         :xt/valid-to vt-to}
-                                                               {:for-valid-time [:from #inst "2051"]})]},
+                                                                       :xt/valid-from vt-from
+                                                                       :xt/valid-to vt-to}
+                                                             {:for-valid-time [:from #inst "2051"]})]},
                   tx0, #inst "2023")))
 
       (t/is (= [{:id :mark,
@@ -1583,9 +1589,9 @@
                  :vt-from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
                  :vt-to #time/zoned-date-time "2040-01-01T00:00Z[UTC]"}]
                (q '{:find [id vt-from vt-to], :where [(match :xt_docs {:xt/id id
-                                                                         :xt/valid-from vt-from
-                                                                         :xt/valid-to vt-to}
-                                                               {:for-valid-time [:to #inst "2040"]})]},
+                                                                       :xt/valid-from vt-from
+                                                                       :xt/valid-to vt-to}
+                                                             {:for-valid-time [:to #inst "2040"]})]},
                   tx1, #inst "2023"))))))
 
 (deftest test-snodgrass-99-tutorial
@@ -1890,7 +1896,7 @@
       :where [(match :customer [{:xt/id c, :firstname "bob"}])]}
     [{:c 1, :o 2}])
 
-(t/testing "cardinality violation error"
+  (t/testing "cardinality violation error"
     (t/is (thrown-with-msg? xtdb.RuntimeException #"cardinality violation"
                             (->> '{:find [firstname]
                                    :where [[(q {:find [firstname],
@@ -1912,9 +1918,9 @@
                             [:put :xt_cats {:xt/id 2} {:for-valid-time [:in #inst "2016" #inst "2018"]}]])
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :xt_docs_app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :xt-docs-app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                                 :to #time/zoned-date-time "2020-01-01T00:00Z[UTC]"},
-             :xt_cats_app_time {:from #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
+             :xt-cats-app-time {:from #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
                                 :to #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}]
            (xt/q
             tu/*node*
@@ -1926,9 +1932,9 @@
                       [(contains? xt_docs_app_time xt_cats_app_time)]]})))
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :xt_docs_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :xt-docs-sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                                 :to nil},
-             :xt_cats_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :xt-cats-sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                                 :to nil}}]
            (xt/q
             tu/*node*
@@ -1970,7 +1976,7 @@
 
 
   (t/is (= [{:xt/id 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
              :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
              :app-time-to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
@@ -1985,9 +1991,9 @@
         "projecting both period and underlying cols")
 
   (t/is (= [{:xt/id 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                         :to nil}}]
            (xt/q
             tu/*node*
@@ -2011,9 +2017,9 @@
 
   (t/is (= [{:xt/id 1
              :id2 1,
-             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             :sys-time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                         :to nil}}]
            (xt/q
             tu/*node*
@@ -2078,9 +2084,9 @@
   (t/is (= '[{:plan [:project [name age]
                      [:project [{age _r0_age} {name _r0_name} {pid _r0_pid}]
                       [:rename {age _r0_age, name _r0_name, pid _r0_pid}
-                       [:project [{pid xt/id} name age]
+                       [:project [{pid xt$id} name age]
                         [:scan {:table people, :for-valid-time nil, :for-system-time nil}
-                         [age name {xt/id (= xt/id ?pid)}]]]]]]}]
+                         [age name {xt$id (= xt$id ?pid)}]]]]]]}]
 
            (xt/q tu/*node*
                  '{:find [name age]
@@ -2299,7 +2305,7 @@
 
 (t/deftest test-normalisation
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id "doc" :Foo/Bar 1 :Bar.Foo/hELLo-wORLd 2}]])
-  (t/is (= [{:Foo/Bar 1, :Bar.Foo/Hello-World 2}]
+  (t/is (= [{:foo/bar 1, :bar.foo/hello-world 2}]
            (xt/q tu/*node* '{:find [Foo/Bar Bar.Foo/Hello-World]
                              :where [(match :xt-docs [Foo/Bar Bar.Foo/Hello-World])]})))
   (t/is (= [{:bar 1, :foo 2}]

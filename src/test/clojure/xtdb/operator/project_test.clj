@@ -28,10 +28,10 @@
                            :preserve-blocks? true})))))
 
 (t/deftest test-project-row-number
-  (t/is (= {:col-types '{a :i64, $row-num :i64}
-            :res [[{:a 12, :$row-num 1}, {:a 0, :$row-num 2}]
-                  [{:a 100, :$row-num 3}]]}
-           (tu/query-ra [:project '[a, {$row-num (row-number)}]
+  (t/is (= {:col-types '{a :i64, row-num :i64}
+            :res [[{:a 12, :row-num 1}, {:a 0, :row-num 2}]
+                  [{:a 100, :row-num 3}]]}
+           (tu/query-ra [:project '[a, {row-num (row-number)}]
                          [::tu/blocks
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]

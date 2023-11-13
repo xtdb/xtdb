@@ -17,19 +17,21 @@
                            :with-col-types? true})))
 
     (t/testing "prefix"
-      (t/is (= {:col-types '{R_b :i64, R_c :i64}
-                :res [[{:R_c 12, :R_b 10}, {:R_c 0, :R_b 15}]
-                      [{:R_c 100, :R_b 83}]]}
-               (tu/query-ra [:rename 'R '{a c}
+      (t/is (= {:col-types '{r_b :i64, r_c :i64}
+                :res [[{:r_c 12, :r_b 10}, {:r_c 0, :r_b 15}]
+                      [{:r_c 100, :r_b 83}]]}
+               (tu/query-ra [:rename 'r '{a c}
                              blocks-expr]
                             {:preserve-blocks? true
-                             :with-col-types? true}))))
+                             :with-col-types? true
+                             :key-fn :sql}))))
 
     (t/testing "prefix only"
-      (t/is (= {:col-types '{R_a :i64, R_b :i64}
-                :res [[{:R_a 12, :R_b 10}, {:R_a 0, :R_b 15}]
-                      [{:R_a 100, :R_b 83}]]}
-               (tu/query-ra [:rename 'R
+      (t/is (= {:col-types '{r_a :i64, r_b :i64}
+                :res [[{:r_a 12, :r_b 10}, {:r_a 0, :r_b 15}]
+                      [{:r_a 100, :r_b 83}]]}
+               (tu/query-ra [:rename 'r
                              blocks-expr]
                             {:preserve-blocks? true
-                             :with-col-types? true}))))))
+                             :with-col-types? true
+                             :key-fn :sql}))))))

@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [clojure.walk :as walk]
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
@@ -12,7 +13,6 @@
   (:import (clojure.lang MapEntry)
            (java.lang AutoCloseable)
            (org.apache.arrow.memory BufferAllocator)
-           xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
            (xtdb.watermark IWatermarkSource Watermark)))
@@ -202,7 +202,7 @@
 
 (defn- col-sym
   ([col]
-   (-> (symbol col) (vary-meta assoc :column? true)))
+   (-> (symbol col) util/symbol->normal-form-symbol (vary-meta assoc :column? true)))
   ([prefix col]
    (col-sym (str (format "%s_%s" prefix col)))))
 
@@ -345,7 +345,8 @@
                                 set)}))
 
 (defn- ->param-sym [lv]
-  (-> (symbol (str "?" (name lv)))
+  (-> (symbol (str "?" lv))
+      util/symbol->normal-form-symbol
       (with-meta {::param? true})))
 
 (defn- plan-in-tables [{in-bindings :in}]
@@ -354,11 +355,14 @@
                                    (fn [idx [binding-type binding-arg]]
                                      (let [table-key (symbol (str "?in" idx))]
                                        (-> (case binding-type
-                                             :scalar {::vars #{binding-arg}, ::in-cols [(->param-sym binding-arg)]}
-                                             :tuple {::vars (set binding-arg), ::in-cols (mapv ->param-sym binding-arg)}
-                                             :relation (let [cols (first binding-arg)]
+                                             :scalar {::vars #{(util/symbol->normal-form-symbol binding-arg)},
+                                                      ::in-cols [(->param-sym binding-arg)]}
+                                             :tuple {::vars (into #{} (map util/symbol->normal-form-symbol) binding-arg),
+                                                     ::in-cols (mapv ->param-sym binding-arg)}
+                                             :relation (let [cols (->> (first binding-arg)
+                                                                       (mapv util/symbol->normal-form-symbol))]
                                                          {::table-key table-key, ::in-cols cols, ::vars (set cols)})
-                                             :collection (let [col (first binding-arg)]
+                                             :collection (let [col (util/symbol->normal-form-symbol (first binding-arg))]
                                                            {::table-key table-key, ::vars #{col}, ::in-cols [col]}))
                                            (assoc ::binding-type binding-type)))))))]
     (-> in-bindings
@@ -379,17 +383,17 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
-(def app-time-period-sym 'xt/valid-time)
-(def app-time-from-sym 'xt/valid-from)
-(def app-time-to-sym 'xt/valid-to)
+(def app-time-period-sym 'xt$valid_time)
+(def app-time-from-sym 'xt$valid_from)
+(def app-time-to-sym 'xt$valid_to)
 (def app-temporal-cols {:period app-time-period-sym
                         :from app-time-from-sym
                         :to app-time-to-sym})
 
 
-(def system-time-period-sym 'xt/system-time)
-(def system-time-from-sym 'xt/system-from)
-(def system-time-to-sym 'xt/system-to)
+(def system-time-period-sym 'xt$system_time)
+(def system-time-from-sym 'xt$system_from)
+(def system-time-to-sym 'xt$system_to)
 (def sys-temporal-cols {:period system-time-period-sym
                         :from system-time-from-sym
                         :to system-time-to-sym})
@@ -435,7 +439,7 @@
                                       {:a a, :lit v-arg})))
                             (group-by :a))
                        (update-vals #(into #{} (map :lit) %)))
-        plan (-> [:scan {:table table
+        plan (-> [:scan {:table (util/symbol->normal-form-symbol table)
                          :for-valid-time (:for-valid-time temporal-opts)
                          :for-system-time (:for-system-time temporal-opts)}
                   (-> attrs
@@ -546,10 +550,11 @@
         (vary-meta merge
                    {::required-vars (form-vars form)}
                    (when-let [[return-type return-arg] return]
-                     (-> (case return-type
-                           :scalar {::return-var return-arg
-                                    ::vars #{return-arg}})
-                         (assoc ::return-type return-type)))))))
+                     (let [return-arg (util/symbol->normal-form-symbol return-arg)]
+                       (-> (case return-type
+                             :scalar {::return-var return-arg
+                                      ::vars #{return-arg}})
+                           (assoc ::return-type return-type))))))))
 
 (defn- ->apply-mapping [apply-params]
   ;;TODO symbol names will clash with nested applies
@@ -1019,7 +1024,7 @@
                               :form (let [{::keys [col]} (meta find-arg)]
                                       (plan-head-form col arg)))])))))))
 
-(defn- plan-find [{find-args :find, rename-keys :keys} head-exprs]
+(defn- plan-find [{find-args :find, rename-keys :keys :as find} head-exprs]
   (let [clauses (->> find-args
                      (mapv (fn [rename-key clause]
                              (let [expr (get head-exprs clause)
@@ -1078,8 +1083,10 @@
                              :vars missing-vars}))))
 
 (defn- check-head-vars [{:keys [find order-by]} {body-provided-vars ::vars}]
-  (let [find-vars (set (mapcat form-vars find))
-        order-by-vars (set (mapcat (comp form-vars :find-arg) order-by))]
+  (let [find-vars (->> (mapcat form-vars find)
+                       set)
+        order-by-vars (->> (mapcat (comp form-vars :find-arg) order-by)
+                           set)]
     (unbound-var-check find-vars body-provided-vars "find")
     (unbound-var-check order-by-vars body-provided-vars "order-by")))
 
@@ -1107,11 +1114,19 @@
 
     plan))
 
+(defn normalize-query [query]
+  (walk/postwalk (fn [form]
+                   (if (and (vector? form) (= (first form) :logic-var))
+                     (update form 1 util/symbol->normal-form-symbol)
+                     form))
+                 query))
+
 (defn- plan-query [conformed-query]
-  (let [in-rels (plan-in-tables conformed-query)]
-    (-> (plan-body conformed-query in-rels)
-        (wrap-head conformed-query (::param-vars (meta in-rels)))
-        (wrap-top conformed-query))))
+  (let [normalized-query (normalize-query conformed-query)
+        in-rels (plan-in-tables normalized-query)]
+    (-> (plan-body normalized-query in-rels)
+        (wrap-head normalized-query (::param-vars (meta in-rels)))
+        (wrap-top normalized-query))))
 
 (defn compile-query [query]
   (binding [*gensym* (seeded-gensym "_" 0)]
@@ -1150,7 +1165,7 @@
                args)
        (into {})))
 
-(def row-alias-sym 'xt/*)
+(def row-alias-sym 'xt$*)
 
 (defn apply-datalog-specific-rewrites [plan basis
                                        ^IWatermarkSource wm-src,
@@ -1182,7 +1197,8 @@
         (when (realized? wm-delay) (util/try-close @wm-delay))))))
 
 (defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
-                                           query {:keys [args default-all-valid-time? basis default-tz explain?]}]
+                                           query {:keys [args default-all-valid-time? basis default-tz explain? key-fn]
+                                                  :or {key-fn :datalog}}]
   (let [plan (compile-query query)
         {::keys [in-bindings]} (meta plan)
 
@@ -1192,7 +1208,9 @@
                  #_(doto clojure.pprint/pprint)
                  #_(->> (binding [*print-meta* true]))
                  (lp/rewrite-plan {})
+                 #_(lp/normalize-plan)
                  #_(doto clojure.pprint/pprint)
+                 #_(->> (binding [*print-meta* true]))
                  (doto (lp/validate-plan)))]
 
     (if explain?
@@ -1207,4 +1225,4 @@
         (util/with-close-on-catch [^AutoCloseable params (vw/open-params allocator (args->params args in-bindings))]
           (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
               (.openCursor)
-              (op/cursor->result-set params)))))))
+              (op/cursor->result-set params (util/parse-key-fn key-fn))))))))

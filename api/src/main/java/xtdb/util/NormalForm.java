@@ -9,8 +9,19 @@ public class NormalForm {
     private NormalForm() {
     }
 
-    // TODO we could cache these? guessing they're probably not free.
-    
+    public static String snakeCase(String s) {
+        var i = s.lastIndexOf('$');
+        if (i < 0) {
+            return s.toLowerCase(Locale.ROOT)
+                    .replace("$", "/")
+                    .replace("-", "_");
+        } else {
+            return "%s/%s".formatted(
+                    s.substring(0, i).replace("$", ".").replace("-","_"),
+                    s.substring(i + 1).replace("-", "_"));
+        }
+    }
+
     private static String normalise(String s) {
         return s.toLowerCase(Locale.ROOT)
                 .replace('.', '$')

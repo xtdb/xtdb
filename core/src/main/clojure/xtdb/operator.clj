@@ -22,16 +22,14 @@
             xtdb.operator.top
             xtdb.operator.unwind
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
-  (:import (clojure.lang MapEntry)
-           java.lang.AutoCloseable
+            [xtdb.vector.reader :as vr])
+  (:import java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util Iterator)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb ICursor IResultCursor IResultSet)
+           (xtdb ICursor IKeyFn IResultCursor IResultSet)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter))
@@ -54,13 +52,6 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRaQuerySource
   (^xtdb.operator.PreparedQuery prepareRaQuery [ra-query]))
-
-(defn- ->table-arg-fields [table-args]
-  (->> (for [[table-key rows] table-args]
-         (MapEntry/create
-          table-key
-          (vw/rows->fields rows)))
-       (into {})))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
                                         ^Clock clock, ^RefCounter ref-ctr fields]
@@ -183,6 +174,7 @@
 
 (deftype CursorResultSet [^IResultCursor cursor
                           ^AutoCloseable params
+                          ^IKeyFn key-fn
                           ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
   (columnFields [_] (.columnFields cursor))
@@ -197,7 +189,7 @@
                                     (reify Consumer
                                       (accept [_ rel]
                                         (set! (.-next-values res)
-                                              (.iterator (vr/rel->rows rel))))))
+                                              (.iterator (vr/rel->rows rel key-fn))))))
                        (not (and next-values (.hasNext next-values)))))
            (and next-values (.hasNext next-values))))))
 
@@ -206,5 +198,5 @@
     (.close cursor)
     (.close params)))
 
-(defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
-  (CursorResultSet. cursor params nil))
+(defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params, ^IKeyFn key-fn]
+  (CursorResultSet. cursor params key-fn nil))

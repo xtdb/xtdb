@@ -29,7 +29,7 @@
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
-           (xtdb ICursor InstantSource)
+           (xtdb ICursor IKeyFn InstantSource)
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            (xtdb.operator IRaQuerySource PreparedQuery)
@@ -188,22 +188,27 @@
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema blocks))}))
 
-(defn <-reader [^IVectorReader col]
-  (mapv (fn [idx]
-          (.getObject col idx))
-        (range (.valueCount col))))
+(defn <-reader
+  ([^IVectorReader col] (<-reader col (util/parse-key-fn :datalog)))
+  ([^IVectorReader col ^IKeyFn key-fn]
+   (mapv (fn [idx]
+           (.getObject col idx key-fn))
+         (range (.valueCount col)))))
 
-(defn <-cursor [^ICursor cursor]
-  (let [!res (volatile! (transient []))]
-    (.forEachRemaining cursor
-                       (reify Consumer
-                         (accept [_ rel]
-                           (vswap! !res conj! (vr/rel->rows rel)))))
-    (persistent! @!res)))
+(defn <-cursor
+  ([^ICursor cursor] (<-cursor cursor (util/parse-key-fn :datalog)))
+  ([^ICursor cursor ^IKeyFn key-fn]
+   (let [!res (volatile! (transient []))]
+     (.forEachRemaining cursor
+                        (reify Consumer
+                          (accept [_ rel]
+                            (vswap! !res conj! (vr/rel->rows rel key-fn)))))
+     (persistent! @!res))))
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [node params preserve-blocks? with-col-types?] :as query-opts}]
+  ([query {:keys [node params preserve-blocks? with-col-types? key-fn] :as query-opts
+           :or {key-fn :datalog}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
                       node (-> (update :basis api/after-latest-submitted-tx node)
@@ -221,7 +226,7 @@
                        (-> (select-keys query-opts [:basis :table-args :default-tz :default-all-valid-time?])
                            (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
-           (let [rows (-> (<-cursor res)
+           (let [rows (-> (<-cursor res (util/parse-key-fn key-fn))
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
                {:res rows, :col-types (update-vals (.columnFields bq) types/field->col-type)}
@@ -383,7 +388,9 @@
             (java.util.UUID. (Long/reverse n) 0))]
     (map new-uuid (range n))))
 
-(defn vec->vals [^IVectorReader rdr]
-  (->> (for [i (range (.valueCount rdr))]
-         (.getObject rdr i))
-       (into [])))
+(defn vec->vals
+  ([^IVectorReader rdr] (vec->vals rdr (util/parse-key-fn :datalog)))
+  ([^IVectorReader rdr ^IKeyFn key-fn]
+   (->> (for [i (range (.valueCount rdr))]
+          (.getObject rdr i key-fn))
+        (into []))))

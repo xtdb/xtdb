@@ -6,11 +6,11 @@ import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
+import xtdb.IKeyFn;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.IntStream;
 
 public interface IVectorReader extends AutoCloseable {
 
@@ -49,6 +49,8 @@ public interface IVectorReader extends AutoCloseable {
     ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse);
 
     Object getObject(int idx);
+
+    Object getObject(int idx, IKeyFn keyFn);
 
     IVectorReader structKeyReader(String colName);
 

@@ -7,6 +7,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
+import xtdb.IKeyFn;
 import xtdb.vector.IVectorIndirection.Selection;
 
 import java.nio.ByteBuffer;
@@ -126,7 +127,12 @@ class IndirectVectorReader implements IVectorReader {
 
     @Override
     public Object getObject(int idx) {
-        return reader.getObject(indirection.getIndex(idx));
+        return getObject(idx, (k) -> k);
+    }
+
+    @Override
+    public Object getObject(int idx, IKeyFn keyFn) {
+        return reader.getObject(indirection.getIndex(idx), keyFn);
     }
 
     @Override
