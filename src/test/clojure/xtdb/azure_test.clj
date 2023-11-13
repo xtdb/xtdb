@@ -44,7 +44,12 @@
 
     :else (f)))
 
+(defn wait-between-tests [f]
+  (Thread/sleep 10000)
+  (f))
+
 (t/use-fixtures :once run-if-auth-available)
+(t/use-fixtures :each wait-between-tests)
 
 (defn object-store ^Closeable [prefix]
   (->> (ig/prep-key ::azure/blob-object-store {:storage-account storage-account
@@ -54,19 +59,19 @@
                                                :prefix (util/->path (str "xtdb.azure-test." prefix))})
        (ig/init-key ::azure/blob-object-store)))
 
-(t/deftest ^:azure put-delete-test
+(t/deftest ^:azure put-delete-test 
   (with-open [os (object-store (random-uuid))]
     (os-test/test-put-delete os)))
 
-(t/deftest ^:azure range-test
+(t/deftest ^:azure range-test 
   (with-open [os (object-store (random-uuid))]
     (os-test/test-range os)))
 
-(t/deftest ^:azure list-test
+(t/deftest ^:azure list-test 
   (with-open [os (object-store (random-uuid))]
     (os-test/test-list-objects os)))
 
-(t/deftest ^:azure list-test-with-prior-objects
+(t/deftest ^:azure list-test-with-prior-objects 
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
       (os-test/put-edn os (util/->path "alice") :alice)
@@ -84,7 +89,7 @@
         (t/is (= (mapv util/->path ["alan"]) 
                  (.listObjects ^IObjectStore os)))))))
 
-(t/deftest ^:azure multiple-object-store-list-test
+(t/deftest ^:azure multiple-object-store-list-test 
   (let [prefix (random-uuid)
         wait-time-ms 5000]
     (with-open [os-1 (object-store prefix)
@@ -130,7 +135,7 @@
                                                    (.setRetrieveUncommittedBlobs true))))]
     (set/difference all-blobs comitted-blobs)))
 
-(t/deftest ^:azure multipart-start-and-cancel
+(t/deftest ^:azure multipart-start-and-cancel 
   (with-open [os (object-store (random-uuid))]
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)]
@@ -147,7 +152,7 @@
             (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
               (= #{} uncomitted-blobs))))))))
 
-(t/deftest ^:azure multipart-put-test
+(t/deftest ^:azure multipart-put-test 
   (with-open [os (object-store (random-uuid))]
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)
