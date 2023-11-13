@@ -28,5 +28,5 @@ ENV XTDB_VERSION=${XTDB_VERSION}
 LABEL org.opencontainers.image.version=${XTDB_VERSION}
 LABEL org.opencontainers.image.revision=${GIT_SHA}
 
-ADD xtdb.edn xtdb.edn
+ADD local_xtdb.edn xtdb.edn
 ADD build/libs/xtdb-standalone.jar xtdb-standalone.jar
