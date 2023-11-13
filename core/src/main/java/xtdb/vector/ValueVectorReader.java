@@ -12,6 +12,7 @@ import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
+import xtdb.IKeyFn;
 import xtdb.types.ClojureForm;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
@@ -28,7 +29,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static java.time.temporal.ChronoUnit.MICROS;
-import static java.util.function.Function.identity;
 import static xtdb.util.NormalForm.datalogForm;
 
 public class ValueVectorReader implements IVectorReader {

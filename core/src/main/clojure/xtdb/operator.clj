@@ -22,20 +22,17 @@
             xtdb.operator.top
             xtdb.operator.unwind
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
-  (:import (clojure.lang MapEntry)
-           java.lang.AutoCloseable
+            [xtdb.vector.reader :as vr])
+  (:import java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util Iterator)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb ICursor IResultCursor IResultSet)
+           (xtdb ICursor IKeyFn IResultCursor IResultSet)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
-           xtdb.util.RefCounter
-           (xtdb.vector IKeyFn KeyFnBuilder)))
+           xtdb.util.RefCounter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
@@ -83,9 +80,9 @@
 
 (defn key-fn-kw->key-fn [kw]
   (case kw
-    :datalog (KeyFnBuilder/datalog)
-    :sql (KeyFnBuilder/sql)
-    :snake_case (KeyFnBuilder/snakeCase)
+    :datalog IKeyFn/DATALOG
+    :sql IKeyFn/SQL
+    :snake_case IKeyFn/SNAKE_CASE
     (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn kw}))))
 
 (defn prepare-ra ^xtdb.operator.PreparedQuery

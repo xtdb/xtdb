@@ -11,8 +11,9 @@
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType)
+           xtdb.IKeyFn
            (xtdb.types IntervalDayTime IntervalYearMonth)
-           (xtdb.vector KeyFnBuilder IVectorWriter)
+           (xtdb.vector IVectorWriter)
            (xtdb.vector.extensions ClojureFormVector KeywordVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -27,7 +28,7 @@
 
       (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
         {:vs (vec (for [idx (range (count vs))]
-                    (.getObject duv-rdr idx (KeyFnBuilder/datalog))))
+                    (.getObject duv-rdr idx IKeyFn/DATALOG)))
          :vec-types (vec (for [idx (range (count vs))]
                            (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
 

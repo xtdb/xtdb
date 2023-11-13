@@ -21,10 +21,11 @@
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
+           xtdb.IKeyFn
            xtdb.indexer.IIndexer
            (xtdb.operator BoundQuery IRaQuerySource PreparedQuery)
            [xtdb.tx Ops]
-           (xtdb.vector IVectorReader KeyFnBuilder)))
+           (xtdb.vector IVectorReader)))
 
 ;;;; populate-root temporarily copied from test-util
 
@@ -131,7 +132,7 @@
                                      ;; HACK getting results in a Clojure data structure, putting them back in to a VSR
                                      ;; because we can get DUVs in the in-rel but the output just expects mono vecs.
 
-                                     (populate-root vsr (vr/rel->rows in-rel (KeyFnBuilder/sql)))
+                                     (populate-root vsr (vr/rel->rows in-rel IKeyFn/SQL))
                                      (.putNext listener))))
 
               (.completed listener)))]

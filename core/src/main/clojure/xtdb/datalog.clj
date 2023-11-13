@@ -15,7 +15,6 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.vector KeyFnBuilder)
            (xtdb.watermark IWatermarkSource Watermark)))
 
 (s/def ::logic-var symbol?)

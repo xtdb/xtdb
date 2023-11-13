@@ -29,11 +29,11 @@
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
-           (xtdb ICursor InstantSource)
+           (xtdb ICursor IKeyFn InstantSource)
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            (xtdb.operator IRaQuerySource PreparedQuery)
-           (xtdb.vector IVectorReader RelationReader IKeyFn KeyFnBuilder)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -189,14 +189,14 @@
                  (->cursor allocator schema blocks))}))
 
 (defn <-reader
-  ([^IVectorReader col] (<-reader col (KeyFnBuilder/datalog)))
+  ([^IVectorReader col] (<-reader col IKeyFn/DATALOG))
   ([^IVectorReader col ^IKeyFn key-fn]
    (mapv (fn [idx]
            (.getObject col idx key-fn))
          (range (.valueCount col)))))
 
 (defn <-cursor
-  ([^ICursor cursor] (<-cursor cursor (KeyFnBuilder/datalog)))
+  ([^ICursor cursor] (<-cursor cursor IKeyFn/DATALOG))
   ([^ICursor cursor ^IKeyFn key-fn]
    (let [!res (volatile! (transient []))]
      (.forEachRemaining cursor
@@ -389,7 +389,7 @@
     (map new-uuid (range n))))
 
 (defn vec->vals
-  ([^IVectorReader rdr] (vec->vals rdr (KeyFnBuilder/datalog)))
+  ([^IVectorReader rdr] (vec->vals rdr IKeyFn/DATALOG))
   ([^IVectorReader rdr ^IKeyFn key-fn]
    (->> (for [i (range (.valueCount rdr))]
           (.getObject rdr i key-fn))
