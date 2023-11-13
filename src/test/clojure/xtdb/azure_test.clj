@@ -45,6 +45,7 @@
     :else (f)))
 
 (defn wait-between-tests [f]
+  (log/info "Waiting 10 seconds between tests... (Allowing AQMP conneciton time to clear up)")
   (Thread/sleep 10000)
   (f))
 
