@@ -2456,4 +2456,27 @@
          (set (xt/q tu/*node*
                     '(-> (from :customers [{:xt/id id} name])
                          (with {:orders (pull* (from :orders [{:customer-id $c-id} {:xt/id id}])
-                                               {:args [{:c-id id}]})})))))))
+                                               {:args [{:c-id id}]})}))))))
+  (t/is (=
+         [{:orders nil}]
+         (xt/q tu/*node*
+               '(unify
+                 (with {orders (pull (table [] []))})))))
+
+  (t/is (=
+         [{:orders {}}]
+         (xt/q tu/*node*
+               '(unify
+                 (with {orders (pull (table [{}] []))})))))
+
+  (t/is (=
+         [{:orders nil}]
+         (xt/q tu/*node*
+               '(unify
+                 (with {orders (pull* (table [] []))})))))
+
+  (t/is (=
+         [{:orders [{}]}]
+         (xt/q tu/*node*
+               '(unify
+                 (with {orders (pull* (table [{}] []))}))))))
