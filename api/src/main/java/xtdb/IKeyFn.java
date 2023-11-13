@@ -3,6 +3,8 @@ package xtdb;
 import clojure.lang.Keyword;
 import xtdb.util.NormalForm;
 
+import java.util.HashMap;
+
 public interface IKeyFn {
     Object denormalize(String key);
 
@@ -13,4 +15,9 @@ public interface IKeyFn {
 
     // TODO the inner hyphen to underscore is not strictly necessary on the way out
     IKeyFn SNAKE_CASE = (k) -> Keyword.intern(NormalForm.snakeCase(k));
+
+    static IKeyFn cached(IKeyFn f) {
+        var cache = new HashMap<String, Object>();
+        return (k) -> cache.computeIfAbsent(k, f::denormalize);
+    }
 }

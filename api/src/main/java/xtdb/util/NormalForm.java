@@ -9,8 +9,6 @@ public class NormalForm {
     private NormalForm() {
     }
 
-    // TODO we could cache these? guessing they're probably not free.
-
     public static String snakeCase(String s) {
         var i = s.lastIndexOf('$');
         if (i < 0) {
