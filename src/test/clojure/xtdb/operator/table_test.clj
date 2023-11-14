@@ -4,7 +4,7 @@
             [xtdb.util :as util])
   (:import java.time.Duration))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-table
   (t/is (= {:res [{:a 12, :b "foo" :c 1.2, :d nil, :e true, :f (Duration/ofHours 1)}
@@ -122,3 +122,9 @@
                      (tu/query-ra '[:table ?a]
                                   {:params '{?a [1 "foo" :foo]}}))
    "param not struct list type"))
+
+(t/deftest do-not-leak-memory-on-expression-errors
+  (t/is
+   (thrown-with-msg? RuntimeException #"division by zero"
+                     (tu/query-ra '[:table [x9] [{x9 -54} {x9 (/ 35 0)}]]
+                                  {:node tu/*node*}))))

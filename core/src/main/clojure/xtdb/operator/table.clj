@@ -58,16 +58,16 @@
         (doseq [[col-name ^Field field] fields
                 :let [col-kw (keyword col-name)
                       ;; create things dynamically here for now, to not run into issues with normalisation
-                      out-vec (.createVector (create-field-without-children col-name field) allocator)
-                      out-writer (vw/->writer out-vec)]]
+                      out-vec (.createVector (create-field-without-children col-name field) allocator)]]
+          (util/with-close-on-catch [out-writer (vw/->writer out-vec)]
 
-          (dotimes [idx row-count]
-            (let [row (nth rows idx)
-                  v (-> (get row col-kw) (->v opts))]
-              (vw/write-value! v (.legWriter out-writer (vw/value->arrow-type v)))))
+            (dotimes [idx row-count]
+              (let [row (nth rows idx)
+                    v (-> (get row col-kw) (->v opts))]
+                (vw/write-value! v (.legWriter out-writer (vw/value->arrow-type v)))))
 
-          (.syncValueCount out-writer)
-          (.add out-cols (vr/vec->reader out-vec)))
+            (.syncValueCount out-writer)
+            (.add out-cols (vr/vec->reader out-vec))))
 
         (vr/rel-reader out-cols row-count)))))
 
@@ -104,7 +104,7 @@
                     projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
                 (.add field-set (types/col-type->field (.getColumnType projection-spec)))
                 (.put out-row k-kw (fn [{:keys [allocator params]}]
-                                     (with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
+                                     (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
                                        (.getObject out-vec 0 key-fn))))))))
         (.add out-rows out-row)))
 
