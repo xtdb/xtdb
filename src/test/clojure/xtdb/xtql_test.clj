@@ -102,36 +102,30 @@
         "simple param nested")
 
   (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
-           (set (xt/q tu/*node* '(unify (from :docs {:bind [first-name]})
+           (set (xt/q tu/*node* '(unify (from :docs [first-name])
                                         (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])))))
         "testing unify")
 
   (t/is (= [{:first-name "Petr"}]
-           (xt/q tu/*node* '(unify (from :docs {:bind [{:xt/id :petr} first-name]})
+           (xt/q tu/*node* '(unify (from :docs [{:xt/id :petr} first-name])
                                    (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))))
         "testing unify with restriction")
 
-  #_ ;; TODO still some issues with normalisation
   (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
-           (set (xt/q tu/*node* '(table $ivan+petr {:bind [first-name]})
+           (set (xt/q tu/*node* '(table $ivan+petr [first-name])
                       {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}})))
         "table arg as parameter")
 
-  (t/is (= #{{:name "Ivan"} {:name "Petr"}}
-           (set (xt/q tu/*node* '(table $ivan+petr [name])
-                      {:args {:ivan+petr [{:name "Ivan"} {:name "Petr"}]}})))
+  (t/is (= #{{:first-name "Petr"}}
+           (set (xt/q tu/*node* '(-> (table $ivan+petr [first-name])
+                                     (where (= "Petr" first-name)))
+                      {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}})))
         "table arg as parameter")
 
-  (t/is (= #{{:name "Petr"}}
-           (set (xt/q tu/*node* '(-> (table $ivan+petr [name])
-                                     (where (= "Petr" name)))
-                      {:args {:ivan+petr [{:name "Ivan"} {:name "Petr"}]}})))
-        "table arg as parameter")
-
-  (t/is (= [{:name "Petr"}]
-           (xt/q tu/*node* '(unify (from :docs [{:xt/id :petr :first-name name}])
-                                   (table $ivan+petr [name]))
-                 {:args {:ivan+petr [{:name "Ivan"} {:name "Petr"}]}}))
+  (t/is (= [{:first-name "Petr"}]
+           (xt/q tu/*node* '(unify (from :docs [{:xt/id :petr :first-name first-name}])
+                                   (table $ivan+petr [first-name]))
+                 {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}}))
         "table arg as paramater in unify"))
 
 
