@@ -76,7 +76,12 @@
   (t/is (= [{:a {:baz 1}, :b 2}]
            (tu/query-ra '[:table [{:a {:baz ?p1} :b ?p2}]]
                         {:params {'?p1 1, '?p2 2, '?p3 3, '?p4 4}}))
-        "nested param"))
+        "nested param")
+
+  (t/is (= [{:foo :bar, :baz {:nested-foo :bar}}]
+           (tu/query-ra ' [:table [{:foo :bar, :baz {:nested-foo ?nested_param}}]]
+                          {:params {'?nested_param :bar}}))
+        "nested param with need for normalisation"))
 
 (t/deftest test-table-handles-symbols
   (t/is (= '[{:x50 true}]
@@ -128,3 +133,17 @@
    (thrown-with-msg? RuntimeException #"division by zero"
                      (tu/query-ra '[:table [x9] [{x9 -54} {x9 (/ 35 0)}]]
                                   {:node tu/*node*}))))
+
+(t/deftest test-absent-columns
+  (t/is (= '{:res [{:x5 1} {:x6 -77}],
+             :col-types {x5 [:union #{:absent :i64}], x6 [:union #{:absent :i64}]}}
+           (tu/query-ra
+            '[:table [{:x5 1} {:x6 -77}]]
+            {:with-col-types? true})))
+
+  (t/is (= '{:res [{:x5 1} {:x6 -77}],
+             :col-types {x5 [:union #{:absent :i64}], x6 [:union #{:absent :i64}]}}
+           (tu/query-ra '[:table ?table]
+                        {:params {'?table [{:x5 1} {:x6 -77}]}
+                         :with-col-types? true}))
+        "differing columns"))

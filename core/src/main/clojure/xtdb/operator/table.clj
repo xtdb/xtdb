@@ -1,5 +1,6 @@
 (ns xtdb.operator.table
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
@@ -43,31 +44,24 @@
     explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat types/null-field))))
                            (select-keys explicit-col-names))))
 
-(defn- create-field-without-children ^Field [col-name ^Field field]
-  (let [arrow-type (.getType field)]
-    (case arrow-type
-      ;; lists need a child
-      (#xt.arrow/type :list #xt.arrow/type :set) (types/->field (str col-name) arrow-type (.isNullable field)
-                                                                (types/->field "$data$" #xt.arrow/type :union false))
-      (types/->field (str col-name) arrow-type (.isNullable field)))))
-
 (defn- ->out-rel [{:keys [allocator] :as opts} fields rows ->v]
   (let [row-count (count rows)]
     (when (pos? row-count)
       (util/with-close-on-catch [out-cols (ArrayList. (count fields))]
         (doseq [[col-name ^Field field] fields
                 :let [col-kw (keyword col-name)
-                      ;; create things dynamically here for now, to not run into issues with normalisation
-                      out-vec (.createVector (create-field-without-children col-name field) allocator)]]
+                      out-vec (.createVector field allocator)]]
           (util/with-close-on-catch [out-writer (vw/->writer out-vec)]
 
             (dotimes [idx row-count]
-              (let [row (nth rows idx)
-                    v (-> (get row col-kw) (->v opts))]
-                (vw/write-value! v (.legWriter out-writer (vw/value->arrow-type v)))))
+              (let [row (nth rows idx)]
+                (if (contains? row col-kw)
+                  (let [v (-> (get row col-kw) (->v opts))]
+                    (vw/write-value! v (.legWriter out-writer (vw/value->arrow-type v))))
+                  (vw/write-value! nil (.legWriter out-writer #xt.arrow/type :absent)))))
 
             (.syncValueCount out-writer)
-            (.add out-cols (vr/vec->reader out-vec))))
+            (.add out-cols (.withName (vr/vec->reader out-vec) (str col-name)))))
 
         (vr/rel-reader out-cols row-count)))))
 
@@ -76,36 +70,44 @@
         field-sets (HashMap.)
         row-count (count rows)
         out-rows (ArrayList. row-count)
-        key-fn (util/parse-key-fn :datalog)]
+        key-fn (util/parse-key-fn :datalog)
+        rows (map #(update-keys % keyword) rows)
+        columns (->> (mapcat keys rows)
+                     (into #{}))]
     (doseq [row rows]
-      (let [out-row (HashMap.)]
+      (let [out-row (HashMap.)
+            absent-columns (set/difference columns (set (keys row)))]
+
+        (doseq [absent-column absent-columns
+                :let [^Set field-set (.computeIfAbsent field-sets (symbol absent-column) (reify Function (apply [_ _] (HashSet.))))]]
+          (.add field-set types/absent-field))
+
         (doseq [[k v] row
-                :let [k-kw (keyword k)
-                      k-sym (symbol k)]]
+                :let [k-sym (symbol k)]]
           (let [expr (expr/form->expr v (assoc opts :param-types param-types))
                 ^Set field-set (.computeIfAbsent field-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
             (case (:op expr)
               :literal (do
                          (.add field-set (let [arrow-type (vw/value->arrow-type v)]
                                            (types/->field-default-name arrow-type (nil? v) nil)))
-                         (.put out-row k-kw v))
+                         (.put out-row k v))
 
               :param (let [{:keys [param]} expr]
                        (.add field-set (get param-fields param))
                        ;; TODO let's try not to copy this out and back in again
-                       (.put out-row k-kw (fn [{:keys [^RelationReader params]}]
-                                            (let [col (.readerForName params (name param))]
-                                              (.getObject col 0 key-fn)))))
+                       (.put out-row k (fn [{:keys [^RelationReader params]}]
+                                         (let [col (.readerForName params (name param))]
+                                           (.getObject col 0 key-fn)))))
 
               ;; HACK: this is quite heavyweight to calculate a single value -
               ;; the EE doesn't yet have an efficient means to do so...
               (let [input-types (assoc opts :param-types param-types)
                     expr (expr/form->expr v input-types)
                     projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
-                (.add field-set (types/col-type->field (.getColumnType projection-spec)))
-                (.put out-row k-kw (fn [{:keys [allocator params]}]
-                                     (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
-                                       (.getObject out-vec 0 key-fn))))))))
+                (.add field-set (types/normalize-field (types/col-type->field (.getColumnType projection-spec))))
+                (.put out-row k (fn [{:keys [allocator params]}]
+                                  (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
+                                    (.getObject out-vec 0 key-fn))))))))
         (.add out-rows out-row)))
 
     (let [fields (-> field-sets

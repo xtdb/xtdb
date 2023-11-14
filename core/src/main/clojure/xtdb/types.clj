@@ -331,7 +331,7 @@
         (map->col-type))))
 
 (def ^Field null-field (->field "null" ArrowType$Null/INSTANCE true))
-(def ^:private ^Field absent-field (->field "absent" AbsentType/INSTANCE false))
+(def ^Field absent-field (->field "absent" AbsentType/INSTANCE false))
 
 ;; beware that anywhere this is used, naming of the fields (apart from struct subfields) should not matter
 (defn merge-fields [& fields]
@@ -461,6 +461,18 @@
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
+
+(defn normalize-field [^Field field]
+  (cond
+    (= #xt.arrow/type :struct (.getType field))
+    (apply ->field (.getName field) ArrowType$Struct/INSTANCE (.isNullable field)
+           (map (comp #(field-with-name % (util/str->normal-form-str (.getName ^Field %))) normalize-field) (.getChildren field)))
+
+    (seq (.getChildren field))
+    (apply ->field (.getName field) (.getType field) (.isNullable field)
+           (map normalize-field (.getChildren field)))
+
+    :else field))
 
 (defn without-null [col-type]
   (let [without-null (-> (flatten-union-types col-type)
