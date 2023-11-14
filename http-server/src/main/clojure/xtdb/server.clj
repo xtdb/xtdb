@@ -22,7 +22,8 @@
             [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [clojure.java.io :as io])
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
@@ -117,10 +118,10 @@
 
           :parameters {:body ::query-body}}})
 
-(defmethod route-handler :swagger-json [_]
+(defmethod route-handler :openapi [_]
   {:get {:no-doc true
-         :swagger {:info {:title "XTDB"}}
-         :handler (r.swagger/create-swagger-handler)
+         :handler (fn [_]
+                    (slurp (io/resource "openapi.json")))
          :muuntaja (m/create (-> m/default-options
                                  (m/select-formats #{"application/json"})))}})
 
