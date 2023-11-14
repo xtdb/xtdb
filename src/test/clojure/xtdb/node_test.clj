@@ -521,3 +521,8 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
         (t/is (= (set docs)
                  (->> (xt/q node '{:find [e] :where [(match :docs {:xt/* e})]})
                       (into #{} (map :e)))))))))
+
+(t/deftest non-existant-column-no-nil-rows-2898
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, 2)"]])
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
