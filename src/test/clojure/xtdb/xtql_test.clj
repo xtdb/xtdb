@@ -293,6 +293,21 @@
                                          :count-heads (count heads)})))))
           "various aggs")))
 
+(deftest test-clojure-case-symbols-in-expr
+  (xt/submit-tx tu/*node* [[:put :customers {:xt/id 0, :name "bob"}]
+                           [:put :customers {:xt/id 1, :name "alice"}]])
+
+  (t/is (= [{:count 2}]
+           (xt/q tu/*node*
+                 '(-> (from :customers [xt/id])
+                      (aggregate {:count (count xt/id)})))))
+
+  (t/is (= [{:count 2}]
+           (xt/q tu/*node*
+                 '(-> (from :customers [{:xt/id my-funky/xt-id}])
+                      (aggregate {:count (count my-funky/xt-id)}))))))
+
+
 (t/deftest test-with-op
   (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :o1, :unit-price 1.49, :quantity 4}]
                                       [:put :docs {:xt/id :o2, :unit-price 5.39, :quantity 1}]
