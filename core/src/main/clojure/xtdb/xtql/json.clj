@@ -4,7 +4,7 @@
            (java.util Date List)
            (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Table
+                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$DocsTable Query$ParamTable
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defn- query-type [query]
@@ -357,11 +357,10 @@
   Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
   Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))})
   Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))})
-  Query$Table (unparse [q] (let [docs (.documents q)]
-                             {"table" (if docs
-                                        (mapv #(update-vals % unparse) docs)
-                                        (.v (.param q)))
-                              "bind" (mapv unparse (.bindings q))})))
+  Query$DocsTable (unparse [q] {"table" (mapv #(update-vals % unparse) (.documents q))
+                                "bind" (mapv unparse (.bindings q))})
+  Query$ParamTable (unparse [q] {"table" (.v (.param q))
+                                 "bind" (mapv unparse (.bindings q))}))
 
 
 (defn- parse-order-spec [order-spec query]

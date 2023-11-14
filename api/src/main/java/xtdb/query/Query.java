@@ -365,34 +365,43 @@ public sealed interface Query {
         return new Offset(length);
 
     }
-    final class Table implements Query, UnifyClause {
+    final class DocsTable implements Query, UnifyClause {
         public final List<Map<String, Expr>> documents;
+        public final List<OutSpec> bindings;
+
+        private DocsTable(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+            this.documents = documents;
+            this.bindings = bindings;
+        }
+
+        public DocsTable bindings(List<OutSpec> bindings) { return new DocsTable(documents, bindings); }
+
+        @Override
+        public String toString() {
+            return String.format("(%s [%s])", "table", stringifyList(documents));
+        }
+    }
+
+    final class ParamTable implements Query, UnifyClause {
         public final Expr.Param param;
         public final List<OutSpec> bindings;
 
-        private Table(List<Map<String, Expr>> documents, Expr.Param param, List<OutSpec> bindings) {
-            this.documents = documents;
+        private ParamTable(Expr.Param param, List<OutSpec> bindings) {
             this.bindings = bindings;
             this.param = param;
         }
 
-        public Table binding(List<OutSpec> bindings) { return new Table(documents, param, bindings); }
-
         @Override
         public String toString() {
-            if (this.documents != null) {
-                return String.format("(%s [%s])", "table", stringifyList(documents));
-            } else {
-                return String.format("(%s %s)", "table", this.param.toString());
-            }
+            return String.format("(%s %s)", "table", this.param.toString());
         }
     }
 
-    static Table table(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
-        return new Table(documents, null, bindings);
+    static DocsTable table(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+        return new DocsTable(documents, bindings);
     }
 
-    static Table table(Expr.Param param, List<OutSpec> bindings) {
-        return new Table(null, param, bindings);
+    static ParamTable table(Expr.Param param, List<OutSpec> bindings) {
+        return new ParamTable(param, bindings);
     }
 }

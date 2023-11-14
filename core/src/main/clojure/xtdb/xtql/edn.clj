@@ -10,7 +10,8 @@
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
-                       Query$Table TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
+                       Query$DocsTable Query$ParamTable
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
 
 (defmulti parse-query
   (fn [query]
@@ -402,12 +403,12 @@
   Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
   Query$Limit (unparse [this] (list 'limit (.length this)))
   Query$Offset (unparse [this] (list 'offset (.length this)))
-  Query$Table (unparse [this]
-                (let [docs (.documents this)
-                      bind (mapv unparse (.bindings this))]
-                  (if docs
-                    (list 'table (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) docs) bind)
-                    (list 'table (symbol (.v (.param this))) bind)))))
+  Query$DocsTable (unparse [this]
+                    (list 'table
+                          (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) (.documents this))
+                          (mapv unparse (.bindings this))))
+  Query$ParamTable (unparse [this]
+                     (list 'table (symbol (.v (.param this))) (mapv unparse (.bindings this)))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
