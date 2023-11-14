@@ -135,7 +135,7 @@
                                                  (update :tx (fnil identity (some-> wm .txBasis)))
                                                  (assoc :current-time current-time))
                                       :params params, :default-all-valid-time? default-all-valid-time?})
-                           (wrap-cursor allocator wm clock ref-ctr fields)))
+                           (wrap-cursor wm allocator clock ref-ctr fields)))
 
                      (catch Throwable t
                        (.release ref-ctr)
