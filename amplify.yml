@@ -9,6 +9,7 @@ applications:
           commands:
             - yarn run build
             - yarn run build-openapi-docs
+            - yarn run build-javadoc
       artifacts:
         baseDirectory: /dist
         files:
