@@ -61,5 +61,5 @@
    ["/query" {:name :query
               :summary "Query"}]
 
-   ["/swagger.json" {:name :swagger-json
+   ["/openapi.yaml" {:name :openapi
                      :no-doc true}]])

@@ -17,12 +17,14 @@
             [reitit.interceptor.sieppari :as r.sieppari]
             [reitit.ring :as r.ring]
             [reitit.swagger :as r.swagger]
+            [ring.util.response :as ring-response]
             [ring.adapter.jetty9 :as j]
             [spec-tools.core :as st]
             [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [clojure.java.io :as io])
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
@@ -117,12 +119,10 @@
 
           :parameters {:body ::query-body}}})
 
-(defmethod route-handler :swagger-json [_]
-  {:get {:no-doc true
-         :swagger {:info {:title "XTDB"}}
-         :handler (r.swagger/create-swagger-handler)
-         :muuntaja (m/create (-> m/default-options
-                                 (m/select-formats #{"application/json"})))}})
+(defmethod route-handler :openapi [_]
+  {:get {:handler (fn [_req]
+                    (ring-response/resource-response "openapi.yaml"))
+         :muuntaja (m/create m/default-options)}})
 
 (defn- handle-ex-info [ex _req]
   {:status 400, :body ex})

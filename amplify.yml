@@ -8,6 +8,7 @@ applications:
         build:
           commands:
             - yarn run build
+            - yarn run build-openapi-docs
       artifacts:
         baseDirectory: /dist
         files:
