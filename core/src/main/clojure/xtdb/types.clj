@@ -462,18 +462,6 @@
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
 
-(defn normalize-field [^Field field]
-  (cond
-    (= #xt.arrow/type :struct (.getType field))
-    (apply ->field (.getName field) ArrowType$Struct/INSTANCE (.isNullable field)
-           (map (comp #(field-with-name % (util/str->normal-form-str (.getName ^Field %))) normalize-field) (.getChildren field)))
-
-    (seq (.getChildren field))
-    (apply ->field (.getName field) (.getType field) (.isNullable field)
-           (map normalize-field (.getChildren field)))
-
-    :else field))
-
 (defn without-null [col-type]
   (let [without-null (-> (flatten-union-types col-type)
                          (disj :null))]

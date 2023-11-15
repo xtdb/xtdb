@@ -526,3 +526,16 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, 2)"]])
   (t/is (= [{}]
            (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
+
+(t/deftest test-nested-field-normalisation
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES(1, OBJECT ('field-name1': OBJECT('field-name2': true),
+                                                                                'field/name3': OBJECT('baz': -4113466)))"]])
+
+  (t/is (= [{:data {:field$name3 {:baz -4113466}, :field_name1 {:field_name2 true}}}]
+           (xt/q tu/*node* "SELECT t1.data FROM t1"))
+        "testing insert worked")
+
+  (t/is (= [{:field_name2 true, :baz nil}]
+           (xt/q tu/*node* "SELECT t2.field_name1.field_name2, t2.field$name4.baz
+                            FROM (SELECT t1.data.field_name1, t1.data.field$name4 FROM t1) AS t2"))
+        "testing insert worked"))

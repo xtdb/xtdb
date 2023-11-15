@@ -79,7 +79,7 @@
         "nested param")
 
   (t/is (= [{:foo :bar, :baz {:nested-foo :bar}}]
-           (tu/query-ra ' [:table [{:foo :bar, :baz {:nested-foo ?nested_param}}]]
+           (tu/query-ra ' [:table [{:foo :bar, :baz {:nested_foo ?nested_param}}]]
                           {:params {'?nested_param :bar}}))
         "nested param with need for normalisation"))
 

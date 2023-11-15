@@ -755,7 +755,7 @@
     ;; TODO: this will eventually be resolved at runtime.
     [:object_name ^:z n]
     ;; =>
-    (keyword (expr n))
+    (keyword (util/str->normal-form-str (expr n)))
 
     ;; Does not work for column references, see above.
     [:field_reference ^:z vep [:regular_identifier fn]]

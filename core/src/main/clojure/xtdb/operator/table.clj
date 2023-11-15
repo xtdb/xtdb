@@ -104,7 +104,7 @@
               (let [input-types (assoc opts :param-types param-types)
                     expr (expr/form->expr v input-types)
                     projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
-                (.add field-set (types/normalize-field (types/col-type->field (.getColumnType projection-spec))))
+                (.add field-set (types/col-type->field (.getColumnType projection-spec)))
                 (.put out-row k (fn [{:keys [allocator params]}]
                                   (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
                                     (.getObject out-vec 0 key-fn))))))))

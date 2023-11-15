@@ -120,7 +120,7 @@
     (let [obj (.obj o)]
       (cond (vector? obj) (into [] (map plan-expr) obj)
             (set? obj) (into #{} (map plan-expr) obj)
-            (map? obj) (into {} (map (juxt key (comp plan-expr val))) obj)
+            (map? obj) (into {} (map (juxt (comp util/kw->normal-form-kw key) (comp plan-expr val))) obj)
             :else obj)))
   (required-vars [_] #{})
 
