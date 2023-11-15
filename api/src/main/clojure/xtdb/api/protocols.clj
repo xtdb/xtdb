@@ -61,5 +61,5 @@
    ["/query" {:name :query
               :summary "Query"}]
 
-   ["/openapi.json" {:name :openapi
+   ["/openapi.yaml" {:name :openapi
                      :no-doc true}]])

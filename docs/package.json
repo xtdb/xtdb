@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-openapi-docs": "redoc-cli bundle openapi/openapi.json --output=dist/openapi/index.html"
+    "build-openapi-docs": "redoc-cli bundle openapi/openapi.yaml --output=dist/openapi/index.html"
   },
   "dependencies": {
     "@astrojs/mdx": "^1.1.2",

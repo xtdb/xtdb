@@ -1,0 +1,94 @@
+openapi: 3.0.1
+info:
+  title: XTDB
+servers:
+  - url: /
+paths:
+  /status:
+    get:
+      summary: Status
+      description: Get status information from the node
+      responses:
+        default:
+          description: ''
+          content: {}
+  /tx:
+    post:
+      summary: Transaction
+      description: Submits a transaction to the cluster
+      requestBody:
+        content:
+          application/transit+json:
+            schema:
+              required:
+                - tx-ops
+              type: object
+              properties:
+                tx-ops:
+                  type: array
+                opts:
+                  title: xtdb.server/opts
+                  type: object
+                  properties:
+                    system-time:
+                      title: xtdb.server/system-time
+                      type: object
+                    default-all-valid-time?:
+                      type: boolean
+                    default-tz:
+                      type: object
+        required: true
+      responses:
+        default:
+          description: ''
+          content: {}
+      x-codegen-request-body-name: body
+  /query:
+    post:
+      summary: Query
+      requestBody:
+        content:
+          application/transit+json:
+            schema:
+              title: xtdb.server/query-body
+              required:
+                - query
+              type: object
+              properties:
+                query:
+                  type: object
+                basis:
+                  title: xtdb.server/basis
+                  type: object
+                  properties:
+                    current-time:
+                      type: string
+                      format: date-time
+                    tx:
+                      type: object
+                      nullable: true
+                    after-tx:
+                      type: object
+                      nullable: true
+                basis-timeout:
+                  title: xtdb.server/basis-timeout
+                  type: object
+                  nullable: true
+                args:
+                  type: array
+                  nullable: true
+                  items:
+                    type: object
+                default-all-valid-time?:
+                  type: boolean
+                default-tz:
+                  type: object
+        required: true
+      responses:
+        default:
+          description: ''
+          content: {}
+      x-codegen-request-body-name: xtdb.server/query-body
+components: {}
+x-id:
+  - reitit.swagger/default

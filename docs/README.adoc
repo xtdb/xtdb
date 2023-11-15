@@ -41,7 +41,7 @@ All commands are run from the root of the project, from a terminal:
 | Get help using the Astro CLI
 
 | `yarn run build-openapi-docs` 
-| Build a static page from `openapi/openapi.json` to `dist/openapi-docs` 
+| Build a static page from `openapi/openapi.yaml` to `dist/openapi-docs` 
 |===
 
 == Reference documentation versioning
