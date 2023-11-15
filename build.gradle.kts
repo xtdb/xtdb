@@ -5,6 +5,7 @@ evaluationDependsOnChildren()
 plugins {
     `java-library`
     id("dev.clojurephant.clojure") version "0.7.0"
+    id("io.freefair.aggregate-javadoc") version "6.6"
 }
 
 val defaultJvmArgs = listOf(
@@ -39,12 +40,6 @@ allprojects {
 
             withSourcesJar()
             withJavadocJar()
-        }
-
-        tasks.javadoc {
-            options {
-                (this as CoreJavadocOptions).addStringOption("Xdoclint:none", "-quiet")
-            }
         }
 
         tasks.test {
