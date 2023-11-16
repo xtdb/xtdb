@@ -30,7 +30,6 @@
   (^xtdb.vector.IVectorReader metadataReader [])
   (^java.util.Set columnNames [])
   (^Long rowIndex [^String columnName, ^int pageIdx])
-  (^long pageCount [])
   (^org.roaringbitmap.buffer.ImmutableRoaringBitmap iidBloomBitmap [^int pageIdx]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -277,20 +276,13 @@
                 (.put page-idx-cache [col-name data-page-idx] cols-data-idx)))))))
 
     {:col-names (into #{} col-names)
-     :page-idx-cache page-idx-cache
-     :page-count (loop [page-count 0, idx 0]
-                   (cond
-                     (>= idx meta-row-count) page-count
-                     :else (recur (cond-> page-count
-                                    (not (.isNull data-page-idx-rdr idx)) inc)
-                                  (inc idx))))}))
+     :page-idx-cache page-idx-cache}))
 
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names page-idx-cache, page-count]}]
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names page-idx-cache]}]
   (reify ITableMetadata
     (metadataReader [_] metadata-reader)
     (columnNames [_] col-names)
     (rowIndex [_ col-name page-idx] (get page-idx-cache [col-name page-idx]))
-    (pageCount [_] page-count)
     (iidBloomBitmap [_ page-idx]
       (let [bloom-rdr (-> (.structKeyReader metadata-reader "columns")
                           (.listElementReader)
