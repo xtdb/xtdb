@@ -1,4 +1,5 @@
 import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
+import java.io.File
 
 evaluationDependsOnChildren()
 
@@ -201,6 +202,10 @@ dependencies {
     testImplementation("cheshire", "cheshire", "5.11.0")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
     testImplementation("org.clojure", "test.check", "1.1.1")
+    
+    // For generating clojure docs
+    testImplementation("codox", "codox", "0.10.8")
+
     // for AWS profiles (managing datasets)
     devImplementation("software.amazon.awssdk", "sts", "2.16.76")
 }
@@ -232,6 +237,20 @@ tasks.create("run-auctionmark", JavaExec::class) {
     addToArgsIfExistent("load-phase" , args)
     addToArgsIfExistent("duration", args)
 
+    this.args = args
+}
+
+val codoxOpts = File("codox.edn").readText()
+
+tasks.create("build-codox", JavaExec::class) {
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    val args = mutableListOf<String>(
+        "-e", "(require 'codox.main)",
+        "-e", "(codox.main/generate-docs ${codoxOpts})"
+    )
+    
     this.args = args
 }
 
