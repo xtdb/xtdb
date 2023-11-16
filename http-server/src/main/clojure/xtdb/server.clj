@@ -98,7 +98,7 @@
 
 (s/def ::query (some-fn string? map? list?))
 
-(s/def ::args (s/nilable (s/coll-of any? :kind vector?)))
+(s/def ::args (s/nilable (s/coll-of any?)))
 
 (s/def ::query-body
   (s/keys :req-un [::query],

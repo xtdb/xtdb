@@ -647,3 +647,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                   (map (fn [row]
                          (update row :xt/error #(ex-data (.form ^ClojureForm %))))))))))
 
+(t/deftest test-xtql-with-param-2933
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :petr :name "Petr"}]])
+
+  (t/is (= [{:name "Petr"}]
+           (xt/q tu/*node* '(from :docs [{:xt/id $petr} name]) {:args {:petr :petr}}))))
