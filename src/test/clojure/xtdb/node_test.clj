@@ -546,3 +546,13 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
   (t/is (= [{:foo 2} {:foo nil}]
            (xt/q tu/*node* "SELECT t2.data.foo FROM t2"))))
+
+(t/deftest distinct-null-2535
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, foo) VALUES(1, NULL)"]
+                           [:sql "INSERT INTO t1(xt$id, foo) VALUES(2, NULL)"]])
+
+  (t/is (= [{:nil nil}]
+           (xt/q tu/*node* "SELECT DISTINCT NULL AS nil FROM t1")))
+
+  (t/is (= [{:foo nil}]
+           (xt/q tu/*node* "SELECT DISTINCT t1.foo FROM t1"))))
