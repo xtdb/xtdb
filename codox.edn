@@ -1,4 +1,6 @@
 ;; Used by the "build-codox" gradle task - can see options here: 
 ;; https://github.com/weavejester/codox#project-options
 {:output-path "docs/dist/clojure-docs" 
- :source-paths ["api/src/main"]}
+ :source-paths ["api/src/main"
+                "http-client-clj/src/main"]
+ :namespaces '[xtdb.api xtdb.client]}
