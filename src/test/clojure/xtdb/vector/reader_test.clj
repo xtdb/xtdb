@@ -3,7 +3,8 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.util :as util])
   (:import [org.apache.arrow.vector.complex DenseUnionVector StructVector ListVector]
            (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb.vector IVectorPosition)))
@@ -240,3 +241,21 @@
         (t/is (= #{1 2 3}
                  (.readObject (.valueReader (vw/vec-wtr->rdr set-wrt) pos)))
               "valueReader testing for set")))))
+
+(deftest struct-normalisation-testing
+  (t/testing "structs"
+    (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)]
+      (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
+        (.startStruct my-column-wtr1)
+        (-> (.structKeyWriter my-column-wtr1 "long_name" (FieldType/notNullable #xt.arrow/type :i64))
+            (.writeLong 42))
+        (-> (.structKeyWriter my-column-wtr1 "short_name" (FieldType/notNullable #xt.arrow/type :utf8))
+            (.writeObject "forty-two"))
+        (.endStruct my-column-wtr1)
+        (.endRow rel-wtr1))
+
+      (t/is (= [{:my-column {:short-name "forty-two", :long-name 42}}]
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) (util/parse-key-fn :datalog))))
+
+      (t/is (= [{:my_column {:short_name "forty-two", :long_name 42}}]
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) (util/parse-key-fn :sql)))))))
