@@ -23,8 +23,7 @@
             [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit]
-            [xtdb.util :as util]
-            [clojure.java.io :as io])
+            [xtdb.util :as util])
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
@@ -73,6 +72,12 @@
           :parameters {:body (s/keys :req-un [::tx-ops]
                                      :opt-un [::opts])}}})
 
+
+(defn- throwable->ex-info [^Throwable t]
+  (ex-info (.getMessage t) {::err/error-type :unknown-runtime-error
+                            :class (.getName (.getClass t))
+                            :stringified (.toString t)}))
+
 (defn- ->tj-resultset-encoder [opts]
   (reify
     mf/EncodeToBytes
@@ -81,11 +86,20 @@
     mf/EncodeToOutputStream
     (encode-to-output-stream [_ res _]
       (fn [^OutputStream out]
-        (with-open [^IResultSet res res
-                    out out]
-          (let [writer (transit/writer out :json opts)]
-            (doseq [el (iterator-seq res)]
-              (transit/write writer el))))))))
+        (if-not (ex-data res)
+          (with-open [^IResultSet res res
+                      out out]
+            (let [writer (transit/writer out :json opts)]
+              (try
+                (doseq [el (iterator-seq res)]
+                  (transit/write writer el))
+                (catch xtdb.RuntimeException e
+                  (transit/write writer e))
+                (catch Throwable t
+                  (transit/write writer (throwable->ex-info t))))))
+          (with-open [out out]
+            (let [writer (transit/writer out :json opts)]
+              (transit/write writer res))))))))
 
 (s/def ::current-time inst?)
 (s/def ::tx (s/nilable #(instance? TransactionInstant %)))
@@ -138,6 +152,10 @@
    :body (err/illegal-arg :malformed-request
                           {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})})
 
+(defn- default-handler
+  [^Exception e _]
+  {:status 500 :body (throwable->ex-info e)})
+
 (def router
   (http/router xtp/http-routes
                {:expand (fn [{route-name :name, :as route} opts]
@@ -154,14 +172,15 @@
                                       [ri.muuntaja/format-response-interceptor]
 
                                       [ri.exception/exception-interceptor
-                                       (-> (merge ri.exception/default-handlers
-                                                  {xtdb.IllegalArgumentException handle-ex-info
-                                                   xtdb.RuntimeException handle-ex-info
-                                                   ::r.coercion/request-coercion handle-request-coercion-error
-                                                   :muuntaja/decode handle-muuntaja-decode-error
-                                                   ::ri.exception/wrap (fn [handler e req]
-                                                                         (log/warn e "response error")
-                                                                         (handler e req))}))]
+                                       (merge ri.exception/default-handlers
+                                              {::ri.exception/default default-handler
+                                               xtdb.IllegalArgumentException handle-ex-info
+                                               xtdb.RuntimeException handle-ex-info
+                                               ::r.coercion/request-coercion handle-request-coercion-error
+                                               :muuntaja/decode handle-muuntaja-decode-error
+                                               ::ri.exception/wrap (fn [handler e req]
+                                                                     (log/warn e "response error")
+                                                                     (handler e req))})]
 
                                       [ri.muuntaja/format-request-interceptor]
                                       [rh.coercion/coerce-request-interceptor]]}}))

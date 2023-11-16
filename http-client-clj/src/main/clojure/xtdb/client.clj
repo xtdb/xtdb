@@ -3,7 +3,6 @@
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
-            [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit])
@@ -61,19 +60,27 @@
       (throw (NoSuchElementException.)))
     (let [el (.next-el this)]
       (set! (.next-el this) nil)
-      el))
+      (if (instance? Throwable el)
+        (throw el)
+        el)))
 
   (close [_]
     (.close in)))
 
-(defmethod hato.middleware/coerce-response-body ::transit+json->resultset [_req {:keys [^InputStream body] :as resp}]
-  (try
-    (let [rdr (transit/reader body :json {:handlers xt.transit/tj-read-handlers})]
-      (-> resp
-          (assoc :body (TransitResultSet. body rdr nil))))
-    (catch Exception e
-      (.close body)
-      (throw e))))
+(defmethod hato.middleware/coerce-response-body ::transit+json->result-or-error [_req {:keys [^InputStream body status] :as resp}]
+  (letfn [(parse-body [rdr->body]
+            (try
+              (let [rdr (transit/reader body :json {:handlers xt.transit/tj-read-handlers})]
+                (-> resp (assoc :body (rdr->body rdr))))
+              (catch Exception e
+                (.close body)
+                (throw e))))]
+
+    (if (hato.middleware/unexceptional-status? status)
+      (parse-body (fn [rdr] (->TransitResultSet body rdr nil)))
+
+      ;; This should be an error we know how to decode
+      (parse-body transit/read))))
 
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   xtp/PNode
@@ -91,7 +98,7 @@
                                                        (assoc :query query)
                                                        (assoc-in [:basis :tx] basis-tx)
                                                        (update :basis xtp/after-latest-submitted-tx client))
-                                      :as ::transit+json->resultset}))))
+                                      :as ::transit+json->result-or-error}))))
           (.thenApply (reify Function
                         (apply [_ resp]
                           (:body resp)))))))

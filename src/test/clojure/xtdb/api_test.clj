@@ -659,3 +659,19 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
   (let [^AutoCloseable node tu/*node*]
     (.close node)
     (.close node)))
+
+(t/deftest test-query-with-errors
+  (t/is (thrown-with-msg? xtdb.IllegalArgumentException
+                          #"Illegal argument: ':xtql/malformed-table'"
+                          (xt/q tu/*node* '(from docs [name]))))
+
+  (t/is (thrown-with-msg? xtdb.RuntimeException
+                          #"data exception — division by zero"
+                          (xt/q tu/*node* '(-> (table [{}] [])
+                                               (with {:foo (/ 1 0)})))))
+
+  ;; Might need to get updated if this kind of error gets handled differently.
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :name 2}]])
+  (t/is (thrown-with-msg? Exception ;; Exception as type is different for local/remote
+                          #"No method in multimethod 'codegen-call' for dispatch value"
+                          (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))

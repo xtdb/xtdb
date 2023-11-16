@@ -20,6 +20,7 @@
           "xtdb/tx-key" (transit/read-handler xtp/map->TransactionInstant)
           "xtdb/illegal-arg" (transit/read-handler err/-iae-reader)
           "xtdb/runtime-err" (transit/read-handler err/-runtime-err-reader)
+          "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
           "xtdb/period-duration" xt-edn/period-duration-reader
           "xtdb.interval/year-month" xt-edn/interval-ym-reader
           "xtdb.interval/day-time" xt-edn/interval-dt-reader
@@ -32,6 +33,7 @@
                                                       (FieldType/notNullable arrow-type))))
           "xtdb/field" (transit/read-handler (fn [[name field-type children]]
                                                (Field. name field-type children)))}))
+
 
 (def tj-write-handlers
   (merge (-> {Period "time/period"
@@ -53,6 +55,7 @@
          {TransactionInstant (transit/write-handler "xtdb/tx-key" #(select-keys % [:tx-id :system-time]))
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" ex-data)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" ex-data)
+          clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" #(vector (ex-message %) (ex-data %)))
 
           ClojureForm (transit/write-handler "xtdb/clj-form" #(.form ^ClojureForm %))
 
