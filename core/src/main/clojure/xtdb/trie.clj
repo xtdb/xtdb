@@ -280,10 +280,11 @@
 
 (defn open-meta-file [^IBufferPool buffer-pool ^Path file-path]
   (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
-    (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
+    (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf buf)
+          nodes-vec (.getVector root "nodes")]
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
-        (->MetaFile (ArrowHashTrie/from root) buf (vr/<-root root))))))
+        (->MetaFile (ArrowHashTrie/from nodes-vec) buf (vr/<-root root))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel

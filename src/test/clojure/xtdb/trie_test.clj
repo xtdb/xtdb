@@ -23,7 +23,10 @@
                       {:path [1], :node [:leaf [nil {:page-idx 2} {:page-idx 0} nil]]}
                       {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
                       {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
-             (trie/postwalk-merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)]
+             (trie/postwalk-merge-plan [nil
+                                        (ArrowHashTrie/from (.getVector t1-root "nodes"))
+                                        (ArrowHashTrie/from (.getVector log-root "nodes"))
+                                        (ArrowHashTrie/from (.getVector log2-root "nodes"))]
                                        (fn [path [mn-tag mn-arg :as merge-node]]
                                          {:path (vec path)
                                           :node (case mn-tag
@@ -40,7 +43,10 @@
                        :node [:branch
                               [nil {:path [0 1],
                                     :node [:leaf [nil {:page-idx 0} {:page-idx 0} nil]]} nil nil]]} nil nil nil]]}
-             (->> (trie/->merge-plan [nil {:trie (ArrowHashTrie/from t1-root)} {:trie (ArrowHashTrie/from log-root)} {:trie (ArrowHashTrie/from log2-root)}]
+             (->> (trie/->merge-plan [nil
+                                        (ArrowHashTrie/from (.getVector t1-root "nodes"))
+                                        (ArrowHashTrie/from (.getVector log-root "nodes"))
+                                        (ArrowHashTrie/from (.getVector log2-root "nodes"))]
                                      (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-bb))]
                                        #(zero? (HashTrie/compareToPath iid-ptr %)))
                                      page-idx-preds

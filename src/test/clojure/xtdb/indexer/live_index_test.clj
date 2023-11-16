@@ -69,10 +69,11 @@
                   trie-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))) allocator)
                   leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
         (let [trie-root (.getVectorSchemaRoot trie-rdr)
+              nodes-vec (.getVector trie-root "nodes")
               iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
           (.loadNextBatch trie-rdr)
           (t/is (= iid-bytes
-                   (->> (.leaves (ArrowHashTrie/from trie-root))
+                   (->> (.leaves (ArrowHashTrie/from nodes-vec))
                         (mapcat (fn [^ArrowHashTrie$Leaf leaf]
                                   ;; would be good if ArrowFileReader accepted a page-idx...
                                   (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))

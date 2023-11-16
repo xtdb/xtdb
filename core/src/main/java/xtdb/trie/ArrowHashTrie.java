@@ -1,7 +1,6 @@
 package xtdb.trie;
 
 import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.complex.DenseUnionVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.StructVector;
@@ -18,11 +17,11 @@ public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
     private final IntVector branchElVec;
     private final IntVector dataPageIdxVec;
 
-    private ArrowHashTrie(VectorSchemaRoot trieRoot) {
-        nodesVec = ((DenseUnionVector) trieRoot.getVector("nodes"));
+    private ArrowHashTrie(DenseUnionVector nodesVec) {
+        this.nodesVec = nodesVec;
         branchVec = (ListVector) nodesVec.getVectorByType(BRANCH_TYPE_ID);
         branchElVec = (IntVector) branchVec.getDataVector();
-        StructVector pageVec = (StructVector) nodesVec.getVectorByType(LEAF_TYPE_ID);
+        StructVector pageVec = (StructVector) this.nodesVec.getVectorByType(LEAF_TYPE_ID);
         dataPageIdxVec = pageVec.getChild("data-page-idx", IntVector.class);
     }
 
@@ -100,8 +99,8 @@ public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
         };
     }
 
-    public static HashTrie<Node> from(VectorSchemaRoot root) {
-        return new ArrowHashTrie(root);
+    public static HashTrie<Node> from(DenseUnionVector nodes) {
+        return new ArrowHashTrie(nodes);
     }
 
     @Override
