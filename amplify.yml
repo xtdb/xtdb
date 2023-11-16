@@ -10,6 +10,7 @@ applications:
             - yarn run build
             - yarn run build-openapi-docs
             - yarn run build-javadoc
+            - yarn run build-clj-docs
       artifacts:
         baseDirectory: /dist
         files:
