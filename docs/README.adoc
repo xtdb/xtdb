@@ -42,6 +42,9 @@ All commands are run from the root of the project, from a terminal:
 
 | `yarn run build-openapi-docs` 
 | Build a static page from `openapi/openapi.yaml` to `dist/openapi-docs` 
+
+| `yarn run build-javadoc` 
+| Builds the full aggregate set of project javadocs via gradle to `dist/javadoc` 
 |===
 
 == Reference documentation versioning

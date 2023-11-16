@@ -8,7 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-openapi-docs": "redoc-cli bundle openapi/openapi.yaml --output=dist/openapi/index.html"
+    "build-openapi-docs": "redoc-cli bundle openapi/openapi.yaml --output=dist/openapi/index.html",
+    "build-javadoc": "cd ../ && ./gradlew aggregateJavadoc && cp -r ./build/docs/aggregateJavadoc docs/dist/javadoc"
   },
   "dependencies": {
     "@astrojs/mdx": "^1.1.2",
