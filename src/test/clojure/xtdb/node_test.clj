@@ -539,3 +539,10 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            (xt/q tu/*node* "SELECT t2.field_name1.field_name2, t2.field$name4.baz
                             FROM (SELECT t1.data.field_name1, t1.data.field$name4 FROM t1) AS t2"))
         "testing insert worked"))
+
+(t/deftest test-get-field-on-duv-with-struct-2425
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t2(xt$id, data) VALUES(1, 'bar')"]
+                           [:sql "INSERT INTO t2(xt$id, data) VALUES(2, OBJECT('foo': 2))"]])
+
+  (t/is (= [{:foo 2} {:foo nil}]
+           (xt/q tu/*node* "SELECT t2.data.foo FROM t2"))))
