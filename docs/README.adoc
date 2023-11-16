@@ -45,6 +45,9 @@ All commands are run from the root of the project, from a terminal:
 
 | `yarn run build-javadoc` 
 | Builds the full aggregate set of project javadocs via gradle to `dist/javadoc` 
+
+| `yarn run build-clj-docs` 
+| Builds API docs for Clojure to `dist/clojure-docs`.
 |===
 
 == Reference documentation versioning
