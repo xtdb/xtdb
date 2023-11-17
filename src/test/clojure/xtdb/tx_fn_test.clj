@@ -19,8 +19,7 @@
     (t/is (= #{{:xt/id :foo, :n 0}
                {:xt/id :bar, :n 1}}
              (set (xt/q tu/*node*
-                        '{:find [xt/id n]
-                          :where [(match :foo [xt/id n])]})))))
+                        '(from :foo [xt/id n]))))))
 
   (t/testing "nested tx fn"
     (xt/submit-tx tu/*node* [[:put-fn :inner-fn
@@ -37,8 +36,7 @@
                {:xt/id :bar-inner, :from :inner}
                {:xt/id :bar-outer, :from :outer}}
              (set (xt/q tu/*node*
-                        '{:find [xt/id from]
-                          :where [(match :bar [xt/id from])]}))))))
+                        '(from :bar [xt/id from])))))))
 
 (t/deftest test-tx-fn-return-values
   (xt/submit-tx tu/*node* [[:put-fn :identity 'identity]])
@@ -48,10 +46,8 @@
                                      [:put :docs {:xt/id put-id}]])
 
             (->> (xt/q tu/*node*
-                       ['{:find [id]
-                          :in [id]
-                          :where [($ :docs {:xt/id id})]}
-                        put-id])
+                       '(from :docs [{:xt/id id} {:xt/id $id}])
+                       {:args {:id put-id}})
                  (into #{} (map :id))))]
 
     (t/is (= #{:empty-list} (run-test [] :empty-list)))
@@ -62,8 +58,7 @@
 (t/deftest test-tx-fn-q
   (xt/submit-tx tu/*node* [[:put-fn :doc-counter
                             '(fn [id]
-                               (let [doc-count (count (q '{:find [id]
-                                                           :where [(match :foo [id])]}))]
+                               (let [doc-count (count (q '(from :foo [xt/id])))]
                                  [[:put :foo {:xt/id id, :doc-count doc-count}]]))]
                            [:call :doc-counter :foo]
                            [:call :doc-counter :bar]])
@@ -71,17 +66,14 @@
   (t/is (= [{:xt/id :foo, :doc-count 0}
             {:xt/id :bar, :doc-count 1}]
            (xt/q tu/*node*
-                 '{:find [xt/id doc-count]
-                   :where [(match :foo [xt/id doc-count])]})))
+                 '(from :foo [xt/id doc-count]))))
 
   (let [tx2 (xt/submit-tx tu/*node* [[:put :accounts {:xt/id :petr :balance 100}]
                                      [:put :accounts {:xt/id :ivan :balance 200}]
                                      [:put-fn :update-balance
                                       '(fn [id]
-                                         (let [[account] (q ['{:find [xt/id balance]
-                                                               :in [xt/id]
-                                                               :where [(match :accounts [xt/id balance])]}
-                                                             id])]
+                                         (let [[account] (q '(from :accounts [balance xt/id {:xt/id $id}])
+                                                            {:args {:id id}})]
                                            (if account
                                              [[:put :accounts (update account :balance inc)]]
                                              [])))]
@@ -90,9 +82,8 @@
     (t/is (= #{{:xt/id :petr, :balance 101}
                {:xt/id :ivan, :balance 200}}
              (set (xt/q tu/*node*
-                         '{:find [xt/id balance]
-                           :where [(match :accounts [xt/id balance])]}
-                         {:basis {:tx tx2}})))
+                        '(from :accounts [xt/id balance])
+                        {:basis {:tx tx2}})))
           "query in tx-fn with in-args")))
 
 (t/deftest test-tx-fn-sql-q
@@ -106,8 +97,7 @@
   (t/is (= [{:xt/id :foo, :doc-count 0}
             {:xt/id :bar, :doc-count 1}]
            (xt/q tu/*node*
-                 '{:find [xt/id doc-count]
-                   :where [(match :docs [xt/id doc-count])]}))))
+                 '(from :docs [xt/id doc-count])))))
 
 (t/deftest test-tx-fn-current-tx
   (let [{tt0 :system-time} (xt/submit-tx tu/*node* [[:put-fn :with-tx
@@ -122,18 +112,17 @@
                {:xt/id :bar, :tx-id 0, :system-time (util/->zdt tt0)}
                {:xt/id :baz, :tx-id 1, :system-time (util/->zdt tt1)}}
              (set (xt/q tu/*node*
-                        '{:find [xt/id tx-id system-time]
-                          :where [(match :docs [xt/id tx-id system-time])]}))))))
+                        '(from :docs [xt/id tx-id system-time])))))))
 
 (t/deftest test-tx-fn-exceptions
   (letfn [(foo-version []
             (-> (xt/q tu/*node*
-                      '{:find [xt/id version], :where [(match :docs [xt/id version])]})
+                      '(from :docs [xt/id version]))
                 first :version))]
 
     (xt/submit-tx tu/*node* [[:put-fn :assoc-version
                               '(fn [version]
-                                [[:put :docs {:xt/id :foo, :version version}]])]
+                                 [[:put :docs {:xt/id :foo, :version version}]])]
                              [:call :assoc-version 0]])
     (t/is (= 0 (foo-version)))
 
@@ -215,9 +204,7 @@
 
             (Thread/sleep 100)
 
-            (xt/q& node '{:find [xt/id]
-                          :where [(match :xt_docs [xt/id])
-                                  [id :foo]]})))))
+            (xt/q& node '(from :xt_docs [xt/id]))))))
 
 
 (t/deftest test-call-tx-fn-with-ns-attr
@@ -230,9 +217,7 @@
 
     (t/is (= [{:xt/id :foo, :n 0}
               {:xt/id :bar, :n 1}]
-             (xt/q tu/*node*
-                   '{:find [xt/id n]
-                     :where [(match :docs [xt/id {:a/b n}])]})))))
+             (xt/q tu/*node* '(from :docs [xt/id {:a/b n}]))))))
 
 (t/deftest test-lazy-error-in-tx-fns-2811
   (xt/submit-tx tu/*node* [[:put-fn :my-fn '(fn [ns] (for [n ns]
@@ -243,24 +228,23 @@
   (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :v 1}]])
   (t/is (= [{:xt/id 1, :v 1}]
            (xt/q tu/*node*
-                 '{:find [xt/id v]
-                   :where [(match :docs [xt/id v])]}))))
+                 '(from :docs [xt/id v])))))
 
 (t/deftest normalisation-in-tx-fn
   (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :first-name "Allan" :last-name "Turing"}]
                            [:put-fn :my-fn '(fn []
-                                              (let [ks (->> (q '{:find [first-name last-name]
-                                                                 :where [(match :docs [first-name last-name])]}
+                                              (let [ks (->> (q '(from :docs [first-name last-name])
                                                                {:key-fn :sql})
                                                             (mapcat keys)
                                                             (into []))]
                                                 [[:put :the-keys {:xt/id 1 :keys ks}]]))]
                            [:call :my-fn]])
 
-  (t/is (= [{:key :first_name} {:key :last_name}]
-           (xt/q tu/*node*
-                 '{:find [key]
-                   :where [(match :the-keys {:keys [key ...]})]}))
+  (t/is (= #{{:key :first_name} {:key :last_name}}
+           (set (xt/q tu/*node*
+                      ;; TODO unwind in XTQL
+                      '{:find [key]
+                        :where [(match :the-keys {:keys [key ...]})]})))
         "testing `key-fn` in q")
 
   (xt/submit-tx tu/*node* [[:put-fn :my-case-fn '(fn [{:keys [snake_case kebab-case]}]
@@ -273,5 +257,4 @@
 
   (t/is (= [{:xt/id "baz"} {:xt/id "toto"} {:xt/id "bar"} {:xt/id "foo"}]
            (xt/q tu/*node*
-                 '{:find [xt/id]
-                   :where [(match :casing [xt/id])]}))))
+                 '(from :casing [xt/id])))))

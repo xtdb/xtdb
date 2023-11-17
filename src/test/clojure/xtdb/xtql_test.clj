@@ -1636,16 +1636,7 @@
           tx6 (xt/submit-tx tu/*node*
                             [[:put-fn :delete-1-week-records,
                               '(fn delete-1-weeks-records []
-                                 (->> (q
-                                       '{:find [id app-from app-to]
-                                         :where [(match :docs {:xt/id id
-                                                               :xt/valid-from app-from
-                                                               :xt/valid-to app-to}
-                                                        {:for-valid-time :all-time})
-                                                 [(= (- #inst "1970-01-08" #inst "1970-01-01")
-                                                     (- app-to app-from))]]}
-                                       ;;TODO tx-fn needs to support XTQL
-                                       #_'(-> (from :docs {:bind [{:xt/id id
+                                 (->> (q '(-> (from :docs {:bind [{:xt/id id
                                                                    :xt/valid-from app-from
                                                                    :xt/valid-to app-to}]
                                                            :for-valid-time :all-time})

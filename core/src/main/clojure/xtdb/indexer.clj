@@ -34,7 +34,7 @@
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb.api.protocols TransactionInstant)
-           xtdb.IBufferPool
+           (xtdb IBufferPool IResultSet)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            xtdb.operator.IRaQuerySource
@@ -199,8 +199,10 @@
      (let [[q args] (if (vector? q+args)
                       [(first q+args) (rest q+args)]
                       [q+args nil])]
-       (with-open [res (d/open-datalog-query allocator ra-src wm-src scan-emitter q (-> (into tx-opts opts)
-                                                                                        (assoc :args args)))]
+       (with-open [^IResultSet res (if (map? q)
+                                     (d/open-datalog-query allocator ra-src wm-src scan-emitter q (-> (into tx-opts opts)
+                                                                                                      (assoc :args args)))
+                                     (xtql/open-xtql-query allocator ra-src wm-src q (into tx-opts opts)))]
          (vec (iterator-seq res)))))))
 
 (defn- tx-fn-sql
