@@ -13,9 +13,12 @@
                        Query$DocsTable Query$ParamTable
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
 
+;; TODO inline once the type we support is fixed
+(defn- query-type? [q] (seq? q))
+
 (defmulti parse-query
   (fn [query]
-    (when-not (list? query)
+    (when-not (query-type? query)
       (throw (err/illegal-arg :xtql/malformed-query {:query query})))
 
     (let [[op] query]
@@ -29,7 +32,7 @@
 
 (defmulti parse-query-tail
   (fn [query-tail]
-    (when-not (list? query-tail)
+    (when-not (query-type? query-tail)
       (throw (err/illegal-arg :xtql/malformed-query-tail {:query-tail query-tail})))
 
     (let [[op] query-tail]
@@ -43,7 +46,7 @@
 
 (defmulti parse-unify-clause
   (fn [clause]
-    (when-not (list? clause)
+    (when-not (query-type? clause)
       (throw (err/illegal-arg :xtql/malformed-unify-clause {:clause clause})))
 
     (let [[op] clause]
@@ -57,7 +60,7 @@
 
 (defmulti parse-dml
   (fn [dml]
-    (when-not (list? dml)
+    (when-not (query-type? dml)
       (throw (err/illegal-arg :xtql/malformed-dml {:dml dml})))
 
     (let [[op] dml]

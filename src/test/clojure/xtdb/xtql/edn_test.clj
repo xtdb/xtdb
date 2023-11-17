@@ -1,5 +1,5 @@
 (ns xtdb.xtql.edn-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.xtql.edn :as edn]))
 
   ;; TODO check errors
@@ -247,3 +247,16 @@
     (t/is (= q
              (roundtrip-q q))
           "table as a parameter")))
+
+(deftest test-generated-queries
+  (let [q '(unify (from :users [{:xt/id user-id} first-name last-name])
+                  (from :articles [{:author-id user-id} title content]))]
+    (t/is (= q
+             (roundtrip-q (roundtrip-q q)))
+          "roundtripping twice to test generated queries (i.e. cons ...)")
+
+    (t/is (= q
+             (roundtrip-q (lazy-seq (list 'unify
+                                          (lazy-seq '(from :users [{:xt/id user-id} first-name last-name]))
+                                          (lazy-seq '(from :articles [{:author-id user-id} title content]))) q)))
+          "testing parsing lazy-seq")))
