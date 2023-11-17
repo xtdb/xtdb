@@ -1230,52 +1230,54 @@
 (defmethod codegen-call [:get-field :any] [_]
   {:return-type :null, :->call-code (constantly nil)})
 
-(defmethod codegen-call [:= :struct :struct] [{[[_ l-field-types] [_ r-field-types]] :arg-types}]
-  (let [fields (set (keys l-field-types))]
-    (if-not (= fields (set (keys r-field-types)))
-      {:return-type :bool, :->call-code (constantly false)}
+(doseq [[op return-code] [[:= 1] [:<> -1]]]
+  (defmethod codegen-call [op :struct :struct] [{[[_ l-field-types] [_ r-field-types]] :arg-types}]
+    (let [fields (set (keys l-field-types))]
+      (if-not (= fields (set (keys r-field-types)))
+        {:return-type :bool, :->call-code (constantly (if (= := op) false true))}
 
-      (let [inner-calls (->> (for [field fields]
-                               (MapEntry/create field
-                                                (->> (for [l-val-type (-> (get l-field-types field) types/flatten-union-types)
-                                                           r-val-type (-> (get r-field-types field) types/flatten-union-types)]
-                                                       (MapEntry/create [l-val-type r-val-type]
-                                                                        (if (or (= :null l-val-type) (= :null r-val-type))
-                                                                          {:return-type :null, :->call-code (constantly nil)}
-                                                                          (codegen-call {:f :=, :arg-types [l-val-type r-val-type]}))))
-                                                     (into {}))))
-                             (into {}))
-            l-sym (gensym 'l-struct)
-            r-sym (gensym 'r-struct)]
+        (let [inner-calls (->> (for [field fields]
+                                 (MapEntry/create field
+                                                  (->> (for [l-val-type (-> (get l-field-types field) types/flatten-union-types)
+                                                             r-val-type (-> (get r-field-types field) types/flatten-union-types)]
+                                                         (MapEntry/create [l-val-type r-val-type]
+                                                                          (if (or (= :null l-val-type) (= :null r-val-type))
+                                                                            {:return-type :null, :->call-code (constantly nil)}
+                                                                            (codegen-call {:f :=, :arg-types [l-val-type r-val-type]}))))
+                                                       (into {}))))
+                               (into {}))
+              l-sym (gensym 'l-struct)
+              r-sym (gensym 'r-struct)]
 
-        {:return-type [:union #{:bool :null}]
-         :continue-call (fn [f [l-code r-code]]
-                          (let [res-sym (gensym 'res)]
-                            `(let [~l-sym ~l-code
-                                   ~r-sym ~r-code
-                                   ~res-sym
-                                   ~(->> (for [[field inner-calls] inner-calls]
-                                           (continue-read (fn [l-val-type l-val-code]
-                                                            (continue-read (fn [r-val-type r-val-code]
-                                                                             (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-val-type r-val-type])]
-                                                                               (if continue-call
-                                                                                 (continue-call cont-b3-call [l-val-code r-val-code])
-                                                                                 (cont-b3-call return-type (->call-code [l-val-code r-val-code])))))
-                                                                           (get r-field-types field)
-                                                                           (-> `(.get ~r-sym ~(str field))
-                                                                               (with-tag IValueReader))))
-                                                          (get l-field-types field)
-                                                          (-> `(.get ~l-sym ~(str field))
-                                                              (with-tag IValueReader))))
-                                         (reduce (fn [l-code r-code]
-                                                   `(let [~res-sym ~l-code]
-                                                      (if (== -1 ~res-sym)
-                                                        -1
-                                                        (min ~res-sym ~r-code))))
-                                                 1))]
-                               (if (zero? ~res-sym)
-                                 ~(f :null nil)
-                                 ~(f :bool `(== 1 ~res-sym))))))}))))
+          {:return-type [:union #{:bool :null}]
+           :continue-call (fn [f [l-code r-code]]
+                            (let [res-sym (gensym 'res)]
+                              `(let [~l-sym ~l-code
+                                     ~r-sym ~r-code
+                                     ~res-sym
+                                     ~(->> (for [[field inner-calls] inner-calls]
+                                             (continue-read (fn [l-val-type l-val-code]
+                                                              (continue-read (fn [r-val-type r-val-code]
+                                                                               (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-val-type r-val-type])]
+                                                                                 (if continue-call
+                                                                                   (continue-call cont-b3-call [l-val-code r-val-code])
+                                                                                   (cont-b3-call return-type (->call-code [l-val-code r-val-code])))))
+                                                                             (get r-field-types field)
+                                                                             (-> `(.get ~r-sym ~(str field))
+                                                                                 (with-tag IValueReader))))
+                                                            (get l-field-types field)
+                                                            (-> `(.get ~l-sym ~(str field))
+                                                                (with-tag IValueReader))))
+                                           (reduce (fn [l-code r-code]
+                                                     `(let [~res-sym ~l-code]
+                                                        (if (== -1 ~res-sym)
+                                                          -1
+                                                          (min ~res-sym ~r-code))))
+                                                   1))]
+                                 (prn ~res-sym)
+                                 (if (zero? ~res-sym)
+                                   ~(f :null nil)
+                                   ~(f :bool `(== ~return-code ~res-sym))))))})))))
 
 (defmethod codegen-cast [:list :list] [{[_ source-el-type] :source-type
                                         [_ target-el-type :as target-type] :target-type}]

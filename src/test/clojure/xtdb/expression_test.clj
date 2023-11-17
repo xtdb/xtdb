@@ -1428,6 +1428,7 @@
 (t/deftest test-struct-equals
   (t/is (= true (project1 '(= {} {}) {})))
   (t/is (= false (project1 '(= {:a 1, :b 2} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= false (project1 '(= {:a 1, :b 2, :c 3} {:a 1, :b 2} ) {})))
 
   (t/is (= true (project1 '(= {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3}) {})))
   (t/is (= false (project1 '(= {:a 1, :b 2, :c 4} {:a 1, :b 2, :c 3}) {})))
@@ -1436,6 +1437,20 @@
 
   (t/is (= nil (project1 '(= {:a 1, :b 2, :c nil} {:a 1, :b 2, :c 3.0}) {})))
   (t/is (= false (project1 '(= {:a 1, :b 3, :c nil} {:a 1, :b 2, :c 3.0}) {}))))
+
+
+(t/deftest test-struct-not-equals
+  (t/is (= false (project1 '(<> {} {}) {})))
+  (t/is (= true (project1 '(<> {:a 1, :b 2} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= true (project1 '(<> {:a 1, :b 2, :c 3} {:a 1, :b 2}) {})))
+
+  (t/is (= false (project1 '(<> {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= true (project1 '(<> {:a 1, :b 2, :c 4} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= false (project1 '(<> {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3.0}) {})))
+  (t/is (= true (project1 '(<> {:a 1, :b 2, :c 2.5} {:a 1, :b 2, :c 3.0}) {})))
+
+  (t/is (= nil (project1 '(<> {:a 1, :b 2, :c nil} {:a 1, :b 2, :c 3.0}) {})))
+  (t/is (= true (project1 '(<> {:a 1, :b 3, :c nil} {:a 1, :b 2, :c 3.0}) {}))))
 
 (t/deftest test-lists
   (t/testing "simple lists"
