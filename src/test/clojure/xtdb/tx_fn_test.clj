@@ -4,7 +4,8 @@
             [xtdb.node :as node]
             [xtdb.indexer :as idx]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import (xtdb.types ClojureForm)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -258,3 +259,13 @@
   (t/is (= [{:xt/id "baz"} {:xt/id "toto"} {:xt/id "bar"} {:xt/id "foo"}]
            (xt/q tu/*node*
                  '(from :casing [xt/id])))))
+
+(t/deftest test-unhandled-query-type
+  (xt/submit-tx tu/*node* [[:put-fn :my-fn '(fn [] (q "SELECT t1.foo FROM foo"))]
+                           [:call :my-fn]])
+
+  (t/is (= "Runtime error: ':xtdb.call/error-evaluating-tx-fn'"
+           (let [^ClojureForm error (-> (xt/q tu/*node* '(from :xt/txs [{:xt/error error}]))
+                                        first
+                                        :error)]
+             (-> (.form error) ex-data :xtdb.error/message)))))

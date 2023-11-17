@@ -3,14 +3,15 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api.protocols :as xtp]
             [xtdb.datalog :as d]
+            [xtdb.error :as err]
             xtdb.indexer
+            [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
             [xtdb.sql :as sql]
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
-            [xtdb.xtql :as xtql]
-            [xtdb.logical-plan :as lp])
+            [xtdb.xtql :as xtql])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time ZoneId)
@@ -74,7 +75,11 @@
 
                 (map? query) (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts)
 
-                (list? query) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)))))))
+                (seq? query) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)
+
+                :else (throw (err/illegal-arg :unknown-query-type
+                                              {:query query
+                                               :type (type query)}))))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 

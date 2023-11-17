@@ -199,10 +199,13 @@
      (let [[q args] (if (vector? q+args)
                       [(first q+args) (rest q+args)]
                       [q+args nil])]
-       (with-open [^IResultSet res (if (map? q)
-                                     (d/open-datalog-query allocator ra-src wm-src scan-emitter q (-> (into tx-opts opts)
-                                                                                                      (assoc :args args)))
-                                     (xtql/open-xtql-query allocator ra-src wm-src q (into tx-opts opts)))]
+       (with-open [^IResultSet res (cond (map? q) (d/open-datalog-query allocator ra-src wm-src scan-emitter q (-> (into tx-opts opts)
+                                                                                                                   (assoc :args args)))
+                                         (seq? q) (xtql/open-xtql-query allocator ra-src wm-src q (into tx-opts opts))
+
+                                         :else (throw (throw (err/runtime-err :unknown-query-type
+                                                                              {:query q
+                                                                               :type (type q)}))))]
          (vec (iterator-seq res)))))))
 
 (defn- tx-fn-sql

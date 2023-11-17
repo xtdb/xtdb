@@ -556,3 +556,10 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
   (t/is (= [{:foo nil}]
            (xt/q tu/*node* "SELECT DISTINCT t1.foo FROM t1"))))
+
+;; TODO move this to api-test once #2937 is in
+(t/deftest throw-on-unknown-query-type
+  (t/is (thrown-with-msg?
+         xtdb.IllegalArgumentException
+         #"Illegal argument: ':unknown-query-type'"
+         (xt/q tu/*node* (Object.)))))
