@@ -2501,3 +2501,10 @@
                           #""
                           (xt/q tu/*node* '(from :docs [first-name last-name])
                                 {:key-fn :camelCase}))))
+
+(deftest list-diff-test-2887
+  (t/is (= []
+           (xt/q tu/*node*
+                 '(-> (table [{:x [1 2 3]}] [x])
+                      (where (<> x $foo)))
+                 {:args {:foo [1 2 3]}}))))

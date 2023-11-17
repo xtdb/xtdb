@@ -1375,52 +1375,56 @@
                              ~(f return-type (-> `(trim-array-view ~n-sym ~list-sym)
                                                  (with-tag IListValueReader)))))))}))
 
-(defmethod codegen-call [:= :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
-  (let [n-sym (gensym 'n)
-        len-sym (gensym 'len)
-        res-sym (gensym 'res)
-        inner-calls (->> (for [l-el-type (types/flatten-union-types l-el-type)
-                               r-el-type (types/flatten-union-types r-el-type)]
-                           (MapEntry/create [l-el-type r-el-type]
-                                            (if (or (= :null l-el-type) (= :null r-el-type))
-                                              {:return-type :null, :->call-code (constantly nil)}
-                                              (codegen-call {:f :=, :arg-types [l-el-type r-el-type]}))))
-                         (into {}))]
+(doseq [[op return-code] [[:= 1] [:<> -1]]]
+  (defmethod codegen-call [op :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
+    (let [n-sym (gensym 'n)
+          len-sym (gensym 'len)
+          res-sym (gensym 'res)
+          inner-calls (->> (for [l-el-type (types/flatten-union-types l-el-type)
+                                 r-el-type (types/flatten-union-types r-el-type)]
+                             (MapEntry/create [l-el-type r-el-type]
+                                              (if (or (= :null l-el-type) (= :null r-el-type))
+                                                {:return-type :null, :->call-code (constantly nil)}
+                                                (codegen-call {:f :=, :arg-types [l-el-type r-el-type]}))))
+                           (into {}))]
 
-    {:return-type [:union #{:bool :null}]
-     :continue-call (fn continue-list= [f [l-code r-code]]
-                      (let [l-sym (gensym 'l), r-sym (gensym 'r)]
-                        ;; this is essentially `(every? = ...)` but with 3VL
-                        `(let [~l-sym ~l-code, ~r-sym ~r-code
-                               ~(-> res-sym (with-tag 'long))
-                               (let [~len-sym (.size ~l-sym)]
-                                 (if-not (= ~len-sym (.size ~r-sym))
-                                   -1
-                                   (loop [~n-sym 0, ~res-sym 1]
-                                     (cond
-                                       (>= ~n-sym ~len-sym) ~res-sym
-                                       (== -1 ~res-sym) -1
-                                       :else (recur (inc ~n-sym)
-                                                    (min ~res-sym
-                                                         (do
-                                                           ~(continue-read
-                                                             (fn cont-l [l-el-type l-el-code]
-                                                               `(do
-                                                                  ~(continue-read (fn cont-r [r-el-type r-el-code]
-                                                                                    (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
-                                                                                      (if continue-call
-                                                                                        (continue-call cont-b3-call [l-el-code r-el-code])
-                                                                                        (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
-                                                                                  r-el-type
-                                                                                  `(.nth ~r-sym ~n-sym))))
-                                                             l-el-type
-                                                             `(.nth ~l-sym ~n-sym)))))))))]
-                           (if (zero? ~res-sym)
-                             ~(f :null nil)
-                             ~(f :bool `(== 1 ~res-sym))))))}))
+      {:return-type [:union #{:bool :null}]
+       :continue-call (fn continue-list= [f [l-code r-code]]
+                        (let [l-sym (gensym 'l), r-sym (gensym 'r)]
+                          ;; this is essentially `(every? = ...)` but with 3VL
+                          `(let [~l-sym ~l-code, ~r-sym ~r-code
+                                 ~(-> res-sym (with-tag 'long))
+                                 (let [~len-sym (.size ~l-sym)]
+                                   (if-not (= ~len-sym (.size ~r-sym))
+                                     -1
+                                     (loop [~n-sym 0, ~res-sym 1]
+                                       (cond
+                                         (>= ~n-sym ~len-sym) ~res-sym
+                                         (== -1 ~res-sym) -1
+                                         :else (recur (inc ~n-sym)
+                                                      (min ~res-sym
+                                                           (do
+                                                             ~(continue-read
+                                                               (fn cont-l [l-el-type l-el-code]
+                                                                 `(do
+                                                                    ~(continue-read (fn cont-r [r-el-type r-el-code]
+                                                                                      (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
+                                                                                        (if continue-call
+                                                                                          (continue-call cont-b3-call [l-el-code r-el-code])
+                                                                                          (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
+                                                                                    r-el-type
+                                                                                    `(.nth ~r-sym ~n-sym))))
+                                                               l-el-type
+                                                               `(.nth ~l-sym ~n-sym)))))))))]
+                             (if (zero? ~res-sym)
+                               ~(f :null nil)
+                               ~(f :bool `(== ~return-code ~res-sym))))))})))
 
 (defmethod codegen-call [:= :set :set] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
   (throw (UnsupportedOperationException. "TODO: `=` on sets")))
+
+(defmethod codegen-call [:<> :set :set] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
+  (throw (UnsupportedOperationException. "TODO: `<>` on sets")))
 
 (def out-vec-sym (gensym 'out_vec))
 (def ^:private out-writer-sym (gensym 'out_writer_sym))

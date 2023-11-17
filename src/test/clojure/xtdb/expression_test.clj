@@ -1480,9 +1480,10 @@
   (t/testing "Nested expr"
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
 
-(t/deftest test-list-equals
+(t/deftest test-list-equal
   (t/is (= true (project1 '(= [] []) {})))
   (t/is (= false (project1 '(= [1 2] [1 2 3]) {})))
+  (t/is (= false (project1 '(= [1 2 3] [1 2]) {})))
 
   (t/is (= true (project1 '(= [1 2 3] [1 2 3]) {})))
   (t/is (= false (project1 '(= [1 2 4] [1 2 3]) {})))
@@ -1493,6 +1494,21 @@
   (t/is (= false (project1 '(= [1 3 nil] [1 2 3.0]) {})))
 
   (t/is (= true (project1 '(= [[1 2] [3 4]] [[1 2] [3 4]]) {}))))
+
+(t/deftest test-list-diff
+  (t/is (= false (project1 '(<> [] []) {})))
+  (t/is (= true (project1 '(<> [1 2] [1 2 3]) {})))
+  (t/is (= true (project1 '(<> [1 2 3] [1 2]) {})))
+
+  (t/is (= false (project1 '(<> [1 2 3] [1 2 3]) {})))
+  (t/is (= true (project1 '(<> [1 2 4] [1 2 3]) {})))
+  (t/is (= false (project1 '(<> [1 2 3] [1 2 3.0]) {})))
+  (t/is (= true (project1 '(<> [1 2 2.5] [1 2 3.0]) {})))
+
+  (t/is (= nil (project1 '(<> [1 2 nil] [1 2 3.0]) {})))
+  (t/is (= true (project1 '(<> [1 3 nil] [1 2 3.0]) {})))
+
+  (t/is (= false (project1 '(<> [[1 2] [3 4]] [[1 2] [3 4]]) {}))))
 
 (t/deftest test-sets
   (t/is (= #{1 2 3}
@@ -1775,4 +1791,3 @@
   (t/is (= :true (project1 '(if true :true :false) {})))
   (t/is (= :false (project1 '(if false :true :false) {})))
   (t/is (= :false (project1 '(if nil :true :false) {}))))
-
