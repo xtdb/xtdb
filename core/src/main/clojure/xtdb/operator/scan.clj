@@ -275,14 +275,16 @@
     (util/close vsr-cache)))
 
 (defn- eid-select->eid [eid-select]
-  (if (= 'xt$id (second eid-select))
-    (nth eid-select 2)
-    (second eid-select)))
+  (cond (= 'xt$id (second eid-select))
+        (nth eid-select 2)
+
+        (= 'xt$id (nth eid-select 2))
+        (second eid-select)))
 
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
   (when-let [eid-select (get selects "xt$id")]
     (when (= '= (first eid-select))
-      (let [eid (eid-select->eid eid-select)]
+      (when-let [eid (eid-select->eid eid-select)]
         (cond
           (s/valid? ::lp/value eid)
           (trie/->iid eid)

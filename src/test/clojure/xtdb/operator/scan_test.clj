@@ -623,3 +623,13 @@
                  (into #{} (map :xt/id) (tu/query-ra
                                          '[:scan {:table docs} [xt$id]]
                                          {:node node}))))))))
+
+(deftest dont-use-fast-path-on-non-literals-2768
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id "foo-start" :v "foo-start"}]
+                           [:put :xt-docs {:xt/id "bar-start" :v "bar-start"}]])
+
+  (t/is (= [#:xt{:id "foo-start"}]
+           (tu/query-ra
+            '[:scan
+              {:table xt_docs} [{xt$id (= "foo" (substring xt$id 1 3))}]]
+            {:node tu/*node*}))))
