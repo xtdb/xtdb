@@ -3,7 +3,9 @@
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
            (java.util Date List)
            (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
-                       Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
+                       Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec
+                       Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$DocsTable Query$ParamTable
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -326,6 +328,11 @@
 
     (Query/aggregate (parse-col-specs aggregate query))))
 
+(defmethod parse-query-tail 'limit [{:strs [limit] :as query}]
+  (when-not (int? limit)
+    (throw (err/illegal-arg :xtql/limit {:limit query :message "Limit must be an integer!"})))
+  (Query/limit limit))
+
 (defmethod parse-query 'unionAll [{union-all "unionAll", :as query}]
   (if-not (vector? union-all)
     (throw (err/illegal-arg :xtql/malformed-union-all {:union-all query}))
@@ -354,6 +361,7 @@
   Query$WithCols (unparse [q] {"with" (mapv unparse (.cols q))})
   Query$Without (unparse [q] {"without" (.cols q)})
   Query$Return (unparse [q] {"return" (mapv unparse (.cols q))})
+  Query$Limit (unparse [this] {"limit" (.length this)})
   Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
   Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))})
   Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))})

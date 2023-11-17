@@ -1,5 +1,5 @@
 (ns xtdb.xtql.json-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.xtql.edn :as edn]
             [xtdb.xtql.json :as json]))
 
@@ -222,3 +222,11 @@
            (roundtrip-q [{"from" "foo", "bind" ["a" "b"]}
                          {"orderBy" [{"+" ["a" "b"]}
                                      ["b" {"dir" "desc"}]]}]))))
+
+(deftest test-limit-2939
+  (t/is (= ['(-> (from :users [name])
+                 (limit 10))
+            [{"from" "users" "bind" ["name"]}
+             {"limit" 10}]]
+           (roundtrip-q [{"from" "users" "bind" ["name"]}
+                         {"limit" 10}]))))
