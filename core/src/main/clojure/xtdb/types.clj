@@ -7,7 +7,7 @@
   (:import (clojure.lang MapEntry)
            [java.io Writer]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.vector.extensions AbsentType ClojureFormType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -97,6 +97,7 @@
   ArrowType$Struct (<-arrow-type [_] :struct)
   ArrowType$List (<-arrow-type [_] :list)
   SetType (<-arrow-type [_] :set)
+  ArrowType$Map (<-arrow-type [arrow-type] [:map {:sorted? (.getKeysSorted arrow-type)}])
   ArrowType$Union (<-arrow-type [_] :union)
 
   KeywordType (<-arrow-type [_] :keyword)
@@ -120,6 +121,7 @@
   ArrowType$Duration (arrow-type->leg [arrow-type] (keyword (format "duration-%s" (name (second (<-arrow-type arrow-type))))))
   ArrowType$Interval (arrow-type->leg [arrow-type] (keyword (format "interval-%s" (name (second (<-arrow-type arrow-type))))))
 
+  ArrowType$Map (arrow-type->leg [arrow-type] (if (.getKeysSorted arrow-type) :map-sorted :map-unsorted))
   ArrowType$FixedSizeList (arrow-type->leg [arrow-type] (keyword (format "fixed-size-list-%d" (second (<-arrow-type arrow-type)))))
   ArrowType$FixedSizeBinary (arrow-type->leg [arrow-type] (keyword (format "fixed-size-binary-%d" (second (<-arrow-type arrow-type))))))
 
@@ -157,6 +159,8 @@
       :struct ArrowType$Struct/INSTANCE
       :list ArrowType$List/INSTANCE
       :set SetType/INSTANCE
+      :map (let [[_ {:keys [sorted?]}] col-type]
+             (ArrowType$Map. (boolean sorted?)))
       :union (.getType Types$MinorType/DENSEUNION)
 
       :date (let [[_ date-unit] col-type]
