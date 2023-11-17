@@ -4,60 +4,39 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
+           org.apache.arrow.vector.VectorSchemaRoot
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
 
 (deftest test-merge-plan-with-nil-nodes-2700
-  (with-open [al (RootAllocator.)
-              t1-root (tu/open-arrow-hash-trie-root al [[nil 0 nil 1] 2 nil 3])
-              log-root (tu/open-arrow-hash-trie-root al 0)
-              log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
+  (letfn [(->arrow-hash-trie [^VectorSchemaRoot meta-root]
+            (let [nodes-vec (.getVector meta-root "nodes")]
+              (ArrowHashTrie/from nodes-vec (dec (.getValueCount nodes-vec)))))]
 
-    (t/is (= {:path [],
-              :node [:branch
-                     [{:path [0],
-                       :node [:branch
-                              [{:path [0 0], :node [:leaf [nil nil {:page-idx 0} nil]]}
-                               {:path [0 1], :node [:leaf [nil {:page-idx 0} {:page-idx 0} nil]]}
-                               {:path [0 2], :node [:leaf [nil nil {:page-idx 0} nil]]}
-                               {:path [0 3], :node [:leaf [nil {:page-idx 1} {:page-idx 0} nil]]}]]}
-                      {:path [1], :node [:leaf [nil {:page-idx 2} {:page-idx 0} nil]]}
-                      {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
-                      {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
-             (trie/postwalk-merge-plan [nil
-                                        (ArrowHashTrie/from (.getVector t1-root "nodes"))
-                                        (ArrowHashTrie/from (.getVector log-root "nodes"))
-                                        (ArrowHashTrie/from (.getVector log2-root "nodes"))]
-                                       (fn [path [mn-tag mn-arg :as merge-node]]
-                                         {:path (vec path)
-                                          :node (case mn-tag
-                                                  :branch merge-node
-                                                  :leaf [:leaf (mapv (fn [^ArrowHashTrie$Leaf leaf]
-                                                                       (when leaf
-                                                                         {:page-idx (.getDataPageIndex leaf)}))
-                                                                     mn-arg)])}))))
+    (with-open [al (RootAllocator.)
+                t1-root (tu/open-arrow-hash-trie-root al [[nil 0 nil 1] 2 nil 3])
+                log-root (tu/open-arrow-hash-trie-root al 0)
+                log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
 
-    #_ ; TODO -> scan-test
-    (t/is (= {:path [],
-              :node [:branch
-                     [{:path [0],
-                       :node [:branch
-                              [nil {:path [0 1],
-                                    :node [:leaf [nil {:page-idx 0} {:page-idx 0} nil]]} nil nil]]} nil nil nil]]}
-             (->> (trie/->merge-plan [nil
-                                        (ArrowHashTrie/from (.getVector t1-root "nodes"))
-                                        (ArrowHashTrie/from (.getVector log-root "nodes"))
-                                        (ArrowHashTrie/from (.getVector log2-root "nodes"))]
-                                     (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-bb))]
-                                       #(zero? (HashTrie/compareToPath iid-ptr %)))
-                                     page-idx-preds
-                                     (repeat 4 iid-bloom-bitmap))
-                  (walk/postwalk (fn [x]
-                                   (if (map-entry? x)
-                                     (cond (= :path (key x)) (MapEntry/create :path (into [] (val x)))
-                                           (= :trie-leaf-file (key x)) {}
-                                           :else x)
-                                     x)))))
-          "testing iid fast path case")))
+      (t/is (= {:path [],
+                :node [:branch
+                       [{:path [0],
+                         :node [:branch
+                                [{:path [0 0], :node [:leaf [nil nil {:page-idx 0} nil]]}
+                                 {:path [0 1], :node [:leaf [nil {:page-idx 0} {:page-idx 0} nil]]}
+                                 {:path [0 2], :node [:leaf [nil nil {:page-idx 0} nil]]}
+                                 {:path [0 3], :node [:leaf [nil {:page-idx 1} {:page-idx 0} nil]]}]]}
+                        {:path [1], :node [:leaf [nil {:page-idx 2} {:page-idx 0} nil]]}
+                        {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
+                        {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
+               (trie/postwalk-merge-plan [nil (->arrow-hash-trie t1-root) (->arrow-hash-trie log-root) (->arrow-hash-trie log2-root)]
+                                         (fn [path [mn-tag mn-arg :as merge-node]]
+                                           {:path (vec path)
+                                            :node (case mn-tag
+                                                    :branch merge-node
+                                                    :leaf [:leaf (mapv (fn [^ArrowHashTrie$Leaf leaf]
+                                                                         (when leaf
+                                                                           {:page-idx (.getDataPageIndex leaf)}))
+                                                                       mn-arg)])})))))))
 
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]

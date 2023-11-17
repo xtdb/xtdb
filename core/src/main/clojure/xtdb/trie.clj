@@ -284,7 +284,7 @@
           nodes-vec (.getVector root "nodes")]
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
-        (->MetaFile (ArrowHashTrie/from nodes-vec) buf (vr/<-root root))))))
+        (->MetaFile (ArrowHashTrie/from nodes-vec (dec (.getValueCount nodes-vec))) buf (vr/<-root root))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel

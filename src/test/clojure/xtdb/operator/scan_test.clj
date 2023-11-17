@@ -2,17 +2,19 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.node :as node]
-            [xtdb.operator :as op]
+            xtdb.operator
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw]
-            [xtdb.types :as types])
+            [xtdb.trie :as trie])
   (:import (java.util.function IntPredicate)
-           org.apache.arrow.vector.VectorSchemaRoot
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.operator.IRaQuerySource
-           xtdb.operator.IRelationSelector
+           org.apache.arrow.vector.VectorSchemaRoot
+           org.apache.arrow.vector.complex.ListVector
+           (xtdb.operator IRaQuerySource IRelationSelector)
+           [xtdb.trie ArrowHashTrie]
            xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)

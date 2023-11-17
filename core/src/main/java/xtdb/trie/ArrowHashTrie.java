@@ -13,12 +13,15 @@ public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
     private static final byte LEAF_TYPE_ID = 2;
 
     private final DenseUnionVector nodesVec;
+    private final int rootIdx;
     private final ListVector branchVec;
     private final IntVector branchElVec;
     private final IntVector dataPageIdxVec;
 
-    private ArrowHashTrie(DenseUnionVector nodesVec) {
+    private ArrowHashTrie(DenseUnionVector nodesVec, int rootIdx) {
         this.nodesVec = nodesVec;
+        this.rootIdx = rootIdx;
+
         branchVec = (ListVector) nodesVec.getVectorByType(BRANCH_TYPE_ID);
         branchElVec = (IntVector) branchVec.getDataVector();
         StructVector pageVec = (StructVector) this.nodesVec.getVectorByType(LEAF_TYPE_ID);
@@ -99,12 +102,12 @@ public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
         };
     }
 
-    public static HashTrie<Node> from(DenseUnionVector nodes) {
-        return new ArrowHashTrie(nodes);
+    public static HashTrie<Node> from(DenseUnionVector nodes, int rootIdx) {
+        return new ArrowHashTrie(nodes, rootIdx);
     }
 
     @Override
     public HashTrie.Node<Node> rootNode() {
-        return forIndex(new byte[0], nodesVec.getValueCount() - 1);
+        return forIndex(new byte[0], rootIdx);
     }
 }
