@@ -233,7 +233,7 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         reader.close();
     }
 

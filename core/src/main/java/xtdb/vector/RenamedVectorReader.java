@@ -198,7 +198,7 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         reader.close();
     }
 }

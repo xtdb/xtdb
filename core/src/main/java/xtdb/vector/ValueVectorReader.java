@@ -286,7 +286,7 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         vector.close();
     }
 

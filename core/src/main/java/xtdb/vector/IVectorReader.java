@@ -87,4 +87,7 @@ public interface IVectorReader extends AutoCloseable {
     IRowCopier rowCopier(IVectorWriter writer);
 
     IValueReader valueReader(IVectorPosition pos);
+
+    @Override
+    void close();
 }
