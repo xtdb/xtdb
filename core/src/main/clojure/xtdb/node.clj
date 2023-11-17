@@ -10,7 +10,6 @@
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
             [xtdb.xtql :as xtql]
-            [xtdb.xtql.edn :as xtql.edn]
             [xtdb.logical-plan :as lp])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
@@ -75,13 +74,7 @@
 
                 (map? query) (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts)
 
-                (list? query) (let [plan (-> (xtql.edn/parse-query query)
-                                             (xtql/compile-query))]
-                                (if (:explain? query-opts)
-                                  (lp/explain-result plan)
-
-                                  (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src plan)]
-                                    (xtql/open-xtql-query allocator wm-src pq query-opts))))))))))
+                (list? query) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 

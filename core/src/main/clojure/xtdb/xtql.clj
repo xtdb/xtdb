@@ -4,23 +4,24 @@
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.xtql.edn :as xt.edn])
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.operator PreparedQuery)
-           xtdb.operator.PreparedQuery
+           (xtdb.operator IRaQuerySource)
            (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery Expr$Exists
                        Expr$Pull Expr$PullMany
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$DocsTable
                        Query$ParamTable
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
+                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
 ;;keeps the conversion to java AST to -> clojure sym in one place.
 ;;TODO Document var->cols purpose, and/or give it a more descriptive name
+
 
 (defprotocol PlanQuery
   (plan-query [query]))
@@ -861,14 +862,20 @@
          #_(doto clojure.pprint/pprint)
          (doto (lp/validate-plan)))]))
 
-(defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
-                                        {:keys [args basis default-tz default-all-valid-time? key-fn]
-                                         :or {key-fn :datalog}}]
-  ;;TODO better error if args is a vector of maps, as this is supported in other places which take args (join etc.)
-  (let [args (->> args
-                  (into {} (map (fn [[k v]]
-                                  (MapEntry/create (param-sym (str (symbol k))) v)))))]
-    (util/with-close-on-catch [params (vw/open-params allocator args)]
-      (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
-          (.openCursor)
-          (op/cursor->result-set params (util/parse-key-fn key-fn))))))
+(defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src,
+                                        query {:keys [args default-all-valid-time? basis default-tz explain? key-fn]
+                                               :or {key-fn :datalog}}]
+
+  (let [plan (-> (xt.edn/parse-query query)
+                 compile-query)]
+    (if explain?
+      (lp/explain-result plan)
+
+      ;;TODO better error if args is a vector of maps, as this is supported in other places which take args (join etc.)
+      (let [args (->> args
+                      (into {} (map (fn [[k v]]
+                                      (MapEntry/create (param-sym (str (symbol k))) v)))))]
+        (util/with-close-on-catch [params (vw/open-params allocator args)]
+          (-> (.bind (.prepareRaQuery ra-src plan) wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+              (.openCursor)
+              (op/cursor->result-set params (util/parse-key-fn key-fn))))))))
