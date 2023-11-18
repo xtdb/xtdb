@@ -148,14 +148,16 @@
       (doto ig/load-namespaces)))
 
 (defn start-node ^xtdb.node.Node [opts]
-  (let [system (-> (node-system opts)
+  (let [!closing (atom false)
+        system (-> (node-system opts)
                    ig/prep
                    ig/init)]
 
     (-> (:xtdb/node system)
         (assoc :system system
-               :close-fn #(do (ig/halt! system)
-                              #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
+               :close-fn #(when-not (first (swap-vals! !closing (constantly true)))
+                            (ig/halt! system)
+                            #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
   xtp/PSubmitNode
@@ -186,7 +188,8 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn start-submit-node ^xtdb.node.SubmitNode [opts]
-  (let [system (-> (into {::submit-node {}
+  (let [!closing (atom false)
+        system (-> (into {::submit-node {}
                           :xtdb.tx-producer/tx-producer {}
                           :xtdb/allocator {}
                           :xtdb/default-tz nil}
@@ -199,4 +202,5 @@
 
     (-> (::submit-node system)
         (doto (-> :!system (reset! system)))
-        (assoc :close-fn #(ig/halt! system)))))
+        (assoc :close-fn #(when-not (first (swap-vals! !closing (constantly true)))
+                            (ig/halt! system))))))

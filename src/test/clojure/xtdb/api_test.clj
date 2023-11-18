@@ -6,7 +6,8 @@
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.util :as util]
             [xtdb.error :as err])
-  (:import (java.time Duration ZoneId)
+  (:import (java.lang AutoCloseable)
+           (java.time Duration ZoneId)
            xtdb.types.ClojureForm))
 
 (t/use-fixtures :each
@@ -652,3 +653,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
   (t/is (= [{:name "Petr"}]
            (xt/q tu/*node* '(from :docs [{:xt/id $petr} name]) {:args {:petr :petr}}))))
+
+(t/deftest test-close-node-multiple-times
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :petr :name "Petr"}]])
+  (let [^AutoCloseable node tu/*node*]
+    (.close node)
+    (.close node)))
