@@ -155,7 +155,7 @@
 
     (-> (:xtdb/node system)
         (assoc :system system
-               :close-fn #(when-not (first (swap-vals! !closing (constantly true)))
+               :close-fn #(when (compare-and-set! !closing false true)
                             (ig/halt! system)
                             #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
 
@@ -202,5 +202,5 @@
 
     (-> (::submit-node system)
         (doto (-> :!system (reset! system)))
-        (assoc :close-fn #(when-not (first (swap-vals! !closing (constantly true)))
+        (assoc :close-fn #(when-not (compare-and-set! !closing false true)
                             (ig/halt! system))))))
