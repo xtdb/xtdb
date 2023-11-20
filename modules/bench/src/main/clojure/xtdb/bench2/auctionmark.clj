@@ -145,7 +145,7 @@
                              [imb :imb_ib_id imb_ib_id]]}
                    i_id])
                first)
-           _ (println res)
+           ;;_ (println res)
 
 
            ;; current number of bids
@@ -158,7 +158,7 @@
                              [i :i_status :open]]}
                    i_id])
                first)
-           _ (println res)
+           ;;_ (println res)
 
            ;; current bid/max
            {:keys [curr_bid, curr_max] :as res}
@@ -172,7 +172,7 @@
                      imb_ib_id])
                  first))
 
-           _ (print res)
+           ;;_ (println res)
 
            new_bid_win (or (nil? imb_ib_id) (< curr_max max_bid))
            new_bid (if (and new_bid_win curr_max (< bid curr_max) curr_max) curr_max bid)
