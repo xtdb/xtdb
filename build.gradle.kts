@@ -240,7 +240,7 @@ tasks.create("run-auctionmark", JavaExec::class) {
     this.args = args
 }
 
-val codoxOpts = File("codox.edn").readText()
+val codoxOpts = File("${projectDir}/codox.edn").readText()
 
 tasks.create("build-codox", JavaExec::class) {
     classpath = sourceSets.test.get().runtimeClasspath
