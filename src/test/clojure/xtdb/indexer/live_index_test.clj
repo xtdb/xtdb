@@ -14,7 +14,7 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           xtdb.IBufferPool
+           (xtdb IBufferPool InstantSource)
            xtdb.indexer.live_index.ILiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
@@ -38,28 +38,28 @@
                        (mapv (comp vec util/uuid->bytes)))]
 
     (t/testing "commit"
-      (let [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
-            live-table-tx (.liveTable live-idx-tx "my-table")
-            put-doc-wrt (.docWriter live-table-tx)]
-        (let [wp (IVectorPosition/build)]
-          (doseq [^UUID iid iids]
-            (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
-                     #(do
-                        (.getPositionAndIncrement wp)
-                        (vw/write-value! {:some :doc} put-doc-wrt)))))
+      (util/with-open [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))]
+        (let [live-table-tx (.liveTable live-idx-tx "my-table")
+              put-doc-wrt (.docWriter live-table-tx)]
+          (let [wp (IVectorPosition/build)]
+            (doseq [^UUID iid iids]
+              (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
+                       #(do
+                          (.getPositionAndIncrement wp)
+                          (vw/write-value! {:some :doc} put-doc-wrt)))))
 
-        (.commit live-idx-tx)
+          (.commit live-idx-tx)
 
-        (let [live-table (.liveTable live-index "my-table")
-              live-rel (li/live-rel live-table)
-              iid-vec (.getVector (.colWriter live-rel "xt$iid"))
+          (let [live-table (.liveTable live-index "my-table")
+                live-rel (li/live-rel live-table)
+                iid-vec (.getVector (.colWriter live-rel "xt$iid"))
 
-              ^LiveHashTrie trie (li/live-trie live-table)]
+                ^LiveHashTrie trie (li/live-trie live-table)]
 
-          (t/is (= iid-bytes
-                   (->> (.leaves (.compactLogs trie))
-                        (mapcat (fn [^LiveHashTrie$Leaf leaf]
-                                  (mapv #(vec (.getObject iid-vec %)) (.data leaf))))))))))
+            (t/is (= iid-bytes
+                     (->> (.leaves (.compactLogs trie))
+                          (mapcat (fn [^LiveHashTrie$Leaf leaf]
+                                    (mapv #(vec (.getObject iid-vec %)) (.data leaf)))))))))))
 
     (t/testing "finish chunk"
       (.finishChunk live-index 0 12000)
@@ -135,37 +135,55 @@
 
 (t/deftest test-new-table-discarded-on-abort-2721
   (let [{^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*]
-
-    (let [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"})
-          foo-table-tx (.liveTable live-tx0 "foo")]
-      (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0 #())
-      (.commit live-tx0))
+    (util/with-open [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"})]
+      (let [foo-table-tx (.liveTable live-tx0 "foo")]
+        (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0 #())
+        (.commit live-tx0)))
 
     (t/testing "aborting bar means it doesn't get added to the committed live-index")
-    (let [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-02T00:00:00Z"})
-          bar-table-tx (.liveTable live-tx1 "bar")]
-      (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0 #())
+    (util/with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-02T00:00:00Z"})]
+      (let [bar-table-tx (.liveTable live-tx1 "bar")]
+        (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0 #())
 
-      (t/testing "doesn't get added in the tx either"
-        (t/is (nil? (.liveTable live-index "bar"))))
+        (t/testing "doesn't get added in the tx either"
+          (t/is (nil? (.liveTable live-index "bar"))))
 
-      (.abort live-tx1)
+        (.abort live-tx1)
 
-      (t/is (some? (.liveTable live-index "foo")))
-      (t/is (nil? (.liveTable live-index "bar"))))
+        (t/is (some? (.liveTable live-index "foo")))
+        (t/is (nil? (.liveTable live-index "bar")))))
 
     (t/testing "aborting foo doesn't clear it from the live-index"
-      (let [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-03T00:00:00Z"})
-            foo-table-tx (.liveTable live-tx2 "foo")]
-        (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0 #())
-        (.abort live-tx2))
+      (util/with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-03T00:00:00Z"})]
+        (let [foo-table-tx (.liveTable live-tx2 "foo")]
+          (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0 #())
+          (.abort live-tx2)))
 
       (t/is (some? (.liveTable live-index "foo"))))
 
     (t/testing "committing bar after an abort adds it correctly"
-      (let [live-tx3 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-04T00:00:00Z"})
-            bar-table-tx (.liveTable live-tx3 "bar")]
-        (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0 #())
-        (.commit live-tx3))
+      (util/with-open [live-tx3 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-04T00:00:00Z"})]
+        (let [bar-table-tx (.liveTable live-tx3 "bar")]
+          (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0 #())
+          (.commit live-tx3)))
 
       (t/is (some? (.liveTable live-index "bar"))))))
+
+(defn- random-maps [n]
+  (let [nb-ks 5
+        ks [:foo :bar :baz :toto :fufu]]
+    (->> (repeatedly n #(zipmap ks (map str (repeatedly nb-ks random-uuid))))
+         (map-indexed #(assoc %2 :xt/id %1)))))
+
+(deftest incoming-puts-dont-cause-memory-leak-2800
+  (let [node-dir (io/file "test/incoming-puts-dont-cause-memory-leak")
+        node-opts {:node-dir (.toPath node-dir)
+                   :instant-src InstantSource/SYSTEM
+                   :rows-per-chunk 16}]
+    (dotimes [_ 5]
+      (with-open [node (tu/->local-node node-opts)]
+
+        (doseq [tx (->> (random-maps 32)
+                        (map #(vector :put :docs %))
+                        (partition-all 16))]
+          (xt/submit-tx node tx))))))

@@ -240,6 +240,7 @@
   (liveTable [_ table-name] (.get tables table-name))
 
   (startTx [this-table tx-key]
+    (.acquire wm-cnt)
     (let [table-txs (HashMap.)]
       (reify ILiveIndexTx
         (liveTable [_ table-name]
@@ -280,7 +281,7 @@
                 (util/close wms)))))
 
         AutoCloseable
-        (close [_]))))
+        (close [_] (.release wm-cnt)))))
 
   (openWatermark [_]
     (.acquire wm-cnt)
