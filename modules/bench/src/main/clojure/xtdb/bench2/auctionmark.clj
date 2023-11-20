@@ -608,6 +608,8 @@
                        {:t :call, :f [bxt2/generate :user generate-user (* sf 1e6)]}
                        {:t :call, :f [bxt2/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
                        {:t :call, :f [bxt2/generate :item generate-item (* sf 1e6 10)]}
+                       {:t :call, :f [bxt2/generate :gag generate-global-attribute-group 100]}
+                       {:t :call, :f [bxt2/generate :gav generate-global-attribute-value 1000]}
                        {:t :call, :f (fn [_] (log/info "finished load stage"))}]}]
 
              [])
