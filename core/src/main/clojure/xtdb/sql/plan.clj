@@ -1241,6 +1241,11 @@
                       :out {(aggregate-symbol "agg_out" aggregate)
                             (list 'count (aggregate-symbol "agg_in" aggregate))}}
 
+                     [:aggregate_function [:array_aggregate_function "ARRAY_AGG" ^:z ve]]
+                     {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
+                      :out {(aggregate-symbol "agg_out" aggregate)
+                            (list 'array-agg (aggregate-symbol "agg_in" aggregate))}}
+
                      (throw (err/illegal-arg :xtdb.sql/parse-error
                                              {::err/message "unknown aggregation function"}))))]
     [:group-by (->> (map :out group-by)

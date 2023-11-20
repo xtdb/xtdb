@@ -563,3 +563,26 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
          xtdb.IllegalArgumentException
          #"Illegal argument: ':unknown-query-type'"
          (xt/q tu/*node* (Object.)))))
+
+
+(t/deftest test-array-agg-2946
+  (xt/submit-tx tu/*node*
+                [[:put :track {:xt/id :track-1 :name "foo1" :composer "bar" :album :album-1}]
+                 [:put :track {:xt/id :track-2 :name "foo2" :composer "bar" :album :album-1}]
+                 [:put :album  {:xt/id :album-1 :name "foo-album"}]])
+
+
+  (t/is (= [{:name "foo-album", :tracks ["foo1" "foo2"]}]
+           (xt/q tu/*node*
+                 "SELECT a.name, ARRAY_AGG(t.name) AS tracks FROM track AS t, album AS a
+                  WHERE t.album = a.xt$id
+                  GROUP BY a.name"))
+        "array-agg")
+
+  #_ ;;TODO parser needs to be adpated #2948
+  (t/is (= [{:name "foo-album", :tracks ["bar"]}]
+           (xt/q tu/*node*
+                 "SELECT a.name, ARRAY_AGG(DISTINCT t.composer) AS composer FROM track AS t, album AS a
+                  WHERE t.album = a.xt$id
+                  GROUP BY a.name"))
+        "array-agg distinct"))
