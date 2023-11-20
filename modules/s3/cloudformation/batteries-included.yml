@@ -1,0 +1,644 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: xtdb-cluster
+    Description: An environment/cluster name that will be used for namespacing all cluster resources.
+
+  EC2InstanceType:
+    Type: String
+    Default: i3.large
+    Description: EC2 Instance Type used for ECS Service (We recommend using one that is storage optimized)
+
+  DesiredCapacity:
+    Type: Number
+    Default: '1'
+    Description: Number of EC2 instances to launch in your ECS cluster / XTDB node tasks to run.
+
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: Use an ECS Optimized Image from SSM Parameter Store
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+    
+  S3BucketName:
+    Type: String
+    Default: xtdb-cluster-bucket
+    Description: Enter the desired name of the bucket which will contain the XTDB Object Store
+
+  MSKClusterName:
+    Type: String
+    Default: xtdb-cluster-kafka
+    Description: Enter the desired name of the MSK kafka cluster used as the XTDB Kafka Log
+
+  MSKVolumeSize:
+    Type: Number
+    Default: 100
+    Description: The size in GiB of the EBS volume for the data drive on each broker node of the kafka cluster.
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - Label:
+          default: "Environment"
+        Parameters:
+          - EnvironmentName
+      - Label: 
+          default: "ECS Configuration"
+        Parameters: 
+          - EC2InstanceType
+          - DesiredCapacity
+          - ImageId
+      - Label:
+          default: "XTDB resource options"
+        Parameters:
+          - S3BucketName
+          - MSKClusterName
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.192.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.192.11.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.192.12.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+  
+  PrivateSubnetMSKOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 0
+         - Fn::GetAZs: {Ref: 'AWS::Region'}
+      VpcId: !Ref 'VPC'
+      CidrBlock: 10.192.20.0/24
+      MapPublicIpOnLaunch: false
+
+  PrivateSubnetMSKTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 1
+         - Fn::GetAZs: {Ref: 'AWS::Region'}
+      VpcId: !Ref 'VPC'
+      CidrBlock: 10.192.21.0/24
+      MapPublicIpOnLaunch: false
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+  
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PrivateSubnetMSKOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKOne
+
+  PrivateSubnetMSKTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKTwo
+
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Security group allowing ingress/egress for all
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+  MSKSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MSK Security Group
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 2181
+        ToPort: 2181
+        SourceSecurityGroupId: !GetAtt SecurityGroup.GroupId
+      - IpProtocol: tcp
+        FromPort: 9098
+        ToPort: 9098
+        SourceSecurityGroupId: !GetAtt SecurityGroup.GroupId
+      - IpProtocol: tcp
+        FromPort: 9094
+        ToPort: 9094
+        SourceSecurityGroupId: !GetAtt SecurityGroup.GroupId
+      - IpProtocol: tcp
+        FromPort: 9092
+        ToPort: 9092
+        SourceSecurityGroupId: !GetAtt SecurityGroup.GroupId
+
+  MSKSelfIngressAllowRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MSKSecurityGroup
+    Properties:
+      GroupId: !Ref MSKSecurityGroup
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref MSKSecurityGroup
+
+  MSKCluster:
+    Type: AWS::MSK::Cluster
+    Properties: 
+      BrokerNodeGroupInfo: 
+        ClientSubnets: [!Ref 'PrivateSubnetMSKOne', !Ref 'PrivateSubnetMSKTwo']
+        InstanceType: kafka.t3.small
+        SecurityGroups: [!GetAtt MSKSecurityGroup.GroupId]
+        StorageInfo: 
+          EBSStorageInfo:
+            VolumeSize: !Ref MSKVolumeSize
+      ClusterName: !Ref MSKClusterName
+      EncryptionInfo: 
+        EncryptionInTransit: 
+          ClientBroker: TLS_PLAINTEXT
+          InCluster: true
+      EnhancedMonitoring: DEFAULT
+      KafkaVersion: 2.6.2
+      NumberOfBrokerNodes: 2
+      ClientAuthentication:
+        Unauthenticated:
+          Enabled: True
+
+  MSKBootstrapLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: MSKBootstrapLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'kafka:Describe*'
+                  - 'kafka:Get*'
+                  - 'kafka:List*'
+                Resource:
+                  - !Sub 'arn:aws:kafka:${AWS::Region}:${AWS::AccountId}:cluster/${MSKClusterName}/*'
+
+  FetchBootstrapServerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: FetchBootstrapServerLambda
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+
+          def lambda_handler(event, context):
+              try:
+                msk_client = boto3.client('kafka')
+
+                # Retrieve the MSK cluster ARN from CloudFormation input
+                msk_cluster_arn = event['ResourceProperties']['MSKClusterArn']
+
+                # Describe the MSK cluster
+                response = msk_client.get_bootstrap_brokers(ClusterArn=msk_cluster_arn)
+
+                # Extract the bootstrap servers
+                bootstrap_servers = response['BootstrapBrokerString']
+
+                # Send the bootstrap servers back to CloudFormation
+                responseData = {'BootstrapServers': bootstrap_servers}
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+              except Exception as e:
+                print(f"Error: {e}")
+                cfnresponse.send(event, context, cfnresponse.FAILED, {})
+      Handler: index.lambda_handler
+      Role: !GetAtt MSKBootstrapLambdaRole.Arn
+      Runtime: python3.8
+      Timeout: 60
+
+  BootstrapServerInvoke:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: 
+      - FetchBootstrapServerLambda
+      - MSKCluster
+    Properties:
+      ServiceToken: !GetAtt FetchBootstrapServerLambda.Arn
+      MSKClusterArn: !Ref MSKCluster
+      CustomPropertyToForceUpdate: "ah"
+
+  SNSTopic: 
+    Type: AWS::SNS::Topic
+    Properties: 
+      TopicName: !Join [ '-', [ !Ref S3BucketName, 'bucket-events' ] ]
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref S3BucketName
+      AccessControl: Private
+      NotificationConfiguration:
+        TopicConfigurations:
+          - Topic: !Ref SNSTopic
+            Event: 's3:ObjectCreated:*'
+          - Topic: !Ref SNSTopic
+            Event: 's3:ObjectRemoved:*'
+  
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 's3.amazonaws.com'
+            Action: sns:Publish
+            Resource: !Ref SNSTopic
+            Condition:
+              ArnEquals:
+                aws:SourceArn:  !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName] ]
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+      Topics:
+        - !Ref SNSTopic
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref EnvironmentName
+      
+  TaskExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'ecs-tasks.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'xtdb-standalone'
+      RetentionInDays: 365
+
+  TaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    DependsOn:
+      - MSKCluster
+      - BootstrapServerInvoke
+      - S3Bucket
+      - SNSTopic
+    Properties:
+      Family: 'xtdb-task'
+      RequiresCompatibilities:
+        - 'EC2'
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      NetworkMode: 'bridge'
+      ContainerDefinitions:
+        - Name: 'xtdb-container'
+          Image: 'ghcr.io/xtdb/xtdb-aws-ea:latest'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+          MemoryReservation: 256 
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: xtdb
+          Environment:
+            - Name: KAFKA_BOOTSTRAP_SERVERS
+              Value: !GetAtt BootstrapServerInvoke.BootstrapServers
+            - Name: XTDB_TOPIC_NAME
+              Value: xtdb-log
+            - Name: XTDB_S3_BUCKET
+              Value: !Ref S3BucketName
+            - Name: XTDB_SNS_TOPIC
+              Value: !Ref SNSTopic
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role'
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+                - 's3:PutObject'
+                - 's3:DeleteObject'
+                - 's3:ListBucket'
+                - 's3:AbortMultipartUpload'
+                - 's3:ListBucketMultipartUploads'
+              Resource:
+                -  !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName] ]
+                -  !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName, '/*'] ]
+        - PolicyName: SNSAccess
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 'sns:Subscribe'
+                - 'sns:Unsubscribe'
+              Resource:
+                - !Ref SNSTopic 
+        - PolicyName: SQSAccess
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 'sqs:CreateQueue'
+                - 'sqs:GetQueueUrl'
+                - 'sqs:GetQueueAttributes'
+                - 'sqs:DeleteQueue'
+                - 'sqs:DeleteMessage'
+                - 'sqs:ReceiveMessage'
+                - 'sqs:SetQueueAttributes'
+              Resource:
+                - '*'
+        - PolicyName: MSKConnectAuthentication
+          PolicyDocument:
+            Statement: 
+            - Effect: Allow
+              Action: 
+                - 'kafka-cluster:*Topic*'
+                - 'kafka-cluster:Connect'
+                - 'kafka-cluster:AlterCluster'
+                - 'kafka-cluster:DescribeCluster'
+                - 'kafka-cluster:DescribeClusterDynamicConfiguration'
+              Resource:
+                - !Sub 'arn:aws:kafka:${AWS::Region}:${AWS::AccountId}:cluster/${MSKClusterName}/*'
+            - Effect: Allow
+              Action: 
+                - 'kafka-cluster:*Topic*'
+                - 'kafka-cluster:WriteData'
+                - 'kafka-cluster:ReadData'
+              Resource:
+                - !Sub 'arn:aws:kafka:${AWS::Region}:${AWS::AccountId}:topic/${MSKClusterName}/*'
+            - Effect: Allow
+              Action: 
+                - 'kafka-cluster:AlterGroup'
+                - 'kafka-cluster:DescribeGroup'
+              Resource:
+                - !Sub 'arn:aws:kafka:${AWS::Region}:${AWS::AccountId}:group/${MSKClusterName}/*'
+
+
+  EC2InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref EC2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroups:
+        - !Ref SecurityGroup
+      UserData: !Base64 
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -xe
+            - echo ECS_CLUSTER=
+            - !Ref ECSCluster
+            - |2
+               >> /etc/ecs/ecs.config
+            - '/opt/aws/bin/cfn-signal -e $? '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource ECSAutoScalingGroup '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |+
+
+  ECSAutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      VPCZoneIdentifier: 
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: !Ref DesiredCapacity
+      MaxSize: !Ref DesiredCapacity
+      DesiredCapacity: !Ref DesiredCapacity
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: 'true'
+
+  ECSALB:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: ECSALB
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '30'
+      Subnets: 
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref SecurityGroup
+
+  ECSServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'ec2:Describe*'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                Resource: '*'
+  ECSTG:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    DependsOn: ECSALB
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /status
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Name: ECSTG
+      Port: 3000
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VPC
+
+  ALBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    DependsOn: ECSServiceRole
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ECSTG
+      LoadBalancerArn: !Ref ECSALB
+      Port: '3000'
+      Protocol: HTTP
+
+  ECSALBListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    DependsOn: ALBListener
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ECSTG
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /
+      ListenerArn: !Ref ALBListener
+      Priority: 1
+
+  ECSService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: 'EC2'
+      DesiredCount: !Ref DesiredCapacity
+      LoadBalancers:
+        - ContainerName: xtdb-container
+          ContainerPort: '3000'
+          TargetGroupArn: !Ref ECSTG
+      PlacementConstraints:
+        - Type: distinctInstance 
+
+  AutoscalingRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: service-autoscaling
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'application-autoscaling:*'
+                  - 'ecs:DescribeServices'
+                  - 'ecs:UpdateService'
+                Resource: '*'
+
+Outputs:
+  LoadBalancerUrl:
+    Description: The Load-Balanced XTDB node URL  
+    Value: !Sub 'http://${ECSALB.DNSName}:3000'
