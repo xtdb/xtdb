@@ -1405,16 +1405,3 @@
       (hasNext [_] (.hasNext it))
       (next [_] (.next it))
       (close [_]))))
-
-(defn is-column? [x]
-  (and (symbol? x)
-       (or (:column? (meta x))
-           (:correlated-column? (meta x))
-           (:param? (meta x)))))
-
-(defn normalize-plan [plan]
-  (walk/postwalk (fn [form]
-                   (if (is-column? form)
-                     (vary-meta (util/symbol->normal-form-symbol form) (meta form))
-                     form))
-                 plan))
