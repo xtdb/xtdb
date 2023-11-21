@@ -80,7 +80,11 @@
 
   (t/is (thrown-with-msg?
          IllegalArgumentException #"Invalid keys provided to option map"
-         (roundtrip-q '(from :foo {:bar x :baz x})))))
+         (roundtrip-q '(from :foo {:bar x :baz x}))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Attribute in bind spec must be keyword"
+         (roundtrip-q '(from :foo [{bar x "fish" y}])))))
 
 (t/deftest test-parse-unify
   (t/is (= '(unify (from :foo [{:baz b}])
@@ -103,13 +107,28 @@
 (t/deftest test-parse-with-operator
   (let [q '(with {:bar 1} {:baz (+ 1 1)})]
     (t/is (= q
-             (roundtrip-q-tail q)))))
+             (roundtrip-q-tail q))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Short form of col spec must be a keyword"
+         (roundtrip-q-tail '(with (+ 1 1)))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Attribute in col spec must be keyword"
+         (roundtrip-q-tail '(with {bar (+ 1 1)})))))
 
 (t/deftest test-parse-with-unify-clause
   (let [q '(with {bar 1} {baz (+ 1 1)})]
     (t/is (= q
-             (roundtrip-unify-clause q)))))
-;TODO with as unify-clause, will fail due to lack of distinct binding types
+             (roundtrip-unify-clause q))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Var specs must be pairs of bindings"
+         (roundtrip-unify-clause '(with (+ 1 1)))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Attribute in var spec must be symbol"
+         (roundtrip-unify-clause '(with {:bar (+ 1 1)})))))
 
 (t/deftest test-parse-without
   (let [q '(-> (from :foo [a])

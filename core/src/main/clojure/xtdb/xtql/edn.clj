@@ -213,8 +213,8 @@
   ^List [specs _query]
   (letfn [(parse-out-spec [[attr expr]]
             (when-not (keyword? attr)
-              ;; TODO error
-              )
+              (throw (err/illegal-arg :xtql/malformed-bind-spec
+                                      {:attr attr :expr expr ::err/message "Attribute in bind spec must be keyword"})))
 
             (OutSpec/of (str (symbol attr)) (parse-expr expr)))]
 
@@ -226,7 +226,6 @@
                                                  [(OutSpec/of attr (Expr/lVar attr))])
                                 (map? spec) (map parse-out-spec spec))))))
 
-      ;; TODO error
       (throw (UnsupportedOperationException.)))))
 
 (defn- parse-arg-specs
@@ -252,17 +251,24 @@
                             (for [[attr expr] spec]
                               (do
                                 (when-not (symbol? attr)
-                                  (throw (err/illegal-arg :xtql/malformed-var-spec {:spec spec})))
+                                  (throw (err/illegal-arg
+                                          :xtql/malformed-var-spec
+                                          {:spec spec
+                                           ::err/message "Attribute in var spec must be symbol"})))
                                 (VarSpec/of (str attr) (parse-expr expr))))
-                            (throw (err/illegal-arg :xtql/malformed-var-spec {:spec spec}))))))))
+                            (throw (err/illegal-arg
+                                    :xtql/malformed-var-spec
+                                    {:spec spec
+                                     ::err/message "Var specs must be pairs of bindings"}))))))))
 
 (defn- parse-col-specs
   "[{:to-col (from-expr)} :col ...]"
   [specs _query]
   (letfn [(parse-col-spec [[attr expr]]
             (when-not (keyword? attr)
-              ;; TODO error
-              )
+              (throw (err/illegal-arg
+                      :xtql/malformed-col-spec
+                      {:attr attr :expr expr ::err/message "Attribute in col spec must be keyword"})))
 
             (ColSpec/of (str (symbol attr)) (parse-expr expr)))]
 
@@ -273,8 +279,12 @@
                                                   (cond
                                                     (keyword? spec) (let [attr (str (symbol spec))]
                                                                       [(ColSpec/of attr (Expr/lVar attr))])
-                                                    (map? spec) (map parse-col-spec spec))))))
-      ;; TODO error
+                                                    (map? spec) (map parse-col-spec spec)
+
+                                                    :else
+                                                    (throw (err/illegal-arg
+                                                            :xtql/malformed-col-spec
+                                                            {:spec spec ::err/message "Short form of col spec must be a keyword"})))))))
       :else (throw (UnsupportedOperationException.)))))
 
 (defn check-opt-keys [valid-keys opts]

@@ -317,7 +317,21 @@
                {:oid :o3, :o-value 4.13, :unit-price 0.59, :qty 7}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id oid :unit-price unit-price :quantity qty}])
-                             (with {:o-value (* unit-price qty)}))))))))
+                             (with {:o-value (* unit-price qty)})))))))
+
+
+  (t/testing "Duplicate vars"
+    ;;Undefined behaviour
+    (t/is (= [{:b 3}]
+             (xt/q tu/*node*
+                   '(-> (table [{}] []) 
+                        (with {:b 2} {:b 3}))))))
+
+  (t/testing "overwriting existing col"
+    (t/is (= [{:a 2}]
+             (xt/q tu/*node*
+                   '(-> (table [{:a 1}] [a]) 
+                        (with {:a 2})))))))
 
 (t/deftest test-with-op-errs
   (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :foo}]])]
@@ -327,6 +341,16 @@
                                   '(-> (from :docs [{:xt/id id}])
                                        (with {:bar (str baz)})))))))
 
+(t/deftest test-with-unify-clause
+  (t/testing "Duplicate vars unify"
+    (t/is (= [{:a 1}]
+             (xt/q tu/*node*
+                   '(unify 
+                     (with {a 1} {a 1})))))
+    (t/is (= []
+             (xt/q tu/*node*
+                   '(unify 
+                     (with {b 2} {b 3})))))))
 #_
 (deftest test-aggregate-exprs
   (let [tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :foo, :category :c0, :v 1}]
@@ -1906,12 +1930,12 @@
     [{:c 2, :o 3}]
 
     '(-> (from :customer {:bind [{:xt/id cid, :firstname "bob"}]})
-         (with {c (q (-> (from :customer {:bind [{:xt/id $cid} {:xt/id c}]})
-                         (aggregate {:count (count c)}))
-                     {:args [cid]})}
-               {o (q (-> (from :order {:bind [{:customer $cid} {:xt/id o}]})
-                         (aggregate {:count (count o)}))
-                     {:args [cid]})})
+         (with {:c (q (-> (from :customer {:bind [{:xt/id $cid} {:xt/id c}]})
+                          (aggregate {:count (count c)}))
+                      {:args [cid]})}
+               {:o (q (-> (from :order {:bind [{:customer $cid} {:xt/id o}]})
+                          (aggregate {:count (count o)}))
+                      {:args [cid]})})
          (without :cid))
 
     [{:c 1, :o 2}])
