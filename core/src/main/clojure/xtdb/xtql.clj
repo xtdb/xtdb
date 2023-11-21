@@ -11,7 +11,7 @@
            (xtdb.operator IRaQuerySource)
            (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery Expr$Exists
-                       Expr$Pull Expr$PullMany
+                       Expr$Pull Expr$PullMany Expr$Get
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$DocsTable
                        Query$ParamTable
@@ -139,6 +139,10 @@
   Expr$Call
   (plan-expr [call] (list* (symbol (.f call)) (mapv plan-expr (.args call))))
   (required-vars [call] (into #{} (mapcat required-vars) (.args call)))
+
+  Expr$Get
+  (plan-expr [this] (list '. (plan-expr (.expr this)) (keyword (.field this)))) ;;keywords are safer than symbols in the RA plan
+  (required-vars [this] (required-vars (.expr this)))
 
   Expr$Exists
   (plan-expr [this]

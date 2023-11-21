@@ -135,6 +135,25 @@ public interface Expr {
         return new Call(f, args);
     }
 
+    final class Get implements Expr {
+        public final Expr expr;
+        public final String field;
+
+        private Get(Expr expr, String field) {
+            this.expr = expr;
+            this.field = field;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("(. %s %s)", expr, field);
+        }
+    }
+
+    static Get get(Expr expr, String field) {
+        return new Get(expr, field);
+    }
+
     final class Subquery implements Expr {
         public final Query query;
         public final List<ArgSpec> args;
