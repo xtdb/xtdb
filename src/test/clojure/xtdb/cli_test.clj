@@ -63,18 +63,16 @@
                    (->system []))))))))
 
 (t/deftest test-env-loading
-  (with-redefs [cli/read-env-var (fn [env-name] 
+  (with-redefs [cli/read-env-var (fn [env-name]
                                    (when (= (str env-name) "TEST_ENV") "hello world"))]
     (letfn [(->system [cli-args]
               (-> (::cli/node-opts (cli/parse-args cli-args))
-                  ig/prep
-                  ig/init
                   (->> (into {}))))]
 
       (t/testing "EDN config - #env reader tag fetches from env"
-        (t/is (= {:foo "hello world"}
+        (t/is (= {::foo "hello world"}
                  (->system ["--edn" "{:xtdb.cli-test/foo #env TEST_ENV}"]))))
 
       (t/testing "JSON config - edn object fetched from env"
-        (t/is (= {:foo "hello world"}
-                 (->system ["--json" "{\"xtdb.cli-test/foo\": {\"env\": \"TEST_ENV\"}}"])))))))
+        (t/is (= {::foo "hello world"}
+                 (->system ["--json" "{\"xtdb.cli-test/foo\": {\"@env\": \"TEST_ENV\"}}"])))))))
