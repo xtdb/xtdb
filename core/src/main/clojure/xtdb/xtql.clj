@@ -106,7 +106,6 @@
   ;; directly, but wanted to avoid duplicating that code.
   (apply set/union (map (comp :required-vars plan-arg-spec) subquery-args)))
 
-;TODO fill out expr plan for other types
 (extend-protocol ExprPlan
   Expr$LogicVar
   (plan-expr [this] (col-sym (.lv this)))
@@ -482,8 +481,6 @@
 
   Query$WithCols
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    ;;TODO Needs to check if projected col already exists otherwise bad things happen.
-    ;;Should we assume error here? or should we allow the user to project over the existing col.
     (let [projections (for [binding (.cols this)
                             :let [var (col-sym (.attr ^ColSpec binding))
                                   expr (.expr ^ColSpec binding)
@@ -551,8 +548,6 @@
 
   Query$With
   (plan-unify-clause [this]
-    ;;TODO check for duplicate vars
-    ;;TODO differing binding specs makes this hard to share with outer with.
     (for [binding (.vars this)
           :let [var (col-sym (.attr ^VarSpec binding))
                 expr (.expr ^VarSpec binding)
@@ -618,7 +613,7 @@
          [:apply
           :left-outer-join
           (merge
-           args ;;TODO fix apply params, reverse map is unlike any other arg form
+           args
            unifying-vars-apply-param-mapping)
           (:ra-plan acc-plan)
           (->> unifying-vars-apply-param-mapping
