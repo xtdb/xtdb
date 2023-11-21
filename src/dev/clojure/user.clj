@@ -15,7 +15,7 @@
                                                     (.listFiles (io/file "."))
                                                     (.listFiles (io/file "modules")))
                                   :when (and (.isDirectory dir)
-                                             (.exists (io/file dir "deps.edn")))
+                                             (.exists (io/file dir "build.gradle.kts")))
                                   sub-dir #{"src/main/clojure" "src/test/clojure"}
                                   :let [refresh-dir (io/file dir sub-dir)]
 
