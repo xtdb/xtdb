@@ -1989,21 +1989,19 @@
 
 
 (deftest test-period-constructor
-  ;;TODO Needs table/values op
-  #_#_(t/is (= [{:p1 {:from #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
+
+  (t/is (= [{:p1 {:from #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
                   :to #time/zoned-date-time "2022-01-01T00:00Z[UTC]"}}]
            (xt/q
-             tu/*node*
-             '{:find [p1],
-               :where [[(period #inst "2018" #inst "2022") p1]]})))
+            tu/*node*
+            '(unify (with {p1 (period #inst "2018" #inst "2022")})))))
 
   (t/is (thrown-with-msg?
-          RuntimeException
-          #"From cannot be greater than to when constructing a period"
-          (xt/q
-            tu/*node*
-            '{:find [p1],
-              :where [[(period #inst "2022" #inst "2020") p1]]}))))
+         RuntimeException
+         #"From cannot be greater than to when constructing a period"
+         (xt/q
+          tu/*node*
+          '(unify (with {p1 (period #inst "2022" #inst "2020")}))))))
 
 
 (deftest test-period-and-temporal-col-projection
