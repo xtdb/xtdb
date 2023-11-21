@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            [clojure.walk :as walk]
             [xtdb.error :as err]
             [xtdb.node :as node]
             [xtdb.util :as util])
@@ -19,6 +20,22 @@
 (defn- file-extension [^File f]
   (second (re-find #"\.(.+?)$" (.getName f))))
 
+(defn read-env-var [env-var]
+  (System/getenv (str env-var)))
+
+(defn edn-read-string [edn-string]
+  (edn/read-string {:readers {'env read-env-var}}
+                   edn-string))
+
+(defn json-read-string [json-string]
+  (walk/postwalk
+   (fn [item]
+     (let [env-key (keyword "@env")]
+       (cond
+         (env-key item) (read-env-var (env-key item))
+         :else item)))
+   (json/read-str json-string :key-fn keyword)))
+
 (def cli-options
   [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, JSON"
     :parse-fn io/file
@@ -27,11 +44,11 @@
 
    ["-e" "--edn EDN" "Options as EDN."
     :default nil
-    :parse-fn edn/read-string]
+    :parse-fn edn-read-string]
 
    ["-j" "--json JSON" "Options as JSON."
     :default nil
-    :parse-fn json/read-str]
+    :parse-fn json-read-string]
 
    ["-h" "--help"]])
 
@@ -42,8 +59,8 @@
 
 (defn- read-opts [src file-name]
   (cond
-    (str/ends-with? file-name ".json") (json/read-str (slurp src) :key-fn keyword)
-    (str/ends-with? file-name ".edn") (edn/read-string (slurp src))
+    (str/ends-with? file-name ".json") (json-read-string (slurp src))
+    (str/ends-with? file-name ".edn") (edn-read-string (slurp src))
     :else (throw (err/illegal-arg :unsupported-options-type
                                   {::err/message (format "Unsupported options type: '%s'" file-name)}))))
 
