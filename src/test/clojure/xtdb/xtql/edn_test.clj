@@ -134,7 +134,11 @@
   (let [q '(-> (from :foo [a])
                (without :a :b :f))]
     (t/is (= q
-             (roundtrip-q q)))))
+             (roundtrip-q q)))
+
+    (t/is (thrown-with-msg?
+           IllegalArgumentException #"Columns must be keywords in without"
+           (roundtrip-q-tail '(without {:bar baz}))))))
 
 (t/deftest test-parse-return
   (let [q '(-> (from :foo [a])
