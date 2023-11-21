@@ -1274,7 +1274,6 @@
                                                           -1
                                                           (min ~res-sym ~r-code))))
                                                    1))]
-                                 (prn ~res-sym)
                                  (if (zero? ~res-sym)
                                    ~(f :null nil)
                                    ~(f :bool `(== ~return-code ~res-sym))))))})))))
