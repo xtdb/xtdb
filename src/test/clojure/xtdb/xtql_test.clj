@@ -2530,3 +2530,20 @@
                  '(-> (table [{:x [1 2 3]}] [x])
                       (where (<> x $foo)))
                  {:args {:foo [1 2 3]}}))))
+
+
+(deftest test-without
+  (t/is (= [{}]
+           (xt/q tu/*node*
+                 '(-> (table [{:x 1}] [x])
+                      (without :x)))))
+  (t/is (= [{:y 2}]
+           (xt/q tu/*node*
+                 '(-> (table [{:x 1 :y 2}] [x y])
+                      (without :x)))))
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"All cols in without must be present in input relation"
+                          (xt/q tu/*node*
+                                '(-> (table [{:x 2}] [x])
+                                     (without :z))))))

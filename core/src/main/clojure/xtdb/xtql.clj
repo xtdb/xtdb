@@ -498,10 +498,16 @@
 
   Query$Without
   (plan-query-tail [without {:keys [ra-plan provided-vars]}]
-    ;;TODO should this error if you remove vars that don't exist
-    (let [provided-vars (set/difference provided-vars (into #{} (map symbol) (.cols without)))]
-      {:ra-plan [:project (vec provided-vars) ra-plan]
-       :provided-vars provided-vars}))
+    (let [cols-to-be-removed (into #{} (map symbol) (.cols without))
+          _ (when (not (set/subset? cols-to-be-removed provided-vars))
+              (throw (err/illegal-arg
+                      :xtql/invalid-without
+                      {:without-cols cols-to-be-removed
+                       :input-relation-cols provided-vars
+                       ::err/message "All cols in without must be present in input relation"})))
+          output-projection (set/difference provided-vars (into #{} (map symbol) (.cols without)))]
+      {:ra-plan [:project (vec output-projection) ra-plan]
+       :provided-vars output-projection}))
 
   Query$Return
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
