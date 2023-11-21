@@ -112,7 +112,7 @@ jobs:
   deploy-docker:
     name: Deploy XTDB Docker Image
     runs-on: ubuntu-latest
-    if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/2.x'
+    if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/docker-latest'
     permissions:
       contents: read
       packages: write
