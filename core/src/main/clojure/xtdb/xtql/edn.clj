@@ -5,7 +5,7 @@
   (:import (clojure.lang MapEntry)
            (java.util List)
            (xtdb.query ArgSpec ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
-                       Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param
+                       Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                        Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
@@ -98,6 +98,15 @@
                        (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
 
                      (case f
+                       .
+                       (do
+                         (when-not (and (= (count args) 2)
+                                        (first args)
+                                        (symbol? (second args)))
+                           (throw (err/illegal-arg :xtql/malformed-get {:expr expr})))
+
+                         (Expr/get (parse-expr (first args)) (str (second args))))
+
                        (exists? q pull pull*)
                        (do
                          (when-not (and (<= 1 (count args) 2)
@@ -138,6 +147,10 @@
         (map? obj) (->> (map #(MapEntry/create (key %) (unparse (val %))) obj)
                         (into {}))
         :else obj)))
+
+  Expr$Get
+  (unparse [e]
+    (list '. (unparse (.expr e)) (symbol (.field e))))
 
   Expr$Exists
   (unparse [e]

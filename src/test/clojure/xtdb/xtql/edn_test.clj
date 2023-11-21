@@ -40,7 +40,16 @@
           "no-args")
 
     (t/is (= '(foo 12 "hello") (roundtrip-expr '(foo 12 "hello")))
-          "args")))
+          "args"))
+
+  (t/testing "struct accessors"
+
+    (t/is (= '(. foo bar) (roundtrip-expr '(. foo bar))))
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException #"malformed-get"
+      (roundtrip-expr '(. foo))))))
 
 (t/deftest test-expr-subquery
   (t/is (= '(exists? (from :foo [a]))

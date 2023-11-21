@@ -2547,3 +2547,17 @@
                           (xt/q tu/*node*
                                 '(-> (table [{:x 2}] [x])
                                      (without :z))))))
+
+(deftest test-struct-accessors
+  (t/is (= [{:r 1}]
+           (xt/q tu/*node*
+                 '(-> (table [{:x {:foo 1}}] [x])
+                      (return {:r (. x foo)})))))
+  (t/is (= [{:r nil}]
+           (xt/q tu/*node*
+                 '(-> (table [{:x {:foo 1}}] [x])
+                      (return {:r (. x bar)})))))
+  (t/is (= [{:r {:bar [1 2 3]}}]
+           (xt/q tu/*node*
+                 '(-> (table [{:x 1 :y {:foo {:bar [1 2 3]} :baz 1}}] [x y])
+                      (return {:r (. y foo)}))))))
