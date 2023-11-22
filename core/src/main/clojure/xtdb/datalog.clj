@@ -1222,7 +1222,8 @@
                                                        :expected (count in-bindings)
                                                        :actual args})))
 
-        (util/with-close-on-catch [^AutoCloseable params (vw/open-params allocator (args->params args in-bindings))]
-          (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
-              (.openCursor)
-              (op/cursor->result-set params (util/parse-key-fn key-fn))))))))
+        (util/with-close-on-catch [^AutoCloseable params (vw/open-params allocator (args->params args in-bindings))
+                                   cursor (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
+                                                                :default-all-valid-time? default-all-valid-time?})
+                                              (.openCursor))]
+          (op/cursor->result-set cursor params (util/parse-key-fn key-fn)))))))

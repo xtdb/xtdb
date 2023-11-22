@@ -880,7 +880,8 @@
       (let [args (->> args
                       (into {} (map (fn [[k v]]
                                       (MapEntry/create (param-sym (str (symbol k))) v)))))]
-        (util/with-close-on-catch [params (vw/open-params allocator args)]
-          (-> (.bind (.prepareRaQuery ra-src plan) wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
-              (.openCursor)
-              (op/cursor->result-set params (util/parse-key-fn key-fn))))))))
+        (util/with-close-on-catch [params (vw/open-params allocator args)
+                                   cursor (-> (.prepareRaQuery ra-src plan)
+                                              (.bind wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+                                              (.openCursor))]
+          (op/cursor->result-set cursor params (util/parse-key-fn key-fn)))))))

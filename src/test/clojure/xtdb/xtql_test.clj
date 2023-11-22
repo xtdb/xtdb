@@ -2517,12 +2517,10 @@
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :snake_case})))
 
-  ;; TODO doesn't get caught
-  #_
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #""
+                          #"Illegal argument: "
                           (xt/q tu/*node* '(from :docs [first-name last-name])
-                                {:key-fn :camelCase}))))
+                                {:key-fn :foo-bar}))))
 
 (deftest list-diff-test-2887
   (t/is (= []

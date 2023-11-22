@@ -36,7 +36,8 @@
   (util/with-close-on-catch [params (vw/open-params allocator
                                                     (->> (:args query-opts)
                                                          (into {} (map-indexed (fn [idx v]
-                                                                                 (MapEntry/create (symbol (str "?_" idx)) v))))))]
-    (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
-        (.openCursor)
-        (op/cursor->result-set params  (util/parse-key-fn key-fn)))))
+                                                                                 (MapEntry/create (symbol (str "?_" idx)) v))))))
+                             cursor (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
+                                                          :default-all-valid-time? default-all-valid-time?})
+                                        (.openCursor))]
+    (op/cursor->result-set cursor params (util/parse-key-fn key-fn))))

@@ -617,6 +617,7 @@
                    :snake_case (IKeyFn/keyword IKeyFn/SNAKE_CASE)
 
                    (cond
+                     (keyword? key-fn) (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))
                      (instance? IKeyFn key-fn) key-fn
                      (ifn? key-fn) (reify IKeyFn
                                      (denormalize [_ s]
