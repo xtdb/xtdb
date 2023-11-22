@@ -675,3 +675,31 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
   (t/is (thrown-with-msg? Exception ;; Exception as type is different for local/remote
                           #"No method in multimethod 'codegen-call' for dispatch value"
                           (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
+
+(def ivan+petr
+  '[[:put :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+    [:put :docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
+
+(t/deftest normalisation-option
+  (xt/submit-tx tu/*node* ivan+petr)
+
+  (t/is (= [{:xt/id :petr :first-name "Petr", :last-name "Petrov"}
+            {:xt/id :ivan :first-name "Ivan", :last-name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
+                 {:key-fn :datalog}))
+        "datalog key-fn")
+
+  (t/is (= [{:xt$id :petr :first_name "Petr", :last_name "Petrov"}
+            {:xt$id :ivan :first_name "Ivan", :last_name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
+                 {:key-fn :sql})))
+
+  (t/is (= [{:xt/id :petr :first_name "Petr", :last_name "Petrov"}
+            {:xt/id :ivan :first_name "Ivan", :last_name "Ivanov"}]
+           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
+                 {:key-fn :snake_case})))
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Illegal argument: "
+                          (xt/q tu/*node* '(from :docs [first-name last-name])
+                                {:key-fn :foo-bar}))))

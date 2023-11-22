@@ -45,6 +45,8 @@
 
 (s/def ::tx-id int?)
 
+(s/def ::key-fn keyword?)
+
 (s/def ::system-time
   (st/spec {:decode/string (fn [_ s]
                              (cond
@@ -116,7 +118,7 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::basis ::basis-timeout ::args ::default-all-valid-time? ::default-tz]))
+          :opt-un [::basis ::basis-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn]))
 
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts

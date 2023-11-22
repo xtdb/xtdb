@@ -5,7 +5,8 @@
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
             [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
-            [xtdb.transit :as xt.transit])
+            [xtdb.transit :as xt.transit]
+            [xtdb.util :as util])
   (:import [java.io EOFException InputStream]
            java.lang.AutoCloseable
            java.util.concurrent.CompletableFuture
@@ -82,9 +83,13 @@
       ;; This should be an error we know how to decode
       (parse-body transit/read))))
 
+(defn validate-query-opts [{:keys [key-fn] :as _query-opts}]
+  (some-> key-fn util/validate-remote-key-fn))
+
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   xtp/PNode
   (open-query& [client query {:keys [basis] :as query-opts}]
+    (validate-query-opts query-opts)
     (let [{basis-tx :tx} basis
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
