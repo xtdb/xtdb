@@ -503,7 +503,7 @@
 
   Query$Without
   (plan-query-tail [without {:keys [ra-plan provided-vars]}]
-    (let [cols-to-be-removed (into #{} (map symbol) (.cols without))
+    (let [cols-to-be-removed (into #{} (map col-sym) (.cols without))
           _ (when (not (set/subset? cols-to-be-removed provided-vars))
               (throw (err/illegal-arg
                       :xtql/invalid-without

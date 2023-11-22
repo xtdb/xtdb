@@ -2541,6 +2541,16 @@
                                 '(-> (table [{:x 2}] [x])
                                      (without :z))))))
 
+(deftest test-without-normalisation-2959
+  (xt/submit-tx tu/*node*
+                [[:put :users {:xt/id 1 :name "Oliver"}]])
+
+  (t/is
+   (= [{:name "Oliver", :user-id 1}]
+      (xt/q tu/*node*
+            '(-> (from :users [{:xt/id user-id} name])
+                 (without :user-id))))))
+
 (deftest test-struct-accessors
   (t/is (= [{:r 1}]
            (xt/q tu/*node*
