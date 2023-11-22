@@ -1,0 +1,6 @@
+{:xtdb.kafka/log {:topic-name #env XTDB_TOPIC_NAME
+                  :bootstrap-servers #env KAFKA_BOOTSTRAP_SERVERS} 
+ :xtdb.s3/bucket {:bucket #env XTDB_S3_BUCKET,
+                  :prefix "xtdb-object-store"
+                  :sns-topic-arn #env XTDB_SNS_TOPIC}
+ :xtdb/server {:port 3000}}
