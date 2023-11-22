@@ -4,7 +4,7 @@ set -e
 (
     cd $(dirname $0)/..
 
-    if [ "$1" == "--clean" ] || ! [ -e build/libs/xtdb-standalone.jar ]; then
+    if [ "$1" == "--clean" ] || ! [ -e aws/build/libs/xtdb-aws.jar ]; then
         ../gradlew :docker:aws:shadowJar
     fi
 
