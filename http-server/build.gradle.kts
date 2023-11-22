@@ -19,9 +19,9 @@ dependencies {
     api(project(":core"))
     api(project(":wire-formats"))
 
-    api("ring", "ring-core", "1.9.4")
-    api("info.sunng", "ring-jetty9-adapter", "0.15.2")
-    api("org.eclipse.jetty", "jetty-alpn-server", "10.0.6")
+    api("ring", "ring-core", "1.10.0")
+    api("info.sunng", "ring-jetty9-adapter", "0.22.4")
+    api("org.eclipse.jetty", "jetty-alpn-server", "10.0.15")
 
     api("metosin", "muuntaja", "0.6.8")
     api("metosin", "jsonista", "0.3.3")
