@@ -211,18 +211,39 @@
                                   {"leftJoin" {"from" "baz", "bind" ["a" "c"]}
                                    "args" ["a"]
                                    "bind" ["c"]}]}))))
-
 (t/deftest test-order-by
-  (t/is (= ['(-> (from :foo [a b])
-                 (order-by (+ a b) [b {:dir :desc}]))
+  (t/is (= ['(order-by x
+                       (+ a b)
+                       {:val y :nulls :last}
+                       {:val z :dir :asc}
+                       {:val l :dir :desc :nulls :first})
+            {"orderBy" ["x"
+                        {"+" ["a" "b"]}
+                        {"val" "y" "nulls" "last"}
+                        {"val" "z" "dir" "asc"}
+                        {"val" "l" "dir" "desc" "nulls" "first"}]}]
+           (roundtrip-q-tail
+            {"orderBy" ["x"
+                        {"val" {"+" ["a" "b"]}}
+                        {"val" "y" "nulls" "last"}
+                        {"val" "z" "dir" "asc"}
+                        {"val" "l" "dir" "desc" "nulls" "first"}]})))
 
-            [{"from" "foo", "bind" ["a" "b"]}
-             {"orderBy" [{"+" ["a" "b"]}
-                         ["b" {"dir" "desc"}]]}]]
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Invalid keys provided to option map"
+         (roundtrip-q-tail {"orderBy" [{"foo" "y" "nulls" "last"}]})))
 
-           (roundtrip-q [{"from" "foo", "bind" ["a" "b"]}
-                         {"orderBy" [{"+" ["a" "b"]}
-                                     ["b" {"dir" "desc"}]]}]))))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"order-by-val-missing"
+         (roundtrip-q-tail {"orderBy" [{"nulls" "last"}]})))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"malformed-order-by-direction"
+         (roundtrip-q-tail {"orderBy" [{"val" "x" "dir" "d"}]})))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"malformed-order-by-nulls"
+         (roundtrip-q-tail {"orderBy" [{"val" "x" "nulls" "fish"}]}))))
 
 (deftest test-limit-2939
   (t/is (= ['(-> (from :users [name])

@@ -174,8 +174,31 @@
                                          :baz x})))))
 
 (t/deftest test-parse-order-by
-  (t/is (= '(order-by (+ a b) [b {:dir :desc}])
-           (roundtrip-q-tail '(order-by (+ a b) [b {:dir :desc}])))))
+  (t/is (= '(order-by (+ a b)
+                      x
+                      {:val y :nulls :last}
+                      {:val z :dir :asc}
+                      {:val l :dir :desc :nulls :first})
+           (roundtrip-q-tail '(order-by (+ a b)
+                                        {:val x}
+                                        {:val y :nulls :last}
+                                        {:val z :dir :asc}
+                                        {:val l :dir :desc :nulls :first}))))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Invalid keys provided to option map"
+         (roundtrip-q-tail '(order-by {:foo y :nulls :last}))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"order-by-val-missing"
+         (roundtrip-q-tail '(order-by {:nulls :last}))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"malformed-order-by-direction"
+         (roundtrip-q-tail '(order-by {:val x :dir "d"}))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"malformed-order-by-nulls"
+         (roundtrip-q-tail '(order-by {:val x :nulls :fish})))))
 
 (t/deftest test-parse-union-all
   (t/is (= '(union-all (from :foo [{:baz b}])

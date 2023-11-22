@@ -10,7 +10,7 @@
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
-                       Query$DocsTable Query$ParamTable
+                       Query$DocsTable Query$ParamTable Query$OrderDirection Query$OrderNulls
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
 
 ;; TODO inline once the type we support is fixed
@@ -518,26 +518,31 @@
 (defmethod parse-query 'table [this] (parse-table this))
 (defmethod parse-unify-clause 'table [this] (parse-table this))
 
+(def order-spec-opt-keys #{:val :dir :nulls})
+
 (defn- parse-order-spec [order-spec this]
-  (if (vector? order-spec)
-    (do
-      (when-not (= 2 (count order-spec))
-        (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query this})))
+  (if (map? order-spec)
+    (let [{:keys [val dir nulls]} order-spec
+          _ (check-opt-keys order-spec-opt-keys order-spec)
+          __ (when-not (contains? order-spec :val)
+               (throw (err/illegal-arg :xtql/order-by-val-missing
+                                       {:order-spec order-spec, :query this})))
+          dir (case dir
+                nil nil
+                :asc Query$OrderDirection/ASC
+                :desc Query$OrderDirection/DESC
 
-      (let [[expr opts] order-spec
-            parsed-expr (parse-expr expr)]
-        (when-not (map? opts)
-          (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query this})))
+                (throw (err/illegal-arg :xtql/malformed-order-by-direction
+                                        {:direction dir, :order-spec order-spec, :query this})))
+          nulls (case nulls
+                  nil nil
+                  :first Query$OrderNulls/FIRST
+                  :last Query$OrderNulls/LAST
 
-        (let [{:keys [dir]} opts]
-          (case dir
-            :asc (Query/asc parsed-expr)
-            :desc (Query/desc parsed-expr)
-
-            (throw (err/illegal-arg :xtql/malformed-order-by-direction
-                                    {:direction dir, :order-spec order-spec, :query this}))))))
-
-    (Query/asc (parse-expr order-spec))))
+                  (throw (err/illegal-arg :xtql/malformed-order-by-nulls
+                                          {:nulls nulls, :order-spec order-spec, :query this})))]
+      (Query/orderSpec (parse-expr val) dir nulls))
+    (Query/orderSpec (parse-expr order-spec) nil nil)))
 
 (defmethod parse-query-tail 'order-by [[_ & order-specs :as this]]
   (Query/orderBy (mapv #(parse-order-spec % this) order-specs)))
@@ -546,10 +551,13 @@
   Query$OrderSpec
   (unparse [spec]
     (let [expr (unparse (.expr spec))
-          dir (.direction spec)]
-      (if (= Query$OrderDirection/DESC dir)
-        [expr {:dir :desc}]
-        expr)))
+          dir (.direction spec)
+          nulls (.nulls spec)]
+      (if (and (not dir) (not nulls))
+        expr
+        (cond-> {:val expr}
+          dir (assoc :dir (if (= Query$OrderDirection/ASC dir) :asc :desc))
+          nulls (assoc :nulls (if (= Query$OrderNulls/FIRST nulls) :first :last))))))
 
   Query$OrderBy
   (unparse [query]
