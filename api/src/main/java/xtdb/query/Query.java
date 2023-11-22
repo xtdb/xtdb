@@ -274,27 +274,29 @@ public sealed interface Query {
         ASC, DESC
     }
 
+    enum OrderNulls {
+        FIRST, LAST
+    }
+
     final class OrderSpec {
         public final Expr expr;
         public final OrderDirection direction;
+        public final OrderNulls nulls;
 
-        private OrderSpec(Expr expr, OrderDirection direction) {
+        private OrderSpec(Expr expr, OrderDirection direction, OrderNulls nulls) {
             this.expr = expr;
             this.direction = direction;
+            this.nulls = nulls;
         }
 
         @Override
         public String toString() {
-            return String.format("%s %s", expr, direction);
+            return String.format("%s %s %s", expr, direction, nulls);
         }
     }
 
-    static OrderSpec asc(Expr expr) {
-        return new OrderSpec(expr, ASC);
-    }
-
-    static OrderSpec desc(Expr expr) {
-        return new OrderSpec(expr, DESC);
+    static OrderSpec orderSpec(Expr expr, OrderDirection direction, OrderNulls nulls) {
+        return new OrderSpec(expr, direction, nulls);
     }
 
     final class OrderBy implements QueryTail {

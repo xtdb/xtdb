@@ -12,7 +12,8 @@
            (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery Expr$Exists
                        Expr$Pull Expr$PullMany Expr$Get
-                       Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
+                       Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
+                       Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$DocsTable
                        Query$ParamTable
                        TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
@@ -699,11 +700,13 @@
   (let [expr (.expr spec)]
     {:order-spec [(if (instance? Expr$LogicVar expr)
                     (col-sym (.lv ^Expr$LogicVar expr))
-                    (throw (UnsupportedOperationException. "TODO")))
+                    (throw (UnsupportedOperationException. "TODO order-by spec can only take a column as val")))
 
-                  (if (= Query$OrderDirection/DESC (.direction spec))
-                    {:direction :desc}
-                    {:direction :asc})]}))
+                  (cond-> {}
+                    (.direction spec)
+                    (assoc :direction (if (= Query$OrderDirection/DESC (.direction spec)) :desc :asc))
+                    (.nulls spec)
+                    (assoc :null-ordering (if (= Query$OrderNulls/LAST (.nulls spec)) :nulls-last :nulls-first)))]}))
 
 (extend-protocol PlanQueryTail
   Query$OrderBy

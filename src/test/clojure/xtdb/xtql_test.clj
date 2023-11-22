@@ -139,7 +139,7 @@
     (t/is (= [{:first-name "Petr"} {:first-name "Ivan"}]
              (xt/q tu/*node*
                    '(-> (from :docs [first-name])
-                        (order-by [first-name {:dir :desc}])))))
+                        (order-by {:val first-name :dir :desc})))))
 
 
     (t/is (= [{:first-name "Ivan"}]
@@ -152,7 +152,7 @@
     (t/is (= [{:first-name "Petr"}]
              (xt/q tu/*node*
                    '(-> (from :docs [first-name])
-                        (order-by [first-name {:dir :desc}])
+                        (order-by {:val first-name :dir :desc})
                         (limit 1)))))
 
     (t/is (= [{:first-name "Petr"}]
@@ -160,7 +160,26 @@
                    '(-> (from :docs [first-name])
                         (order-by first-name)
                         (offset 1)
-                        (limit 1)))))))
+                        (limit 1)))))
+
+    (xt/submit-tx tu/*node* [[:put :docs {:xt/id :dave :first-name nil}]
+                             [:put :docs {:xt/id :jeff :first-name "Jeff"}]])
+
+    (t/is (= [{:first-name nil}
+              {:first-name "Ivan"}
+              {:first-name "Jeff"}
+              {:first-name "Petr"}]
+             (xt/q tu/*node*
+                   '(-> (from :docs [first-name])
+                        (order-by {:val first-name :dir :asc :nulls :first})))))
+
+    (t/is (= [{:first-name "Ivan"}
+              {:first-name "Jeff"}
+              {:first-name "Petr"}
+              {:first-name nil}]
+             (xt/q tu/*node*
+                   '(-> (from :docs [first-name])
+                        (order-by {:val first-name :dir :asc :nulls :last})))))))
 
 (deftest test-order-by-multiple-cols
   (let [_tx (xt/submit-tx tu/*node*
@@ -1057,7 +1076,7 @@
                  '(-> (unify (join (-> (unify (from :film [{:film/bond bond}])
                                               (from :person [{:xt/id bond, :person/name bond-name}]))
                                        (aggregate :bond-name :bond {:film-count (count bond)})
-                                       (order-by [film-count {:dir :desc}] bond-name)
+                                       (order-by {:val film-count :dir :desc} bond-name)
                                        (limit 1))
                                    [{:bond bond-with-most-films
                                      :bond-name bond-name}])
@@ -1694,7 +1713,7 @@
                (set (q '(-> (from :docs {:bind [{:customer-number cust,
                                                  :xt/valid-from app-from}]
                                          :for-valid-time :all-time})
-                            (order-by [app-from {:dir :asc}]))
+                            (order-by {:val app-from :dir :asc}))
                        tx5, nil)))
             "as-of 29 Jan")
 
@@ -1703,7 +1722,7 @@
                                             :xt/valid-from app-from
                                             :xt/valid-to app-to}]
                                     :for-valid-time :all-time})
-                       (order-by [app-from {:dir :asc}]))
+                       (order-by {:val app-from :dir :asc}))
                   tx6, nil))
             "'as best known' (as-of 30 Jan)")
 
@@ -1725,7 +1744,7 @@
 
                      (where (<> prop $prop)
                             (overlaps? app-time app-time-2))
-                     (order-by [app-from {:dir :asc}])
+                     (order-by {:val app-from :dir :asc})
                      (return :prop
                              {:vt-begin (greatest app-from app-from2)}
                              {:vt-to (least app-to app-to2)}))
@@ -1765,7 +1784,7 @@
                      (where (<> prop $prop)
                             (overlaps? app-time app-time-2)
                             (overlaps? system-time system-time-2))
-                     (order-by [app-from {:dir :asc}])
+                     (order-by {:val app-from :dir :asc})
                      (return :prop {:vt-begin (greatest app-from app-from2)
                                     :vt-to (least app-to app-to2)
                                     :recorded-from (greatest sys-from sys-from2)
@@ -1802,7 +1821,7 @@
                      (where (<> prop $prop)
                             (overlaps? app-time app-time-2)
                             (contains? system-time sys-from2))
-                     (order-by [app-from {:dir :asc}])
+                     (order-by {:val app-from :dir :asc})
                      (return :prop
                              {:vt-begin (greatest app-from app-from2)
                               :vt-to (least app-to app-to2)

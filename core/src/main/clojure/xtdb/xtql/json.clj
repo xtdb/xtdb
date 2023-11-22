@@ -1,10 +1,11 @@
 (ns xtdb.xtql.json
-  (:require [xtdb.error :as err])
+  (:require [xtdb.xtql.edn :as xtql.edn]
+            [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
            (java.util Date List)
            (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
-                       Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec
+                       Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$DocsTable Query$ParamTable
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
@@ -370,27 +371,32 @@
   Query$ParamTable (unparse [q] {"table" (.v (.param q))
                                  "bind" (mapv unparse (.bindings q))}))
 
+(def order-spec-opt-keys (set (map name xtql.edn/order-spec-opt-keys)))
 
-(defn- parse-order-spec [order-spec query]
-  (if (vector? order-spec)
-    (do
-      (when-not (= 2 (count order-spec))
-        (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query query})))
+(defn- parse-order-spec [order-spec this]
+  (if (map? order-spec)
+    (let [{:strs [val dir nulls]} order-spec
+          _ (xtql.edn/check-opt-keys order-spec-opt-keys order-spec)
+          __ (when-not (contains? order-spec "val")
+               (throw (err/illegal-arg :xtql/order-by-val-missing
+                                       {:order-spec order-spec, :query this})))
+          dir (case dir
+                nil nil
+                "asc" Query$OrderDirection/ASC
+                "desc" Query$OrderDirection/DESC
 
-      (let [[expr opts] order-spec
-            parsed-expr (parse-expr expr)]
-        (when-not (map? opts)
-          (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query query})))
+                (throw (err/illegal-arg :xtql/malformed-order-by-direction
+                                        {:direction dir, :order-spec order-spec, :query this})))
+          nulls (case nulls
+                  nil nil
+                  "first" Query$OrderNulls/FIRST
+                  "last" Query$OrderNulls/LAST
 
-        (let [{dir "dir"} opts]
-          (case dir
-            "asc" (Query/asc parsed-expr)
-            "desc" (Query/desc parsed-expr)
-
-            (throw (err/illegal-arg :xtql/malformed-order-by-direction
-                                    {:direction dir, :order-spec order-spec, :query query}))))))
-
-    (Query/asc (parse-expr order-spec))))
+                  (throw (err/illegal-arg :xtql/malformed-order-by-nulls
+                                          {:nulls nulls, :order-spec order-spec, :query this})))]
+      (Query/orderSpec (parse-expr val) dir nulls))
+    ;:TODO short form can only reasonably be a var, as exprs use maps, would be ambiguous with long form
+    (Query/orderSpec (parse-expr order-spec) nil nil)))
 
 (defmethod parse-query-tail 'orderBy [{order-by "orderBy", :as query}]
   (if-not (vector? order-by)
@@ -402,10 +408,13 @@
   Query$OrderSpec
   (unparse [spec]
     (let [expr (unparse (.expr spec))
-          dir (.direction spec)]
-      (if (= Query$OrderDirection/DESC dir)
-        [expr {"dir" "desc"}]
-        expr)))
+          dir (.direction spec)
+          nulls (.nulls spec)]
+      (if (and (not dir) (not nulls))
+        expr
+        (cond-> {"val" expr}
+          dir (assoc "dir" (if (= Query$OrderDirection/ASC dir) "asc" "desc"))
+          nulls (assoc "nulls" (if (= Query$OrderNulls/FIRST nulls) "first" "last"))))))
 
   Query$OrderBy
   (unparse [q]
