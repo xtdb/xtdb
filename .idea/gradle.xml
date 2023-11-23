@@ -13,6 +13,7 @@
             <option value="$PROJECT_DIR$/api" />
             <option value="$PROJECT_DIR$/core" />
             <option value="$PROJECT_DIR$/docker" />
+            <option value="$PROJECT_DIR$/docker/aws" />
             <option value="$PROJECT_DIR$/http-client-clj" />
             <option value="$PROJECT_DIR$/http-server" />
             <option value="$PROJECT_DIR$/modules" />
