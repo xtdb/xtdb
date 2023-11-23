@@ -315,3 +315,16 @@
                                           (lazy-seq '(from :users [{:xt/id user-id} first-name last-name]))
                                           (lazy-seq '(from :articles [{:author-id user-id} title content]))) q)))
           "testing parsing lazy-seq")))
+
+(deftest test-unnest
+  (let [q '(unify (table [{:x [1 2 3]}] [x])
+                  (unnest x y))]
+    (t/is (= q
+             (roundtrip-q q))
+          "unnest in unify"))
+
+  (let [q '(-> (table [{:x [1 2 3]}] [x])
+               (unnest x :y))]
+    (t/is (= q
+             (roundtrip-q q))
+          "unnest in threading")))

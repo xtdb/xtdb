@@ -10,12 +10,13 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator IRaQuerySource)
            (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
-                       Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery Expr$Exists
-                       Expr$Pull Expr$PullMany Expr$Get
+                       Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
+                       Expr$Subquery Expr$Exists Expr$Pull Expr$PullMany Expr$Get
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
                        Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec
-                       Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$DocsTable
-                       Query$ParamTable
+                       Query$Pipeline Query$Return Query$Unify
+                       Query$Where Query$With Query$WithCols Query$Without Query$DocsTable Query$ParamTable
+                       Query$UnnestCol Query$UnnestVar
                        TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -524,7 +525,13 @@
                {(col-sym (.attr ^ColSpec col)) (plan-expr expr)}))
            (.cols this))]
       {:ra-plan [:project projections ra-plan]
-       :provided-vars (set (map #(first (keys %)) projections))})))
+       :provided-vars (set (map #(first (keys %)) projections))}))
+
+  Query$UnnestCol
+  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+    (let [mapping {(col-sym (.unnestedCol this)) (col-sym (.lv ^Expr$LogicVar (.unnestCol this)))}]
+      {:ra-plan [:unwind mapping ra-plan]
+       :provided-vars (conj provided-vars (ffirst mapping))})))
 
 (defn plan-join [join-type query args binding]
   (let [out-bindings (mapv plan-out-spec binding) ;;TODO refelection (interface here?)
@@ -567,6 +574,13 @@
                     :provided-vars #{var}
                     :required-vars (required-vars expr))]))
 
+  Query$UnnestVar
+  (plan-unify-clause [unnest]
+    (let [mapping {(col-sym (.lv ^Expr$LogicVar (.unnestVar unnest))) (col-sym (.unnestedVar unnest))}]
+      [[:unnest {:mapping mapping
+                 :required-vars #{(ffirst mapping)}
+                 :provided-vars #{(second (first mapping))}}]]))
+
   Query$Join
   (plan-unify-clause [this]
     (plan-join :inner-join (.query this) (.args this) (.bindings this)))
@@ -601,6 +615,20 @@
                    (-> ra-plan
                        (wrap-expr-subqueries (mapcat :subqueries renamed-withs)))]}
         (wrap-unify var->cols))))
+
+(defn wrap-unnest [acc-plan {:keys [mapping] :as _unnest}]
+  (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan])
+        [{acc-plan-with-unique-cols :ra-plan}] rels
+        original-unnested-col (second (first mapping))
+        unnested-col (*gensym* (str original-unnested-col))]
+    (wrap-unify
+     {:ra-plan [:unwind ;; confusingly the unwind operator takes it inverted
+                {unnested-col (first (get var->cols (ffirst mapping)))}
+                acc-plan-with-unique-cols]}
+     (update var->cols original-unnested-col (fnil conj #{}) unnested-col))))
+
+(defn wrap-unnests [acc-plan unnests]
+  (reduce wrap-unnest acc-plan unnests))
 
 (defn wrap-inner-join [acc-plan {:keys [args] :as join-plan}]
   (if (seq args)
@@ -652,7 +680,8 @@
   (plan-query [unify]
     ;;TODO not all clauses can return entire plans (e.g. where-clauses),
     ;;they require an extra call to wrap should these still use the :ra-plan key.
-    (let [{from-clauses :from, where-clauses :where with-clauses :with join-clauses :join}
+    (let [{from-clauses :from, where-clauses :where with-clauses :with join-clauses :join
+           unnests :unnest}
           (-> (mapcat plan-unify-clause (.clauses unify))
               (->> (group-by first))
               (update-vals #(mapv second %)))]
@@ -667,9 +696,10 @@
       (loop [plan (mega-join from-clauses)
              wheres where-clauses
              withs with-clauses
-             joins join-clauses]
+             joins join-clauses
+             unnests unnests]
 
-        (if (and (empty? wheres) (empty? withs) (empty? joins))
+        (if (and (empty? wheres) (empty? withs) (empty? joins) (empty? unnests))
 
           plan
 
@@ -679,22 +709,26 @@
 
               (let [{available-wheres true, unavailable-wheres false} (->> wheres (group-by available?))
                     {available-withs true, unavailable-withs false} (->> withs (group-by available?))
-                    {available-joins true, unavailable-joins false} (->> joins (group-by available?))]
+                    {available-joins true, unavailable-joins false} (->> joins (group-by available?))
+                    {available-unnests true, unavailable-unnests false} (->> unnests (group-by available?))]
 
-                (if (and (empty? available-wheres) (empty? available-withs) (empty? available-joins))
+                (if (and (empty? available-wheres) (empty? available-withs) (empty? available-joins) (empty? available-unnests))
                   (throw (err/illegal-arg :no-available-clauses
                                           {:available-vars available-vars
                                            :unavailable-wheres unavailable-wheres
                                            :unavailable-withs unavailable-withs
-                                           :unavailable-joins unavailable-joins}))
+                                           :unavailable-joins unavailable-joins
+                                           :unavailable-unnests unavailable-unnests}))
 
                   (recur (cond-> plan
                            available-wheres (wrap-wheres available-wheres)
                            available-withs (wrap-withs available-withs)
-                           available-joins (wrap-joins available-joins))
+                           available-joins (wrap-joins available-joins)
+                           available-unnests (wrap-unnests available-unnests))
                          unavailable-wheres
                          unavailable-withs
-                         unavailable-joins))))))))))
+                         unavailable-joins
+                         unavailable-unnests))))))))))
 
 (defn- plan-order-spec [^Query$OrderSpec spec]
   (let [expr (.expr spec)]
@@ -747,9 +781,9 @@
                             (plan-query query))]
 
     (-> ra-plan
-        #_(doto clojure.pprint/pprint)
+        (doto clojure.pprint/pprint)
         #_(->> (binding [*print-meta* true]))
-        (lp/rewrite-plan {})
+        #_(lp/rewrite-plan {})
         #_(doto clojure.pprint/pprint)
         #_(->> (binding [*print-meta* true]))
         (doto (lp/validate-plan)))))

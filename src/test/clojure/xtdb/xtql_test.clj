@@ -343,13 +343,13 @@
     ;;Undefined behaviour
     (t/is (= [{:b 3}]
              (xt/q tu/*node*
-                   '(-> (table [{}] []) 
+                   '(-> (table [{}] [])
                         (with {:b 2} {:b 3}))))))
 
   (t/testing "overwriting existing col"
     (t/is (= [{:a 2}]
              (xt/q tu/*node*
-                   '(-> (table [{:a 1}] [a]) 
+                   '(-> (table [{:a 1}] [a])
                         (with {:a 2})))))))
 
 (t/deftest test-with-op-errs
@@ -364,11 +364,11 @@
   (t/testing "Duplicate vars unify"
     (t/is (= [{:a 1}]
              (xt/q tu/*node*
-                   '(unify 
+                   '(unify
                      (with {a 1} {a 1})))))
     (t/is (= []
              (xt/q tu/*node*
-                   '(unify 
+                   '(unify
                      (with {b 2} {b 3})))))))
 #_
 (deftest test-aggregate-exprs
@@ -2564,3 +2564,24 @@
            (xt/q tu/*node*
                  '(-> (table [{:x 1 :y {:foo {:bar [1 2 3]} :baz 1}}] [x y])
                       (return {:r (. y foo)}))))))
+
+(deftest test-unnest
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(-> (unify (table [{:x [1 2 3]}] [x])
+                             (unnest x y))
+                      (return :y)))))
+
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(-> (table [{:x [1 2 3]}] [x])
+                      (unnest x :y)
+                      (return :y)))))
+
+  (t/is (= [{:y 1} {:y 3}]
+           (xt/q tu/*node*
+                 '(-> (unify (table [{:x [1 2 3]}] [x])
+                             (unnest x y)
+                             (table [{:y 1} {:y 3}] [y]))
+                      (return :y))))
+        "unify unnested column"))
