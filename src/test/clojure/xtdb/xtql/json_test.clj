@@ -252,22 +252,3 @@
              {"limit" 10}]]
            (roundtrip-q [{"from" "users" "bind" ["name"]}
                          {"limit" 10}]))))
-
-(deftest test-unnest
-  (t/is (= ['(unify (table [{:x [1 2 3]}] [x])
-                    (unnest x y))
-            {"unify" [{"table" [{"x" [1 2 3]}]
-                       "bind" ["x"]}
-                      {"unnest" ["x" "y"]}]}]
-           (roundtrip-q {"unify" [{"table" [{"x" [1 2 3]}]
-                                   "bind" ["x"]}
-                                  {"unnest" ["x" "y"]}]})))
-
-  (t/is (= ['(-> (table [{:x [1 2 3]}] [x])
-                 (unnest x :y))
-            [{"table" [{"x" [1 2 3]}]
-              "bind" ["x"]}
-             {"unnest" ["x" "y"]}]]
-           (roundtrip-q [{"table" [{"x" [1 2 3]}]
-                          "bind" ["x"]}
-                         {"unnest" ["x" "y"]}] ))))

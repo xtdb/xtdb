@@ -406,31 +406,4 @@ public sealed interface Query {
     static ParamTable table(Expr.Param param, List<OutSpec> bindings) {
         return new ParamTable(param, bindings);
     }
-
-    final class UnnestVar implements UnifyClause {
-        public final Expr unnestVar;
-        public final String unnestedVar;
-
-        private UnnestVar(Expr.LogicVar unnestVar, String unnestedVar) {
-            this.unnestVar = unnestVar;
-            this.unnestedVar = unnestedVar;
-        }
-    }
-    static UnnestVar unnestVar(Expr.LogicVar unnestVar, String unnestedVar){
-        return new UnnestVar(unnestVar, unnestedVar);
-    }
-
-    final class UnnestCol implements QueryTail {
-        public final Expr unnestCol;
-        public final String unnestedCol;
-
-        private UnnestCol (Expr.LogicVar unnestCol, String unnestedCol) {
-            this.unnestCol = unnestCol;
-            this.unnestedCol = unnestedCol;
-        }
-    }
-
-    static UnnestCol unnestCol(Expr.LogicVar unnestCol, String unnestedCol){
-        return new UnnestCol(unnestCol, unnestedCol);
-    }
 }
