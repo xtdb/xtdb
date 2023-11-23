@@ -21,7 +21,7 @@ The standard arithmetic functions are available:
   Particularly, the division function performs integer division if it's only given integer values.
 * If the result would under-/overflow the widest type of the input arguments, a runtime exception will be thrown.
 * Trying to divide by zero will result in a runtime exception.
-* Where the Datalog variants are variadic (e.g. `(+ exprs ...)`), they can accept any amount of arguments.
+* Where the XTQL variants are variadic (e.g. `(+ exprs ...)`), they can accept any amount of arguments.
 
   e.g. `(+ a b c d)` is equivalent to `a + b + c + d`
 

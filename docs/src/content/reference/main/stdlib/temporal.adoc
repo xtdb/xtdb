@@ -4,7 +4,7 @@
 
 [cols="3,3,8"]
 |===
-| Datalog | SQL | Return type
+| XTQL | SQL | Return type
 
 | | `DATE 'date_str'` | Construct a date - e.g. `DATE '2020-01-01'`
 
@@ -39,7 +39,7 @@ Examples:
 
 [cols="3,3,8"]
 |===
-| Datalog | SQL | Return type
+| XTQL | SQL | Return type
 
 | `(+ date-time duration)`
 
@@ -113,7 +113,7 @@ XTDB allows fine-grained control over user requests for the 'current time', to a
 
 [cols="3,3,8"]
 |===
-| Datalog | SQL |
+| XTQL | SQL |
 
 | `(current-timestamp <precision>?)`
 | `CURRENT_TIMESTAMP`
@@ -161,7 +161,7 @@ These functions will return null if any of their arguments are null.
 
 [cols="3,3,8"]
 |===
-| Datalog | SQL |
+| XTQL | SQL |
 
 | `(contains? p1 p2)`
 
@@ -256,7 +256,7 @@ a| Returns true iff `p1` starts after `p2` ends
 
 [cols="3,3,8"]
 |===
-| Datalog | SQL |
+| XTQL | SQL |
 | `(date-trunc "unit" date-time)` | `DATE_TRUNC('unit', date_time)`
 | Truncates the date-time to the given time-unit, which must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE`, `SECOND`, `MILLISECOND`, `MICROSECOND.`
 | `(extract "field" date-time)` | `EXTRACT('field', date_time)`

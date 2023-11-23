@@ -4,11 +4,11 @@
       label: Installation
     - slug: data-types
       label: Data Types
-- section: Datalog
+- section: XTQL
   pages:
-    - slug: datalog/txs
+    - slug: xtql/txs
       label: Transactions
-    - slug: datalog/queries
+    - slug: xtql/queries
       label: Queries
 - section: SQL
   pages:
