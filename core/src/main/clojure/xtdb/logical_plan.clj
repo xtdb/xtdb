@@ -250,6 +250,9 @@
     [:fixpoint _ base _]
     (relation-columns base)
 
+    [:unwind columns relation]
+    (conj (relation-columns relation) (val (first columns)))
+
     [:unwind columns opts relation]
     (cond-> (conj (relation-columns relation) (val (first columns)))
       (:ordinality-column opts) (conj (:ordinality-column opts)))
