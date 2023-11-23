@@ -8,6 +8,7 @@
                        Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$DocsTable Query$ParamTable
+                       Query$UnnestVar Query$UnnestCol
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defn- query-type [query]
@@ -311,6 +312,20 @@
 
     (Query/with (parse-var-specs with query))))
 
+(defmethod parse-query-tail 'unnest [{:strs [unnest] :as query}]
+  (when-not (and (vector? unnest) (= 2 (count unnest)))
+    (throw (err/illegal-arg :xtql/malformed-with {:unnest query})))
+
+  (let [[unnest-col unnested-col] unnest]
+    (Query/unnestCol (parse-expr unnest-col) unnested-col)))
+
+(defmethod parse-unify-clause 'unnest [{:strs [unnest] :as query}]
+  (when-not (and (vector? unnest) (= 2 (count unnest)))
+    (throw (err/illegal-arg :xtql/malformed-with {:unnest query})))
+
+  (let [[unnest-var unnested-var] unnest]
+    (Query/unnestVar (parse-expr unnest-var) unnested-var)))
+
 (defmethod parse-query-tail 'without [{:strs [without] :as query}]
   (if-not (and (vector? without) (every? string? without))
     (throw (err/illegal-arg :xtql/malformed-without {:without query}))
@@ -369,7 +384,9 @@
   Query$DocsTable (unparse [q] {"table" (mapv #(update-vals % unparse) (.documents q))
                                 "bind" (mapv unparse (.bindings q))})
   Query$ParamTable (unparse [q] {"table" (.v (.param q))
-                                 "bind" (mapv unparse (.bindings q))}))
+                                 "bind" (mapv unparse (.bindings q))})
+  Query$UnnestVar (unparse [q] {"unnest" [(unparse (.unnestVar q)) (.unnestedVar q)]})
+  Query$UnnestCol (unparse [q] {"unnest" [(unparse (.unnestCol q)) (.unnestedCol q)]}))
 
 (def order-spec-opt-keys (set (map name xtql.edn/order-spec-opt-keys)))
 

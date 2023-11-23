@@ -11,6 +11,7 @@
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        Query$DocsTable Query$ParamTable Query$OrderDirection Query$OrderNulls
+                       Query$UnnestCol Query$UnnestVar
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
 
 ;; TODO inline once the type we support is fixed
@@ -434,7 +435,9 @@
                           (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) (.documents this))
                           (mapv unparse (.bindings this))))
   Query$ParamTable (unparse [this]
-                     (list 'table (symbol (.v (.param this))) (mapv unparse (.bindings this)))))
+                     (list 'table (symbol (.v (.param this))) (mapv unparse (.bindings this))))
+  Query$UnnestCol (unparse [this] (list 'unnest (symbol (.lv ^Expr$LogicVar (.unnestCol this))) (keyword (.unnestedCol this))))
+  Query$UnnestVar (unparse [this] (list 'unnest (symbol (.lv ^Expr$LogicVar (.unnestVar this))) (symbol (.unnestedVar this)))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -517,6 +520,20 @@
 
 (defmethod parse-query 'table [this] (parse-table this))
 (defmethod parse-unify-clause 'table [this] (parse-table this))
+
+(defmethod parse-query-tail 'unnest [[_ unnest-col unnested-col :as this]]
+  (when-not (= 3 (count this))
+    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes exactly 3 arguments"})))
+  (when-not (and (symbol? unnest-col) (keyword? unnested-col))
+    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes a symbol and a keyword in query tail context"})))
+  (Query/unnestCol (Expr/lVar (str unnest-col)) (subs (str unnested-col) 1)))
+
+(defmethod parse-unify-clause 'unnest [[_ unnest-var unnested-var :as this]]
+  (when-not (= 3 (count this))
+    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes exactly 3 arguments"})))
+  (when-not (and (symbol? unnest-var) (symbol? unnested-var))
+    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes two symbols in a unify context"})))
+  (Query/unnestVar (Expr/lVar (str unnest-var)) (str unnested-var)))
 
 (def order-spec-opt-keys #{:val :dir :nulls})
 
