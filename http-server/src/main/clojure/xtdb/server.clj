@@ -20,14 +20,14 @@
             [ring.util.response :as ring-response]
             [ring.adapter.jetty9 :as j]
             [spec-tools.core :as st]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit]
             [xtdb.util :as util])
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
-           xtdb.api.protocols.TransactionInstant
+           xtdb.protocols.TransactionInstant
            xtdb.IResultSet))
 
 (def ^:private muuntaja-opts

@@ -3,7 +3,7 @@
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit]
             [xtdb.util :as util])

@@ -2,14 +2,14 @@
   (:require [clojure.edn :as edn]
             [cognitect.transit :as transit]
             [time-literals.read-write :as time-literals.rw]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.edn :as xt-edn]
             [xtdb.error :as err]
             [xtdb.types :as types])
   (:import (com.cognitect.transit TransitFactory)
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId)
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
-           (xtdb.api.protocols TransactionInstant)
+           (xtdb.protocols TransactionInstant)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (def tj-read-handlers

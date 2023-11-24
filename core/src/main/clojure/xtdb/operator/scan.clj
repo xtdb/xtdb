@@ -29,7 +29,7 @@
            (org.apache.arrow.vector VectorLoader)
            (org.apache.arrow.vector.types.pojo FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           xtdb.api.protocols.TransactionInstant
+           xtdb.protocols.TransactionInstant
            (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor

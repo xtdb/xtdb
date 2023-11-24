@@ -1,4 +1,4 @@
-(ns ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false} xtdb.api.protocols
+(ns ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false} xtdb.protocols
   (:import java.io.Writer
            java.time.Instant
            xtdb.types.ClojureForm))

@@ -1,7 +1,7 @@
 (ns xtdb.log.watcher
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            xtdb.api.protocols
+            xtdb.protocols
             xtdb.indexer
             [xtdb.log :as xt-log]
             xtdb.operator.scan
@@ -12,7 +12,7 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.ipc.ArrowStreamReader
            org.apache.arrow.vector.TimeStampMicroTZVector
-           xtdb.api.protocols.TransactionInstant
+           xtdb.protocols.TransactionInstant
            xtdb.indexer.IIndexer
            [xtdb.log Log LogSubscriber]))
 

@@ -1,7 +1,7 @@
 (ns xtdb.datalog.temporal-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)

@@ -2,7 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api.protocols :as api]
+            [xtdb.protocols :as xtp]
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -104,20 +104,20 @@
   ([k] (component *node* k))
   ([node k] (util/component node k)))
 
-(defn latest-completed-tx ^xtdb.api.protocols.TransactionInstant [node]
-  (:latest-completed-tx (api/status node)))
+(defn latest-completed-tx ^xtdb.protocols.TransactionInstant [node]
+  (:latest-completed-tx (xtp/status node)))
 
-(defn latest-submitted-tx ^xtdb.api.protocols.TransactionInstant [node]
-  (:latest-submitted-tx (api/status node)))
+(defn latest-submitted-tx ^xtdb.protocols.TransactionInstant [node]
+  (:latest-submitted-tx (xtp/status node)))
 
 (defn then-await-tx
-  (^xtdb.api.protocols.TransactionInstant [node]
+  (^xtdb.protocols.TransactionInstant [node]
    (then-await-tx (latest-submitted-tx node) node nil))
 
-  (^xtdb.api.protocols.TransactionInstant [tx node]
+  (^xtdb.protocols.TransactionInstant [tx node]
    (then-await-tx tx node nil))
 
-  (^xtdb.api.protocols.TransactionInstant [tx node ^Duration timeout]
+  (^xtdb.protocols.TransactionInstant [tx node ^Duration timeout]
    @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer) tx timeout)))
 
 (defn ->mock-clock
@@ -211,7 +211,7 @@
            :or {key-fn :clojure}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
-                      node (-> (update :basis api/after-latest-submitted-tx node)
+                      node (-> (update :basis xtp/after-latest-submitted-tx node)
                                (doto (-> :basis :after-tx (then-await-tx node)))))]
 
      (with-open [^RelationReader

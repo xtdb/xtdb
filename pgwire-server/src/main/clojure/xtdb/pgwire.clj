@@ -9,7 +9,7 @@
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.node :as xtn]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]

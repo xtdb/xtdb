@@ -135,7 +135,7 @@
     (shutdown-agents)))
 
 (comment
-  (require '[xtdb.api.protocols :as xtp])
+  (require '[xtdb.protocols :as xtp])
 
   (with-open [node (xtn/start-node {:xtdb/c1-import {:export-log-path "/tmp/tpch"}})]
     (try

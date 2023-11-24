@@ -4,7 +4,7 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
@@ -18,7 +18,7 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
-           xtdb.api.protocols.TransactionInstant
+           xtdb.protocols.TransactionInstant
            xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            java.lang.AutoCloseable

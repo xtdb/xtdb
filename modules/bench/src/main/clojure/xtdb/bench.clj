@@ -1,20 +1,19 @@
 (ns xtdb.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [xtdb.api.protocols :as xtp]
             [xtdb.indexer :as idx]
             [xtdb.kafka :as k]
             [xtdb.node :as xtn]
-            [xtdb.object-store :as os]
+            [xtdb.protocols :as xtp]
             [xtdb.s3 :as s3]
             [xtdb.util :as util])
-  (:import xtdb.indexer.IIndexer
-           [java.nio.file Files Path]
+  (:import [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            java.time.Duration
            java.util.UUID
            software.amazon.awssdk.services.s3.model.GetObjectRequest
-           software.amazon.awssdk.services.s3.S3Client))
+           software.amazon.awssdk.services.s3.S3Client
+           xtdb.indexer.IIndexer))
 
 (defn parse-args [arg-spec args]
   (let [{:keys [options summary errors]}
@@ -59,10 +58,10 @@
                                                     :prefix (str "node." node-id)}}))))
 
 (defn sync-node
-  (^xtdb.api.protocols.TransactionInstant [node]
+  (^xtdb.protocols.TransactionInstant [node]
    (sync-node node nil))
 
-  (^xtdb.api.protocols.TransactionInstant [node ^Duration timeout]
+  (^xtdb.protocols.TransactionInstant [node ^Duration timeout]
    @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer)
                    (xtp/latest-submitted-tx node)
                    timeout)))

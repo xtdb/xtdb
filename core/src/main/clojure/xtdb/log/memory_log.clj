@@ -1,6 +1,6 @@
 (ns xtdb.log.memory-log
   (:require [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.log :as log])
   (:import java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture

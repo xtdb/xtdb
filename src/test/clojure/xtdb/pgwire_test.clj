@@ -5,7 +5,7 @@
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]

@@ -1,7 +1,7 @@
 (ns xtdb.indexer.live-table-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.indexer.live-index :as live-index]
             [xtdb.node :as xtn]
             [xtdb.test-json :as tj]

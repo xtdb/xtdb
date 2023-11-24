@@ -33,7 +33,7 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.api.protocols TransactionInstant)
+           (xtdb.protocols TransactionInstant)
            (xtdb IBufferPool IResultSet)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
@@ -48,12 +48,12 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexer
-  (^xtdb.api.protocols.TransactionInstant indexTx [^xtdb.api.protocols.TransactionInstant tx
+  (^xtdb.protocols.TransactionInstant indexTx [^xtdb.protocols.TransactionInstant tx
                                                    ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
-  (^xtdb.api.protocols.TransactionInstant latestCompletedTx [])
-  (^xtdb.api.protocols.TransactionInstant latestCompletedChunkTx [])
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^xtdb.api.protocols.TransactionInstant tx, ^java.time.Duration timeout])
-  (^void forceFlush [^xtdb.api.protocols.TransactionInstant txKey ^long expected-last-chunk-tx-id])
+  (^xtdb.protocols.TransactionInstant latestCompletedTx [])
+  (^xtdb.protocols.TransactionInstant latestCompletedChunkTx [])
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^xtdb.protocols.TransactionInstant tx, ^java.time.Duration timeout])
+  (^void forceFlush [^xtdb.protocols.TransactionInstant txKey ^long expected-last-chunk-tx-id])
   (^Throwable indexerError []))
 
 (defprotocol Finish

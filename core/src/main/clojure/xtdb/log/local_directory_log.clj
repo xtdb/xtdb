@@ -1,7 +1,7 @@
 (ns xtdb.log.local-directory-log
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.log :as xt.log]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry

@@ -1,7 +1,7 @@
 (ns xtdb.await-test
   (:require [clojure.test :as t]
             [xtdb.await :as await]
-            [xtdb.api.protocols :as xtp])
+            [xtdb.protocols :as xtp])
   (:import java.util.concurrent.PriorityBlockingQueue))
 
 (defn- ->tx [tx-id]

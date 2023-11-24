@@ -1,13 +1,13 @@
 (ns xtdb.log
   (:require [clojure.tools.logging :as log]
-            xtdb.api.protocols
+            xtdb.protocols
             [xtdb.util :as util])
   (:import java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.channels ClosedChannelException)
            java.time.Duration
            java.util.concurrent.Semaphore
-           xtdb.api.protocols.TransactionInstant))
+           xtdb.protocols.TransactionInstant))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -65,7 +65,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
-  (notifyTx [^xtdb.api.protocols.TransactionInstant tx])
+  (notifyTx [^xtdb.protocols.TransactionInstant tx])
   (subscribe [^xtdb.log.Log log, ^Long after-tx-id, ^xtdb.log.LogSubscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]

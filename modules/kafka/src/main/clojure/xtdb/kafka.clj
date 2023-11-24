@@ -1,7 +1,7 @@
 (ns xtdb.kafka
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.log :as log]
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])

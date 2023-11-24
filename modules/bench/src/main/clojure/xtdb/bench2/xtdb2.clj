@@ -3,7 +3,7 @@
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.bench2 :as b]
             [xtdb.bench2.measurement :as bm]
             [xtdb.node :as xtn]

@@ -1,5 +1,5 @@
 (ns xtdb.api
-  (:require [xtdb.api.protocols :as xtp])
+  (:require [xtdb.protocols :as xtp])
   (:import java.util.concurrent.ExecutionException
            java.util.function.Function
            xtdb.IResultSet))
@@ -182,8 +182,8 @@
    - :default-tz
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
-  (^xtdb.api.protocols.TransactionInstant [node tx-ops] (submit-tx node tx-ops {}))
-  (^xtdb.api.protocols.TransactionInstant [node tx-ops tx-opts]
+  (^xtdb.protocols.TransactionInstant [node tx-ops] (submit-tx node tx-ops {}))
+  (^xtdb.protocols.TransactionInstant [node tx-ops tx-opts]
    (-> @(submit-tx& node tx-ops tx-opts)
        (rethrowing-cause))))
 

@@ -1,5 +1,5 @@
 (ns xtdb.azure.log
-  (:require [xtdb.api.protocols :as xtp]
+  (:require [xtdb.protocols :as xtp]
             [xtdb.log :as log]
             [xtdb.util :as util])
   (:import java.util.concurrent.CompletableFuture

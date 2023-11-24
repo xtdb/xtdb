@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.indexer.live-index :as li]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]

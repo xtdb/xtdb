@@ -1,7 +1,7 @@
 (ns xtdb.api-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.util :as util]

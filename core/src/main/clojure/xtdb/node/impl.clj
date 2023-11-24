@@ -1,7 +1,7 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api.protocols :as xtp]
+            [xtdb.protocols :as xtp]
             [xtdb.datalog :as d]
             [xtdb.error :as err]
             xtdb.indexer
