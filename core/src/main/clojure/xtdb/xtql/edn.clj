@@ -291,8 +291,8 @@
       (sequential? specs) (->> specs
                                (into [] (mapcat (fn [spec]
                                                   (cond
-                                                    (keyword? spec) (let [attr (str (symbol spec))]
-                                                                      [(ColSpec/of attr (Expr/lVar attr))])
+                                                    (symbol? spec) (let [attr (str spec)]
+                                                                     [(ColSpec/of attr (Expr/lVar attr))])
                                                     (map? spec) (map parse-col-spec spec)
 
                                                     :else
@@ -384,7 +384,7 @@
   OutSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
   ArgSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
   VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) false symbol))
-  ColSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) keyword keyword))
+  ColSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
 
   Query$From
   (unparse [from]
