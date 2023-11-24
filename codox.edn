@@ -2,5 +2,6 @@
 ;; https://github.com/weavejester/codox#project-options
 {:output-path "docs/dist/clojure-docs" 
  :source-paths ["api/src/main"
+                "core/src/main"
                 "http-client-clj/src/main"]
- :namespaces '[xtdb.api xtdb.client]}
+ :namespaces '[xtdb.api xtdb.node xtdb.client]}
