@@ -84,11 +84,13 @@
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
 
+(def ^:dynamic *http-port* nil)
+
 (defn with-http-client-node [f]
-  (let [port (free-port)]
+  (binding [*http-port* (free-port)]
     (util/with-open [_ (xtn/start-node (-> *node-opts*
-                                           (assoc-in [:xtdb/server :port] port)))]
-      (binding [*node* (xtc/start-client (str "http://localhost:" port))]
+                                           (assoc-in [:xtdb/server :port] *http-port*)))]
+      (binding [*node* (xtc/start-client (str "http://localhost:" *http-port*))]
         (f)))))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}

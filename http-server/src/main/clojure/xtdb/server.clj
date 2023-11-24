@@ -1,5 +1,7 @@
 (ns xtdb.server
-  (:require [clojure.instant :as inst]
+  (:require [clojure.data.json :as json]
+            [clojure.instant :as inst]
+            [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
@@ -28,12 +30,12 @@
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
-           xtdb.api.TransactionKey
-           xtdb.IResultSet))
+           xtdb.IResultSet
+           xtdb.api.TransactionKey))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
-      (m/select-formats #{"application/transit+json"})
+      (m/select-formats #{"application/json" "application/transit+json"})
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                 serde/transit-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
@@ -104,6 +106,33 @@
             (let [writer (transit/writer out :json opts)]
               (transit/write writer res))))))))
 
+(defn- ->jsonl-resultset-encoder [_opts]
+  (reify
+    mf/EncodeToBytes
+    ;; we're required to be a sub-type of ETB but don't need to implement its fn.
+
+    mf/EncodeToOutputStream
+    (encode-to-output-stream [_ res _]
+      (fn [^OutputStream out]
+        (if-not (ex-data res)
+          (with-open [^IResultSet res res
+                      writer (io/writer out)]
+            (try
+              (doseq [el (iterator-seq res)]
+                (json/write el writer)
+                (.write writer "\n"))
+              ;; TODO how to to mark it as an error for the client
+              (catch xtdb.RuntimeException e
+                (json/write (ex-data e) writer)
+                (.write writer "\n"))
+              (catch Throwable t
+                (json/write (throwable->ex-info t) writer)
+                (.write writer "\n"))))
+          (with-open [out out]
+            (let [writer (io/writer out)]
+              (json/write (ex-data res) writer))))))))
+
+
 (s/def ::current-time inst?)
 (s/def ::tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
@@ -113,7 +142,7 @@
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
-(s/def ::query (some-fn string? map? list?))
+(s/def ::query (some-fn string? map? seq?))
 
 (s/def ::args (s/nilable (s/coll-of any?)))
 
@@ -126,7 +155,10 @@
                            (assoc :return :output-stream)
 
                            (assoc-in [:formats "application/transit+json" :encoder]
-                                     [->tj-resultset-encoder {:handlers serde/transit-write-handlers}])))
+                                     [->tj-resultset-encoder {:handlers serde/transit-write-handlers}])
+
+                           (assoc-in [:formats "application/jsonl" :encoder]
+                                     [->jsonl-resultset-encoder {}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
@@ -184,7 +216,10 @@
                                                :muuntaja/decode handle-muuntaja-decode-error
                                                ::ri.exception/wrap (fn [handler e req]
                                                                      (log/warn e "response error")
-                                                                     (handler e req))})]
+                                                                     (let [response-format (:raw-format (:muuntaja/response req))]
+                                                                       (cond-> (handler e req)
+                                                                         (#{"appllication/json" "application/jsonl"} response-format)
+                                                                         (-> (update :body ex-data) (assoc :muuntaja/content-type "application/json")))))})]
 
                                       [ri.muuntaja/format-request-interceptor]
                                       [rh.coercion/coerce-request-interceptor]]}}))
