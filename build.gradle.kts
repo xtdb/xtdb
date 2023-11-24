@@ -119,8 +119,8 @@ allprojects {
 
                         licenses {
                             license {
-                                name.set("The MIT License")
-                                url.set("http://opensource.org/licenses/MIT")
+                                name.set("The MPL License")
+                                url.set("https://opensource.org/license/mpl-2-0/")
                             }
                         }
                         developers {

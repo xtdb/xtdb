@@ -140,6 +140,6 @@ We would love to hear from you: hello@xtdb.com
 
 == License and Copyright
 
-The MIT License.
+XTDB is licensed under the Mozilla Public License, version 2 or (at your option) any later version.
 
 Copyright © 2018-2023 JUXT LTD.

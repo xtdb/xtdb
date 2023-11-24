@@ -28,7 +28,7 @@ The existing 'SQL:2011' standard already defined various bitemporal language fea
 - Immutability - losing information is bad for business and destructive database operations are a bad default in 2023. By contrast, XTDB keeps accurate, auditable records at all times and implements strong consistency via ACID transactions by default
 - Temporality - flexible record versioning and querying through history are common business expectations for IT applications, and across many industries auditable versioning is a regulatory required. XTDB makes temporal requirements easy
 - Schemaless-ness - normalized schemas are wonderful but it is increasingly necessary to handle records with arbitrarily nested data and irregular shapes. XTDB allows these records to be dynamically interpreted, joined and analyzed. Schema can be gradually defined and integrated with your application as requirements evolve
-- Openness - data is valuable and usually outlives code, therefore businesses should be mindful of being locked in to non-open data systems. XTDB builds upon open source technologies, and is itself open source software (MIT License), but more importantly the entire processing and storage architecture is built around Apache Arrow - a high-performance polyglot data format for cutting edge systems
+- Openness - data is valuable and usually outlives code, therefore businesses should be mindful of being locked in to non-open data systems. XTDB builds upon open source technologies, and is itself open source software (MPL License), but more importantly the entire processing and storage architecture is built around Apache Arrow - a high-performance polyglot data format for cutting edge systems
 
 == Design
 

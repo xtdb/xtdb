@@ -10,5 +10,5 @@
  :name "XTDB"
  :version "2.0.0-SNAPSHOT"
  :description "XTDB is a document-oriented, dynamic, bitemporal database queryable with XTQL and SQL."
- :license {:name "MIT Licence"
-           :url "https://opensource.org/license/mit/"}}
+ :license {:name "MPL Licence"
+           :url "https://opensource.org/license/mpl-2-0/"}}
