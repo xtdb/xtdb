@@ -9,11 +9,10 @@
            java.nio.ByteBuffer
            (java.nio.channels Channels ClosedByInterruptException FileChannel)
            (java.nio.file Path)
-           (java.time Duration)
+           (java.time Duration InstantSource)
            java.time.temporal.ChronoUnit
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
-           xtdb.InstantSource
            (xtdb.log Log LogRecord)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
@@ -144,8 +143,8 @@
 
 (defmethod ig/prep-key :xtdb.log/local-directory-log [_ opts]
   (-> (merge {:buffer-size 4096
-              :instant-src InstantSource/SYSTEM
-              :poll-sleep-duration "PT0.1S"}
+              :instant-src (InstantSource/system)
+              :poll-sleep-duration #time/duration "PT0.1S"}
              opts)
       (util/maybe-update :root-path util/->path)
       (util/maybe-update :poll-sleep-duration util/->duration)))

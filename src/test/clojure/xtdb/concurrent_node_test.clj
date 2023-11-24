@@ -5,7 +5,7 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory ArrowBuf)
-           (xtdb InstantSource)
+           (java.time InstantSource)
            xtdb.IBufferPool))
 
 (defn- random-maps [n]
@@ -20,7 +20,7 @@
 
 (def ^java.io.File node-dir (io/file "dev/concurrent-node-test"))
 (def node-opts {:node-dir (.toPath node-dir)
-                :instant-src InstantSource/SYSTEM})
+                :instant-src (InstantSource/system)})
 
 (defn- populate-node [{:keys [node-dir] :as node-opts}]
   (when-not (util/path-exists node-dir)

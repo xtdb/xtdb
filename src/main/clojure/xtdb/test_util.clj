@@ -21,7 +21,7 @@
            java.net.ServerSocket
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           (java.time Duration Instant Period)
+           (java.time Duration Instant InstantSource Period)
            (java.util LinkedList)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream)
@@ -29,7 +29,7 @@
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
-           (xtdb ICursor IKeyFn InstantSource)
+           (xtdb ICursor IKeyFn)
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            (xtdb.operator IRaQuerySource PreparedQuery)
@@ -121,11 +121,16 @@
    @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer) tx timeout)))
 
 (defn ->mock-clock
-  (^xtdb.InstantSource []
+  (^java.time.InstantSource []
    (->mock-clock (iterate #(.plus ^Instant % (Period/ofDays 1))
                           (.toInstant #inst "2020-01-01"))))
 
-  (^xtdb.InstantSource [^Iterable insts] (InstantSource/mock insts)))
+  (^java.time.InstantSource [^Iterable insts]
+   (let [it (.iterator insts)]
+     (reify InstantSource
+       (instant [_]
+         (assert (.hasNext it) "out of insts!")
+         (.next it))))))
 
 (defn with-mock-clock [f]
   (with-opts {:xtdb.log/memory-log {:instant-src (->mock-clock)}} f))

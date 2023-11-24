@@ -12,11 +12,10 @@
   (:import (io.micrometer.core.instrument MeterRegistry Timer)
            (java.io Closeable File)
            (java.nio.file Path)
-           (java.time Clock Duration)
+           (java.time Clock Duration InstantSource)
            (java.util Random)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.concurrent.atomic AtomicLong)
-           (xtdb InstantSource)))
+           (java.util.concurrent.atomic AtomicLong)))
 
 (set! *warn-on-reflection* false)
 
@@ -209,7 +208,7 @@
       (util/delete-dir node-dir))
     (let [report (-> (run-benchmark
                       {:node-opts {:node-dir node-dir
-                                   :instant-src InstantSource/SYSTEM}
+                                   :instant-src (InstantSource/system)}
                        :benchmark-type :auctionmark
                        :benchmark-opts (assoc opts :sync true)})
                      only-oltp-stage)]
@@ -257,7 +256,7 @@
   (def report-core2
     (run-benchmark
      {:node-opts {:node-dir (.toPath node-dir)
-                  :instant-src InstantSource/SYSTEM}
+                  :instant-src (InstantSource/system)}
       :benchmark-type :auctionmark
       :benchmark-opts {:duration run-duration :load-phase true
                        :scale-factor 0.1 :threads 1}}))

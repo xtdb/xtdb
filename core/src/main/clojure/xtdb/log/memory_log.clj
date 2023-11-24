@@ -2,9 +2,9 @@
   (:require [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.log :as log])
-  (:import java.time.temporal.ChronoUnit
+  (:import java.time.InstantSource
+           java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture
-           xtdb.InstantSource
            (xtdb.log INotifyingSubscriberHandler Log LogRecord)))
 
 (deftype InMemoryLog [!records, ^INotifyingSubscriberHandler subscriber-handler, ^InstantSource instant-src]
@@ -31,7 +31,7 @@
 (derive :xtdb.log/memory-log :xtdb/log)
 
 (defmethod ig/prep-key :xtdb.log/memory-log [_ opts]
-  (merge {:instant-src InstantSource/SYSTEM} opts))
+  (merge {:instant-src (InstantSource/system)} opts))
 
 (defmethod ig/init-key :xtdb.log/memory-log [_ {:keys [instant-src]}]
   (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) instant-src))
