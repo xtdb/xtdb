@@ -20,6 +20,7 @@
             [ring.util.response :as ring-response]
             [ring.adapter.jetty9 :as j]
             [spec-tools.core :as st]
+            xtdb.api
             [xtdb.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit]
@@ -27,7 +28,7 @@
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
-           xtdb.protocols.TransactionInstant
+           xtdb.api.TransactionKey
            xtdb.IResultSet))
 
 (def ^:private muuntaja-opts
@@ -104,8 +105,8 @@
               (transit/write writer res))))))))
 
 (s/def ::current-time inst?)
-(s/def ::tx (s/nilable #(instance? TransactionInstant %)))
-(s/def ::after-tx (s/nilable #(instance? TransactionInstant %)))
+(s/def ::tx (s/nilable #(instance? TransactionKey %)))
+(s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::basis (s/keys :opt-un [::current-time ::tx ::after-tx]))
 
 (s/def ::basis-timeout

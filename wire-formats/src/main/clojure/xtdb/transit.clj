@@ -2,22 +2,22 @@
   (:require [clojure.edn :as edn]
             [cognitect.transit :as transit]
             [time-literals.read-write :as time-literals.rw]
-            [xtdb.protocols :as xtp]
+            [xtdb.api :as xt]
             [xtdb.edn :as xt-edn]
             [xtdb.error :as err]
             [xtdb.types :as types])
   (:import (com.cognitect.transit TransitFactory)
-           (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId)
+           (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
-           (xtdb.protocols TransactionInstant)
+           xtdb.api.TransactionKey
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (def tj-read-handlers
   (merge (-> time-literals.rw/tags
              (update-keys str)
              (update-vals transit/read-handler))
-         {"xtdb/clj-form" (transit/read-handler xtp/->ClojureForm)
-          "xtdb/tx-key" (transit/read-handler xtp/map->TransactionInstant)
+         {"xtdb/clj-form" (transit/read-handler xt/->ClojureForm)
+          "xtdb/tx-key" (transit/read-handler xt/map->TransactionKey)
           "xtdb/illegal-arg" (transit/read-handler err/-iae-reader)
           "xtdb/runtime-err" (transit/read-handler err/-runtime-err-reader)
           "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
@@ -52,7 +52,7 @@
               YearMonth "time/year-month"
               MonthDay "time/month-day"}
              (update-vals #(transit/write-handler % str)))
-         {TransactionInstant (transit/write-handler "xtdb/tx-key" #(select-keys % [:tx-id :system-time]))
+         {TransactionKey (transit/write-handler "xtdb/tx-key" #(select-keys % [:tx-id :system-time]))
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" ex-data)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" ex-data)
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" #(vector (ex-message %) (ex-data %)))

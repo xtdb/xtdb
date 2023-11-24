@@ -1,7 +1,7 @@
 (ns xtdb.tx-producer
   (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.protocols :as xtp]
+            [xtdb.api :as xt]
             [xtdb.error :as err]
             xtdb.log
             [xtdb.sql :as sql]
@@ -24,7 +24,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITxProducer
   (submitTx
-    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
+    ^java.util.concurrent.CompletableFuture #_<TransactionKey> [^java.util.List txOps, ^java.util.Map opts]))
 
 (def eid? (some-fn uuid? integer? string? keyword?))
 
@@ -334,7 +334,7 @@
       (let [fn-id (.fnId op)]
         (vw/write-value! fn-id (.legWriter fn-id-writer (vw/value->arrow-type fn-id))))
 
-      (let [clj-form (xtp/->ClojureForm (vec (.args op)))]
+      (let [clj-form (xt/->ClojureForm (vec (.args op)))]
         (vw/write-value! clj-form (.legWriter args-list-writer (vw/value->arrow-type clj-form))))
 
       (.endStruct call-writer))))

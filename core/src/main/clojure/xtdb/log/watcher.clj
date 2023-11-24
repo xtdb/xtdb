@@ -1,7 +1,7 @@
 (ns xtdb.log.watcher
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            xtdb.protocols
+            xtdb.api
             xtdb.indexer
             [xtdb.log :as xt-log]
             xtdb.operator.scan
@@ -12,7 +12,7 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.ipc.ArrowStreamReader
            org.apache.arrow.vector.TimeStampMicroTZVector
-           xtdb.protocols.TransactionInstant
+           xtdb.api.TransactionKey
            xtdb.indexer.IIndexer
            [xtdb.log Log LogSubscriber]))
 
@@ -48,9 +48,9 @@
                           (.loadNextBatch sr)
 
                           (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
-                                ^TransactionInstant tx-key (cond-> (.tx record)
-                                                             (not (.isNull system-time-vec 0))
-                                                             (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))]
+                                ^TransactionKey tx-key (cond-> (.tx record)
+                                                         (not (.isNull system-time-vec 0))
+                                                         (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))]
 
                             (.indexTx indexer tx-key tx-root)))
 

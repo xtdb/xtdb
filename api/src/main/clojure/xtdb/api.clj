@@ -1,14 +1,39 @@
 (ns xtdb.api
   (:require [xtdb.protocols :as xtp])
-  (:import java.util.concurrent.ExecutionException
+  (:import [java.io Writer]
+           [java.time Instant]
+           java.util.concurrent.ExecutionException
            java.util.function.Function
-           xtdb.IResultSet))
+           xtdb.IResultSet
+           xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]
   `(try
      ~form
      (catch ExecutionException e#
        (throw (.getCause e#)))))
+
+(defrecord TransactionKey [^long tx-id, ^Instant system-time]
+  Comparable
+  (compareTo [_ tx-key]
+    (Long/compare tx-id (.tx-id ^TransactionKey tx-key))))
+
+(defmethod print-dup TransactionKey [tx-key ^Writer w]
+  (.write w "#xt/tx-key ")
+  (print-method (into {} tx-key) w))
+
+(defmethod print-method TransactionKey [tx-key w]
+  (print-dup tx-key w))
+
+(defn ->ClojureForm [form]
+  (ClojureForm. form))
+
+(defmethod print-dup ClojureForm [^ClojureForm clj-form ^Writer w]
+  (.write w "#xt/clj-form ")
+  (print-method (.form clj-form) w))
+
+(defmethod print-method ClojureForm [clj-form w]
+  (print-dup clj-form w))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn q&
@@ -116,7 +141,7 @@
   Alternatively a basis map containing reference to a specific transaction can be supplied,
   in this case the query will be run exactly at that transaction, ensuring the repeatability of queries.
 
-  This tx reference (known as a TransactionInstant) is the same map returned by submit-tx
+  This tx reference (known as a TransactionKey) is the same map returned by submit-tx
 
   (q node
      '{:find ...
@@ -171,8 +196,7 @@
      [:sql-batch [\"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\" [2 3] [4 5] [6 7]]]
      [:sql \"UPDATE foo SET b = 1\"]]
 
-  Returns a map with details about the submitted transaction,
-  including system-time and tx-id.
+  Returns a map with details about the submitted transaction, including system-time and tx-id.
 
   opts (map):
    - :system-time
@@ -182,8 +206,8 @@
    - :default-tz
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
-  (^xtdb.protocols.TransactionInstant [node tx-ops] (submit-tx node tx-ops {}))
-  (^xtdb.protocols.TransactionInstant [node tx-ops tx-opts]
+  ([node tx-ops] (submit-tx node tx-ops {}))
+  ([node tx-ops tx-opts]
    (-> @(submit-tx& node tx-ops tx-opts)
        (rethrowing-cause))))
 

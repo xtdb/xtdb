@@ -1,14 +1,14 @@
 (ns xtdb.azure.log
-  (:require [xtdb.protocols :as xtp]
+  (:require [xtdb.api :as xt]
             [xtdb.log :as log]
             [xtdb.util :as util])
-  (:import java.util.concurrent.CompletableFuture
+  (:import [com.azure.messaging.eventhubs EventData EventHubConsumerClient EventHubProducerAsyncClient]
+           [com.azure.messaging.eventhubs.models EventPosition PartitionEvent SendOptions]
+           java.io.Closeable
            java.nio.ByteBuffer
            java.time.Duration
-           java.io.Closeable
-           [xtdb.log INotifyingSubscriberHandler Log]
-           [com.azure.messaging.eventhubs EventData EventHubProducerAsyncClient EventHubConsumerClient]
-           [com.azure.messaging.eventhubs.models SendOptions EventPosition PartitionEvent]))
+           java.util.concurrent.CompletableFuture
+           [xtdb.log INotifyingSubscriberHandler Log]))
 
 (defn ->consumer [f]
   (reify java.util.function.Consumer
@@ -17,7 +17,7 @@
      (f val))))
 
 (defn event-data->tx-instant [^EventData data]
-  (xtp/->TransactionInstant (.getOffset data) (.getEnqueuedTime data)))
+  (xt/->TransactionKey (.getOffset data) (.getEnqueuedTime data)))
 
 (def producer-send-options
   (.setPartitionId (SendOptions.) "0"))
@@ -46,7 +46,7 @@
                       (->consumer (fn [e]
                                     (.completeExceptionally fut e)))
                       (fn [] (let [{:keys [offset timestamp]} (get-partition-properties consumer)]
-                               (.complete fut (log/->LogRecord (xtp/->TransactionInstant offset timestamp) record))))))
+                               (.complete fut (log/->LogRecord (xt/->TransactionKey offset timestamp) record))))))
       fut))
 
   (readRecords [_ after-tx-id limit]

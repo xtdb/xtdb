@@ -33,8 +33,8 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.protocols TransactionInstant)
            (xtdb IBufferPool IResultSet)
+           xtdb.api.TransactionKey
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            xtdb.operator.IRaQuerySource
@@ -48,12 +48,12 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexer
-  (^xtdb.protocols.TransactionInstant indexTx [^xtdb.protocols.TransactionInstant tx
-                                                   ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
-  (^xtdb.protocols.TransactionInstant latestCompletedTx [])
-  (^xtdb.protocols.TransactionInstant latestCompletedChunkTx [])
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^xtdb.protocols.TransactionInstant tx, ^java.time.Duration timeout])
-  (^void forceFlush [^xtdb.protocols.TransactionInstant txKey ^long expected-last-chunk-tx-id])
+  (^xtdb.api.TransactionKey indexTx [^xtdb.api.TransactionKey tx
+                                     ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
+  (^xtdb.api.TransactionKey latestCompletedTx [])
+  (^xtdb.api.TransactionKey latestCompletedChunkTx [])
+  (^java.util.concurrent.CompletableFuture #_<TransactionKey> awaitTxAsync [^xtdb.api.TransactionKey tx, ^java.time.Duration timeout])
+  (^void forceFlush [^xtdb.api.TransactionKey txKey ^long expected-last-chunk-tx-id])
   (^Throwable indexerError []))
 
 (defprotocol Finish
@@ -505,7 +505,7 @@
 (def ^:private ^:const ^String txs-table
   "xt$txs")
 
-(defn- add-tx-row! [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^TransactionInstant tx-key, ^Throwable t]
+(defn- add-tx-row! [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
   (let [tx-id (.tx-id tx-key)
         system-time-µs (util/instant->micros (.system-time tx-key))
 
@@ -541,8 +541,8 @@
 
                   ^:volatile-mutable indexer-error
 
-                  ^:volatile-mutable ^TransactionInstant latest-completed-tx
-                  ^:volatile-mutable ^TransactionInstant latest-completed-chunk-tx
+                  ^:volatile-mutable ^TransactionKey latest-completed-tx
+                  ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
                   ^PriorityBlockingQueue awaiters
 
                   ^RowCounter row-counter

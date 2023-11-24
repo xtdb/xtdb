@@ -1,7 +1,7 @@
 (ns xtdb.log.local-directory-log
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.protocols :as xtp]
+            [xtdb.api :as xt]
             [xtdb.log :as xt.log]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -52,7 +52,7 @@
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (xt.log/->LogRecord (xtp/->TransactionInstant offset system-time) (ByteBuffer/wrap record))))
+                                  (xt.log/->LogRecord (xt/->TransactionKey offset system-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -113,7 +113,7 @@
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (xt.log/->LogRecord (xtp/->TransactionInstant offset system-time) record)))
+                      (.set elements n (MapEntry/create f (xt.log/->LogRecord (xt/->TransactionKey offset system-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)

@@ -1,23 +1,22 @@
 (ns xtdb.kafka
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [xtdb.protocols :as xtp]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as xt]
             [xtdb.log :as log]
-            [xtdb.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import [xtdb.log Log LogSubscriber]
-           java.io.Closeable
+            [xtdb.util :as util])
+  (:import java.io.Closeable
            java.lang.AutoCloseable
            java.nio.file.Path
            [java.time Duration Instant]
-           java.time.Instant
            [java.util List Map Properties]
            [java.util.concurrent CompletableFuture]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
            [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
-           org.apache.kafka.common.TopicPartition))
+           org.apache.kafka.common.TopicPartition
+           [xtdb.log Log LogSubscriber]))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -57,7 +56,7 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (log/->LogRecord (xtp/->TransactionInstant (.offset record) (Instant/ofEpochMilli (.timestamp record)))
+  (log/->LogRecord (xt/->TransactionKey (.offset record) (Instant/ofEpochMilli (.timestamp record)))
                    (.value record)))
 
 (defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^LogSubscriber subscriber]
@@ -98,8 +97,8 @@
                (onCompletion [_ record-metadata e]
                  (if e
                    (.completeExceptionally fut e)
-                   (.complete fut (log/->LogRecord (xtp/->TransactionInstant (.offset record-metadata)
-                                                                             (Instant/ofEpochMilli (.timestamp record-metadata)))
+                   (.complete fut (log/->LogRecord (xt/->TransactionKey (.offset record-metadata)
+                                                                        (Instant/ofEpochMilli (.timestamp record-metadata)))
                                                    record))))))
       fut))
 

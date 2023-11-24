@@ -1,10 +1,10 @@
 (ns xtdb.watermark
   (:require [clojure.tools.logging :as log]
-            xtdb.protocols
+            xtdb.api
             [xtdb.util :as util])
   (:import java.lang.AutoCloseable
            java.util.concurrent.atomic.AtomicInteger
-           xtdb.protocols.TransactionInstant))
+           xtdb.api.TransactionKey))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
@@ -21,7 +21,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
-  (^xtdb.protocols.TransactionInstant txBasis [])
+  (^xtdb.api.TransactionKey txBasis [])
   (^xtdb.watermark.ILiveIndexWatermark liveIndex [])
 
   (^void retain [])
@@ -31,9 +31,9 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermarkSource
-  (^xtdb.watermark.IWatermark openWatermark [^xtdb.protocols.TransactionInstant txKey]))
+  (^xtdb.watermark.IWatermark openWatermark [^xtdb.api.TransactionKey txKey]))
 
-(deftype Watermark [^TransactionInstant tx-key, ^ILiveIndexWatermark live-idx-wm, ^AtomicInteger ref-cnt]
+(deftype Watermark [^TransactionKey tx-key, ^ILiveIndexWatermark live-idx-wm, ^AtomicInteger ref-cnt]
   IWatermark
   (txBasis [_] tx-key)
   (liveIndex [_] live-idx-wm)

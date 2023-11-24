@@ -1,7 +1,6 @@
 (ns xtdb.datalog.temporal-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)
@@ -53,10 +52,10 @@
               (xt/q tu/*node* '{:find [foo]
                                 :where [(match :xt_docs {:xt/id 1})
                                         [1 :foo foo]]}
-                    {:basis {:tx (xtp/->TransactionInstant 0 (.toInstant #inst "2000"))}})))
+                    {:basis {:tx (xt/->TransactionKey 0 (.toInstant #inst "2000"))}})))
 
     (t/is (=  [{:foo "2000-4000"}]
               (xt/q tu/*node* '{:find [foo]
                                 :where [(match :xt_docs {:xt/id 1})
                                         [1 :foo foo]]}
-                    {:basis {:tx (xtp/->TransactionInstant 0 (.toInstant (java.util.Date.)))}})))))
+                    {:basis {:tx (xt/->TransactionKey 0 (.toInstant (java.util.Date.)))}})))))

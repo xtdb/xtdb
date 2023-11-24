@@ -32,7 +32,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTable
-  (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.protocols.TransactionInstant txKey
+  (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.api.TransactionKey txKey
                                                   ^boolean newLiveTable])
   (^xtdb.watermark.ILiveTableWatermark openWatermark [^boolean retain])
   (^java.util.concurrent.CompletableFuture #_<List<Map$Entry>> finishChunk [^String trieKey])
@@ -48,7 +48,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndex
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
-  (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.protocols.TransactionInstant txKey])
+  (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.TransactionKey txKey])
   (^xtdb.watermark.ILiveIndexWatermark openWatermark [])
   (^java.util.Map finishChunk [^long chunkIdx, ^long nextChunkIdx])
   (^void nextChunk [])

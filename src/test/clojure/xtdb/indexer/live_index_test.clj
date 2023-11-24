@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.protocols :as xtp]
             [xtdb.indexer.live-index :as li]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -38,7 +37,7 @@
                        (mapv (comp vec util/uuid->bytes)))]
 
     (t/testing "commit"
-      (let [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
+      (let [live-idx-tx (.startTx live-index (xt/->TransactionKey 0 (.toInstant #inst "2000")))
             live-table-tx (.liveTable live-idx-tx "my-table")
             put-doc-wrt (.docWriter live-table-tx)]
         (let [wp (IVectorPosition/build)]

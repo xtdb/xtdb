@@ -1,14 +1,14 @@
 (ns xtdb.await
-  (:require xtdb.protocols)
-  (:import xtdb.protocols.TransactionInstant
+  (:require xtdb.api)
+  (:import xtdb.api.TransactionKey
            [java.util.concurrent CompletableFuture PriorityBlockingQueue]))
 
-(deftype AwaitingTx [^TransactionInstant tx, ^CompletableFuture fut]
+(deftype AwaitingTx [^TransactionKey tx, ^CompletableFuture fut]
   Comparable
   (compareTo [_ other]
     (.compareTo tx (.tx ^AwaitingTx other))))
 
-(defn- await-done? [^TransactionInstant awaited-tx, ^TransactionInstant completed-tx]
+(defn- await-done? [^TransactionKey awaited-tx, ^TransactionKey completed-tx]
   (or (nil? awaited-tx)
       (when completed-tx
         (not (pos? (.compareTo awaited-tx completed-tx))))))
@@ -20,7 +20,7 @@
 
 (defn await-tx-async
   ^java.util.concurrent.CompletableFuture
-  [^TransactionInstant awaited-tx, ->latest-completed-tx, ^PriorityBlockingQueue awaiters]
+  [^TransactionKey awaited-tx, ->latest-completed-tx, ^PriorityBlockingQueue awaiters]
 
   (or (try
         ;; fast path - don't bother with the PBQ unless we need to

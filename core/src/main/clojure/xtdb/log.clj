@@ -7,11 +7,11 @@
            (java.nio.channels ClosedChannelException)
            java.time.Duration
            java.util.concurrent.Semaphore
-           xtdb.protocols.TransactionInstant))
+           xtdb.api.TransactionKey))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord LogRecord [^TransactionInstant tx ^ByteBuffer record])
+(defrecord LogRecord [^TransactionKey tx ^ByteBuffer record])
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface LogSubscriber
@@ -34,7 +34,7 @@
 
     (.acceptRecord subscriber record)
 
-    (.tx-id ^TransactionInstant (.tx record))))
+    (.tx-id ^TransactionKey (.tx record))))
 
 (defn handle-polling-subscription [^Log log after-tx-id {:keys [^Duration poll-sleep-duration]} ^LogSubscriber subscriber]
   (doto (.newThread subscription-thread-factory
@@ -65,7 +65,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
-  (notifyTx [^xtdb.protocols.TransactionInstant tx])
+  (notifyTx [^xtdb.api.TransactionKey tx])
   (subscribe [^xtdb.log.Log log, ^Long after-tx-id, ^xtdb.log.LogSubscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]
@@ -95,7 +95,7 @@
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
                                                          (->> (.readRecords log after-tx-id 100)
-                                                              (take-while #(<= ^long (.tx-id ^TransactionInstant (.tx ^LogRecord %))
+                                                              (take-while #(<= ^long (.tx-id ^TransactionKey (.tx ^LogRecord %))
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live

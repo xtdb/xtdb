@@ -4,10 +4,10 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.protocols :as xtp]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
+            [xtdb.protocols :as xtp]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
@@ -18,10 +18,8 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
-           xtdb.protocols.TransactionInstant
            xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
-           java.lang.AutoCloseable
            (xtdb.watermark IWatermarkSource)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -77,7 +75,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (xtp/map->TransactionInstant {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -349,7 +347,7 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (xtp/map->TransactionInstant {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -476,8 +474,7 @@
         (t/is (= 5500 (count first-half-tx-ops)))
         (t/is (= 5500 (count second-half-tx-ops)))
 
-        (let [^TransactionInstant
-              first-half-tx-key (reduce
+        (let [first-half-tx-key (reduce
                                  (fn [_ tx-ops]
                                    (xt/submit-tx submit-node tx-ops))
                                  nil
@@ -491,7 +488,7 @@
                            (tu/then-await-tx node (Duration/ofSeconds 10)))))
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
-              (let [{:keys [^TransactionInstant latest-completed-tx, next-chunk-idx]}
+              (let [{:keys [latest-completed-tx, next-chunk-idx]}
                     (meta/latest-chunk-metadata mm)]
 
                 (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
@@ -510,8 +507,7 @@
               (t/is (= :utf8
                        (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
 
-              (let [^TransactionInstant
-                    second-half-tx-key (reduce
+              (let [second-half-tx-key (reduce
                                         (fn [_ tx-ops]
                                           (xt/submit-tx submit-node tx-ops))
                                         nil
@@ -522,7 +518,7 @@
                           (:tx-id second-half-tx-key)))
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
-                  (doseq [^Node node [new-node node]
+                  (doseq [node [new-node node]
                           :let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (t/is (<= (:tx-id first-half-tx-key)
@@ -623,7 +619,7 @@
       (let [mm (tu/component node ::meta/metadata-manager)]
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-        (let [last-tx-key (xtp/map->TransactionInstant {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")})]
+        (let [last-tx-key (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
                    (xt/submit-tx node [[:sql-batch ["INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                                     [0, 2, "hello", 12]

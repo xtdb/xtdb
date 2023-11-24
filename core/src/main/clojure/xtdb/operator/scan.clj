@@ -29,7 +29,7 @@
            (org.apache.arrow.vector VectorLoader)
            (org.apache.arrow.vector.types.pojo FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           xtdb.protocols.TransactionInstant
+           xtdb.api.TransactionKey
            (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
@@ -67,7 +67,7 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- ->temporal-bounds [^RelationReader params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}]
+(defn- ->temporal-bounds [^RelationReader params, {^TransactionKey basis-tx :tx}, {:keys [for-valid-time for-system-time]}]
   (let [bounds (TemporalBounds.)]
     (letfn [(->time-μs [[tag arg]]
               (case tag
