@@ -26,10 +26,12 @@ If it's not provided, the XTDB client will default it to the latest transaction 
 * `:key-fn`: specifies how keys are returned in query results.
 ** `:clojure` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
 
+== Operators
+
 XTQL queries consist of composable operators, optionally combined with a pipeline.
 
-* 'Source operators' are valid at the start of a pipeline, or in isolation.
-* 'Tail operators' transform data in a pipeline - they aren't valid as the first operator, because they don't source data, but can appear anywhere else in the pipeline.
+* link:#_source_operators[Source operators] are valid at the start of a pipeline, or in isolation.
+* link:#_tail_operators[Tail operators] transform data in a pipeline - they aren't valid as the first operator, because they don't source data, but can appear anywhere else in the pipeline.
 
 A pipeline consists of a source operator, and optionally many tail operators:
 
@@ -51,9 +53,8 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 (from ...)
 ----
 
-The operators are as follows:
+=== Source Operators
 
-.Source operators
 [cols="3,8"]
 |===
 |Operator|Purpose
@@ -63,7 +64,8 @@ The operators are as follows:
 | link:#_unify[`unify`,role=no-underline] | Combines multiple input sources using Datalog-style unification.
 |===
 
-.Tail operators
+=== Tail operators
+
 [cols="3,8"]
 |===
 |Operator|Purpose
@@ -79,12 +81,12 @@ The operators are as follows:
 | link:#_unnest[`unnest`,role=no-underline] | Flattens an array within a column into individual rows
 |===
 
+=== Unify clauses
+
 Joins in XTQL are specified using the link:#_unify[`unify`] operator - this combines multiple input relations using Datalog-style unification.
 This allows for very declarative yet terse method of specifying join conditions; how relations relate to each other.
 
 'Unify clauses' are inputs to the link:#_unify[`unify`,role=no-underline] operator:
-
-.Unify clauses
 [cols="3,8"]
 |===
 |Clause|Purpose
@@ -96,8 +98,6 @@ This allows for very declarative yet terse method of specifying join conditions;
 | link:#_where[`where`,role=no-underline] | Filters the rows using the given predicates
 | link:#_with[`with`,role=no-underline] | Defines new logical variables in the unification
 |===
-
-== Operators
 
 === `aggregate`
 
