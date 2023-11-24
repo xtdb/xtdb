@@ -329,7 +329,7 @@ For example:
 [source,clojure]
 ----
 (-> (from :users [username first-name last-name])
-    (return username {:full-name (str last-name ", " first-name)}))
+    (return username {:full-name (concat last-name ", " first-name)}))
 
 ;; =>
 
@@ -413,14 +413,14 @@ The other columns in the query are duplicated for each row.
 
 [source]
 ----
-Unwind :: (unwind UnwindSpec)
+Unnest :: (unnest UnnestSpec)
 
 // as a tail operator
-UnwindSpec :: {Column Expr}
+UnnestSpec :: {Column Expr}
 Column :: keyword
 
 // in `unify`
-UnwindSpec :: {LogicVar Expr}
+UnnestSpec :: {LogicVar Expr}
 LogicVar :: symbol
 ----
 
