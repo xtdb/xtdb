@@ -317,14 +317,24 @@
           "testing parsing lazy-seq")))
 
 (deftest test-unnest
-  (let [q '(unify (table [{:x [1 2 3]}] [x])
-                  (unnest x y))]
+  (let [q '(unnest {y x})]
     (t/is (= q
-             (roundtrip-q q))
-          "unnest in unify"))
+             (roundtrip-unify-clause q))
+          "unnest unify clause"))
 
-  (let [q '(-> (table [{:x [1 2 3]}] [x])
-               (unnest x :y))]
+  (let [q '(unnest {:y x})]
     (t/is (= q
-             (roundtrip-q q))
-          "unnest in threading")))
+             (roundtrip-q-tail q))
+          "unnest op"))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Unnest takes only a single binding"
+         (roundtrip-q-tail '(unnest {:a b :c d}))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Unnest takes only a single binding"
+         (roundtrip-q-tail '(unnest {:a b} {:c d}))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Unnest takes only a single binding"
+         (roundtrip-q-tail '(unnest a)))))

@@ -258,7 +258,7 @@
                    (fn [idx {:keys [provided-vars ra-plan]}]
                      (let [var->col (->> provided-vars
                                          (into {} (map (juxt col-sym (if (= idx 0) col-sym (partial col-sym (str "_r" idx)))))))]
-                       ;;by not prefixing the leftmost rels columens, apply params need not be rewritten in the case its an apply binary join.
+                       ;;by not prefixing the leftmost rels columns, apply params need not be rewritten in the case its an apply binary join.
                        {:ra-plan [:rename var->col
                                   ra-plan]
                         :provided-vars (set (vals var->col))
@@ -471,6 +471,20 @@
 (defn- wrap-project [plan projection]
   [:project projection plan])
 
+(defn- plan-col-spec [^ColSpec col-spec provided-vars]
+  (let [col (col-sym (.attr col-spec))
+        spec-expr (.expr col-spec)
+        _ (required-vars-available? spec-expr provided-vars)
+        {:keys [subqueries expr]} (plan-expr-with-subqueries spec-expr)]
+    {:l col :r expr :subqueries subqueries :logic-var? (instance? Expr$LogicVar spec-expr)}))
+
+(defn- plan-var-spec [^VarSpec spec]
+  (let [var (col-sym (.attr spec))
+        spec-expr (.expr spec)
+        {:keys [subqueries expr]} (plan-expr-with-subqueries spec-expr)]
+    {:l var :r expr :required-vars (required-vars spec-expr)
+     :subqueries subqueries :logic-var? (instance? Expr$LogicVar spec-expr)}))
+
 (extend-protocol PlanQueryTail
   Query$Where
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
@@ -487,17 +501,13 @@
 
   Query$WithCols
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [projections (for [binding (.cols this)
-                            :let [var (col-sym (.attr ^ColSpec binding))
-                                  expr (.expr ^ColSpec binding)
-                                  _ (required-vars-available? expr provided-vars)]]
-                        (assoc (plan-expr-with-subqueries expr) :var var))
+    (let [projections (map #(plan-col-spec % provided-vars) (.cols this))
           return-vars (set/union
                        provided-vars
-                       (set (map :var projections)))]
+                       (set (map :l projections)))]
       {:ra-plan
        [:project (vec return-vars)
-        [:map (mapv (fn [{:keys [var expr]}] {var expr}) projections)
+        [:map (mapv (fn [{:keys [l r]}] {l r}) projections)
          (-> ra-plan
              (wrap-expr-subqueries (mapcat :subqueries projections)))]]
        :provided-vars return-vars}))
@@ -529,9 +539,13 @@
 
   Query$UnnestCol
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [mapping {(col-sym (.unnestedCol this)) (col-sym (.lv ^Expr$LogicVar (.unnestCol this)))}]
-      {:ra-plan [:unwind mapping ra-plan]
-       :provided-vars (conj provided-vars (ffirst mapping))})))
+    (let [{:keys [l r subqueries logic-var?]} (plan-col-spec (.col this) provided-vars)]
+      (when (seq subqueries)
+        (throw (UnsupportedOperationException. "TODO: Add support for subqueries in unnest expr")))
+      (when-not logic-var?
+        (throw (UnsupportedOperationException. "TODO: Add support for expr in unnest")))
+      {:ra-plan [:unwind {l r} ra-plan]
+       :provided-vars (conj provided-vars l)})))
 
 (defn plan-join [join-type query args binding]
   (let [out-bindings (mapv plan-out-spec binding) ;;TODO refelection (interface here?)
@@ -567,19 +581,22 @@
   Query$With
   (plan-unify-clause [this]
     (for [binding (.vars this)
-          :let [var (col-sym (.attr ^VarSpec binding))
-                expr (.expr ^VarSpec binding)
-                planned-expr (plan-expr-with-subqueries expr)]]
-      [:with (assoc planned-expr
-                    :provided-vars #{var}
-                    :required-vars (required-vars expr))]))
+          :let [{:keys [l r required-vars subqueries]} (plan-var-spec binding)]]
+      [:with {:expr r
+              :provided-vars #{l}
+              :required-vars required-vars
+              :subqueries subqueries}]))
 
   Query$UnnestVar
-  (plan-unify-clause [unnest]
-    (let [mapping {(col-sym (.lv ^Expr$LogicVar (.unnestVar unnest))) (col-sym (.unnestedVar unnest))}]
-      [[:unnest {:mapping mapping
-                 :required-vars #{(ffirst mapping)}
-                 :provided-vars #{(second (first mapping))}}]]))
+  (plan-unify-clause [this]
+    (let [{:keys [l r subqueries logic-var? required-vars]} (plan-var-spec (.var this))]
+      (when (seq subqueries)
+        (throw (UnsupportedOperationException. "TODO: Add support for subqueries in unnest expr")))
+      (when-not logic-var?
+        (throw (UnsupportedOperationException. "TODO: Add support for expr in unnest")))
+      [[:unnest {:expr r
+                 :required-vars required-vars
+                 :provided-vars #{l}}]]))
 
   Query$Join
   (plan-unify-clause [this]
@@ -616,14 +633,17 @@
                        (wrap-expr-subqueries (mapcat :subqueries renamed-withs)))]}
         (wrap-unify var->cols))))
 
-(defn wrap-unnest [acc-plan {:keys [mapping] :as _unnest}]
+(defn wrap-unnest [acc-plan {:keys [provided-vars expr] :as _unnest}]
   (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan])
+        ;;TODO is it safe to do unique-cols over a just the parent plan, it has no context of what var unnest
+        ;; is going to introduce, maybe it renames a col to one this unnest introduces.
+        ;; Behaviour should mirror with, could add a help fn.
         [{acc-plan-with-unique-cols :ra-plan}] rels
-        original-unnested-col (second (first mapping))
-        unnested-col (col-sym (*gensym* (str original-unnested-col)))]
+        original-unnested-col (first provided-vars)
+        unnested-col (col-sym (*gensym* original-unnested-col))]
     (wrap-unify
      {:ra-plan [:unwind ;; confusingly the unwind operator takes it inverted
-                {unnested-col (first (get var->cols (ffirst mapping)))}
+                {unnested-col (first (get var->cols expr))}
                 acc-plan-with-unique-cols]}
      (update var->cols original-unnested-col (fnil conj #{}) unnested-col))))
 

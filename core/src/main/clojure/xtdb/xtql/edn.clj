@@ -259,21 +259,25 @@
 (defn- parse-var-specs
   "[{to-var (from-expr)}]"
   [specs _query]
-  (->> specs
-       (into [] (mapcat (fn [spec]
-                          (if (map? spec)
-                            (for [[attr expr] spec]
-                              (do
-                                (when-not (symbol? attr)
-                                  (throw (err/illegal-arg
-                                          :xtql/malformed-var-spec
-                                          {:spec spec
-                                           ::err/message "Attribute in var spec must be symbol"})))
-                                (VarSpec/of (str attr) (parse-expr expr))))
-                            (throw (err/illegal-arg
-                                    :xtql/malformed-var-spec
-                                    {:spec spec
-                                     ::err/message "Var specs must be pairs of bindings"}))))))))
+  (letfn [(parse-var-spec [[attr expr]]
+            (when-not (symbol? attr)
+              (throw (err/illegal-arg
+                      :xtql/malformed-var-spec {:attr attr :expr expr
+                       ::err/message "Attribute in var spec must be symbol"})))
+
+
+            (VarSpec/of (str attr) (parse-expr expr)))]
+
+    (cond
+      (map? specs) (mapv parse-var-spec specs)
+      (sequential? specs) (->> specs
+                               (into [] (mapcat (fn [spec]
+                                                  (if (map? spec) (map parse-var-spec spec)
+                                                      (throw (err/illegal-arg
+                                                              :xtql/malformed-var-spec
+                                                              {:spec spec
+                                                               ::err/message "Var specs must be pairs of bindings"})))))))
+      :else (throw (UnsupportedOperationException.)))))
 
 (defn- parse-col-specs
   "[{:to-col (from-expr)} :col ...]"
@@ -436,8 +440,8 @@
                           (mapv unparse (.bindings this))))
   Query$ParamTable (unparse [this]
                      (list 'table (symbol (.v (.param this))) (mapv unparse (.bindings this))))
-  Query$UnnestCol (unparse [this] (list 'unnest (symbol (.lv ^Expr$LogicVar (.unnestCol this))) (keyword (.unnestedCol this))))
-  Query$UnnestVar (unparse [this] (list 'unnest (symbol (.lv ^Expr$LogicVar (.unnestVar this))) (symbol (.unnestedVar this)))))
+  Query$UnnestCol (unparse [this] (list 'unnest (unparse (.col this))))
+  Query$UnnestVar (unparse [this] (list 'unnest (unparse (.var this)))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -521,19 +525,19 @@
 (defmethod parse-query 'table [this] (parse-table this))
 (defmethod parse-unify-clause 'table [this] (parse-table this))
 
-(defmethod parse-query-tail 'unnest [[_ unnest-col unnested-col :as this]]
-  (when-not (= 3 (count this))
-    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes exactly 3 arguments"})))
-  (when-not (and (symbol? unnest-col) (keyword? unnested-col))
-    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes a symbol and a keyword in query tail context"})))
-  (Query/unnestCol (Expr/lVar (str unnest-col)) (subs (str unnested-col) 1)))
+(defn check-unnest [binding unnest]
+  (when-not (and (= 2 (count unnest))
+                 (map? binding)
+                 (= 1 (count binding)))
+    (throw (err/illegal-arg :xtql/unnest {:unnest unnest ::err/message "Unnest takes only a single binding"}))))
 
-(defmethod parse-unify-clause 'unnest [[_ unnest-var unnested-var :as this]]
-  (when-not (= 3 (count this))
-    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes exactly 3 arguments"})))
-  (when-not (and (symbol? unnest-var) (symbol? unnested-var))
-    (throw (err/illegal-arg :xtql/unnest {:unnest this :message "Unnest takes two symbols in a unify context"})))
-  (Query/unnestVar (Expr/lVar (str unnest-var)) (str unnested-var)))
+(defmethod parse-query-tail 'unnest [[_ binding :as this]]
+  (check-unnest binding this)
+  (Query/unnestCol (first (parse-col-specs binding this))))
+
+(defmethod parse-unify-clause 'unnest [[_ binding :as this]]
+  (check-unnest binding this)
+  (Query/unnestVar (first (parse-var-specs binding this))))
 
 (def order-spec-opt-keys #{:val :dir :nulls})
 
