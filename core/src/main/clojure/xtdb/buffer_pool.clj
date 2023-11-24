@@ -392,14 +392,14 @@
 
 (defn ->remote ^xtdb.IBufferPool [{:keys [^BufferAllocator allocator
                                           object-store
-                                          data-dir
+                                          disk-store
                                           max-cache-bytes
                                           max-cache-entries]
                                    :or {max-cache-entries 1024
                                         max-cache-bytes 536870912}}]
   (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                       (ArrowBufLRU. 16 max-cache-entries max-cache-bytes)
-                      data-dir
+                      disk-store
                       object-store))
 
 (defmethod ig/prep-key ::remote [_ opts]

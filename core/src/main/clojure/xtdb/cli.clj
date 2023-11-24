@@ -8,7 +8,8 @@
             [clojure.walk :as walk]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import java.io.File
            java.net.URL
            java.util.Map))
@@ -24,8 +25,8 @@
   (System/getenv (str env-var)))
 
 (defn edn-read-string [edn-string]
-  (edn/read-string {:readers {'env read-env-var}}
-                   edn-string))
+  (ig/read-string {:readers {'env read-env-var}}
+                  edn-string))
 
 (defn json-read-string [json-string]
   (walk/postwalk

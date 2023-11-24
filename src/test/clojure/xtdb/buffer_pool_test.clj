@@ -40,7 +40,7 @@
   (util/with-open [os (os-test/->InMemoryObjectStore (TreeMap.))
                    bp (bp/->remote {:allocator tu/*allocator*
                                     :object-store os
-                                    :data-dir (create-tmp-dir)})]
+                                    :disk-store (create-tmp-dir)})]
     (bp/clear-cache-counters)
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))
@@ -128,7 +128,7 @@
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf))))))
 
     (when disk-store
-      (t/testing "expect a file to exist under our :data-dir"
+      (t/testing "expect a file to exist under our :disk-store"
         (t/is (util/path-exists (.resolve disk-store k)))
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.resolve disk-store k))))))
 
@@ -183,7 +183,7 @@
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/->remote {:allocator tu/*allocator*
                 :object-store (->SimulatedObjectStore (atom []) (atom {}))
-                :data-dir (create-tmp-dir)}))
+                :disk-store (create-tmp-dir)}))
 
 (defn get-remote-calls [test-bp]
   @(:calls (:remote-store test-bp)))
