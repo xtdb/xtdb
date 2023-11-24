@@ -408,29 +408,37 @@ public sealed interface Query {
     }
 
     final class UnnestVar implements UnifyClause {
-        public final Expr unnestVar;
-        public final String unnestedVar;
+        public final VarSpec var;
 
-        private UnnestVar(Expr.LogicVar unnestVar, String unnestedVar) {
-            this.unnestVar = unnestVar;
-            this.unnestedVar = unnestedVar;
+        private UnnestVar(VarSpec var) {
+            this.var = var;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("(unnest %s)", var);
         }
     }
-    static UnnestVar unnestVar(Expr.LogicVar unnestVar, String unnestedVar){
-        return new UnnestVar(unnestVar, unnestedVar);
+
+    static UnnestVar unnestVar(VarSpec var) {
+        return new UnnestVar(var);
     }
 
     final class UnnestCol implements QueryTail {
-        public final Expr unnestCol;
-        public final String unnestedCol;
+        public final ColSpec col;
 
-        private UnnestCol (Expr.LogicVar unnestCol, String unnestedCol) {
-            this.unnestCol = unnestCol;
-            this.unnestedCol = unnestedCol;
+        private UnnestCol(ColSpec col) {
+            this.col = col;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("(unnest %s)", col);
         }
     }
 
-    static UnnestCol unnestCol(Expr.LogicVar unnestCol, String unnestedCol){
-        return new UnnestCol(unnestCol, unnestedCol);
+    static UnnestCol unnestCol(ColSpec col) {
+        return new UnnestCol(col);
     }
+
 }

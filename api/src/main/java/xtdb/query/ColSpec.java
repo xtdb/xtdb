@@ -11,7 +11,7 @@ public final class ColSpec {
 
     @Override
     public String toString() {
-        return String.format("{%s %s}", attr, expr);
+        return String.format("{:%s %s}", attr, expr);
     }
 
     public static ColSpec of(String attr, Expr expr) {

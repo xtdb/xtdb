@@ -255,19 +255,19 @@
 
 (deftest test-unnest
   (t/is (= ['(unify (table [{:x [1 2 3]}] [x])
-                    (unnest x y))
+                    (unnest {y x}))
             {"unify" [{"table" [{"x" [1 2 3]}]
                        "bind" ["x"]}
-                      {"unnest" ["x" "y"]}]}]
+                      {"unnest" [{"y" "x"}]}]}]
            (roundtrip-q {"unify" [{"table" [{"x" [1 2 3]}]
                                    "bind" ["x"]}
-                                  {"unnest" ["x" "y"]}]})))
+                                  {"unnest" [{"y" "x"}]}]})))
 
   (t/is (= ['(-> (table [{:x [1 2 3]}] [x])
-                 (unnest x :y))
+                 (unnest {:y x}))
             [{"table" [{"x" [1 2 3]}]
               "bind" ["x"]}
-             {"unnest" ["x" "y"]}]]
+             {"unnest" [{"y" "x"}]}]]
            (roundtrip-q [{"table" [{"x" [1 2 3]}]
                           "bind" ["x"]}
-                         {"unnest" ["x" "y"]}] ))))
+                         {"unnest" [{"y" "x"}]}] ))))

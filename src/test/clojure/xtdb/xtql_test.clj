@@ -2569,19 +2569,19 @@
   (t/is (= [{:y 1} {:y 2} {:y 3}]
            (xt/q tu/*node*
                  '(-> (unify (table [{:x [1 2 3]}] [x])
-                             (unnest x y))
+                             (unnest {y x}))
                       (return y)))))
 
   (t/is (= [{:y 1} {:y 2} {:y 3}]
            (xt/q tu/*node*
                  '(-> (table [{:x [1 2 3]}] [x])
-                      (unnest x :y)
+                      (unnest {:y x})
                       (return y)))))
 
   (t/is (= [{:y 1} {:y 3}]
            (xt/q tu/*node*
                  '(-> (unify (table [{:x [1 2 3]}] [x])
-                             (unnest x y)
+                             (unnest {y x})
                              (table [{:y 1} {:y 3}] [y]))
                       (return y))))
         "unify unnested column"))

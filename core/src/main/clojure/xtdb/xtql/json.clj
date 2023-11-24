@@ -312,19 +312,20 @@
 
     (Query/with (parse-var-specs with query))))
 
-(defmethod parse-query-tail 'unnest [{:strs [unnest] :as query}]
-  (when-not (and (vector? unnest) (= 2 (count unnest)))
-    (throw (err/illegal-arg :xtql/malformed-with {:unnest query})))
+(defn check-unnest [unnest]
+  (when-not (and (vector? unnest)
+                 (= 1 (count unnest))
+                 (map? (first unnest))
+                 (= 1 (count (first unnest))))
+    (throw (err/illegal-arg :xtql/unnest {:unnest unnest ::err/message "Unnest takes only a single binding"}))))
 
-  (let [[unnest-col unnested-col] unnest]
-    (Query/unnestCol (parse-expr unnest-col) unnested-col)))
+(defmethod parse-query-tail 'unnest [{:strs [unnest] :as this}]
+  (check-unnest unnest)
+  (Query/unnestCol (first (parse-col-specs unnest this))))
 
-(defmethod parse-unify-clause 'unnest [{:strs [unnest] :as query}]
-  (when-not (and (vector? unnest) (= 2 (count unnest)))
-    (throw (err/illegal-arg :xtql/malformed-with {:unnest query})))
-
-  (let [[unnest-var unnested-var] unnest]
-    (Query/unnestVar (parse-expr unnest-var) unnested-var)))
+(defmethod parse-unify-clause 'unnest [{:strs [unnest] :as this}]
+  (check-unnest unnest)
+  (Query/unnestVar (first (parse-var-specs unnest this))))
 
 (defmethod parse-query-tail 'without [{:strs [without] :as query}]
   (if-not (and (vector? without) (every? string? without))
@@ -385,8 +386,8 @@
                                 "bind" (mapv unparse (.bindings q))})
   Query$ParamTable (unparse [q] {"table" (.v (.param q))
                                  "bind" (mapv unparse (.bindings q))})
-  Query$UnnestVar (unparse [q] {"unnest" [(unparse (.unnestVar q)) (.unnestedVar q)]})
-  Query$UnnestCol (unparse [q] {"unnest" [(unparse (.unnestCol q)) (.unnestedCol q)]}))
+  Query$UnnestVar (unparse [this] {"unnest" [(unparse (.var this))]})
+  Query$UnnestCol (unparse [this] {"unnest" [(unparse (.col this))]}))
 
 (def order-spec-opt-keys (set (map name xtql.edn/order-spec-opt-keys)))
 
