@@ -18,3 +18,7 @@ dependencies {
     compileOnlyApi(files("src/main/resources"))
     implementation("org.clojure", "clojure", "1.11.1")
 }
+
+tasks.javadoc {
+    exclude("xtdb/IResultSet", "xtdb/util/*")
+}

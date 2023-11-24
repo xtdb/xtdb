@@ -40,3 +40,5 @@ dependencies {
     api("commons-codec", "commons-codec", "1.15")
     api("com.carrotsearch", "hppc", "0.9.1")
 }
+
+tasks.javadoc.get().enabled = false
