@@ -5,12 +5,10 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
-            [xtdb.node :as node]
             [xtdb.test-util :as tu])
-  (:import xtdb.node.Node
-           java.time.Duration))
+  (:import java.time.Duration))
 
-(defn ingest-tpch [^Node node {:keys [scale-factor]}]
+(defn ingest-tpch [node {:keys [scale-factor]}]
   (bench/with-timing :submit-docs
     (tpch/submit-docs! node scale-factor))
 

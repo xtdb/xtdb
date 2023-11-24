@@ -6,7 +6,7 @@
             [xtdb.api.protocols :as xtp]
             [xtdb.bench2 :as b]
             [xtdb.bench2.measurement :as bm]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (io.micrometer.core.instrument MeterRegistry Timer)
@@ -288,7 +288,7 @@
   ;; testing single point queries
   ;;;;;;;;;;;;;
 
-  (def node (node/start-node (node-dir->config node-dir)))
+  (def node (xtn/start-node (node-dir->config node-dir)))
 
   (def get-item-query '{:find [i_id i_u_id i_initial_price i_current_price]
                         :in [i_id]

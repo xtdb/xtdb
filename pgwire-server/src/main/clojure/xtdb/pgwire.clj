@@ -10,7 +10,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
@@ -2051,7 +2051,7 @@
   (run! stop-server (vec (.values servers))))
 
 ;; integrant hooks to make pgwire an xtdb module
-; e.g (node/start-node {:xtdb/pgwire {:port 5432}})
+; e.g (xtn/start-node {:xtdb/pgwire {:port 5432}})
 ; will provide a pgwire server as part of node start.
 
 (defmethod ig/prep-key :xtdb/pgwire [_ opts]

@@ -7,7 +7,7 @@
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
             [xtdb.logical-plan :as lp]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             xtdb.object-store
             [xtdb.operator :as op]
             xtdb.operator.scan
@@ -61,7 +61,7 @@
      (f))))
 
 (defn with-node [f]
-  (util/with-open [node (node/start-node *node-opts*)]
+  (util/with-open [node (xtn/start-node *node-opts*)]
     (binding [*node* node]
       (f))))
 
@@ -85,8 +85,8 @@
 
 (defn with-http-client-node [f]
   (let [port (free-port)]
-    (util/with-open [_ (node/start-node (-> *node-opts*
-                                            (assoc-in [:xtdb/server :port] port)))]
+    (util/with-open [_ (xtn/start-node (-> *node-opts*
+                                           (assoc-in [:xtdb/server :port] port)))]
       (binding [*node* (client/start-client (str "http://localhost:" port))]
         (f)))))
 
@@ -248,19 +248,19 @@
                                                      rows-per-chunk log-limit page-limit instant-src]
                                               :or {buffers-dir "objects"}}]
   (let [instant-src (or instant-src (->mock-clock))]
-    (node/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                     :instant-src instant-src}
-                      :xtdb.tx-producer/tx-producer {:instant-src instant-src}
-                      :xtdb.buffer-pool/local {:data-dir (.resolve node-dir buffers-dir)}
-                      :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
-                                         (into {} (filter val)))
-                      :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit}
-                                                    (into {} (filter val)))})))
+    (xtn/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
+                                                    :instant-src instant-src}
+                     :xtdb.tx-producer/tx-producer {:instant-src instant-src}
+                     :xtdb.buffer-pool/local {:data-dir (.resolve node-dir buffers-dir)}
+                     :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
+                                        (into {} (filter val)))
+                     :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit}
+                                                   (into {} (filter val)))})))
 
 (defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
-  (node/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}
-                           :xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                          :clock (->mock-clock)}}))
+  (xtn/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}
+                          :xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
+                                                         :clock (->mock-clock)}}))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

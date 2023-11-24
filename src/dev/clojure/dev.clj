@@ -5,7 +5,7 @@
             [integrant.core :as i]
             [integrant.repl :as ir]
             [xtdb.datasets.tpch :as tpch]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
@@ -20,7 +20,7 @@
 (def node nil)
 
 (defmethod i/init-key ::xtdb [_ {:keys [node-opts]}]
-  (alter-var-root #'node (constantly (node/start-node node-opts)))
+  (alter-var-root #'node (constantly (xtn/start-node node-opts)))
   node)
 
 (defmethod i/halt-key! ::xtdb [_ node]

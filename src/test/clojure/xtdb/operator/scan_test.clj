@@ -1,7 +1,7 @@
 (ns xtdb.operator.scan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             xtdb.operator
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
@@ -20,7 +20,7 @@
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
 (t/deftest test-simple-scan
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :col1 "foo1"}]
                         [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]
                         [:put :xt_docs {:xt/id :foo, :col2 "baz2"}]])
@@ -31,7 +31,7 @@
                                {:node node}))))))
 
 (t/deftest test-simple-scan-with-namespaced-attributes
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :the-ns/col1 "foo1"}]
                         [:put :xt_docs {:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
                         [:put :xt_docs {:xt/id :foo, :the-ns/col2 "baz2"}]])
@@ -42,7 +42,7 @@
                                {:node node}))))))
 
 (t/deftest test-duplicates-in-scan-1
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
 
     (t/is (= [{:xt/id :foo}]
@@ -50,7 +50,7 @@
                           {:node node})))))
 
 (t/deftest test-chunk-boundary
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
     (->> (for [i (range 110)]
            [:put :xt_docs {:xt/id i}])
          (partition-all 10)
@@ -61,7 +61,7 @@
                                {:node node}))))))
 
 (t/deftest test-smaller-page-limit
-  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
     (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
 
     (tu/finish-chunk! node)
@@ -71,7 +71,7 @@
                                {:node node}))))))
 
 (t/deftest test-metadata
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
     (->> (for [i (range 100)]
            [:put :xt_docs {:xt/id i}])
          (partition-all 20)
@@ -83,7 +83,7 @@
                                {:node node})))
           "testing only getting some trie matches"))
 
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
     (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
     (xt/submit-tx node (for [i (range 20)] [:delete :xt_docs i]))
 
@@ -97,7 +97,7 @@
                           {:node node}))
           "testing nothing matches"))
 
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :boolean-or-int true}]
                         [:put :xt_docs {:xt/id 2 :boolean-or-int 2}]])
     (tu/finish-chunk! node)
@@ -108,7 +108,7 @@
           "testing boolean metadata")))
 
 (t/deftest test-past-point-point-queries
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
                                   [:put :xt_docs {:xt/id :doc2 :v 1} {:for-valid-time [:from #inst "2015"]}]
                                   [:put :xt_docs {:xt/id :doc3 :v 1} {:for-valid-time [:from #inst "2018"]}]])
@@ -155,7 +155,7 @@
                                          {:node node :basis {:tx tx2}})))))))
 
 (t/deftest test-past-point-point-queries-with-valid-time
-  (with-open [node (node/start-node tu/*node-opts*)]
+  (with-open [node (xtn/start-node tu/*node-opts*)]
     (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
                                   [:put :xt_docs {:xt/id :doc2 :v 1} {:for-valid-time [:from #inst "2015"]}]
                                   [:put :xt_docs {:xt/id :doc3 :v 1} {:for-valid-time [:from #inst "2018"]}]])
@@ -236,7 +236,7 @@
                                  {:node node :basis {:tx tx2}})))))))
 
 (t/deftest test-scanning-temporal-cols
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}
                          {:for-valid-time [:in #inst "2021" #inst "3000"]}]])
 
@@ -261,7 +261,7 @@
                  (dissoc :xt/system-from :xt/system-to))))))
 
 (t/deftest test-only-scanning-temporal-cols-45
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (let [{tt :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}]])]
 
       (t/is (= #{{:xt/valid-from (util/->zdt tt)
@@ -274,7 +274,7 @@
                                  {:node node})))))))
 
 (t/deftest test-aligns-temporal-columns-correctly-363
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
 
     (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
@@ -307,7 +307,7 @@
 (t/deftest test-for-valid-time-in-params
   (let [tt1 (util/->zdt #inst "2020-01-01")
         tt2 (util/->zdt #inst "2020-01-02")]
-    (with-open [node (node/start-node {})]
+    (with-open [node (xtn/start-node {})]
       (xt/submit-tx node [[:put :foo {:xt/id 1, :version "version 1" :last_updated "tx1"}
                            {:app-time-start tt1 :app-time-end nil}]])
 
@@ -328,7 +328,7 @@
                                                   '?_end nil}})))))))
 
 (t/deftest test-scan-col-types
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (let [^IRaQuerySource ra-src (util/component node :xtdb.operator/ra-query-source)]
       (letfn [(->col-types [tx]
                 (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt$id]])
@@ -411,7 +411,7 @@
                                 'xt/valid-to '(> ?app-time xt/valid-to)})))))))))
 
 (t/deftest test-content-pred
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
                         [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
     (t/is (= [{:first-name "Ivan", :xt/id :ivan}]
@@ -421,7 +421,7 @@
                           {:node node})))))
 
 (t/deftest test-absent-columns
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :col1 "foo1"}]
                         [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]])
 
@@ -441,7 +441,7 @@
   (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
         search-uuid #uuid "80000000-0000-0000-0000-000000000000"
         after-uuid #uuid "f0000000-0000-0000-0000-000000000000"]
-    (with-open [node (node/start-node {})]
+    (with-open [node (xtn/start-node {})]
       (xt/submit-tx node [[:put :xt-docs {:xt/id before-uuid :version 1}]
                           [:put :xt-docs {:xt/id search-uuid :version 1}]
                           [:put :xt-docs {:xt/id after-uuid :version 1}]])
@@ -497,7 +497,7 @@
         after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
         uuids [before-uuid search-uuid after-uuid]
         !search-uuid-versions (atom [])]
-    (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20 :page-limit 16}})]
+    (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20 :page-limit 16}})]
       (->> (for [i (range 110)]
              (let [uuid (rand-nth uuids)]
                (when (= uuid search-uuid)
@@ -518,7 +518,7 @@
                      set))))))
 
 (deftest test-iid-fast-path-multiple-pages
-  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
     (let [uuids (tu/uuid-seq 40)
           search-uuid (rand-nth uuids)]
       (xt/submit-tx node (for [uuid (take 20 uuids)] [:put :xt_docs {:xt/id uuid}]))
@@ -569,7 +569,7 @@
             "general case"))))
 
 (deftest test-live-tries-with-multiple-leaves-are-loaded-correctly-2710
-  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
     (-> (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
         (tu/then-await-tx node))
 
@@ -604,7 +604,7 @@
 
 (deftest duplicate-rows-2815
   (let [page-limit 16]
-    (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit page-limit}})]
+    (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:page-limit page-limit}})]
       (let [first-page (for [i (range page-limit)] (java.util.UUID. 0 i))
             second-page (for [i (range page-limit)] (java.util.UUID. 1 i))
             uuid (first first-page)]

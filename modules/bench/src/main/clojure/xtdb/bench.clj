@@ -4,7 +4,7 @@
             [xtdb.api.protocols :as xtp]
             [xtdb.indexer :as idx]
             [xtdb.kafka :as k]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.s3 :as s3]
             [xtdb.util :as util])
@@ -41,14 +41,14 @@
   (idx/finish-chunk! (util/component node :xtdb/indexer)))
 
 (defn start-node
-  (^xtdb.node.Node [] (start-node {}))
+  (^java.lang.AutoCloseable [] (start-node {}))
 
-  (^xtdb.node.Node [{:keys [node-id node-type ^Path node-tmp-dir]
+  (^java.lang.AutoCloseable [{:keys [node-id node-type ^Path node-tmp-dir]
                       :or {node-id (str (UUID/randomUUID))
                            node-type :in-memory}}]
    (log/info "Starting node, id:" node-id)
 
-   (node/start-node (case node-type
+   (xtn/start-node (case node-type
                       :in-memory {}
                       :local-fs {:xtdb.log/local-directory-log {:root-path (.resolve node-tmp-dir "log")}
                                  :xtdb.buffer-pool/local {:path (.resolve node-tmp-dir "objects")}}

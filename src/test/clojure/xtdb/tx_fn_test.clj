@@ -1,7 +1,7 @@
 (ns xtdb.tx-fn-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.indexer :as idx]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -196,7 +196,7 @@
 (t/deftest handle-interrupted-exception-614
   (t/is (thrown-with-msg?
          Exception #"sleep interrupted"
-         @(with-open [node (node/start-node {})]
+         @(with-open [node (xtn/start-node {})]
             (xt/submit-tx node [[:put-fn :hello-world
                                  '(fn hello-world [id]
                                     (sleep 200)

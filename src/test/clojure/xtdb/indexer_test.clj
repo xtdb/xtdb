@@ -7,7 +7,7 @@
             [xtdb.api.protocols :as xtp]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
@@ -21,7 +21,7 @@
            xtdb.api.protocols.TransactionInstant
            xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
-           xtdb.node.Node
+           java.lang.AutoCloseable
            (xtdb.watermark IWatermarkSource)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -162,7 +162,7 @@
               (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (let [{tt :system-time, :as tx} (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
                                                   {:default-all-valid-time? false})]
       (t/is (= [{:xt/id :foo, :version 0,
@@ -290,7 +290,7 @@
                  (.columnField mm "xt_docs" "struct")))))))
 
 (t/deftest round-trips-nils
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id "nil-bar"
                                         :foo "foo"
                                         :bar nil}]
@@ -596,7 +596,7 @@
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)
                                  (log* logger level throwable message))))]
-      (with-open [node (node/start-node {})]
+      (with-open [node (xtn/start-node {})]
         (t/is (thrown-with-msg? Exception #"oh no!"
                                 (-> (xt/submit-tx node [[:put :xt_docs {:xt/id "foo", :count 42}]])
                                     (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
@@ -609,7 +609,7 @@
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)
                                  (log* logger level throwable message))))]
-      (with-open [node (node/start-node {})]
+      (with-open [node (xtn/start-node {})]
         (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
                                 (-> (xt/submit-tx node [[:sql "INSERT INTO foo(xt$id) VALUES (1)"]])
                                     (tu/then-await-tx node (Duration/ofSeconds 1)))))))))

@@ -3,7 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
@@ -102,7 +102,7 @@
                           {:node tu/*node* :basis {:tx tx} :default-tz #time/zone "Z"})))))
 
 (deftest test-min-max-on-xt-id
-  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
     (-> (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
         (tu/then-await-tx node))
 

@@ -5,7 +5,7 @@
             [cognitect.transit :as transit]
             [xtdb.cli :as cli]
             xtdb.log
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
@@ -137,7 +137,7 @@
 (comment
   (require '[xtdb.api.protocols :as xtp])
 
-  (with-open [node (node/start-node {:xtdb/c1-import {:export-log-path "/tmp/tpch"}})]
+  (with-open [node (xtn/start-node {:xtdb/c1-import {:export-log-path "/tmp/tpch"}})]
     (try
       (xtp/datalog-query node (-> '{:find [?cust ?nkey ?n_name]
                                    :where [[?cust :c_nationkey ?nkey]

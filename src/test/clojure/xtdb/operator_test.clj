@@ -3,7 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
@@ -20,7 +20,7 @@
       (f (.tableMetadata metadata-mgr meta-rdr meta-file-path)))))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
     (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]])
         (tu/then-await-tx node))
 
@@ -73,7 +73,7 @@
                              tx2)))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
     (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]
                             [:put :xt_docs {:name "James", :xt/id :jms}]
                             [:put :xt_docs {:name "Ivan", :xt/id :iva}]])
@@ -112,7 +112,7 @@
                                  {:node node, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (let [{tt1 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
           {tt2 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]

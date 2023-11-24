@@ -4,17 +4,18 @@
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch.ra]
             [xtdb.indexer :as idx]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import java.nio.file.attribute.FileAttribute
+  (:import java.lang.AutoCloseable
+           java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            java.time.Duration
            java.util.UUID))
 
 (defn run-multinode [{:keys [scale-factor ^long sleep-ms]} start-node]
   (log/info "Starting primary node")
-  (with-open [^xtdb.node.Node primary-node (start-node)]
+  (with-open [^AutoCloseable primary-node (start-node)]
     (let [!last-tx (future
                      (let [last-tx (tpch/submit-docs! primary-node scale-factor)]
                        (log/info "last submitted tx:" last-tx)
@@ -23,18 +24,18 @@
         (Thread/sleep sleep-ms)
 
         (log/info "Starting secondary node 1")
-        (with-open [^xtdb.node.Node secondary-node1 (start-node)]
+        (with-open [^java.lang.AutoCloseable secondary-node1 (start-node)]
           (Thread/sleep sleep-ms)
 
           (log/info "Starting secondary node 2")
-          (with-open [^xtdb.node.Node secondary-node2 (start-node)]
+          (with-open [^java.lang.AutoCloseable secondary-node2 (start-node)]
             (Thread/sleep sleep-ms)
 
             (log/info "Starting secondary node 3")
-            (with-open [^xtdb.node.Node secondary-node3 (start-node)]
+            (with-open [^java.lang.AutoCloseable secondary-node3 (start-node)]
               (let [last-tx @!last-tx
                     query tpch.ra/q1-pricing-summary-report]
-                (letfn [(test-node [k ^xtdb.node.Node node]
+                (letfn [(test-node [k ^java.lang.AutoCloseable node]
                           (log/info "awaiting" k "node")
                           (tu/then-await-tx last-tx node (Duration/ofHours 1))
                           (log/info "rows:"
@@ -48,7 +49,7 @@
                   (idx/finish-chunk! (util/component primary-node :xtdb/indexer))
 
                   (log/info "Starting post finish-chunk node")
-                  (with-open [^xtdb.node.Node secondary-node4 (start-node)]
+                  (with-open [^java.lang.AutoCloseable secondary-node4 (start-node)]
                     (test-node :secondary4 secondary-node4)))))))
 
         (finally
@@ -60,7 +61,7 @@
                    :xtdb.buffer-pool/local {:path (.resolve node-dir "objects")}}]
     (run-multinode {:scale-factor 0.1, :sleep-ms 60000}
                    (fn []
-                     (node/start-node node-opts)))))
+                     (xtn/start-node node-opts)))))
 
 (defn -main [& args]
   (try

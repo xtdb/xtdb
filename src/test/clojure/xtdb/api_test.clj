@@ -2,7 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.util :as util]
             [xtdb.error :as err])
@@ -182,7 +182,7 @@
                               "James" "Matt"])))))
 
 (t/deftest start-and-query-empty-node-re-231-test
-  (with-open [n (node/start-node {})]
+  (with-open [n (xtn/start-node {})]
     (t/is (= [] (xt/q n "select a.a from a a" {})))))
 
 (t/deftest test-basic-sql-dml

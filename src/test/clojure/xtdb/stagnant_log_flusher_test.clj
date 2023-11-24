@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.log :as xt-log]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.reader :as ivr])
@@ -91,7 +91,7 @@
     (= (:tx (last (node-log node))) (.latestCompletedTx indexer))))
 
 (defn start-node ^java.lang.AutoCloseable [flusher-duration & flusher-opts]
-  (node/start-node {:xtdb.stagnant-log-flusher/flusher (apply hash-map :duration flusher-duration flusher-opts)}))
+  (xtn/start-node {:xtdb.stagnant-log-flusher/flusher (apply hash-map :duration flusher-duration flusher-opts)}))
 
 (t/deftest if-log-does-not-get-a-new-msg-in-xx-time-we-submit-a-flush-test
   (with-open [node (start-node #time/duration "PT0.001S")]

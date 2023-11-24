@@ -2,7 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.types :as types]))
@@ -10,7 +10,7 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (deftest test-scan
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 2}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 2}})]
     (let [scan-emitter (util/component node :xtdb.operator.scan/scan-emitter)]
       (xt/submit-tx node [[:put :foo {:xt/id "foo1"}]
                           [:put :bar {:xt/id "bar1"}]])

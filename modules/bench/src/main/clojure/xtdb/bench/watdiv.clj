@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [xtdb.bench :as bench]
             [xtdb.api :as xt]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu])
   (:import java.time.Duration))
 
@@ -53,7 +53,7 @@
         (count (xt/q node query))))))
 
 (comment
-  (with-open [node (node/start-node {})]
+  (with-open [node (xtn/start-node {})]
     (ingest-watdiv node (io/file "/tmp/watdiv-10M.edn"))
     (query-watdiv node (io/file "/tmp/watdiv-stress-100-queries.1.edn"))))
 

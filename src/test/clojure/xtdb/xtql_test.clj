@@ -9,7 +9,7 @@
             [xtdb.james-bond :as bond]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.node :as node])
+            [xtdb.node :as xtn])
   (:import (xtdb.types ClojureForm)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -1124,7 +1124,7 @@
 
 #_
 (t/deftest bug-non-string-table-names-599
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put :t1 {:xt/id id,
@@ -1148,7 +1148,7 @@
 
 #_
 (t/deftest bug-dont-throw-on-non-existing-column-597
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put :t1 {:xt/id id,
@@ -1171,7 +1171,7 @@
 
 #_
 (t/deftest add-better-metadata-support-for-keywords
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put :t1 {:xt/id id,
@@ -2266,7 +2266,7 @@
 
 #_
 (t/deftest test-metadata-filtering-for-time-data-607
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1}})]
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1}})]
     (xt/submit-tx node [[:put :docs {:xt/id 1 :from-date #time/date "2000-01-01"}]
                         [:put :docs {:xt/id 2 :from-date #time/date "3000-01-01"}]])
     (t/is (= [{:id 1}]
@@ -2400,7 +2400,7 @@
                              :d (= #time/time "08:12:13.366" #time/time "08:12:13.366")}))))))
 
 (t/deftest bug-temporal-queries-wrong-at-boundary-2531
-  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 10}
+  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 10}
                                      :xtdb.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}
                                      :xtdb.log/memory-log {:instant-src (tu/->mock-clock)}})]
     (doseq [i (range 10)]

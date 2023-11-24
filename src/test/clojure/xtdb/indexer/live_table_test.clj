@@ -3,7 +3,7 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api.protocols :as xtp]
             [xtdb.indexer.live-index :as live-index]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
@@ -125,7 +125,7 @@
 
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]]
-    (with-open [node (node/start-node {})
+    (with-open [node (xtn/start-node {})
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp "foo")]
@@ -156,7 +156,7 @@
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
-    (with-open [node (node/start-node {})
+    (with-open [node (xtn/start-node {})
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)]
       (let [live-index-allocator (util/->child-allocator allocator "live-index")]

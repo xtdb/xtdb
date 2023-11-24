@@ -2,7 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [xtdb.log :as xt-log]
             [xtdb.indexer]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.tx-producer]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.util :as util])

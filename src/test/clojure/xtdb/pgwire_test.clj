@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
@@ -16,7 +16,7 @@
            (xtdb IResultSet)
            (java.lang Thread$State)
            (java.net SocketException)
-           (java.sql Connection DriverManager PreparedStatement)
+           (java.sql Connection PreparedStatement)
            (java.time Clock Instant ZoneId ZoneOffset)
            (java.util.concurrent CompletableFuture CountDownLatch TimeUnit)
            #_org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
@@ -25,13 +25,13 @@
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
 
-(def ^:dynamic ^:private *port*)
-(def ^:dynamic ^:private *node*)
-(def ^:dynamic ^:private *server*)
+(def ^:dynamic ^:private *port* nil)
+(def ^:dynamic ^:private *node* nil)
+(def ^:dynamic ^:private *server* nil)
 
 (defn require-node []
   (when-not *node*
-    (set! *node* (node/start-node {:xtdb.log/memory-log {:instant-src (tu/->mock-clock)}}))))
+    (set! *node* (xtn/start-node {:xtdb.log/memory-log {:instant-src (tu/->mock-clock)}}))))
 
 (defn require-server
   ([] (require-server {}))
@@ -865,8 +865,8 @@
 (deftest start-stop-as-module-test
   (tu/with-log-level 'xtdb.pgwire :off
     (let [port (tu/free-port)]
-      (with-open [_node (node/start-node {:xtdb/pgwire {:port port
-                                                         :num-threads 3}})]
+      (with-open [_node (xtn/start-node {:xtdb/pgwire {:port port
+                                                       :num-threads 3}})]
         (let [srv (get @#'pgwire/servers port)]
           (is (some? srv)))
 

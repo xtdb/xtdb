@@ -7,7 +7,7 @@
             [clojure.tools.logging :as log]
             [clojure.walk :as walk]
             [xtdb.error :as err]
-            [xtdb.node :as node]
+            [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import java.io.File
            java.net.URL
@@ -127,7 +127,7 @@
 
       help (println help)
 
-      :else (with-open [_node (node/start-node node-opts)]
+      :else (with-open [_node (xtn/start-node node-opts)]
               (log/info "Node started")
               ;; NOTE: This isn't registered until the node manages to start up
               ;; cleanly, so ctrl-c keeps working as expected in case the node
