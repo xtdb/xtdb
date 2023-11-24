@@ -487,7 +487,7 @@
   (when-not (every? keyword? cols)
     (throw (err/illegal-arg :xtql/malformed-without {:without this
                                                      ::err/message "Columns must be keywords in without"})))
-  (Query/without (map name cols)))
+  (Query/without (map (comp str symbol) cols)))
 
 (defmethod parse-query-tail 'return [[_ & cols :as this]]
   (Query/ret (parse-col-specs cols this)))

@@ -140,8 +140,8 @@
          (roundtrip-unify-clause '(with {:bar (+ 1 1)})))))
 
 (t/deftest test-parse-without
-  (let [q '(-> (from :foo [a])
-               (without :a :b :f))]
+  (let [q '(-> (from :foo [xt/id a])
+               (without :a :xt/id :f))]
     (t/is (= q
              (roundtrip-q q)))
 
