@@ -129,7 +129,7 @@ jobs:
       - name: Build Uberjar
         uses: gradle/gradle-build-action@v2.6.1
         with:
-          arguments: :docker:shadowJar
+          arguments: :docker:standalone:shadowJar
           cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -141,10 +141,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push Docker image
+      - name: Build and push Standalone Docker image
         uses: docker/build-push-action@v5
         with:
-          context: docker
+          context: docker/standalone
           platforms: linux/arm/v7,linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/xtdb/xtdb-standalone-ea:latest

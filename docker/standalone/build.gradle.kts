@@ -6,14 +6,7 @@ plugins {
 
 dependencies {
     implementation(project(":core"))
-    implementation(project(":pgwire-server"))
     implementation(project(":http-server"))
-    implementation(project(":modules:jdbc"))
-    implementation(project(":modules:kafka"))
-    implementation(project(":modules:azure"))
-    implementation(project(":modules:s3"))
-    implementation(project(":modules:google-cloud"))
-    implementation(project(":modules:flight-sql"))
     implementation("ch.qos.logback", "logback-classic", "1.4.5")
 }
 

@@ -3,9 +3,9 @@
 == Building a local image for testing
 
 * Make sure your Docker daemon is running
-* `./bin/docker-build.sh [--clean]` will build and tag as `xtdb-standalone-ea:latest`, and load it into your images list. The `--clean` flag can be used to ensure the xtdb uberjar is rebuilt.
+* `./bin/build-standalone-image.sh [--clean]` will build and tag as `xtdb-standalone-ea:latest`, and load it into your images list. The `--clean` flag can be used to ensure the xtdb uberjar is rebuilt.
 * To run: `docker run -ti --rm -p -p 3000:3000 xtdb-standalone-ea:latest` (this will run the server, exposing port 3000)
 
 == Customizing the local image
 
-If you wish to build the local image with a different default configuration included, you can change the content of the `local_xtdb.edn` file prior to building, or create a new file and replace references to `local_xtdb.edn` with the new config file. The created uberjar should have all XTDB modules included, so the node can be configured however you wish.
+If you wish to build the local image with a different default configuration included, you can change the content of the `standalone/local_xtdb.edn` file prior to building, or create a new file and replace references to `local_xtdb.edn` with the new config file. The created uberjar should have all XTDB modules included, so the node can be configured however you wish.
