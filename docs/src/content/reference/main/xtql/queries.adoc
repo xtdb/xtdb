@@ -346,7 +346,9 @@ It takes an array of maps, either as a literal, a parameter, or a value nested w
 [source]
 ----
 Table :: (table TableExpr [BindSpec+])
-TableExpr :: Expr // defined separately
+TableExpr :: Expr
+
+Expr :: <defined separately>
 ----
 
 For example:
@@ -416,11 +418,11 @@ The other columns in the query are duplicated for each row.
 ----
 Unnest :: (unnest UnnestSpec)
 
-// as a tail operator
+; as a tail operator
 UnnestSpec :: {Column Expr}
 Column :: keyword
 
-// in `unify`
+; in `unify`
 UnnestSpec :: {LogicVar Expr}
 LogicVar :: symbol
 
@@ -489,10 +491,10 @@ The 'with' operator specifies columns to add to the query.
 ----
 With :: (with WithSpec*)
 
-// as a tail operator
+; as a tail operator
 WithSpec :: WithVar | {Column Expr, ...}
 
-// in `unify`
+; in `unify`
 WithSpec :: WithVar | {LogicVar Expr, ...}
 
 WithVar :: symbol
