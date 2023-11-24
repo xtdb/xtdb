@@ -30,10 +30,10 @@ Once you have a REPL (e.g. by running `clj`), you can connect to the XTDB node w
 
 [source,clojure]
 ----
-(require '[xtdb.client :as xt.client]
+(require '[xtdb.client :as xtc]
          '[xtdb.api :as xt])
 
-(with-open [node (xt.client/start-client "http://localhost:3000")]
+(with-open [node (xtc/start-client "http://localhost:3000")]
   (xt/status node)
 
   ;; ...

@@ -3,7 +3,7 @@
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api.protocols :as api]
-            [xtdb.client :as client]
+            [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
             [xtdb.logical-plan :as lp]
@@ -87,7 +87,7 @@
   (let [port (free-port)]
     (util/with-open [_ (xtn/start-node (-> *node-opts*
                                            (assoc-in [:xtdb/server :port] port)))]
-      (binding [*node* (client/start-client (str "http://localhost:" port))]
+      (binding [*node* (xtc/start-client (str "http://localhost:" port))]
         (f)))))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
