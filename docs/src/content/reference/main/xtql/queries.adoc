@@ -133,7 +133,7 @@ The available aggregate functions are documented link:../stdlib/aggregates[here]
 
 === `from`
 
-The `from` operator sources data from a table in XTDB - it expects the table to fetch from, as well as options that define what columns to return, as well as any temporal filters to apply.
+The `from` operator sources data from a table in XTDB - it expects the table to fetch from, as well as options that define what columns to return, and optionally any temporal filters to apply.
 
 [source]
 ----
