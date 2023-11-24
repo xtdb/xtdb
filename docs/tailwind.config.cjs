@@ -40,6 +40,18 @@ module.exports = {
 				'hero-image': "url('/images/space.webp')",
 				'hero-image-nostars': "url('/images/space-nostars.webp')"			
 			},
+            typography: {
+                DEFAULT: {
+                    css: {
+                        'code::before': {
+                            content: '""'
+                        },
+                        'code::after': {
+                            content: '""'
+                        }
+                    }
+                }
+            },
 		},
 	},
 
