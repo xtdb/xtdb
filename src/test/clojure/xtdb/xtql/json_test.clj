@@ -159,10 +159,10 @@
                                        {"<" ["bar" "baz"]}]}))))
 
 (t/deftest test-with
-  (t/is (= ['(with :a :b {:c (+ a b)})
-            {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
+  (t/is (= ['(with {:c (+ a b)})
+            {"with" [{"c" {"+" ["a" "b"]}}]}]
 
-           (roundtrip-q-tail {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
+           (roundtrip-q-tail {"with" [{"c" {"+" ["a" "b"]}}]}))))
 
 (t/deftest test-without
   (t/is (= ['(without :a :b :c)
@@ -171,13 +171,13 @@
            (roundtrip-q-tail {"without" ["a" "b" "c"]}))))
 
 (t/deftest test-return
-  (t/is (= ['(return :a :b {:c (+ a b)})
+  (t/is (= ['(return a b {:c (+ a b)})
             {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
 
            (roundtrip-q-tail {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
 
 (t/deftest test-aggregate
-  (t/is (= ['(aggregate :a :b {:c (sum (+ a b))})
+  (t/is (= ['(aggregate a b {:c (sum (+ a b))})
             {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}]
 
            (roundtrip-q-tail {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}))))

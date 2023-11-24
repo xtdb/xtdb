@@ -80,8 +80,8 @@
   (t/is (= '(from :foo {:for-system-time (at #inst "2020"), :bind [a]})
            (roundtrip-q '(from :foo {:for-system-time (at #inst "2020"), :bind [a]}))))
 
-  (t/is (= '(from :foo [a {:xt/id b} c])
-           (roundtrip-q '(from :foo [a {:xt/id b} {:c c}]))))
+  (t/is (= '(from :foo [a {:xt/id b} c {:d "fish"}])
+           (roundtrip-q '(from :foo [a {:xt/id b} {:c c} {:d "fish"}]))))
 
   (let [q '(from :foo [{:foo {:baz 1}}])]
     (t/is (= q
@@ -151,21 +151,21 @@
 
 (t/deftest test-parse-return
   (let [q '(-> (from :foo [a])
-               (return :a {:a b}))]
+               (return a {:b a}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-aggregate
-  (let [q '(-> (from :foo [a])
-               (return {:b (sum a)}))]
+  (let [q '(-> (from :foo [a c])
+               (return c {:b (sum a)}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-join
-  (t/is (= '(join (from :foo [a])
-                  [{:a b}])
-           (roundtrip-unify-clause '(join (from :foo [a])
-                                          [{:a b}]))))
+  (t/is (= '(join (from :foo [a c])
+                  [{:a b} c])
+           (roundtrip-unify-clause '(join (from :foo [a c])
+                                          [{:a b} c]))))
 
   (t/is (thrown-with-msg?
          IllegalArgumentException #"Invalid keys provided to option map"

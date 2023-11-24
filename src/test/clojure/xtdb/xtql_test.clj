@@ -274,7 +274,7 @@
                       '(-> (unify (from :film [{:xt/id film, :film/name film-name, :film/bond bond}])
                                   (from :person [{:xt/id bond, :person/name bond-name}])
                                   (with {film :skyfall}))
-                           (return :film-name :bond-name)))))
+                           (return film-name bond-name)))))
         "one -> one")
 
 
@@ -286,7 +286,7 @@
                       '(-> (unify (from :film [{:film/name film-name, :film/bond bond}])
                                   (from :person [{:xt/id bond, :person/name bond-name}])
                                   (with {bond :daniel-craig}))
-                           (return :film-name :bond-name)))))
+                           (return film-name bond-name)))))
         "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
@@ -300,7 +300,7 @@
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [heads])
-                             (aggregate :heads {:count-heads (count heads)})))))
+                             (aggregate heads {:count-heads (count heads)})))))
           "head frequency")
 
     (t/is (= #{{:sum-heads 6, :min-heads 1, :max-heads 3, :count-heads 4}}
@@ -753,7 +753,7 @@
                                                  (where (<> $e s)))
                                              {:args [e]
                                               :bind [s p]}))
-                           (return :e :s)))))
+                           (return e s)))))
         "dependent: find people who have siblings")
 
   (t/is (thrown-with-msg? IllegalArgumentException
@@ -901,7 +901,7 @@
                           (from :docs [{:xt/id e3 :age a3}])
                           (with {a4 (+ a1 a2)})
                           (where (= a4 a3)))
-                         (return :e1 :e2 :e3))))))
+                         (return e1 e2 e3))))))
 
     (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
@@ -912,7 +912,7 @@
                           (from :docs [{:xt/id e2 :age a2}])
                           (from :docs [{:xt/id e3 :age a3}])
                           (with {a3 (+ a1 a2)}))
-                         (return :e1 :e2 :e3))))))))
+                         (return e1 e2 e3))))))))
 
 #_
 (deftest test-namespaced-columns-within-match
@@ -1075,7 +1075,7 @@
            (xt/q tu/*node*
                  '(-> (unify (join (-> (unify (from :film [{:film/bond bond}])
                                               (from :person [{:xt/id bond, :person/name bond-name}]))
-                                       (aggregate :bond-name :bond {:film-count (count bond)})
+                                       (aggregate bond-name bond {:film-count (count bond)})
                                        (order-by {:val film-count :dir :desc} bond-name)
                                        (limit 1))
                                    [{:bond bond-with-most-films
@@ -1083,7 +1083,7 @@
                              (from :film [{:film/bond bond-with-most-films
                                            :film/name film-name}]))
                       (order-by film-name)
-                      (return :bond-name :film-name))))
+                      (return bond-name film-name))))
         "films made by the Bond with the most films")
 
   #_(t/testing "(contrived) correlated sub-query"
@@ -1745,7 +1745,7 @@
                      (where (<> prop $prop)
                             (overlaps? app-time app-time-2))
                      (order-by {:val app-from :dir :asc})
-                     (return :prop
+                     (return prop
                              {:vt-begin (greatest app-from app-from2)}
                              {:vt-to (least app-to app-to2)}))
                 {:prop 7797}
@@ -1785,10 +1785,10 @@
                             (overlaps? app-time app-time-2)
                             (overlaps? system-time system-time-2))
                      (order-by {:val app-from :dir :asc})
-                     (return :prop {:vt-begin (greatest app-from app-from2)
-                                    :vt-to (least app-to app-to2)
-                                    :recorded-from (greatest sys-from sys-from2)
-                                    :recorded-stop (least sys-to sys-to2)}))
+                     (return prop {:vt-begin (greatest app-from app-from2)
+                                   :vt-to (least app-to app-to2)
+                                   :recorded-from (greatest sys-from sys-from2)
+                                   :recorded-stop (least sys-to sys-to2)}))
                 {:prop 7797}
                 tx7, nil))
             "Case 5: Application-time sequenced and system-time sequenced")
@@ -1822,7 +1822,7 @@
                             (overlaps? app-time app-time-2)
                             (contains? system-time sys-from2))
                      (order-by {:val app-from :dir :asc})
-                     (return :prop
+                     (return prop
                              {:vt-begin (greatest app-from app-from2)
                               :vt-to (least app-to app-to2)
                               :recorded-from sys-from2}))
@@ -2570,18 +2570,18 @@
            (xt/q tu/*node*
                  '(-> (unify (table [{:x [1 2 3]}] [x])
                              (unnest x y))
-                      (return :y)))))
+                      (return y)))))
 
   (t/is (= [{:y 1} {:y 2} {:y 3}]
            (xt/q tu/*node*
                  '(-> (table [{:x [1 2 3]}] [x])
                       (unnest x :y)
-                      (return :y)))))
+                      (return y)))))
 
   (t/is (= [{:y 1} {:y 3}]
            (xt/q tu/*node*
                  '(-> (unify (table [{:x [1 2 3]}] [x])
                              (unnest x y)
                              (table [{:y 1} {:y 3}] [y]))
-                      (return :y))))
+                      (return y))))
         "unify unnested column"))
