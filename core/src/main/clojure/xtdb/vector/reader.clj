@@ -90,7 +90,7 @@
                 (.rowCount rel))))
 
 (defn rel->rows
-  (^java.lang.Iterable [^RelationReader rel] (rel->rows rel (util/parse-key-fn :datalog)))
+  (^java.lang.Iterable [^RelationReader rel] (rel->rows rel (util/parse-key-fn :clojure)))
   (^java.lang.Iterable [^RelationReader rel ^IKeyFn key-fn]
    (let [col-ks (for [^IVectorReader col rel]
                   [col (.denormalize key-fn (.getName col))])]

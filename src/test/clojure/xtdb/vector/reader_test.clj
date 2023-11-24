@@ -255,7 +255,7 @@
         (.endRow rel-wtr1))
 
       (t/is (= [{:my-column {:short-name "forty-two", :long-name 42}}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) (util/parse-key-fn :datalog))))
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) (util/parse-key-fn :clojure))))
 
       (t/is (= [{:my_column {:short_name "forty-two", :long_name 42}}]
                (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) (util/parse-key-fn :sql)))))))

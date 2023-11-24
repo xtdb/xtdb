@@ -906,7 +906,7 @@
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src,
                                         query {:keys [args default-all-valid-time? basis default-tz explain? key-fn]
-                                               :or {key-fn :datalog}}]
+                                               :or {key-fn :clojure}}]
 
   (let [plan (-> (xt.edn/parse-query query)
                  compile-query)]

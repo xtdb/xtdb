@@ -70,7 +70,7 @@
         field-sets (HashMap.)
         row-count (count rows)
         out-rows (ArrayList. row-count)
-        key-fn (util/parse-key-fn :datalog)
+        key-fn (util/parse-key-fn :clojure)
         rows (map #(update-keys % keyword) rows)
         columns (->> (mapcat keys rows)
                      (into #{}))]

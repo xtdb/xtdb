@@ -1198,7 +1198,7 @@
 
 (defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
                                            query {:keys [args default-all-valid-time? basis default-tz explain? key-fn]
-                                                  :or {key-fn :datalog}}]
+                                                  :or {key-fn :clojure}}]
   (let [plan (compile-query query)
         {::keys [in-bindings]} (meta plan)
 

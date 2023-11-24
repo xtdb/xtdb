@@ -28,40 +28,12 @@ public class NormalForm {
                 .replace('-', '_');
     }
 
-    private static String unnormalise(String s) {
-        return s.replace('_', '-')
-                .replace('$', '.');
-    }
-
     public static String normalForm(String s) {
         var i = s.lastIndexOf('/');
         if (i < 0) {
             return normalise(s);
         } else {
             return "%s$%s".formatted(normalise(s.substring(0, i)), normalise(s.substring(i + 1)));
-        }
-    }
-
-    public static String datalogForm(String s) {
-        var i = s.lastIndexOf('$');
-        if (i < 0) {
-            return unnormalise(s);
-        } else {
-            return "%s/%s".formatted(unnormalise(s.substring(0, i)), unnormalise(s.substring(i + 1)));
-        }
-    }
-
-    public static Keyword normalForm(Keyword k) {
-        return Keyword.intern(normalForm(k.sym));
-    }
-
-    public static Keyword datalogForm(Keyword normalFormKeyword) {
-        var k = normalFormKeyword.sym.toString();
-        var i = k.lastIndexOf('$');
-        if (i < 0) {
-            return Keyword.intern(unnormalise(k));
-        } else {
-            return Keyword.intern(unnormalise(k.substring(0, i)), unnormalise(k.substring(i + 1)));
         }
     }
 
@@ -72,4 +44,9 @@ public class NormalForm {
             return Symbol.intern(normalise(sym.getName()));
         }
     }
+
+    public static Keyword normalForm(Keyword k) {
+        return Keyword.intern(normalForm(k.sym));
+    }
+
 }

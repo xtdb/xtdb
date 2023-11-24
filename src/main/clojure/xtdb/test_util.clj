@@ -189,14 +189,14 @@
                  (->cursor allocator schema blocks))}))
 
 (defn <-reader
-  ([^IVectorReader col] (<-reader col (util/parse-key-fn :datalog)))
+  ([^IVectorReader col] (<-reader col (util/parse-key-fn :clojure)))
   ([^IVectorReader col ^IKeyFn key-fn]
    (mapv (fn [idx]
            (.getObject col idx key-fn))
          (range (.valueCount col)))))
 
 (defn <-cursor
-  ([^ICursor cursor] (<-cursor cursor (util/parse-key-fn :datalog)))
+  ([^ICursor cursor] (<-cursor cursor (util/parse-key-fn :clojure)))
   ([^ICursor cursor ^IKeyFn key-fn]
    (let [!res (volatile! (transient []))]
      (.forEachRemaining cursor
@@ -208,7 +208,7 @@
 (defn query-ra
   ([query] (query-ra query {}))
   ([query {:keys [node params preserve-blocks? with-col-types? key-fn] :as query-opts
-           :or {key-fn :datalog}}]
+           :or {key-fn :clojure}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
                       node (-> (update :basis api/after-latest-submitted-tx node)
@@ -389,7 +389,7 @@
     (map new-uuid (range n))))
 
 (defn vec->vals
-  ([^IVectorReader rdr] (vec->vals rdr (util/parse-key-fn :datalog)))
+  ([^IVectorReader rdr] (vec->vals rdr (util/parse-key-fn :clojure)))
   ([^IVectorReader rdr ^IKeyFn key-fn]
    (->> (for [i (range (.valueCount rdr))]
           (.getObject rdr i key-fn))

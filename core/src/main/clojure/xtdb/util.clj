@@ -612,7 +612,7 @@
 
 (defn parse-key-fn [key-fn]
   (IKeyFn/cached (case key-fn
-                   :datalog (IKeyFn/keyword IKeyFn/DATALOG)
+                   :clojure (IKeyFn/keyword IKeyFn/CLOJURE)
                    :sql (IKeyFn/keyword IKeyFn/SQL)
                    :snake_case (IKeyFn/keyword IKeyFn/SNAKE_CASE)
 
@@ -625,7 +625,7 @@
                      :else (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))))
 
 (defn validate-remote-key-fn [key-fn]
-  (when-not (#{:datalog :sql :snake_case} key-fn)
+  (when-not (#{:clojure :sql :snake_case} key-fn)
     (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))
 
 (defn ->child-allocator [^BufferAllocator allocator name]
