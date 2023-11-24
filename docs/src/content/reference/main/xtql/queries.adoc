@@ -296,6 +296,7 @@ OrderSpec :: OrderCol
 OrderCol :: symbol
 Direction :: :asc | :desc
 NullOrdering :: :first | :last
+Expr :: <defined separately>
 ----
 
 For example:
@@ -422,6 +423,8 @@ Column :: keyword
 // in `unify`
 UnnestSpec :: {LogicVar Expr}
 LogicVar :: symbol
+
+Expr :: <defined separately>
 ----
 
 * If the value in question isn't an array, or the array is empty, the row is filtered out.
@@ -456,6 +459,8 @@ It expects (optionally) many predicates - rows that match all of the predicates 
 [source]
 ----
 Where :: (where Expr*)
+
+Expr :: <defined separately>
 ----
 
 * Like all other XTQL expressions, `where` respects 'three-valued logic' - if an expression returns either false or null, the row will be filtered out.
