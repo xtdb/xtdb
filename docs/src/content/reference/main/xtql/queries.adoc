@@ -203,7 +203,7 @@ Without any temporal filters, it is valid to just specify the binding specs with
 [#_joins]
 === Joins - `join`, `left-join`
 
-The `join` and `left-join` unify clauses further constrain a unification by joining against the given query.
+The `join` and `left-join` link:#_unify_clauses[unify clauses] further constrain a unification by joining against the given query.
 
 [source]
 ----
@@ -219,7 +219,7 @@ JoinOpts :: [BindSpec+]
 ----
 
 We join the inner query to the rest of the unify inputs using the binding specs - see the link:#_binding_specs[binding specs] section for more details.
-These binding specs act as both 'join conditions' (if the logic variables are reused within the unify operator) and a specification of which columns from the sub-query should be returned from the outer query.
+These binding specs act as both 'join conditions' (if the logic variables are reused within the link:#_unify[`unify`,role=no-underline] operator) and a specification of which columns from the sub-query should be returned from the outer query.
 
 * The `join` operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
 * The `left-join` operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
@@ -240,7 +240,7 @@ In this case, `customer-id` is specified multiple times, so this adds a join-con
 === `limit`
 
 The `limit` operator limits the rows returned by the query.
-Without an explicit preceding `order-by`, the rows selected for return are undefined.
+Without an explicit preceding link:#_order-by[`order-by`,role=no-underline], the rows selected for return are undefined.
 
 [source]
 ----
@@ -260,7 +260,7 @@ For example:
 === `offset`
 
 The `offset` operator skips the first N rows that would have otherwise been returned by the query.
-Without an explicit preceding `order-by`, the rows selected for return are undefined.
+Without an explicit preceding link:#_order-by[`order-by`,role=no-underline], the rows selected for return are undefined.
 
 [source]
 ----
@@ -403,10 +403,10 @@ FROM customers c
   JOIN orders o ON (c.xt$id = o.customer_id)
 ----
 
-* Join and Left Join clauses work in a similar way to `from`, except they execute a full sub-query rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
-* Table clauses, likewise - any logic variables specified in its binding specs are unified.
-* `where` clauses further constrain the results using predicates - these have access to any logic variable bound in the containing `unify` operator.
-* `with` clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, again, the value of the `with` result must agree with the value elsewhere in the `unify`.
+* link:#_joins[`join`,role=no-underline] and link:#_joins[`left-join`,role=no-underline] clauses work in a similar way to link:#_from[`from`,role=no-underline], except they execute a full sub-query rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
+* link:#_table[`table`,role=no-underline] clauses, likewise - any logic variables specified in its binding specs are unified.
+* link:#_where[`where`,role=no-underline] clauses further constrain the results using predicates - these have access to any logic variable bound in the containing `unify` operator.
+* link:#_with[`with`,role=no-underline] clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, again, the value of the link:#_with[`with`,role=no-underline] result must agree with the value elsewhere in the `unify`.
 * The `unify` operator returns a relation containing a column for every logic variable bound in any of its clauses.
 
 === `unnest`
@@ -662,9 +662,9 @@ For example:
 ;;      `SELECT first_name, last_name FROM users WHERE username = ?`
 ----
 
-(In these examples, we use `from` - but the same applies to `join` and `left-join`.)
+(In these examples, we use link:#_from[`from`,role=no-underline] - but the same applies to link:#_joins[`join`,role=no-underline] and link:#_joins[`left-join`,role=no-underline].)
 
-Within `unify` operators, these output names (`first-name`, `last-name` etc.) create 'logic variables' which, if they are re-used within the same `unify` operator, will add a 'join condition' - see the link:#_unify[`unify`] operator for more details.
+Within link:#_unify[`unify`,role=no-underline] operators, these output names (`first-name`, `last-name` etc.) create 'logic variables' which, if they are re-used within the same link:#_unify[`unify`,role=no-underline] operator, will add a 'join condition' - see the link:#_unify[`unify`] operator for more details.
 
 == Argument specs
 
