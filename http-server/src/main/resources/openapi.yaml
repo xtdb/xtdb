@@ -3,92 +3,195 @@ info:
   title: XTDB
 servers:
   - url: /
+components:
+  schemas:
+    Timeout:
+      description: timeout in milliseconds
+      type: integer
+    DefaultTz:
+      type: string
+      example: "America/Los_Angeles"
+    SystemTime:
+      type: string
+      example: "2024-01-01T00:00Z"
+      format: date-time
+    TransactionKey:
+      type: object
+      properties:
+        tx-id:
+          type: integer
+        system-time:
+          example: "2024-01-01T00:00Z"
+          type: string
+    Status:
+      type: object
+      properties:
+        latest-completed-tx:
+          $ref: '#/components/schemas/TransactionKey'
+        latest-submitted-tx:
+          $ref: '#/components/schemas/TransactionKey'
+    TransactionOp:
+      type: object
+    TransactionOps:
+      type: object
+      required:
+        - tx-ops
+      properties:
+        tx-ops:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionOp'
+        opts:
+          title: transaction opts
+          type: object
+          properties:
+            system-time:
+              schema:
+                $ref: '#/components/schemas/SystemTime'
+            default-tz:
+              schema:
+                $ref: '#/components/schemas/DefaultTz'
+            default-all-valid-time?:
+              type: boolean
+    Row:
+      type: object
+    Error:
+      type: object
+      properties:
+        xtdb.error/error-type:
+          type: string
+          example: "illegal-argument"
+        xtdb.error/error-key:
+          type: string
+          example: "xtql/malformed-table"
+        message:
+          type: string
+          example: "Illegal argument: ':xtql/malformed-table'"
+    Basis:
+      type: object
+      properties:
+        description: wall clock time for functions that require it (i.e. `(current-time)`)
+        current-time:
+          type: string
+          example: "2024-01-01T00:00Z"
+          format: date-time
+        tx:
+          description: specifies the latest transaction that’ll be visible to the query
+          schema:
+            $ref: '#/components/schemas/TransactionKey'
+        after-tx:
+          description: requires that the node has indexed at least the specified transaction
+          schema:
+            $ref: '#/components/schemas/TransactionKey'
+    Query:
+      type: object
+    QueryBody:
+      title: xtdb.server/query-body
+      required:
+        - query
+      type: object
+      properties:
+        query:
+          schema:
+            $ref: '#/components/schemas/Query'
+        basis:
+          schema:
+            $ref: '#/components/schemas/Basis'
+        basis-timeout:
+          description:  Timeout to wait for the basis
+          schema:
+            $ref: '#'#/components/schemas/Timeout'
+          nullable: true
+        args:
+          type: array
+          nullable: true
+          items:
+            type: object
+        default-all-valid-time?:
+          type: boolean
+        default-tz:
+          schema:
+            $ref: '#/components/schemas/DefaultTz'
 paths:
   /status:
     get:
       summary: Status
       description: Get status information from the node
       responses:
-        default:
-          description: ''
-          content: {}
+        '200':
+          description: Ok
+          content:
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/Status'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
   /tx:
     post:
       summary: Transaction
-      description: Submits a transaction to the cluster
+      description: |
+        Submits a transaction to the cluster. 
+        
+        See [XTQL Transactions](https://docs.xtdb.com/reference/main/xtql/txs) for details about different XT transaction operations. 
+        
+        See [SQL Transactions](https://docs.xtdb.com/reference/main/sql/txs) for details about different SQL transaction operations.
       requestBody:
         content:
           application/transit+json:
             schema:
-              required:
-                - tx-ops
-              type: object
-              properties:
-                tx-ops:
-                  type: array
-                opts:
-                  title: xtdb.server/opts
-                  type: object
-                  properties:
-                    system-time:
-                      title: xtdb.server/system-time
-                      type: object
-                    default-all-valid-time?:
-                      type: boolean
-                    default-tz:
-                      type: object
+              $ref: '#/components/schemas/TransactionOps'
         required: true
       responses:
-        default:
-          description: ''
-          content: {}
-      x-codegen-request-body-name: body
+        200:
+          description: Ok
+          content:
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/TransactionKey'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionKey'
   /query:
     post:
       summary: Query
+      description: |
+        Submits a query to the cluster.
+        
+        See [XTQL queries](https://docs.xtdb.com/reference/main/xtql/queries) for details about how to construct queries.
+        
+        See [SQL queries](https://docs.xtdb.com/reference/main/sql/queries) for details about SQL queries.
       requestBody:
         content:
           application/transit+json:
             schema:
-              title: xtdb.server/query-body
-              required:
-                - query
-              type: object
-              properties:
-                query:
-                  type: object
-                basis:
-                  title: xtdb.server/basis
-                  type: object
-                  properties:
-                    current-time:
-                      type: string
-                      format: date-time
-                    tx:
-                      type: object
-                      nullable: true
-                    after-tx:
-                      type: object
-                      nullable: true
-                basis-timeout:
-                  title: xtdb.server/basis-timeout
-                  type: object
-                  nullable: true
-                args:
-                  type: array
-                  nullable: true
-                  items:
-                    type: object
-                default-all-valid-time?:
-                  type: boolean
-                default-tz:
-                  type: object
+              $ref: '#/components/schemas/QueryBody'
         required: true
       responses:
-        default:
-          description: ''
-          content: {}
-      x-codegen-request-body-name: xtdb.server/query-body
-components: {}
-x-id:
-  - reitit.swagger/default
+        200:
+          description: Ok
+          content:
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/Row'
+            application/jsonl:
+              schema:
+                $ref: '#/components/schemas/Row'
+        400:
+          description: A validation error, parsing error or runtime error occurred.
+          content:
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        500:
+          description: Server error. An unknown server occured server side.
+          content:
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
