@@ -302,7 +302,7 @@
                                                     :else
                                                     (throw (err/illegal-arg
                                                             :xtql/malformed-col-spec
-                                                            {:spec spec ::err/message "Short form of col spec must be a keyword"})))))))
+                                                            {:spec spec ::err/message "Short form of col spec must be a symbol"})))))))
       :else (throw (UnsupportedOperationException.)))))
 
 (defn check-opt-keys [valid-keys opts]
@@ -477,6 +477,7 @@
 ;; TODO Align errors with json ones where appropriate.
 
 (defmethod parse-query-tail 'with [[_ & cols :as this]]
+  ;;TODO with uses col-specs but doesn't support short form, this needs handling
   (Query/withCols (parse-col-specs cols this)))
 
 (defmethod parse-unify-clause 'with [[_ & vars :as this]]
