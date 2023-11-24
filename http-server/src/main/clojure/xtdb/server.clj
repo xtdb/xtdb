@@ -138,7 +138,8 @@
 
 (defmethod route-handler :openapi [_]
   {:get {:handler (fn [_req]
-                    (ring-response/resource-response "openapi.yaml"))
+                    (-> (ring-response/resource-response "openapi.yaml")
+                        (assoc "Access-Control-Allow-Origin" "*")))
          :muuntaja (m/create m/default-options)}})
 
 (defn- handle-ex-info [ex _req]
