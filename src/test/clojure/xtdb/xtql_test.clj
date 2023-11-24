@@ -2541,12 +2541,12 @@
                                 '(-> (table [{:x 2}] [x])
                                      (without :z))))))
 
-(deftest test-without-normalisation-2959
+(deftest test-without-normalisation-2959-2969
   (xt/submit-tx tu/*node*
                 [[:put :users {:xt/id 1 :name "Oliver"}]])
 
   (t/is
-   (= [{:name "Oliver", :user-id 1}]
+   (= [{:name "Oliver"}]
       (xt/q tu/*node*
             '(-> (from :users [{:xt/id user-id} name])
                  (without :user-id))))))

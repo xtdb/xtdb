@@ -521,7 +521,7 @@
                       {:without-cols cols-to-be-removed
                        :input-relation-cols provided-vars
                        ::err/message "All cols in without must be present in input relation"})))
-          output-projection (set/difference provided-vars (into #{} (map symbol) (.cols without)))]
+          output-projection (set/difference provided-vars cols-to-be-removed)]
       {:ra-plan [:project (vec output-projection) ra-plan]
        :provided-vars output-projection}))
 
