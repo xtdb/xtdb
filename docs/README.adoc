@@ -13,6 +13,9 @@ For Mac OS: `brew install git-lfs`
 
 To initialise: `git lfs install`
 
+You will also need to have the `docs/shared` git submodule checked out.
+To do this, run `git submodule update --init` from the root of the project.
+
 From this point you should be able to run the commands in the next section.
 
 == Commands
