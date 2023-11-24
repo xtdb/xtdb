@@ -119,7 +119,7 @@
              (roundtrip-q-tail q))))
 
   (t/is (thrown-with-msg?
-         IllegalArgumentException #"Short form of col spec must be a keyword"
+         IllegalArgumentException #"Short form of col spec must be a symbol"
          (roundtrip-q-tail '(with (+ 1 1)))))
 
   (t/is (thrown-with-msg?
