@@ -101,7 +101,7 @@ This allows for very declarative yet terse method of specifying join conditions;
 
 === `aggregate`
 
-The 'aggregate' operator aggregates rows in a query according to the aggregate specs.
+The `aggregate` operator aggregates rows in a query according to the aggregate specs.
 
 [source]
 ----
@@ -239,7 +239,7 @@ In this case, `customer-id` is specified multiple times, so this adds a join-con
 
 === `limit`
 
-The limit operator limits the rows returned by the query.
+The `limit` operator limits the rows returned by the query.
 Without an explicit preceding `order-by`, the rows selected for return are undefined.
 
 [source]
@@ -259,7 +259,7 @@ For example:
 
 === `offset`
 
-The offset operator skips the first N rows that would have otherwise been returned by the query.
+The `offset` operator skips the first N rows that would have otherwise been returned by the query.
 Without an explicit preceding `order-by`, the rows selected for return are undefined.
 
 [source]
@@ -280,7 +280,7 @@ For example:
 
 === `order-by`
 
-The 'order-by' operator sorts the rows in a relation.
+The `order-by` operator sorts the rows in a relation.
 
 [source]
 ----
@@ -313,7 +313,7 @@ For example:
 
 === `return`
 
-The return operator specifies the columns to return from the query.
+The `return` operator specifies the columns to return from the query.
 It also allows additional projections, should you want to return a new column based on existing columns.
 
 [source]
@@ -340,7 +340,7 @@ For example:
 
 === `table`
 
-The 'table' operator creates an inline table with the provided values.
+The `table` operator creates an inline table with the provided values.
 It takes an array of maps, either as a literal, a parameter, or a value nested within another document, and yields each element as a row, with the values in the map bound/constrained as required.
 
 [source]
@@ -374,7 +374,7 @@ For example:
 
 === `unify`
 
-The 'unify' operator combines multiple input relations using Datalog-style unification, to achieve join-like behaviour.
+The `unify` operator combines multiple input relations using Datalog-style unification, to achieve join-like behaviour.
 
 [source]
 ----
@@ -411,7 +411,7 @@ FROM customers c
 
 === `unnest`
 
-The 'unnest' operator extracts values from an array - returning one row for each element.
+The `unnest` operator extracts values from an array - returning one row for each element.
 The other columns in the query are duplicated for each row.
 
 [source]
@@ -455,7 +455,7 @@ For example:
 
 === `where`
 
-The 'where' operator filters rows in a query or unification operator.
+The `where` operator filters rows in a query or unification operator.
 It expects (optionally) many predicates - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
 
 [source]
@@ -485,7 +485,7 @@ Example:
 
 === `with`
 
-The 'with' operator specifies columns to add to the query.
+The `with` operator specifies columns to add to the query.
 
 [source]
 ----
@@ -524,7 +524,7 @@ For example:
 
 === `without`
 
-The 'without' operator removes columns from the ongoing query:
+The `without` operator removes columns from the ongoing query:
 
 [source]
 ----
