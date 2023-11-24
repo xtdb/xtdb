@@ -222,7 +222,7 @@ We join the inner query to the rest of the unify inputs using the binding specs 
 These binding specs act as both 'join conditions' (if the logic variables are reused within the unify operator) and a specification of which columns from the sub-query should be returned from the outer query.
 
 * The `join` operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
-* The `left-join` operator performs an outer, or optional, join with with sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
+* The `left-join` operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
 
 Parameters in the sub-query can be fulfilled with the `:args` option - see the link:#_argument_specs[argument specs] section for more details.
 
