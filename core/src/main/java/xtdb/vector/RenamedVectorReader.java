@@ -113,7 +113,7 @@ public class RenamedVectorReader implements IVectorReader {
         return reader.getObject(idx, (k) -> k);
     }
     @Override
-    public Object getObject(int idx, IKeyFn keyFn) {
+    public Object getObject(int idx, IKeyFn<?> keyFn) {
         return reader.getObject(idx, keyFn);
     }
 
