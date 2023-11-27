@@ -534,6 +534,85 @@ For example, in this query, we only want the `customer-id` to join on - we don't
     (without :customer-id))
 ----
 
+== Expressions
+
+XTQL expressions are valid within predicates, projections, bindings and arguments.
+
+[source]
+----
+Expr :: number | "string" | true | false | nil | ObjectExpr
+      | SetExpr | [Expr*] | {MapKey Expr, ...}
+      | ParamExpr | VariableExpr
+      | GetFieldExpr | CallExpr
+      | SubqueryExpr | ExistsExpr | PullExpr | PullManyExpr
+
+ObjectExpr :: java.time.Temporal | java.time.TemporalAmount
+
+SetExpr :: #{Expr*}
+VectorExpr :: [Expr*]
+MapExpr :: {MapKey Expr, ...}
+MapKey :: keyword
+
+ParamExpr :: '$' symbol
+VariableExpr :: symbol
+GetFieldExpr :: (. Expr symbol)
+CallExpr :: (symbol Expr*)
+
+SubQueryExpr :: (q Query
+                   {; optional
+                    :args ArgSpec})
+
+ExistsExpr :: (exists Query
+                      {; optional
+                       :args ArgSpec})
+
+PullExpr :: (pull Query
+                  {; optional
+                   :args ArgSpec})
+
+PullManyExpr :: (pull* Query
+                       {; optional
+                        :args ArgSpec})
+----
+
+* Call expressions can use functions from the link:../stdlib[XTDB standard library].
+* Variable expressions can refer to any variable in scope - within a `unify` clause, any logic variable; within any other operator, any column returned in the previous step.
+* Parameter symbols must be prefixed by a `$`; other variables must not start with a `$`.
+
+=== Subqueries
+
+* Subquery expressions must return a single row containing a single column - otherwise, a runtime exception will be thrown.
+* 'Exists' expressions will return false if the subquery returns no rows; true otherwise.
+* 'Pull' expressions must return a single row - otherwise, a runtime exception will be throws.
+The columns in the returned row will be nested into a map in the outer expression.
+* 'Pull many' expressions may return any number of rows.
+  The rows will be nested into an array of maps in the outer expression.
+* The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
+
+For example:
+
+[source,clojure]
+----
+(-> (from :posts [{:xt/id $post-id} author-id])
+    (with {:author (pull (-> (from :authors [{:xt/id $author-id} post-content])
+                             (return :post-content))
+                         {:args [author-id]})
+
+           :comments (pull* (-> (from :comments [{:post-id $post-id} comment posted-at])
+                                (order-by :posted-at)
+                                (limit 2)
+                                (return :comment))
+                            {:args [{:post-id $post-id}]})})
+
+    (return :post-content :author :comments))
+
+;; =>
+
+{:post-content "..."
+ :author {:name "..."}
+ :comments [{:comment "..."}, {:comment "..."}]}
+----
+
 == Binding specs
 
 [source]
