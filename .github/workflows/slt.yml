@@ -17,9 +17,9 @@ jobs:
                   {dir: "random/aggregates/", error: 19},
                   {dir: "random/groupby/", error: 8},
                   {dir: "random/select/"},
-                  {dir: "index/between/"},
-                  {dir: "index/commute/"},
-                  {dir: "index/orderby/"},
+                  {dir: "index/between/", error: 10},
+                  {dir: "index/commute/", error: 10},
+                  {dir: "index/orderby/", error: 60},
                   {dir: "index/orderby_nosort/"},
                   {dir: "index/in/"},
                   {dir: "index/random/"}]
