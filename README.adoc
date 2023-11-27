@@ -1,41 +1,38 @@
-= XTDB 2.x Early Access 🧪
+= XTDB
 
-Welcome to the XTDB early access!
+XTDB is an open-source, bitemporal, dynamic, document-oriented database, queryable using XTQL or SQL.
 
-XTDB 2.x is a bitemporal and dynamic relational database for SQL and Datalog:
+XTDB 2.x is currently in early access; if you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb.
 
-- Bitemporal means that all data is accurately versioned as updates are made (system time), and all data exists within a universal domain timeline for representing 'validity'/'effectivity' (application time).
-- Dynamic means that no upfront schema needs to be specified before records can be inserted. Complex and nested data is automatically represented using https://arrow.apache.org/[Apache Arrow] types.
-- Relational means that the full spectrum of traditional SQL database capabilities is available - including joins, transactions, https://en.wikipedia.org/wiki/Multiset#Applications[bag/multiset] semantics, https://en.wikipedia.org/wiki/Three-valued_logic[three-valued logic], multiple N-ary relations etc.
-- SQL means immediate accessibility for a mainstream audience, but also includes an eye to the future with preliminary https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/[Flight SQL] driver support.
-- https://en.wikipedia.org/wiki/Datalog[Datalog] means a programmer-friendly API for complex relational querying that bypasses SQL's verbose JOINs and https://www.scattered-thoughts.net/writing/against-sql/[compositional challenges].
-
-XTDB 2.x can currently be used via Clojure, Java, and HTTP.
-
-== Warning
-
-This is experimental, pre-alpha software.
-
-If you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb.
+* It is immutable - while it's optimised for current-time queries, you can audit the full history of your database at any point.
+* It is 'bitemporal' - all data is accurately versioned as updates are made ('system' time), but it also allows you to separately record and query when that data is, was, or will become valid in your business domain ('valid' time).
+* It is dynamic - you don't need to specify schema up-front before documents can be inserted.
+* It is queryable using XTQL or SQL.
++
+XTQL is a data-oriented, composable query language - designed from the ground up to be amenable to both hand-written and generated queries.
+It is heavily inspired by the theoretical bases of both Datalog and the relational algebra.
++
+It also supports SQL, for compatibility with existing experience and tooling.
+Particularly, it supports the bitemporal functionality as specified in the SQL:2011 standard.
+* It is written and supported by https://juxt.pro[JUXT^].
 
 == Quick links
 
 * https://xtdb.com/v2[XTDB 2.x documentation]
 * https://xtdb.com[XTDB 1.x documentation]
-// * Maven releases
-// * Release notes
+* https://repo1.maven.org/maven2/com/xtdb/[Maven releases]
+* https://github.com/xtdb/xtdb/releases[Release notes]
 * Support:
-  https://discuss.xtdb.com/[discuss.xtdb.com,window=_blank] |
-  https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip community chat,window=_blank] |
+  https://discuss.xtdb.com/[discuss.xtdb.com^] |
   hello@xtdb.com
-* https://github.com/xtdb/xtdb/tree/2.x/dev/DEVELOPING.adoc[Developing XTDB 2.x]
-* https://www.zotero.org/groups/4778667/xtdb/[Bibliography,window=_blank]
+* https://github.com/xtdb/xtdb/tree/2.x/dev[Developing XTDB 2.x]
+* https://www.zotero.org/groups/4778667/xtdb/[Bibliography^]
 
 == Inside-out Architecture
 
 XTDB embraces the transaction log as the central point of coordination when running as a distributed system.
 
-[quote,Martin Kleppman]
+[quote,Martin Kleppmann]
 ____
 What do we have to gain from turning the database inside out?
 
@@ -44,51 +41,9 @@ ____
 
 image::img/xtdb-node-1.svg[XTDB 2.x Architecture Diagram, 1000, 460]
 
-== How does this differ from XTDB 1.x?
-
-XTDB 1.x is a mature product offering that is used in production by many organizations, and its ongoing development is focused on hardening and performance.
-XTDB 1.x is an embeddable database that emphasizes in-process JVM usage to enable advanced functionality like user-defined transaction functions, speculative transactions, programmatic Datalog rules, and more.
-
-XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream audience.
-
-[cols=3*]
-|===
-| | XTDB 1.x | '`XTDB 2.x`' Early Access
-| Status | Stable | Experimental (pre-alpha)
-| Initial Stable Release | 2019 | TBD
-| Execution Model | Tuple-at-a-Time Sort-Merge Joins | Vectorized Relational Algebra
-| Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
-| Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
-| Bitemporal Querying | Timeslice only ('as-of') | Fully bitemporal - SQL:2011 and beyond
-| Temporal Granularity | Milliseconds | Microseconds
-| Relational Decorrelation | No | Yes
-| Analytical Querying | No | Yes
-| Single-partition Transaction Log | Infinite Retention | Ephemeral WAL
-| Persistence Layer | Transaction Log + Document Store | Object Store
-| Index Upgrades | Full log replay | Online
-| - | - | -
-| Immutable Semantics | Yes | Yes
-| Online Transactions (ACID, linearizable consistency) | Yes | Yes
-| Always-On Bitemporality | Yes | Yes
-| Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
-|===
-
-See link:DATALOG.adoc[] for instructions on how to translate 1.x Datalog transactions/queries to 2.x.
-
-== Repo Layout
-
-2.x is split across multiple projects which are maintained within this repository.
-
-* `api` contains the user API to XTDB 2.x.
-* `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, JDBC, S3 DB etc.).
-  Implementations of these storage options are located in their own projects.
-* `http-server` and `http-client-clj` contain the HTTP server implementation, and a remote client for Clojure users.
-* Storage and other modules are under `modules`.
-  Modules are published to Maven independently so that you can maintain granular dependencies on precisely the individual components needed for your application.
-
 == Pre-Release Snapshot Builds
 
-Maven snapshot versions are periodically published under `dev-SNAPSHOT` and are used to facilitate support and debugging activities during the development cycle.
+Maven snapshot versions are periodically published under `2.0.0-SNAPSHOT` and are used to facilitate support and debugging activities during the development cycle.
 To access snapshots versions, the Sonatype snapshot repository must be added to your project definition:
 
 [source,xml]
@@ -118,21 +73,44 @@ To access snapshots versions, the Sonatype snapshot repository must be added to 
 :mvn/repos {"sonatype-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
 ----
 
-In contrast to regular releases which are immutable, a `dev-SNAPSHOT` release can be "updated" - this mutability can often be useful but may also cause unexpected surprises when depending on `dev-SNAPSHOT` for longer than necessary.
-Snapshot versions, including full `dev-<timestamp>` coordinates (which are useful to avoid being caught out by mutation), can be found https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/xtdb-core/dev-SNAPSHOT/[here].
+In contrast to regular releases which are immutable, a `2.0.0-SNAPSHOT` release can be "updated" - this mutability can often be useful but may also cause unexpected surprises when depending on `2.0.0-SNAPSHOT` for longer than necessary.
+Snapshot versions, including full `2.0.0-<timestamp>` coordinates (which are useful to avoid being caught out by mutation), can be found https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/xtdb-core/dev-SNAPSHOT/[here].
 
-=== Troubleshooting
 
-Certain older versions of Docker (< 20.10.10) struggle with newer Linux images.
-When that happens, you will see this error:
+== XTDB 1.x
 
-[source,sh]
-----
-# There is insufficient memory for the Java Runtime Environment to continue.
-# Cannot create worker GC thread. Out of system resources.
-----
+XTDB 1.x is a mature product offering that is used in production by many organizations, and its ongoing development is focused on hardening and performance.
+XTDB 1.x is an embeddable database that emphasizes in-process JVM usage to enable advanced functionality like user-defined transaction functions, speculative transactions, programmatic Datalog rules, and more.
 
-To resolve this, upgrade to the latest version of Docker.
+XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream audience.
+
+[cols=3*]
+|===
+| | XTDB 1.x | '`XTDB 2.x`' Early Access
+| Status | Stable | Experimental (pre-alpha)
+| Initial Stable Release | 2019 | TBD
+| Query languages | EDN Datalog | XTQL + SQL:2011
+| Bitemporal Querying | Timeslice only (point-in-time) | Fully bitemporal - SQL:2011 and beyond
+| Query focus | OLTP | OLAP + OLTP ('HTAP')
+| Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
+| Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
+| - | - | -
+| Immutable Semantics | Yes | Yes
+| Online Transactions (ACID, strong consistency) | Yes | Yes
+| Always-On Bitemporality | Yes | Yes
+| Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
+|===
+
+== Repo Layout
+
+2.x is split across multiple projects which are maintained within this repository.
+
+* `api` contains the user API to XTDB 2.x.
+* `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, JDBC, S3 DB etc.).
+  Implementations of these storage options are located in their own projects.
+* `http-server` and `http-client-clj` contain the HTTP server implementation, and a remote client for Clojure users.
+* Storage and other modules are under `modules`.
+  Modules are published to Maven independently so that you can maintain granular dependencies on precisely the individual components needed for your application.
 
 == Questions, Thoughts & Feedback
 
