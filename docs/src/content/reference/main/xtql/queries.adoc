@@ -321,7 +321,7 @@ Return :: (return ReturnSpec*)
 ReturnSpec :: ReturnVar | {Column Expr, ...}
 ReturnVar :: symbol
 Column :: keyword
-Expr :: <as defined above>
+Expr :: <defined separately>
 ----
 
 For example:
@@ -541,7 +541,7 @@ For example, in this query, we only want the `customer-id` to join on - we don't
 BindSpec :: BindVariable | {BindColumn Expr, ...}
 BindVariable :: symbol
 BindColumn :: keyword
-Expr :: <as defined above>
+Expr :: <defined separately>
 ----
 
 Binding specs define which columns are retrieved from a relation, and specify constraints on those columns.
@@ -589,7 +589,7 @@ Argument specs are used to fulfil parameters in a sub-query.
 ArgSpec :: ArgVariable | {Parameter Expr, ...}
 ArgVariable :: symbol
 Parameter :: keyword
-Expr :: <as defined above>
+Expr :: <defined separately>
 ----
 
 For example:
