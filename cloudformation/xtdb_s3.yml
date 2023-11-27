@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A stack for setting up XTDB S3 object store and associated resources (SNS topics for changes, XTDB user)
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Default: xtdb-cluster-bucket
+    Description: Enter the desired name of the bucket which will contain the XTDB Object Store
+
+Resources:
+  SNSTopic: 
+    Type: AWS::SNS::Topic
+    Properties: 
+      TopicName: !Join [ '-', [ !Ref S3BucketName, 'bucket-events' ] ]
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref S3BucketName
+      AccessControl: Private
+      NotificationConfiguration:
+        TopicConfigurations:
+          - Topic: !Ref SNSTopic
+            Event: 's3:ObjectCreated:*'
+          - Topic: !Ref SNSTopic
+            Event: 's3:ObjectRemoved:*'
+  
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 's3.amazonaws.com'
+            Action: sns:Publish
+            Resource: !Ref SNSTopic
+            Condition:
+              ArnEquals:
+                aws:SourceArn:  !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName] ]
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+      Topics:
+        - !Ref SNSTopic
+
+  S3AccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      Description: Policy that grants access to all resources needed for using the S3 bucket & it's changelog topic as an XTDB object store
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+            - 's3:GetObject'
+            - 's3:PutObject'
+            - 's3:DeleteObject'
+            - 's3:ListBucket'
+            - 's3:AbortMultipartUpload'
+            - 's3:ListBucketMultipartUploads'
+          Resource:
+            - !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName] ]
+            - !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName, '/*'] ]
+
+        - Effect: Allow
+          Action:
+            - 'sns:Subscribe'
+            - 'sns:Unsubscribe'
+          Resource:
+            - !Ref SNSTopic 
+        
+        - Effect: Allow
+          Action:
+            - 'sqs:CreateQueue'
+            - 'sqs:GetQueueUrl'
+            - 'sqs:GetQueueAttributes'
+            - 'sqs:DeleteQueue'
+            - 'sqs:DeleteMessage'
+            - 'sqs:ReceiveMessage'
+            - 'sqs:SetQueueAttributes'
+          Resource:
+            - '*'
+            
+Outputs:
+  BucketName:
+    Description: The name of the S3 Bucket
+    Value: !Ref S3Bucket
+
+  SNSTopicArn:
+    Description: The ARN of the SNS Topic with the S3 notifications
+    Value: !Ref SNSTopic
+
+  S3AccessPolicyArn:
+    Description: ARN of the managed policy that has relevant SNS and S3 permissions, and ability to create SQS queues
+    Value: !Ref S3AccessPolicy 
+
+
+
