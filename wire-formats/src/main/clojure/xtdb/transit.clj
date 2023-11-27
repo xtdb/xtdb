@@ -6,9 +6,7 @@
             [xtdb.edn :as xt-edn]
             [xtdb.error :as err]
             [xtdb.types :as types])
-  (:import (com.cognitect.transit TransitFactory)
-           (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
-           (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
+  (:import (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            xtdb.api.TransactionKey
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -25,15 +23,7 @@
           "xtdb.interval/year-month" xt-edn/interval-ym-reader
           "xtdb.interval/day-time" xt-edn/interval-dt-reader
           "xtdb.interval/month-day-nano" xt-edn/interval-mdn-reader
-          "xtdb/list" (transit/read-handler edn/read-string)
-          "xtdb/arrow-type" (transit/read-handler types/->arrow-type)
-          "xtdb/field-type" (transit/read-handler (fn [[arrow-type nullable?]]
-                                                    (if nullable?
-                                                      (FieldType/nullable arrow-type)
-                                                      (FieldType/notNullable arrow-type))))
-          "xtdb/field" (transit/read-handler (fn [[name field-type children]]
-                                               (Field. name field-type children)))}))
-
+          "xtdb/list" (transit/read-handler edn/read-string)}))
 
 (def tj-write-handlers
   (merge (-> {Period "time/period"
@@ -68,12 +58,4 @@
           IntervalMonthDayNano (transit/write-handler "xtdb.interval/month-day-nano"
                                                       #(vector (str (.period ^IntervalMonthDayNano %))
                                                                (str (.duration ^IntervalMonthDayNano %))))
-          clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))
-          ArrowType (transit/write-handler "xtdb/arrow-type" #(types/<-arrow-type %))
-          ;; beware that this currently ignores dictionary encoding and metadata of FieldType's
-          FieldType (transit/write-handler "xtdb/field-type"
-                                           (fn [^FieldType field-type]
-                                             (TransitFactory/taggedValue "array" [(.getType field-type) (.isNullable field-type)])))
-          Field (transit/write-handler "xtdb/field"
-                                       (fn [^Field field]
-                                         (TransitFactory/taggedValue "array" [(.getName field) (.getFieldType field) (.getChildren field)])))}))
+          clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))}))
