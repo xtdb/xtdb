@@ -243,9 +243,9 @@
 
   (t/is (= #{{:key :first_name} {:key :last_name}}
            (set (xt/q tu/*node*
-                      ;; TODO unnest in XTQL
-                      '{:find [key]
-                        :where [(match :the-keys {:keys [key ...]})]})))
+                      '(-> (from :the-keys [keys])
+                           (unnest {:key keys})
+                           (return key)))))
         "testing `key-fn` in q")
 
   (xt/submit-tx tu/*node* [[:put-fn :my-case-fn '(fn [{:keys [snake_case kebab-case]}]

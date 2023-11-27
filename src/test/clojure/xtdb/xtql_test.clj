@@ -1858,32 +1858,31 @@
      {:customer 1, :n-orders 1}]
 
 
-    ;;TODO needs spread/unnest op
-    #_#_
-    '{:find [customer, n-orders, n-qty]
-      :where [(match :customer {:xt/id customer})
-              [(q {:find [(count order)]
-                   :in [customer]
-                   :where [(match :order {:customer customer, :xt/id order})]})
-               n-orders]
-              [(q {:find [(sum qty2)]
-                   :in [customer]
-                   :where [(match :order {:customer customer, :xt/id order, :items [item ...]})
-                           [(. item :qty) qty2]]})
-               n-qty]]}
+    '(-> (from :customer [{:xt/id customer}])
+         (with {:n-orders (q (-> (from :order [{:xt/id order, :customer $customer}])
+                                 (aggregate {:n-orders (count-star)}))
+                             {:args [customer]})
+
+                :n-qty (q (-> (from :order [{:xt/id order, :customer $customer} items])
+                              ;; TODO unnest relation (through table or from)
+                              (unnest {:item items})
+                              (return {:qty (. item qty)})
+                              (aggregate {:n-qty (sum qty)}))
+                          {:args [customer]})}))
     [{:customer 0, :n-orders 2, :n-qty 4}
      {:customer 1, :n-orders 1, :n-qty 3}]
 
-    #_#_ '{:find [n-orders, n-qty]
-           :where [[(q {:find [(count order)]
-                        :where [(match :order {:xt/id order})]})
-                    n-orders]
-                   [(q {:find [(sum qty2)]
-                        :where [(match :order {:xt/id order, :items [item ...]})
-                                [(. item :qty) qty2]]})
-                    n-qty]]}
+    ;; TODO subqs in table
+    #_#_
+    '(table [{:n-orders (q (-> (from :order [])
+                               (aggregate {:n-orders (count-star)})))
+              :n-qty (q (-> (from :order [items])
+                              ;; TODO unnest relation (through table or from)
+                            (unnest {:item items})
+                            (return {:qty (. item qty)})
+                            (aggregate {:n-qty (sum qty)})))}]
+            [n-orders n-qty])
     [{:n-orders 3, :n-qty 7}]
-
 
     '(-> (from :order {:bind [{:xt/id order :customer customer}]})
          (with {:firstname (q (from :customer {:bind [{:xt/id $customer, :firstname firstname}]})
