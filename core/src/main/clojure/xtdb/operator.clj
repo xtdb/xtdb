@@ -20,7 +20,7 @@
             xtdb.operator.set
             xtdb.operator.table
             xtdb.operator.top
-            xtdb.operator.unwind
+            xtdb.operator.unnest
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import java.lang.AutoCloseable

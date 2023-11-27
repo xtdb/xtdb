@@ -1328,14 +1328,14 @@
 
 (defn- build-collection-derived-table [tp]
   (let [{:keys [id]} (sem/table tp)
-        [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
+        [unnest-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
         cdt (r/$ tp 1)
         cve (r/$ cdt 2)
-        unwind-symbol (symbol (str "$unwind" lp/relation-id-delimiter id "$"))]
-    [:unwind {unwind-column unwind-symbol}
+        unnest-symbol (symbol (str "$unnest" lp/relation-id-delimiter id "$"))]
+    [:unnest {unnest-column unnest-symbol}
      (cond-> {}
        ordinality-column (assoc :ordinality-column ordinality-column))
-     [:map [{unwind-symbol (expr cve)}] nil]]))
+     [:map [{unnest-symbol (expr cve)}] nil]]))
 
 (defn- interpret-system-time-period-spec [table-primary-ast]
   (when-let [z (r/find-first (partial r/ctor? :query_system_time_period_specification) table-primary-ast)]
@@ -1428,9 +1428,9 @@
   (reduce
    (fn [acc table]
      (r/zmatch table
-       [:unwind cve unwind-opts [:map projection nil]]
+       [:unnest cve unnest-opts [:map projection nil]]
        ;;=>
-       [:unwind cve unwind-opts [:map projection acc]]
+       [:unnest cve unnest-opts [:map projection acc]]
 
        [:apply :cross-join columns nil dependent-relation]
        ;;=>

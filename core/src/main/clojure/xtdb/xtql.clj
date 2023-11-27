@@ -544,7 +544,7 @@
         (throw (UnsupportedOperationException. "TODO: Add support for subqueries in unnest expr")))
       (when-not logic-var?
         (throw (UnsupportedOperationException. "TODO: Add support for expr in unnest")))
-      {:ra-plan [:unwind {l r} ra-plan]
+      {:ra-plan [:unnest {l r} ra-plan]
        :provided-vars (conj provided-vars l)})))
 
 (defn plan-join [join-type query args binding]
@@ -642,7 +642,7 @@
         original-unnested-col (first provided-vars)
         unnested-col (col-sym (*gensym* original-unnested-col))]
     (wrap-unify
-     {:ra-plan [:unwind ;; confusingly the unwind operator takes it inverted
+     {:ra-plan [:unnest ;; confusingly the unnest operator takes it inverted
                 {unnested-col (first (get var->cols expr))}
                 acc-plan-with-unique-cols]}
      (update var->cols original-unnested-col (fnil conj #{}) unnested-col))))

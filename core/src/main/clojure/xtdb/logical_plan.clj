@@ -250,10 +250,10 @@
     [:fixpoint _ base _]
     (relation-columns base)
 
-    [:unwind columns relation]
+    [:unnest columns relation]
     (conj (relation-columns relation) (val (first columns)))
 
-    [:unwind columns opts relation]
+    [:unnest columns opts relation]
     (cond-> (conj (relation-columns relation) (val (first columns)))
       (:ordinality-column opts) (conj (:ordinality-column opts)))
 
@@ -490,7 +490,7 @@
                            (:cross-join :left-outer-join :single-join) new-smap
                            (:semi-join :anti-join) (merge (->smap independent-relation) params))))))
 
-      [:unwind columns opts relation]
+      [:unnest columns opts relation]
       (let [smap (->smap relation)
             [to from] (first columns)
             from (get smap from)
@@ -500,7 +500,7 @@
                           (let [smap (assoc smap ordinality-column (next-name))]
                             [smap {:ordinality-column (get smap ordinality-column)}])
                           [smap {}])]
-        (with-smap [:unwind columns opts relation] smap))
+        (with-smap [:unnest columns opts relation] smap))
 
       [:arrow path]
       (with-smap [:arrow path] {})

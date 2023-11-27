@@ -67,7 +67,7 @@
 (s/def ::triple-value
   (s/or :literal ::value,
         :logic-var ::logic-var
-        :unwind (s/tuple ::logic-var #{'...})))
+        :unnest (s/tuple ::logic-var #{'...})))
 
 (s/def ::match-map-spec
   (-> (s/map-of ::attr ::triple-value)
@@ -452,20 +452,20 @@
       (wrap-with-period-constructor plan match)
       {::vars attrs})))
 
-(defn- attr->unwind-col [a]
-  (col-sym "__uw" a))
+(defn- attr->unnest-col [a]
+  (col-sym "__unnest" a))
 
-(defn- wrap-unwind [plan triples]
+(defn- wrap-unnest [plan triples]
   (->> triples
        (transduce
         (comp (keep (fn [[a [v-type _v-arg]]]
-                      (when (= v-type :unwind)
+                      (when (= v-type :unnest)
                         a)))
               (distinct))
 
         (completing (fn [plan a]
-                      (let [uw-col (attr->unwind-col a)]
-                        (-> [:unwind {uw-col a}
+                      (let [uw-col (attr->unnest-col a)]
+                        (-> [:unnest {uw-col a}
                              plan]
                             (vary-meta update ::vars conj uw-col)))))
         plan)))
@@ -503,12 +503,12 @@
                                         (case v-type
                                           :logic-var {:lv v-arg
                                                       :col a}
-                                          :unwind {:lv (first v-arg), :col (attr->unwind-col a)}
+                                          :unnest {:lv (first v-arg), :col (attr->unnest-col a)}
                                           nil)))
                                 (group-by :lv))
                            (update-vals #(into #{} (map :col) %)))]
          (-> (plan-scan table match temporal-opts)
-             (wrap-unwind match)
+             (wrap-unnest match)
              (wrap-unify var->cols)))))))
 
 (def ^:dynamic *gensym* gensym)

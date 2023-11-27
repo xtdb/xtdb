@@ -1057,7 +1057,7 @@
                                  :in [a]
                                  :where [(match :b {:xt/id bid, :b a})]})]})))))
 
-(t/deftest test-explicit-unwind-574
+(t/deftest test-explicit-unnest-574
   (xt/submit-tx tu/*node* bond/tx-ops)
 
   (t/is (= [{:brand "Aston Martin", :model "DB10"}

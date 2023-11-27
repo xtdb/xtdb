@@ -2,7 +2,7 @@
  {x3 name}
  [:project
   [x3]
-  [:unwind
+  [:unnest
    {x3 x1}
    {}
    [:rename {films x1} [:scan {:table starsin} [films]]]]]]

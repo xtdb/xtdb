@@ -243,7 +243,7 @@
 
   (t/is (= #{{:key :first_name} {:key :last_name}}
            (set (xt/q tu/*node*
-                      ;; TODO unwind in XTQL
+                      ;; TODO unnest in XTQL
                       '{:find [key]
                         :where [(match :the-keys {:keys [key ...]})]})))
         "testing `key-fn` in q")

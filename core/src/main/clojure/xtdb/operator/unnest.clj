@@ -1,4 +1,4 @@
-(ns xtdb.operator.unwind
+(ns xtdb.operator.unnest
   (:require [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
@@ -17,15 +17,15 @@
 
 (s/def ::ordinality-column ::lp/column)
 
-(defmethod lp/ra-expr :unwind [_]
-  (s/cat :op #{:ω :unwind}
+(defmethod lp/ra-expr :unnest [_]
+  (s/cat :op #{:ω :unnest}
          :columns (s/map-of ::lp/column ::lp/column, :conform-keys true, :count 1)
          :opts (s/? (s/keys :opt-un [::ordinality-column]))
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype UnwindCursor [^BufferAllocator allocator
+(deftype UnnestCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
                        ^String from-column-name
                        ^Field to-field
@@ -104,23 +104,23 @@
   (close [_]
     (.close in-cursor)))
 
-(defmethod lp/emit-expr :unwind [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
+(defmethod lp/emit-expr :unnest [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
-      (fn [fields]
-        (let [unwind-field (->> (get fields from-col)
-                                types/flatten-union-field
-                                (keep (fn [^Field field]
-                                        (condp = (class (.getType field))
-                                          ArrowType$List (first (.getChildren field))
-                                          SetType (first (.getChildren field))
-                                          ArrowType$FixedSizeList (first (.getChildren field))
-                                          (types/col-type->field :null))))
-                                (apply types/merge-fields))]
-          {:fields (-> fields
-                          (assoc to-col unwind-field)
-                          (cond-> ordinality-column (assoc ordinality-column (types/col-type->field :i32))))
-           :->cursor (fn [{:keys [allocator]} in-cursor]
-                       (UnwindCursor. allocator in-cursor
-                                      (str from-col) (types/field-with-name unwind-field (str to-col))
-                                      (some-> ordinality-column name)))})))))
+                   (fn [fields]
+                     (let [unnest-field (->> (get fields from-col)
+                                             types/flatten-union-field
+                                             (keep (fn [^Field field]
+                                                     (condp = (class (.getType field))
+                                                       ArrowType$List (first (.getChildren field))
+                                                       SetType (first (.getChildren field))
+                                                       ArrowType$FixedSizeList (first (.getChildren field))
+                                                       (types/col-type->field :null))))
+                                             (apply types/merge-fields))]
+                       {:fields (-> fields
+                                    (assoc to-col unnest-field)
+                                    (cond-> ordinality-column (assoc ordinality-column (types/col-type->field :i32))))
+                        :->cursor (fn [{:keys [allocator]} in-cursor]
+                                    (UnnestCursor. allocator in-cursor
+                                                   (str from-col) (types/field-with-name unnest-field (str to-col))
+                                                   (some-> ordinality-column name)))})))))

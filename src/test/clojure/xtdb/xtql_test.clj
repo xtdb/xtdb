@@ -1101,7 +1101,7 @@
                                  :where [(match :b {:xt/id bid, :b a})]})]})))))
 
 #_
-(t/deftest test-explicit-unwind-574
+(t/deftest test-explicit-unnest-574
   (xt/submit-tx tu/*node* bond/tx-ops)
 
   (t/is (= [{:brand "Aston Martin", :model "DB10"}
@@ -1858,7 +1858,7 @@
      {:customer 1, :n-orders 1}]
 
 
-    ;;TODO needs spread/unwind op
+    ;;TODO needs spread/unnest op
     #_#_
     '{:find [customer, n-orders, n-qty]
       :where [(match :customer {:xt/id customer})
