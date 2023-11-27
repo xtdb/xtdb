@@ -4,7 +4,6 @@ Description: A stack for setting up XTDB S3 object store and associated resource
 Parameters:
   S3BucketName:
     Type: String
-    Default: xtdb-cluster-bucket
     Description: Enter the desired name of the bucket which will contain the XTDB Object Store
 
 Resources:

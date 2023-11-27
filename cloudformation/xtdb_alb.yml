@@ -26,7 +26,7 @@ Resources:
       SecurityGroups:
         - !Ref SecurityGroupId
 
-  ECSTG:
+  ECSTargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     DependsOn: ECSALB
     Properties:
@@ -35,7 +35,7 @@ Resources:
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
-      Name: ECSTG
+      Name: ECSTargetGroup
       Port: 3000
       Protocol: HTTP
       UnhealthyThresholdCount: 2
@@ -46,7 +46,7 @@ Resources:
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref ECSTG
+          TargetGroupArn: !Ref ECSTargetGroup
       LoadBalancerArn: !Ref ECSALB
       Port: '3000'
       Protocol: HTTP
@@ -57,7 +57,7 @@ Resources:
     Properties:
       Actions:
         - Type: forward
-          TargetGroupArn: !Ref ECSTG
+          TargetGroupArn: !Ref ECSTargetGroup
       Conditions:
         - Field: path-pattern
           Values:
@@ -68,7 +68,7 @@ Resources:
 Outputs:
   TargetGroupArn:
     Description: ARN of the Target Group created for the nodes
-    Value: !Ref ECSTG
+    Value: !Ref ECSTargetGroup
 
   LoadBalancerArn:
     Description: ARN of the Applicaiton Load Balancer created for the nodes

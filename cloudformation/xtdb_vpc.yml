@@ -17,7 +17,7 @@ Resources:
       InternetGatewayId: !Ref InternetGateway
       VpcId: !Ref VPC
 
-  PublicSubnet1:
+  PublicSubnetOne:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -25,7 +25,7 @@ Resources:
       CidrBlock: 10.192.11.0/24
       MapPublicIpOnLaunch: true
 
-  PublicSubnet2:
+  PublicSubnetTwo:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -46,17 +46,17 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  PublicSubnet1RouteTableAssociation:
+  PublicSubnetOneRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet1
+      SubnetId: !Ref PublicSubnetOne
 
-  PublicSubnet2RouteTableAssociation:
+  PublicSubnetTwoRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet2
+      SubnetId: !Ref PublicSubnetTwo
 
   SecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
@@ -75,13 +75,13 @@ Outputs:
     Description: ID of the VPC created by the stack
     Value: !Ref VPC
 
-  PublicSubnet1:
+  PublicSubnetOne:
     Description: ID of the first public subnet created within the VPC
-    Value: !Ref PublicSubnet1
+    Value: !Ref PublicSubnetOne
 
-  PublicSubnet2:
+  PublicSubnetTwo:
     Description: ID of the second public subnet created within the VPC
-    Value: !Ref PublicSubnet2
+    Value: !Ref PublicSubnetTwo
 
   SecurityGroupId:
     Description: ID of the security group created for the VPC
