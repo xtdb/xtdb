@@ -86,7 +86,7 @@ XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x 
 
 [cols=3*]
 |===
-| | XTDB 1.x | '`XTDB 2.x`' Early Access
+| | XTDB 1.x | XTDB 2.x (early access)
 | Status | Stable | Experimental (pre-alpha)
 | Initial Stable Release | 2019 | TBD
 | Query languages | EDN Datalog | XTQL + SQL:2011
