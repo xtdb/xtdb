@@ -1,5 +1,7 @@
 (ns xtdb.jdbc-test
-  (:require [clojure.test :as t]
+  (:require [clojure.string :as str]
+            [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
@@ -144,8 +146,8 @@
           !fut1 (future
                   (let [this-thread (Thread/currentThread)
                         orig-f @#'j/insert-event!]
-                    (with-redefs [j/insert-event! (fn [pool event-key v topic]
-                                                    (let [res (orig-f pool event-key v topic)]
+                    (with-redefs [j/insert-event! (fn [dialect pool event-key v topic]
+                                                    (let [res (orig-f dialect pool event-key v topic)]
                                                       (when (and (= topic "txs")
                                                                  (= this-thread (Thread/currentThread)))
                                                         (deliver !tx1-submitted nil)
@@ -175,12 +177,12 @@
   (t/is (pos-int? (::xt/tx-id (xt/latest-submitted-tx *api*))))
 
   (let [offset (::xt/tx-id (xt/latest-submitted-tx *api*))
-        pool (-> *api* :!system deref ::j/connection-pool :pool)
+        {:keys [dialect, pool]} (-> *api* :!system deref ::j/connection-pool)
         jdbc-execute jdbc/execute!
         insert-docs! (fn [n]
                        (with-redefs [jdbc/execute! jdbc-execute]
                          (dotimes [_ n]
-                           (#'j/insert-event! pool
+                           (#'j/insert-event! dialect pool
                              (str (UUID/randomUUID))
                              (str (UUID/randomUUID))
                              "not-a-topic"))))
@@ -206,3 +208,44 @@
         (try
           (prn (jdbc/execute! pool (into [(str "EXPLAIN " sql)] params)))
           (catch Throwable _ (println "EXC")))))))
+
+(t/deftest node-out-of-sync-1918
+  (when (#{:postgresql} fj/*db-type*)
+    (let [execute! jdbc/execute!
+          thread-id-tl (ThreadLocal.)
+          promises (atom {})
+          futs (atom {})
+
+          proceed (fn [thread-id] (deliver (@promises thread-id) true))
+          start
+          (fn [thread-id]
+            (swap! promises assoc thread-id (promise))
+            (->> (future
+                   (.set thread-id-tl thread-id)
+                   (->> (xt/submit-tx *api* [[::xt/put {:xt/id thread-id}]])
+                        (xt/await-tx *api*)
+                        (xt/tx-committed? *api*)))
+                 (swap! futs assoc thread-id)))]
+
+      (with-redefs [jdbc/execute!
+                    (fn [& args]
+                      (when-some [thread-id (.get thread-id-tl)]
+                        (let [[sql] (second args)]
+                          (when (and (string? sql) (str/starts-with? sql "LOCK TABLE"))
+                            ;; this forces the flushing of any transaction opening statements
+                            (execute! (first args) ["SELECT 1"])
+                            (assert (deref (@promises thread-id) 500 false)))))
+                      (apply execute! args))]
+
+        (start :a)
+        (Thread/sleep 100)
+        (start :b)
+        (Thread/sleep 100)
+        (proceed :b)
+        @(:b @futs)
+        (proceed :a)
+        @(:a @futs)
+        (xt/sync *api*)
+        (t/is (= [{:xt/id :a} {:xt/id :b}]
+                 [(xt/entity (xt/db *api*) :a)
+                  (xt/entity (xt/db *api*) :b)]))))))

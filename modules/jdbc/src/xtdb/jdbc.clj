@@ -13,8 +13,7 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.event :as txe]
-            [xtdb.tx.subscribe :as tx-sub]
-            [clojure.tools.logging :as log])
+            [xtdb.tx.subscribe :as tx-sub])
   (:import (clojure.lang MapEntry)
            (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.io Closeable)
@@ -113,10 +112,19 @@
 (defmethod doc-exists-sql ::default [_ doc-id]
   ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0 ORDER BY EVENT_OFFSET FOR UPDATE" doc-id])
 
-(defn- insert-event! [pool event-key v topic]
-  (let [b (nippy/freeze v)]
-    (jdbc/execute-one! pool ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic]
-                       {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
+;; optional, used to specialise pg inserts to resolve concurrency issue with CURRENT_TIMESTAMP
+;; see https://github.com/xtdb/xtdb/issues/1918
+(defprotocol DialectInsertEvent
+  (insert-event!* [dialect pool event-key v topic]))
+
+;; var wrapper for with-redefs in existing tests
+(defn insert-event! [dialect pool event-key v topic] (insert-event!* dialect pool event-key v topic))
+
+(extend-protocol DialectInsertEvent
+  Object
+  (insert-event!* [_dialect pool event-key v topic]
+    (let [b (nippy/freeze v)]
+      (jdbc/execute-one! pool ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic] {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))))
 
 (defn- update-doc! [pool k doc]
   (jdbc/execute! pool ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze doc) k]))
@@ -133,10 +141,10 @@
                             (sort-by key))]
         (if (c/evicted-doc? doc)
           (do
-            (insert-event! tx id doc "docs")
+            (insert-event! dialect tx id doc "docs")
             (evict-doc! tx id doc))
           (if-not (not-empty (jdbc/execute-one! tx (doc-exists-sql dialect id)))
-            (insert-event! tx id doc "docs")
+            (insert-event! dialect tx id doc "docs")
             (update-doc! tx id doc))))))
 
   (fetch-docs [_ ids]
@@ -165,7 +173,7 @@
   (submit-tx [_ tx-events opts]
     (jdbc/with-transaction [tx pool]
       (ensure-serializable-identity-seq! dialect tx "tx_events")
-      (let [tx-data (-> (insert-event! tx nil {::txe/tx-events tx-events, ::xt/submit-tx-opts opts} "txs")
+      (let [tx-data (-> (insert-event! dialect tx nil {::txe/tx-events tx-events, ::xt/submit-tx-opts opts} "txs")
                         (tx-result->tx-data tx dialect))]
         (delay
           {::xt/tx-id (::xt/tx-id tx-data)

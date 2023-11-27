@@ -1,5 +1,6 @@
 (ns ^:no-doc xtdb.jdbc.psql
   (:require [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [xtdb.jdbc :as j]
             [xtdb.system :as sys]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
@@ -40,4 +41,15 @@ CREATE TABLE IF NOT EXISTS tx_events (
     (ensure-serializable-identity-seq! [_ tx table-name]
       ;; we have to take a table write lock in Postgres, because auto-increments aren't guaranteed to be increasing, even between transactions with 'serializable' isolation level
       ;; `table-name` is trusted
-      (jdbc/execute! tx [(format "LOCK TABLE %s IN SHARE ROW EXCLUSIVE MODE" table-name)]))))
+      (jdbc/execute! tx [(format "LOCK TABLE %s IN SHARE ROW EXCLUSIVE MODE" table-name)]))
+
+    j/DialectInsertEvent
+    (insert-event!* [_ pool event-key v topic]
+      (let [b (nippy/freeze v)
+            ;; see #1918
+            sql (if (= "txs" topic)
+                  "INSERT INTO tx_events (EVENT_KEY, TX_TIME, V, TOPIC, COMPACTED)
+                   VALUES (?, statement_timestamp(), ?,?,0)"
+                  "INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED)
+                   VALUES (?, ?,?,0)")]
+        (jdbc/execute-one! pool [sql event-key b topic] {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))))
