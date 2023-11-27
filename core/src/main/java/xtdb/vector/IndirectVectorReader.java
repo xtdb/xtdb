@@ -173,8 +173,7 @@ class IndirectVectorReader implements IVectorReader {
 
     @Override
     public IVectorReader legReader(Keyword legKey) {
-        IVectorReader inner = reader.legReader(legKey);
-        return inner == null ? null : new IndirectVectorReader(inner, indirection);
+        return new IndirectVectorReader(reader.legReader(legKey), indirection);
     }
 
     @Override
