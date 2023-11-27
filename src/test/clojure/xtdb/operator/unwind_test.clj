@@ -69,6 +69,24 @@
                         {:params '{?x [{:a 1, :b [1 "foo"]}]}}))
         "handles multiple types")
 
+  (t/is (= {{:a 1, :b* 1} 1, {:a 1, :b* "foo"} 1}
+           (frequencies
+            (tu/query-ra '[:project [a b*]
+                           [:unwind {b* b}
+                            [:table ?x]]]
+                         {:params '{?x [{:a 1, :b #{1 "foo"}}]}})))
+        "handles sets")
+
+  (t/is (= {{:a 1, :b* 1} 1, {:a 1, :b* "foo"} 1, {:a 3, :b* 2} 1, {:a 3, :b* "bar"} 1}
+           (frequencies
+            (tu/query-ra '[:project [a b*]
+                           [:unwind {b* b}
+                            [:table ?x]]]
+                         {:params '{?x [{:a 1, :b #{1 "foo"}}
+                                        {:a 2, :b "not-a-set"}
+                                        {:a 3, :b #{2 "bar"}}]}})))
+        "handles mixed lists + sets + other things")
+
   (t/is (= [{:a 1, :b* 1, :$ordinal 1}
             {:a 1, :b* 2, :$ordinal 2}
             {:a 2, :b* 3, :$ordinal 1}
