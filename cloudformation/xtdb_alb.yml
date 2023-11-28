@@ -48,7 +48,7 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref ECSTargetGroup
       LoadBalancerArn: !Ref ECSALB
-      Port: '3000'
+      Port: '80'
       Protocol: HTTP
 
   ECSALBListenerRule:
@@ -76,4 +76,4 @@ Outputs:
 
   LoadBalancerUrl:
     Description: The Load-Balanced XTDB node URL  
-    Value: !Sub 'http://${ECSALB.DNSName}:3000'
+    Value: !Sub 'http://${ECSALB.DNSName}'

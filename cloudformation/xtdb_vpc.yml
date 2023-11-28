@@ -98,10 +98,20 @@ Resources:
       GroupDescription: Security group allowing ingress/egress for all
       SecurityGroupIngress:
         - CidrIp: 0.0.0.0/0
-          IpProtocol: -1
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
       SecurityGroupEgress:
         - CidrIp: 0.0.0.0/0
           IpProtocol: -1
+  
+  SelfIngressAllowRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: SecurityGroup
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref SecurityGroup
 
 Outputs:
   VpcId: 
