@@ -200,8 +200,8 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 [source,clojure]
 ----
 (-> (unify (from :customers [{:xt/id cid}])
-           (where (not-exists? (from :orders [{:customer-id cid}])
-                               {:args [cid]})))
+           (where (not (exists? (from :orders [{:customer-id $cid}])
+                                {:args [cid]}))))
     (limit 100))
 ----
 +
@@ -212,16 +212,20 @@ Here, we're asking to additionally return customers who haven't yet any orders (
     "unify": [
       {
         "from": "customers",
-        "bind": { "xt/id": "cid" }
+        "bind": [{ "xt/id": "cid" }]
       },
       {
         "where": [
           {
-            "notExists": {
-              "from": "orders",
-              "bind": [ { "customer-id": "cid" } ]
-            },
-            "args": [ "cid" ]
+            "not": [
+              {
+                "exists": {
+                  "from": "orders",
+                  "bind": [ { "customer-id": "$cid" } ]
+                },
+                "args": [ "cid" ]
+              }
+            ]
           }
         ]
       }
@@ -229,6 +233,7 @@ Here, we're asking to additionally return customers who haven't yet any orders (
   },
   { "limit": 100 }
 ]
+
 ----
 +
 [source,sql]
@@ -248,7 +253,7 @@ LIMIT 100
 [source,clojure]
 ----
 (-> (from :users [first-name last-name])
-    (with {:full-name (str first-name " " last-name)}))
+    (with {:full-name (concat first-name " " last-name)}))
 ----
 +
 [source,json]
@@ -262,7 +267,7 @@ LIMIT 100
     "with": [
       {
         "full-name": {
-          "str": ["first-name", { "@value": " " }, "last-name"]
+          "concat": ["first-name", { "@value": " " }, "last-name"]
         }
       }
     ]
@@ -272,8 +277,7 @@ LIMIT 100
 +
 [source,sql]
 ----
-SELECT first_name, last_name,
-       CONCAT(first_name, ' ', last_name) AS full_name
+SELECT users.first_name, users.last_name, (users.first_name || ' ' || users.last_name) AS full_name
 FROM users
 ----
 +
@@ -285,7 +289,7 @@ We can also use `with` within `unify` - this creates new logic variables which w
 ----
 (-> (unify (from :users [{:xt/id user-id} first-name last-name])
            (from :articles [{:author-id user-id} title content]))
-    (return {:full-name (str first-name " " last-name)} title content))
+    (return {:full-name (str first-name " " last-name)} :title :content))
 ----
 +
 [source,json]
@@ -317,7 +321,7 @@ We can also use `with` within `unify` - this creates new logic variables which w
 +
 [source,sql]
 ----
-SELECT CONCAT(first_name, ' ', last_name) AS full_name, title, content
+SELECT CONCAT(u.first_name, ' ', u.last_name) AS full_name, a.title, a.content
 FROM users u JOIN articles a ON u.xt$id = a.author_id
 ----
 * Where we don't need any additional projections, we can use `without`:
@@ -350,7 +354,7 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 +
 [source,sql]
 ----
-SELECT first_name, last_name, title, content
+SELECT u.first_name, u.last_name, a.title, a.content
 FROM users u
   JOIN articles a ON u.xt$id = a.author_id
 ----
@@ -367,7 +371,7 @@ To count/sum/average values, we use `aggregate`:
     (aggregate cid currency
                {:order-count (count*)
                 :total-value (sum order-value)})
-    (order-by [order-value {:dir :desc}])
+    (order-by [total-value {:dir :desc}])
     (limit 100))
 ----
 
@@ -395,7 +399,7 @@ To count/sum/average values, we use `aggregate`:
       { "total-value": { "sum": [ "order-value" ] } }
     ]
   },
-  { "orderBy": [ [ "order-value", { "dir": "desc" } ] ] },
+  { "orderBy": [ [ "total-value", { "dir": "desc" } ] ] },
   { "limit": 100 }
 ]
 ----
@@ -420,17 +424,16 @@ For example, if a user is reading an article, we might also want to show them de
 [source,clojure]
 ----
 (-> (from :articles [{:xt/id article-id} title content author-id])
+ 
+    (with {:author (pull (from :authors [{:xt/id $author-id} first-name last-name])
+                         {:args [author-id]})
+ 
 
-    (with {author (pull (-> (from :authors [{:xt/id author-id} first-name last-name])
-                            (without :author-id))
-                        {:args [author-id]})
+           :comments (pull* (-> (from :comments [{:article-id $article-id} created-at comment])
+                                (order-by {:val created-at :dir :desc})
+                                (limit 10))
+                            {:args [article-id]})})))
 
-           comments (pull* (-> (from :comments [{:article-id article-id} created-at comment])
-                               (without :article-id)
-                               (order-by [created-at {:dir :desc}])
-                               (limit 10))
-
-                           {:args [article-id]})}))
 
 ;; => [{:title "...", :content "...",
 ;;      :author {:first-name "...", :last-name "..."}
@@ -521,20 +524,20 @@ In XTQL, while there are sensible defaults set for the whole query, you can over
 +
 [source,sql]
 ----
-SELECT first_name, last_name FROM users FOR VALID_TIME AT DATE '2020-01-01';
-SELECT first_name, last_name FROM users FOR ALL VALID_TIME;
+SELECT users.first_name, users.last_name FROM users FOR VALID_TIME AS OF DATE '2020-01-01'
+SELECT users.first_name, users.last_name FROM users FOR ALL VALID_TIME
 ----
 +
-** You can also specify `[:from <time>]`, `[:to <time>]` or `[:in <from-time> <to-time>]`, to give fine-grained, in-query control over the history returned for the given rows.
+** You can also specify `(from <time>)`, `(to <time>)` or `(in <from-time> <to-time>)`, to give fine-grained, in-query control over the history returned for the given rows.
 ** System time (formerly 'transaction time', renamed for consistency with SQL:2011) is filtered in the same map with `:for-system-time`.
 * This means that you can (for example) query the same table at two points-in-time in the same query - 'who worked here in both 2018 and 2023':
 +
 [source,clojure]
 ----
-(unify (from :users {:for-valid-time [:at #inst "2018"]
+(unify (from :users {:for-valid-time (at #inst "2018")
                      :bind [{:xt/id user-id}]})
 
-       (from :users {:for-valid-time [:at #inst "2023"]
+       (from :users {:for-valid-time (at #inst "2023")
                      :bind [{:xt/id user-id}]}))
 ----
 +
@@ -751,7 +754,7 @@ You can check the `:xt/txs` table to see whether and why a transaction failed:
 
 [source,clojure]
 ----
-(xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
+(xt/q node '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
       {:args {:tx-id my-tx-id}})
 
 ;; =>
