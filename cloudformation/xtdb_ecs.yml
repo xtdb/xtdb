@@ -146,6 +146,9 @@ Resources:
           Essential: true
           PortMappings:
             - ContainerPort: 3000
+          MountPoints:
+          - ContainerPath: /var/lib/xtdb
+            SourceVolume: xtdb-volume
           MemoryReservation: 256 
           LogConfiguration:
             LogDriver: awslogs
@@ -162,6 +165,11 @@ Resources:
               Value: !Ref S3BucketName
             - Name: XTDB_SNS_TOPIC
               Value: !Ref SNSTopicArn
+      Volumes:
+        - Name: xtdb-volume
+          Host:
+            SourcePath: "/mnt/nvme-storage/xtdb"
+
 
   EC2InstanceRole:
     Type: AWS::IAM::Role
@@ -194,22 +202,26 @@ Resources:
       IamInstanceProfile: !Ref EC2InstanceProfile
       SecurityGroups:
         - !Ref SecurityGroupId
-      UserData: !Base64 
-        'Fn::Join':
-          - ''
-          - - |
-              #!/bin/bash -xe
-            - echo ECS_CLUSTER=
-            - !Ref ECSCluster
-            - |2
-               >> /etc/ecs/ecs.config
-            - '/opt/aws/bin/cfn-signal -e $? '
-            - '         --stack '
-            - !Ref 'AWS::StackName'
-            - '         --resource ECSAutoScalingGroup '
-            - '         --region '
-            - !Ref 'AWS::Region'
-            - |+
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+
+          # Setup for ECS
+          echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+
+          # Identify NVMe drives
+          NVME_DEVICES=$(lsblk -o NAME,TRAN | grep nvme | awk '{print $1}')
+
+          # Format and mount single NVME drive only
+          for DEVICE in $NVME_DEVICES; do
+            mkfs -t xfs /dev/$DEVICE
+            mkdir -p /mnt/nvme-storage
+            mount /dev/$DEVICE /mnt/nvme-storage
+            break
+          done
+
+          # Send signal to group to mark as successfully created to the scaling group
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
 
   ECSAutoScalingGroup:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
