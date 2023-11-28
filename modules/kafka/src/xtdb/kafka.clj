@@ -279,7 +279,7 @@
     ;; for #1256 - let's fast-track tx-fn doc replacements straight into the local doc-store to prevent the race condition.
     ;; we don't do this for all docs because of put/evict ordering - would prefer the topic to be the authority on this.
     (some->> (seq (->> id-and-docs
-                       (filter (comp (some-fn :crux.db.fn/tx-events :crux.db.fn/failed?) val))))
+                       (filter (comp (some-fn :crux.db.fn/tx-events :crux.db.fn/failed?) second))))
              (db/submit-docs local-document-store)))
 
   (fetch-docs [_ ids]

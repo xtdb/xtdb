@@ -199,3 +199,19 @@
                       (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration (Duration/ofMillis 1010)})]
             (t/is (.hasNext c))
             (t/is (not (contains? (.next c) :xtdb.api/tx-ops)))))))))
+
+(t/deftest abort-tx-2912
+  (let [with-fixtures
+        (t/join-fixtures
+          [fk/with-cluster-doc-store-opts
+           fk/with-cluster-tx-log-opts
+           fix/with-node])]
+    (with-fixtures
+      (fn []
+        (fix/submit+await-tx
+          [[::xt/put {:xt/id 42, :n 1}]
+           [::xt/put {:xt/id :inc, :xt/fn '(fn [ctx] [:xtdb.api/put {:xt/id 42, :n 2}])}]])
+        (fix/submit+await-tx
+          [[::xt/fn :inc]
+           [::xt/match 42 {:xt/id 42, :n 1}]])
+        (t/is (= {:xt/id 42, :n 1} (xt/entity (xt/db *api*) 42)))))))
