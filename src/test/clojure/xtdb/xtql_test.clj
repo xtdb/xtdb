@@ -14,6 +14,8 @@
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
+;;TODO test nested subqueries
+
 (def ivan+petr
   '[[:put :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
     [:put :docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
@@ -496,86 +498,8 @@
                         '(unify (from :docs [{:xt/id e :first-name name}])
                                 (with {baz (upper $name)}))
                         {:args {:name "Petr"}})))
-          "param in unify with")
+          "param in unify with")))
 
-
-    #_#_#_#_#_(t/is (= #{{:e :ivan}}
-                       (set (xt/q tu/*node*
-                                  ['{:find [e]
-                                     :in [first-name last-name]
-                                     :where [(match :docs {:xt/id e})
-                                             [e :first-name first-name]
-                                             [e :last-name last-name]]}
-                                   "Ivan" "Ivanov"])))
-                    "multiple args")
-
-    (t/is (= #{{:e :ivan}}
-             (set (xt/q tu/*node*
-                        ['{:find [e]
-                           :in [[first-name]]
-                           :where [(match :docs {:xt/id e})
-                                   [e :first-name first-name]]}
-                         ["Ivan"]])))
-          "tuple with 1 var")
-
-    (t/is (= #{{:e :ivan}}
-             (set (xt/q tu/*node*
-                        ['{:find [e]
-                           :in [[first-name last-name]]
-                           :where [(match :docs {:xt/id e})
-                                   [e :first-name first-name]
-                                   [e :last-name last-name]]}
-                         ["Ivan" "Ivanov"]])))
-          "tuple with 2 vars")
-
-    (t/testing "collection"
-      (let [query '{:find [e]
-                    :in [[first-name ...]]
-                    :where [(match :docs {:xt/id e})
-                            [e :first-name first-name]]}]
-        (t/is (= #{{:e :petr}}
-                 (set (xt/q tu/*node* [query ["Petr"]]))))
-
-        (t/is (= #{{:e :ivan} {:e :petr}}
-                 (set (xt/q tu/*node* [query ["Ivan" "Petr"]]))))))
-
-    (t/testing "relation"
-      (let [query '{:find [e]
-                    :in [[[first-name last-name]]]
-                    :where [(match :docs {:xt/id e})
-                            [e :first-name first-name]
-                            [e :last-name last-name]]}]
-
-        (t/is (= #{{:e :ivan}}
-                 (set (xt/q tu/*node*
-                            [query [{:first-name "Ivan", :last-name "Ivanov"}]]))))
-
-        (t/is (= #{{:e :ivan}}
-                 (set (xt/q tu/*node*
-                            [query [["Ivan" "Ivanov"]]]))))
-
-        (t/is (= #{{:e :ivan} {:e :petr}}
-                 (set (xt/q tu/*node*
-                            [query
-                             [{:first-name "Ivan", :last-name "Ivanov"}
-                              {:first-name "Petr", :last-name "Petrov"}]]))))
-
-        (t/is (= #{{:e :ivan} {:e :petr}}
-                 (set (xt/q tu/*node*
-                            [query
-                             [["Ivan" "Ivanov"]
-                              ["Petr" "Petrov"]]]))))))))
-
-#_
-(deftest test-in-arity-exceptions
-  (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #":in arity mismatch"
-                            (xt/q tu/*node*
-                                  '{:find [e]
-                                    :in [foo]
-                                    :where [(match :docs {:xt/id e})
-                                            [e :foo foo]]})))))
 (deftest test-subquery-args-and-unification
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:name "Ivan" :last-name "Ivanov"}}
@@ -629,100 +553,6 @@
                        '(-> (from :docs [{:first-name first-name :last-name last-name}])
                             (where (< first-name "Ivan"))))))))
 
-#_
-(deftest test-value-unification
-  (let [_tx (xt/submit-tx tu/*node*
-                          (conj ivan+petr
-                                '[:put :docs {:xt/id :sergei :first-name "Sergei" :last-name "Sergei"}]
-                                '[:put :docs {:xt/id :jeff :first-name "Sergei" :last-name "but-different"}]))]
-    (t/is (= [{:e :sergei, :n "Sergei"}]
-             (xt/q
-              tu/*node*
-              '{:find [e n]
-                :where [(match :docs {:xt/id e})
-                        [e :last-name n]
-                        [e :first-name n]]})))
-    (t/is (= #{{:e :sergei, :f :sergei, :n "Sergei"} {:e :sergei, :f :jeff, :n "Sergei"}}
-             (set (xt/q
-                   tu/*node*
-                   '{:find [e f n]
-                     :where [(match :docs {:xt/id e})
-                             (match :docs {:xt/id f})
-                             [e :last-name n]
-                             [e :first-name n]
-                             [f :first-name n]]}))))))
-
-#_
-(deftest test-implicit-match-unification
-  (xt/submit-tx tu/*node* '[[:put :foo {:xt/id :ivan, :name "Ivan"}]
-                            [:put :foo {:xt/id :petr, :name "Petr"}]
-                            [:put :bar {:xt/id :sergei, :name "Sergei"}]
-                            [:put :bar {:xt/id :ivan,:name "Ivan"}]
-                            [:put :toto {:xt/id :jon, :name "John"}]
-                            [:put :toto {:xt/id :mat,:name "Matt"}]])
-  (t/is (= [{:e :ivan, :name "Ivan"}]
-           (xt/q tu/*node*
-                 '{:find [e name]
-                   :where [(match :foo {:xt/id e})
-                           (match :bar {:xt/id e})
-                           [e :name name]]})))
-  (t/is (= []
-           (xt/q tu/*node*
-                 '{:find [e]
-                   :where [(match :foo {:xt/id e})
-                           (match :toto {:xt/id e})
-                           [e :name]]}))))
-
-#_
-(deftest exists-with-no-outer-unification-692
-  (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :docs {:xt/id :ivan, :name "Ivan"}]
-                            [:put :docs {:xt/id :petr, :name "Petr"}]
-                            [:put :docs {:xt/id :ivan2, :name "Ivan"}]])]
-
-    (t/is (= [{:e :ivan} {:e :ivan2}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :docs {:xt/id e})
-                             (exists? {:find [e2]
-                                       :in [e]
-                                       :where [(match :docs {:xt/id e})
-                                               (match :docs {:xt/id e2})
-                                               [e :name name]
-                                               [e2 :name name]
-                                               [(<> e e2)]]})]}))
-          "with in variables")
-    (t/is (= [{:e :ivan} {:e :ivan2}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :docs {:xt/id e})
-                             (match :docs {:xt/id e2})
-                             (exists? {:find [e e2]
-                                       :where [(match :docs {:xt/id e})
-                                               (match :docs {:xt/id e2})
-                                               [e :name name]
-                                               [e2 :name name]
-                                               [(<> e e2)]]})]}))
-          "without in variables")))
-
-#_
-(deftest exists-with-keys-699
-  (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :docs {:xt/id 1, :name "one"}]
-                            [:put :docs {:xt/id 2, :name "two"}]
-                            [:put :docs {:xt/id 3, :name "three"}]])]
-
-    (t/is (= [{:e 2} {:e 3}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :docs {:xt/id e})
-                             (match :docs {:xt/id e3})
-                             (exists? {:find [(+ e2 2)]
-                                       :keys [e3]
-                                       :in [e]
-                                       :where [(match :docs {:xt/id e2})
-                                               [(<> e e2)]]})]})))))
-
 
 (deftest test-left-join
   (xt/submit-tx tu/*node*
@@ -764,8 +594,6 @@
                                          (-> (from :docs [{:xt/id e :first-name "Petr"}])
                                              (where (= n 1)))
                                          [e]))))))
-
-;;TODO some generic tests for unavailable vars/missing params?
 
 (deftest test-exists
   (let [_tx (xt/submit-tx tu/*node*
@@ -871,20 +699,6 @@
                                   {:args [e]}))))))
           "Multiple not exists")))
 
-#_
-(deftest test-simple-literals-in-find
-  (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :ivan, :age 15}]
-                            [:put :docs {:xt/id :petr, :age 22}]
-                            [:put :docs {:xt/id :slava, :age 37}]])
-
-
-  (t/is (= #{{:_column_0 1, :_column_1 "foo", :xt/id :ivan}
-             {:_column_0 1, :_column_1 "foo", :xt/id :petr}
-             {:_column_0 1, :_column_1 "foo", :xt/id :slava}}
-           (set (xt/q tu/*node*
-                      '{:find [1 "foo" xt/id]
-                        :where [(match :docs [xt/id])]})))))
-
 (deftest testing-unify-with
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :docs {:xt/id :ivan, :age 15}]
@@ -914,21 +728,13 @@
                           (with {a3 (+ a1 a2)}))
                          (return e1 e2 e3))))))))
 
-#_
-(deftest test-namespaced-columns-within-match
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :ivan :age 10}]])
-  (t/is (= [{:xt/id :ivan, :age 10}]
-           (xt/q tu/*node* '{:find [xt/id age]
-                             :where [(match :docs [xt/id])
-                                     [xt/id :age age]]})))
-  (t/is (= [{:id :ivan, :age 10}]
-           (xt/q tu/*node* '{:find [id age]
-                             :where [(match :docs {:xt/id id})
-                                     [id :age age]]})))
-  (t/is (= [{:id :ivan, :age 10}]
-           (xt/q tu/*node* '{:find [id age]
-                             :where [(match :docs [{:xt/id id}])
-                                     [id :age age]]}))))
+
+(deftest test-namespaced-columns-in-from
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :ivan}]])
+  (t/is (= [{:xt/id :ivan}]
+           (xt/q tu/*node* '(from :docs [xt/id]))))
+  (t/is (= [{:id :ivan}]
+           (xt/q tu/*node* '(from :docs [{:xt/id id}])))))
 
 #_
 (deftest test-nested-expressions-581
@@ -986,82 +792,6 @@
                                [(+ (+ a1 a2) a3) sum-ages]
                                [(+ a1 (+ a2 a3 1)) sum-ages]]}))))))
 
-#_
-(deftest test-union-join
-  (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :ivan, :age 20, :role :developer}]
-                                      [:put :docs {:xt/id :oleg, :age 30, :role :manager}]
-                                      [:put :docs {:xt/id :petr, :age 35, :role :qa}]
-                                      [:put :docs {:xt/id :sergei, :age 35, :role :manager}]])]
-
-    (letfn [(q [query]
-              (xt/q tu/*node* query))]
-      (t/is (= [{:e :ivan}]
-               (q '{:find [e]
-                    :where [(match :docs {:xt/id e})
-                            (union-join [e]
-                                        (and (match :docs {:xt/id e})
-                                             [e :role :developer])
-                                        (and (match :docs {:xt/id e})
-                                             [e :age 30]))
-                            (union-join [e]
-                                        (and (match :docs {:xt/id e})
-                                             [e :xt/id :petr])
-                                        (and (match :docs {:xt/id e})
-                                             [e :xt/id :ivan]))]})))
-
-      (t/is (= [{:e :petr}, {:e :oleg}]
-               (q '{:find [e]
-                    :where [(match :docs {:xt/id :sergei})
-                            [:sergei :age age]
-                            [:sergei :role role]
-                            (union-join [e age role]
-                                        (and (match :docs {:xt/id e})
-                                             [e :age age])
-                                        (and (match :docs {:xt/id e})
-                                             [e :role role]))
-                            [(<> e :sergei)]]})))
-
-      (t/testing "functions within union-join"
-        (t/is (= [{:age 35, :older-age 45}]
-                 (q '{:find [age older-age]
-                      :where [(match :docs {:xt/id :sergei})
-                              [:sergei :age age]
-                              (union-join [age older-age]
-                                          [(+ age 10) older-age])]})))))))
-
-#_
-(deftest test-union-join-with-match-syntax-693
-  (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :ivan, :age 20, :role :developer}]
-                                      [:put :docs {:xt/id :oleg, :age 30, :role :manager}]
-                                      [:put :docs {:xt/id :petr, :age 35, :role :qa}]
-                                      [:put :docs {:xt/id :sergei, :age 35, :role :manager}]])]
-    (t/is (= [{:e :ivan}]
-             (xt/q tu/*node* '{:find [e]
-                               :where [(union-join [e]
-                                                   (and (match :docs {:xt/id e})
-                                                        [e :role :developer])
-                                                   (and (match :docs {:xt/id e})
-                                                        [e :age 30]))
-                                       (union-join [e]
-                                                   (and (match :docs {:xt/id e})
-                                                        [e :xt/id :petr])
-                                                   (and (match :docs {:xt/id e})
-                                                        [e :xt/id :ivan]))]})))))
-
-#_
-(deftest test-union-join-with-subquery-638
-  (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :ivan, :age 20, :role :developer}]
-                            [:put :docs {:xt/id :oleg, :age 30, :role :manager}]
-                            [:put :docs {:xt/id :petr, :age 35, :role :qa}]
-                            [:put :docs {:xt/id :sergei, :age 35, :role :manager}]])
-  (t/is (= [{:e :oleg}]
-           (xt/q tu/*node* '{:find [e]
-                             :where [(union-join [e]
-                                                 (q {:find [e]
-                                                     :where [(match :docs {:xt/id e})
-                                                             [e :age 30]]}))]}))))
-
-
 (deftest test-join-clause
   (xt/submit-tx tu/*node* bond/tx-ops)
 
@@ -1084,23 +814,20 @@
                                            :film/name film-name}]))
                       (order-by film-name)
                       (return bond-name film-name))))
-        "films made by the Bond with the most films")
+        "films made by the Bond with the most films"))
 
-  #_(t/testing "(contrived) correlated sub-query"
-    (xt/submit-tx tu/*node* '[[:put :a {:xt/id :a1, :a 1}]
-                              [:put :a {:xt/id :a2, :a 2}]
-                              [:put :b {:xt/id :b2, :b 2}]
-                              [:put :b {:xt/id :b3, :b 3}]])
+(deftest test-join-clause-unification
+  (xt/submit-tx tu/*node* '[[:put :a {:xt/id :a1, :a 2 :b 1}]
+                            [:put :a {:xt/id :a2, :a 2 :b 3}]
+                            [:put :a {:xt/id :a3, :a 2 :b 0}]])
+  (t/is (= [{:aid :a2 :a 2 :b 3}]
+           (xt/q tu/*node*
+                 '(unify (from :a [{:xt/id aid} a b])
+                        (join (table [{:b (+ $a 1)}] [b])
+                              {:args [a]
+                               :bind [b]}))))
+        "b is unified"))
 
-    (t/is (= [{:aid :a2, :bid :b2}]
-             (xt/q tu/*node*
-                   '{:find [aid bid]
-                     :where [(match :a {:xt/id aid, :a a})
-                             (q {:find [bid]
-                                 :in [a]
-                                 :where [(match :b {:xt/id bid, :b a})]})]})))))
-
-#_
 (t/deftest test-explicit-unnest-574
   (xt/submit-tx tu/*node* bond/tx-ops)
 
@@ -1115,14 +842,14 @@
             {:brand "Rolls-Royce", :model "Silver Wraith"}]
 
            (xt/q tu/*node*
-                 ['{:find [brand model]
-                    :in [film]
-                    :where [(match :film {:xt/id film, :film/vehicles [vehicle ...]})
-                            (match :vehicle {:xt/id vehicle, :vehicle/brand brand, :vehicle/model model})]
-                    :order-by [[brand] [model]]}
-                  :spectre]))))
+                 '(-> (unify (from :vehicle [{:xt/id vehicle, :vehicle/brand brand, :vehicle/model model}])
+                             (from :film [{:xt/id $film, :film/vehicles vehicles}])
+                             (unnest {vehicle vehicles}))
+                      (order-by brand model)
+                      (return brand model))
+                 {:args {:film :spectre}}))))
 
-#_
+
 (t/deftest bug-non-string-table-names-599
   (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
@@ -1134,9 +861,8 @@
                       (xt/submit-tx node tx-ops))))
 
             (count-table [_tx]
-              (-> (xt/q node '{:find [(count id)]
-                               :keys [id-count]
-                               :where [(match :t1 {:xt/id id})]})
+              (-> (xt/q node '(-> (from :t1 [{:xt/id id}])
+                                  (aggregate {:id-count (count id)})))
                   (first)
                   (:id-count)))]
 
@@ -1146,7 +872,6 @@
       (let [tx (submit-ops! (range 80 160))]
         (t/is (= 160 (count-table tx)))))))
 
-#_
 (t/deftest bug-dont-throw-on-non-existing-column-597
   (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
@@ -1159,17 +884,16 @@
       (xt/submit-tx node '[[:put :docs {:xt/id 0 :foo :bar}]])
       (submit-ops! (range 1010))
 
-      (t/is (= 1010 (-> (xt/q node '{:find [(count id)]
-                                     :keys [id-count]
-                                     :where [(match :t1 {:xt/id id})]})
+      (t/is (= 1010 (-> (xt/q node
+                              '(-> (from :t1 [{:xt/id id}])
+                                   (aggregate {:id-count (count id)})))
                         (first)
                         (:id-count))))
 
       (t/is (= [{:xt/id 0}]
-               (xt/q node '{:find [xt/id]
-                            :where [(match :docs [xt/id some-attr])]}))))))
+               (xt/q node '(from :docs [xt/id some-attr])))))))
 
-#_
+
 (t/deftest add-better-metadata-support-for-keywords
   (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
@@ -1182,39 +906,10 @@
             ;; going over the chunk boundary
             tx2 (submit-ops! (range 200))]
         (t/is (= [{:xt/id :some-doc}]
-                 (xt/q node '{:find [xt/id]
-                              :where [(match :docs [xt/id])
-                                      [xt/id :xt/id :some-doc]]})))))))
+                 (xt/q node '(-> (from :docs [xt/id])
+                                 (where (= xt/id :some-doc))))))))))
 
-#_
-(deftest test-subquery-unification
-  (let [tx (xt/submit-tx tu/*node* '[[:put :a {:xt/id :a1, :a 2 :b 1}]
-                                     [:put :a {:xt/id :a2, :a 2 :b 3}]
-                                     [:put :a {:xt/id :a3, :a 2 :b 0}]])]
-
-    (t/testing "variables returned from subqueries that must be run as an apply are unified"
-
-      (t/testing "subquery"
-        (t/is (= [{:aid :a2 :a 2 :b 3}]
-                 (xt/q tu/*node*
-                       '{:find [aid a b]
-                         :where [(match :a [{:xt/id aid} a b])
-                                 (q {:find [b]
-                                     :in [a]
-                                     :where [[(+ a 1) b]]})]}))
-              "b is unified"))
-
-      (t/testing "union-join"
-        (t/is (= [{:aid :a2 :a 2 :b 3}]
-                 (xt/q tu/*node*
-                       '{:find [aid a b]
-                         :where [(match :a [{:xt/id aid} a b])
-                                 (union-join [a b]
-                                             [(+ a 1) b])]}))
-              "b is unified")))))
-
-#_
-(deftest test-basic-rules
+#_(deftest test-basic-rules
   (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
                             [:put :docs {:xt/id :petr :name "Petr" :last-name "Petrov" :age 18}]
                             [:put :docs {:xt/id :georgy :name "Georgy" :last-name "George" :age 17}]])
@@ -1837,7 +1532,6 @@
                            [:put :order {:xt/id 1, :customer 0, :items [{:sku "cheese", :qty 3}]}]
                            [:put :order {:xt/id 2, :customer 1, :items [{:sku "bread", :qty 1} {:sku "eggs", :qty 2}]}]])
 
-  ;;TODO nested subqeries
   (t/are [q result] (= (into #{} result) (set (xt/q tu/*node* q)))
 
     '(unify (with {n-customers (q (-> (from :customer {:bind [{:xt/id id}]})
@@ -2119,179 +1813,68 @@
                           :for-system-time :all-time})))
         "period column matching literal"))
 
-#_
 (t/deftest test-explain-plan-654
-  (t/is (= '[{:plan [:project [name age]
-                     [:project [{age _r0_age} {name _r0_name} {pid _r0_pid}]
-                      [:rename {age _r0_age, name _r0_name, pid _r0_pid}
-                       [:project [{pid xt/id} name age]
-                        [:scan {:table people, :for-valid-time nil, :for-system-time nil}
-                         [age name {xt/id (= xt/id ?pid)}]]]]]]}]
-
+  (t/is (= '[{:plan
+              [:project
+               [name age]
+               [:scan
+                {:table people, :for-valid-time nil, :for-system-time nil}
+                [{xt$id (= xt$id ?pid)} name age]]]}]
            (xt/q tu/*node*
-                 '{:find [name age]
-                   :in [pid]
-                   :where [($ :people [{:xt/id pid} name age])]}
+                 '(from :people [{:xt/id $pid} name age])
                  {:explain? true}))))
 
-#_
-(deftest test-unbound-vars
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in find clause must be bound in where: foo"
-    (xt/q
-     tu/*node*
-     '{:find [foo]
-       :where [(match :docs {:first-name name})]}))
-   "plain logic var in find")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in find clause must be bound in where: foo"
-    (xt/q
-     tu/*node*
-     (->
-      '{:find [(+ foo 1)]
-        :where [(match :docs {:first-name name})]})))
-   "logic var within expr in find")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in find clause must be bound in where: foo"
-    (xt/q
-     tu/*node*
-     (->
-      '{:find [(sum foo)]
-        :where [(match :docs {:first-name name})]})))
-   "logic var within aggr in find")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in find clause must be bound in where: foo"
-    (xt/q
-     tu/*node*
-     (->
-      '{:find [(sum (- 64 (+ 20 4 foo)))]
-        :where [(match :docs {:first-name name})]})))
-   "deeply nested logic var in find")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in find clause must be bound in where: baz, bar, foo"
-    (xt/q
-     tu/*node*
-     (->
-      '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
-        :where [(match :docs {:first-name name})]})))
-   "multiple unbound vars in find")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in find clause must be bound in where: baz, bar, foo"
-    (xt/q
-     tu/*node*
-     (->
-      '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
-        :where [(match :docs {:first-name name})]})))
-   "multiple unbound vars in find")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in order-by clause must be bound in where: baz"
-    (xt/q
-     tu/*node*
-     (->
-      '{:find [name]
-        :where [(match :docs {:first-name name})]
-        :order-by [[baz :asc]]})))
-   "simple order-by var")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in order-by clause must be bound in where: biff, baz, bing"
-    (xt/q
-     tu/*node*
-     (->
-      '{:find [name]
-        :where [(match :docs {:first-name name})]
-        :order-by [[(count biff) :desc] [baz :asc] [bing]]})))
-   "multiple unbound vars in order-by")
-
-  (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Logic variables in find clause must be bound in where: age, min_age"
-    (xt/q tu/*node*
-          '{:find [min_age age]
-            :where [(q {:find [(min age)]
-                        :where [($ :docs {:age age})]})]}))
-   "variables not exposed by subquery"))
-
-#_
 (t/deftest test-default-valid-time
   (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :foo "2000-4000"} {:for-valid-time [:in #inst "2000" #inst "4000"]}]
                            [:put :docs {:xt/id 1 :foo "3000-"} {:for-valid-time [:from #inst "3000"]}]])
 
   (t/is (= #{{:xt/id 1, :foo "2000-4000"} {:xt/id 1, :foo "3000-"}}
            (set (xt/q tu/*node*
-                      '{:find [xt/id foo]
-                        :where [(match :docs [xt/id foo])]}
+                      '(from :docs [xt/id foo])
                       {:default-all-valid-time? true})))))
 
-#_
+
 (t/deftest test-sql-insert
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (0)"]])
   (t/is (= [{:xt/id 0}]
            (xt/q tu/*node*
-                 '{:find [xt/id]
-                   :where [(match :foo [xt/id])]}))))
+                 '(from :foo [xt/id])))))
 
 
-#_
-(t/deftest test-dml-insert
+(t/deftest test-put
   (xt/submit-tx tu/*node* [[:put :foo {:xt/id 0}]])
-  (t/is (= [{:id 0}]
+  (t/is (= [{:xt/id 0}]
            (xt/q tu/*node*
-                 '{:find [id]
-                   :where [(match :foo {:xt/id id})]}))))
+                 '(from :foo [xt/id])))))
 
-#_
 (t/deftest test-metadata-filtering-for-time-data-607
   (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 1}})]
     (xt/submit-tx node [[:put :docs {:xt/id 1 :from-date #time/date "2000-01-01"}]
                         [:put :docs {:xt/id 2 :from-date #time/date "3000-01-01"}]])
     (t/is (= [{:id 1}]
+
              (xt/q node
-                   '{:find [id]
-                     :where [(match :docs [{:xt/id id} from-date])
-                             [(>= from-date #inst "1500")]
-                             [(< from-date #inst "2500")]]})))
+                   '(-> (from :docs [{:xt/id id} from-date])
+                        (where (>= from-date #inst "1500")
+                               (< from-date #inst "2500"))
+                        (return id)))))
+
     (xt/submit-tx node [[:put :docs2 {:xt/id 1 :from-date #inst "2000-01-01"}]
                         [:put :docs2 {:xt/id 2 :from-date #inst "3000-01-01"}]])
     (t/is (= [{:id 1}]
              (xt/q node
-                   '{:find [id]
-                     :where [(match :docs2 [{:xt/id id} from-date])
-                             [(< from-date #time/date "2500-01-01")]
-                             [(< from-date #time/date "2500-01-01")]]})))))
+                   '(-> (from :docs2 [{:xt/id id} from-date])
+                        (where (< from-date #time/date "2500-01-01")
+                               (< from-date #time/date "2500-01-01"))
+                        (return id)))))))
 
-#_
 (t/deftest bug-non-namespaced-nested-keys-747
   (xt/submit-tx tu/*node* [[:put :bar {:xt/id 1 :foo {:a/b "foo"}}]])
   (t/is (= [{:foo {:a/b "foo"}}]
            (xt/q tu/*node*
-                 '{:find [foo]
-                   :where [(match :bar [foo])]}))))
+                 '(from :bar [foo])))))
 
-#_
+#_ ;;TODO from-star
 (t/deftest test-row-alias
   (let [docs [{:xt/id 42, :firstname "bob"}
               {:xt/id 43, :firstname "alice", :lastname "carrol"}
@@ -2300,7 +1883,7 @@
     (t/is (= (set (mapv (fn [doc] {:c doc}) docs))
              (set (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]}))))))
 
-#_
+#_ ;;TODO from-star
 (t/deftest test-row-alias-system-time-key-set
   (let [inputs
         [[{:xt/id 0, :a 0} #inst "2023-01-17T00:00:00"]
@@ -2328,7 +1911,7 @@
                 {:basis {:tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}})))))
 
 #_
-(t/deftest test-row-alias-app-time-key-set
+(t/deftest test-row-alias-app-time-key-set ;TODO from-star
   (let [inputs
         [[{:xt/id 0, :a 0} #inst "2023-01-17T00:00:00"]
          [{:xt/id 0, :b 0} #inst "2023-01-18T00:00:00"]
@@ -2371,21 +1954,22 @@
              (xt/q tu/*node* '(from :xt.docs/the-docs [{:xt/id id}])))
           "with dots in namespace")))
 
-#_
 (t/deftest test-inconsistent-valid-time-range-2494
   (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 1} {:for-valid-time [:in nil #inst "2011"]}]])
   (t/is (= [{:tx-id 0, :committed? false}]
-           (xt/q tu/*node* '{:find [tx-id committed?]
-                             :where [($ :xt/txs {:xt/id tx-id,
-                                                 :xt/committed? committed?})]})))
+
+           (xt/q tu/*node*
+                 '(from :xt/txs [{:xt/id tx-id,
+                                  :xt/committed? committed?}]))))
   (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 2}]])
   (xt/submit-tx tu/*node* '[[:delete :xt-docs 2 {:for-valid-time [:in nil #inst "2011"]}]])
+
   (t/is (= #{{:tx-id 0, :committed? false}
              {:tx-id 1, :committed? true}
              {:tx-id 2, :committed? false}}
-           (set (xt/q tu/*node* '{:find [tx-id committed?]
-                                  :where [($ :xt/txs {:xt/id tx-id,
-                                                      :xt/committed? committed?})]})))))
+           (set (xt/q tu/*node*
+                      '(from :xt/txs [{:xt/id tx-id,
+                                       :xt/committed? committed?}]))))))
 
 (deftest test-date-and-time-literals
   (t/is (= [{:a true, :b false, :c true, :d true}]
@@ -2445,7 +2029,7 @@
 
 #_
 (deftest row-alias-on-txs-tables-2809
-  ;;TODO from *
+  ;;TODO from-star
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 1 :v 1}]])
   (xt/submit-tx tu/*node* [[:call :non-existing-fn]])
 
