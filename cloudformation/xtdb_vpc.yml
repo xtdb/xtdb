@@ -33,6 +33,22 @@ Resources:
       CidrBlock: 10.192.12.0/24
       MapPublicIpOnLaunch: true
 
+  PrivateSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.192.20.0/24
+      MapPublicIpOnLaunch: false
+
+  PrivateSubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.192.21.0/24
+      MapPublicIpOnLaunch: false
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -58,6 +74,23 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnetTwo
 
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  
+  PrivateSubnetOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetOne
+
+  PrivateSubnetTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetTwo
+
   SecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -75,13 +108,13 @@ Outputs:
     Description: ID of the VPC created by the stack
     Value: !Ref VPC
 
-  PublicSubnetOne:
-    Description: ID of the first public subnet created within the VPC
-    Value: !Ref PublicSubnetOne
+  PublicSubnets:
+    Description: IDs of both of the public subnets created within the VPC
+    Value: !Join [ ", ", [ !Ref PublicSubnetOne, !Ref PublicSubnetTwo ] ]
 
-  PublicSubnetTwo:
-    Description: ID of the second public subnet created within the VPC
-    Value: !Ref PublicSubnetTwo
+  PrivateSubnets:
+    Description: IDs of both of the private subnets created within the VPC
+    Value: !Join [ ", ", [ !Ref PrivateSubnetOne, !Ref PrivateSubnetTwo ] ]
 
   SecurityGroupId:
     Description: ID of the security group created for the VPC

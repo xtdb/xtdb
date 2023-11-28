@@ -9,6 +9,10 @@ Parameters:
     Description: Group ID of the security group to be used by the ECS nodes
     Type: AWS::EC2::SecurityGroup::Id
 
+  PrivateSubnets:
+    Description: List of public subnets to host the MSK brokers on
+    Type: List<AWS::EC2::Subnet::Id>
+
   MSKClusterName:
     Type: String
     Default: xtdb-cluster-kafka
@@ -19,46 +23,7 @@ Parameters:
     Default: 100
     Description: The size in GiB of the EBS volume for the data drive on each broker node of the kafka cluster.
 
-Resources:
-  PrivateSubnetMSKOne:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-         Fn::Select:
-         - 0
-         - Fn::GetAZs: {Ref: 'AWS::Region'}
-      VpcId: !Ref VpcId
-      CidrBlock: 10.192.20.0/24
-      MapPublicIpOnLaunch: false
-
-  PrivateSubnetMSKTwo:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-         Fn::Select:
-         - 1
-         - Fn::GetAZs: {Ref: 'AWS::Region'}
-      VpcId: !Ref VpcId
-      CidrBlock: 10.192.21.0/24
-      MapPublicIpOnLaunch: false
-
-  PrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VpcId
-  
-  PrivateSubnetMSKOneRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      SubnetId: !Ref PrivateSubnetMSKOne
-
-  PrivateSubnetMSKTwoRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      SubnetId: !Ref PrivateSubnetMSKTwo
-  
+Resources:  
   MSKSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -96,7 +61,7 @@ Resources:
     Type: AWS::MSK::Cluster
     Properties: 
       BrokerNodeGroupInfo: 
-        ClientSubnets: [!Ref 'PrivateSubnetMSKOne', !Ref 'PrivateSubnetMSKTwo']
+        ClientSubnets: !Ref PrivateSubnets
         InstanceType: kafka.t3.small
         SecurityGroups: [!GetAtt MSKSecurityGroup.GroupId]
         StorageInfo: 
