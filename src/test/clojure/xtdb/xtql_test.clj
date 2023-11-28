@@ -2181,3 +2181,11 @@
            (xt/q tu/*node* '(unify (from :film [{:film/bond-girls bond-girls} {:film/name "Die Another Day"}])
                                    (unnest {bond-girl bond-girls})
                                    (from :person [{:xt/id bond-girl} person/name]))))))
+
+(deftest test-seqs-in-expression-pos-2993
+  (xt/submit-tx tu/*node* ivan+petr)
+
+  (t/is (= [{:full-name "Petr Petrov"} {:full-name "Ivan Ivanov"}]
+           (xt/q tu/*node* (list '->
+                                 '(from :docs [{:xt/id user-id} first-name last-name])
+                                 (list 'return {:full-name (cons 'concat (list 'first-name " " 'last-name))}))))))

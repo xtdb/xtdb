@@ -90,41 +90,41 @@
     (set? expr) (Expr/val (into #{} (map parse-expr) expr))
     (map? expr) (Expr/val (into {} (map (juxt key (comp parse-expr val))) expr))
 
-    (list? expr) (do
-                   (when (empty? expr)
-                     (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+    (seq? expr) (do
+                  (when (empty? expr)
+                    (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
 
-                   (let [[f & args] expr]
-                     (when-not (symbol? f)
-                       (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+                  (let [[f & args] expr]
+                    (when-not (symbol? f)
+                      (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
 
-                     (case f
-                       .
-                       (do
-                         (when-not (and (= (count args) 2)
-                                        (first args)
-                                        (symbol? (second args)))
-                           (throw (err/illegal-arg :xtql/malformed-get {:expr expr})))
+                    (case f
+                      .
+                      (do
+                        (when-not (and (= (count args) 2)
+                                       (first args)
+                                       (symbol? (second args)))
+                          (throw (err/illegal-arg :xtql/malformed-get {:expr expr})))
 
-                         (Expr/get (parse-expr (first args)) (str (second args))))
+                        (Expr/get (parse-expr (first args)) (str (second args))))
 
-                       (exists? q pull pull*)
-                       (do
-                         (when-not (and (<= 1 (count args) 2)
-                                        (or (nil? (second args))
-                                            (map? (second args))))
-                           (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr})))
+                      (exists? q pull pull*)
+                      (do
+                        (when-not (and (<= 1 (count args) 2)
+                                       (or (nil? (second args))
+                                           (map? (second args))))
+                          (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr})))
 
-                         (let [[query {:keys [args]}] args
-                               parsed-query (parse-query query)
-                               parsed-args (some-> args (parse-arg-specs expr))]
-                           (case f
-                             exists? (Expr/exists parsed-query parsed-args)
-                             q (Expr/q parsed-query parsed-args)
-                             pull (Expr/pull parsed-query parsed-args)
-                             pull* (Expr/pullMany parsed-query parsed-args))))
+                        (let [[query {:keys [args]}] args
+                              parsed-query (parse-query query)
+                              parsed-args (some-> args (parse-arg-specs expr))]
+                          (case f
+                            exists? (Expr/exists parsed-query parsed-args)
+                            q (Expr/q parsed-query parsed-args)
+                            pull (Expr/pull parsed-query parsed-args)
+                            pull* (Expr/pullMany parsed-query parsed-args))))
 
-                       (Expr/call (str f) (mapv parse-expr args)))))
+                      (Expr/call (str f) (mapv parse-expr args)))))
 
     :else (Expr/val expr)))
 
