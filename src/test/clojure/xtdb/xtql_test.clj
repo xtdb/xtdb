@@ -2168,3 +2168,16 @@
                              (table [{:y 1} {:y 3}] [y]))
                       (return y))))
         "unify unnested column"))
+
+(deftest unnest-rewrite-issue-2982
+  (xt/submit-tx tu/*node* bond/tx-ops)
+
+  (t/is (= [{:bond-girl :halle-berry,
+             :bond-girls [:halle-berry :rosamund-pike],
+             :person/name "Halle Berry"}
+            {:bond-girl :rosamund-pike,
+             :bond-girls [:halle-berry :rosamund-pike],
+             :person/name "Rosamund Pike"}]
+           (xt/q tu/*node* '(unify (from :film [{:film/bond-girls bond-girls} {:film/name "Die Another Day"}])
+                                   (unnest {bond-girl bond-girls})
+                                   (from :person [{:xt/id bond-girl} person/name]))))))

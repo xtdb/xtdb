@@ -251,7 +251,7 @@
     (relation-columns base)
 
     [:unnest columns relation]
-    (conj (relation-columns relation) (val (first columns)))
+    (conj (relation-columns relation) (key (first columns)))
 
     [:unnest columns opts relation]
     (cond-> (conj (relation-columns relation) (val (first columns)))
