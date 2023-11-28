@@ -26,10 +26,12 @@ If it's not provided, the XTDB client will default it to the latest transaction 
 * `:key-fn`: specifies how keys are returned in query results.
 ** `:clojure` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
 
+== Operators
+
 XTQL queries consist of composable operators, optionally combined with a pipeline.
 
-* 'Source operators' are valid at the start of a pipeline, or in isolation.
-* 'Tail operators' transform data in a pipeline - they aren't valid as the first operator, because they don't source data, but can appear anywhere else in the pipeline.
+* link:#_source_operators[Source operators] are valid at the start of a pipeline, or in isolation.
+* link:#_tail_operators[Tail operators] transform data in a pipeline - they aren't valid as the first operator, because they don't source data, but can appear anywhere else in the pipeline.
 
 A pipeline consists of a source operator, and optionally many tail operators:
 
@@ -51,9 +53,8 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 (from ...)
 ----
 
-The operators are as follows:
+=== Source Operators
 
-.Source operators
 [cols="3,8"]
 |===
 |Operator|Purpose
@@ -63,7 +64,8 @@ The operators are as follows:
 | link:#_unify[`unify`,role=no-underline] | Combines multiple input sources using Datalog-style unification.
 |===
 
-.Tail operators
+=== Tail operators
+
 [cols="3,8"]
 |===
 |Operator|Purpose
@@ -79,12 +81,12 @@ The operators are as follows:
 | link:#_unnest[`unnest`,role=no-underline] | Flattens an array within a column into individual rows
 |===
 
+=== Unify clauses
+
 Joins in XTQL are specified using the link:#_unify[`unify`] operator - this combines multiple input relations using Datalog-style unification.
 This allows for very declarative yet terse method of specifying join conditions; how relations relate to each other.
 
 'Unify clauses' are inputs to the link:#_unify[`unify`,role=no-underline] operator:
-
-.Unify clauses
 [cols="3,8"]
 |===
 |Clause|Purpose
@@ -97,11 +99,9 @@ This allows for very declarative yet terse method of specifying join conditions;
 | link:#_with[`with`,role=no-underline] | Defines new logical variables in the unification
 |===
 
-== Operators
-
 === `aggregate`
 
-The 'aggregate' operator aggregates rows in a query according to the aggregate specs.
+The `aggregate` operator aggregates rows in a query according to the aggregate specs.
 
 [source]
 ----
@@ -133,7 +133,7 @@ The available aggregate functions are documented link:../stdlib/aggregates[here]
 
 === `from`
 
-The `from` operator sources data from a table in XTDB - it expects the table to fetch from, as well as options that define what columns to return, as well as any temporal filters to apply.
+The `from` operator sources data from a table in XTDB - it expects the table to fetch from, as well as options that define what columns to return, and optionally any temporal filters to apply.
 
 [source]
 ----
@@ -203,7 +203,7 @@ Without any temporal filters, it is valid to just specify the binding specs with
 [#_joins]
 === Joins - `join`, `left-join`
 
-The `join` and `left-join` unify clauses further constrain a unification by joining against the given query.
+The `join` and `left-join` link:#_unify_clauses[unify clauses] further constrain a unification by joining against the given query.
 
 [source]
 ----
@@ -219,10 +219,10 @@ JoinOpts :: [BindSpec+]
 ----
 
 We join the inner query to the rest of the unify inputs using the binding specs - see the link:#_binding_specs[binding specs] section for more details.
-These binding specs act as both 'join conditions' (if the logic variables are reused within the unify operator) and a specification of which columns from the sub-query should be returned from the outer query.
+These binding specs act as both 'join conditions' (if the logic variables are reused within the link:#_unify[`unify`,role=no-underline] operator) and a specification of which columns from the sub-query should be returned from the outer query.
 
 * The `join` operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
-* The `left-join` operator performs an outer, or optional, join with with sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
+* The `left-join` operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
 
 Parameters in the sub-query can be fulfilled with the `:args` option - see the link:#_argument_specs[argument specs] section for more details.
 
@@ -239,8 +239,8 @@ In this case, `customer-id` is specified multiple times, so this adds a join-con
 
 === `limit`
 
-The limit operator limits the rows returned by the query.
-Without an explicit preceding `order-by`, the rows selected for return are undefined.
+The `limit` operator limits the rows returned by the query.
+Without an explicit preceding link:#_order-by[`order-by`,role=no-underline], the rows selected for return are undefined.
 
 [source]
 ----
@@ -259,8 +259,8 @@ For example:
 
 === `offset`
 
-The offset operator skips the first N rows that would have otherwise been returned by the query.
-Without an explicit preceding `order-by`, the rows selected for return are undefined.
+The `offset` operator skips the first N rows that would have otherwise been returned by the query.
+Without an explicit preceding link:#_order-by[`order-by`,role=no-underline], the rows selected for return are undefined.
 
 [source]
 ----
@@ -280,7 +280,7 @@ For example:
 
 === `order-by`
 
-The 'order-by' operator sorts the rows in a relation.
+The `order-by` operator sorts the rows in a relation.
 
 [source]
 ----
@@ -313,7 +313,7 @@ For example:
 
 === `return`
 
-The return operator specifies the columns to return from the query.
+The `return` operator specifies the columns to return from the query.
 It also allows additional projections, should you want to return a new column based on existing columns.
 
 [source]
@@ -340,13 +340,15 @@ For example:
 
 === `table`
 
-The 'table' operator creates an inline table with the provided values.
+The `table` operator creates an inline table with the provided values.
 It takes an array of maps, either as a literal, a parameter, or a value nested within another document, and yields each element as a row, with the values in the map bound/constrained as required.
 
 [source]
 ----
 Table :: (table TableExpr [BindSpec+])
-TableExpr :: Expr // defined separately
+TableExpr :: Expr
+
+Expr :: <defined separately>
 ----
 
 For example:
@@ -372,7 +374,7 @@ For example:
 
 === `unify`
 
-The 'unify' operator combines multiple input relations using Datalog-style unification, to achieve join-like behaviour.
+The `unify` operator combines multiple input relations using Datalog-style unification, to achieve join-like behaviour.
 
 [source]
 ----
@@ -401,26 +403,26 @@ FROM customers c
   JOIN orders o ON (c.xt$id = o.customer_id)
 ----
 
-* Join and Left Join clauses work in a similar way to `from`, except they execute a full sub-query rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
-* Table clauses, likewise - any logic variables specified in its binding specs are unified.
-* `where` clauses further constrain the results using predicates - these have access to any logic variable bound in the containing `unify` operator.
-* `with` clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, again, the value of the `with` result must agree with the value elsewhere in the `unify`.
+* link:#_joins[`join`,role=no-underline] and link:#_joins[`left-join`,role=no-underline] clauses work in a similar way to link:#_from[`from`,role=no-underline], except they execute a full sub-query rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
+* link:#_table[`table`,role=no-underline] clauses, likewise - any logic variables specified in its binding specs are unified.
+* link:#_where[`where`,role=no-underline] clauses further constrain the results using predicates - these have access to any logic variable bound in the containing `unify` operator.
+* link:#_with[`with`,role=no-underline] clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, again, the value of the link:#_with[`with`,role=no-underline] result must agree with the value elsewhere in the `unify`.
 * The `unify` operator returns a relation containing a column for every logic variable bound in any of its clauses.
 
 === `unnest`
 
-The 'unnest' operator extracts values from an array - returning one row for each element.
+The `unnest` operator extracts values from an array - returning one row for each element.
 The other columns in the query are duplicated for each row.
 
 [source]
 ----
 Unnest :: (unnest UnnestSpec)
 
-// as a tail operator
+; as a tail operator
 UnnestSpec :: {Column Expr}
 Column :: keyword
 
-// in `unify`
+; in `unify`
 UnnestSpec :: {LogicVar Expr}
 LogicVar :: symbol
 
@@ -453,7 +455,7 @@ For example:
 
 === `where`
 
-The 'where' operator filters rows in a query or unification operator.
+The `where` operator filters rows in a query or unification operator.
 It expects (optionally) many predicates - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
 
 [source]
@@ -483,16 +485,16 @@ Example:
 
 === `with`
 
-The 'with' operator specifies columns to add to the query.
+The `with` operator specifies columns to add to the query.
 
 [source]
 ----
 With :: (with WithSpec*)
 
-// as a tail operator
+; as a tail operator
 WithSpec :: WithVar | {Column Expr, ...}
 
-// in `unify`
+; in `unify`
 WithSpec :: WithVar | {LogicVar Expr, ...}
 
 WithVar :: symbol
@@ -522,7 +524,7 @@ For example:
 
 === `without`
 
-The 'without' operator removes columns from the ongoing query:
+The `without` operator removes columns from the ongoing query:
 
 [source]
 ----
@@ -660,9 +662,9 @@ For example:
 ;;      `SELECT first_name, last_name FROM users WHERE username = ?`
 ----
 
-(In these examples, we use `from` - but the same applies to `join` and `left-join`.)
+(In these examples, we use link:#_from[`from`,role=no-underline] - but the same applies to link:#_joins[`join`,role=no-underline] and link:#_joins[`left-join`,role=no-underline].)
 
-Within `unify` operators, these output names (`first-name`, `last-name` etc.) create 'logic variables' which, if they are re-used within the same `unify` operator, will add a 'join condition' - see the link:#_unify[`unify`] operator for more details.
+Within link:#_unify[`unify`,role=no-underline] operators, these output names (`first-name`, `last-name` etc.) create 'logic variables' which, if they are re-used within the same link:#_unify[`unify`,role=no-underline] operator, will add a 'join condition' - see the link:#_unify[`unify`] operator for more details.
 
 == Argument specs
 
