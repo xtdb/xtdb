@@ -273,7 +273,7 @@
             new-cut (+ cut total-length)
             cut-len (- new-cut prev-cut)]
         (if (<= (int min-multipart-part-size) cut-len)
-          (recur (conj cuts new-cut) cut new-cut blocks)
+          (recur (conj cuts new-cut) new-cut new-cut blocks)
           (recur cuts prev-cut new-cut blocks)))
       cuts)))
 
