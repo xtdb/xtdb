@@ -35,6 +35,7 @@
    (hato/request (merge {:accept :transit+json
                          :as :transit+json
                          :request-method request-method
+                         :version :http-1.1
                          :url (str (:base-url client)
                                    (-> (r/match-by-name router endpoint)
                                        (r/match->path)))
