@@ -72,7 +72,7 @@ public class Ops {
 
         @Override
         public String toString() {
-            return "[:sql '%s' {:paramGroupRows=%s, :paramGroupBytes=%s}]".formatted(sql, paramGroupRows, paramGroupBytes);
+            return String.format("[:sql '%s' {:paramGroupRows=%s, :paramGroupBytes=%s}]", sql, paramGroupRows, paramGroupBytes);
         }
     }
 
@@ -99,7 +99,7 @@ public class Ops {
 
         @Override
         public String toString() {
-            return "[:xtql %s {:params %s}]".formatted(query, params);
+            return String.format("[:xtql %s {:params %s}]", query, params);
         }
     }
 
@@ -165,7 +165,7 @@ public class Ops {
 
         @Override
         public String toString() {
-            return "[:put {tableName=%s, doc=%s, validFrom=%s, validTo=%s}]".formatted(tableName, doc, validFrom, validTo);
+            return String.format("[:put {tableName=%s, doc=%s, validFrom=%s, validTo=%s}]", tableName, doc, validFrom, validTo);
         }
     }
 
@@ -223,7 +223,7 @@ public class Ops {
 
         @Override
         public String toString() {
-            return "[:delete %s %s {validFrom=%s, validTo=%s}]".formatted(tableName, entityId, validFrom, validTo);
+            return String.format("[:delete %s %s {validFrom=%s, validTo=%s}]", tableName, entityId, validFrom, validTo);
         }
     }
 
@@ -251,7 +251,7 @@ public class Ops {
 
         @Override
         public String toString() {
-            return "[:evict {tableName=%s, entityId=%s}]".formatted(tableName, entityId);
+            return String.format("[:evict {tableName=%s, entityId=%s}]", tableName, entityId);
         }
     }
 
@@ -279,7 +279,7 @@ public class Ops {
 
         @Override
         public String toString() {
-            return "[:call %s %s]".formatted(fnId, Arrays.toString(args));
+            return String.format("[:call %s %s]", fnId, Arrays.toString(args));
         }
     }
 
