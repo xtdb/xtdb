@@ -138,9 +138,9 @@
                                                               :prefix (util/->path (str (random-uuid)))
                                                               :sns-topic-arn sns-topic-arn}})]
       ;; Submit some documents to the node
-      (t/is (xt/submit-tx node [[:put :bar {:xt/id "bar1"}]
-                                [:put :bar {:xt/id "bar2"}]
-                                [:put :bar {:xt/id "bar3"}]]))
+      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
+                                (xt/put :bar {:xt/id "bar2"})
+                                (xt/put :bar {:xt/id "bar3"})]))
 
       ;; Ensure finish-chunk! works
       (t/is (nil? (tu/finish-chunk! node)))

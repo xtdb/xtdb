@@ -2267,7 +2267,7 @@
   (let [docs [{:xt/id 42, :firstname "bob"}
               {:xt/id 43, :firstname "alice", :lastname "carrol"}
               {:xt/id 44, :firstname "jim", :orders [{:sku "eggs", :qty 2}, {:sku "cheese", :qty 1}]}]]
-    (xt/submit-tx tu/*node* (map (partial vector :put :customer) docs))
+    (xt/submit-tx tu/*node* (map (partial xt/put :customer) docs))
     (t/is (= (set (mapv (fn [doc] {:c doc}) docs))
              (set (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]}))))))
 

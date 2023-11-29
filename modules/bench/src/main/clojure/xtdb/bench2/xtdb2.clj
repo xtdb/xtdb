@@ -29,7 +29,7 @@
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
          partition-count 512]
      (doseq [chunk (partition-all partition-count doc-seq)]
-       (xt/submit-tx (:sut worker) (mapv (partial vector :put table) chunk))))))
+       (xt/submit-tx (:sut worker) (mapv (partial xt/put table) chunk))))))
 
 (defn install-proxy-node-meters!
   [^MeterRegistry meter-reg]
