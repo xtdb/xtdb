@@ -706,3 +706,30 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                           #"Illegal argument: "
                           (xt/q tu/*node* '(from :docs [first-name last-name])
                                 {:key-fn :foo-bar}))))
+
+(t/deftest dynamic-xtql-queries
+  (xt/submit-tx tu/*node* [[:put :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"}]
+                           [:put :posts {:xt/id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}]])
+
+  (letfn [(build-posts-query [{:keys [with-author? popular?]}]
+            (xt/template (-> (from :posts [{:xt/id id} text
+                                           ~@(when with-author?
+                                               '[author-name])
+                                           ~@(when popular?
+                                               '[likes])])
+                             ~@(when popular?
+                                 ['(where (> likes 100))]))))]
+
+    (t/is (= #{{:id :uk, :text "Hello from England!"}
+               {:id :de, :text "Hallo aus Deutschland!"}}
+             (set (xt/q tu/*node* (build-posts-query {})))))
+
+    (t/is (= #{{:id :uk, :text "Hello from England!", :author-name "James"}
+               {:id :de, :text "Hallo aus Deutschland!", :author-name "Finn"}}
+             (set (xt/q tu/*node* (build-posts-query {:with-author? true})))))
+
+    (t/is (= #{{:id :de, :text "Hallo aus Deutschland!", :likes 127}}
+             (set (xt/q tu/*node* (build-posts-query {:popular? true})))))
+
+    (t/is (= #{{:id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}}
+             (set (xt/q tu/*node* (build-posts-query {:popular? true, :with-author? true})))))))
