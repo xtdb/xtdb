@@ -12,5 +12,5 @@
  xt.tx/xtql xtdb.serde/xtql-op-reader
  xt.tx/put xtdb.serde/put-op-reader
  xt.tx/delete xtdb.serde/delete-op-reader
- xt.tx/erase xtdb.serde/evict-op-reader
+ xt.tx/erase xtdb.serde/erase-op-reader
  xt.tx/call xtdb.serde/call-op-reader}

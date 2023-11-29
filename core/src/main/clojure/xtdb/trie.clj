@@ -68,7 +68,7 @@
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            (types/col-type->field "put" put-doc-col-type)
                            (types/col-type->field "delete" :null)
-                           (types/col-type->field "evict" :null))]))
+                           (types/col-type->field "erase" :null))]))
 
 (defn open-log-data-root
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]

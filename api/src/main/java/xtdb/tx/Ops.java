@@ -262,16 +262,16 @@ public class Ops {
         }
     }
 
-    public static Evict evict(Keyword tableName, Object entityId) {
-        return new Evict(tableName, entityId);
+    public static Erase erase(Keyword tableName, Object entityId) {
+        return new Erase(tableName, entityId);
     }
 
-    public static final class Evict extends Ops {
+    public static final class Erase extends Ops {
 
         private final Keyword tableName;
         private final Object entityId;
 
-        private Evict(Keyword tableName, Object entityId) {
+        private Erase(Keyword tableName, Object entityId) {
             this.tableName = tableName;
             this.entityId = entityId;
         }
@@ -286,7 +286,7 @@ public class Ops {
 
         @Override
         public String toString() {
-            return String.format("[:evict {tableName=%s, entityId=%s}]", tableName, entityId);
+            return String.format("[:erase {tableName=%s, entityId=%s}]", tableName, entityId);
         }
     }
 

@@ -150,7 +150,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "evict",
+        "name" : "erase",
         "nullable" : true,
         "type" : {
           "name" : "null"
@@ -257,7 +257,7 @@
         "name" : "delete",
         "count" : 0
       },{
-        "name" : "evict",
+        "name" : "erase",
         "count" : 0
       }]
     }]

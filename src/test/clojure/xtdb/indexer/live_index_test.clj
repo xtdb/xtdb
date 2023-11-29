@@ -108,7 +108,7 @@
     (xt/sql-op "UPDATE foo SET bar = 2 WHERE foo.xt$id = 1")
     (xt/sql-op "DELETE FROM foo WHERE foo.bar = 2")
     (xt/sql-op "INSERT INTO foo (xt$id, bar) VALUES (2, 2)")]
-   ;; sql evict
+   ;; sql erase
    [(xt/sql-op "ERASE FROM foo WHERE foo.xt$id = 2")]
    ;; abort
    [(xt/sql-op "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')")]])

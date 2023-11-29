@@ -14,7 +14,7 @@
            [org.apache.arrow.vector PeriodDuration]
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
            xtdb.api.TransactionKey
-           (xtdb.tx Ops Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql Ops$Xtql)
+           (xtdb.tx Ops Ops$Call Ops$Delete Ops$Erase Ops$Put Ops$Sql Ops$Xtql)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -111,17 +111,17 @@
   (-> (Ops/delete table-name id)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
-(defn- render-evict-op [^Ops$Evict op]
+(defn- render-erase-op [^Ops$Erase op]
   {:table-name (.tableName op), :xt/id (.entityId op)})
 
-(defmethod print-dup Ops$Evict [op ^Writer w]
-  (.write w (format "#xt.tx/evict %s" (pr-str (render-evict-op op)))))
+(defmethod print-dup Ops$Erase [op ^Writer w]
+  (.write w (format "#xt.tx/erase %s" (pr-str (render-erase-op op)))))
 
-(defmethod print-method Ops$Evict [op ^Writer w]
+(defmethod print-method Ops$Erase [op ^Writer w]
   (print-dup op w))
 
-(defn- evict-op-reader [{:keys [table-name xt/id]}]
-  (Ops/evict table-name id))
+(defn- erase-op-reader [{:keys [table-name xt/id]}]
+  (Ops/erase table-name id))
 
 (defn- render-call-op [^Ops$Call op]
   {:f (.f op), :args (.args op)})
@@ -161,7 +161,7 @@
           "xtdb.tx/xtql" (transit/read-handler xtql-op-reader)
           "xtdb.tx/put" (transit/read-handler put-op-reader)
           "xtdb.tx/delete" (transit/read-handler delete-op-reader)
-          "xtdb.tx/erase" (transit/read-handler evict-op-reader)
+          "xtdb.tx/erase" (transit/read-handler erase-op-reader)
           "xtdb.tx/call" (transit/read-handler call-op-reader)}))
 
 (def tj-write-handlers
@@ -211,5 +211,5 @@
           Ops$Xtql (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
           Ops$Put (transit/write-handler "xtdb.tx/put" render-put-op)
           Ops$Delete (transit/write-handler "xtdb.tx/delete" render-delete-op)
-          Ops$Evict (transit/write-handler "xtdb.tx/erase" render-evict-op)
+          Ops$Erase (transit/write-handler "xtdb.tx/erase" render-erase-op)
           Ops$Call (transit/write-handler "xtdb.tx/call" render-call-op)}))

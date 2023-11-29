@@ -27,7 +27,7 @@
   (^xtdb.vector.IVectorWriter docWriter [])
   (^void logPut [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo, writeDocFn])
   (^void logDelete [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo])
-  (^void logEvict [^java.nio.ByteBuffer iid])
+  (^void logErase [^java.nio.ByteBuffer iid])
   (^xtdb.indexer.live_index.ILiveTable commit [])
   (^void abort []))
 
@@ -87,7 +87,7 @@
                     ^IVectorWriter sys-time-ceilings-wtr, ^IVectorWriter sys-time-ceiling-wtr
                     ^IVectorWriter put-wtr
                     ^IVectorWriter delete-wtr
-                    ^IVectorWriter evict-wtr]
+                    ^IVectorWriter erase-wtr]
   ILiveTable
   (startTx [this-table tx-key new-live-table?]
     (let [!transient-trie (atom live-trie)
@@ -135,7 +135,7 @@
 
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
-        (logEvict [_ iid]
+        (logErase [_ iid]
           (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
 
@@ -148,7 +148,7 @@
           (.writeLong sys-time-ceiling-wtr Long/MAX_VALUE)
           (.endList sys-time-ceilings-wtr)
 
-          (.writeNull evict-wtr)
+          (.writeNull erase-wtr)
 
           (.endRow live-rel)
 
@@ -227,7 +227,7 @@
                     iid-wtr (.colWriter rel "xt$system_from")
                     vts-wtr (.listElementWriter vts-wtr)
                     stcs-wtr (.listElementWriter stcs-wtr)
-                    (.legWriter op-wtr :put) (.legWriter op-wtr :delete) (.legWriter op-wtr :evict))))))
+                    (.legWriter op-wtr :put) (.legWriter op-wtr :delete) (.legWriter op-wtr :erase))))))
 
 (defn ->live-trie [log-limit page-limit iid-rdr]
   (-> (doto (LiveHashTrie/builder iid-rdr)

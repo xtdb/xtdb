@@ -144,18 +144,18 @@
 
         nil))))
 
-(defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
+(defn- ->erase-indexer ^xtdb.indexer.OpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
 
-  (let [evict-leg (.legReader tx-ops-rdr :evict)
-        table-rdr (.structKeyReader evict-leg "table")
-        id-rdr (.structKeyReader evict-leg "xt$id")]
+  (let [erase-leg (.legReader tx-ops-rdr :erase)
+        table-rdr (.structKeyReader erase-leg "table")
+        id-rdr (.structKeyReader erase-leg "xt$id")]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
               eid (.getObject id-rdr tx-op-idx)]
 
           (-> (.liveTable live-idx-tx table)
-              (.logEvict (trie/->iid eid)))
+              (.logErase (trie/->iid eid)))
 
           (.addRows row-counter 1))
 
@@ -359,7 +359,7 @@
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)]
             (-> (.liveTable live-idx-tx table)
-                (.logEvict iid))))
+                (.logErase iid))))
 
         (.addRows row-counter row-count)))))
 
@@ -599,7 +599,7 @@
                       (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
                             !put-idxer (delay (->put-indexer row-counter live-idx-tx tx-ops-rdr system-time))
                             !delete-idxer (delay (->delete-indexer row-counter live-idx-tx tx-ops-rdr system-time))
-                            !evict-idxer (delay (->evict-indexer row-counter live-idx-tx tx-ops-rdr))
+                            !erase-idxer (delay (->erase-indexer row-counter live-idx-tx tx-ops-rdr))
                             !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-rdr tx-opts))
                             !xtql-idxer (delay (->xtql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
                             !sql-idxer (delay (->sql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
@@ -609,7 +609,7 @@
                                                    :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
                                                    :put (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
                                                    :delete (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
-                                                   :evict (.indexOp ^OpIndexer @!evict-idxer tx-op-idx)
+                                                   :erase (.indexOp ^OpIndexer @!erase-idxer tx-op-idx)
                                                    :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
                                                    :abort (throw abort-exn))]
                             (try

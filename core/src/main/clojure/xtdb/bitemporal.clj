@@ -27,7 +27,7 @@
           (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
         (let [leg (.getOp ev-ptr)]
-          (if (= :evict leg)
+          (if (= :erase leg)
             (do
               (.reset ceiling)
               (duplicate-ptr skip-iid-ptr current-iid-ptr)

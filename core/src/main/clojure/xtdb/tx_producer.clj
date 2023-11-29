@@ -17,7 +17,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
-           (xtdb.tx Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql Ops$Xtql)
+           (xtdb.tx Ops$Abort Ops$Call Ops$Delete Ops$Erase Ops$Put Ops$Sql Ops$Xtql)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -137,18 +137,18 @@
 
       (.endStruct delete-writer))))
 
-(defn- ->evict-writer [^IVectorWriter op-writer]
-  (let [evict-writer (.legWriter op-writer :evict (FieldType/notNullable #xt.arrow/type :struct))
-        table-writer (.structKeyWriter evict-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        id-writer (.structKeyWriter evict-writer "xt$id" (FieldType/notNullable #xt.arrow/type :union))]
-    (fn [^Ops$Evict op]
-      (.startStruct evict-writer)
+(defn- ->erase-writer [^IVectorWriter op-writer]
+  (let [erase-writer (.legWriter op-writer :erase (FieldType/notNullable #xt.arrow/type :struct))
+        table-writer (.structKeyWriter erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
+        id-writer (.structKeyWriter erase-writer "xt$id" (FieldType/notNullable #xt.arrow/type :union))]
+    (fn [^Ops$Erase op]
+      (.startStruct erase-writer)
       (vw/write-value! (str (symbol (.tableName op))) table-writer)
 
       (let [eid (.entityId op)]
         (vw/write-value! eid (.legWriter id-writer (vw/value->arrow-type eid))))
 
-      (.endStruct evict-writer))))
+      (.endStruct erase-writer))))
 
 (defn- ->call-writer [^IVectorWriter op-writer]
   (let [call-writer (.legWriter op-writer :call (FieldType/notNullable #xt.arrow/type :struct))
@@ -178,7 +178,7 @@
         !write-sql! (delay (->sql-writer op-writer allocator))
         !write-put! (delay (->put-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
-        !write-evict! (delay (->evict-writer op-writer))
+        !write-erase! (delay (->erase-writer op-writer))
         !write-call! (delay (->call-writer op-writer))
         !write-abort! (delay (->abort-writer op-writer))]
 
@@ -188,7 +188,7 @@
         Ops$Sql (@!write-sql! tx-op)
         Ops$Put (@!write-put! tx-op)
         Ops$Delete (@!write-delete! tx-op)
-        Ops$Evict (@!write-evict! tx-op)
+        Ops$Erase (@!write-erase! tx-op)
         Ops$Call (@!write-call! tx-op)
         Ops$Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))

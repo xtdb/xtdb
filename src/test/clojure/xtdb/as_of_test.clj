@@ -98,7 +98,7 @@
                                 :default-all-valid-time? true})))
           "all app, all sys")))
 
-(t/deftest test-evict
+(t/deftest test-erase
   (letfn [(all-time-docs []
             (->> (tu/query-ra '[:scan {:table xt_docs, :for-valid-time :all-time, :for-system-time :all-time}
                                 [xt$id xt$valid_from xt$valid_to xt$system_from xt$system_to]]
@@ -113,9 +113,9 @@
     (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 1})])
 
     (t/is (= {:doc 3, :other-doc 1} (all-time-docs))
-          "documents present before evict")
+          "documents present before erase")
 
     (xt/submit-tx tu/*node* [(xt/erase :xt_docs :doc)])
 
     (t/is (= {:other-doc 1} (all-time-docs))
-          "documents removed after evict")))
+          "documents removed after erase")))

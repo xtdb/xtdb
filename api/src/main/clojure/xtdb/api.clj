@@ -289,7 +289,7 @@
   (.until tx-op (expect-instant until)))
 
 (defn erase [table id]
-  (Ops/evict (expect-table-name table) (expect-eid id)))
+  (Ops/erase (expect-table-name table) (expect-eid id)))
 
 (defn call [f & args]
   (Ops/call (expect-fn-id f) args))
