@@ -16,7 +16,6 @@ publishing {
 
 dependencies {
     api(project(":api"))
-    api(project(":wire-formats"))
     compileOnlyApi(files("src/main/resources"))
 
     api("org.clojure", "tools.logging", "1.2.4")

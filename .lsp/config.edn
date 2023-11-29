@@ -6,7 +6,6 @@
                 :import true
                 :import-classes {:classes-per-line -1}}}
  :source-paths ["api/src/main/java" "api/src/main/clojure"
-                "wire-formats/src/main/clojure"
                 "core/src/main/clojure" "core/src/main/java"
                 "http-server/src/main/clojure"
                 "http-client-clj/src/main/clojure"

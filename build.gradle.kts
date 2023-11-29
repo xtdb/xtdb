@@ -39,7 +39,7 @@ allprojects {
         java {
             // I'd like to put this in the individual projects but this seems to take preference.
             sourceCompatibility = when(project.name) {
-                "api", "wire-formats", "http-client-clj" -> JavaVersion.VERSION_11
+                "api", "http-client-clj" -> JavaVersion.VERSION_11
                 else -> JavaVersion.VERSION_17
             }
 
@@ -174,7 +174,6 @@ dependencies {
     }
 
     projectDep(":api")
-    projectDep(":wire-formats")
     projectDep(":core")
 
     projectDep(":http-server")

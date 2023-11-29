@@ -28,7 +28,6 @@
             <option value="$PROJECT_DIR$/modules/kafka" />
             <option value="$PROJECT_DIR$/modules/s3" />
             <option value="$PROJECT_DIR$/pgwire-server" />
-            <option value="$PROJECT_DIR$/wire-formats" />
           </set>
         </option>
       </GradleProjectSettings>

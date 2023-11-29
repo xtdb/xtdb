@@ -1,10 +1,10 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
   xtdb.edn
   (:require [time-literals.read-write :as time-literals])
-  (:import (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           java.io.Writer
+  (:import java.io.Writer
            [java.time Duration Period]
-           [org.apache.arrow.vector PeriodDuration]))
+           [org.apache.arrow.vector PeriodDuration]
+           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
               (some-> (System/getProperty "xtdb.no-java-time-literals") Boolean/valueOf))

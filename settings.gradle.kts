@@ -1,6 +1,6 @@
 rootProject.name = "xtdb"
 
-include("api", "core", "wire-formats")
+include("api", "core")
 include("http-server", "http-client-clj", "pgwire-server")
 include("docker:standalone","docker:aws")
 
