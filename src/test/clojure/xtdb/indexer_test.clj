@@ -25,48 +25,48 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (def txs
-  [[[:put :device-info
-     {:xt/id "device-info-demo000000",
-      :api-version "23",
-      :manufacturer "iobeam",
-      :model "pinto",
-      :os-name "6.0.1"}]
-    [:put :device-readings
-     {:xt/id "reading-demo000000",
-      :device-id "device-info-demo000000",
-      :cpu-avg-15min 8.654,
-      :rssi -50.0,
-      :cpu-avg-5min 10.802,
-      :battery-status "discharging",
-      :ssid "demo-net",
-      :time #inst "2016-11-15T12:00:00.000-00:00",
-      :battery-level 59.0,
-      :bssid "01:02:03:04:05:06",
-      :battery-temperature 89.5,
-      :cpu-avg-1min 24.81,
-      :mem-free 4.10011078E8,
-      :mem-used 5.89988922E8}]]
-   [[:put :device-info
-     {:xt/id "device-info-demo000001",
-      :api-version "23",
-      :manufacturer "iobeam",
-      :model "mustang",
-      :os-name "6.0.1"}]
-    [:put :device-readings
-     {:xt/id "reading-demo000001",
-      :device-id "device-info-demo000001",
-      :cpu-avg-15min 8.822,
-      :rssi -61.0,
-      :cpu-avg-5min 8.106,
-      :battery-status "discharging",
-      :ssid "stealth-net",
-      :time #inst "2016-11-15T12:00:00.000-00:00",
-      :battery-level 86.0,
-      :bssid "A0:B1:C5:D2:E0:F3",
-      :battery-temperature 93.7,
-      :cpu-avg-1min 4.93,
-      :mem-free 7.20742332E8,
-      :mem-used 2.79257668E8}]]])
+  [[(xt/put :device-info
+            {:xt/id "device-info-demo000000",
+             :api-version "23",
+             :manufacturer "iobeam",
+             :model "pinto",
+             :os-name "6.0.1"})
+    (xt/put :device-readings
+            {:xt/id "reading-demo000000",
+             :device-id "device-info-demo000000",
+             :cpu-avg-15min 8.654,
+             :rssi -50.0,
+             :cpu-avg-5min 10.802,
+             :battery-status "discharging",
+             :ssid "demo-net",
+             :time #inst "2016-11-15T12:00:00.000-00:00",
+             :battery-level 59.0,
+             :bssid "01:02:03:04:05:06",
+             :battery-temperature 89.5,
+             :cpu-avg-1min 24.81,
+             :mem-free 4.10011078E8,
+             :mem-used 5.89988922E8})]
+   [(xt/put :device-info
+            {:xt/id "device-info-demo000001",
+             :api-version "23",
+             :manufacturer "iobeam",
+             :model "mustang",
+             :os-name "6.0.1"})
+    (xt/put :device-readings
+            {:xt/id "reading-demo000001",
+             :device-id "device-info-demo000001",
+             :cpu-avg-15min 8.822,
+             :rssi -61.0,
+             :cpu-avg-5min 8.106,
+             :battery-status "discharging",
+             :ssid "stealth-net",
+             :time #inst "2016-11-15T12:00:00.000-00:00",
+             :battery-level 86.0,
+             :bssid "A0:B1:C5:D2:E0:F3",
+             :battery-temperature 93.7,
+             :cpu-avg-1min 4.93,
+             :mem-free 7.20742332E8,
+             :mem-used 2.79257668E8})]])
 
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
@@ -161,7 +161,7 @@
 
 (t/deftest temporal-watermark-is-immutable-2354
   (with-open [node (xtn/start-node {})]
-    (let [{tt :system-time, :as tx} (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
+    (let [{tt :system-time, :as tx} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 0})]
                                                   {:default-all-valid-time? false})]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (util/->zdt tt)
@@ -174,7 +174,7 @@
                                xt$system_from, xt$system_to]]
                             {:node node})))
 
-      (let [{tt2 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 1}]]
+      (let [{tt2 :system-time} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 1})]
                                              {:default-all-valid-time? false})]
         (t/is (= #{{:xt/id :foo, :version 0,
                     :xt/valid-from (util/->zdt tt2)
@@ -211,16 +211,16 @@
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        tx-ops [[:put :xt_docs {:xt/id "foo"
-                                :list [12.0 "foo"]}]
-                [:put :xt_docs {:xt/id 24}]
-                [:put :xt_docs {:xt/id "bar"
-                                :list [#inst "2020-01-01" false]}]
-                [:put :xt_docs {:xt/id :baz
-                                :struct {:a 1, :b "b"}}]
-                [:put :xt_docs {:xt/id 52}]
-                [:put :xt_docs {:xt/id :quux
-                                :struct {:a true, :c "c"}}]]]
+        tx-ops [(xt/put :xt_docs {:xt/id "foo"
+                                  :list [12.0 "foo"]})
+                (xt/put :xt_docs {:xt/id 24})
+                (xt/put :xt_docs {:xt/id "bar"
+                                  :list [#inst "2020-01-01" false]})
+                (xt/put :xt_docs {:xt/id :baz
+                                  :struct {:a 1, :b "b"}})
+                (xt/put :xt_docs {:xt/id 52})
+                (xt/put :xt_docs {:xt/id :quux
+                                  :struct {:a true, :c "c"}})]]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -234,16 +234,16 @@
 
 (t/deftest test-multi-block-metadata
   (let [node-dir (util/->path "target/multi-block-metadata")
-        tx0 [[:put :xt_docs {:xt/id "foo"
-                             :list [12.0 "foo"]}]
-             [:put :xt_docs {:xt/id :bar
-                             :struct {:a 1, :b "b"}}]
-             [:put :xt_docs {:xt/id "baz"
-                             :list [#inst "2020-01-01" false]}]
-             [:put :xt_docs {:xt/id 24}]]
-        tx1 [[:put :xt_docs {:xt/id 52}]
-             [:put :xt_docs {:xt/id :quux
-                             :struct {:a true, :b {:c "c", :d "d"}}}]]]
+        tx0 [(xt/put :xt_docs {:xt/id "foo"
+                               :list [12.0 "foo"]})
+             (xt/put :xt_docs {:xt/id :bar
+                               :struct {:a 1, :b "b"}})
+             (xt/put :xt_docs {:xt/id "baz"
+                               :list [#inst "2020-01-01" false]})
+             (xt/put :xt_docs {:xt/id 24})]
+        tx1 [(xt/put :xt_docs {:xt/id 52})
+             (xt/put :xt_docs {:xt/id :quux
+                               :struct {:a true, :b {:c "c", :d "d"}}})]]
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
@@ -289,11 +289,11 @@
 
 (t/deftest round-trips-nils
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id "nil-bar"
-                                        :foo "foo"
-                                        :bar nil}]
-                        [:put :xt_docs {:xt/id "no-bar"
-                                        :foo "foo"}]])
+    (xt/submit-tx node [(xt/put :xt_docs {:xt/id "nil-bar"
+                                          :foo "foo"
+                                          :bar nil})
+                        (xt/put :xt_docs {:xt/id "no-bar"
+                                          :foo "foo"})])
     (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}
               {:id "no-bar", :foo "foo"}]
              (xt/q node '{:find [id foo bar]
@@ -308,7 +308,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (-> (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :uuid uuid}]])
+      (-> (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :uuid uuid})])
           (tu/then-await-tx node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk! node)
@@ -329,15 +329,16 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (xt/submit-tx node [[:put :xt_docs {:xt/id "foo"}]
-                          [:put :xt_docs {:xt/id "bar"}]])
+      (xt/submit-tx node [(xt/put :xt_docs {:xt/id "foo"})
+                          (xt/put :xt_docs {:xt/id "bar"})])
 
       ;; aborted tx shows up in log
-      (xt/submit-tx node [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
+      (xt/submit-tx node [(xt/sql-op "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')")])
 
-      (-> (xt/submit-tx node [[:delete :xt_docs "foo" {:for-valid-time [:in #inst "2020-04-01"]}]
-                              [:put :xt_docs {:xt/id "bar", :month "april"},
-                               {:for-valid-time [:in #inst "2020-04-01" #inst "2020-05-01"]}]])
+      (-> (xt/submit-tx node [(-> (xt/delete :xt_docs "foo")
+                                  (xt/starting-from #inst "2020-04-01"))
+                              (-> (xt/put :xt_docs {:xt/id "bar", :month "april"},)
+                                  (xt/during #inst "2020-04-01" #inst "2020-05-01"))])
           (tu/then-await-tx node))
 
       (tu/finish-chunk! node)
@@ -384,7 +385,7 @@
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
             tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     [:put (:table (meta doc)) doc])]
+                     (xt/put (:table (meta doc)) doc))]
 
         (t/is (= 11000 (count tx-ops)))
 
@@ -428,7 +429,7 @@
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
             tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     [:put (:table (meta doc)) doc])]
+                     (xt/put (:table (meta doc)) doc))]
 
         (t/is (= 11000 (count tx-ops)))
 
@@ -439,7 +440,7 @@
                            (partition-all 100 tx-ops))]
 
           (Thread/sleep 250) ; wait for the chunk to finish writing to disk
-                             ; we don't have an accessible hook for this, beyond awaiting the tx
+                                        ; we don't have an accessible hook for this, beyond awaiting the tx
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
                         ^IMetadataManager mm (util/component node ::meta/metadata-manager)]]
@@ -468,7 +469,7 @@
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
             tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     [:put (:table (meta doc)) doc])
+                     (xt/put (:table (meta doc)) doc))
             [first-half-tx-ops second-half-tx-ops] (split-at (/ (count tx-ops) 2) tx-ops)]
 
         (t/is (= 5500 (count first-half-tx-ops)))
@@ -495,7 +496,7 @@
                 (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
                 (Thread/sleep 250) ; wait for the chunk to finish writing to disk
-                                   ; we don't have an accessible hook for this, beyond awaiting the tx
+                                        ; we don't have an accessible hook for this, beyond awaiting the tx
                 (let [objs (mapv str (.listObjects bp))]
                   (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                   (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
@@ -535,7 +536,7 @@
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
                   (Thread/sleep 250) ; wait for the chunk to finish writing to disk
-                                     ; we don't have an accessible hook for this, beyond awaiting the tx
+                                        ; we don't have an accessible hook for this, beyond awaiting the tx
                   (doseq [^Node node [new-node node]
                           :let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
@@ -559,7 +560,7 @@
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
       (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
 
-        (-> (xt/submit-tx node1 [[:put :xt_docs {:xt/id 0, :v "foo"}]])
+        (-> (xt/submit-tx node1 [(xt/put :xt_docs {:xt/id 0, :v "foo"})])
             (tu/then-await-tx node1 (Duration/ofSeconds 1)))
 
         (tu/finish-chunk! node1)
@@ -567,9 +568,9 @@
         (t/is (=  :utf8
                   (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
 
-        (let [tx2 (xt/submit-tx node1 [[:put :xt_docs {:xt/id 1, :v :bar}]
-                                       [:put :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
-                                       [:put :xt_docs {:xt/id 3, :v #xt/clj-form :foo}]])]
+        (let [tx2 (xt/submit-tx node1 [(xt/put :xt_docs {:xt/id 1, :v :bar})
+                                       (xt/put :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"})
+                                       (xt/put :xt_docs {:xt/id 3, :v #xt/clj-form :foo})])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
           (tu/finish-chunk! node1)
@@ -594,7 +595,7 @@
                                  (log* logger level throwable message))))]
       (with-open [node (xtn/start-node {})]
         (t/is (thrown-with-msg? Exception #"oh no!"
-                                (-> (xt/submit-tx node [[:put :xt_docs {:xt/id "foo", :count 42}]])
+                                (-> (xt/submit-tx node [(xt/put :xt_docs {:xt/id "foo", :count 42})])
                                     (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
 
 (t/deftest bug-catch-closed-by-interrupt-exception-740
@@ -607,7 +608,7 @@
                                  (log* logger level throwable message))))]
       (with-open [node (xtn/start-node {})]
         (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
-                                (-> (xt/submit-tx node [[:sql "INSERT INTO foo(xt$id) VALUES (1)"]])
+                                (-> (xt/submit-tx node [(xt/sql-op "INSERT INTO foo(xt$id) VALUES (1)")])
                                     (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
@@ -621,9 +622,10 @@
 
         (let [last-tx-key (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
-                   (xt/submit-tx node [[:sql-batch ["INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
-                                                    [0, 2, "hello", 12]
-                                                    [1, 1, "world", 3.3]]]])))
+                   (xt/submit-tx node [(-> (xt/sql-op "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)")
+                                           (xt/with-op-args
+                                             [0, 2, "hello", 12]
+                                             [1, 1, "world", 3.3]))])))
 
           (t/is (= last-tx-key
                    (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))

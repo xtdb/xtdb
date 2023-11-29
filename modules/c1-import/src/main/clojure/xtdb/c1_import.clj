@@ -3,11 +3,12 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as xt]
             [xtdb.cli :as cli]
             xtdb.log
             [xtdb.node :as xtn]
-            [xtdb.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            java.lang.AutoCloseable
            (java.nio.file ClosedWatchServiceException Files OpenOption Path StandardOpenOption StandardWatchEventKinds WatchEvent WatchEvent$Kind)
@@ -51,11 +52,12 @@
                      (case tx-status
                        :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
                                  ;; HACK: what to do if the user has a separate :xt/id  key?
-                                 (let [app-time-opts {:for-valid-time [:in start-valid-time end-valid-time]}]
-                                   (case tx-op
-                                     :put [:put :xt_docs (xform-doc doc) app-time-opts]
-                                     :delete [:delete :xt_docs eid app-time-opts]
-                                     :evict [:evict :xt_docs eid])))
+                                 (case tx-op
+                                   :put (-> (xt/put :xt_docs (xform-doc doc))
+                                            (xt/during start-valid-time end-valid-time))
+                                   :delete (-> (xt/delete :xt_docs eid)
+                                               (xt/during start-valid-time end-valid-time))
+                                   :evict (xt/erase :xt_docs eid)))
                        :abort [[:abort]])
                      {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))

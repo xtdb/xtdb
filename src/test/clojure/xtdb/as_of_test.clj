@@ -8,8 +8,8 @@
 (t/use-fixtures :each tu/with-node)
 
 (t/deftest test-as-of-tx
-  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])]
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
+  (let [tx1 (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx1"})])]
+    (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx2"})])
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan {:table xt_docs} [last_updated]]
@@ -34,9 +34,9 @@
                           {:basis {:tx tx1}})))))))
 
 (t/deftest test-app-time
-  (let [{:keys [system-time]} (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]
-                                                       [:put :xt_docs {:xt/id :doc-with-app-time}
-                                                        {:for-valid-time [:in #inst "2021"]}]])
+  (let [{:keys [system-time]} (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 1})
+                                                       (-> (xt/put :xt_docs {:xt/id :doc-with-app-time})
+                                                           (xt/starting-from #inst "2021"))])
         system-time (util/->zdt system-time)]
 
     (t/is (= {:doc {:xt/id :doc,
@@ -57,10 +57,10 @@
                   (into {} (map (juxt :xt/id identity))))))))
 
 (t/deftest test-system-time
-  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 0}]])
+  (let [tx1 (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 0})])
         tt1 (util/->zdt (:system-time tx1))
 
-        tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]])
+        tx2 (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 1})])
         tt2 (util/->zdt (:system-time tx2))
 
         original-v0-doc {:xt/id :doc, :version 0
@@ -107,15 +107,15 @@
                  (map :xt/id)
                  frequencies))]
 
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 0}]
-                             [:put :xt_docs {:xt/id :other-doc, :version 0}]])
+    (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 0})
+                             (xt/put :xt_docs {:xt/id :other-doc, :version 0})])
 
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]])
+    (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 1})])
 
     (t/is (= {:doc 3, :other-doc 1} (all-time-docs))
           "documents present before evict")
 
-    (xt/submit-tx tu/*node* [[:evict :xt_docs :doc]])
+    (xt/submit-tx tu/*node* [(xt/erase :xt_docs :doc)])
 
     (t/is (= {:other-doc 1} (all-time-docs))
           "documents removed after evict")))

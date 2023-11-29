@@ -117,7 +117,7 @@
 ;;                                                             :event-hub-name (str "xtdb.azure-test-hub." (UUID/randomUUID))
 ;;                                                             :create-event-hub? true
 ;;                                                             :retention-period-in-days 1}})]
-;;     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
+;;     (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo}])])
 ;;     (t/is (= [{:id :foo}]
 ;;              (xt/q node '{:find [id]
 ;;                           :where [($ :xt_docs [{:xt/id id}])]})))))

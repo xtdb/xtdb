@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [sci.core :as sci]
+            [xtdb.api :as xt]
             [xtdb.await :as await]
             [xtdb.datalog :as d]
             [xtdb.error :as err]
@@ -227,6 +228,12 @@
 (defn reset-tx-fn-error! []
   (first (reset-vals! !last-tx-fn-error nil)))
 
+(def ^:private xt-sci-ns
+  (-> (sci/copy-ns xtdb.api (sci/create-ns 'xtdb.api))
+      (select-keys ['put 'put-fn 'delete 'erase 'call
+                    'sql-op 'xtql-op 'with-op-args 'with-op-arg-rows
+                    'during 'starting-at 'until])))
+
 (defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src, scan-emitter
                                                ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
   (let [call-leg (.legReader tx-ops-rdr :call)
@@ -237,7 +244,8 @@
         sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src scan-emitter tx-opts)
                                       'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
-                                      '*current-tx* tx-key}})]
+                                      '*current-tx* tx-key}
+                           :namespaces {'xt xt-sci-ns}})]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]

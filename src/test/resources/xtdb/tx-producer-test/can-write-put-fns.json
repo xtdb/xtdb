@@ -174,8 +174,8 @@
                   "name" : "clj-form",
                   "count" : 2,
                   "VALIDITY" : [1,1],
-                  "OFFSET" : [0,35,70],
-                  "DATA" : ["(fn [id] [[:put :foo {:xt/id id}]])","(fn [id] [[:put :bar {:xt/id id}]])"]
+                  "OFFSET" : [0,37,74],
+                  "DATA" : ["(fn [id] [(xt/put :foo {:xt/id id})])","(fn [id] [(xt/put :bar {:xt/id id})])"]
                 }]
               }]
             }]

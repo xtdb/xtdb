@@ -69,7 +69,7 @@
                                                  (reduce (fn [[_!last-tx last-doc-count] batch]
                                                            [(xt/submit-tx& tx-producer
                                                                            (vec (for [doc batch]
-                                                                                  [:put (:table (meta doc)) doc])))
+                                                                                  (xt/put (:table (meta doc)) doc))))
                                                             (+ last-doc-count (count batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName t))
@@ -104,7 +104,8 @@
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] param-batch]
                                                            [(xt/submit-tx& tx-producer
-                                                                           [[:sql-batch (into [dml] param-batch)]])
+                                                                           [(-> (xt/sql-op dml)
+                                                                                (xt/with-op-arg-rows param-batch))])
                                                             (+ last-doc-count (count param-batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName table))

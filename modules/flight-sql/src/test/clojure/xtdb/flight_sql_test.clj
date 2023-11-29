@@ -60,7 +60,7 @@
                     (flight-info->rows))))))
 
 (t/deftest test-jdbc-client
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')"]])
+  (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')")])
 
   ;; NOTE FSQL JDBC driver doesn't seem happy with prepared statement updates
   ;; see https://issues.apache.org/jira/browse/ARROW-18294

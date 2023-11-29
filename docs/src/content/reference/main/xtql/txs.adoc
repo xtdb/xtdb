@@ -1,59 +1,64 @@
 = XTQL Transactions
 
-XTQL transactions are submitted through `xtdb.api/submit-tx`.
+XTQL transactions are submitted through `xtdb.api/submit-tx` (`xtdb.api` aliased here as `xt`).
 
-* `(xt/submit-tx <node> <tx-ops>)`: returns the transaction key of the submitted transaction.
+* `(xt/submit-tx <node> <tx-ops>)` returns the transaction key of the submitted transaction.
 ** `tx-ops`: vector of link:#tx-ops[transaction operations].
 * `(xt/submit-tx& <node> <tx-ops>)`: returns a `CompletableFuture` of the transaction key.
 
 [#tx-ops]
 == Transaction operations
 
-=== `:put`
+=== `put`
 
 Upserts a document into the given table, optionally during the given valid time period.
 
-`[:put <table> <document> <opts>?]`
+`(xt/put <table> <document>)`
 
 * `table` (keyword).
 * `document` (map): must contain `:xt/id`.
-* `opts` (map):
-** `:for-valid-time [:in <from> <to>]`:
-*** `from` (timestamp): may be `nil`.
+
+To specify a valid-time range:
+
+* `(-> (xt/put <table> <document>) (xt/starting <from>))`
+* `(-> (xt/put <table> <document>) (xt/until <to>))`
+* `(-> (xt/put <table> <document>) (xt/during <from> <to))`
+
+where:
+
+* `from` (timestamp): may be `nil`.
     Defaults to the current time of the transaction if not provided.
-*** `to` (timestamp): may be `nil`.
+* `to` (timestamp): may be `nil`.
     Defaults to the end-of-time if not provided.
 
-=== `:delete`
+=== `delete`
 
 Deletes a document from the given table, optionally during the given valid time period.
 
-`[:delete <table> <id> <opts>?]`
+`(xt/delete <table> <id>)`
 
-See `:put` for options.
+See `put` for options.
 
-=== `:erase`
+=== `erase`
 
-Irrevocably erase the document from the given table (including through system time), optionally during the given valid time period.
+Irrevocably erase the document from the given table (including through system time), for all valid-time.
 
-`[:erase <table> <id> <opts>?]`
+`(xt/erase <table> <id>)`
 
-See `:put` for options.
-
-=== `:call`
+=== `call`
 
 Call a transaction function.
 
-`[:call <fn> <args>...]`
+`(xt/call <fn-id> <args>*)`
 
-Transaction functions are defined using `:put-fn`:
+Transaction functions are defined using `put-fn`:
 
 [source,clojure]
 ----
-[:put-fn :increment
- '(fn [args...]
-    ...
-    )]
+(xt/put-fn :increment
+           '(fn [args...]
+              ...
+              ))
 ----
 
 Transaction functions are evaluated with the Small Clojure Interpreter (https://github.com/babashka/sci[SCI^]).

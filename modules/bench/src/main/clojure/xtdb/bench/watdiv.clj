@@ -34,8 +34,7 @@
                                       (map read-string)
                                       (partition-all 100))]
                  (xt/submit-tx node (for [doc doc-batch]
-                                      ;; TODO we don't support set vals yet
-                                      [:put (->> doc (into {} (remove (comp set? val))))])))))]
+                                      (xt/put :docs doc))))))]
     (bench/with-timing :await-tx
       (tu/then-await-tx tx node (Duration/ofHours 5)))
 

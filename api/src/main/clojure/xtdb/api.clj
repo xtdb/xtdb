@@ -189,12 +189,16 @@
   "Writes transactions to the log for processing
 
   tx-ops: Datalog/SQL style transactions.
-    [[:put :table {:xt/id \"my-id\", ...}]
-     [:delete :table \"my-id\"]]
+    [(xt/put :table {:xt/id \"my-id\", ...})
+     (xt/delete :table \"my-id\")]
 
-    [[:sql [\"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\" 0 1]]
-     [:sql-batch [\"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\" [2 3] [4 5] [6 7]]]
-     [:sql \"UPDATE foo SET b = 1\"]]
+    [(-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
+         (xt/with-op-args [0 1]))
+
+     (-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
+         (xt/with-op-args [2 3] [4 5] [6 7]))
+
+     (xt/sql-op \"UPDATE foo SET b = 1\")]
 
   Returns a map with details about the submitted transaction, including system-time and tx-id.
 
@@ -217,3 +221,39 @@
   including details of both the latest submitted and completed tx"
   [node]
   (xtp/status node))
+
+(defn put [table doc]
+  [:put table doc])
+
+(defn put-fn [fn-id f]
+  [:put-fn fn-id f])
+
+(defn delete [table id]
+  [:delete table id])
+
+(defn during [tx-op from until]
+  (conj tx-op {:for-valid-time [:in from until]}))
+
+(defn starting-from [tx-op from]
+  (during tx-op from nil))
+
+(defn until [tx-op until]
+  (during tx-op nil until))
+
+(defn erase [table id]
+  [:evict table id])
+
+(defn call [f & args]
+  (into [:call f] args))
+
+(defn sql-op [sql]
+  [:sql sql])
+
+(defn xtql-op [xtql]
+  [:xtql xtql])
+
+(defn with-op-args [op & args]
+  (into op args))
+
+(defn with-op-arg-rows [op arg-rows]
+  (into op arg-rows))

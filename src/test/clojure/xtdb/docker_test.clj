@@ -191,7 +191,7 @@
     (with-open [node (->> {:xtdb.log/local-directory-log {:root-path (io/file hostdir "log")}
                            :xtdb.buffer-pool/local {:path (io/file hostdir "objects")}}
                           (xtn/start-node))]
-      (-> (node/snapshot-async node (xt/submit-tx node [[:put {:xt/id 42, :greeting "Hello, world!"}]]))
+      (-> (node/snapshot-async node (xt/submit-tx node [(xt/put {:xt/id 42, :greeting "Hello, world!"})]))
           (.orTimeout 5 TimeUnit/SECONDS)
           deref))
 

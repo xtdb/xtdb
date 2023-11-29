@@ -186,7 +186,7 @@
 
 (defn- insert-statement [node insert-statement]
   (xt/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                            [:put (:table (meta doc)) (merge {:xt/id (UUID/randomUUID)} doc)]))
+                            (xt/put (:table (meta doc)) (merge {:xt/id (UUID/randomUUID)} doc))))
                 {:default-all-valid-time? true})
   node)
 
@@ -201,10 +201,10 @@
 (defn- execute-sql-statement [node sql-statement variables opts]
   (binding [r/*memo* (HashMap.)]
     (xt/submit-tx node
-                  [[:sql sql-statement]]
+                  [(xt/sql-op sql-statement)]
                   (-> opts
-                           (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
-                           (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))
+                      (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
+                      (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))
     node))
 
 (defn- execute-sql-query [node sql-statement variables opts]

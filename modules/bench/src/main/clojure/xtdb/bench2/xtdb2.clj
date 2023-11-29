@@ -21,7 +21,7 @@
 
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
-         [:put-fn id fn-def])
+         (xt/put-fn id fn-def))
        (xt/submit-tx (:sut worker))))
 
 (defn generate

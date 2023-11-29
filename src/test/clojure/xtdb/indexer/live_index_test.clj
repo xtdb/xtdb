@@ -96,21 +96,22 @@
       (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 104))))))
 
 (def txs
-  [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
-    [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 2}]]
-   [[:delete :hello #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d"]
-    [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3}
-     {:for-valid-time [:in #inst "2023" #inst "2024"]}]]
-   [[:evict :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
+  [[(xt/put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1})
+    (xt/put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 2})]
+   [(xt/delete :hello #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d")
+    (-> (xt/put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3})
+
+        (xt/during #inst "2023" #inst "2024"))]
+   [(xt/erase :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38")]
    ;; sql
-   [[:sql "INSERT INTO foo (xt$id, bar, toto) VALUES (1, 1, 'toto')"]
-    [:sql "UPDATE foo SET bar = 2 WHERE foo.xt$id = 1"]
-    [:sql "DELETE FROM foo WHERE foo.bar = 2"]
-    [:sql "INSERT INTO foo (xt$id, bar) VALUES (2, 2)"]]
+   [(xt/sql-op "INSERT INTO foo (xt$id, bar, toto) VALUES (1, 1, 'toto')")
+    (xt/sql-op "UPDATE foo SET bar = 2 WHERE foo.xt$id = 1")
+    (xt/sql-op "DELETE FROM foo WHERE foo.bar = 2")
+    (xt/sql-op "INSERT INTO foo (xt$id, bar) VALUES (2, 2)")]
    ;; sql evict
-   [[:sql "ERASE FROM foo WHERE foo.xt$id = 2"]]
+   [(xt/sql-op "ERASE FROM foo WHERE foo.xt$id = 2")]
    ;; abort
-   [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]]])
+   [(xt/sql-op "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')")]])
 
 (t/deftest can-build-live-index
   (let [node-dir (util/->path "target/can-build-live-index")]

@@ -37,49 +37,27 @@
                           {:tx-op tx-op
                            :op (first tx-op)})))
 
-(defn expect-sql [sql tx-op]
-  (when-not (string? sql)
+(defn- expect-sql ^String [sql tx-op]
+  (if-not (string? sql)
     (throw (err/illegal-arg :xtdb.tx/expected-sql
                             {::err/message "Expected SQL query",
                              :tx-op tx-op
-                             :sql sql}))))
+                             :sql sql}))
 
-(defmethod parse-tx-op :sql [[_ sql+params :as tx-op]]
-  (when-not sql+params
-    (throw (err/illegal-arg :xtdb.tx/expected-sql+params
-                            {::err/message "expected SQL query or [sql & params]", :tx-op tx-op})))
+    sql))
 
-  (cond
-    (string? sql+params) (Ops/sql sql+params)
+(defmethod parse-tx-op :sql [[_ sql & arg-rows :as tx-op]]
+  (let [sql (expect-sql sql tx-op)]
+    (cond
+      (nil? arg-rows) (Ops/sql sql)
 
-    (vector? sql+params)
-    (let [[sql & params] sql+params]
-      (expect-sql sql tx-op)
-      (Ops/sql sql params))
+      (not (every? sequential? arg-rows))
+      (throw (err/illegal-arg :xtdb.tx/malformed-sql-args
+                              {::err/message "arg-rows should be vectors"
+                               :arg-rows arg-rows}))
 
-    :else
-    (throw (err/illegal-arg :xtdb.tx/invalid-tx-op
-                            {::err/message "unexpected value in :sql - expecting vector or string", :tx-op tx-op}))))
-
-(defmethod parse-tx-op :sql-batch [[_ sql+params :as tx-op]]
-  (when-not (vector? sql+params)
-    (throw (err/illegal-arg :xtdb.tx/expected-sql+params
-                            {::err/message "expected [sql & param-groups]", :tx-op tx-op})))
-
-  (let [[sql & params] sql+params]
-    (expect-sql sql tx-op)
-    (when-not (sequential? params)
-      (throw (err/illegal-arg :xtdb.tx/expected-param-seqs
-                              {::err/message "expected seqs of params"
-                               :tx-op tx-op
-                               :params params})))
-
-    (when-let [non-seq (some (complement sequential?) params)]
-      (throw (err/illegal-arg :xtdb.tx/expected-param-seqs
-                              {::err/message "expected seqs of params"
-                               :tx-op tx-op
-                               :non-seq non-seq})))
-    (Ops/sqlBatch ^String sql, ^List (vec params))))
+      :else
+      (Ops/sqlBatch sql ^List arg-rows))))
 
 (defn expect-table-name [table-name tx-op]
   (when-not (table? table-name)

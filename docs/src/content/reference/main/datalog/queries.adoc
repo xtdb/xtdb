@@ -224,10 +224,10 @@ Examples:
 [source,clojure]
 ----
 ;; example data
-[[:put :people {:xt/id :matthew}]
- [:put :people {:xt/id :mark, :parent :matthew}]
- [:put :people {:xt/id :luke, :parent :mark}]
- [:put :people {:xt/id :john, :parent :mark}]]
+[(xt/put :people {:xt/id :matthew})
+ (xt/put :people {:xt/id :mark, :parent :matthew})
+ (xt/put :people {:xt/id :luke, :parent :mark})
+ (xt/put :people {:xt/id :john, :parent :mark})]
 
 ;; find me people who have children
 {:find [parent child]

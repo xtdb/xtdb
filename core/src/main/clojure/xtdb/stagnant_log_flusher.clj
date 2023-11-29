@@ -91,6 +91,6 @@
 
   (defn submit [tx] (.submitTx (:xtdb.tx-producer/tx-producer sys) tx {}))
 
-  @(submit [[:put :foo {:xt/id 42, :msg "Hello, world!"}]])
+  @(submit [(xt/put :foo {:xt/id 42, :msg "Hello, world!"})])
 
   )
