@@ -42,40 +42,68 @@
 
 (declare parse-expr parse-arg-specs)
 
+(defn- bad-literal [l]
+  (throw (err/illegal-arg :xtql/malformed-literal {:literal l})))
+
+(defn- try-parse [v f l]
+  (try
+    (f v)
+    (catch Exception e
+      (throw (err/illegal-arg :xtql/malformed-literal {:literal l, :error (.getMessage e)})))))
+
+(defn json-value->object [{v "@value", t "@type" :as l}]
+  (cond (or (nil? v) (nil? t)) l
+        (= "xt:set" t) (if-not (vector? v)
+                         (bad-literal l)
+                         (into #{} (map json-value->object) v))
+
+        (not (string? v)) (bad-literal l)
+
+        :else (case t
+                "xt:keyword" (keyword v)
+                "xt:date" (try-parse v #(LocalDate/parse %) l)
+                "xt:duration" (try-parse v #(Duration/parse %) l)
+                "xt:timestamp" (try-parse v #(LocalDateTime/parse %) l)
+                "xt:timestamptz" (try-parse v #(ZonedDateTime/parse %) l)
+                (throw (err/illegal-arg :xtql/unknown-type {:value v, :type t})))))
+
+(defn object->json-value [obj]
+  (cond
+    (keyword? obj) {"@value" (str (symbol obj)), "@type" "xt:keyword"}
+    (set? obj) {"@value" (mapv object->json-value obj), "@type" "xt:set"}
+    (instance? Date obj) {"@value" (str (.toInstant ^Date obj),) "@type" "xt:timestamp"}
+    (instance? LocalDate obj) {"@value" (str obj), "@type" "xt:date"}
+    (instance? Duration obj) {"@value" (str obj), "@type" "xt:duration"}
+    (instance? LocalDateTime obj) {"@value" (str obj), "@type" "xt:timestamp"}
+    (instance? ZonedDateTime obj) {"@value" (str obj), "@type" "xt:timestamptz"}
+    :else obj))
+
 (defn- parse-literal [{v "@value", t "@type" :as l}]
-  (letfn [(bad-literal [l]
-            (throw (err/illegal-arg :xtql/malformed-literal {:literal l})))
+  (cond
+    (nil? v) (Expr/val nil)
 
-          (try-parse [v f]
-            (try
-              (f v)
-              (catch Exception e
-                (throw (err/illegal-arg :xtql/malformed-literal {:literal l, :error (.getMessage e)})))))]
-    (cond
-      (nil? v) (Expr/val nil)
+    (nil? t) (cond
+               (map? v) (Expr/val (into {} (map (juxt key (comp parse-expr val))) v))
+               (vector? v) (Expr/val (mapv parse-expr v))
+               (string? v) (Expr/val v)
+               :else (bad-literal l))
 
-      (nil? t) (cond
-                 (map? v) (Expr/val (into {} (map (juxt key (comp parse-expr val))) v))
-                 (vector? v) (Expr/val (mapv parse-expr v))
-                 (string? v) (Expr/val v)
-                 :else (bad-literal l))
+    :else (if (= "xt:set" t)
+            (if-not (vector? v)
+              (bad-literal l)
 
-      :else (if (= "xt:set" t)
-              (if-not (vector? v)
-                (bad-literal l)
+              (Expr/val (into #{} (map parse-expr) v)))
 
-                (Expr/val (into #{} (map parse-expr) v)))
+            (if-not (string? v)
+              (bad-literal l)
 
-              (if-not (string? v)
-                (bad-literal l)
-
-                (case t
-                  "xt:keyword" (Expr/val (keyword v))
-                  "xt:date" (Expr/val (try-parse v #(LocalDate/parse %)))
-                  "xt:duration" (Expr/val (try-parse v #(Duration/parse %)))
-                  "xt:timestamp" (Expr/val (try-parse v #(LocalDateTime/parse %)))
-                  "xt:timestamptz" (Expr/val (try-parse v #(ZonedDateTime/parse %)))
-                  (throw (err/illegal-arg :xtql/unknown-type {:value v, :type t}))))))))
+              (case t
+                "xt:keyword" (Expr/val (keyword v))
+                "xt:date" (Expr/val (try-parse v #(LocalDate/parse %) l))
+                "xt:duration" (Expr/val (try-parse v #(Duration/parse %) l))
+                "xt:timestamp" (Expr/val (try-parse v #(LocalDateTime/parse %) l))
+                "xt:timestamptz" (Expr/val (try-parse v #(ZonedDateTime/parse %) l))
+                (throw (err/illegal-arg :xtql/unknown-type {:value v, :type t})))))))
 
 (defn parse-expr [expr]
   (letfn [(bad-expr [expr]

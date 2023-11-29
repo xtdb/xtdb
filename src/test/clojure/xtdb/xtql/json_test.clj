@@ -1,11 +1,12 @@
 (ns xtdb.xtql.json-test
   (:require [clojure.test :as t :refer [deftest]]
+            [clojure.data.json :as json]
             [xtdb.xtql.edn :as edn]
-            [xtdb.xtql.json :as json]))
+            [xtdb.xtql.json :as xjson]))
 
 (defn- roundtrip-expr [expr]
-  (let [parsed (json/parse-expr expr)]
-    [(edn/unparse parsed) (json/unparse parsed)]))
+  (let [parsed (xjson/parse-expr expr)]
+    [(edn/unparse parsed) (xjson/unparse parsed)]))
 
 (defn- roundtrip-value [v t]
   (let [[edn {v "@value", t "@type"}] (roundtrip-expr {"@value" v, "@type" (when t (str "xt:" (name t)))})]
@@ -59,6 +60,27 @@
   ;; TODO Implement Expr$Get
   )
 
+(defn- roundtrip-json [data]
+  (letfn [(value-wrt-fn [_ v] (xjson/object->json-value v))
+          (value-rdr-fn [_ v] (if (map? v) (xjson/json-value->object v) v))]
+    (-> (json/write-str data :value-fn value-wrt-fn)
+        (json/read-str :value-fn value-rdr-fn))))
+
+(deftest test-json-conversion
+  (t/is (= {"foo" "foo"
+            "bar" :bar
+            "nested-map" {"toto" :toto}
+            "set" #{1 2 "foo" :bar}
+            "date" #time/date "1998-09-02"
+            "duration "#time/duration "PT1H"}
+
+           (roundtrip-json {"foo" "foo"
+                            "bar" :bar
+                            "nested-map" {"toto" :toto}
+                            "set" #{1 2 "foo" :bar}
+                            "date" #time/date "1998-09-02"
+                            "duration "#time/duration "PT1H"}))))
+
 (t/deftest test-expr-subquery
   (t/is (= ['(exists? (from :foo [a])) {"exists" {"from" "foo", "bind" ["a"]}}]
            (roundtrip-expr {"exists" {"from" "foo", "bind" ["a"]}})))
@@ -71,12 +93,12 @@
            (roundtrip-expr {"q" {"from" "foo", "bind" ["a"]}}))))
 
 (defn- roundtrip-q [query]
-  (let [parsed (json/parse-query query)]
-    [(edn/unparse parsed) (json/unparse parsed)]))
+  (let [parsed (xjson/parse-query query)]
+    [(edn/unparse parsed) (xjson/unparse parsed)]))
 
 (defn- roundtrip-q-tail [query]
-  (let [parsed (json/parse-query-tail query)]
-    [(edn/unparse parsed) (json/unparse parsed)]))
+  (let [parsed (xjson/parse-query-tail query)]
+    [(edn/unparse parsed) (xjson/unparse parsed)]))
 
 (t/deftest test-parse-from
   (t/is (= ['(from :foo [a]) {"from" "foo", "bind" ["a"]}]
