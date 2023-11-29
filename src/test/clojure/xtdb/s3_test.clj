@@ -1,12 +1,17 @@
 (ns xtdb.s3-test
   (:require [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as xt]
+            [xtdb.datasets.tpch :as tpch]
+            [xtdb.node :as xtn]
             [xtdb.object-store-test :as os-test]
-            [xtdb.s3 :as s3]
+            [xtdb.s3 :as s3] 
+            [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.io Closeable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
+           [java.time Duration]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
            xtdb.IObjectStore
@@ -124,3 +129,49 @@
         (let [^ByteBuffer uploaded-buffer @(.getObject ^IObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
+
+(t/deftest ^:s3 node-level-test
+  (util/with-tmp-dirs #{disk-store}
+    (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::s3/object-store)
+                                                                     :disk-store disk-store}
+                                           ::s3/object-store {:bucket bucket
+                                                              :prefix (util/->path (str (random-uuid)))
+                                                              :sns-topic-arn sns-topic-arn}})]
+      ;; Submit some documents to the node
+      (t/is (xt/submit-tx node [[:put :bar {:xt/id "bar1"}]
+                                [:put :bar {:xt/id "bar2"}]
+                                [:put :bar {:xt/id "bar3"}]]))
+
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
+
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+               (xtdb.api/q node '{:find [e]
+                                  :where [(match :bar {:xt/id e})]})))
+      
+      (let [object-store (get-in node [:system ::s3/object-store])]
+      ;; Ensure some files are written
+        (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))
+
+;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
+;; FIXME: Currently failing due to mis-sized multipart upload parts, see issue here: 
+;; https://github.com/xtdb/xtdb/issues/3004
+;;
+;; (t/deftest ^:s3 tpch-test-node
+;;   (util/with-tmp-dirs #{disk-store}
+;;     (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::s3/object-store)
+;;                                                                      :disk-store disk-store}
+;;                                            ::s3/object-store {:bucket bucket
+;;                                                               :prefix (util/->path (str (random-uuid)))
+;;                                                               :sns-topic-arn sns-topic-arn}})]
+;;       ;; Submit tpch docs 
+;;       (-> (tpch/submit-docs! node 0.05)
+;;           (tu/then-await-tx node (Duration/ofHours 1)))
+
+;;       ;; Ensure finish-chunk! works
+;;       (t/is (nil? (tu/finish-chunk! node)))
+
+;;       (let [object-store (get-in node [:system ::s3/object-store])]
+;;       ;; Ensure files have been written
+;;         (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))

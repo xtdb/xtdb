@@ -3,15 +3,20 @@
             [clojure.set :as set]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [juxt.clojars-mirrors.integrant.core :as ig] 
+            [xtdb.api :as xt]
             [xtdb.azure :as azure]
+            [xtdb.datasets.tpch :as tpch]
+            [xtdb.node :as xtn]
             [xtdb.object-store-test :as os-test]
+            [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [com.azure.storage.blob BlobContainerClient]
            [com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions]
            [java.io Closeable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
+           [java.time Duration]
            xtdb.IObjectStore
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
@@ -178,3 +183,51 @@
         (let [^ByteBuffer uploaded-buffer @(.getObject ^IObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
+
+
+(t/deftest ^:azure node-level-test
+  (util/with-tmp-dirs #{disk-store}
+    (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::azure/blob-object-store)
+                                                                     :disk-store disk-store}
+                                           ::azure/blob-object-store {:storage-account storage-account
+                                                                      :container container
+                                                                      :servicebus-namespace servicebus-namespace
+                                                                      :servicebus-topic-name servicebus-topic-name
+                                                                      :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}})]
+      ;; Submit some documents to the node
+      (t/is (xt/submit-tx node [[:put :bar {:xt/id "bar1"}]
+                                [:put :bar {:xt/id "bar2"}]
+                                [:put :bar {:xt/id "bar3"}]]))
+
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
+
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+               (xtdb.api/q node '{:find [e]
+                                  :where [(match :bar {:xt/id e})]})))
+
+      (let [object-store (get-in node [:system ::azure/blob-object-store])]
+      ;; Ensure some files are written
+        (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))
+
+;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
+(t/deftest ^:azure tpch-test-node
+  (util/with-tmp-dirs #{disk-store}
+    (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::azure/blob-object-store)
+                                                                     :disk-store disk-store}
+                                           ::azure/blob-object-store {:storage-account storage-account
+                                                                      :container container
+                                                                      :servicebus-namespace servicebus-namespace
+                                                                      :servicebus-topic-name servicebus-topic-name
+                                                                      :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}})]
+      ;; Submit tpch docs 
+      (-> (tpch/submit-docs! node 0.05)
+          (tu/then-await-tx node (Duration/ofHours 1)))
+
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
+
+      (let [object-store (get-in node [:system ::azure/blob-object-store])]
+      ;; Ensure files have been written
+        (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))

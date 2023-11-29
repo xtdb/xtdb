@@ -3,12 +3,17 @@
             [clojure.tools.logging :as log]
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as xt]
+            [xtdb.datasets.tpch :as tpch]
+            [xtdb.node :as xtn]
             [xtdb.google-cloud :as google-cloud]
             [xtdb.object-store-test :as os-test]
+            [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]
            [java.io Closeable]
-           [xtdb IObjectStore]))
+           [xtdb IObjectStore]
+           [java.time Duration]))
 
 ;; Ensure you are authenticated with google cloud before running these tests - there are two options to do this:
 ;; - gcloud auth Login onto an account which belongs to the `xtdb-devs@gmail.com` group
@@ -98,3 +103,48 @@
       
       (t/is (= (mapv util/->path ["alan" "alice"]) 
                (.listObjects ^IObjectStore os-2))))))
+
+(t/deftest ^:azure node-level-test
+  (util/with-tmp-dirs #{disk-store}
+    (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::google-cloud/blob-object-store)
+                                                                     :disk-store disk-store}
+                                           ::google-cloud/blob-object-store {:project-id project-id
+                                                                             :bucket test-bucket
+                                                                             :pubsub-topic pubsub-topic
+                                                                             :prefix (str "xtdb.google-cloud-test." (random-uuid))}})]
+      ;; Submit some documents to the node
+      (t/is (xt/submit-tx node [[:put :bar {:xt/id "bar1"}]
+                                [:put :bar {:xt/id "bar2"}]
+                                [:put :bar {:xt/id "bar3"}]]))
+
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
+
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+               (xtdb.api/q node '{:find [e]
+                                  :where [(match :bar {:xt/id e})]})))
+
+      (let [object-store (get-in node [:system ::google-cloud/blob-object-store])]
+      ;; Ensure some files are written
+        (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))
+
+;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
+(t/deftest ^:azure tpch-test-node
+  (util/with-tmp-dirs #{disk-store}
+    (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::google-cloud/blob-object-store)
+                                                                     :disk-store disk-store}
+                                           ::google-cloud/blob-object-store {:project-id project-id
+                                                                             :bucket test-bucket
+                                                                             :pubsub-topic pubsub-topic
+                                                                             :prefix (str "xtdb.google-cloud-test." (random-uuid))}})]
+      ;; Submit tpch docs 
+      (-> (tpch/submit-docs! node 0.05)
+          (tu/then-await-tx node (Duration/ofHours 1)))
+
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
+
+      (let [object-store (get-in node [:system ::google-cloud/blob-object-store])]
+      ;; Ensure files have been written
+        (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))
