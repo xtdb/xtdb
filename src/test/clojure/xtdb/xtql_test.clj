@@ -2119,11 +2119,11 @@
                  '(-> (table [{:x 1 :y 2}] [x y])
                       (without :x)))))
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"All cols in without must be present in input relation"
-                          (xt/q tu/*node*
-                                '(-> (table [{:x 2}] [x])
-                                     (without :z))))))
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node*
+                 '(-> (table [{:x 2}] [x])
+                      (without :z))))
+        "ignores missing columns"))
 
 (deftest test-without-normalisation-2959-2969
   (xt/submit-tx tu/*node*
