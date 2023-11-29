@@ -59,12 +59,12 @@
                     ^PutObjectRequest (.build))
                 (AsyncRequestBody/fromByteBuffer buf))))
 
-(defrecord MultipartUpload [^S3AsyncClient client bucket ^Path prefix ^Path k upload-id on-complete ^List !completed-parts]
+(defrecord MultipartUpload [^S3AsyncClient client bucket ^Path prefix ^Path k upload-id on-complete !part-number ^List !completed-parts]
   IMultipartUpload 
   (uploadPart [_  buf]
     (let [prefixed-key (util/prefix-key prefix k)
           content-length (long (.limit buf))
-          part-number (int (inc (.size !completed-parts)))]
+          part-number (int (swap! !part-number inc))]
       (-> (.uploadPart client
                        (-> (UploadPartRequest/builder)
                            (.bucket bucket)
@@ -81,14 +81,15 @@
                                                         ^CompletedPart (.build))))))))
   
   (complete [_]
-    (let [prefixed-key (util/prefix-key prefix k)]
+    (let [prefixed-key (util/prefix-key prefix k)
+          !sorted-parts (sort-by (fn [^CompletedPart part] (.partNumber part)) !completed-parts)]
       (-> (.completeMultipartUpload client
                                     (-> (CompleteMultipartUploadRequest/builder)
                                         (.bucket bucket)
                                         (.key (str prefixed-key))
                                         (.uploadId upload-id)
                                         (.multipartUpload (-> (CompletedMultipartUpload/builder)
-                                                              (.parts !completed-parts)
+                                                              (.parts !sorted-parts)
                                                               ^CompletedMultipartUpload (.build)))
                                         ^CompleteMultipartUploadRequest (.build)))
           (.thenRun (fn [] (on-complete k))))))
@@ -185,6 +186,7 @@
                                                 (fn [k]
                                                   ;; On complete - add filename to cache
                                                   (.add file-name-cache k))
+                                                (atom 0)
                                                 (ArrayList.)))))))
 
   Closeable
