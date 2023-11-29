@@ -5,7 +5,8 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr])
   (:import [java.time LocalDate LocalTime OffsetDateTime ZoneOffset]
-           java.util.Date))
+           java.util.Date
+           (org.h2.jdbc JdbcSQLNonTransientException)))
 
 (defn- check-tx-time-col [pool]
   (when-not (->> (jdbc/execute! pool ["SHOW COLUMNS FROM tx_events"] {:builder-fn jdbcr/as-unqualified-lower-maps})
@@ -15,24 +16,38 @@
     (log/warn (str "`tx_time` column not in UTC format. "
                    "See https://github.com/xtdb/xtdb/releases/tag/20.09-1.12.1 for more details."))))
 
+(defmacro swallow-object-already-exists [& body]
+  `(try
+     ~@body
+     (catch JdbcSQLNonTransientException e#
+       (if-some [cause# (.getCause e#)]
+         (when-not (str/includes? (.getMessage cause#) "object already exists")
+           (throw e#))
+         (throw e#)))))
+
 (defn ->dialect [_]
   (reify j/Dialect
     (db-type [_] :h2)
 
     (setup-schema! [_ pool]
-      (doto pool
-        (jdbc/execute! ["
-CREATE TABLE IF NOT EXISTS tx_events (
+
+      (swallow-object-already-exists
+        (jdbc/execute! pool ["
+  CREATE TABLE IF NOT EXISTS tx_events (
   event_offset BIGINT AUTO_INCREMENT PRIMARY KEY,
   event_key VARCHAR,
   tx_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   topic VARCHAR NOT NULL,
   v VARBINARY NOT NULL,
-  compacted INTEGER NOT NULL)"])
+  compacted INTEGER NOT NULL)"]))
 
-        (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
-        (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])
-        (check-tx-time-col)))
+
+      (jdbc/execute! pool ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
+
+      (swallow-object-already-exists
+        (jdbc/execute! pool ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"]))
+
+      (check-tx-time-col pool))
 
     (ensure-serializable-identity-seq! [_ tx table-name]
       ;; `table-name` is trusted
