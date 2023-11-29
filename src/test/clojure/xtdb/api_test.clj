@@ -1,11 +1,10 @@
 (ns xtdb.api-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.protocols :as xtp]
+            [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu :refer [*node*]]
-            [xtdb.util :as util]
-            [xtdb.error :as err])
+            [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
            (java.time Duration ZoneId)
            xtdb.types.ClojureForm))
@@ -22,7 +21,7 @@
   (t/is (map? (xt/status *node*))))
 
 (t/deftest test-simple-query
-  (let [tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo, :inst #inst "2021"}]])]
+  (let [tx (xt/submit-tx *node* [[:put :xt_docs {:xt/id :foo, :inst #inst "2021"}]])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
@@ -41,9 +40,9 @@
                      (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
-  (let [tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
-                                  [:sql ["INSERT INTO xt_docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
-                                         4]]])]
+  (let [tx (xt/submit-tx *node* [[:put :xt_docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
+                                 [:sql ["INSERT INTO xt_docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
+                                        4]]])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
@@ -61,7 +60,7 @@
                    {:basis-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
-  (let [tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
+  (let [tx (xt/submit-tx *node* [[:put :xt_docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
@@ -74,8 +73,8 @@
              (xt/q *node* "SELECT b.xt$id, b.v FROM xt_docs b")))))
 
 (t/deftest round-trips-structs
-  (let [tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
-                                  [:put :xt_docs {:xt/id :bar, :struct {:a true, :d 42.0}}]])]
+  (let [tx (xt/submit-tx *node* [[:put :xt_docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
+                                 [:put :xt_docs {:xt/id :bar, :struct {:a true, :d 42.0}}]])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
@@ -117,13 +116,13 @@
                           {:default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-system-time-47
-  (let [tx1 (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo}]]
+  (let [tx1 (xt/submit-tx *node* [[:put :xt_docs {:xt/id :foo}]]
                           {:system-time #inst "2012"})
 
-        _invalid-tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :bar}]]
+        _invalid-tx (xt/submit-tx *node* [[:put :xt_docs {:xt/id :bar}]]
                                   {:system-time #inst "2011"})
 
-        tx3 (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :baz}]])]
+        tx3 (xt/submit-tx *node* [[:put :xt_docs {:xt/id :baz}]])]
 
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2012")})
              tx1))
@@ -161,10 +160,10 @@
                   (into #{} (map #(update % :err (comp ex-data (fn [^ClojureForm clj-form] (some-> clj-form .form)))))))))))
 
 (def ^:private devs
-  '[[:put :users {:xt/id :jms, :name "James"}]
-    [:put :users {:xt/id :hak, :name "Håkan"}]
-    [:put :users {:xt/id :mat, :name "Matt"}]
-    [:put :users {:xt/id :wot, :name "Dan"}]])
+  [[:put :users {:xt/id :jms, :name "James"}]
+   [:put :users {:xt/id :hak, :name "Håkan"}]
+   [:put :users {:xt/id :mat, :name "Matt"}]
+   [:put :users {:xt/id :wot, :name "Dan"}]])
 
 (t/deftest test-sql-roundtrip
   (let [tx (xt/submit-tx *node* devs)]
@@ -677,8 +676,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                           (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
 
 (def ivan+petr
-  '[[:put :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
-    [:put :docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
+  [[:put :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+   [:put :docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (t/deftest normalisation-option
   (xt/submit-tx tu/*node* ivan+petr)

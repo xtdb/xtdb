@@ -16,8 +16,8 @@
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (def ivan+petr
-  '[[:put :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
-    [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
+  [[:put :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+   [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (deftest test-scan
   (xt/submit-tx tu/*node* ivan+petr)
@@ -128,10 +128,10 @@
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (deftest datascript-test-joins
   (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :xt_docs {:xt/id 1, :name "Ivan", :age 15}]
-                            [:put :xt_docs {:xt/id 2, :name "Petr", :age 37}]
-                            [:put :xt_docs {:xt/id 3, :name "Ivan", :age 37}]
-                            [:put :xt_docs {:xt/id 4, :age 15}]])]
+                          [[:put :xt_docs {:xt/id 1, :name "Ivan", :age 15}]
+                           [:put :xt_docs {:xt/id 2, :name "Petr", :age 37}]
+                           [:put :xt_docs {:xt/id 3, :name "Ivan", :age 37}]
+                           [:put :xt_docs {:xt/id 4, :age 15}]])]
 
     (t/is (= #{{:e 1, :v 15} {:e 3, :v 37}}
              (set (xt/q tu/*node*
@@ -229,10 +229,10 @@
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
 (t/deftest datascript-test-aggregates
   (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :xt_docs {:xt/id :cerberus, :heads 3}]
-                            [:put :xt_docs {:xt/id :medusa, :heads 1}]
-                            [:put :xt_docs {:xt/id :cyclops, :heads 1}]
-                            [:put :xt_docs {:xt/id :chimera, :heads 1}]])]
+                          [[:put :xt_docs {:xt/id :cerberus, :heads 3}]
+                           [:put :xt_docs {:xt/id :medusa, :heads 1}]
+                           [:put :xt_docs {:xt/id :cyclops, :heads 1}]
+                           [:put :xt_docs {:xt/id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (set (xt/q tu/*node*
                         '{:find [heads (count heads)]
@@ -253,9 +253,9 @@
           "various aggs")))
 
 (t/deftest test-find-exprs
-  (let [_tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :o1, :unit-price 1.49, :quantity 4}]
-                                      [:put :xt_docs {:xt/id :o2, :unit-price 5.39, :quantity 1}]
-                                      [:put :xt_docs {:xt/id :o3, :unit-price 0.59, :quantity 7}]])]
+  (let [_tx (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :o1, :unit-price 1.49, :quantity 4}]
+                                     [:put :xt_docs {:xt/id :o2, :unit-price 5.39, :quantity 1}]
+                                     [:put :xt_docs {:xt/id :o3, :unit-price 0.59, :quantity 7}]])]
     (t/is (= #{{:oid :o1, :o-value 5.96}
                {:oid :o2, :o-value 5.39}
                {:oid :o3, :o-value 4.13}}
@@ -267,9 +267,9 @@
                                   [oid :quantity qty]]}))))))
 
 (deftest test-aggregate-exprs
-  (let [tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :foo, :category :c0, :v 1}]
-                                     [:put :xt_docs {:xt/id :bar, :category :c0, :v 2}]
-                                     [:put :xt_docs {:xt/id :baz, :category :c1, :v 4}]])]
+  (let [tx (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :foo, :category :c0, :v 1}]
+                                    [:put :xt_docs {:xt/id :bar, :category :c0, :v 2}]
+                                    [:put :xt_docs {:xt/id :baz, :category :c1, :v 4}]])]
     (t/is (= [{:category :c0, :sum-doubles 6}
               {:category :c1, :sum-doubles 8}]
              (xt/q tu/*node*
@@ -482,8 +482,8 @@
 (deftest test-value-unification
   (let [_tx (xt/submit-tx tu/*node*
                           (conj ivan+petr
-                                '[:put :xt_docs {:xt/id :sergei :first-name "Sergei" :last-name "Sergei"}]
-                                '[:put :xt_docs {:xt/id :jeff :first-name "Sergei" :last-name "but-different"}]))]
+                                [:put :xt_docs {:xt/id :sergei :first-name "Sergei" :last-name "Sergei"}]
+                                [:put :xt_docs {:xt/id :jeff :first-name "Sergei" :last-name "but-different"}]))]
     (t/is (= [{:e :sergei, :n "Sergei"}]
              (xt/q
               tu/*node*
@@ -502,12 +502,12 @@
                              [f :first-name n]]}))))))
 
 (deftest test-implicit-match-unification
-  (xt/submit-tx tu/*node* '[[:put :foo {:xt/id :ivan, :name "Ivan"}]
-                            [:put :foo {:xt/id :petr, :name "Petr"}]
-                            [:put :bar {:xt/id :sergei, :name "Sergei"}]
-                            [:put :bar {:xt/id :ivan,:name "Ivan"}]
-                            [:put :toto {:xt/id :jon, :name "John"}]
-                            [:put :toto {:xt/id :mat,:name "Matt"}]])
+  (xt/submit-tx tu/*node* [[:put :foo {:xt/id :ivan, :name "Ivan"}]
+                           [:put :foo {:xt/id :petr, :name "Petr"}]
+                           [:put :bar {:xt/id :sergei, :name "Sergei"}]
+                           [:put :bar {:xt/id :ivan,:name "Ivan"}]
+                           [:put :toto {:xt/id :jon, :name "John"}]
+                           [:put :toto {:xt/id :mat,:name "Matt"}]])
   (t/is (= [{:e :ivan, :name "Ivan"}]
            (xt/q tu/*node*
                  '{:find [e name]
@@ -523,9 +523,9 @@
 
 (deftest exists-with-no-outer-unification-692
   (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
-                            [:put :xt_docs {:xt/id :petr, :name "Petr"}]
-                            [:put :xt_docs {:xt/id :ivan2, :name "Ivan"}]])]
+                          [[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
+                           [:put :xt_docs {:xt/id :petr, :name "Petr"}]
+                           [:put :xt_docs {:xt/id :ivan2, :name "Ivan"}]])]
 
     (t/is (= [{:e :ivan} {:e :ivan2}]
              (xt/q tu/*node*
@@ -552,9 +552,9 @@
 
 (deftest exists-with-keys-699
   (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :xt_docs {:xt/id 1, :name "one"}]
-                            [:put :xt_docs {:xt/id 2, :name "two"}]
-                            [:put :xt_docs {:xt/id 3, :name "three"}]])]
+                          [[:put :xt_docs {:xt/id 1, :name "one"}]
+                           [:put :xt_docs {:xt/id 2, :name "two"}]
+                           [:put :xt_docs {:xt/id 3, :name "three"}]])]
 
     (t/is (= [{:e 2} {:e 3}]
              (xt/q tu/*node*
@@ -569,10 +569,10 @@
 
 (deftest test-left-join
   (xt/submit-tx tu/*node*
-                '[[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
-                  [:put :xt_docs {:xt/id :petr, :name "Petr", :parent :ivan}]
-                  [:put :xt_docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
-                  [:put :xt_docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])
+                [[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
+                 [:put :xt_docs {:xt/id :petr, :name "Petr", :parent :ivan}]
+                 [:put :xt_docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
+                 [:put :xt_docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])
 
   (t/is (= #{{:e :ivan, :c :petr}
              {:e :petr, :c :sergei}
@@ -614,10 +614,10 @@
 
 (deftest test-semi-join
   (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
-                            [:put :xt_docs {:xt/id :petr, :name "Petr", :parent :ivan}]
-                            [:put :xt_docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
-                            [:put :xt_docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])]
+                          [[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
+                           [:put :xt_docs {:xt/id :petr, :name "Petr", :parent :ivan}]
+                           [:put :xt_docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
+                           [:put :xt_docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])]
 
     (t/is (= #{{:e :ivan} {:e :petr}}
              (set (xt/q tu/*node*
@@ -653,9 +653,9 @@
 (deftest test-anti-join
   (let [_tx (xt/submit-tx
              tu/*node*
-             '[[:put :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
-               [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
-               [:put :xt_docs {:xt/id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
+             [[:put :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
+              [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
+              [:put :xt_docs {:xt/id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
 
     (t/is (= #{{:e :ivan} {:e :sergei}}
              (set (xt/q tu/*node*
@@ -831,9 +831,9 @@
                                                      [e :first-name "Sergei"]]})]}))))))
 
 (deftest test-simple-literals-in-find
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan, :age 15}]
-                            [:put :xt_docs {:xt/id :petr, :age 22}]
-                            [:put :xt_docs {:xt/id :slava, :age 37}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :ivan, :age 15}]
+                           [:put :xt_docs {:xt/id :petr, :age 22}]
+                           [:put :xt_docs {:xt/id :slava, :age 37}]])
 
 
   (t/is (= #{{:-column-0 1, :-column-1 "foo", :xt/id :ivan}
@@ -845,9 +845,9 @@
 
 (deftest calling-a-function-580
   (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :xt_docs {:xt/id :ivan, :age 15}]
-                            [:put :xt_docs {:xt/id :petr, :age 22}]
-                            [:put :xt_docs {:xt/id :slava, :age 37}]])]
+                          [[:put :xt_docs {:xt/id :ivan, :age 15}]
+                           [:put :xt_docs {:xt/id :petr, :age 22}]
+                           [:put :xt_docs {:xt/id :slava, :age 37}]])]
 
     (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
@@ -894,9 +894,9 @@
 
 (deftest test-nested-expressions-581
   (let [_tx (xt/submit-tx tu/*node*
-                          '[[:put :xt_docs {:xt/id :ivan, :age 15}]
-                            [:put :xt_docs {:xt/id :petr, :age 22, :height 240, :parent 1}]
-                            [:put :xt_docs {:xt/id :slava, :age 37, :parent 2}]])]
+                          [[:put :xt_docs {:xt/id :ivan, :age 15}]
+                           [:put :xt_docs {:xt/id :petr, :age 22, :height 240, :parent 1}]
+                           [:put :xt_docs {:xt/id :slava, :age 37, :parent 2}]])]
 
     (t/is (= #{{:e1 :ivan, :e2 :petr, :e3 :slava}
                {:e1 :petr, :e2 :ivan, :e3 :slava}}
@@ -948,10 +948,10 @@
                                [(+ a1 (+ a2 a3 1)) sum-ages]]}))))))
 
 (deftest test-union-join
-  (let [_tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
-                                      [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
-                                      [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
-                                      [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])]
+  (let [_tx (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
+                                     [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
+                                     [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
+                                     [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])]
 
     (letfn [(q [query]
               (xt/q tu/*node* query))]
@@ -990,10 +990,10 @@
                                           [(+ age 10) older-age])]})))))))
 
 (deftest test-union-join-with-match-syntax-693
-  (let [_tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
-                                      [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
-                                      [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
-                                      [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])]
+  (let [_tx (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
+                                     [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
+                                     [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
+                                     [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])]
     (t/is (= [{:e :ivan}]
              (xt/q tu/*node* '{:find [e]
                                :where [(union-join [e]
@@ -1008,10 +1008,10 @@
                                                         [e :xt/id :ivan]))]})))))
 
 (deftest test-union-join-with-subquery-638
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
-                            [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
-                            [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
-                            [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
+                           [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
+                           [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
+                           [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])
   (t/is (= [{:e :oleg}]
            (xt/q tu/*node* '{:find [e]
                              :where [(union-join [e]
@@ -1044,10 +1044,10 @@
         "films made by the Bond with the most films")
 
   (t/testing "(contrived) correlated sub-query"
-    (xt/submit-tx tu/*node* '[[:put :a {:xt/id :a1, :a 1}]
-                              [:put :a {:xt/id :a2, :a 2}]
-                              [:put :b {:xt/id :b2, :b 2}]
-                              [:put :b {:xt/id :b3, :b 3}]])
+    (xt/submit-tx tu/*node* [[:put :a {:xt/id :a1, :a 1}]
+                             [:put :a {:xt/id :a2, :a 2}]
+                             [:put :b {:xt/id :b2, :b 2}]
+                             [:put :b {:xt/id :b3, :b 3}]])
 
     (t/is (= [{:aid :a2, :bid :b2}]
              (xt/q tu/*node*
@@ -1110,7 +1110,7 @@
                                       (partition-all 20))]
                       (xt/submit-tx node tx-ops))))]
 
-      (xt/submit-tx node '[[:put :xt_docs {:xt/id 0 :foo :bar}]])
+      (xt/submit-tx node [[:put :xt_docs {:xt/id 0 :foo :bar}]])
       (submit-ops! (range 1010))
 
       (t/is (= 1010 (-> (xt/q node '{:find [(count id)]
@@ -1131,7 +1131,7 @@
                                                    :data (str "data" id)}])
                                       (partition-all 20))]
                       (xt/submit-tx node tx-ops))))]
-      (let [_tx1 (xt/submit-tx node '[[:put :xt_docs {:xt/id :some-doc}]])
+      (let [_tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :some-doc}]])
             ;; going over the chunk boundary
             tx2 (submit-ops! (range 200))]
         (t/is (= [{:xt/id :some-doc}]
@@ -1140,9 +1140,9 @@
                                       [xt/id :xt/id :some-doc]]})))))))
 
 (deftest test-subquery-unification
-  (let [tx (xt/submit-tx tu/*node* '[[:put :a {:xt/id :a1, :a 2 :b 1}]
-                                     [:put :a {:xt/id :a2, :a 2 :b 3}]
-                                     [:put :a {:xt/id :a3, :a 2 :b 0}]])]
+  (let [tx (xt/submit-tx tu/*node* [[:put :a {:xt/id :a1, :a 2 :b 1}]
+                                    [:put :a {:xt/id :a2, :a 2 :b 3}]
+                                    [:put :a {:xt/id :a3, :a 2 :b 0}]])]
 
     (t/testing "variables returned from subqueries that must be run as an apply are unified"
 
@@ -1167,9 +1167,9 @@
 
 #_ ;; TODO currently don't work
 (deftest test-basic-rules
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
-                            [:put :xt_docs {:xt/id :petr :name "Petr" :last-name "Petrov" :age 18}]
-                            [:put :xt_docs {:xt/id :georgy :name "Georgy" :last-name "George" :age 17}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
+                           [:put :xt_docs {:xt/id :petr :name "Petr" :last-name "Petrov" :age 18}]
+                           [:put :xt_docs {:xt/id :georgy :name "Georgy" :last-name "George" :age 17}]])
   (letfn [(q [query & args]
             (apply xt/q tu/*node* query args))]
     (t/testing "without rule"
@@ -1461,13 +1461,13 @@
     ;; 2023: Matthew, Mark (again)
     ;; 2024+: Matthew
 
-    (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in #inst "2015"]}]
-                                        [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in  #inst "2018"  #inst "2020"]}]
-                                        [:put :xt_docs {:xt/id :luke} {:for-valid-time [:in #inst "2021"]}]])
+    (let [tx0 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in #inst "2015"]}]
+                                       [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in  #inst "2018"  #inst "2020"]}]
+                                       [:put :xt_docs {:xt/id :luke} {:for-valid-time [:in #inst "2021"]}]])
 
-          tx1 (xt/submit-tx tu/*node* '[[:delete :xt_docs :luke {:for-valid-time [:in #inst "2022"]}]
-                                        [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in #inst "2023" #inst "2024"]}]
-                                        [:put :xt_docs {:xt/id :john} {:for-valid-time [:in #inst "2016" #inst "2020"]}]])]
+          tx1 (xt/submit-tx tu/*node* [[:delete :xt_docs :luke {:for-valid-time [:in #inst "2022"]}]
+                                       [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in #inst "2023" #inst "2024"]}]
+                                       [:put :xt_docs {:xt/id :john} {:for-valid-time [:in #inst "2016" #inst "2020"]}]])]
 
       (t/is (= #{{:id :matthew}, {:id :mark}}
                (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2023"))))
@@ -1531,8 +1531,8 @@
             "for all sys time"))))
 
 (t/deftest test-for-valid-time-with-current-time-2493
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in nil #inst "2040"]}]])
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in #inst "2022" #inst "2030"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in nil #inst "2040"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in #inst "2022" #inst "2030"]}]])
   (t/is (= #{{:id :matthew,
               :vt-from #time/zoned-date-time "2030-01-01T00:00Z[UTC]",
               :vt-to #time/zoned-date-time "2040-01-01T00:00Z[UTC]"}
@@ -1541,9 +1541,9 @@
               :vt-to #time/zoned-date-time "2030-01-01T00:00Z[UTC]"}}
            (set (xt/q tu/*node*
                       '{:find [id vt-from vt-to], :where [(match :xt_docs {:xt/id id
-                                                                             :xt/valid-from vt-from
-                                                                             :xt/valid-to vt-to}
-                                                                   {:for-valid-time [:in nil #inst "2040"]})]}
+                                                                           :xt/valid-from vt-from
+                                                                           :xt/valid-to vt-to}
+                                                                 {:for-valid-time [:in nil #inst "2040"]})]}
                       {:basis {:current-time (util/->instant #inst "2023")}})))))
 
 (t/deftest test-temporal-opts-from-and-to
@@ -1558,9 +1558,9 @@
     ;; tx1
     ;; now - 2040 : Matthew
 
-    (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:from #inst "2015"]}]
-                                        [:put :xt_docs {:xt/id :mark} {:for-valid-time [:to #inst "2050"]}]])
-          tx1 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:to #inst "2040"]}]])]
+    (let [tx0 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:from #inst "2015"]}]
+                                       [:put :xt_docs {:xt/id :mark} {:for-valid-time [:to #inst "2050"]}]])
+          tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:to #inst "2040"]}]])]
       (t/is (= #{{:id :matthew,
                   :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                   :vt-to nil}
@@ -1600,33 +1600,33 @@
                   {:basis {:tx tx, :current-time (util/->instant current-time)}}))]
 
     (let [tx0 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:xt/id 1 :customer-number 145 :property-number 7797}
-                               {:for-valid-time [:in #inst "1998-01-10"]}]]
+                            [[:put :docs {:xt/id 1 :customer-number 145 :property-number 7797}
+                              {:for-valid-time [:in #inst "1998-01-10"]}]]
                             {:system-time #inst "1998-01-10"})
 
           tx1 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:xt/id 1 :customer-number 827 :property-number 7797}
-                               {:for-valid-time [:in  #inst "1998-01-15"] }]]
+                            [[:put :docs {:xt/id 1 :customer-number 827 :property-number 7797}
+                              {:for-valid-time [:in  #inst "1998-01-15"] }]]
                             {:system-time #inst "1998-01-15"})
 
           _tx2 (xt/submit-tx tu/*node*
-                             '[[:delete :docs 1 {:for-valid-time [:in #inst "1998-01-20"]}]]
+                             [[:delete :docs 1 {:for-valid-time [:in #inst "1998-01-20"]}]]
                              {:system-time #inst "1998-01-20"})
 
           _tx3 (xt/submit-tx tu/*node*
-                             '[[:put :docs {:xt/id 1 :customer-number 145 :property-number 7797}
-                                {:for-valid-time [:in #inst "1998-01-03" #inst "1998-01-10"]}]]
+                             [[:put :docs {:xt/id 1 :customer-number 145 :property-number 7797}
+                               {:for-valid-time [:in #inst "1998-01-03" #inst "1998-01-10"]}]]
                              {:system-time #inst "1998-01-23"})
 
           _tx4 (xt/submit-tx tu/*node*
-                             '[[:delete :docs 1 {:for-valid-time [:in #inst "1998-01-03" #inst "1998-01-05"]}]]
+                             [[:delete :docs 1 {:for-valid-time [:in #inst "1998-01-03" #inst "1998-01-05"]}]]
                              {:system-time #inst "1998-01-26"})
 
           tx5 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:xt/id 1 :customer-number 145 :property-number 7797}
-                               {:for-valid-time [:in #inst "1998-01-05" #inst "1998-01-12"]}]
-                              [:put :docs {:xt/id 1 :customer-number 827 :property-number 7797}
-                               {:for-valid-time [:in #inst "1998-01-12" #inst "1998-01-20"]}]]
+                            [[:put :docs {:xt/id 1 :customer-number 145 :property-number 7797}
+                              {:for-valid-time [:in #inst "1998-01-05" #inst "1998-01-12"]}]
+                             [:put :docs {:xt/id 1 :customer-number 827 :property-number 7797}
+                              {:for-valid-time [:in #inst "1998-01-12" #inst "1998-01-20"]}]]
                             {:system-time #inst "1998-01-28"})
 
           tx6 (xt/submit-tx tu/*node*
@@ -1645,8 +1645,8 @@
                             {:system-time #inst "1998-01-30"})
 
           tx7 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:xt/id 2 :customer-number 827 :property-number 3621}
-                               {:for-valid-time [:in #inst "1998-01-15"]}]]
+                            [[:put :docs {:xt/id 2 :customer-number 827 :property-number 3621}
+                              {:for-valid-time [:in #inst "1998-01-15"]}]]
                             {:system-time #inst "1998-01-31"})]
 
       (t/is (= [{:cust 145 :app-from (util/->zdt #inst "1998-01-10")}]
@@ -1853,13 +1853,13 @@
     '{:find [order fullname]
       :where [(match :order {:xt/id order, :customer customer})
               [(concat
-                 (q {:find [fn]
-                     :in [customer]
-                     :where [(match :customer {:xt/id customer, :firstname fn})]})
-                 " "
-                 (q {:find [ln]
-                     :in [customer]
-                     :where [(match :customer {:xt/id customer, :lastname ln})]}))
+                (q {:find [fn]
+                    :in [customer]
+                    :where [(match :customer {:xt/id customer, :firstname fn})]})
+                " "
+                (q {:find [ln]
+                    :in [customer]
+                    :where [(match :customer {:xt/id customer, :lastname ln})]}))
                fullname]]}
     [{:order 0, :fullname "bob smith"}
      {:order 1, :fullname "bob smith"}
@@ -1914,8 +1914,8 @@
 
 (deftest test-period-predicates
 
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2020"]}]
-                            [:put :xt_cats {:xt/id 2} {:for-valid-time [:in #inst "2016" #inst "2018"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2020"]}]
+                           [:put :xt_cats {:xt/id 2} {:for-valid-time [:in #inst "2016" #inst "2018"]}]])
 
   (t/is (= [{:xt/id 1, :id2 2,
              :xt-docs-app-time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
@@ -1951,28 +1951,28 @@
   (t/is (= [{:p1 {:from #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
                   :to #time/zoned-date-time "2022-01-01T00:00Z[UTC]"}}]
            (xt/q
-             tu/*node*
-             '{:find [p1],
-               :where [[(period #inst "2018" #inst "2022") p1]]})))
+            tu/*node*
+            '{:find [p1],
+              :where [[(period #inst "2018" #inst "2022") p1]]})))
 
   (t/is (= [{:p1 {:from #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
                   :to nil}}]
            (xt/q
-             tu/*node*
-             '{:find [p1],
-               :where [[(period #inst "2018" nil) p1]]}))
+            tu/*node*
+            '{:find [p1],
+              :where [[(period #inst "2018" nil) p1]]}))
         "open-ended")
 
   (t/is (thrown-with-msg?
-          RuntimeException
-          #"From cannot be greater than to when constructing a period"
-          (xt/q
-            tu/*node*
-            '{:find [p1],
-              :where [[(period #inst "2022" #inst "2020") p1]]}))))
+         RuntimeException
+         #"From cannot be greater than to when constructing a period"
+         (xt/q
+          tu/*node*
+          '{:find [p1],
+            :where [[(period #inst "2022" #inst "2020") p1]]}))))
 
 (deftest test-period-and-temporal-col-projection
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
 
 
   (t/is (= [{:xt/id 1,
@@ -2035,7 +2035,7 @@
                               :for-system-time :all-time})]}))
         "period unification")
 
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 2}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 2}]])
 
   (t/is (= [{:xt/id 2,
              :time {:from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
@@ -2049,9 +2049,9 @@
                               :for-system-time :all-time})]}))
         "period unification within match")
 
-  (xt/submit-tx tu/*node* '[[:put :xt_docs
-                             {:xt/id 3 :c {:from #inst "2015" :to #inst "2050"}}
-                             {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs
+                            {:xt/id 3 :c {:from #inst "2015" :to #inst "2050"}}
+                            {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
 
   (t/is (= [{:xt/id 3,
              :time
@@ -2068,7 +2068,7 @@
         "period unification within match with user period column"))
 
 (deftest test-period-literal-match
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
@@ -2323,13 +2323,13 @@
                                :where [(match :xt/the-docs {:xt/* doc})]})))))
 
 (t/deftest test-inconsistent-valid-time-range-2494
-  (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 1} {:for-valid-time [:in nil #inst "2011"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 1} {:for-valid-time [:in nil #inst "2011"]}]])
   (t/is (= [{:tx-id 0, :committed? false}]
            (xt/q tu/*node* '{:find [tx-id committed?]
                              :where [($ :xt/txs {:xt/id tx-id,
                                                  :xt/committed? committed?})]})))
-  (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 2}]])
-  (xt/submit-tx tu/*node* '[[:delete :xt-docs 2 {:for-valid-time [:in nil #inst "2011"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 2}]])
+  (xt/submit-tx tu/*node* [[:delete :xt-docs 2 {:for-valid-time [:in nil #inst "2011"]}]])
   (t/is (= #{{:tx-id 0, :committed? false}
              {:tx-id 1, :committed? true}
              {:tx-id 2, :committed? false}}
@@ -2350,8 +2350,8 @@
 
 (t/deftest bug-temporal-queries-wrong-at-boundary-2531
   (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 10}
-                                     :xtdb.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}
-                                     :xtdb.log/memory-log {:instant-src (tu/->mock-clock)}})]
+                                    :xtdb.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}
+                                    :xtdb.log/memory-log {:instant-src (tu/->mock-clock)}})]
     (doseq [i (range 10)]
       (xt/submit-tx node [[:put :ints {:xt/id 0 :n i}]]))
 

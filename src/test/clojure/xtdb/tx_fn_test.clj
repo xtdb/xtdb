@@ -128,8 +128,8 @@
     (t/is (= 0 (foo-version)))
 
     (t/testing "non existing tx fn"
-      (xt/submit-tx tu/*node* '[[:call :non-existing-fn]
-                                [:call :assoc-version :fail]])
+      (xt/submit-tx tu/*node* [[:call :non-existing-fn]
+                               [:call :assoc-version :fail]])
 
       (t/is (= 0 (foo-version)))
       (t/is (thrown-with-msg? RuntimeException
@@ -138,8 +138,8 @@
 
     (t/testing "invalid results"
       (xt/submit-tx tu/*node* [[:put-fn :invalid-fn '(fn [] [[:foo]])]])
-      (xt/submit-tx tu/*node* '[[:call :invalid-fn]
-                                [:call :assoc-version :fail]])
+      (xt/submit-tx tu/*node* [[:call :invalid-fn]
+                               [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
 
       (t/is (thrown-with-msg? IllegalArgumentException #"invalid-tx-op"
@@ -148,8 +148,8 @@
     (t/testing "no :fn"
       (xt/submit-tx tu/*node* [[:put :xt/tx-fns {:xt/id :no-fn}]])
 
-      (xt/submit-tx tu/*node* '[[:call :no-fn]
-                                [:call :assoc-version :fail]])
+      (xt/submit-tx tu/*node* [[:call :no-fn]
+                               [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
 
       (t/is (thrown-with-msg? RuntimeException
@@ -158,8 +158,8 @@
 
     (t/testing "not a fn"
       (xt/submit-tx tu/*node* [[:put :xt/tx-fns {:xt/id :not-a-fn, :xt/fn 0}]])
-      (xt/submit-tx tu/*node* '[[:call :not-a-fn]
-                                [:call :assoc-version :fail]])
+      (xt/submit-tx tu/*node* [[:call :not-a-fn]
+                               [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
 
       (t/is (thrown-with-msg? RuntimeException
@@ -168,8 +168,8 @@
 
     (t/testing "compilation errors"
       (xt/submit-tx tu/*node* [[:put-fn :compilation-error-fn '(fn [] unknown-symbol)]])
-      (xt/submit-tx tu/*node* '[[:call :compilation-error-fn]
-                                [:call :assoc-version :fail]])
+      (xt/submit-tx tu/*node* [[:call :compilation-error-fn]
+                               [:call :assoc-version :fail]])
 
       (t/is (= 0 (foo-version)))
       (t/is (thrown-with-msg? RuntimeException #":xtdb.call/error-compiling-tx-fn"
@@ -183,8 +183,8 @@
                                    [])]])
 
       (tu/with-log-level 'xtdb.indexer :error
-        (xt/submit-tx tu/*node* '[[:call :exception-fn]
-                                  [:call :assoc-version :fail]])
+        (xt/submit-tx tu/*node* [[:call :exception-fn]
+                                 [:call :assoc-version :fail]])
         (t/is (= 0 (foo-version)))
         (t/is (thrown-with-msg? RuntimeException #":xtdb.call/error-evaluating-tx-fn"
                                 (some-> (idx/reset-tx-fn-error!) throw)))))

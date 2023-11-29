@@ -82,9 +82,9 @@
 
 (t/deftest can-write-docs-with-different-keys
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/docs-with-different-keys.json")
-                         '[[:put :foo {:xt/id :a, :a 1}]
-                           [:put :foo {:xt/id "b", :b 2}]
-                           [:put :bar {:xt/id 3, :c 3}]]))
+                         [[:put :foo {:xt/id :a, :a 1}]
+                          [:put :foo {:xt/id "b", :b 2}]
+                          [:put :bar {:xt/id 3, :c 3}]]))
 
 (t/deftest can-write-sql-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-sql.json")
