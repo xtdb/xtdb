@@ -4,7 +4,7 @@ SQL queries are submitted through `xtdb.api/q`:
 
 * `(xt/q <node> [<query> & <params>] <opts>?)` returns the query results as a vector of maps.
 ** `opts`: map of query options
-*** `:basis`, `:basis-timeout`, `:default-all-valid-time?`: see link:../datalog/queries#basis[Datalog]
+*** `:basis`, `:basis-timeout`, `:default-all-valid-time?`: see link:../xtql/queries#basis[XTQL]
     By default, `:default-all-valid-time?` is false, unlike the SQL:2011 specification - to maintain SQL spec compatibility, specify `:default-all-valid-time? true`.
 * `(xt/q& <node> [<query> & <params>] <opts>?)`: returns a `CompletableFuture` of the query results.
 

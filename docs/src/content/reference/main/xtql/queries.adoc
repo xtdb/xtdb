@@ -15,12 +15,14 @@ XTQL query options are an optional map of the following keys:
       {:args {:username "james"}})
 ----
 +
+[#basis]
 * `:basis`: a map specifying the 'basis' of the query - this is used to ensure repeatable queries.
 ** `:tx`: specifies the latest transaction that'll be visible to the query
 ** `:after-tx`: requires that the node has indexed at least the specified transaction.
 +
 If it's not provided, the XTDB client will default it to the latest transaction submitted through that client, in order to 'read your writes'.
 ** `:current-time`: overrides the wall-clock time used in any functions that require it.
+* `:basis-timeout`: duration to wait for the basis tx(s) to be indexed before timing out.
 * `:default-tz`: the default timezone to use - defaults to the JVM timezone of the server.
 * `:explain?`: rather than returning results, setting this flag to `true` returns the query plan for the query - defaults to `false`.
 * `:key-fn`: specifies how keys are returned in query results.
