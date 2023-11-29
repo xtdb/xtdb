@@ -2137,6 +2137,16 @@
                       (without :z))))
         "ignores missing columns"))
 
+(deftest test-without-removing-cols-3001
+  (xt/submit-tx tu/*node*
+                [(xt/put :users {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov"})
+                 (xt/put :users {:xt/id "petr", :first-name "Petr", :last-name "Petrov"})])
+
+  (t/is (= [{:last-name "Petrov"} {:last-name "Ivanov"}]
+           (xt/q tu/*node*
+                 '(-> (from :users [first-name last-name])
+                      (without :first-name))))))
+
 (deftest test-without-normalisation-2959-2969
   (xt/submit-tx tu/*node*
                 [(xt/put :users {:xt/id 1 :name "Oliver"})])
