@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [cognitect.transit :as t]
             [xtdb.api :as xt]
-            [xtdb.transit :as xt.t]
+            [xtdb.serde :as serde]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable)
@@ -147,7 +147,7 @@
                                                                                                   (util/->lex-hex-string first-tx-id)))
                                                             (io/make-parents)))]
                                                   (vreset! !os os)
-                                                  (recur {:seg-row-count 0, :wtr (t/writer os :json {:handlers xt.t/tj-write-handlers}) }))
+                                                  (recur {:seg-row-count 0, :wtr (t/writer os :json {:handlers serde/tj-write-handlers}) }))
                                     :else acc))]
 
                             (when (Thread/interrupted)

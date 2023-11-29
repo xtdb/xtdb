@@ -5,7 +5,7 @@
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
-            [xtdb.transit :as xt.transit]
+            [xtdb.serde :as serde]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -82,7 +82,7 @@
 
 (defn- write-chunk-metadata ^java.nio.ByteBuffer [chunk-meta]
   (with-open [os (ByteArrayOutputStream.)]
-    (let [w (transit/writer os :json {:handlers (merge xt.transit/tj-write-handlers
+    (let [w (transit/writer os :json {:handlers (merge serde/tj-write-handlers
                                                        arrow-write-handlers)})]
       (transit/write w chunk-meta))
     (ByteBuffer/wrap (.toByteArray os))))
@@ -364,7 +364,7 @@
   (let [cm (TreeMap.)]
     (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
       (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
-        (let [rdr (transit/reader is :json {:handlers (merge xt.transit/tj-read-handlers
+        (let [rdr (transit/reader is :json {:handlers (merge serde/tj-read-handlers
                                                              arrow-read-handlers)})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
     cm))

@@ -1,7 +1,7 @@
 (ns user
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as ctn]
-            xtdb.edn
+            xtdb.serde
             [xtdb.util :as util]
             [xtdb.xray :as xray :refer [xray]])
   (:import java.io.File))

@@ -5,7 +5,7 @@
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
             [xtdb.protocols :as xtp]
             [xtdb.error :as err]
-            [xtdb.transit :as xt.transit]
+            [xtdb.serde :as serde]
             [xtdb.util :as util])
   (:import [java.io EOFException InputStream]
            java.lang.AutoCloseable
@@ -15,8 +15,8 @@
            xtdb.IResultSet))
 
 (def transit-opts
-  {:decode {:handlers xt.transit/tj-read-handlers}
-   :encode {:handlers xt.transit/tj-write-handlers}})
+  {:decode {:handlers serde/tj-read-handlers}
+   :encode {:handlers serde/tj-write-handlers}})
 
 (def router
   (r/router xtp/http-routes))
@@ -72,7 +72,7 @@
 (defmethod hato.middleware/coerce-response-body ::transit+json->result-or-error [_req {:keys [^InputStream body status] :as resp}]
   (letfn [(parse-body [rdr->body]
             (try
-              (let [rdr (transit/reader body :json {:handlers xt.transit/tj-read-handlers})]
+              (let [rdr (transit/reader body :json {:handlers serde/tj-read-handlers})]
                 (-> resp (assoc :body (rdr->body rdr))))
               (catch Exception e
                 (.close body)

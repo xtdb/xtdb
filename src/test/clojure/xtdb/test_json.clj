@@ -1,12 +1,12 @@
 (ns xtdb.test-json
   (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.walk :as walk]
             [cognitect.transit :as transit]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.transit :as xt.transit]
-            [xtdb.util :as util]
-            [clojure.string :as str])
+            [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            java.io.File
            java.nio.ByteBuffer
@@ -48,7 +48,7 @@
         actual))
 
 (defn- read-transit-obj [stream]
-  (transit/read (transit/reader stream :json {:handlers xt.transit/tj-read-handlers})))
+  (transit/read (transit/reader stream :json {:handlers serde/tj-read-handlers})))
 
 (defn check-transit-json-file [^Path expected, ^Path actual]
   (with-open [expected-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))

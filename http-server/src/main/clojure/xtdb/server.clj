@@ -17,13 +17,13 @@
             [reitit.interceptor.sieppari :as r.sieppari]
             [reitit.ring :as r.ring]
             [reitit.swagger :as r.swagger]
-            [ring.util.response :as ring-response]
             [ring.adapter.jetty9 :as j]
+            [ring.util.response :as ring-response]
             [spec-tools.core :as st]
             xtdb.api
-            [xtdb.protocols :as xtp]
             [xtdb.error :as err]
-            [xtdb.transit :as xt.transit]
+            [xtdb.protocols :as xtp]
+            [xtdb.serde :as serde]
             [xtdb.util :as util])
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
@@ -35,9 +35,9 @@
   (-> m/default-options
       (m/select-formats #{"application/transit+json"})
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
-                xt.transit/tj-read-handlers)
+                serde/tj-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
-                xt.transit/tj-write-handlers)
+                serde/tj-write-handlers)
       (assoc-in [:http :encode-response-body?] (constantly true))))
 
 (defmulti ^:private route-handler :name, :default ::default)
@@ -126,7 +126,7 @@
                            (assoc :return :output-stream)
 
                            (assoc-in [:formats "application/transit+json" :encoder]
-                                     [->tj-resultset-encoder {:handlers xt.transit/tj-write-handlers}])))
+                                     [->tj-resultset-encoder {:handlers serde/tj-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
