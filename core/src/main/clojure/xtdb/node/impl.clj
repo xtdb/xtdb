@@ -39,10 +39,7 @@
 
 (defn- validate-tx-ops [tx-ops]
   (try
-    (doseq [tx-op (->> tx-ops
-                       (map (fn [tx-op]
-                              (cond-> tx-op
-                                (not (instance? Ops tx-op)) txp/parse-tx-op))))
+    (doseq [tx-op tx-ops
             :when (instance? Ops$Sql tx-op)]
       (sql/parse-query (.sql ^Ops$Sql tx-op)))
     (catch Throwable e

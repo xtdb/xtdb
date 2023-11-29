@@ -6,12 +6,31 @@ import xtdb.types.ClojureForm;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @SuppressWarnings("StaticInitializerReferencesSubClass")
 public class Ops {
+
+    @SuppressWarnings("unused")
+    public interface HasArgs<ArgType, O extends HasArgs<ArgType, O>> {
+        O withArgs(List<ArgType> args);
+
+        @SuppressWarnings("unchecked")
+        default O withArgs(ArgType... args) {
+            return withArgs(Arrays.asList(args));
+        }
+    }
+
+    public interface HasValidTimeBounds<O extends HasValidTimeBounds<O>> {
+        O startingFrom(Instant validFrom);
+
+        O until(Instant validTo);
+
+        O during(Instant validFrom, Instant validTo);
+    }
+
     private Ops() {
     }
 
@@ -35,71 +54,85 @@ public class Ops {
         return sqlBatch(sql, ByteBuffer.wrap(paramGroupBytes));
     }
 
-    public static final class Sql extends Ops {
+    public static final class Sql extends Ops implements HasArgs<List<?>, Sql> {
         private final String sql;
-        private final List<List<?>> paramGroupRows;
-        private final ByteBuffer paramGroupBytes;
+        private final List<List<?>> argRows;
+        private final ByteBuffer argBytes;
 
         public Sql(String sql) {
             this.sql = sql;
-            this.paramGroupRows = null;
-            this.paramGroupBytes = null;
+            this.argRows = null;
+            this.argBytes = null;
         }
 
-        private Sql(String sql, ByteBuffer paramGroupBytes) {
+        private Sql(String sql, ByteBuffer argBytes) {
             this.sql = sql;
-            this.paramGroupBytes = paramGroupBytes;
-            this.paramGroupRows = null;
+            this.argBytes = argBytes;
+            this.argRows = null;
         }
 
-        public Sql(String sql, List<List<?>> paramGroupRows) {
+        public Sql(String sql, List<List<?>> argRows) {
             this.sql = sql;
-            this.paramGroupRows = paramGroupRows;
-            this.paramGroupBytes = null;
+            this.argRows = argRows;
+            this.argBytes = null;
         }
 
         public String sql() {
             return sql;
         }
 
-        public ByteBuffer paramGroupBytes() {
-            return paramGroupBytes;
+        public ByteBuffer argBytes() {
+            return argBytes;
         }
 
-        public List<List<?>> paramGroupRows() {
-            return paramGroupRows;
+        public List<List<?>> argRows() {
+            return argRows;
         }
 
         @Override
         public String toString() {
-            return String.format("[:sql '%s' {:paramGroupRows=%s, :paramGroupBytes=%s}]", sql, paramGroupRows, paramGroupBytes);
+            return String.format("[:sql '%s' {:argRows=%s, :argBytes=%s}]", sql, argRows, argBytes);
+        }
+
+        @Override
+        public Sql withArgs(List<List<?>> args) {
+            return new Sql(sql, args);
         }
     }
 
-    public static Xtql xtql(Object query, List<?> params) {
-        return new Xtql(query, params);
+    public static Xtql xtql(Object query) {
+        return new Xtql(query);
     }
 
-    public static final class Xtql extends Ops {
+    public static final class Xtql extends Ops implements HasArgs<Map<?, ?>, Xtql> {
         private final Object query;
-        private final List<?> params;
+        private final List<Map<?, ?>> args;
 
-        private Xtql(Object query, List<?> params) {
+        private Xtql(Object query) {
+            this(query, null);
+        }
+
+        private Xtql(Object query, List<Map<?, ?>> args) {
             this.query = query;
-            this.params = params;
+            this.args = args;
         }
 
         public Object query() {
             return query;
         }
 
-        public List<?> params() {
-            return params;
+        public List<?> args() {
+            return args;
         }
 
         @Override
         public String toString() {
-            return String.format("[:xtql %s {:params %s}]", query, params);
+            return String.format("[:xtql %s {:args %s}]", query, args);
+        }
+
+        @Override
+        public Xtql withArgs(List<Map<?, ?>> args) {
+            return new Xtql(query, args);
         }
     }
 
@@ -115,16 +148,22 @@ public class Ops {
         return put(XT_TXS, Map.of(XT_ID, fnId, XT_FN, new ClojureForm(fnForm)));
     }
 
-    public static final class Put extends Ops {
+    public static final class Put extends Ops implements HasValidTimeBounds<Put> {
 
         private final Keyword tableName;
         private final Map<Keyword, Object> doc;
-        private Instant validFrom;
-        private Instant validTo;
+        private final Instant validFrom;
+        private final Instant validTo;
 
         private Put(Keyword tableName, Map<Keyword, Object> doc) {
+            this(tableName, doc, null, null);
+        }
+
+        private Put(Keyword tableName, Map<Keyword, Object> doc, Instant validFrom, Instant validTo) {
             this.tableName = tableName;
             this.doc = doc;
+            this.validFrom = validFrom;
+            this.validTo = validTo;
         }
 
         public Keyword tableName() {
@@ -139,28 +178,23 @@ public class Ops {
             return validFrom;
         }
 
-        public Put validFrom(Instant validFrom) {
-            this.validFrom = validFrom;
-            return this;
-        }
-
-        public Put validFrom(Date validFrom) {
-            this.validFrom = validFrom.toInstant();
-            return this;
+        @Override
+        public Put startingFrom(Instant validFrom) {
+            return new Put(tableName, doc, validFrom, validTo);
         }
 
         public Instant validTo() {
             return validTo;
         }
 
-        public Put validTo(Instant validTo) {
-            this.validTo = validTo;
-            return this;
+        @Override
+        public Put until(Instant validTo) {
+            return new Put(tableName, doc, validFrom, validTo);
         }
 
-        public Put validTo(Date validTo) {
-            this.validTo = validTo.toInstant();
-            return this;
+        @Override
+        public Put during(Instant validFrom, Instant validTo) {
+            return new Put(tableName, doc, validFrom, validTo);
         }
 
         @Override
@@ -173,16 +207,22 @@ public class Ops {
         return new Delete(tableName, entityId);
     }
 
-    public static final class Delete extends Ops {
+    public static final class Delete extends Ops implements HasValidTimeBounds<Delete> {
 
         private final Keyword tableName;
         private final Object entityId;
-        private Instant validFrom;
-        private Instant validTo;
+        private final Instant validFrom;
+        private final Instant validTo;
 
         private Delete(Keyword tableName, Object entityId) {
-            this.tableName = tableName;
-            this.entityId = entityId;
+            this(tableName, entityId, null, null);
+        }
+
+        private Delete(Keyword tableName, Object entityId, Instant validFrom, Instant validTo) {
+            this.tableName = Objects.requireNonNull(tableName, "expected tableName");
+            this.entityId = Objects.requireNonNull(entityId, "expected entityId");
+            this.validFrom = validFrom;
+            this.validTo = validTo;
         }
 
         public Keyword tableName() {
@@ -197,28 +237,23 @@ public class Ops {
             return validFrom;
         }
 
-        public Delete validFrom(Instant validFrom) {
-            this.validFrom = validFrom;
-            return this;
-        }
-
-        public Delete validFrom(Date validFrom) {
-            this.validFrom = validFrom.toInstant();
-            return this;
+        @Override
+        public Delete startingFrom(Instant validFrom) {
+            return new Delete(tableName, entityId, validFrom, validTo);
         }
 
         public Instant validTo() {
             return validTo;
         }
 
-        public Delete validTo(Instant validTo) {
-            this.validTo = validTo;
-            return this;
+        @Override
+        public Delete until(Instant validTo) {
+            return new Delete(tableName, entityId, validFrom, validTo);
         }
 
-        public Delete validTo(Date validTo) {
-            this.validTo = validTo.toInstant();
-            return this;
+        @Override
+        public Delete during(Instant validFrom, Instant validTo) {
+            return new Delete(tableName, entityId, validFrom, validTo);
         }
 
         @Override
@@ -255,16 +290,16 @@ public class Ops {
         }
     }
 
-    public static Call call(Object fnId, Object... args) {
+    public static Call call(Object fnId, List<?> args) {
         return new Call(fnId, args);
     }
 
     public static final class Call extends Ops {
 
         private final Object fnId;
-        private final Object[] args;
+        private final List<?> args;
 
-        public Call(Object fnId, Object[] args) {
+        public Call(Object fnId, List<?> args) {
             this.fnId = fnId;
             this.args = args;
         }
@@ -273,13 +308,13 @@ public class Ops {
             return fnId;
         }
 
-        public Object[] args() {
+        public List<?> args() {
             return args;
         }
 
         @Override
         public String toString() {
-            return String.format("[:call %s %s]", fnId, Arrays.toString(args));
+            return String.format("[:call %s %s]", fnId, args);
         }
     }
 

@@ -1,10 +1,16 @@
 (ns xtdb.api
-  (:require [xtdb.protocols :as xtp])
+  (:require [clojure.spec.alpha :as s]
+            [xtdb.error :as err]
+            [xtdb.protocols :as xtp]
+            [xtdb.time :as time]
+            [xtdb.util :as util])
   (:import [java.io Writer]
            [java.time Instant]
            java.util.concurrent.ExecutionException
            java.util.function.Function
+           java.util.List
            xtdb.IResultSet
+           [xtdb.tx Ops Ops$HasArgs Ops$HasValidTimeBounds]
            xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]
@@ -222,38 +228,89 @@
   [node]
   (xtp/status node))
 
-(defn put [table doc]
-  [:put table doc])
+(def ^:private eid? (some-fn uuid? integer? string? keyword?))
 
-(defn put-fn [fn-id f]
-  [:put-fn fn-id f])
+(def ^:private table? keyword?)
+
+(defn- expect-table-name [table-name]
+  (when-not (table? table-name)
+    (throw (err/illegal-arg :xtdb.tx/invalid-table
+                            {::err/message "expected table name" :table table-name})))
+
+  table-name)
+
+(defn- expect-eid [eid]
+  (if-not (eid? eid)
+    (throw (err/illegal-arg :xtdb.tx/invalid-eid
+                            {::err/message "expected xt/id", :xt/id eid}))
+    eid))
+
+(defn- expect-doc [doc]
+  (when-not (map? doc)
+    (throw (err/illegal-arg :xtdb.tx/expected-doc
+                            {::err/message "expected doc map", :doc doc})))
+  (expect-eid (:xt/id doc))
+
+  doc)
+
+(defn- expect-instant [instant]
+  (when-not (s/valid? ::time/datetime-value instant)
+    (throw (err/illegal-arg :xtdb.tx/invalid-date-time
+                            {::err/message "expected date-time"
+                             :timestamp instant})))
+
+  (time/->instant instant))
+
+(defn put [table doc]
+  (Ops/put (expect-table-name table) (expect-doc doc)))
+
+(defn- expect-fn-id [fn-id]
+  (if-not (eid? fn-id)
+    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
+    fn-id))
+
+(defn- expect-tx-fn [tx-fn]
+  (or tx-fn
+      (throw (err/illegal-arg :xtdb.tx/invalid-tx-fn {::err/message "expected tx-fn", :tx-fn tx-fn}))))
+
+(defn put-fn [fn-id tx-fn]
+  (Ops/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn)))
 
 (defn delete [table id]
-  [:delete table id])
+  (Ops/delete table (expect-eid id)))
 
-(defn during [tx-op from until]
-  (conj tx-op {:for-valid-time [:in from until]}))
+(defn during [^Ops$HasValidTimeBounds tx-op from until]
+  (.during tx-op (expect-instant from) (expect-instant until)))
 
-(defn starting-from [tx-op from]
-  (during tx-op from nil))
+(defn starting-from [^Ops$HasValidTimeBounds tx-op from]
+  (.startingFrom tx-op (expect-instant from)))
 
-(defn until [tx-op until]
-  (during tx-op nil until))
+(defn until [^Ops$HasValidTimeBounds tx-op until]
+  (.until tx-op (expect-instant until)))
 
 (defn erase [table id]
-  [:evict table id])
+  (Ops/evict (expect-table-name table) (expect-eid id)))
 
 (defn call [f & args]
-  (into [:call f] args))
+  (Ops/call (expect-fn-id f) args))
 
 (defn sql-op [sql]
-  [:sql sql])
+  (if-not (string? sql)
+    (throw (err/illegal-arg :xtdb.tx/expected-sql
+                            {::err/message "Expected SQL query",
+                             :sql sql}))
+
+    (Ops/sql sql)))
 
 (defn xtql-op [xtql]
-  [:xtql xtql])
+  (if-not (seq? xtql)
+    (throw (err/illegal-arg :xtdb.tx/expected-xtql-query
+                            {::err/message "expected XTQL query", :query xtql}))
 
-(defn with-op-args [op & args]
-  (into op args))
+    (Ops/xtql xtql)))
 
-(defn with-op-arg-rows [op arg-rows]
-  (into op arg-rows))
+(defn with-op-args [^Ops$HasArgs op & args]
+  (.withArgs op ^List args))
+
+(defn with-op-arg-rows [^Ops$HasArgs op arg-rows]
+  (.withArgs op ^List arg-rows))

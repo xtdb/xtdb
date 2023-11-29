@@ -4,7 +4,8 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
-  (:import xtdb.types.ClojureForm))
+  (:import [xtdb.tx Ops]
+           xtdb.types.ClojureForm))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -301,7 +302,7 @@ WHERE foo.xt$id = 1")])]
   (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :foo})])
 
   (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :bar})
-                           [:abort]
+                           Ops/ABORT
                            (xt/put :xt_docs {:xt/id :baz})])
   (t/is (= [{:id :foo}]
            (xt/q tu/*node*
@@ -354,7 +355,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
 (t/deftest test-txs-table-485
   (tu/with-log-level 'xtdb.indexer :error
     (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :foo})])
-    (xt/submit-tx tu/*node* [[:abort]])
+    (xt/submit-tx tu/*node* [Ops/ABORT])
     (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :bar})])
     (xt/submit-tx tu/*node* [(xt/put-fn :tx-fn-fail
                                         '(fn []

@@ -6,4 +6,11 @@
  xt/period-duration xtdb.serde/period-duration-reader
  xt/interval-ym xtdb.serde/interval-ym-reader
  xt/interval-dt xtdb.serde/interval-dt-reader
- xt/interval-mdn xtdb.serde/interval-mdn-reader}
+ xt/interval-mdn xtdb.serde/interval-mdn-reader
+
+ xt.tx/sql xtdb.serde/sql-op-reader
+ xt.tx/xtql xtdb.serde/xtql-op-reader
+ xt.tx/put xtdb.serde/put-op-reader
+ xt.tx/delete xtdb.serde/delete-op-reader
+ xt.tx/erase xtdb.serde/evict-op-reader
+ xt.tx/call xtdb.serde/call-op-reader}

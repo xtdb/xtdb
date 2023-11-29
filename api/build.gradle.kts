@@ -17,6 +17,7 @@ publishing {
 dependencies {
     compileOnlyApi(files("src/main/resources"))
     implementation("org.clojure", "clojure", "1.11.1")
+    api("org.clojure", "spec.alpha", "0.3.218")
 
     api("com.widdindustries", "time-literals", "0.1.10")
     api("com.cognitect", "transit-clj", "1.0.329")

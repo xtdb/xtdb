@@ -5,15 +5,16 @@
             [time-literals.read-write :as time-literals]
             [xtdb.api :as xt]
             [xtdb.error :as err]
+            [xtdb.time :as time]
             [xtdb.types :as types])
   (:import (com.cognitect.transit TransitFactory)
            java.io.Writer
-           [java.time Duration Period]
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
+           java.util.List
            [org.apache.arrow.vector PeriodDuration]
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
            xtdb.api.TransactionKey
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+           (xtdb.tx Ops Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql Ops$Xtql)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -56,6 +57,84 @@
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))
 
+(defn- render-sql-op [^Ops$Sql op]
+  {:sql (.sql op), :arg-rows (.argRows op)})
+
+(defn- sql-op-reader [{:keys [sql ^List arg-rows]}]
+  (-> (Ops/sql sql)
+      (.withArgs arg-rows)))
+
+(defmethod print-dup Ops$Sql [op ^Writer w]
+  (.write w (format "#xt.tx/sql %s" (pr-str (render-sql-op op)))))
+
+(defmethod print-method Ops$Sql [op ^Writer w]
+  (print-dup op w))
+
+(defn- render-xtql-op [^Ops$Xtql op]
+  {:xtql (.query op), :args (.args op)})
+
+(defmethod print-dup Ops$Xtql [op ^Writer w]
+  (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql-op op)))))
+
+(defmethod print-method Ops$Xtql [op ^Writer w]
+  (print-dup op w))
+
+(defn- xtql-op-reader [{:keys [xtql ^List args]}]
+  (-> (Ops/xtql xtql)
+      (.withArgs args)))
+
+(defn- render-put-op [^Ops$Put op]
+  {:table-name (.tableName op), :doc (.doc op)
+   :valid-from (.validFrom op), :valid-to (.validTo op)})
+
+(defmethod print-dup Ops$Put [op ^Writer w]
+  (.write w (format "#xt.tx/put %s" (pr-str (render-put-op op)))))
+
+(defmethod print-method Ops$Put [op ^Writer w]
+  (print-dup op w))
+
+(defn- put-op-reader [{:keys [table-name doc valid-from valid-to]}]
+  (-> (Ops/put table-name doc)
+      (.during (time/->instant valid-from) (time/->instant valid-to))))
+
+(defn- render-delete-op [^Ops$Delete op]
+  {:table-name (.tableName op), :xt/id (.entityId op)
+   :valid-from (.validFrom op), :valid-to (.validTo op)})
+
+(defmethod print-dup Ops$Delete [op ^Writer w]
+  (.write w (format "#xt.tx/delete %s" (pr-str (render-delete-op op)))))
+
+(defmethod print-method Ops$Delete [op ^Writer w]
+  (print-dup op w))
+
+(defn- delete-op-reader [{:keys [table-name xt/id valid-from valid-to]}]
+  (-> (Ops/delete table-name id)
+      (.during (time/->instant valid-from) (time/->instant valid-to))))
+
+(defn- render-evict-op [^Ops$Evict op]
+  {:table-name (.tableName op), :xt/id (.entityId op)})
+
+(defmethod print-dup Ops$Evict [op ^Writer w]
+  (.write w (format "#xt.tx/evict %s" (pr-str (render-evict-op op)))))
+
+(defmethod print-method Ops$Evict [op ^Writer w]
+  (print-dup op w))
+
+(defn- evict-op-reader [{:keys [table-name xt/id]}]
+  (Ops/evict table-name id))
+
+(defn- render-call-op [^Ops$Call op]
+  {:f (.f op), :args (.args op)})
+
+(defmethod print-dup Ops$Call [op ^Writer w]
+  (.write w (format "#xt.tx/call %s" (pr-str (render-call-op op)))))
+
+(defmethod print-method Ops$Call [op ^Writer w]
+  (print-dup op w))
+
+(defn- call-op-reader [{:keys [f args]}]
+  (Ops/call f args))
+
 (def tj-read-handlers
   (merge (-> time-literals/tags
              (update-keys str)
@@ -76,7 +155,14 @@
                                                       (FieldType/nullable arrow-type)
                                                       (FieldType/notNullable arrow-type))))
           "xtdb/field" (transit/read-handler (fn [[name field-type children]]
-                                               (Field. name field-type children)))}))
+                                               (Field. name field-type children)))
+
+          "xtdb.tx/sql" (transit/read-handler sql-op-reader)
+          "xtdb.tx/xtql" (transit/read-handler xtql-op-reader)
+          "xtdb.tx/put" (transit/read-handler put-op-reader)
+          "xtdb.tx/delete" (transit/read-handler delete-op-reader)
+          "xtdb.tx/erase" (transit/read-handler evict-op-reader)
+          "xtdb.tx/call" (transit/read-handler call-op-reader)}))
 
 (def tj-write-handlers
   (merge (-> {Period "time/period"
@@ -119,4 +205,11 @@
                                              (TransitFactory/taggedValue "array" [(.getType field-type) (.isNullable field-type)])))
           Field (transit/write-handler "xtdb/field"
                                        (fn [^Field field]
-                                         (TransitFactory/taggedValue "array" [(.getName field) (.getFieldType field) (.getChildren field)])))}))
+                                         (TransitFactory/taggedValue "array" [(.getName field) (.getFieldType field) (.getChildren field)])))
+
+          Ops$Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
+          Ops$Xtql (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
+          Ops$Put (transit/write-handler "xtdb.tx/put" render-put-op)
+          Ops$Delete (transit/write-handler "xtdb.tx/delete" render-delete-op)
+          Ops$Evict (transit/write-handler "xtdb.tx/erase" render-evict-op)
+          Ops$Call (transit/write-handler "xtdb.tx/call" render-call-op)}))

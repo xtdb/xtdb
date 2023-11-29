@@ -156,8 +156,7 @@
                 :committed? true,
                 :err nil}}
              (->> (xt/q *node*
-                        '{:find [tx-id tx-time committed? err]
-                          :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed? :xt/error err})]})
+                        '(from :xt/txs [{:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?, :xt/error err}]))
                   (into #{} (map #(update % :err (comp ex-data (fn [^ClojureForm clj-form] (some-> clj-form .form)))))))))))
 
 (def ^:private devs
@@ -635,7 +634,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
     (xt/submit-tx tu/*node* [(-> (xt/xtql-op '(assert-exists (from :users [{:first-name $name}])))
                                  (xt/with-op-args {:name "James"}))
                              (xt/delete :users :james)
-                             (xt/put :users {:xt/id :james2, :first-name "James"}) ])
+                             (xt/put :users {:xt/id :james2, :first-name "James"})])
 
     (t/is (= #{{:xt/id :james2, :first-name "James"}
                {:xt/id :dave, :first-name "Dave"}}

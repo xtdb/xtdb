@@ -13,6 +13,7 @@
            java.lang.AutoCloseable
            (java.nio.file ClosedWatchServiceException Files OpenOption Path StandardOpenOption StandardWatchEventKinds WatchEvent WatchEvent$Kind)
            java.util.HashSet
+           [xtdb.tx Ops]
            xtdb.types.ClojureForm))
 
 (defmethod ig/prep-key :xtdb/c1-import [_ opts]
@@ -58,7 +59,7 @@
                                    :delete (-> (xt/delete :xt_docs eid)
                                                (xt/during start-valid-time end-valid-time))
                                    :evict (xt/erase :xt_docs eid)))
-                       :abort [[:abort]])
+                       :abort [Ops/ABORT])
                      {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))
 

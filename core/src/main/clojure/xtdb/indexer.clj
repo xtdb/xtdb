@@ -41,6 +41,7 @@
            xtdb.metadata.IMetadataManager
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
+           xtdb.tx.Ops
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
@@ -273,7 +274,7 @@
             ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
             (when-not (or (nil? res) (true? res))
               (util/with-close-on-catch [tx-ops-vec (txp/open-tx-ops-vec allocator)]
-                (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) (mapv txp/parse-tx-op res))
+                (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
                 (.setValueCount tx-ops-vec (count res))
                 tx-ops-vec)))
 

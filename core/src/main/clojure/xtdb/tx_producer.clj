@@ -1,6 +1,5 @@
 (ns xtdb.tx-producer
-  (:require [clojure.spec.alpha :as s]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.error :as err]
             xtdb.log
@@ -12,13 +11,13 @@
   (:import clojure.lang.Keyword
            (java.lang AutoCloseable)
            (java.time Instant ZoneId)
-           (java.util ArrayList HashMap List)
+           (java.util ArrayList HashMap)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
-           (xtdb.tx Ops Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql Ops$Xtql)
+           (xtdb.tx Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql Ops$Xtql)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -26,158 +25,6 @@
 (definterface ITxProducer
   (submitTx
     ^java.util.concurrent.CompletableFuture #_<TransactionKey> [^java.util.List txOps, ^java.util.Map opts]))
-
-(def eid? (some-fn uuid? integer? string? keyword?))
-
-(def table? keyword?)
-
-(defmulti parse-tx-op first :default ::default)
-
-(defmethod parse-tx-op ::default [tx-op]
-  (throw (err/illegal-arg :xtdb.tx/invalid-tx-op
-                          {:tx-op tx-op
-                           :op (first tx-op)})))
-
-(defn- expect-sql ^String [sql tx-op]
-  (if-not (string? sql)
-    (throw (err/illegal-arg :xtdb.tx/expected-sql
-                            {::err/message "Expected SQL query",
-                             :tx-op tx-op
-                             :sql sql}))
-
-    sql))
-
-(defmethod parse-tx-op :sql [[_ sql & arg-rows :as tx-op]]
-  (let [sql (expect-sql sql tx-op)]
-    (cond
-      (nil? arg-rows) (Ops/sql sql)
-
-      (not (every? sequential? arg-rows))
-      (throw (err/illegal-arg :xtdb.tx/malformed-sql-args
-                              {::err/message "arg-rows should be vectors"
-                               :arg-rows arg-rows}))
-
-      :else
-      (Ops/sqlBatch sql ^List arg-rows))))
-
-(defn expect-table-name [table-name tx-op]
-  (when-not (table? table-name)
-    (throw (err/illegal-arg :xtdb.tx/invalid-table
-                            {::err/message "expected table name", :tx-op tx-op :table table-name})))
-
-  table-name)
-
-(defn expect-eid [eid tx-op]
-  (when-not (eid? eid)
-    (throw (err/illegal-arg :xtdb.tx/invalid-eid
-                            {::err/message "expected entity id", :tx-op tx-op :eid eid})))
-
-  eid)
-
-(defn expect-instant [instant temporal-opts tx-op]
-  (when-not (s/valid? ::time/datetime-value instant)
-    (throw (err/illegal-arg :xtdb.tx/invalid-date-time
-                            {::err/message "expected date-time"
-                             :tx-op tx-op
-                             :temporal-opts temporal-opts})))
-
-  (time/->instant instant))
-
-(defn expect-temporal-opts [temporal-opts tx-op]
-  (when-not (map? temporal-opts)
-    (throw (err/illegal-arg :xtdb.tx/invalid-temporal-opts
-                            {::err/message "expected map of temporal opts"
-                             :tx-op tx-op
-                             :temporal-opts temporal-opts})))
-
-  (when-let [for-valid-time (:for-valid-time temporal-opts)]
-    (when-not (vector? for-valid-time)
-      (throw (err/illegal-arg :xtdb.tx/invalid-temporal-opts
-                              {::err/message "expected vector for `:for-valid-time`"
-                               :tx-op tx-op
-                               :for-valid-time for-valid-time})))
-
-    (let [[tag & args] for-valid-time]
-      (case tag
-        :in {:valid-from (some-> (first args) (expect-instant temporal-opts tx-op))
-             :valid-to (some-> (second args) (expect-instant temporal-opts tx-op))}
-        :from {:valid-from (some-> (first args) (expect-instant temporal-opts tx-op))}
-        :to {:valid-to (some-> (first args) (expect-instant temporal-opts tx-op))}
-        (throw (err/illegal-arg :xtdb.tx/invalid-temporal-opts
-                                {::err/message "invalid tag for `:for-valid-time`, expected one of `#{:in :from :to}`"
-                                 :tx-op tx-op
-                                 :for-valid-time for-valid-time
-                                 :tag tag}))))))
-
-(defn expect-doc [doc tx-op]
-  (when-not (map? doc)
-    (throw (err/illegal-arg :xtdb.tx/expected-doc
-                            {::err/message "expected doc map", :doc doc, :tx-op tx-op})))
-  (let [eid (:xt/id doc)]
-    (when-not (eid? eid)
-      (throw (err/illegal-arg :xtdb.tx/invalid-eid
-                              {::err/message "expected xt/id", :tx-op tx-op :doc doc, :xt/id eid}))))
-
-  doc)
-
-(defmethod parse-tx-op :put [[_ table-name doc temporal-opts :as tx-op]]
-  (expect-table-name table-name tx-op)
-  (expect-doc doc tx-op)
-
-  (let [{:keys [^Instant valid-from, ^Instant valid-to]} (some-> temporal-opts (expect-temporal-opts tx-op))]
-    (-> (Ops/put table-name doc)
-        (.validFrom valid-from)
-        (.validTo valid-to))))
-
-(defn expect-fn-id [fn-id tx-op]
-  (when-not (eid? fn-id)
-    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :tx-op tx-op :fn-id fn-id}))))
-
-(defmethod parse-tx-op :put-fn [[_ fn-id tx-fn temporal-opts :as tx-op]]
-  (expect-fn-id fn-id tx-op)
-
-  (when-not tx-fn
-    (throw (err/illegal-arg :xtdb.tx/invalid-tx-fn {::err/message "expected tx-fn", :tx-op tx-op :tx-fn tx-fn})))
-
-  (let [{:keys [^Instant valid-from, ^Instant valid-to]} (some-> temporal-opts (expect-temporal-opts tx-op))]
-    (-> (Ops/putFn fn-id tx-fn)
-        (.validFrom valid-from)
-        (.validTo valid-to))))
-
-(defmethod parse-tx-op :delete [[_ table-name eid temporal-opts :as tx-op]]
-  (expect-table-name table-name tx-op)
-  (expect-eid eid tx-op)
-
-  (let [{:keys [^Instant valid-from, ^Instant valid-to]} (some-> temporal-opts (expect-temporal-opts tx-op))]
-    (-> (Ops/delete table-name eid)
-        (.validFrom valid-from)
-        (.validTo valid-to))))
-
-(defmethod parse-tx-op :evict [[_ table-name eid :as tx-op]]
-  (expect-table-name table-name tx-op)
-  (expect-eid eid tx-op)
-
-  (Ops/evict table-name eid))
-
-(defmethod parse-tx-op :call [[_ fn-id & args :as tx-op]]
-  (expect-fn-id fn-id tx-op)
-  (Ops/call fn-id (into-array Object args)))
-
-;; required for C1 importer
-(defmethod parse-tx-op :abort [_] Ops/ABORT)
-
-(defmethod parse-tx-op :xtql [[_ query & arg-maps :as tx-op]]
-  (when-not (list? query)
-    (throw (err/illegal-arg :xtdb.tx/expected-query
-                            {::err/message "expected XTQL query", :tx-op tx-op})))
-
-  (when-not (every? map? arg-maps)
-    (throw (err/illegal-arg :xtdb.tx/expected-arg-maps
-                            {::err/message "expected arg-maps",
-                             :tx-op tx-op
-                             :arg-maps arg-maps})))
-
-  (Ops/xtql query arg-maps))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
   (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense nil) false))
@@ -197,10 +44,10 @@
       (.startStruct xtql-writer)
       (vw/write-value! (ClojureForm. (.query op)) query-writer)
 
-      (when-let [param-rows (.params op)]
+      (when-let [arg-rows (.args op)]
         (util/with-open [param-wtr (vw/->vec-writer allocator "params" (FieldType/notNullable #xt.arrow/type :struct))]
-          (doseq [param-row param-rows]
-            (vw/write-value! param-row param-wtr))
+          (doseq [arg-row arg-rows]
+            (vw/write-value! arg-row param-wtr))
 
           (.syncValueCount param-wtr)
 
@@ -241,11 +88,11 @@
         (.startStruct sql-writer)
         (vw/write-value! sql query-writer)
 
-        (when-let [param-bytes (.paramGroupBytes op)]
-          (vw/write-value! param-bytes params-writer))
+        (when-let [arg-bytes (.argBytes op)]
+          (vw/write-value! arg-bytes params-writer))
 
-        (when-let [param-rows (.paramGroupRows op)]
-          (vw/write-value! (encode-sql-params allocator sql param-rows) params-writer)))
+        (when-let [arg-rows (.argRows op)]
+          (vw/write-value! (encode-sql-params allocator sql arg-rows) params-writer)))
 
       (.endStruct sql-writer))))
 
@@ -362,9 +209,7 @@
       (.startList ops-list-writer)
       (write-tx-ops! allocator
                      (.listElementWriter ops-list-writer)
-                     (->> tx-ops
-                          (mapv (fn [tx-op]
-                                  (cond-> tx-op (vector? tx-op) parse-tx-op)))))
+                     tx-ops)
       (.endList ops-list-writer)
 
       (.setRowCount root 1)
