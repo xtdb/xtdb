@@ -1,1 +1,3 @@
 .cache
+.lock
+inline-configs
