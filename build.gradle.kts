@@ -37,7 +37,11 @@ allprojects {
 
     if (plugins.hasPlugin("java-library")) {
         java {
-            sourceCompatibility = JavaVersion.VERSION_17
+            // I'd like to put this in the individual projects but this seems to take preference.
+            sourceCompatibility = when(project.name) {
+                "api", "wire-formats", "http-client-clj" -> JavaVersion.VERSION_11
+                else -> JavaVersion.VERSION_17
+            }
 
             withSourcesJar()
             withJavadocJar()

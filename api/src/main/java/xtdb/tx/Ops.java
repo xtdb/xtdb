@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 @SuppressWarnings("StaticInitializerReferencesSubClass")
-public sealed class Ops {
+public class Ops {
     private Ops() {
     }
 

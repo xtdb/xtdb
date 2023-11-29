@@ -9,7 +9,7 @@ import java.util.Map;
 import static xtdb.query.Query.*;
 import static xtdb.query.QueryUtil.*;
 
-public sealed interface DmlOps {
+public interface DmlOps {
     final class Insert implements DmlOps {
         public final String table;
         public final Query query;
