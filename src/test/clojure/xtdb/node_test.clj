@@ -287,14 +287,14 @@ WHERE foo.xt$id = 1")])]
   (t/is (= []
            (xt/q tu/*node* "SELECT foo.xt$id, foo.\"kebab-case-col\" FROM foo"))))
 
-(t/deftest test-select-left-join-471
+(t/deftest test-select-left-join-2302
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO foo (xt$id, x) VALUES (1, 1), (2, 2)")
                            (xt/sql-op "INSERT INTO bar (xt$id, x) VALUES (1, 1), (2, 3)")])
 
   (t/is (= [{:foo 1, :x 1}, {:foo 2, :x 2}]
            (xt/q tu/*node* "SELECT foo.xt$id foo, foo.x FROM foo LEFT JOIN bar USING (xt$id, x)")))
 
-  #_ ; FIXME #471
+  #_ ; FIXME #2302
   (t/is (= []
            (xt/q tu/*node* "SELECT foo.xt$id foo, foo.x FROM foo LEFT JOIN bar USING (xt$id) WHERE foo.x = bar.x"))))
 
