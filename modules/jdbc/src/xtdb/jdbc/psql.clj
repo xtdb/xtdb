@@ -20,11 +20,15 @@
     (db-type [_] :postgresql)
 
     (setup-schema! [_ pool]
-      (when drop-table?
-        (jdbc/execute! pool ["DROP TABLE IF EXISTS tx_events"]))
+      (jdbc/with-transaction [tx pool]
+        (jdbc/execute! tx ["SELECT pg_advisory_xact_lock(-3455654)"])
 
-      (doto pool
-        (jdbc/execute! ["
+        (when drop-table?
+          (jdbc/execute! tx ["DROP TABLE IF EXISTS tx_events"]))
+
+
+        (doto tx
+          (jdbc/execute! ["
 CREATE TABLE IF NOT EXISTS tx_events (
   event_offset BIGSERIAL PRIMARY KEY,
   event_key VARCHAR,
@@ -33,9 +37,9 @@ CREATE TABLE IF NOT EXISTS tx_events (
   v BYTEA NOT NULL,
   compacted INTEGER NOT NULL)"])
 
-        (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
-        (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])
-        (check-tx-time-col)))
+          (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
+          (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])
+          (check-tx-time-col))))
 
     (ensure-serializable-identity-seq! [_ tx table-name]
       ;; we have to take a table write lock in Postgres, because auto-increments aren't guaranteed to be increasing, even between transactions with 'serializable' isolation level
