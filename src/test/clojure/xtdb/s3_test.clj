@@ -155,23 +155,20 @@
         (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-;; FIXME: Currently failing due to mis-sized multipart upload parts, see issue here: 
-;; https://github.com/xtdb/xtdb/issues/3004
-;;
-;; (t/deftest ^:s3 tpch-test-node
-;;   (util/with-tmp-dirs #{disk-store}
-;;     (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::s3/object-store)
-;;                                                                      :disk-store disk-store}
-;;                                            ::s3/object-store {:bucket bucket
-;;                                                               :prefix (util/->path (str (random-uuid)))
-;;                                                               :sns-topic-arn sns-topic-arn}})]
-;;       ;; Submit tpch docs 
-;;       (-> (tpch/submit-docs! node 0.05)
-;;           (tu/then-await-tx node (Duration/ofHours 1)))
+(t/deftest ^:s3 tpch-test-node
+  (util/with-tmp-dirs #{disk-store}
+    (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::s3/object-store)
+                                                                     :disk-store disk-store}
+                                           ::s3/object-store {:bucket bucket
+                                                              :prefix (util/->path (str (random-uuid)))
+                                                              :sns-topic-arn sns-topic-arn}})]
+      ;; Submit tpch docs 
+      (-> (tpch/submit-docs! node 0.05)
+          (tu/then-await-tx node (Duration/ofHours 1)))
 
-;;       ;; Ensure finish-chunk! works
-;;       (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-;;       (let [object-store (get-in node [:system ::s3/object-store])]
-;;       ;; Ensure files have been written
-;;         (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))
+      (let [object-store (get-in node [:system ::s3/object-store])]
+      ;; Ensure files have been written
+        (t/is (not-empty (.listObjects ^IObjectStore object-store)))))))
