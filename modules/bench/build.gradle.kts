@@ -12,7 +12,7 @@ dependencies {
     api(project(":modules:s3"))
 
     api("org.clojure", "data.csv", "1.0.1")
-    api("ch.qos.logback", "logback-classic", "1.2.10")
+    api("ch.qos.logback", "logback-classic", "1.4.5")
 
     // bench2
     api("io.micrometer", "micrometer-core", "1.9.5")
