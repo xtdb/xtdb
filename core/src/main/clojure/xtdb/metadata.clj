@@ -9,8 +9,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (com.cognitect.transit TransitFactory)
-           (java.io ByteArrayInputStream ByteArrayOutputStream)
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.file Path)
@@ -20,28 +19,10 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector)
-           (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
+           (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.IBufferPool
            (xtdb.vector IVectorReader IVectorWriter)))
 
-(def arrow-read-handlers
-  {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
-   "xtdb/field-type" (transit/read-handler (fn [[arrow-type nullable?]]
-                                             (if nullable?
-                                               (FieldType/nullable arrow-type)
-                                               (FieldType/notNullable arrow-type))))
-   "xtdb/field" (transit/read-handler (fn [[name field-type children]]
-                                        (Field. name field-type children)))})
-
-(def arrow-write-handlers
-  {ArrowType (transit/write-handler "xtdb/arrow-type" #(types/<-arrow-type %))
-   ;; beware that this currently ignores dictionary encoding and metadata of FieldType's
-   FieldType (transit/write-handler "xtdb/field-type"
-                                    (fn [^FieldType field-type]
-                                      (TransitFactory/taggedValue "array" [(.getType field-type) (.isNullable field-type)])))
-   Field (transit/write-handler "xtdb/field"
-                                (fn [^Field field]
-                                  (TransitFactory/taggedValue "array" [(.getName field) (.getFieldType field) (.getChildren field)])))})
 (set! *unchecked-math* :warn-on-boxed)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -82,8 +63,7 @@
 
 (defn- write-chunk-metadata ^java.nio.ByteBuffer [chunk-meta]
   (with-open [os (ByteArrayOutputStream.)]
-    (let [w (transit/writer os :json {:handlers (merge serde/tj-write-handlers
-                                                       arrow-write-handlers)})]
+    (let [w (transit/writer os :json {:handlers serde/tj-write-handlers})]
       (transit/write w chunk-meta))
     (ByteBuffer/wrap (.toByteArray os))))
 
@@ -364,8 +344,7 @@
   (let [cm (TreeMap.)]
     (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
       (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
-        (let [rdr (transit/reader is :json {:handlers (merge serde/tj-read-handlers
-                                                             arrow-read-handlers)})]
+        (let [rdr (transit/reader is :json {:handlers serde/tj-read-handlers})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
     cm))
 
