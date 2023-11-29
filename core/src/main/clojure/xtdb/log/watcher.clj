@@ -5,6 +5,7 @@
             xtdb.indexer
             [xtdb.log :as xt-log]
             xtdb.operator.scan
+            [xtdb.time :as time]
             [xtdb.util :as util]
             xtdb.watermark)
   (:import java.lang.AutoCloseable
@@ -21,7 +22,7 @@
               :log (ig/ref :xtdb/log)
               :indexer (ig/ref :xtdb/indexer)}
              opts)
-      (util/maybe-update :poll-sleep-duration util/->duration)))
+      (util/maybe-update :poll-sleep-duration time/->duration)))
 
 (defn- get-bb-long [^ByteBuffer buf ^long pos default]
   (if (< (+ pos 8) (.limit buf))
@@ -50,7 +51,7 @@
                           (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
                                 ^TransactionKey tx-key (cond-> (.tx record)
                                                          (not (.isNull system-time-vec 0))
-                                                         (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))]
+                                                         (assoc :system-time (-> (.get system-time-vec 0) (time/micros->instant))))]
 
                             (.indexTx indexer tx-key tx-root)))
 

@@ -5,6 +5,7 @@
             [xtdb.error :as err]
             xtdb.log
             [xtdb.sql :as sql]
+            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -74,13 +75,13 @@
   eid)
 
 (defn expect-instant [instant temporal-opts tx-op]
-  (when-not (s/valid? ::util/datetime-value instant)
+  (when-not (s/valid? ::time/datetime-value instant)
     (throw (err/illegal-arg :xtdb.tx/invalid-date-time
                             {::err/message "expected date-time"
                              :tx-op tx-op
                              :temporal-opts temporal-opts})))
 
-  (util/->instant instant))
+  (time/->instant instant))
 
 (defn expect-temporal-opts [temporal-opts tx-op]
   (when-not (map? temporal-opts)
@@ -384,7 +385,7 @@
   (submitTx [_ tx-ops opts]
     (validate-opts opts)
     (let [{:keys [system-time] :as opts} (-> (into {:default-tz default-tz} opts)
-                                             (util/maybe-update :system-time util/->instant))]
+                                             (util/maybe-update :system-time time/->instant))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
             (fn [^LogRecord result]

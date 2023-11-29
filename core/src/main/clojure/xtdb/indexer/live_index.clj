@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
+            [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -90,7 +91,7 @@
   ILiveTable
   (startTx [this-table tx-key new-live-table?]
     (let [!transient-trie (atom live-trie)
-          system-from-µs (util/instant->micros (.system-time tx-key))]
+          system-from-µs (time/instant->micros (.system-time tx-key))]
       (reify ILiveTableTx
         (docWriter [_] put-wtr)
 

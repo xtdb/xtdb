@@ -4,6 +4,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.log :as log]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import java.io.Closeable
            java.lang.AutoCloseable
@@ -152,7 +153,7 @@
 (s/def ::create-topic? boolean?)
 (s/def ::topic-config ::util/string-map)
 
-(s/def ::poll-duration ::util/duration)
+(s/def ::poll-duration ::time/duration)
 
 (derive ::log :xtdb/log)
 
@@ -165,7 +166,7 @@
       (update :topic-config (fn [config]
                               (into {"message.timestamp.type" "LogAppendTime"} config)))
       (util/maybe-update :properties-file util/->path)
-      (util/maybe-update :poll-duration util/->duration)))
+      (util/maybe-update :poll-duration time/->duration)))
 
 (defmethod ig/pre-init-spec ::log [_]
   (s/keys :req-un [::bootstrap-servers ::topic-name ::create-topic? ::replication-factor ::poll-duration]

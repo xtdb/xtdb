@@ -2,7 +2,6 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.protocols :as xtp]
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -11,6 +10,8 @@
             xtdb.object-store
             [xtdb.operator :as op]
             xtdb.operator.scan
+            [xtdb.protocols :as xtp]
+            [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -367,9 +368,9 @@
       (let [doc-wtr (.docWriter live-table-tx)]
         (doseq [{eid :xt/id, :as doc} docs
                 :let [{:keys [:xt/valid-from :xt/valid-to],
-                       :or {valid-from system-time, valid-to (util/micros->instant Long/MAX_VALUE)}} (meta doc)]]
+                       :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
           (.logPut live-table-tx (trie/->iid eid)
-                   (util/instant->micros valid-from) (util/instant->micros valid-to)
+                   (time/instant->micros valid-from) (time/instant->micros valid-to)
                    (fn [] (vw/write-value! doc doc-wtr)))))
       (catch Throwable t
         (.abort live-table-tx)

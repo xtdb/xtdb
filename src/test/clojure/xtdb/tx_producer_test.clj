@@ -5,8 +5,8 @@
             [xtdb.api :as xt]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.tx-producer :as txp]
-            [xtdb.util :as util]))
+            [xtdb.time :as time]
+            [xtdb.tx-producer :as txp]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -115,6 +115,6 @@
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-opts.json")
                          [(xt/sql-op "INSERT INTO foo (id) VALUES (0)")]
 
-                         {:system-time (util/->instant #inst "2021")
+                         {:system-time (time/->instant #inst "2021")
                           :default-all-valid-time? false
                           :default-tz #time/zone "Europe/London"}))

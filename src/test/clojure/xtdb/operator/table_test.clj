@@ -1,14 +1,14 @@
 (ns xtdb.operator.table-test
   (:require [clojure.test :as t]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.time :as time])
   (:import java.time.Duration))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-table
   (t/is (= {:res [{:a 12, :b "foo" :c 1.2, :d nil, :e true, :f (Duration/ofHours 1)}
-                  {:a 100, :b "bar", :c 3.14, :d (util/->zdt #inst "2020"), :e 10, :f (Duration/ofMinutes 1)}]
+                  {:a 100, :b "bar", :c 3.14, :d (time/->zdt #inst "2020"), :e 10, :f (Duration/ofMinutes 1)}]
             :col-types '{a :i64, b :utf8, c :f64,
                          d [:union #{:null [:timestamp-tz :micro "UTC"]}]
                          e [:union #{:bool :i64}]
@@ -19,7 +19,7 @@
                              :with-col-types? true}))))
 
   (t/is (= {:res [{:a 12, :b "foo" :c 1.2 :d nil :e true}
-                  {:a 100, :b "bar" :c 3.14 :d (util/->zdt #inst "2020") :e 10}]
+                  {:a 100, :b "bar" :c 3.14 :d (time/->zdt #inst "2020") :e 10}]
             :col-types '{a :i64, b :utf8, c :f64,
                          d [:union #{:null [:timestamp-tz :micro "UTC"]}]
                          e [:union #{:bool :i64}]}}

@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.time :as time]))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
@@ -37,7 +37,7 @@
   (let [{:keys [system-time]} (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 1})
                                                        (-> (xt/put :xt_docs {:xt/id :doc-with-app-time})
                                                            (xt/starting-from #inst "2021"))])
-        system-time (util/->zdt system-time)]
+        system-time (time/->zdt system-time)]
 
     (t/is (= {:doc {:xt/id :doc,
                     :xt/valid-from system-time
@@ -45,7 +45,7 @@
                     :xt/system-from system-time
                     :xt/system-to nil}
               :doc-with-app-time {:xt/id :doc-with-app-time,
-                                  :xt/valid-from (util/->zdt #inst "2021")
+                                  :xt/valid-from (time/->zdt #inst "2021")
                                   :xt/valid-to nil
                                   :xt/system-from system-time
                                   :xt/system-to nil}}
@@ -58,10 +58,10 @@
 
 (t/deftest test-system-time
   (let [tx1 (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 0})])
-        tt1 (util/->zdt (:system-time tx1))
+        tt1 (time/->zdt (:system-time tx1))
 
         tx2 (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :doc, :version 1})])
-        tt2 (util/->zdt (:system-time tx2))
+        tt2 (time/->zdt (:system-time tx2))
 
         original-v0-doc {:xt/id :doc, :version 0
                          :xt/valid-from tt1

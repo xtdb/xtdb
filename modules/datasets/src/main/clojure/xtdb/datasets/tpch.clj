@@ -5,6 +5,7 @@
             [cognitect.transit :as t]
             [xtdb.api :as xt]
             [xtdb.serde :as serde]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable)
@@ -126,7 +127,7 @@
                             (partition-all tx-size)
                             (map-indexed (fn [tx-id rows]
                                            {:tx-id tx-id
-                                            :system-time (-> (util/->zdt #inst "2020") (.plusDays tx-id) util/->instant)
+                                            :system-time (-> (time/->zdt #inst "2020") (.plusDays tx-id) time/->instant)
                                             :rows rows})))
                       (completing
                        (fn

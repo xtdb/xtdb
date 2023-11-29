@@ -1,10 +1,10 @@
 (ns xtdb.tx-fn-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.node :as xtn]
             [xtdb.indexer :as idx]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.time :as time])
   (:import (xtdb.types ClojureForm)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -109,9 +109,9 @@
 
         {tt1 :system-time} (xt/submit-tx tu/*node* [(xt/call :with-tx :baz)])]
 
-    (t/is (= #{{:xt/id :foo, :tx-id 0, :system-time (util/->zdt tt0)}
-               {:xt/id :bar, :tx-id 0, :system-time (util/->zdt tt0)}
-               {:xt/id :baz, :tx-id 1, :system-time (util/->zdt tt1)}}
+    (t/is (= #{{:xt/id :foo, :tx-id 0, :system-time (time/->zdt tt0)}
+               {:xt/id :bar, :tx-id 0, :system-time (time/->zdt tt0)}
+               {:xt/id :baz, :tx-id 1, :system-time (time/->zdt tt1)}}
              (set (xt/q tu/*node*
                         '(from :docs [xt/id tx-id system-time])))))))
 

@@ -1,6 +1,7 @@
 (ns xtdb.types-test
   (:require [clojure.test :as t]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -49,16 +50,16 @@
                              (ByteBuffer/wrap (byte-array [1 2 3]))]))
         "binary types")
 
-  (t/is (= {:vs [(util/->zdt #inst "1999")
-                 (util/->zdt #inst "2021-09-02T13:54:35.809Z")
-                 (ZonedDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "Europe/Stockholm")
-                 (ZonedDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "+02:00")
+  (t/is (= {:vs [(time/->zdt #inst "1999")
+                 (time/->zdt #inst "2021-09-02T13:54:35.809Z")
+                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "Europe/Stockholm")
+                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "+02:00")
                  (ZonedDateTime/ofInstant (Instant/ofEpochSecond 3600 1000) #time/zone "UTC")]
             :vec-types (repeat 5 TimeStampMicroTZVector)}
            (test-round-trip [#inst "1999"
-                             (util/->instant #inst "2021-09-02T13:54:35.809Z")
-                             (ZonedDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "Europe/Stockholm")
-                             (OffsetDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "+02:00")
+                             (time/->instant #inst "2021-09-02T13:54:35.809Z")
+                             (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "Europe/Stockholm")
+                             (OffsetDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "+02:00")
                              (Instant/ofEpochSecond 3600 1234)]))
         "timestamp types")
 

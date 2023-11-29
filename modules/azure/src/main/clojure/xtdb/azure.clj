@@ -1,11 +1,12 @@
 (ns xtdb.azure
-  (:require [clojure.spec.alpha :as s] 
+  (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.azure.log :as tx-log]
             [xtdb.azure.object-store :as os]
-            [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.log :as xtdb-log]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [com.azure.core.credential TokenCredential]
            [com.azure.core.management AzureEnvironment]
@@ -61,8 +62,8 @@
 (s/def ::event-hub-name string?)
 (s/def ::create-event-hub? boolean?)
 (s/def ::retention-period-in-days number?)
-(s/def ::max-wait-time ::util/duration)
-(s/def ::poll-sleep-duration ::util/duration)
+(s/def ::max-wait-time ::time/duration)
+(s/def ::poll-sleep-duration ::time/duration)
 
 
 (derive ::event-hub-log :xtdb/log)
@@ -72,7 +73,7 @@
               :max-wait-time "PT1S"
               :poll-sleep-duration "PT1S"
               :retention-period-in-days 7} opts)
-      (util/maybe-update :max-wait-time util/->duration)))
+      (util/maybe-update :max-wait-time time/->duration)))
 
 (defmethod ig/pre-init-spec ::event-hub-log [_]
   (s/keys :req-un [::namespace ::event-hub-name ::max-wait-time ::create-event-hub? ::retention-period-in-days ::poll-sleep-duration]

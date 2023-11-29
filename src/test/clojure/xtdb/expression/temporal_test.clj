@@ -6,7 +6,7 @@
             [clojure.test.check.properties :as tcp]
             [xtdb.expression-test :as et]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -80,7 +80,7 @@
                               [:date :day]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (nil? (test-cast util/end-of-time [:date :day]))))
+          (t/is (nil? (test-cast time/end-of-time [:date :day]))))
 
         (t/testing "time"
           (t/is (= #time/time "12:34:56"
@@ -97,7 +97,7 @@
                               [:time-local :second]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (nil? (test-cast util/end-of-time [:time-local :second]))))
+          (t/is (nil? (test-cast time/end-of-time [:time-local :second]))))
 
         (t/testing "ts"
           (t/is (= #time/date-time "2022-08-01T12:34:56"
@@ -114,8 +114,8 @@
                               [:timestamp-local :second]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (nil? (test-cast util/end-of-time [:timestamp-local :second])))
-          (t/is (nil? (test-cast util/end-of-time [:timestamp-local :second] {:default-tz (ZoneId/of "America/Los_Angeles")}))))
+          (t/is (nil? (test-cast time/end-of-time [:timestamp-local :second])))
+          (t/is (nil? (test-cast time/end-of-time [:timestamp-local :second] {:default-tz (ZoneId/of "America/Los_Angeles")}))))
 
         (t/testing "tstz"
           (t/is (= #time/zoned-date-time "2022-08-01T13:34:56+01:00[Europe/London]"
@@ -126,8 +126,8 @@
                    (test-cast #time/zoned-date-time "2022-08-01T12:34:56Z"
                               [:timestamp-tz :nano "Europe/London"])))
 
-          (t/is (nil? (test-cast util/end-of-time [:timestamp-tz :second "Europe/London"] {:default-tz (ZoneId/of "America/Los_Angeles")})))
-          (t/is (nil? (test-cast util/end-of-time [:timestamp-tz :nano "Europe/London"])))))
+          (t/is (nil? (test-cast time/end-of-time [:timestamp-tz :second "Europe/London"] {:default-tz (ZoneId/of "America/Los_Angeles")})))
+          (t/is (nil? (test-cast time/end-of-time [:timestamp-tz :nano "Europe/London"])))))
 
       (t/testing "ts ->"
         (t/testing "date"
@@ -314,7 +314,7 @@
       (t/is (= #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
                (test-arithmetic '+ #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/duration "PT1H15M43.342S")))
 
-      (t/is (nil? (test-arithmetic '+ util/end-of-time #time/duration "PT1H15M43.342S"))))
+      (t/is (nil? (test-arithmetic '+ time/end-of-time #time/duration "PT1H15M43.342S"))))
 
     (t/testing "(+ datetime interval)"
       (t/is (= #time/date "2023-08-01"
@@ -333,7 +333,7 @@
                (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] #time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"))
             "clock change")
 
-      (t/is (nil? (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] util/end-of-time))))
+      (t/is (nil? (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] time/end-of-time))))
 
     (t/testing "(- datetime duration)"
       (t/is (= #time/date-time "2022-07-31T22:44:16.658"
@@ -348,7 +348,7 @@
       (t/is (= #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
                (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/duration "PT1H15M43.342S")))
 
-      (t/is (nil? (test-arithmetic '- util/end-of-time #time/duration "PT1H15M43.342S"))
+      (t/is (nil? (test-arithmetic '- time/end-of-time #time/duration "PT1H15M43.342S"))
             "end of time"))
 
     (t/testing "(- datetime interval)"
@@ -368,7 +368,7 @@
                (test-arithmetic '- #time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-mdn ["P2D" "PT1H"] ))
             "clock change")
 
-      (t/is (nil? (test-arithmetic '- util/end-of-time #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
+      (t/is (nil? (test-arithmetic '- time/end-of-time #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
 
     (t/testing "(- datetime datetime)"
       (t/is (= #time/duration "PT24H"
@@ -390,11 +390,11 @@
                (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/date-time "2022-08-01T02:31:26.684")))
 
       (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- util/end-of-time  #time/date-time "2022-08-01T02:31:26.684")))
+                              (test-arithmetic '- time/end-of-time  #time/date-time "2022-08-01T02:31:26.684")))
       (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" util/end-of-time)))
+                              (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" time/end-of-time)))
       (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- util/end-of-time util/end-of-time))))))
+                              (test-arithmetic '- time/end-of-time time/end-of-time))))))
 
 (tct/defspec test-lt
   (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])

@@ -5,6 +5,7 @@
             xtdb.operator
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -255,10 +256,10 @@
       (t/is (= #{:xt/id :xt/valid-from :xt/valid-to :xt/system-to :xt/system-from}
                (-> res keys set)))
 
-      (t/is (= {:xt/id :doc, :xt/valid-from (util/->zdt #inst "2021"), :xt/valid-to (util/->zdt #inst "3000")}
+      (t/is (= {:xt/id :doc, :xt/valid-from (time/->zdt #inst "2021"), :xt/valid-to (time/->zdt #inst "3000")}
                (dissoc res :xt/system-from :xt/system-to))))
 
-    (t/is (= {:xt/id :doc, :app-time-start (util/->zdt #inst "2021"), :app-time-end (util/->zdt #inst "3000")}
+    (t/is (= {:xt/id :doc, :app-time-start (time/->zdt #inst "2021"), :app-time-end (time/->zdt #inst "3000")}
              (-> (first (tu/query-ra '[:project [xt$id
                                                  {app_time_start xt$valid_from}
                                                  {app_time_end xt$valid_to}]
@@ -271,9 +272,9 @@
   (with-open [node (xtn/start-node {})]
     (let [{tt :system-time} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :doc})])]
 
-      (t/is (= #{{:xt/valid-from (util/->zdt tt)
+      (t/is (= #{{:xt/valid-from (time/->zdt tt)
                   :xt/valid-to nil
-                  :xt/system-from (util/->zdt tt),
+                  :xt/system-from (time/->zdt tt),
                   :xt/system-to nil}}
                (set (tu/query-ra '[:scan {:table xt_docs}
                                    [xt$valid_from xt$valid_to
@@ -312,8 +313,8 @@
                                {:node node :default-all-valid-time? true}))))))
 
 (t/deftest test-for-valid-time-in-params
-  (let [tt1 (util/->zdt #inst "2020-01-01")
-        tt2 (util/->zdt #inst "2020-01-02")]
+  (let [tt1 (time/->zdt #inst "2020-01-01")
+        tt2 (time/->zdt #inst "2020-01-02")]
     (with-open [node (xtn/start-node {})]
       (xt/submit-tx node [(-> (xt/put :foo {:xt/id 1, :version "version 1" :last_updated "tx1"})
                               (xt/starting-from tt1))])
@@ -324,14 +325,14 @@
                (set (tu/query-ra '[:scan {:table foo,
                                           :for-valid-time [:between ?_start ?_end]}
                                    [xt$id version]]
-                                 {:node node :params {'?_start (util/->instant tt1)
+                                 {:node node :params {'?_start (time/->instant tt1)
                                                       '?_end nil}}))))
       (t/is (= #{{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}}
                (set
                 (tu/query-ra '[:scan {:table foo,
                                       :for-valid-time :all-time}
                                [xt$id version]]
-                             {:node node :params {'?_start (util/->instant tt1)
+                             {:node node :params {'?_start (time/->instant tt1)
                                                   '?_end nil}})))))))
 
 (t/deftest test-scan-col-types
@@ -358,8 +359,8 @@
 
 #_ ; TODO adapt for scan/->temporal-bounds
 (t/deftest can-create-temporal-min-max-range
-  (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))
-        μs-2019 (util/instant->micros (util/->instant #inst "2019"))]
+  (let [μs-2018 (time/instant->micros (time/->instant #inst "2018"))
+        μs-2019 (time/instant->micros (time/->instant #inst "2019"))]
     (letfn [(transpose [[mins maxs]]
               (->> (map vector mins maxs)
                    (zipmap [:sys-end :xt/id :sys-start :row-id :app-time-start :app-time-end])
@@ -408,8 +409,8 @@
                   :app-time-end [Long/MIN_VALUE (dec μs-2018)]
                   :sys-start [Long/MIN_VALUE μs-2019]
                   :sys-end [(inc μs-2019) Long/MAX_VALUE]}
-                 (with-open [params (tu/open-params {'?system-time (util/->instant #inst "2019")
-                                                     '?app-time (util/->instant #inst "2018")})]
+                 (with-open [params (tu/open-params {'?system-time (time/->instant #inst "2019")
+                                                     '?app-time (time/->instant #inst "2018")})]
                    (transpose (scan/->temporal-min-max-range
                                params nil nil
                                {'xt/system-from '(>= ?system-time xt/system-from)

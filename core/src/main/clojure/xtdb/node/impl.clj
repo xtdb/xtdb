@@ -1,14 +1,15 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.protocols :as xtp]
             [xtdb.datalog :as d]
             [xtdb.error :as err]
             xtdb.indexer
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
+            [xtdb.protocols :as xtp]
             [xtdb.sql :as sql]
+            [xtdb.time :as time]
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
@@ -32,7 +33,7 @@
   (cond
     (instance? ZoneId default-tz) default-tz
     (string? default-tz) (ZoneId/of default-tz)
-    :else util/utc))
+    :else time/utc))
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 

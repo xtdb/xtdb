@@ -3,6 +3,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.log :as xt.log]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException)
@@ -45,7 +46,7 @@
                               (when-not (= record-separator (.read log-in))
                                 (throw (IllegalStateException. "invalid record")))
                               (let [size (.readInt log-in)
-                                    system-time (util/micros->instant (.readLong log-in))
+                                    system-time (time/micros->instant (.readLong log-in))
                                     record (byte-array size)
                                     read-bytes (.read log-in record)
                                     offset-check (.readLong log-in)]
@@ -106,7 +107,7 @@
                           written-record (.duplicate record)]
                       (.write log-out ^byte record-separator)
                       (.writeInt log-out size)
-                      (.writeLong log-out (util/instant->micros system-time))
+                      (.writeLong log-out (time/instant->micros system-time))
                       (while (>= (.remaining written-record) Long/BYTES)
                         (.writeLong log-out (.getLong written-record)))
                       (while (.hasRemaining written-record)
@@ -147,7 +148,7 @@
               :poll-sleep-duration #time/duration "PT0.1S"}
              opts)
       (util/maybe-update :root-path util/->path)
-      (util/maybe-update :poll-sleep-duration util/->duration)))
+      (util/maybe-update :poll-sleep-duration time/->duration)))
 
 (defmethod ig/init-key :xtdb.log/local-directory-log [_ {:keys [root-path poll-sleep-duration buffer-size instant-src]}]
   (util/mkdirs root-path)

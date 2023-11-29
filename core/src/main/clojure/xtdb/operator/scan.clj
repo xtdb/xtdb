@@ -11,6 +11,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.object-store
+            [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -72,14 +73,14 @@
     (letfn [(->time-μs [[tag arg]]
               (case tag
                 :literal (-> arg
-                             (util/sql-temporal->micros (.getZone expr/*clock*)))
+                             (time/sql-temporal->micros (.getZone expr/*clock*)))
                 :param (some-> (-> (.readerForName params (name arg))
                                    (.getObject 0))
-                               (util/sql-temporal->micros (.getZone expr/*clock*)))
+                               (time/sql-temporal->micros (.getZone expr/*clock*)))
                 :now (-> (.instant expr/*clock*)
-                         (util/instant->micros))))]
+                         (time/instant->micros))))]
 
-      (when-let [system-time (some-> basis-tx (.system-time) util/instant->micros)]
+      (when-let [system-time (some-> basis-tx (.system-time) time/instant->micros)]
         (.lte (.systemFrom bounds) system-time)
 
         (when-not for-system-time

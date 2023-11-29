@@ -3,20 +3,20 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.time :as time])
   (:import xtdb.types.ClojureForm))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (t/deftest test-multi-value-insert-423
   (letfn [(expected [tt]
-            {[(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2025-01-01"), tt nil]
+            {[(time/->zdt #inst "2024-01-01") (time/->zdt #inst "2025-01-01"), tt nil]
              "Happy 2024!"
 
-             [(util/->zdt #inst "2025-01-01") (util/->zdt #inst "2026-01-01"), tt nil]
+             [(time/->zdt #inst "2025-01-01") (time/->zdt #inst "2026-01-01"), tt nil]
              "Happy 2025!",
 
-             [(util/->zdt #inst "2026-01-01") nil, tt nil]
+             [(time/->zdt #inst "2026-01-01") nil, tt nil]
              "Happy 2026!"})
 
           (q [table]
@@ -37,14 +37,14 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
        (1, 'Happy 2025!', DATE '2025-01-01'),
        (1, 'Happy 2026!', DATE '2026-01-01')")])
 
-    (t/is (= (expected (util/->zdt #inst "2020-01-01"))
+    (t/is (= (expected (time/->zdt #inst "2020-01-01"))
              (q "posts")))
 
     (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO posts2 (xt$id, text, xt$valid_from) VALUES (1, 'Happy 2024!', DATE '2024-01-01')")
                              (xt/sql-op "INSERT INTO posts2 (xt$id, text, xt$valid_from) VALUES (1, 'Happy 2025!', DATE '2025-01-01')")
                              (xt/sql-op "INSERT INTO posts2 (xt$id, text, xt$valid_from) VALUES (1, 'Happy 2026!', DATE '2026-01-01')")])
 
-    (t/is (= (expected (util/->zdt #inst "2020-01-02"))
+    (t/is (= (expected (time/->zdt #inst "2020-01-02"))
              (q "posts2")))))
 
 (t/deftest test-dml-sees-in-tx-docs
@@ -61,15 +61,15 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
     (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO foo (xt$id) VALUES ('foo')")])
 
     (t/is (= [{:xt$id "foo",
-               :xt$valid_from (util/->zdt #inst "2020")
+               :xt$valid_from (time/->zdt #inst "2020")
                :xt$valid_to nil}]
              (q)))
 
     (xt/submit-tx tu/*node* [(xt/sql-op "DELETE FROM foo")])
 
     (t/is (= [{:xt$id "foo"
-               :xt$valid_from (util/->zdt #inst "2020")
-               :xt$valid_to (util/->zdt #inst "2020-01-02")}]
+               :xt$valid_from (time/->zdt #inst "2020")
+               :xt$valid_to (time/->zdt #inst "2020-01-02")}]
              (q)))
 
     (xt/submit-tx tu/*node* [(xt/sql-op "DELETE FROM foo")]
@@ -84,8 +84,8 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
   (xt/submit-tx tu/*node* [(-> (xt/sql-op "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO NULL AS u SET first_name = ? WHERE u.xt$id = ?")
                                (xt/with-op-args [#inst "2021", "sue", "susan"]))])
 
-  (t/is (= #{["Susan" "Smith", (util/->zdt #inst "2020") (util/->zdt #inst "2021")]
-             ["sue" "Smith", (util/->zdt #inst "2021") nil]}
+  (t/is (= #{["Susan" "Smith", (time/->zdt #inst "2020") (time/->zdt #inst "2021")]
+             ["sue" "Smith", (time/->zdt #inst "2021") nil]}
            (->> (xt/q tu/*node* "SELECT u.first_name, u.last_name, u.xt$valid_from, u.xt$valid_to FROM users u"
                       {:default-all-valid-time? true})
                 (into #{} (map (juxt :first_name :last_name :xt$valid_from :xt$valid_to)))))))
@@ -158,14 +158,14 @@ INSERT INTO foo (xt$id, v, xt$valid_from, xt$valid_to)
 VALUES (1, 2, DATE '1997-01-01', DATE '2001-01-01')")])
 
   (t/is (= #{{:xt$id 1, :v 1,
-              :xt$valid_from (util/->zdt #inst "1998")
-              :xt$valid_to (util/->zdt #inst "2000")
-              :xt$system_from (util/->zdt #inst "2020-01-01")
-              :xt$system_to (util/->zdt #inst "2020-01-02")}
+              :xt$valid_from (time/->zdt #inst "1998")
+              :xt$valid_to (time/->zdt #inst "2000")
+              :xt$system_from (time/->zdt #inst "2020-01-01")
+              :xt$system_to (time/->zdt #inst "2020-01-02")}
              {:xt$id 1, :v 2,
-              :xt$valid_from (util/->zdt #inst "1997")
-              :xt$valid_to (util/->zdt #inst "2001")
-              :xt$system_from (util/->zdt #inst "2020-01-02")
+              :xt$valid_from (time/->zdt #inst "1997")
+              :xt$valid_to (time/->zdt #inst "2001")
+              :xt$system_from (time/->zdt #inst "2020-01-02")
               :xt$system_to nil}}
 
            (set (xt/q tu/*node* "
@@ -180,7 +180,7 @@ INSERT INTO foo (xt$id, v)
 VALUES (1, 1)")])
 
   (t/is (= [{:xt$id 1, :v 1,
-             :xt$valid_from (util/->zdt #inst "2020")
+             :xt$valid_from (time/->zdt #inst "2020")
              :xt$valid_to nil}]
            (xt/q tu/*node* "SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to FROM foo")))
 
@@ -188,13 +188,13 @@ VALUES (1, 1)")])
            (xt/q tu/*node* "
 SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to
 FROM foo FOR VALID_TIME AS OF DATE '1999-01-01'"
-                 {:basis {:current-time (util/->instant #inst "1999")}})))
+                 {:basis {:current-time (time/->instant #inst "1999")}})))
 
   (t/is (= []
            (xt/q tu/*node* "
 SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to
 FROM foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP"
-                 {:basis {:current-time (util/->instant #inst "1999")}}))))
+                 {:basis {:current-time (time/->instant #inst "1999")}}))))
 
 (t/deftest test-repeated-row-id-scan-bug-also-409
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO foo (xt$id, v) VALUES (1, 1)")])
@@ -221,13 +221,13 @@ FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
 WHERE foo.xt$id = 1")])]
 
       (t/is (= [{:xt$id 1, :v 1
-                 :xt$valid_from (util/->zdt #inst "2020")
-                 :xt$valid_to (util/->zdt #inst "2022")}
+                 :xt$valid_from (time/->zdt #inst "2020")
+                 :xt$valid_to (time/->zdt #inst "2022")}
                 {:xt$id 1, :v 2
-                 :xt$valid_from (util/->zdt #inst "2022")
-                 :xt$valid_to (util/->zdt #inst "2024")}
+                 :xt$valid_from (time/->zdt #inst "2022")
+                 :xt$valid_to (time/->zdt #inst "2024")}
                 {:xt$id 1, :v 1
-                 :xt$valid_from (util/->zdt #inst "2024")
+                 :xt$valid_from (time/->zdt #inst "2024")
                  :xt$valid_to nil}]
 
                (q1 {:basis {:tx tx1}, :default-all-valid-time? true})))
@@ -236,22 +236,22 @@ WHERE foo.xt$id = 1")])]
                (q2 {:basis {:tx tx1}, :default-all-valid-time? true})))
 
       (t/is (= [{:xt$id 1, :v 1
-                 :xt$valid_from (util/->zdt #inst "2020")
-                 :xt$valid_to (util/->zdt #inst "2022")}
+                 :xt$valid_from (time/->zdt #inst "2020")
+                 :xt$valid_to (time/->zdt #inst "2022")}
                 {:xt$id 1, :v 2
-                 :xt$valid_from (util/->zdt #inst "2022")
-                 :xt$valid_to (util/->zdt #inst "2023")}
+                 :xt$valid_from (time/->zdt #inst "2022")
+                 :xt$valid_to (time/->zdt #inst "2023")}
                 {:xt$id 1, :v 1
-                 :xt$valid_from (util/->zdt #inst "2025")
+                 :xt$valid_from (time/->zdt #inst "2025")
                  :xt$valid_to nil}]
 
                (q1 {:basis {:tx tx2}, :default-all-valid-time? true})))
 
       (t/is (= [{:xt$id 1, :v 1
-                 :xt$valid_from (util/->zdt #inst "2025")
+                 :xt$valid_from (time/->zdt #inst "2025")
                  :xt$valid_to nil}]
 
-               (q1 {:basis {:tx tx2, :current-time (util/->instant #inst "2026")}
+               (q1 {:basis {:tx tx2, :current-time (time/->instant #inst "2026")}
                     :default-all-valid-time? false})))
 
       (t/is (= {{:xt$id 1, :v 1} 2, {:xt$id 1, :v 2} 1}
@@ -361,10 +361,10 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
                                            (throw (Exception. "boom"))))
                              (xt/call :tx-fn-fail)])
 
-    (t/is (= #{{:tx-id 0, :tx-time (util/->zdt #inst "2020-01-01"), :committed? true}
-               {:tx-id 1, :tx-time (util/->zdt #inst "2020-01-02"), :committed? false}
-               {:tx-id 2, :tx-time (util/->zdt #inst "2020-01-03"), :committed? true}
-               {:tx-id 3, :tx-time (util/->zdt #inst "2020-01-04"), :committed? false}}
+    (t/is (= #{{:tx-id 0, :tx-time (time/->zdt #inst "2020-01-01"), :committed? true}
+               {:tx-id 1, :tx-time (time/->zdt #inst "2020-01-02"), :committed? false}
+               {:tx-id 2, :tx-time (time/->zdt #inst "2020-01-03"), :committed? true}
+               {:tx-id 3, :tx-time (time/->zdt #inst "2020-01-04"), :committed? false}}
              (set (xt/q tu/*node*
                         '{:find [tx-id tx-time committed?]
                           :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?})]}))))
@@ -406,9 +406,9 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
 (t/deftest test-nulling-valid-time-columns-2504
   (xt/submit-tx tu/*node* [(-> (xt/sql-op "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (1, NULL, ?), (2, ?, NULL), (3, NULL, NULL)")
                                (xt/with-op-args [#inst "3000" , #inst "3000"]))])
-  (t/is (= #{{:id 1, :vf (util/->zdt #inst "2020"), :vt (util/->zdt #inst "3000")}
-             {:id 2, :vf (util/->zdt #inst "3000"), :vt nil}
-             {:id 3, :vf (util/->zdt #inst "2020"), :vt nil}}
+  (t/is (= #{{:id 1, :vf (time/->zdt #inst "2020"), :vt (time/->zdt #inst "3000")}
+             {:id 2, :vf (time/->zdt #inst "3000"), :vt nil}
+             {:id 3, :vf (time/->zdt #inst "2020"), :vt nil}}
            (set (xt/q tu/*node* '{:find [id vf vt]
                                   :where [($ :docs {:xt/id id, :xt/valid-from vf, :xt/valid-to vt}
                                              {:for-valid-time :all-time})]})))))

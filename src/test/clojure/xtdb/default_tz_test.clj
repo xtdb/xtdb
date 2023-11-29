@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.time :as time]))
 
 (t/use-fixtures :each
   (tu/with-opts {:xtdb/default-tz #time/zone "Europe/London"})
@@ -53,5 +53,5 @@
            (xt/q tu/*node*
                  '{:find [time]
                    :where [[(local-time) time]]}
-                 {:basis {:current-time (util/->instant #inst "2024-01-01")}
+                 {:basis {:current-time (time/->instant #inst "2024-01-01")}
                   :default-tz #time/zone "America/Los_Angeles"}))))

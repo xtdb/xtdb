@@ -12,6 +12,7 @@
             [xtdb.operator.scan :as scan]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.sql :as sql]
+            [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.tx-producer :as txp]
             [xtdb.types :as types]
@@ -73,7 +74,7 @@
         doc-rdr (.structKeyReader put-leg "document")
         valid-from-rdr (.structKeyReader put-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
-        system-time-µs (util/instant->micros system-time)
+        system-time-µs (time/instant->micros system-time)
         tables (->> (.legs doc-rdr)
                     (into {} (map (fn [table]
                                     (let [table-name (str (symbol table))
@@ -105,8 +106,8 @@
                          (.getLong valid-to-rdr tx-op-idx))]
           (when-not (> valid-to valid-from)
             (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                    {:valid-from (util/micros->instant valid-from)
-                                     :valid-to (util/micros->instant valid-to)})))
+                                    {:valid-from (time/micros->instant valid-from)
+                                     :valid-to (time/micros->instant valid-to)})))
 
           (.logPut live-table (trie/->iid eid) valid-from valid-to #(.copyRow doc-copier tx-op-idx))
           (.addRows row-counter 1))
@@ -119,7 +120,7 @@
         id-rdr (.structKeyReader delete-leg "xt$id")
         valid-from-rdr (.structKeyReader delete-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader delete-leg "xt$valid_to")
-        current-time-µs (util/instant->micros current-time)]
+        current-time-µs (time/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
@@ -132,8 +133,8 @@
                          (.getLong valid-to-rdr tx-op-idx))]
           (when (> valid-from valid-to)
             (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                    {:valid-from (util/micros->instant valid-from)
-                                     :valid-to (util/micros->instant valid-to)})))
+                                    {:valid-from (time/micros->instant valid-from)
+                                     :valid-to (time/micros->instant valid-to)})))
 
           (-> (.liveTable live-idx-tx table)
               (.logDelete (trie/->iid eid) valid-from valid-to))
@@ -287,7 +288,7 @@
 (defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx
                                                            {{:keys [^Instant current-time]} :basis}]
 
-  (let [current-time-µs (util/instant->micros current-time)]
+  (let [current-time-µs (time/instant->micros current-time)]
     (reify RelationIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
@@ -315,8 +316,8 @@
                              Long/MAX_VALUE)]
               (when (> valid-from valid-to)
                 (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                        {:valid-from (util/micros->instant valid-from)
-                                         :valid-to (util/micros->instant valid-to)})))
+                                        {:valid-from (time/micros->instant valid-from)
+                                         :valid-to (time/micros->instant valid-to)})))
 
               ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
               (when (< valid-from valid-to)
@@ -340,8 +341,8 @@
                            (.getLong valid-to-rdr idx))]
             (when-not (< valid-from valid-to)
               (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                      {:valid-from (util/micros->instant valid-from)
-                                       :valid-to (util/micros->instant valid-to)})))
+                                      {:valid-from (time/micros->instant valid-from)
+                                       :valid-to (time/micros->instant valid-to)})))
 
             (-> (.liveTable live-idx-tx table)
                 (.logDelete iid valid-from valid-to))))
@@ -515,7 +516,7 @@
 
 (defn- add-tx-row! [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
   (let [tx-id (.tx-id tx-key)
-        system-time-µs (util/instant->micros (.system-time tx-key))
+        system-time-µs (time/instant->micros (.system-time tx-key))
 
         live-table (.liveTable live-idx-tx txs-table)
         doc-writer (.docWriter live-table)]

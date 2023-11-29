@@ -3,6 +3,7 @@
             [xtdb.expression.macro :as macro]
             [xtdb.expression.walk :as walk]
             [xtdb.rewrite :refer [zmatch]]
+            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -33,7 +34,7 @@
 (defn form->expr [form {:keys [col-types param-types locals] :as env}]
   (cond
     (symbol? form) (cond
-                     (= 'xtdb/end-of-time form) {:op :literal, :literal util/end-of-time}
+                     (= 'xtdb/end-of-time form) {:op :literal, :literal time/end-of-time}
                      (contains? locals form) {:op :local, :local form}
                      (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
                      (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}
@@ -297,10 +298,10 @@
 
 (defmethod emit-value ::default [_ code] code)
 (defmethod emit-value Date [_ code] `(Math/multiplyExact (.getTime ~code) 1000))
-(defmethod emit-value Instant [_ code] `(util/instant->micros ~code))
-(defmethod emit-value ZonedDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
-(defmethod emit-value OffsetDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
-(defmethod emit-value LocalDateTime [_ code] `(util/instant->micros (.toInstant ~code ZoneOffset/UTC)))
+(defmethod emit-value Instant [_ code] `(time/instant->micros ~code))
+(defmethod emit-value ZonedDateTime [_ code] `(time/instant->micros (time/->instant ~code)))
+(defmethod emit-value OffsetDateTime [_ code] `(time/instant->micros (time/->instant ~code)))
+(defmethod emit-value LocalDateTime [_ code] `(time/instant->micros (.toInstant ~code ZoneOffset/UTC)))
 (defmethod emit-value LocalTime [_ code] `(.toNanoOfDay ~code))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
 (defmethod emit-value UUID [_ code] `(util/uuid->byte-buffer ~code))

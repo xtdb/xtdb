@@ -4,12 +4,10 @@
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
-            [xtdb.api :as xt]
             [xtdb.expression :as expr]
-            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.types :as types]
-            [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
@@ -122,24 +120,24 @@
 
 (t/deftest test-date-trunc
   (let [test-doc {:xt$id :foo,
-                  :date (util/->instant #inst "2021-10-21T12:34:56Z")
-                  :zdt (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
+                  :date (time/->instant #inst "2021-10-21T12:34:56Z")
+                  :zdt (-> (time/->zdt #inst "2021-08-21T12:34:56Z")
                            (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
     (letfn [(simple-trunc [time-unit] (project1 (list 'date-trunc time-unit 'date) test-doc))]
 
-      (t/is (= (util/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
-      (t/is (= (util/->zdt #inst "2021-10-21T12:34") (simple-trunc "MINUTE")))
-      (t/is (= (util/->zdt #inst "2021-10-01") (simple-trunc "MONTH")))
-      (t/is (= (util/->zdt #inst "2021-01-01") (simple-trunc "YEAR"))))
+      (t/is (= (time/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
+      (t/is (= (time/->zdt #inst "2021-10-21T12:34") (simple-trunc "MINUTE")))
+      (t/is (= (time/->zdt #inst "2021-10-01") (simple-trunc "MONTH")))
+      (t/is (= (time/->zdt #inst "2021-01-01") (simple-trunc "YEAR"))))
 
-    (t/is (= (-> (util/->zdt #inst "2021-08-21")
+    (t/is (= (-> (time/->zdt #inst "2021-08-21")
                  (.withZoneSameLocal (ZoneId/of "Europe/London")))
              (project1 '(date-trunc "DAY" zdt) test-doc))
           "timezone aware")
 
-    (t/is (= (util/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" date) test-doc)))
+    (t/is (= (time/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" date) test-doc)))
 
-    (t/is (= (util/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" (date-trunc "MINUTE" date)) test-doc)))
+    (t/is (= (time/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" (date-trunc "MINUTE" date)) test-doc)))
 
     (t/testing "java.time.LocalDate"
       (let [ld (LocalDate/of 2022 3 29)
@@ -154,7 +152,7 @@
   (letfn [(extract [part date-like] (project1 (list 'extract part 'date) {:date date-like}))
           (extract-all [part date-likes] (project (list 'extract part 'date) (map (partial array-map :date) date-likes)))]
     (t/testing "java.time.Instant"
-      (let [inst (util/->instant #inst "2022-03-21T13:44:52.344")]
+      (let [inst (time/->instant #inst "2022-03-21T13:44:52.344")]
         (t/is (= 44 (extract "MINUTE" inst)))
         (t/is (= 13 (extract "HOUR" inst)))
         (t/is (= 21 (extract "DAY" inst)))
@@ -162,7 +160,7 @@
         (t/is (= 2022 (extract "YEAR" inst)))))
 
     (t/testing "java.time.ZonedDateTime"
-      (let [zdt (-> (util/->zdt #inst "2022-03-21T13:44:52.344")
+      (let [zdt (-> (time/->zdt #inst "2022-03-21T13:44:52.344")
                     (.withZoneSameLocal (ZoneId/of "Europe/London")))]
         (t/is (= 44 (extract "MINUTE" zdt)))
         (t/is (= 13 (extract "HOUR" zdt)))
@@ -179,8 +177,8 @@
         (t/is (= 2022 (extract "YEAR" ld)))))
 
     (t/testing "mixed types"
-      (let [dates [(util/->instant #inst "2022-03-22T13:44:52.344")
-                   (-> (util/->zdt #inst "2021-02-23T21:19:10.692")
+      (let [dates [(time/->instant #inst "2022-03-22T13:44:52.344")
+                   (-> (time/->zdt #inst "2021-02-23T21:19:10.692")
                        (.withZoneSameLocal (ZoneId/of "Europe/London")))
                    (LocalDate/of 2020 04 18)]]
         (t/is (= [44 19 0] (extract-all "MINUTE" dates)))
@@ -1310,16 +1308,16 @@
                               (list f-sym 'x 'y))))]
 
     (t/testing "ts/dur"
-      (t/is (= {:res [(util/->zdt #inst "2021-01-01T00:02:03Z")]
+      (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:02:03Z")]
                 :res-type [:timestamp-tz :second "UTC"]}
                (test-projection '+
-                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (util/->instant #inst "2021")))
+                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (time/->instant #inst "2021")))
                                 #(->dur-vec "y" TimeUnit/SECOND 123))))
 
-      (t/is (= {:res [(util/->zdt #inst "2021-01-01T00:00:00.123Z")]
+      (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:00:00.123Z")]
                 :res-type [:timestamp-tz :milli "UTC"]}
                (test-projection '+
-                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (util/->instant #inst "2021")))
+                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (time/->instant #inst "2021")))
                                 #(->dur-vec "y" TimeUnit/MILLISECOND 123))))
 
       (t/is (= {:res [(ZonedDateTime/parse "1970-01-01T00:02:34.000001234Z[UTC]")]
@@ -1333,17 +1331,17 @@
                                       #(->ts-vec "x" TimeUnit/MILLISECOND (- Long/MAX_VALUE 500))
                                       #(->dur-vec "y" TimeUnit/SECOND 1))))
 
-      (t/is (= {:res [(util/->zdt #inst "2020-12-31T23:59:59.998Z")]
+      (t/is (= {:res [(time/->zdt #inst "2020-12-31T23:59:59.998Z")]
                 :res-type [:timestamp-tz :micro "UTC"]}
                (test-projection '-
-                                #(->ts-vec "x" TimeUnit/MICROSECOND (util/instant->micros (util/->instant #inst "2021")))
+                                #(->ts-vec "x" TimeUnit/MICROSECOND (time/instant->micros (time/->instant #inst "2021")))
                                 #(->dur-vec "y" TimeUnit/MILLISECOND 2)))))
 
     (t/is (t/is (= {:res [(Duration/parse "PT23H59M59.999S")]
                     :res-type [:duration :milli]}
                    (test-projection '-
-                                    #(->ts-vec "x" TimeUnit/MILLISECOND (.toEpochMilli (util/->instant #inst "2021-01-02")))
-                                    #(->ts-vec "y" TimeUnit/MILLISECOND (.toEpochMilli (util/->instant #inst "2021-01-01T00:00:00.001Z")))))))
+                                    #(->ts-vec "x" TimeUnit/MILLISECOND (.toEpochMilli (time/->instant #inst "2021-01-02")))
+                                    #(->ts-vec "y" TimeUnit/MILLISECOND (.toEpochMilli (time/->instant #inst "2021-01-01T00:00:00.001Z")))))))
 
     (t/testing "durations"
       (letfn [(->bigint-vec [^String col-name, ^long value]

@@ -7,9 +7,9 @@
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
-            [xtdb.protocols :as xtp]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -75,7 +75,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (time/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -164,9 +164,9 @@
     (let [{tt :system-time, :as tx} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 0})]
                                                   {:default-all-valid-time? false})]
       (t/is (= [{:xt/id :foo, :version 0,
-                 :xt/valid-from (util/->zdt tt)
+                 :xt/valid-from (time/->zdt tt)
                  :xt/valid-to nil
-                 :xt/system-from (util/->zdt tt)
+                 :xt/system-from (time/->zdt tt)
                  :xt/system-to nil}]
                (tu/query-ra '[:scan {:table xt_docs}
                               [xt$id version
@@ -177,19 +177,19 @@
       (let [{tt2 :system-time} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 1})]
                                              {:default-all-valid-time? false})]
         (t/is (= #{{:xt/id :foo, :version 0,
-                    :xt/valid-from (util/->zdt tt2)
+                    :xt/valid-from (time/->zdt tt2)
                     :xt/valid-to nil
-                    :xt/system-from (util/->zdt tt)
-                    :xt/system-to (util/->zdt tt2)}
+                    :xt/system-from (time/->zdt tt)
+                    :xt/system-to (time/->zdt tt2)}
                    {:xt/id :foo, :version 0,
-                    :xt/valid-from (util/->zdt tt)
-                    :xt/valid-to (util/->zdt tt2)
-                    :xt/system-from (util/->zdt tt)
+                    :xt/valid-from (time/->zdt tt)
+                    :xt/valid-to (time/->zdt tt2)
+                    :xt/system-from (time/->zdt tt)
                     :xt/system-to nil}
                    {:xt/id :foo, :version 1,
-                    :xt/valid-from (util/->zdt tt2)
+                    :xt/valid-from (time/->zdt tt2)
                     :xt/valid-to nil
-                    :xt/system-from (util/->zdt tt2)
+                    :xt/system-from (time/->zdt tt2)
                     :xt/system-to nil}}
                  (set (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
                                      [xt$id version
@@ -198,9 +198,9 @@
                                    {:node node :default-all-valid-time? true}))))
 
         (t/is (= [{:xt/id :foo, :version 0,
-                   :xt/valid-from (util/->zdt tt)
+                   :xt/valid-from (time/->zdt tt)
                    :xt/valid-to nil
-                   :xt/system-from (util/->zdt tt)
+                   :xt/system-from (time/->zdt tt)
                    :xt/system-to nil}]
                  (tu/query-ra '[:scan {:table xt_docs}
                                 [xt$id version
@@ -348,7 +348,7 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (time/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -620,7 +620,7 @@
       (let [mm (tu/component node ::meta/metadata-manager)]
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-        (let [last-tx-key (xt/map->TransactionKey {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")})]
+        (let [last-tx-key (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
                    (xt/submit-tx node [(-> (xt/sql-op "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)")
                                            (xt/with-op-args

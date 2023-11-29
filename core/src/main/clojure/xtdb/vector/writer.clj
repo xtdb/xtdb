@@ -1,5 +1,6 @@
 (ns xtdb.vector.writer
   (:require [xtdb.error :as err]
+            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
@@ -15,7 +16,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Map ArrowType$Union Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            xtdb.types.ClojureForm
            (xtdb.vector IListValueReader IRelationWriter IRowCopier IValueReader IVectorPosition IVectorReader IVectorWriter RelationReader)))
@@ -325,7 +326,7 @@
   Instant
   (value->arrow-type [_] #xt.arrow/type [:timestamp-tz :micro "UTC"])
   (value->col-type [_] [:timestamp-tz :micro "UTC"])
-  (write-value! [v ^IVectorWriter w] (.writeLong w (util/instant->micros v)))
+  (write-value! [v ^IVectorWriter w] (.writeLong w (time/instant->micros v)))
 
   ZonedDateTime
   (value->arrow-type [v] (types/->arrow-type [:timestamp-tz :micro (.getId (.getZone v))]))

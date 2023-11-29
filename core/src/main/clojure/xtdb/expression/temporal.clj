@@ -2,8 +2,8 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.time :as time]
+            [xtdb.types :as types])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            [java.util Map]
@@ -86,15 +86,15 @@
   (case ts-unit
     :second `(Instant/ofEpochSecond ~form)
     :milli `(Instant/ofEpochMilli ~form)
-    :micro `(util/micros->instant ~form)
-    :nano `(util/nanos->instant ~form)))
+    :micro `(time/micros->instant ~form)
+    :nano `(time/nanos->instant ~form)))
 
 (defn- inst->ts [form ts-unit]
   (case ts-unit
     :second `(.getEpochSecond ~form)
     :milli `(.toEpochMilli ~form)
-    :micro `(util/instant->micros ~form)
-    :nano `(util/instant->nanos ~form)))
+    :micro `(time/instant->micros ~form)
+    :nano `(time/instant->nanos ~form)))
 
 (defn- ts->zdt [form ts-unit tz-sym]
   `(ZonedDateTime/ofInstant ~(ts->inst form ts-unit) ~tz-sym))
@@ -877,7 +877,7 @@
 (defmethod expr/codegen-call [:extract :utf8 :timestamp-tz] [{[{field :literal} _] :args}]
   {:return-type :i32
    :->call-code (fn [[_ ts-code]]
-                  `(.get (.atOffset ^Instant (util/micros->instant ~ts-code) ZoneOffset/UTC)
+                  `(.get (.atOffset ^Instant (time/micros->instant ~ts-code) ZoneOffset/UTC)
                          ~(case field
                             "YEAR" `ChronoField/YEAR
                             "MONTH" `ChronoField/MONTH_OF_YEAR
@@ -1050,8 +1050,8 @@
    :->call-code #(do `(Math/abs ~@%))})
 
 (defn invalid-period-err [^long from-µs, ^long to-µs]
-  (let [from (util/micros->instant from-µs)
-        to (util/micros->instant to-µs)]
+  (let [from (time/micros->instant from-µs)
+        to (time/micros->instant to-µs)]
     (err/runtime-err :core2.temporal/invalid-period
                      {::err/message
                       (format "From cannot be greater than to when constructing a period - from: %s, to %s" from to)
