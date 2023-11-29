@@ -1,5 +1,6 @@
 (ns xtdb.api
   (:require [clojure.spec.alpha :as s]
+            [xtdb.backtick :as backtick]
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
             [xtdb.time :as time]
@@ -314,3 +315,18 @@
 
 (defn with-op-arg-rows [^Ops$HasArgs op arg-rows]
   (.withArgs op ^List arg-rows))
+
+(defmacro template
+  "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
+
+  Usage:
+
+  (defn build-posts-query [{:keys [with-author?]}]
+    (xt/template (from :posts [{:xt/id id} text
+                               ~@(when with-author?
+                                   '[author])])))"
+
+  {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
+  [query]
+
+  (backtick/quote-fn query))
