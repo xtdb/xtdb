@@ -308,13 +308,12 @@ For example:
 
 [source,clojure]
 ----
-;; sort by order-value descending, then received-at ascending
+;; sort by order-value descending, then received-at ascending,
+;; with nulls returned last
 (-> (from :orders [order-value received-at])
-    (order-by {:val order-value, :dir :desc}
+    (order-by {:val order-value, :dir :desc, :nulls :last}
               received-at))
 ----
-
-* `NullOrdering` is not yet implemented in XTQL.
 
 === `return`
 
