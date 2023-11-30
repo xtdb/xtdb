@@ -571,8 +571,9 @@ We submit `insert` operations to `xt/submit-tx`.
 [source,clojure]
 ----
 (xt/submit-tx node
-  [{:xtql '(insert :users (from :old-users [xt/id {:first-name given-name, :last-name surname}
-                                            xt/valid-from xt/valid-to]))}])
+  [(xt/insert-into :users
+     '(from :old-users [xt/id {:first-name given-name, :last-name surname}
+                        xt/valid-from xt/valid-to]))])
 ----
 
 [source,sql]
@@ -600,8 +601,8 @@ We can delete documents using queries as well.
 ----
 (defn delete-a-post [node the-post-id]
   (xt/submit-tx node
-    [{:xtql '(delete :comments [{:post-id $post-id}])
-      :args {:post-id the-post-id}}]))
+    [(-> (xt/delete-from :comments '[{:post-id $post-id}])
+         (xt/with-op-args {:post-id the-post-id}))]))
 ----
 +
 [source,sql]
@@ -617,9 +618,9 @@ Let's say instead we wanted to delete all comments on posts by a certain author 
 [source,clojure]
 ----
 (xt/submit-tx node
-  [{:xtql '(delete :comments [{:post-id pid}]
-                   (from :posts [{:xt/id pid, :author-id $author}]))
-    :args {:author "james"}}])
+  [(-> (xt/delete-from :comments '[{:post-id pid}]
+                       '(from :posts [{:xt/id pid, :author-id $author}]))
+       (with-op-args {:author "james"}))])
 ----
 +
 [source,sql]
@@ -637,8 +638,8 @@ For example, if we want to take down all Christmas promotions on the 26th Decemb
 [source,clojure]
 ----
 (xt/submit-tx node
-  [{:xtql '(delete :promotions {:bind [{:promotion-type "christmas"}]
-                                :for-valid-time (from #inst "2023-12-26")})}])
+  [(xt/delete-from :promotions '{:bind [{:promotion-type "christmas"}]
+                                 :for-valid-time (from #inst "2023-12-26")})])
 ----
 +
 [source,sql]
@@ -653,7 +654,7 @@ WHERE promotion_type = 'christmas'
 [source,clojure]
 ----
 (xt/submit-tx node
-  [{:xtql '(delete :comments {})}])
+  [(xt/delete-from :comments '{})])
 ----
 +
 [source,sql]
@@ -668,9 +669,9 @@ DELETE FROM comments
 [source,clojure]
 ----
 (xt/submit-tx node
-  [{:xtql '(update :documents {:bind [{:xt/id $doc-id, :version v}]
-                               :set {:version (inc v)}})
-    :args {:doc-id "doc-id"}}])
+  [(-> (xt/update-table :documents {:bind [{:xt/id $doc-id, :version v}]
+                                    :set {:version (inc v)}})
+       (xt/with-op-args {:doc-id "doc-id"}))])
 ----
 +
 [source,sql]
@@ -687,12 +688,12 @@ You can, for example, copy a value from another related table, or even update a 
 ----
 (xt/submit-tx node
   [(xt/put :comments {:xt/id (random-uuid), :post-id post-id})
-   {:xtql '(update :posts {:bind [{:xt/id $post-id}], :set {:comment-count cc}}
+   (-> (xt/update-table :posts '{:bind [{:xt/id $post-id}], :set {:comment-count cc}}
 
-                   (with {cc (q (-> (from :comments [{:post-id $post-id}])
-                                    (aggregate {cc (count)}))
-                                [cc])}))
-    :args {:post-id "my-post-id"}}])
+                        '(with {cc (q (-> (from :comments [{:post-id $post-id}])
+                                          (aggregate {cc (count)}))
+                                      [cc])}))
+       (xt/with-op-args {:post-id "my-post-id"}))])
 ----
 +
 [source,sql]
@@ -715,7 +716,7 @@ We can irretrievably erase a document using an `erase` query.
 [source,clojure]
 ----
 (xt/submit-tx node
-  [{:xtql '(erase :users [{:email "jms@example.com"}])}])
+  ['(xt/erase-from :users [{:email "jms@example.com"}])])
 ----
 +
 [source,sql]
@@ -734,8 +735,8 @@ This query asserts that no user has the email `james@example.com` before inserti
 [source,clojure]
 ----
 (xt/submit-tx node
-  [{:xtql '(assert-not-exists (from :users [{:email $email}]))
-    :args {:email "james@example.com"}}
+  [(-> (xt/assert-not-exists (from :users [{:email $email}]))
+       (xt/with-op-args {:email "james@example.com"}))
 
    (xt/put :users {:xt/id :james, :email "james@example.com"})])
 ----

@@ -303,18 +303,32 @@
 
     (Ops/sql sql)))
 
-(defn xtql-op [xtql]
-  (if-not (seq? xtql)
-    (throw (err/illegal-arg :xtdb.tx/expected-xtql-query
-                            {::err/message "expected XTQL query", :query xtql}))
-
-    (Ops/xtql xtql)))
-
 (defn with-op-args [^Ops$HasArgs op & args]
   (.withArgs op ^List args))
 
 (defn with-op-arg-rows [^Ops$HasArgs op arg-rows]
   (.withArgs op ^List arg-rows))
+
+(defn insert-into [table-name xtql-query]
+  (Ops/xtql (list 'insert table-name xtql-query)))
+
+(defn update-table
+  #_{:clj-kondo/ignore [:unused-binding]}
+  [table-name {:keys [bind set] :as opts} & unify-clauses]
+
+  (Ops/xtql (list* 'update table-name opts unify-clauses)))
+
+(defn delete-from [table-name bind-or-opts & unify-clauses]
+  (Ops/xtql (list* 'delete table-name bind-or-opts unify-clauses)))
+
+(defn erase-from [table-name bind-or-opts & unify-clauses]
+  (Ops/xtql (list* 'erase table-name bind-or-opts unify-clauses)))
+
+(defn assert-exists [xtql-query]
+  (Ops/xtql (list 'assert-exists xtql-query)))
+
+(defn assert-not-exists [xtql-query]
+  (Ops/xtql (list 'assert-not-exists xtql-query)))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.

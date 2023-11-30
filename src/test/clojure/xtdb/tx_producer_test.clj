@@ -104,11 +104,11 @@
 
 (t/deftest can-write-xtql
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-xtdml.json")
-                         [(-> (xt/xtql-op '(update :users {:bind {:xt/id $uid, :version v}
-                                                           :set {v (inc v)}}))
+                         [(-> (xt/update-table :users '{:bind {:xt/id $uid, :version v}
+                                                        :set {v (inc v)}})
                               (xt/with-op-args {:uid :jms}))
 
-                          (-> (xt/xtql-op '(delete :users {:bind {:xt/id $uid}}))
+                          (-> (xt/delete-from :users '{:bind {:xt/id $uid}})
                               (xt/with-op-args {:uid :jms}))]))
 
 (t/deftest can-write-opts

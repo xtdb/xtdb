@@ -232,8 +232,9 @@
 
 (def ^:private xt-sci-ns
   (-> (sci/copy-ns xtdb.api (sci/create-ns 'xtdb.api))
-      (select-keys ['put 'put-fn 'delete 'erase 'call
-                    'sql-op 'xtql-op 'with-op-args 'with-op-arg-rows
+      (select-keys ['put 'put-fn 'delete 'erase 'call 'sql-op
+                    'insert-into 'delete-from 'erase-from 'update-table 'assert-exists 'assert-not-exists
+                    'with-op-args 'with-op-arg-rows
                     'during 'starting-at 'until])))
 
 (defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src, scan-emitter
