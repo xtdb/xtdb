@@ -20,6 +20,8 @@ XTQL query options are an optional map of the following keys:
 ** `:tx`: specifies the latest transaction that'll be visible to the query
 ** `:after-tx`: requires that the node has indexed at least the specified transaction.
 +
+If the node hasn't been indexed the XTDB client will wait.
++
 If it's not provided, the XTDB client will default it to the latest transaction submitted through that client, in order to 'read your writes'.
 ** `:current-time`: overrides the wall-clock time used in any functions that require it.
 * `:basis-timeout`: duration to wait for the basis tx(s) to be indexed before timing out.
