@@ -65,7 +65,7 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 
 | link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB
 | link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation
-| link:#_unify[`unify`,role=no-underline] | Combines multiple input sources using Datalog-style unification.
+| link:#_unify[`unify`,role=no-underline] | Combines multiple input sources using Datalog-style unification
 |===
 
 === Tail operators
@@ -95,10 +95,10 @@ This allows for very declarative yet terse method of specifying join conditions;
 |===
 |Clause|Purpose
 
-| link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB.
+| link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB
 | link:#_joins[`join`,role=no-underline] | Further constrains the unification using the given query
 | link:#_joins[`left-join`,role=no-underline] | Optionally joins the unification against the given query
-| link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation.
+| link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation
 | link:#_unnest[`unnest`,role=no-underline] | Flattens an array within a column into individual rows
 | link:#_where[`where`,role=no-underline] | Filters the rows using the given predicates
 | link:#_with[`with`,role=no-underline] | Defines new logical variables in the unification
