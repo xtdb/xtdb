@@ -412,10 +412,10 @@ FROM customers c
   JOIN orders o ON (c.xt$id = o.customer_id)
 ----
 
+* In link:#_table[`table`,role=no-underline] and link:#_from[`from`,role=no-underline] clauses any logic variables specified in its binding specs are unified.
 * link:#_joins[`join`,role=no-underline] and link:#_joins[`left-join`,role=no-underline] clauses work in a similar way to link:#_from[`from`,role=no-underline], except they execute a full sub-query rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
-* link:#_table[`table`,role=no-underline] clauses, likewise - any logic variables specified in its binding specs are unified.
 * link:#_where[`where`,role=no-underline] clauses further constrain the results using predicates - these have access to any logic variable bound in the containing `unify` operator.
-* link:#_with[`with`,role=no-underline] clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, again, the value of the link:#_with[`with`,role=no-underline] result must agree with the value elsewhere in the `unify`.
+* link:#_with[`with`,role=no-underline] clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, the value of the link:#_with[`with`,role=no-underline] result must agree with the value elsewhere in the `unify`.
 * The `unify` operator returns a relation containing a column for every logic variable bound in any of its clauses.
 
 === `unnest`
