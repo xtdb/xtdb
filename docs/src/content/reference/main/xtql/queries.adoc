@@ -108,6 +108,8 @@ This allows for very declarative yet terse method of specifying join conditions;
 
 The `aggregate` operator aggregates rows in a query according to the aggregate specs.
 
+The available aggregate functions are documented link:../stdlib/aggregates[here].
+
 [source]
 ----
 Aggregate :: (aggregate AggSpec*)
@@ -133,8 +135,6 @@ For example:
     (limit 10)
     (without :customer-id))
 ----
-
-The available aggregate functions are documented link:../stdlib/aggregates[here].
 
 === `from`
 
