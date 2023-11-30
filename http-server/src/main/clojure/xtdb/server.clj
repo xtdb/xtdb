@@ -1,10 +1,10 @@
 (ns xtdb.server
-  (:require [clojure.data.json :as json]
-            [clojure.instant :as inst]
+  (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
+            [jsonista.core :as json]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
@@ -106,6 +106,11 @@
             (let [writer (transit/writer out :json opts)]
               (transit/write writer res))))))))
 
+(def ^:private ascii-newline 10)
+(def ^:private default-object-mapper
+  (doto (jsonista.core/object-mapper)
+    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
+
 (defn- ->jsonl-resultset-encoder [_opts]
   (reify
     mf/EncodeToBytes
@@ -116,22 +121,19 @@
       (fn [^OutputStream out]
         (if-not (ex-data res)
           (with-open [^IResultSet res res
-                      writer (io/writer out)]
+                      ^OutputStream writer out]
             (try
               (doseq [el (iterator-seq res)]
-                (json/write el writer)
-                (.write writer "\n"))
-              ;; TODO how to to mark it as an error for the client
+                (json/write-value writer el default-object-mapper)
+                (.write writer ^byte ascii-newline))
               (catch xtdb.RuntimeException e
-                (json/write (ex-data e) writer)
-                (.write writer "\n"))
+                (json/write-value writer (ex-data e) default-object-mapper)
+                (.write writer ^byte ascii-newline))
               (catch Throwable t
-                (json/write (throwable->ex-info t) writer)
-                (.write writer "\n"))))
-          (with-open [out out]
-            (let [writer (io/writer out)]
-              (json/write (ex-data res) writer))))))))
-
+                (json/write-value writer (ex-data (throwable->ex-info t)) default-object-mapper)
+                (.write writer ^byte ascii-newline))))
+          (with-open [writer out]
+            (json/write-value writer (ex-data res) default-object-mapper)))))))
 
 (s/def ::current-time inst?)
 (s/def ::tx (s/nilable #(instance? TransactionKey %)))
@@ -218,7 +220,7 @@
                                                                      (log/warn e "response error")
                                                                      (let [response-format (:raw-format (:muuntaja/response req))]
                                                                        (cond-> (handler e req)
-                                                                         (#{"appllication/json" "application/jsonl"} response-format)
+                                                                         (#{"application/jsonl"} response-format)
                                                                          (-> (update :body ex-data) (assoc :muuntaja/content-type "application/json")))))})]
 
                                       [ri.muuntaja/format-request-interceptor]
