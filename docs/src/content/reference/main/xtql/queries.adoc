@@ -308,8 +308,8 @@ For example:
 
 [source,clojure]
 ----
-;; sort by order-value descending, then received-at ascending,
-;; with nulls returned last
+;; sort by order-value descending, with nulls returned last,
+;; then received-at ascending
 (-> (from :orders [order-value received-at])
     (order-by {:val order-value, :dir :desc, :nulls :last}
               received-at))
