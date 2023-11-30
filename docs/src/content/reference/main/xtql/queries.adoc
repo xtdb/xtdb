@@ -348,7 +348,8 @@ For example:
 === `table`
 
 The `table` operator creates an inline table with the provided values.
-It takes an array of maps, either as a literal, a parameter, or a value nested within another document, and yields each element as a row, with the values in the map bound/constrained as required.
+The first argument is array of maps, either as a literal, a parameter, or a value nested within another document.
+The `table` operator yields each element as a row, with the values in the map bound/constrained as required.
 
 [source]
 ----
