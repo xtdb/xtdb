@@ -321,6 +321,8 @@ For example:
 The `return` operator specifies the columns to return from the query.
 It also allows additional projections, should you want to return a new column based on existing columns.
 
+If you want to introduce a projected column keeping while keeping the existing columns see the link:#_with[`with`,role=no-underline] operator.
+
 [source]
 ----
 Return :: (return ReturnSpec*)
