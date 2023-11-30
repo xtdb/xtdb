@@ -3,7 +3,7 @@
 XTQL queries are submitted through `xtdb.api/q`
 
 * `(xt/q <node> '<query> <opts>?)` returns the query results as a vector of maps.
-* `(xt/q& <node> '<query> <opts>?)`: returns a `CompletableFuture` of the query results.
+* `(xt/q& <node> '<query> <opts>?)`: returns a `CompletableFuture` of the query results as a vector of maps.
 
 XTQL query options are an optional map of the following keys:
 
@@ -20,8 +20,10 @@ XTQL query options are an optional map of the following keys:
 ** `:tx`: specifies the latest transaction that'll be visible to the query
 ** `:after-tx`: requires that the node has indexed at least the specified transaction.
 +
+If the node hasn't been indexed the XTDB client will wait.
++
 If it's not provided, the XTDB client will default it to the latest transaction submitted through that client, in order to 'read your writes'.
-** `:current-time`: overrides the wall-clock time used in any functions that require it.
+** `:current-time`: overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
 * `:basis-timeout`: duration to wait for the basis tx(s) to be indexed before timing out.
 * `:default-tz`: the default timezone to use - defaults to the JVM timezone of the server.
 * `:explain?`: rather than returning results, setting this flag to `true` returns the query plan for the query - defaults to `false`.
@@ -63,7 +65,7 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 
 | link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB
 | link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation
-| link:#_unify[`unify`,role=no-underline] | Combines multiple input sources using Datalog-style unification.
+| link:#_unify[`unify`,role=no-underline] | Combines multiple input sources using Datalog-style unification
 |===
 
 === Tail operators
@@ -85,18 +87,19 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 
 === Unify clauses
 
-Joins in XTQL are specified using the link:#_unify[`unify`] operator - this combines multiple input relations using Datalog-style unification.
+Joins in XTQL are specified using the link:#_unify[`unify`] operator - this combines multiple input relations using link:#unify_explanation[Datalog-style unification].
 This allows for very declarative yet terse method of specifying join conditions; how relations relate to each other.
 
-'Unify clauses' are inputs to the link:#_unify[`unify`,role=no-underline] operator:
+'Unify clauses' are inputs to the link:#_unify[`unify`,role=no-underline] operator. They are a selection of link:#_source_operators[source] and link:#_tail_operators[tail] operators with a few extra operators that are only valid in unification.
 [cols="3,8"]
 |===
 |Clause|Purpose
 
-| link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB.
+| link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB
 | link:#_joins[`join`,role=no-underline] | Further constrains the unification using the given query
 | link:#_joins[`left-join`,role=no-underline] | Optionally joins the unification against the given query
-| link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation.
+| link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation
+| link:#_unnest[`unnest`,role=no-underline] | Flattens an array within a column into individual rows
 | link:#_where[`where`,role=no-underline] | Filters the rows using the given predicates
 | link:#_with[`with`,role=no-underline] | Defines new logical variables in the unification
 |===
@@ -104,6 +107,8 @@ This allows for very declarative yet terse method of specifying join conditions;
 === `aggregate`
 
 The `aggregate` operator aggregates rows in a query according to the aggregate specs.
+
+The available aggregate functions are documented link:../stdlib/aggregates[here].
 
 [source]
 ----
@@ -130,8 +135,6 @@ For example:
     (limit 10)
     (without :customer-id))
 ----
-
-The available aggregate functions are documented link:../stdlib/aggregates[here].
 
 === `from`
 
@@ -318,6 +321,8 @@ For example:
 The `return` operator specifies the columns to return from the query.
 It also allows additional projections, should you want to return a new column based on existing columns.
 
+If you want to introduce a projected column keeping while keeping the existing columns see the link:#_with[`with`,role=no-underline] operator.
+
 [source]
 ----
 Return :: (return ReturnSpec*)
@@ -343,7 +348,8 @@ For example:
 === `table`
 
 The `table` operator creates an inline table with the provided values.
-It takes an array of maps, either as a literal, a parameter, or a value nested within another document, and yields each element as a row, with the values in the map bound/constrained as required.
+The first argument is array of maps, either as a literal, a parameter, or a value nested within another document.
+The `table` operator yields each element as a row, with the values in the map link:#_binding_specs[bound/constrained] as required.
 
 [source]
 ----
@@ -376,7 +382,7 @@ For example:
 
 === `unify`
 
-The `unify` operator combines multiple input relations using Datalog-style unification, to achieve join-like behaviour.
+The `unify` operator combines multiple input relations using Datalog-style unification (explained below), to achieve join-like behaviour.
 
 [source]
 ----
@@ -384,6 +390,7 @@ Unify :: (unify UnifyClause+)
 UnifyClause :: From | Join | LeftJoin | Table | Where | With
 ----
 
+[[unify_explanation]]
 Each input relation defines a set of 'logic variables' in its binding specs - if a logic variable appears more than once within a single `unify` operator, the results are constrained such that the logic variable has the same value everywhere it's used.
 This has the effect of imposing 'join conditions' over the inputs.
 
@@ -405,10 +412,10 @@ FROM customers c
   JOIN orders o ON (c.xt$id = o.customer_id)
 ----
 
+* In link:#_table[`table`,role=no-underline] and link:#_from[`from`,role=no-underline] clauses any logic variables specified in its binding specs are unified.
 * link:#_joins[`join`,role=no-underline] and link:#_joins[`left-join`,role=no-underline] clauses work in a similar way to link:#_from[`from`,role=no-underline], except they execute a full sub-query rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
-* link:#_table[`table`,role=no-underline] clauses, likewise - any logic variables specified in its binding specs are unified.
 * link:#_where[`where`,role=no-underline] clauses further constrain the results using predicates - these have access to any logic variable bound in the containing `unify` operator.
-* link:#_with[`with`,role=no-underline] clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, again, the value of the link:#_with[`with`,role=no-underline] result must agree with the value elsewhere in the `unify`.
+* link:#_with[`with`,role=no-underline] clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, the value of the link:#_with[`with`,role=no-underline] result must agree with the value elsewhere in the `unify`.
 * The `unify` operator returns a relation containing a column for every logic variable bound in any of its clauses.
 
 === `unnest`
@@ -458,7 +465,7 @@ For example:
 === `where`
 
 The `where` operator filters rows in a query or unification operator.
-It expects (optionally) many predicates - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
+It expects (optionally) many link:../stdlib/predicates[predicates] - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
 
 [source]
 ----
