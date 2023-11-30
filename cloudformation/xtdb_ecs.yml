@@ -105,6 +105,20 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
 
+  ECSTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'ecs-tasks.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref S3AccessPolicyArn
+        - !Ref MSKAccessPolicyArn
+
   ECSServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -139,6 +153,7 @@ Resources:
       RequiresCompatibilities:
         - 'EC2'
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
       NetworkMode: 'bridge'
       ContainerDefinitions:
         - Name: 'xtdb-container'
@@ -170,7 +185,6 @@ Resources:
           Host:
             SourcePath: "/mnt/nvme-storage/xtdb"
 
-
   EC2InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -185,8 +199,6 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role'
-        - !Ref S3AccessPolicyArn
-        - !Ref MSKAccessPolicyArn
 
   EC2InstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
