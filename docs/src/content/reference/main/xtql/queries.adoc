@@ -3,7 +3,7 @@
 XTQL queries are submitted through `xtdb.api/q`
 
 * `(xt/q <node> '<query> <opts>?)` returns the query results as a vector of maps.
-* `(xt/q& <node> '<query> <opts>?)`: returns a `CompletableFuture` of the query results.
+* `(xt/q& <node> '<query> <opts>?)`: returns a `CompletableFuture` of the query results as a vector of maps.
 
 XTQL query options are an optional map of the following keys:
 
