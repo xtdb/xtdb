@@ -708,8 +708,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                                 {:key-fn :foo-bar}))))
 
 (t/deftest dynamic-xtql-queries
-  (xt/submit-tx tu/*node* [[:put :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"}]
-                           [:put :posts {:xt/id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}]])
+  (xt/submit-tx tu/*node* [(xt/put :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"})
+                           (xt/put :posts {:xt/id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"})])
 
   (letfn [(build-posts-query [{:keys [with-author? popular?]}]
             (xt/template (-> (from :posts [{:xt/id id} text
