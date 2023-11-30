@@ -124,7 +124,7 @@
   (Ops/erase table-name id))
 
 (defn- render-call-op [^Ops$Call op]
-  {:f (.f op), :args (.args op)})
+  {:fn-id (.fnId op), :args (.args op)})
 
 (defmethod print-dup Ops$Call [op ^Writer w]
   (.write w (format "#xt.tx/call %s" (pr-str (render-call-op op)))))
@@ -132,8 +132,8 @@
 (defmethod print-method Ops$Call [op ^Writer w]
   (print-dup op w))
 
-(defn- call-op-reader [{:keys [f args]}]
-  (Ops/call f args))
+(defn- call-op-reader [{:keys [fn-id args]}]
+  (Ops/call fn-id args))
 
 (def tj-read-handlers
   (merge (-> time-literals/tags
