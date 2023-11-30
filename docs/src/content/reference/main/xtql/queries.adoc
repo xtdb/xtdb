@@ -87,7 +87,7 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 
 === Unify clauses
 
-Joins in XTQL are specified using the link:#_unify[`unify`] operator - this combines multiple input relations using Datalog-style unification.
+Joins in XTQL are specified using the link:#_unify[`unify`] operator - this combines multiple input relations using link:#unify_explanation[Datalog-style unification].
 This allows for very declarative yet terse method of specifying join conditions; how relations relate to each other.
 
 'Unify clauses' are inputs to the link:#_unify[`unify`,role=no-underline] operator. They are a selection of link:#_source_operators[source] and link:#_tail_operators[tail] operators with a few extra operators that are only valid in unification.
@@ -390,6 +390,7 @@ Unify :: (unify UnifyClause+)
 UnifyClause :: From | Join | LeftJoin | Table | Where | With
 ----
 
+[[unify_explanation]]
 Each input relation defines a set of 'logic variables' in its binding specs - if a logic variable appears more than once within a single `unify` operator, the results are constrained such that the logic variable has the same value everywhere it's used.
 This has the effect of imposing 'join conditions' over the inputs.
 
