@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VpcId: 
+    Description: ID of the VPC to host the LoadBalancer on
+    Type: AWS::EC2::VPC::Id
+
+  SecurityGroupId:
+    Description: Group ID of the security group to be used by the ECS nodes
+    Type: AWS::EC2::SecurityGroup::Id
+
+  PublicSubnets:
+    Description: List of public subnets to host the load balancer on
+    Type: List<AWS::EC2::Subnet::Id>
+
+Resources:
+  ECSALB:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: ECSALB
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '30'
+      Subnets: !Ref PublicSubnets
+      SecurityGroups:
+        - !Ref SecurityGroupId
+
+  ECSTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    DependsOn: ECSALB
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /status
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Name: ECSTargetGroup
+      Port: 3000
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VpcId
+
+  ALBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ECSTargetGroup
+      LoadBalancerArn: !Ref ECSALB
+      Port: '80'
+      Protocol: HTTP
+
+  ECSALBListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    DependsOn: ALBListener
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ECSTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /
+      ListenerArn: !Ref ALBListener
+      Priority: 1
+
+Outputs:
+  TargetGroupArn:
+    Description: ARN of the Target Group created for the nodes
+    Value: !Ref ECSTargetGroup
+
+  LoadBalancerArn:
+    Description: ARN of the Applicaiton Load Balancer created for the nodes
+    Value: !Ref ECSALB
+
+  LoadBalancerUrl:
+    Description: The Load-Balanced XTDB node URL  
+    Value: !Sub 'http://${ECSALB.DNSName}'

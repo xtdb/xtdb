@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VpcId: 
+    Description: ID of the VPC to host the MSK cluster on
+    Type: AWS::EC2::VPC::Id
+
+  SecurityGroupId:
+    Description: Group ID of the security group to be used by the ECS nodes
+    Type: AWS::EC2::SecurityGroup::Id
+
+  PrivateSubnets:
+    Description: List of public subnets to host the MSK brokers on
+    Type: List<AWS::EC2::Subnet::Id>
+
+  MSKClusterName:
+    Type: String
+    Default: xtdb-cluster-kafka
+    Description: Enter the desired name of the MSK kafka cluster used as the XTDB Kafka Log
+
+  MSKVolumeSize:
+    Type: Number
+    Default: 100
+    Description: The size in GiB of the EBS volume for the data drive on each broker node of the kafka cluster.
+
+Resources:  
+  MSKSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MSK Security Group
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 2181
+        ToPort: 2181
+        SourceSecurityGroupId: !Ref SecurityGroupId
+      - IpProtocol: tcp
+        FromPort: 9098
+        ToPort: 9098
+        SourceSecurityGroupId: !Ref SecurityGroupId
+      - IpProtocol: tcp
+        FromPort: 9094
+        ToPort: 9094
+        SourceSecurityGroupId: !Ref SecurityGroupId
+      - IpProtocol: tcp
+        FromPort: 9092
+        ToPort: 9092
+        SourceSecurityGroupId: !Ref SecurityGroupId
+  
+  MSKSelfIngressAllowRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MSKSecurityGroup
+    Properties:
+      GroupId: !Ref MSKSecurityGroup
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref MSKSecurityGroup
+
+  MSKCluster:
+    Type: AWS::MSK::Cluster
+    Properties: 
+      BrokerNodeGroupInfo: 
+        ClientSubnets: !Ref PrivateSubnets
+        InstanceType: kafka.t3.small
+        SecurityGroups: [!GetAtt MSKSecurityGroup.GroupId]
+        StorageInfo: 
+          EBSStorageInfo:
+            VolumeSize: !Ref MSKVolumeSize
+      ClusterName: !Ref MSKClusterName
+      EncryptionInfo: 
+        EncryptionInTransit: 
+          ClientBroker: TLS_PLAINTEXT
+          InCluster: true
+      EnhancedMonitoring: DEFAULT
+      KafkaVersion: 2.6.2
+      NumberOfBrokerNodes: 2
+      ClientAuthentication:
+        Unauthenticated:
+          Enabled: True
+
+  MSKAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      Description: Policy that grants all necessary access to the MSK cluster
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement: 
+        - Effect: Allow
+          Action: 
+            - 'kafka-cluster:*Topic*'
+            - 'kafka-cluster:Connect'
+            - 'kafka-cluster:AlterCluster'
+            - 'kafka-cluster:DescribeCluster'
+            - 'kafka-cluster:DescribeClusterDynamicConfiguration'
+          Resource:
+            - !Sub 'arn:aws:kafka:${AWS::Region}:${AWS::AccountId}:cluster/${MSKClusterName}/*'
+
+        - Effect: Allow
+          Action: 
+            - 'kafka-cluster:*Topic*'
+            - 'kafka-cluster:WriteData'
+            - 'kafka-cluster:ReadData'
+          Resource:
+            - !Sub 'arn:aws:kafka:${AWS::Region}:${AWS::AccountId}:topic/${MSKClusterName}/*'
+
+        - Effect: Allow
+          Action: 
+            - 'kafka-cluster:AlterGroup'
+            - 'kafka-cluster:DescribeGroup'
+          Resource:
+            - !Sub 'arn:aws:kafka:${AWS::Region}:${AWS::AccountId}:group/${MSKClusterName}/*'
+
+Outputs:
+  MSKClusterArn: 
+    Description: ARN of the MSK cluster created by the stack
+    Value: !Ref MSKCluster
+
+  MSKClusterName:
+    Description: Name of the created MSK cluster
+    Value: !Ref MSKClusterName
+
+  MSKAccessPolicyArn:
+    Description: ARN of the managed policy that has relevant MSK permissions
+    Value: !Ref MSKAccessPolicy 

@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  SecurityGroupId:
+    Description: Group ID of the security group to be used by the ECS nodes
+    Type: AWS::EC2::SecurityGroup::Id
+
+  PublicSubnets:
+    Description: List of public subnets to host the load balancer on
+    Type: List<AWS::EC2::Subnet::Id>
+
+  TargetGroupArn:
+    Description: ARN of the Target Group created for the nodes
+    Type: String
+    
+  LoadBalancerArn:
+    Description: ARN of the Application Load Balancer created for the nodes
+    Type: String
+
+  S3BucketName:
+    Description: Name of the S3 bucket to use as the XTDB object store
+    Type: String
+  
+  SNSTopicArn:
+    Description: The ARN of the SNS Topic which the S3 sends notifications to
+    Type: String
+    
+  S3AccessPolicyArn:
+    Description: ARN of the managed policy offering access to all the S3 permissions necessary for the object store
+    Type: String
+  
+  MSKBootstrapServers:
+    Description: Comma separated list containing all Kafka bootstrap server URLs from MSK
+    Type: String
+
+  MSKAccessPolicyArn:
+    Description: ARN of the managed policy offering access to all the MSK permissions
+    Type: String
+
+  ClusterName:
+    Description: Name of the desired ECS cluster.
+    Type: String
+    Default: xtdb-cluster
+
+  EC2InstanceType:
+    Description: EC2 Instance Type used for ECS Service (We recommend using one that is storage optimized)
+    Type: String
+    Default: i3.large
+
+  DesiredCapacity:
+    Description: Number of EC2 instances to launch in your ECS cluster / XTDB node tasks to run.
+    Type: Number
+    Default: '1'
+
+  ImageId:
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: Use an ECS Optimized Image from SSM Parameter Store
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - Label:
+          default: "Parameters/resources from other stacks"
+        Parameters:
+          - SecurityGroupId
+          - PublicSubnets
+          - TargetGroupArn
+          - LoadBalancerArn
+          - S3BucketName
+          - SNSTopicArn
+          - S3AccessPolicyArn
+          - MSKBootstrapServers
+          - MSKAccessPolicyArn
+      - Label: 
+          default: "ECS Configuration"
+        Parameters: 
+          - ClusterName
+          - EC2InstanceType
+          - DesiredCapacity
+          - ImageId
+
+Resources:
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ClusterName
+      
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'xtdb-standalone'
+      RetentionInDays: 365
+
+  TaskExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'ecs-tasks.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  ECSTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'ecs-tasks.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref S3AccessPolicyArn
+        - !Ref MSKAccessPolicyArn
+
+  ECSServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'ec2:Describe*'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                Resource: '*'
+
+  TaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: 'xtdb-task'
+      RequiresCompatibilities:
+        - 'EC2'
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      NetworkMode: 'bridge'
+      ContainerDefinitions:
+        - Name: 'xtdb-container'
+          Image: 'ghcr.io/xtdb/xtdb-aws-ea:latest'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+          MountPoints:
+          - ContainerPath: /var/lib/xtdb
+            SourceVolume: xtdb-volume
+          MemoryReservation: 256 
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: xtdb
+          Environment:
+            - Name: KAFKA_BOOTSTRAP_SERVERS
+              Value: !Ref MSKBootstrapServers
+            - Name: XTDB_TOPIC_NAME
+              Value: xtdb-log
+            - Name: XTDB_S3_BUCKET
+              Value: !Ref S3BucketName
+            - Name: XTDB_SNS_TOPIC
+              Value: !Ref SNSTopicArn
+      Volumes:
+        - Name: xtdb-volume
+          Host:
+            SourcePath: "/mnt/nvme-storage/xtdb"
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role'
+
+  EC2InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref EC2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroups:
+        - !Ref SecurityGroupId
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+
+          # Setup for ECS
+          echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+
+          # Identify NVMe drives
+          NVME_DEVICES=$(lsblk -o NAME,TRAN | grep nvme | awk '{print $1}')
+
+          # Format and mount single NVME drive only
+          for DEVICE in $NVME_DEVICES; do
+            mkfs -t xfs /dev/$DEVICE
+            mkdir -p /mnt/nvme-storage
+            mount /dev/$DEVICE /mnt/nvme-storage
+            break
+          done
+
+          # Send signal to group to mark as successfully created to the scaling group
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
+
+  ECSAutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      VPCZoneIdentifier: !Ref PublicSubnets
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: !Ref DesiredCapacity
+      MaxSize: !Ref DesiredCapacity
+      DesiredCapacity: !Ref DesiredCapacity
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: 'true'
+  
+  ECSService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: 'EC2'
+      DesiredCount: !Ref DesiredCapacity
+      HealthCheckGracePeriodSeconds: 60
+      LoadBalancers:
+        - ContainerName: xtdb-container
+          ContainerPort: '3000'
+          TargetGroupArn: !Ref TargetGroupArn
+      PlacementConstraints:
+        - Type: distinctInstance 
