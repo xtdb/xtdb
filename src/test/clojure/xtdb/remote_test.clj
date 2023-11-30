@@ -90,10 +90,9 @@
                decode-transit))
         "testing tx")
 
-  (Thread/sleep 100)
-
   (t/is (= [{:xt/id 1}]
-           (xt/q *node* '(from :docs [xt/id]))))
+           (xt/q *node* '(from :docs [xt/id])
+                 {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2})])]
     (t/is (= #{{:xt/id 1} {:xt/id 2}}
@@ -110,7 +109,7 @@
                  set))
           "testing query")))
 
-(deftest json-repsonse-test
+(deftest json-response-test
   (xt/submit-tx *node* [(xt/put :foo {:xt/id 1})])
   (Thread/sleep 100)
 
@@ -138,12 +137,12 @@
                decode-json))
         "testing tx")
 
-  (Thread/sleep 100)
   (t/is (= [{:xt/id 1}]
-           (xt/q *node* '(from :docs [xt/id]))))
+           (xt/q *node* '(from :docs [xt/id])
+                 {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2})])]
-    (t/is (= #{{"id" 2} {"id" 1}}
+    (t/is (= #{{"xt/id" 1} {"xt/id" 2}}
              (-> (http/request {:accept "application/jsonl"
                                 :as :string
                                 :request-method :post
@@ -169,20 +168,17 @@
                               :request-method :post
                               :content-type :transit+json
                               :form-params {:query '(from docs [name])}
-                              ;; :transit-opts xtc/transit-opts
                               :url (http-url "query")
-                              :throw-exceptions? false}
-                             #_#_identity identity)
+                              :throw-exceptions? false})
                (update :body decode-json)
                (select-keys [:status :body])))
         "illegal argument error")
 
-  ;; TODO how to mark this as an error
   (t/is (= {:status 200,
             :body
-            [{"error-type" "runtime-error",
-              "error-key" "division-by-zero",
-              "message" "data exception — division by zero"}]}
+            [{"xtdb.error/error-type" "runtime-error",
+              "xtdb.error/error-key" "xtdb.expression/division-by-zero",
+              "xtdb.error/message" "data exception — division by zero"}]}
            (-> (http/request {:accept "application/jsonl"
                               :as :string
                               :request-method :post
