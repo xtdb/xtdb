@@ -382,7 +382,7 @@ For example:
 
 === `unify`
 
-The `unify` operator combines multiple input relations using Datalog-style unification, to achieve join-like behaviour.
+The `unify` operator combines multiple input relations using Datalog-style unification (explained below), to achieve join-like behaviour.
 
 [source]
 ----
