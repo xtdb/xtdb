@@ -23,7 +23,7 @@ XTQL query options are an optional map of the following keys:
 If the node hasn't been indexed the XTDB client will wait.
 +
 If it's not provided, the XTDB client will default it to the latest transaction submitted through that client, in order to 'read your writes'.
-** `:current-time`: overrides the wall-clock time used in any functions that require it.
+** `:current-time`: overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
 * `:basis-timeout`: duration to wait for the basis tx(s) to be indexed before timing out.
 * `:default-tz`: the default timezone to use - defaults to the JVM timezone of the server.
 * `:explain?`: rather than returning results, setting this flag to `true` returns the query plan for the query - defaults to `false`.
