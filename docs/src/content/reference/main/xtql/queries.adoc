@@ -465,7 +465,7 @@ For example:
 === `where`
 
 The `where` operator filters rows in a query or unification operator.
-It expects (optionally) many predicates - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
+It expects (optionally) many link:../stdlib/predicates[predicates] - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
 
 [source]
 ----
