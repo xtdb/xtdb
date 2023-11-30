@@ -735,7 +735,7 @@ This query asserts that no user has the email `james@example.com` before inserti
 [source,clojure]
 ----
 (xt/submit-tx node
-  [(-> (xt/assert-not-exists (from :users [{:email $email}]))
+  [(-> (xt/assert-not-exists '(from :users [{:email $email}]))
        (xt/with-op-args {:email "james@example.com"}))
 
    (xt/put :users {:xt/id :james, :email "james@example.com"})])
