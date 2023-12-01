@@ -1,6 +1,5 @@
 (ns xtdb.server
   (:require [clojure.instant :as inst]
-            [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
@@ -24,18 +23,29 @@
             [spec-tools.core :as st]
             xtdb.api
             [xtdb.error :as err]
+            [xtdb.jackson :as jackson]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.util :as util])
-  (:import java.io.OutputStream
+  (:import (clojure.lang Keyword)
+           java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
            xtdb.IResultSet
            xtdb.api.TransactionKey))
 
+(def ^:private default-object-mapper
+  (doto (json/object-mapper
+         {:encode-key-fn true
+          :decode-key-fn true
+          :modules [(jackson/json-ld-module
+                     {:handlers jackson/handlers})]})
+    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
+
 (def ^:private muuntaja-opts
   (-> m/default-options
       (m/select-formats #{"application/json" "application/transit+json"})
+      (assoc-in [:formats "application/json" :encoder-opts :mapper] default-object-mapper)
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                 serde/transit-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
@@ -107,9 +117,6 @@
               (transit/write writer res))))))))
 
 (def ^:private ascii-newline 10)
-(def ^:private default-object-mapper
-  (doto (jsonista.core/object-mapper)
-    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
 
 (defn- ->jsonl-resultset-encoder [_opts]
   (reify
@@ -126,14 +133,11 @@
               (doseq [el (iterator-seq res)]
                 (json/write-value writer el default-object-mapper)
                 (.write writer ^byte ascii-newline))
-              (catch xtdb.RuntimeException e
-                (json/write-value writer (ex-data e) default-object-mapper)
-                (.write writer ^byte ascii-newline))
               (catch Throwable t
-                (json/write-value writer (ex-data (throwable->ex-info t)) default-object-mapper)
+                (json/write-value writer t default-object-mapper)
                 (.write writer ^byte ascii-newline))))
           (with-open [writer out]
-            (json/write-value writer (ex-data res) default-object-mapper)))))))
+            (json/write-value writer res default-object-mapper)))))))
 
 (s/def ::current-time inst?)
 (s/def ::tx (s/nilable #(instance? TransactionKey %)))
@@ -221,7 +225,7 @@
                                                                      (let [response-format (:raw-format (:muuntaja/response req))]
                                                                        (cond-> (handler e req)
                                                                          (#{"application/jsonl"} response-format)
-                                                                         (-> (update :body ex-data) (assoc :muuntaja/content-type "application/json")))))})]
+                                                                         (assoc :muuntaja/content-type "application/json"))))})]
 
                                       [ri.muuntaja/format-request-interceptor]
                                       [rh.coercion/coerce-request-interceptor]]}}))

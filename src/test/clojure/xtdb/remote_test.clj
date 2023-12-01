@@ -113,10 +113,8 @@
   (xt/submit-tx *node* [(xt/put :foo {:xt/id 1})])
   (Thread/sleep 100)
 
-  (t/is (= {"latest-completed-tx"
-            {"tx-id" 0, "system-time" "2020-01-01T00:00:00Z"},
-            "latest-submitted-tx"
-            {"tx-id" 0, "system-time" "2020-01-01T00:00:00Z"}}
+  (t/is (= {"latest-completed-tx" {"tx-id" 0, "system-time" {"@type" "xt:timestamp", "@value" "2020-01-01T00:00:00Z"}},
+            "latest-submitted-tx" {"tx-id" 0, "system-time" {"@type" "xt:timestamp", "@value" "2020-01-01T00:00:00Z"}}}
            (-> (http/request {:accept :json
                               :as :string
                               :request-method :get
@@ -125,7 +123,7 @@
                decode-json))
         "testing status")
 
-  (t/is (= {"tx-id" 1, "system-time" "2020-01-02T00:00:00Z"}
+  (t/is (= {"tx-id" 1, "system-time" {"@type" "xt:timestamp", "@value" "2020-01-02T00:00:00Z"}}
            (-> (http/request {:accept :json
                               :as :string
                               :request-method :post
@@ -141,13 +139,13 @@
            (xt/q *node* '(from :docs [xt/id])
                  {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
-  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2})])]
-    (t/is (= #{{"xt/id" 1} {"xt/id" 2}}
+  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2 :key :some-keyword})])]
+    (t/is (= #{{"xt/id" 1} {"xt/id" 2 "key" {"@type" "xt:keyword", "@value" "some-keyword"} }}
              (-> (http/request {:accept "application/jsonl"
                                 :as :string
                                 :request-method :post
                                 :content-type :transit+json
-                                :form-params {:query '(from :docs [xt/id])
+                                :form-params {:query '(from :docs [xt/id key])
                                               :basis {:tx tx}}
                                 :transit-opts xtc/transit-opts
                                 :url (http-url "query")})
@@ -155,14 +153,16 @@
                  decode-json*
                  set))
           "testing query"))
-
   (t/is (= {:status 400,
             :body
-            {"xtdb.error/error-type" "illegal-argument",
-             "xtdb.error/error-key" "xtql/malformed-table",
-             "xtdb.error/message" "Illegal argument: ':xtql/malformed-table'",
-             "table" "docs",
-             "from" ["from" "docs" ["name"]]}}
+            {"@type" "xt:error",
+             "@value" {"xtdb.error/message" "Illegal argument: ':xtql/malformed-table'",
+                       "xtdb.error/class" "xtdb.IllegalArgumentException",
+                       "xtdb.error/data" {"xtdb.error/error-type" {"@type" "xt:keyword", "@value" "illegal-argument"},
+                                          "xtdb.error/error-key" {"@type" "xt:keyword", "@value" "xtql/malformed-table"},
+                                          "xtdb.error/message" "Illegal argument: ':xtql/malformed-table'",
+                                          "table" "docs",
+                                          "from" ["from" "docs" ["name"]]}}}}
            (-> (http/request {:accept "application/jsonl"
                               :as :string
                               :request-method :post
@@ -176,9 +176,13 @@
 
   (t/is (= {:status 200,
             :body
-            [{"xtdb.error/error-type" "runtime-error",
-              "xtdb.error/error-key" "xtdb.expression/division-by-zero",
-              "xtdb.error/message" "data exception — division by zero"}]}
+            [{"@type" "xt:error",
+              "@value" {"xtdb.error/message" "data exception — division by zero",
+                        "xtdb.error/class" "xtdb.RuntimeException",
+                        "xtdb.error/data" {"xtdb.error/error-type" {"@type" "xt:keyword", "@value" "runtime-error"},
+                                           "xtdb.error/error-key" {"@type" "xt:keyword",
+                                                                   "@value" "xtdb.expression/division-by-zero"},
+                                           "xtdb.error/message" "data exception — division by zero"}}}]}
            (-> (http/request {:accept "application/jsonl"
                               :as :string
                               :request-method :post
@@ -195,10 +199,12 @@
   (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :name 2})])]
     (t/is (= {:status 500,
               :body
-              {"xtdb.error/error-type" "unknown-runtime-error",
-               "class" "java.lang.IllegalArgumentException",
-               "stringified"
-               "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"}}
+              {"@type" "xt:error",
+               "@value" {"xtdb.error/message" "No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]",
+                         "xtdb.error/class" "clojure.lang.ExceptionInfo",
+                         "xtdb.error/data" {"xtdb.error/error-type" {"@type" "xt:keyword", "@value" "unknown-runtime-error"},
+                                            "class" "java.lang.IllegalArgumentException",
+                                            "stringified" "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"}}}}
              (-> (http/request {:accept "application/jsonl"
                                 :as :string
                                 :request-method :post
