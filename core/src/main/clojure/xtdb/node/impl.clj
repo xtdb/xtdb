@@ -20,7 +20,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            xtdb.indexer.IIndexer
            xtdb.operator.IRaQuerySource
-           (xtdb.tx Ops Ops$Sql)
+           (xtdb.tx Sql)
            (xtdb.tx_producer ITxProducer)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -40,8 +40,8 @@
 (defn- validate-tx-ops [tx-ops]
   (try
     (doseq [tx-op tx-ops
-            :when (instance? Ops$Sql tx-op)]
-      (sql/parse-query (.sql ^Ops$Sql tx-op)))
+            :when (instance? Sql tx-op)]
+      (sql/parse-query (.sql ^Sql tx-op)))
     (catch Throwable e
       (CompletableFuture/failedFuture e))))
 

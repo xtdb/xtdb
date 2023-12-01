@@ -17,7 +17,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
-           (xtdb.tx Ops$Abort Ops$Call Ops$Delete Ops$Erase Ops$Put Ops$Sql Ops$Xtql)
+           (xtdb.tx Abort Call Delete Erase Put Sql Xtql)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -40,7 +40,7 @@
   (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
         query-writer (.structKeyWriter xtql-writer "query" (FieldType/notNullable #xt.arrow/type :clj-form))
         params-writer (.structKeyWriter xtql-writer "params" (FieldType/nullable #xt.arrow/type :varbinary))]
-    (fn write-xtql! [^Ops$Xtql op]
+    (fn write-xtql! [^Xtql op]
       (.startStruct xtql-writer)
       (vw/write-value! (ClojureForm. (.query op)) query-writer)
 
@@ -83,7 +83,7 @@
   (let [sql-writer (.legWriter op-writer :sql (FieldType/notNullable #xt.arrow/type :struct))
         query-writer (.structKeyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
         params-writer (.structKeyWriter sql-writer "params" (FieldType/nullable #xt.arrow/type :varbinary))]
-    (fn write-sql! [^Ops$Sql op]
+    (fn write-sql! [^Sql op]
       (let [sql (.sql op)]
         (.startStruct sql-writer)
         (vw/write-value! sql query-writer)
@@ -102,7 +102,7 @@
         valid-from-writer (.structKeyWriter put-writer "xt$valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.structKeyWriter put-writer "xt$valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
-    (fn write-put! [^Ops$Put op]
+    (fn write-put! [^Put op]
       (.startStruct put-writer)
       (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/kw->normal-form-kw (.tableName op))
                                                (util/->jfn
@@ -124,7 +124,7 @@
         id-writer (.structKeyWriter delete-writer "xt$id" (FieldType/notNullable #xt.arrow/type :union))
         valid-from-writer (.structKeyWriter delete-writer "xt$valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.structKeyWriter delete-writer "xt$valid_to" types/nullable-temporal-field-type)]
-    (fn write-delete! [^Ops$Delete op]
+    (fn write-delete! [^Delete op]
       (.startStruct delete-writer)
 
       (vw/write-value! (str (symbol (util/kw->normal-form-kw (.tableName op)))) table-writer)
@@ -141,7 +141,7 @@
   (let [erase-writer (.legWriter op-writer :erase (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
         id-writer (.structKeyWriter erase-writer "xt$id" (FieldType/notNullable #xt.arrow/type :union))]
-    (fn [^Ops$Erase op]
+    (fn [^Erase op]
       (.startStruct erase-writer)
       (vw/write-value! (str (symbol (.tableName op))) table-writer)
 
@@ -154,7 +154,7 @@
   (let [call-writer (.legWriter op-writer :call (FieldType/notNullable #xt.arrow/type :struct))
         fn-id-writer (.structKeyWriter call-writer "fn-id" (FieldType/notNullable #xt.arrow/type :union))
         args-list-writer (.structKeyWriter call-writer "args" (FieldType/notNullable #xt.arrow/type :clj-form))]
-    (fn write-call! [^Ops$Call op]
+    (fn write-call! [^Call op]
       (.startStruct call-writer)
 
       (let [fn-id (.fnId op)]
@@ -167,7 +167,7 @@
 
 (defn- ->abort-writer [^IVectorWriter op-writer]
   (let [abort-writer (.legWriter op-writer :abort (FieldType/nullable #xt.arrow/type :null))]
-    (fn [^Ops$Abort _op]
+    (fn [^Abort _op]
       (.writeNull abort-writer))))
 
 (defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator]
@@ -184,13 +184,13 @@
 
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
-        Ops$Xtql (@!write-xtql! tx-op)
-        Ops$Sql (@!write-sql! tx-op)
-        Ops$Put (@!write-put! tx-op)
-        Ops$Delete (@!write-delete! tx-op)
-        Ops$Erase (@!write-erase! tx-op)
-        Ops$Call (@!write-call! tx-op)
-        Ops$Abort (@!write-abort! tx-op)
+        Xtql (@!write-xtql! tx-op)
+        Sql (@!write-sql! tx-op)
+        Put (@!write-put! tx-op)
+        Delete (@!write-delete! tx-op)
+        Erase (@!write-erase! tx-op)
+        Call (@!write-call! tx-op)
+        Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]

@@ -12,7 +12,7 @@
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
            xtdb.api.TransactionKey
-           (xtdb.tx Ops Ops$Call Ops$Delete Ops$Erase Ops$Put Ops$Sql Ops$Xtql)
+           (xtdb.tx Ops Call Delete Erase Put Sql Xtql)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -55,79 +55,79 @@
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))
 
-(defn- render-sql-op [^Ops$Sql op]
+(defn- render-sql-op [^Sql op]
   {:sql (.sql op), :arg-rows (.argRows op)})
 
 (defn- sql-op-reader [{:keys [sql ^List arg-rows]}]
   (-> (Ops/sql sql)
       (.withArgs arg-rows)))
 
-(defmethod print-dup Ops$Sql [op ^Writer w]
+(defmethod print-dup Sql [op ^Writer w]
   (.write w (format "#xt.tx/sql %s" (pr-str (render-sql-op op)))))
 
-(defmethod print-method Ops$Sql [op ^Writer w]
+(defmethod print-method Sql [op ^Writer w]
   (print-dup op w))
 
-(defn- render-xtql-op [^Ops$Xtql op]
+(defn- render-xtql-op [^Xtql op]
   {:xtql (.query op), :args (.args op)})
 
-(defmethod print-dup Ops$Xtql [op ^Writer w]
+(defmethod print-dup Xtql [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql-op op)))))
 
-(defmethod print-method Ops$Xtql [op ^Writer w]
+(defmethod print-method Xtql [op ^Writer w]
   (print-dup op w))
 
 (defn- xtql-op-reader [{:keys [xtql ^List args]}]
   (-> (Ops/xtql xtql)
       (.withArgs args)))
 
-(defn- render-put-op [^Ops$Put op]
+(defn- render-put-op [^Put op]
   {:table-name (.tableName op), :doc (.doc op)
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
-(defmethod print-dup Ops$Put [op ^Writer w]
+(defmethod print-dup Put [op ^Writer w]
   (.write w (format "#xt.tx/put %s" (pr-str (render-put-op op)))))
 
-(defmethod print-method Ops$Put [op ^Writer w]
+(defmethod print-method Put [op ^Writer w]
   (print-dup op w))
 
 (defn- put-op-reader [{:keys [table-name doc valid-from valid-to]}]
   (-> (Ops/put table-name doc)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
-(defn- render-delete-op [^Ops$Delete op]
+(defn- render-delete-op [^Delete op]
   {:table-name (.tableName op), :xt/id (.entityId op)
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
-(defmethod print-dup Ops$Delete [op ^Writer w]
+(defmethod print-dup Delete [op ^Writer w]
   (.write w (format "#xt.tx/delete %s" (pr-str (render-delete-op op)))))
 
-(defmethod print-method Ops$Delete [op ^Writer w]
+(defmethod print-method Delete [op ^Writer w]
   (print-dup op w))
 
 (defn- delete-op-reader [{:keys [table-name xt/id valid-from valid-to]}]
   (-> (Ops/delete table-name id)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
-(defn- render-erase-op [^Ops$Erase op]
+(defn- render-erase-op [^Erase op]
   {:table-name (.tableName op), :xt/id (.entityId op)})
 
-(defmethod print-dup Ops$Erase [op ^Writer w]
+(defmethod print-dup Erase [op ^Writer w]
   (.write w (format "#xt.tx/erase %s" (pr-str (render-erase-op op)))))
 
-(defmethod print-method Ops$Erase [op ^Writer w]
+(defmethod print-method Erase [op ^Writer w]
   (print-dup op w))
 
 (defn- erase-op-reader [{:keys [table-name xt/id]}]
   (Ops/erase table-name id))
 
-(defn- render-call-op [^Ops$Call op]
+(defn- render-call-op [^Call op]
   {:fn-id (.fnId op), :args (.args op)})
 
-(defmethod print-dup Ops$Call [op ^Writer w]
+(defmethod print-dup Call [op ^Writer w]
   (.write w (format "#xt.tx/call %s" (pr-str (render-call-op op)))))
 
-(defmethod print-method Ops$Call [op ^Writer w]
+(defmethod print-method Call [op ^Writer w]
   (print-dup op w))
 
 (defn- call-op-reader [{:keys [fn-id args]}]
@@ -188,9 +188,10 @@
                                                       #(vector (str (.period ^IntervalMonthDayNano %))
                                                                (str (.duration ^IntervalMonthDayNano %))))
           clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))
-          Ops$Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
-          Ops$Xtql (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
-          Ops$Put (transit/write-handler "xtdb.tx/put" render-put-op)
-          Ops$Delete (transit/write-handler "xtdb.tx/delete" render-delete-op)
-          Ops$Erase (transit/write-handler "xtdb.tx/erase" render-erase-op)
-          Ops$Call (transit/write-handler "xtdb.tx/call" render-call-op)}))
+
+          Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
+          Xtql (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
+          Put (transit/write-handler "xtdb.tx/put" render-put-op)
+          Delete (transit/write-handler "xtdb.tx/delete" render-delete-op)
+          Erase (transit/write-handler "xtdb.tx/erase" render-erase-op)
+          Call (transit/write-handler "xtdb.tx/call" render-call-op)}))
