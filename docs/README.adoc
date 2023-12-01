@@ -6,15 +6,16 @@ This is a static site based on the https://astro.build[Astro framework] - the pr
 
 To work on this project you should have `git lfs` installed and initialised.
 
-To install, use your OS package manager:
-
-For Arch: `sudo pacman -Sy git-lfs`
-For Mac OS: `brew install git-lfs`
-
-To initialise: `git lfs install`
-
-You will also need to have the `docs/shared` git submodule checked out.
-To do this, run `git submodule update --init` from the root of the project.
+* To install, use your OS package manager:
+** For Arch: `sudo pacman -Sy git-lfs`
+** For Mac OS: `brew install git-lfs`
+* You will need to initialise `git lfs`: 
+** `git lfs install`
+* You will also need to have the `docs/shared` git submodule checked out. From the root of the project:
+** `git submodule update --init`
+* With the submodule initialised, you'll need to pull the
+objects from `git lfs`. Inside the `docs/shared` directory:
+** `git lfs pull` 
 
 From this point you should be able to run the commands in the next section.
 
@@ -29,7 +30,7 @@ All commands are run from the root of the project, from a terminal:
 | Installs dependencies
 
 | `yarn run dev`
-| Starts local dev server at `localhost:3000`
+| Starts local dev server at `localhost:4321`
 
 | `yarn run build`
 | Build your production site to `./dist/`
