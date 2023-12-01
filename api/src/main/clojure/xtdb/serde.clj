@@ -133,7 +133,7 @@
 (defn- call-op-reader [{:keys [fn-id args]}]
   (Ops/call fn-id args))
 
-(def tj-read-handlers
+(def transit-read-handlers
   (merge (-> time-literals/tags
              (update-keys str)
              (update-vals transit/read-handler))
@@ -154,7 +154,7 @@
           "xtdb.tx/erase" (transit/read-handler erase-op-reader)
           "xtdb.tx/call" (transit/read-handler call-op-reader)}))
 
-(def tj-write-handlers
+(def transit-write-handlers
   (merge (-> {Period "time/period"
               LocalDate "time/date"
               LocalDateTime "time/date-time"

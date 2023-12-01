@@ -35,9 +35,9 @@
   (-> m/default-options
       (m/select-formats #{"application/transit+json"})
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
-                serde/tj-read-handlers)
+                serde/transit-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
-                serde/tj-write-handlers)
+                serde/transit-write-handlers)
       (assoc-in [:http :encode-response-body?] (constantly true))))
 
 (defmulti ^:private route-handler :name, :default ::default)
@@ -126,7 +126,7 @@
                            (assoc :return :output-stream)
 
                            (assoc-in [:formats "application/transit+json" :encoder]
-                                     [->tj-resultset-encoder {:handlers serde/tj-write-handlers}])))
+                                     [->tj-resultset-encoder {:handlers serde/transit-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]

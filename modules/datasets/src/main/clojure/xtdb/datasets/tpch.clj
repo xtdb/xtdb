@@ -148,7 +148,7 @@
                                                                                                   (util/->lex-hex-string first-tx-id)))
                                                             (io/make-parents)))]
                                                   (vreset! !os os)
-                                                  (recur {:seg-row-count 0, :wtr (t/writer os :json {:handlers serde/tj-write-handlers}) }))
+                                                  (recur {:seg-row-count 0, :wtr (t/writer os :json {:handlers serde/transit-write-handlers}) }))
                                     :else acc))]
 
                             (when (Thread/interrupted)

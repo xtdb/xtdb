@@ -15,8 +15,8 @@
            xtdb.IResultSet))
 
 (def transit-opts
-  {:decode {:handlers serde/tj-read-handlers}
-   :encode {:handlers serde/tj-write-handlers}})
+  {:decode {:handlers serde/transit-read-handlers}
+   :encode {:handlers serde/transit-write-handlers}})
 
 (def router
   (r/router xtp/http-routes))
@@ -72,7 +72,7 @@
 (defmethod hato.middleware/coerce-response-body ::transit+json->result-or-error [_req {:keys [^InputStream body status] :as resp}]
   (letfn [(parse-body [rdr->body]
             (try
-              (let [rdr (transit/reader body :json {:handlers serde/tj-read-handlers})]
+              (let [rdr (transit/reader body :json {:handlers serde/transit-read-handlers})]
                 (-> resp (assoc :body (rdr->body rdr))))
               (catch Exception e
                 (.close body)

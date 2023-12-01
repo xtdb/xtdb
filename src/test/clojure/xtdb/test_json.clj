@@ -48,7 +48,7 @@
         actual))
 
 (defn- read-transit-obj [stream]
-  (transit/read (transit/reader stream :json {:handlers serde/tj-read-handlers})))
+  (transit/read (transit/reader stream :json {:handlers serde/transit-read-handlers})))
 
 (defn check-transit-json-file [^Path expected, ^Path actual]
   (with-open [expected-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))
