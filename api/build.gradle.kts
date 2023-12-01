@@ -20,7 +20,8 @@ dependencies {
     api("org.clojure", "spec.alpha", "0.3.218")
 
     api("com.widdindustries", "time-literals", "0.1.10")
-    api("com.cognitect", "transit-clj", "1.0.329")
+    api("com.cognitect", "transit-clj", "1.0.333")
+    api("com.cognitect", "transit-java", "1.0.371")
 
     implementation("org.apache.arrow", "arrow-algorithm", "14.0.0")
     implementation("org.apache.arrow", "arrow-compression", "14.0.0")

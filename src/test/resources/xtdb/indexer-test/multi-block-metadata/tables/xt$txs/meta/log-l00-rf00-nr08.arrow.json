@@ -145,7 +145,7 @@
                   "children" : [ ]
                 }]
               },{
-                "name" : "clj-form",
+                "name" : "transit",
                 "nullable" : true,
                 "type" : {
                   "name" : "bool"
@@ -267,7 +267,7 @@
                   "DATA" : ["0","0","4189","0","0","0"]
                 }]
               },{
-                "name" : "clj-form",
+                "name" : "transit",
                 "count" : 6,
                 "VALIDITY" : [0,0,0,0,1,0],
                 "DATA" : [0,0,0,0,1,0]

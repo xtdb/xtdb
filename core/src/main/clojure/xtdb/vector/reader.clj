@@ -8,7 +8,7 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            xtdb.IKeyFn
            (xtdb.vector IVectorReader RelationReader ValueVectorReader)
-           (xtdb.vector.extensions AbsentVector ClojureFormVector KeywordVector SetVector UriVector UuidVector)))
+           (xtdb.vector.extensions AbsentVector KeywordVector SetVector TransitVector UriVector UuidVector)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defprotocol ReaderFactory
@@ -64,7 +64,7 @@
   KeywordVector (vec->reader [arrow-vec] (ValueVectorReader/keywordVector arrow-vec))
   UuidVector (vec->reader [arrow-vec] (ValueVectorReader/uuidVector arrow-vec))
   UriVector (vec->reader [arrow-vec] (ValueVectorReader/uriVector arrow-vec))
-  ClojureFormVector (vec->reader [arrow-vec] (ValueVectorReader/clojureFormVector arrow-vec)))
+  TransitVector (vec->reader [arrow-vec] (ValueVectorReader/transitVector arrow-vec)))
 
 (defn rel-reader
   (^xtdb.vector.RelationReader [cols] (RelationReader/from cols))

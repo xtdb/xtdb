@@ -8,7 +8,7 @@
            [java.io Writer]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.vector.extensions AbsentType ClojureFormType KeywordType SetType UriType UuidType)))
+           (xtdb.vector.extensions AbsentType TransitType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -103,7 +103,7 @@
   KeywordType (<-arrow-type [_] :keyword)
   UuidType (<-arrow-type [_] :uuid)
   UriType (<-arrow-type [_] :uri)
-  ClojureFormType (<-arrow-type [_] :clj-form)
+  TransitType (<-arrow-type [_] :transit)
   AbsentType (<-arrow-type [_] :absent))
 
 (extend-protocol ArrowTypeLegs
@@ -147,7 +147,7 @@
     :keyword KeywordType/INSTANCE
     :uuid UuidType/INSTANCE
     :uri UriType/INSTANCE
-    :clj-form ClojureFormType/INSTANCE
+    :transit TransitType/INSTANCE
     :absent AbsentType/INSTANCE
 
     :struct ArrowType$Struct/INSTANCE
@@ -276,7 +276,7 @@
       (derive :time-local :any) (derive :interval :any) (derive :duration :any)
       (derive :fixed-size-binary :varbinary) (derive :varbinary :any) (derive :utf8 :any)
 
-      (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :clj-form :any)
+      (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any)
 
       (derive :list :any) (derive :struct :any) (derive :set :any)))
 
@@ -456,8 +456,8 @@
 (defmethod col-type->field* :uri [col-name nullable? _col-type]
   (->field col-name UriType/INSTANCE nullable?))
 
-(defmethod col-type->field* :clj-form [col-name nullable? _col-type]
-  (->field col-name ClojureFormType/INSTANCE nullable?))
+(defmethod col-type->field* :transit [col-name nullable? _col-type]
+  (->field col-name TransitType/INSTANCE nullable?))
 
 (defmethod col-type->field* :absent [col-name nullable? _col-type]
   (->field col-name AbsentType/INSTANCE nullable?))
@@ -465,14 +465,6 @@
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
-
-(defn without-null [col-type]
-  (let [without-null (-> (flatten-union-types col-type)
-                         (disj :null))]
-    (case (count without-null)
-      0 :null
-      1 (first without-null)
-      without-null)))
 
 (defn col-type->leg [col-type]
   (let [head (col-type-head col-type)]
@@ -661,7 +653,7 @@
 (defmethod arrow-type->col-type KeywordType [_] :keyword)
 (defmethod arrow-type->col-type UriType [_] :uri)
 (defmethod arrow-type->col-type UuidType [_] :uuid)
-(defmethod arrow-type->col-type ClojureFormType [_] :clj-form)
+(defmethod arrow-type->col-type TransitType [_] :transit)
 (defmethod arrow-type->col-type AbsentType [_] :absent)
 
 ;;; LUB

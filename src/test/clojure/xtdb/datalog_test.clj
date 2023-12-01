@@ -2439,7 +2439,7 @@
               :xtdb.error/error-key :xtdb.call/no-such-tx-fn,
               :xtdb.error/message "Runtime error: ':xtdb.call/no-such-tx-fn'",
               :fn-id :non-existing-fn}
-             (.getData ^xtdb.RuntimeException (.form ^ClojureForm (:xt/error (first txs))))))))
+             (.getData ^xtdb.RuntimeException (:xt/error (first txs)))))))
 
 (deftest test-params-struct-key-normalisation-in-args
   (t/is (= [{:x {:last-name "Ivanov", :first-name "Ivan"}}

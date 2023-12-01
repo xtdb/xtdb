@@ -1400,7 +1400,7 @@
                              :explain-data (s/explain-data ::logical-plan plan)}))))
 
 (defn explain-result [plan]
-  (let [fields '{plan (types/col-type->field :clj-form)}
+  (let [fields '{plan (types/col-type->field :transit)}
         ^Iterable res [{:plan plan}]
         it (.iterator res)]
     (reify IResultSet

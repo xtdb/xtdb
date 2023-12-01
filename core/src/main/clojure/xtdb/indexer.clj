@@ -41,7 +41,6 @@
            xtdb.metadata.IMetadataManager
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
-           xtdb.tx.Ops
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
@@ -476,7 +475,7 @@
                                       (map? query) (do
                                                      #_(xtql.json/parse-dml query)
                                                      (throw (UnsupportedOperationException. "JSON DML")))
-                                      (list? query) (xtql.edn/parse-dml query))
+                                      (seq? query) (xtql.edn/parse-dml query))
                                     (assoc tx-opts :table-info tables-with-cols))
 
             [:insert query-opts inner-query]
@@ -535,10 +534,10 @@
                (doto (.structKeyWriter doc-writer "xt$committed?" (FieldType/notNullable  #xt.arrow/type :bool))
                  (.writeBoolean (nil? t)))
 
-               (let [e-wtr (.structKeyWriter doc-writer "xt$error" (FieldType/nullable #xt.arrow/type :clj-form))]
+               (let [e-wtr (.structKeyWriter doc-writer "xt$error" (FieldType/nullable #xt.arrow/type :transit))]
                  (if (or (nil? t) (= t abort-exn))
                    (.writeNull e-wtr)
-                   (.writeObject e-wtr (pr-str t))))
+                   (vw/write-value! t e-wtr)))
                (.endStruct doc-writer)))
 
     (.addRows row-counter 1)))

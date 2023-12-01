@@ -6,15 +6,15 @@ import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.ExtensionTypeRegistry;
 import org.apache.arrow.vector.types.pojo.FieldType;
 
-public class ClojureFormType extends XtExtensionType {
-    public static final ClojureFormType INSTANCE = new ClojureFormType();
+public class TransitType extends XtExtensionType {
+    public static final TransitType INSTANCE = new TransitType();
 
     static {
         ExtensionTypeRegistry.register(INSTANCE);
     }
 
-    public ClojureFormType() {
-        super("xt/clj-form", Utf8.INSTANCE);
+    public TransitType() {
+        super("xt/transit+msgpack", Binary.INSTANCE);
     }
 
     @Override
@@ -24,6 +24,6 @@ public class ClojureFormType extends XtExtensionType {
 
     @Override
     public FieldVector getNewVector(String name, FieldType fieldType, BufferAllocator allocator) {
-        return new ClojureFormVector(name, allocator, fieldType);
+        return new TransitVector(name, allocator, fieldType);
     }
 }

@@ -233,14 +233,14 @@
     :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long
     :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes, :uri Bytes
 
-    :list Object, :set Object, :struct Object :clj-form Bytes})
+    :list Object, :set Object, :struct Object :transit Object})
 
 (defmethod read-value-code :null [_ & _args] nil)
 (defmethod write-value-code :null [_ w & _args] `(.writeNull ~w))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
            :timestamp-tz :timestamp-local :time-local :duration
-           :utf8 :varbinary :uuid :uri :keyword :clj-form]
+           :utf8 :varbinary :uuid :uri :keyword :transit]
         :let [rw-fn (col-type->rw-fn k)]]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" rw-fn)) ~@args)))

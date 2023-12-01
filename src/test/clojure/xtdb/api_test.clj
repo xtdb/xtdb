@@ -157,7 +157,7 @@
                 :err nil}}
              (->> (xt/q *node*
                         '(from :xt/txs [{:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?, :xt/error err}]))
-                  (into #{} (map #(update % :err (comp ex-data (fn [^ClojureForm clj-form] (some-> clj-form .form)))))))))))
+                  (into #{} (map #(update % :err ex-data))))))))
 
 (def ^:private devs
   [(xt/put :users {:xt/id :jms, :name "James"})
@@ -624,7 +624,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 
              (->> (xt/q tu/*node* '(from :xt/txs [{:xt/committed? false} xt/id xt/error]))
                   (map (fn [row]
-                         (update row :xt/error #(ex-data (.form ^ClojureForm %)))))))))
+                         (update row :xt/error ex-data)))))))
 
   (t/testing "assert-exists"
     (xt/submit-tx tu/*node* [(-> (xt/assert-exists '(from :users [{:first-name $name}]))
@@ -649,7 +649,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
              (->> (xt/q tu/*node* '(-> (from :xt/txs [{:xt/committed? false} xt/id xt/error])
                                        (where (> xt/id 2))))
                   (map (fn [row]
-                         (update row :xt/error #(ex-data (.form ^ClojureForm %))))))))))
+                         (update row :xt/error ex-data))))))))
 
 (t/deftest test-xtql-with-param-2933
   (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :petr :name "Petr"})])

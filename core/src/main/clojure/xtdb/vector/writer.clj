@@ -1,10 +1,13 @@
 (ns xtdb.vector.writer
-  (:require [xtdb.error :as err]
+  (:require [cognitect.transit :as transit]
+            [xtdb.error :as err]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.serde :as serde])
   (:import (clojure.lang Keyword)
+           [java.io ByteArrayOutputStream]
            (java.lang AutoCloseable)
            (java.math BigDecimal)
            java.net.URI
@@ -960,6 +963,11 @@
 
         (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type))))))
 
+(defn- write-as-transit [v w]
+  (with-open [baos (ByteArrayOutputStream.)]
+    (transit/write (transit/writer baos :msgpack {:handlers serde/transit-write-handlers}) v)
+    (write-value! (.toByteArray baos) w)))
+
 (extend-protocol ArrowWriteable
   Keyword
   (value->arrow-type [_] #xt.arrow/type :keyword)
@@ -980,10 +988,22 @@
     (write-value! (str uri) w))
 
   ClojureForm
-  (value->arrow-type [_] #xt.arrow/type :clj-form)
-  (value->col-type [_] :clj-form)
+  (value->arrow-type [_] #xt.arrow/type :transit)
+  (value->col-type [_] :transit)
   (write-value! [clj-form ^IVectorWriter w]
-    (write-value! (pr-str (.form clj-form)) w)))
+    (write-as-transit clj-form ^IVectorWriter w))
+
+  xtdb.RuntimeException
+  (value->arrow-type [_] #xt.arrow/type :transit)
+  (value->col-type [_] :transit)
+  (write-value! [v ^IVectorWriter w]
+    (write-as-transit v ^IVectorWriter w))
+
+  xtdb.IllegalArgumentException
+  (value->arrow-type [_] #xt.arrow/type :transit)
+  (value->col-type [_] :transit)
+  (write-value! [v ^IVectorWriter w]
+    (write-as-transit v ^IVectorWriter w)))
 
 (defn write-vec! [^ValueVector v, vs]
   (.clear v)

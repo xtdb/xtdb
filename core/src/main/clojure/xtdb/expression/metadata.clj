@@ -20,7 +20,7 @@
 
 (declare meta-expr)
 
-(def ^:private bool-metadata-types #{:null :bool :fixed-size-binary :clj-form})
+(def ^:private bool-metadata-types #{:null :bool :fixed-size-binary :transit})
 
 (defn call-meta-expr [{:keys [f args] :as expr} {:keys [col-types] :as opts}]
   (letfn [(var-param-expr [f meta-value field {:keys [param-type] :as param-expr}]

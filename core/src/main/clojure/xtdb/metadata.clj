@@ -174,7 +174,7 @@
 
               (.endStruct struct-wtr))))))))
 
-(doseq [type-head #{:null :bool :fixed-size-binary :clj-form}]
+(doseq [type-head #{:null :bool :fixed-size-binary :transit}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type)))
 
 (doseq [type-head #{:int :float :utf8 :varbinary :keyword :uri :uuid

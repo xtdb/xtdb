@@ -38,7 +38,7 @@
 
 (defn- ->xtql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
   (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
-        query-writer (.structKeyWriter xtql-writer "query" (FieldType/notNullable #xt.arrow/type :clj-form))
+        query-writer (.structKeyWriter xtql-writer "query" (FieldType/notNullable #xt.arrow/type :transit))
         params-writer (.structKeyWriter xtql-writer "params" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-xtql! [^Xtql op]
       (.startStruct xtql-writer)
@@ -153,7 +153,7 @@
 (defn- ->call-writer [^IVectorWriter op-writer]
   (let [call-writer (.legWriter op-writer :call (FieldType/notNullable #xt.arrow/type :struct))
         fn-id-writer (.structKeyWriter call-writer "fn-id" (FieldType/notNullable #xt.arrow/type :union))
-        args-list-writer (.structKeyWriter call-writer "args" (FieldType/notNullable #xt.arrow/type :clj-form))]
+        args-list-writer (.structKeyWriter call-writer "args" (FieldType/notNullable #xt.arrow/type :transit))]
     (fn write-call! [^Call op]
       (.startStruct call-writer)
 

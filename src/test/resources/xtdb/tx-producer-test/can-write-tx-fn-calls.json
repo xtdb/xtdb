@@ -47,11 +47,11 @@
             "name" : "args",
             "nullable" : false,
             "type" : {
-              "name" : "ClojureFormType"
+              "name" : "TransitType"
             },
             "children" : [ ],
             "metadata" : [{
-              "value" : "xt/clj-form",
+              "value" : "xt/transit+msgpack",
               "key" : "ARROW:extension:name"
             },{
               "value" : "",
@@ -117,8 +117,8 @@
             "name" : "args",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "OFFSET" : [0,13,30],
-            "DATA" : ["[12 nil :bar]","[\"hello\" \"world\"]"]
+            "OFFSET" : [0,26,56],
+            "DATA" : ["92af7e23787464622f636c6a2d666f726d930cc0a57e3a626172","92af7e23787464622f636c6a2d666f726d92a568656c6c6fa5776f726c64"]
           }]
         }]
       }]

@@ -4,7 +4,8 @@
             [xtdb.indexer :as idx]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.error :as err])
   (:import (xtdb.types ClojureForm)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -265,7 +266,8 @@
                            (xt/call :my-fn)])
 
   (t/is (= "Runtime error: ':xtdb.call/error-evaluating-tx-fn'"
-           (let [^ClojureForm error (-> (xt/q tu/*node* '(from :xt/txs [{:xt/error error}]))
-                                        first
-                                        :error)]
-             (-> (.form error) ex-data :xtdb.error/message)))))
+           (-> (xt/q tu/*node* '(from :xt/txs [{:xt/error error}]))
+               first
+               :error
+               ex-data
+               ::err/message))))

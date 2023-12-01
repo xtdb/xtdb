@@ -134,7 +134,8 @@
   (Ops/call fn-id args))
 
 (def transit-read-handlers
-  (merge (-> time-literals/tags
+  (merge transit/default-read-handlers
+         (-> time-literals/tags
              (update-keys str)
              (update-vals transit/read-handler))
          {"xtdb/clj-form" (transit/read-handler xt/->ClojureForm)
@@ -154,8 +155,13 @@
           "xtdb.tx/erase" (transit/read-handler erase-op-reader)
           "xtdb.tx/call" (transit/read-handler call-op-reader)}))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; TransitVector
+(defn transit-msgpack-reader [in]
+  (.r ^cognitect.transit.Reader (transit/reader in :msgpack {:handlers transit-read-handlers})))
+
 (def transit-write-handlers
-  (merge (-> {Period "time/period"
+  (merge transit/default-write-handlers
+         (-> {Period "time/period"
               LocalDate "time/date"
               LocalDateTime "time/date-time"
               ZonedDateTime "time/zoned-date-time"

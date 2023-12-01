@@ -575,14 +575,14 @@
 
           (tu/finish-chunk! node1)
 
-          (t/is (= [:union #{:utf8 :clj-form :keyword :uuid}]
+          (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
                    (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
-              (t/is (= [:union #{:utf8 :clj-form :keyword :uuid}]
+              (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
                        (types/field->col-type (.columnField mm2 "xt_docs" "v")))))))))))
 
 (t/deftest test-await-fails-fast

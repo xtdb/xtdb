@@ -92,11 +92,11 @@
           "name" : "xt$error",
           "nullable" : true,
           "type" : {
-            "name" : "ClojureFormType"
+            "name" : "TransitType"
           },
           "children" : [ ],
           "metadata" : [{
-            "value" : "xt/clj-form",
+            "value" : "xt/transit+msgpack",
             "key" : "ARROW:extension:name"
           },{
             "value" : "",

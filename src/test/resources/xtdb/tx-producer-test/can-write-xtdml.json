@@ -24,11 +24,11 @@
             "name" : "query",
             "nullable" : false,
             "type" : {
-              "name" : "ClojureFormType"
+              "name" : "TransitType"
             },
             "children" : [ ],
             "metadata" : [{
-              "value" : "xt/clj-form",
+              "value" : "xt/transit+msgpack",
               "key" : "ARROW:extension:name"
             },{
               "value" : "",
@@ -89,8 +89,8 @@
             "name" : "query",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "OFFSET" : [0,67,104],
-            "DATA" : ["(update :users {:bind {:xt/id $uid, :version v}, :set {v (inc v)}})","(delete :users {:bind {:xt/id $uid}})"]
+            "OFFSET" : [0,113,180],
+            "DATA" : ["92af7e23787464622f636c6a2d666f726d92a67e236c69737493a87e24757064617465a77e3a757365727382a67e3a62696e6482a77e3a78742f6964a67e2424756964a97e3a76657273696f6ea37e2476a57e3a73657481a37e247692ab7e23787464622f6c697374a728696e63207629","92af7e23787464622f636c6a2d666f726d92a67e236c69737493a87e2464656c657465a77e3a757365727381a67e3a62696e6481a77e3a78742f6964a67e2424756964"]
           },{
             "name" : "params",
             "count" : 2,

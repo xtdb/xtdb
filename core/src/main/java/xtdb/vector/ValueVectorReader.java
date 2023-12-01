@@ -13,7 +13,6 @@ import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.IKeyFn;
-import xtdb.types.ClojureForm;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
@@ -442,22 +441,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader clojureFormVector(ClojureFormVector v) {
-        var underlyingVec = varCharVector(v.getUnderlyingVector());
-
-        return new ValueVectorReader(v) {
-            private static final IFn READ_STRING = Clojure.var("clojure.core/read-string");
-
-            @Override
-            public ByteBuffer getBytes(int idx) {
-                return underlyingVec.getBytes(idx);
-            }
-
-            @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
-                return new ClojureForm(READ_STRING.invoke(underlyingVec.getObject(idx)));
-            }
-        };
+    public static IVectorReader transitVector(TransitVector v) {
+        return new ValueVectorReader(v);
     }
 
     public static IVectorReader varBinaryVector(VarBinaryVector v) {

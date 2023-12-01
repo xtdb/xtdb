@@ -14,7 +14,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType)
            (xtdb.types IntervalDayTime IntervalYearMonth)
            (xtdb.vector IVectorWriter)
-           (xtdb.vector.extensions ClojureFormVector KeywordVector UriVector UuidVector)))
+           (xtdb.vector.extensions KeywordVector TransitVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -78,7 +78,7 @@
 
   (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156" (URI/create "https://xtdb.com") #xt/clj-form (fn [a b] (+ a b))]]
     (t/is (= {:vs vs
-              :vec-types [KeywordVector KeywordVector UuidVector UriVector ClojureFormVector]}
+              :vec-types [KeywordVector KeywordVector UuidVector UriVector TransitVector]}
              (test-round-trip vs))
           "extension types")))
 

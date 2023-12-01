@@ -381,14 +381,13 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
            RuntimeException
            #":xtdb\.call/error-evaluating-tx-fn"
 
-           (throw (let [^ClojureForm clj-form (-> (xt/q tu/*node*
-                                                        ['{:find [err]
-                                                           :in [tx-id]
-                                                           :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
-                                                         3])
-                                                  first
-                                                  :err)]
-                    (.form clj-form)))))))
+           (throw (-> (xt/q tu/*node*
+                            ['{:find [err]
+                               :in [tx-id]
+                               :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
+                             3])
+                      first
+                      :err))))))
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
