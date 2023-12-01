@@ -1,0 +1,143 @@
+= Getting started with XTDB on AWS 
+
+The following guide will set up an example XTDB cluster on AWS - with a configurable number of nodes running on https://aws.amazon.com/ecs/[**ECS**], connectable via a load balancer.   
+
+We will use a set of provided cloudformation templates, available in the https://github.com/xtdb/xtdb/tree/2.x/cloudformation[**XTDB repository**]. These will setup a node using https://aws.amazon.com/s3/[**S3**] as the XTDB object store, and https://aws.amazon.com/msk/[**MSK**] hosted **Kafka** as the XTDB log.
+
+While we provide a number of parameters to help configure these, for more advanced use-cases you can feel free to edit the templates to suit your needs. You may also already have suitable pieces of infrastructure you wish to re-use. 
+
+The guide assumes you are using the default templates to set everything up.
+
+*The templates are as follows:*
+
+* `xtdb-vpc` - Sets up a sample VPC to be used by the other infrastructure.
+* `xtdb-s3` - Sets up all S3 infrastructure & permissions that are required to be used for an XTDB Object Store.
+* `xtdb-msk` - Sets up an MSK Kafka cluster for use as the XTDB log
+** Depends on `xtdb-vpc`
+* `xtdb-alb` - Sets up application load balancer and all relevant infrastructure for that to route traffic to the ECS service
+** Depends on `xtdb-vpc`
+* `xtdb-ecs` - Sets up XTDB on ECS, running on EC2 instances.
+** Depends on `xtdb-vpc`, `xtdb-s3`, `xtdb-msk` and `xtdb-alb`.
+
+== Setting up the stacks
+
+Go to the **AWS cloudformation** dashboard (or use the CLI), then go through the instructions below to set up each stack in order.
+
+=== Setting up the VPC
+
+`xtdb-vpc` can be uploaded as is, and doesn't require any parameters to be passed in. 
+
+It will **output** the following:
+
+* `VpcId`: ID of the VPC created by the stack
+* `PublicSubnets`: IDs of the both of the public subnets created within the VPC
+* `PrivateSubnets`: IDs of the both of the private subnets created within the VPC
+* `SecurityGroupId`: ID of the security group created for the VPC
+
+NOTE: If you wish to group all of the resources created from all the templates under a single tag, you can apply them at the stack level when uploading the templates. This is optional, but may be useful for finding resources later.  
+
+=== Setting up the S3 resources
+
+`xtdb-s3` doesn't have any dependencies on `xtdb-vpc`, so you can upload both at the same time.  
+
+It takes the following **input parameters**:
+
+* `S3BucketName` - Desired name of the bucket which will contain the XTDB Object Store.
+
+It will **output** the following:
+
+* `BucketName`: The name of the created S3 Bucket (identical to that passed in within `S3BucketName`) 
+* `SNSTopicArn`: The ARN of the SNS Topic which the s3 bucket sends it's notifications to - this will be used by the node.
+* `S3AccessPolicyArn`: The ARN of the managed policy that has all of the relevant S3, SNS and SQS permissions the XTDB task will need.
+
+=== Setting up the MSK cluster
+
+`xtdb-msk` will require `xtdb-vpc` to have been created prior.  
+
+It takes the following **input parameters**:
+
+* `VpcId`: ID of the VPC to host the MSK cluster on (from `xtdb-vpc`)
+* `SecurityGroupId`: Group ID of the security group to be used by the ECS nodes (from `xtdb-vpc`)
+* `PrivateSubnets`: List of private subnets to host the MSK brokers on, at least two (from `xtdb-vpc`)
+* `MSKClusterName`: User desired name of the MSK kafka cluster used as the XTDB Kafka Log - defaults to `xtdb-cluster-kafka`
+* `MSKVolumeSize`: The size in GiB of the EBS volume for the data drive on each broker node of the kafka cluster - defaults to `100`
+
+It will **output** the following:
+
+* `MSKClusterArn`: ARN of the MSK cluster created by the stack 
+* `MSKClusterName`:  Name of the created MSK cluster
+* `MSKAccessPolicyArn`:  ARN of the managed policy that has relevant MSK permissions
+
+`xtdb-msk` will likely take the longest to set up - usually around thirty minutes. This is because **MSK** will need to provision and set up Kafka. In the meantime, you can setup `xtdb-alb` (see <<albsetup, below>>). 
+
+There is one more **important step** that **MUST** be done after `xtdb-msk` has finished creating it's resources, in order for us to later correctly configure the XTDB nodes - fetching the **bootstrap servers** from MSK.
+
+[#bootstrap-servers]
+=== Fetching the bootstrap servers 
+
+After `xtdb-msk` has been successfully provisioned, you will need to get the list of **Kafka bootstrap servers** that the node will connect to. As these cannot be directly returned from cloudformation itself, you will need to fetch them manually from AWS.
+
+The steps to do so (in the AWS console) are as follows:
+
+* Go to the **MSK** dashboard in the console.
+* This should lead you to a list of **Clusters** - select whichever one has the same name as `MSKClusterName` (this defaults to `xtdb-cluster-kafka` if left unaltered)
+* You should see an overview of the created MSK cluster - at the top, there will be a **Cluster summary** - with a link to "View client information". Click on this.
+* This should lead us to a list of Bootstrap Servers - there should be a copy button on the "PLAINTEXT" ones.
+** These should be in a comma separated list - there should be two of them in total.
+** The Bootstrap Server URLs should be in something similar to the following shape: `b-2.<MSKClusterName>.<ID>.c5.kafka.<Region>.amazonaws.com:9092`. 
+** Ensure they end with port `9092`, as these are the `PLAINTEXT` URLs. 
+
+[#albsetup]
+=== Setting up the load balancer
+
+`xtdb-alb` will require will require `xtdb-vpc` to have been created prior.
+
+It takes the following **input parameters**:
+
+- `VpcId`: ID of the VPC to host the load balancer on (from `xtdb-vpc`)
+- `SecurityGroupId`: Group ID of the security group to be used by the ECS nodes (from `xtdb-vpc`)
+- `PublicSubnets`: List of public subnets to host the load balancer on (from `xtdb-vpc`)
+
+It will **output** the following:
+
+- `TargetGroupArn`: ARN of the Target Group created for the nodes
+- `LoadBalancerArn`: ARN of the Applicaiton Load Balancer created for the nodes
+- `LoadBalancerUrl`: The Load-Balanced XTDB node URL - 'http://${ECSALB.DNSName}'
+
+The `LoadBalancerURL` will be the primary URL for connecting to the XTDB cluster, so you will want to keep it close to hand. 
+
+=== Setting up the nodes on ECS
+
+`xtdb-ecs` will finally set up the nodes on ECS, and will require all of the prior stacks to be created. 
+
+It splits it's inputs into two distinct sections - parameters/resources from other stacks, and desired ECS Configuration.
+
+* Expected **input parameters** from other resources/stacks: 
+** `SecurityGroupId`: Group ID of the security group to be used by the ECS nodes (from `xtdb-vpc`)
+** `PublicSubnets`: List of public subnets to host the load balancer on (from `xtdb-vpc`)
+** `TargetGroupArn`: ARN of the Target Group created for the nodes (from `xtdb-alb`)
+** `LoadBalancerArn`: ARN of the  Application Load Balancer created for the nodes (from `xtdb-alb`)
+** `S3BucketName`: Name of the S3 bucket to use as the XTDB object store (from `xtdb-s3`)
+** `SNSTopicArn`: The ARN of the SNS Topic which the S3 sends notifications to (from `xtdb-s3`)
+** `S3AccessPolicyArn`: ARN of the managed policy offering access to all the S3 permissions necessary for the object store (from `xtdb-s3`)
+** `MSKBootstrapServers`: Comma separated list containing all Kafka bootstrap server URLs from MSK (needs to be grabbed manually from the MSK cluster info, see "<<Fetching the bootstrap servers>>")
+** `MSKAccessPolicyArn`: ARN of the managed policy offering access to all the MSK permissions (from `xtdb-msk`)
+* Expected **input parameters** for the configuration of ECS: 
+** `ClusterName`: Name of the desired ECS cluster -  defaults to `xtdb-cluster`
+** `EC2InstanceType`: EC2 Instance Type used for ECS Service - defaults to `i3.large` (storage optimized)
+** `DesiredCapacity`: Number of EC2 instances to launch in your ECS cluster / XTDB node tasks to run - defaults to `1`
+** `ImageId:` Used to grab an ECS Optimized Image from SSM Parameter Store (We recommend that this is left as default)  
+
+After this has finished creation - there will be a cluster of XTDB nodes running on ECS with whatever extra configurarions you have set. These will be accessible via the `LoadBalancerURL` from earlier.
+
+== Accessing the node
+
+With the stacks setup in AWS, you should be able to make some calls to the nodes over HTTP using the `LoadBalancerURL` mentioned earlier. You can call to `GET` the status of one of the nodes:
+
+```
+curl http://<LoadBalancerURL>/status
+```
+
+NOTE: As our nodes are behind an application load balancer, be aware that messages sent over HTTP will be spread across the nodes, so you may see some differing values coming back from the status as each node in the cluster processes new transactions.
+
+Should the above be successful, you should be ready to go with an XTDB cluster! For more information on performing operations on the node over HTTP, see **TODO: <HTTP TUTORIAL LINK>**.
