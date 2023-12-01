@@ -10,7 +10,7 @@ Parameters:
     Type: AWS::EC2::SecurityGroup::Id
 
   PrivateSubnets:
-    Description: List of public subnets to host the MSK brokers on
+    Description: List of private subnets to host the MSK brokers on (at least two required)
     Type: List<AWS::EC2::Subnet::Id>
 
   MSKClusterName:
