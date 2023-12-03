@@ -25,7 +25,7 @@ Upserts a document into the given table, optionally during the given valid time 
 
 To specify a valid-time range:
 
-* `(-> (xt/put <table> <document>) (xt/starting <from>))`
+* `(-> (xt/put <table> <document>) (xt/starting-from <from>))`
 * `(-> (xt/put <table> <document>) (xt/until <to>))`
 * `(-> (xt/put <table> <document>) (xt/during <from> <to))`
 
