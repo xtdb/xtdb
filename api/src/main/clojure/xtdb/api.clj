@@ -3,8 +3,7 @@
             [xtdb.backtick :as backtick]
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
-            [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.time :as time])
   (:import [java.io Writer]
            [java.time Instant]
            java.util.concurrent.ExecutionException
