@@ -675,10 +675,6 @@
                           (from :docs [{:xt/id e :first-name n}])
                           (where (not (exists? (from :docs [{:first-name "Ivan"} {:first-name $n}]) {:args [n]}))))))))
 
-
-
-
-
     (t/is (= [{:first-name "Petr", :e :petr}]
              (xt/q tu/*node*
                    '(unify

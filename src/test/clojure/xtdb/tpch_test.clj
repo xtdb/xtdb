@@ -4,7 +4,7 @@
             [xtdb.api :as xt]
             [xtdb.sql :as core.sql]
             [xtdb.datasets.tpch :as tpch]
-            [xtdb.datasets.tpch.datalog :as tpch-datalog]
+            [xtdb.datasets.tpch.xtql :as tpch-xtql]
             [xtdb.datasets.tpch.ra :as tpch-ra]
             xtdb.sql-test
             [xtdb.test-util :as tu]
@@ -96,46 +96,46 @@
   (binding [*qs* #{11 17}]
     (t/run-test test-01-ra)))
 
-(def ^:private ^:dynamic *datalog-qs*
+(def ^:private ^:dynamic *xtql-qs*
   ;; replace with *qs* once these are all expected to work
   (-> (set (range 1 23))
-      (disj 21) ; TODO apply decorr
-      (disj 7) ; TODO general fail
-      (disj 13) ; TODO left-join
-      (disj 15) ; TODO has a view, not sure how to represent this
-      (disj 19 22) ; TODO cardinality-many literals
+      (disj 1 3 5 6 7 8 9 10 11 12 14) ; TODO nested aggs
+      (disj 2 20) ; TODO #3022
+      (disj 15) ; TODO `letfn`
+      (disj 21) ; TODO general fail
+      (disj 12 16 18 19 22) ; TODO `in?`
       ))
 
-(defn test-datalog-query [n expected-res]
+(defn test-xtql-query [n expected-res]
   (let [q (inc n)]
-    (when (contains? *datalog-qs* q)
-      (let [query @(nth tpch-datalog/queries n)
-            {::tpch-datalog/keys [in-args]} (meta query)]
-        (t/is (is-equal? expected-res (xt/q *node* (into [query] in-args) {:key-fn :sql}))
+    (when (contains? *xtql-qs* q)
+      (let [query @(nth tpch-xtql/queries n)
+            {::tpch-xtql/keys [args]} (meta query)]
+        (t/is (is-equal? expected-res (xt/q *node* query {:args args, :key-fn :sql}))
               (format "Q%02d" (inc n)))))))
 
-(t/deftest test-001-datalog
+(t/deftest test-001-xtql
   (with-tpch-data {:method :docs, :scale-factor 0.001
-                   :node-dir (util/->path "target/tpch-queries-datalog-sf-001")}
+                   :node-dir (util/->path "target/tpch-queries-xtql-sf-001")}
     (fn []
       (dorun
-       (map-indexed test-datalog-query results-sf-001)))))
+       (map-indexed test-xtql-query results-sf-001)))))
 
-(t/deftest ^:integration test-01-datalog
+(t/deftest ^:integration test-01-xtql
   (with-tpch-data {:method :docs, :scale-factor 0.01
-                   :node-dir (util/->path "target/tpch-queries-datalog-sf-01")}
+                   :node-dir (util/->path "target/tpch-queries-xtql-sf-01")}
     (fn []
       (dorun
-       (map-indexed test-datalog-query results-sf-01)))))
+       (map-indexed test-xtql-query results-sf-01)))))
 
 (comment
-  (binding [*datalog-qs* #{2}]
-    (t/run-test test-001-datalog))
+  (binding [*xtql-qs* #{2}]
+    (t/run-test test-001-xtql))
 
   #_{:clj-kondo/ignore [:unresolved-namespace]}
   (binding [*node* dev/node
-            *datalog-qs* #{1}]
-    (t/run-test test-01-datalog)))
+            *xtql-qs* #{1}]
+    (t/run-test test-01-xtql)))
 
 (defn slurp-sql-query [query-no]
   (slurp (io/resource (str "xtdb/sql/tpch/" (format "q%02d.sql" query-no)))))
