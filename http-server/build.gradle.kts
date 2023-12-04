@@ -33,4 +33,5 @@ dependencies {
     api("metosin", "reitit-spec", "0.5.15")
 
     api("com.cognitect", "transit-clj", "1.0.329")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
 }
