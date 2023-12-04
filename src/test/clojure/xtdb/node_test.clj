@@ -481,7 +481,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
                         [:scan {:table users} [xt$id foo a b]]]]]]}]
 
            (xt/q tu/*node*
-                 ["SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"]
+                 "SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"
                  {:explain? true}))))
 
 (t/deftest test-normalising-nested-cols-2483

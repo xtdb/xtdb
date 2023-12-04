@@ -14,10 +14,6 @@
     (->> (repeatedly n #(zipmap ks (map str (repeatedly nb-ks random-uuid))))
          (map-indexed #(assoc %2 :xt/id %1)))))
 
-(defn q-now [node q+args]
-  (xt/q node q+args
-        {:basis {:after-tx (:latest-completed-tx (xt/status node))}}))
-
 (def ^java.io.File node-dir (io/file "dev/concurrent-node-test"))
 (def node-opts {:node-dir (.toPath node-dir)
                 :instant-src (InstantSource/system)})
@@ -61,7 +57,7 @@
           q '{:find [id foo bar baz foobar barfoo]
               :in [id]
               :where [(match :docs [{:xt/id id} foo bar baz foobar barfoo])]}
-          get-item #(q-now node [q (rand-nth open-ids)])
+          get-item #(xt/q node q {:args [(rand-nth open-ids)]})
           f-call #(future
                     (dotimes [_ 100]
                       (get-item)))

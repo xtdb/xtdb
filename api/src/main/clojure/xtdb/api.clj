@@ -45,23 +45,22 @@
 (defn q&
   "asynchronously query an XTDB node.
 
-  q+args param is either a Datalog/SQL query, or a vector containing a Datalog/SQL query
-  and args that line up with those specified in the query.
+  - query: either an XTQL or SQL query.
+  - opts:
+    - `:basis`: see 'Transaction Basis'
+    - `:args`: arguments to pass to the query.
 
-  (q& node
-      '{:find ...
-        :where ...})
+  For example:
 
-  (q& node
-      ['{:find ...
-         :in [a b]
-         :where ...}
-       a-value b-value])
+  (q& node '(from ...))
+
+  (q& node '(from :foo [{:a $a, :b $b}])
+      {:a a-value, :b b-value})
 
   (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
-  (q& node [\"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" foo-id])
+  (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" {:args [foo-id]})
 
-  Please see Datalog/SQL query language docs for more details.
+  Please see XTQL/SQL query language docs for more details.
 
   This function returns a CompleteableFuture containing the results of its query as a vector of maps
 
@@ -90,22 +89,15 @@
       '{:find ...
         :where ...}
       {:basis-timeout (Duration/ofSeconds 1)})"
+
   (^java.util.concurrent.CompletableFuture [node q+args] (q& node q+args {}))
 
   (^java.util.concurrent.CompletableFuture
-   [node q+args opts]
-   (let [[q args] (if (vector? q+args)
-                    [(first q+args) (subvec q+args 1)]
-                    [q+args nil])
-
-         args (or (:args opts) args) ;;TODO XTQL has no support for q+args vec,
-         ;; these approaches for should be exclusive.
-
-         opts (-> (into {:default-all-valid-time? false} opts)
-                  (assoc :args args)
+   [node query opts]
+   (let [opts (-> (into {:default-all-valid-time? false} opts)
                   (update :basis xtp/after-latest-submitted-tx node))]
 
-     (-> (xtp/open-query& node q opts)
+     (-> (xtp/open-query& node query opts)
          (.thenApply
           (reify Function
             (apply [_ res]
@@ -116,23 +108,22 @@
 (defn q
   "query an XTDB node.
 
-  q+args param is either a Datalog/SQL query, or a vector containing a Datalog/SQL query
-  and args that line up with those specified in the query.
+  - query: either an XTQL or SQL query.
+  - opts:
+    - `:basis`: see 'Transaction Basis'
+    - `:args`: arguments to pass to the query.
 
-  (q node
-     '{:find ...
-       :where ...})
+  For example:
 
-  (q node
-     ['{:find ...
-        :in [a b]
-        :where ...}
-      a-value b-value])
+  (q& node '(from ...))
 
-  (q node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
-  (q node [\"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" foo-id])
+  (q& node '(from :foo [{:a $a, :b $b}])
+      {:a a-value, :b b-value})
 
-  Please see Datalog/SQL query language docs for more details.
+  (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
+  (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" {:args [foo-id]})
+
+  Please see XTQL/SQL query language docs for more details.
 
   This function returns the results of its query as a vector of maps
 
@@ -173,7 +164,7 @@
 (defn submit-tx&
   "Writes transactions to the log for processing. Non-blocking.
 
-  tx-ops: Datalog/SQL transaction operations.
+  tx-ops: XTQL/SQL transaction operations.
 
   Returns a CompleteableFuture containing a map with details about
   the submitted transaction, including system-time and tx-id.
@@ -194,7 +185,7 @@
 (defn submit-tx
   "Writes transactions to the log for processing
 
-  tx-ops: Datalog/SQL style transactions.
+  tx-ops: XTQL/SQL style transactions.
     [(xt/put :table {:xt/id \"my-id\", ...})
      (xt/delete :table \"my-id\")]
 
@@ -216,6 +207,7 @@
    - :default-tz
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
+
   ([node tx-ops] (submit-tx node tx-ops {}))
   ([node tx-ops tx-opts]
    (-> @(submit-tx& node tx-ops tx-opts)

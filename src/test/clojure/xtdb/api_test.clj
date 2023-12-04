@@ -162,8 +162,8 @@
   (xt/submit-tx *node* devs)
 
   (t/is (= #{{:name "James"} {:name "Matt"}}
-           (set (xt/q *node* ["SELECT u.name FROM users u WHERE u.name IN (?, ?)"
-                              "James" "Matt"])))))
+           (set (xt/q *node* "SELECT u.name FROM users u WHERE u.name IN (?, ?)"
+                      {:args ["James" "Matt"]})))))
 
 (t/deftest start-and-query-empty-node-re-231-test
   (with-open [n (xtn/start-node {})]
@@ -344,10 +344,10 @@
 
     (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}]
              (xt/q *node*
-                   [(str "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to "
-                         "FROM foo FOR VALID_TIME AS OF ?")
-                    tt1]
-                   {:default-all-valid-time? true}))
+                   (str "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to "
+                        "FROM foo FOR VALID_TIME AS OF ?")
+                   {:args [tt1]
+                    :default-all-valid-time? true}))
           "`FOR VALID_TIME AS OF` overrides flag")
 
     (t/is (= #{{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}

@@ -195,20 +195,16 @@
 
 (defn- tx-fn-q [allocator ra-src wm-src scan-emitter tx-opts]
   (fn tx-fn-q*
-    ([q+args] (tx-fn-q* q+args {}))
+    ([query] (tx-fn-q* query {}))
 
-    ([q+args opts]
-     (let [[q args] (if (vector? q+args)
-                      [(first q+args) (rest q+args)]
-                      [q+args nil])]
-       (with-open [^IResultSet res (cond (map? q) (d/open-datalog-query allocator ra-src wm-src scan-emitter q (-> (into tx-opts opts)
-                                                                                                                   (assoc :args args)))
-                                         (seq? q) (xtql/open-xtql-query allocator ra-src wm-src q (into tx-opts opts))
+    ([query opts]
+     (with-open [^IResultSet res (cond (map? query) (d/open-datalog-query allocator ra-src wm-src scan-emitter query (into tx-opts opts))
+                                       (seq? query) (xtql/open-xtql-query allocator ra-src wm-src query (into tx-opts opts))
 
-                                         :else (throw (throw (err/runtime-err :unknown-query-type
-                                                                              {:query q
-                                                                               :type (type q)}))))]
-         (vec (iterator-seq res)))))))
+                                       :else (throw (err/runtime-err :unknown-query-type
+                                                                     {:query query
+                                                                      :type (type query)})))]
+       (vec (iterator-seq res))))))
 
 (defn- tx-fn-sql
   ([allocator, ^IRaQuerySource ra-src, wm-src tx-opts query]

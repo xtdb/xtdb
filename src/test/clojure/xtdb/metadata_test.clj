@@ -22,8 +22,9 @@
                                  ["claire", "Claire", #inst "2019"]))])]
 
     (t/is (= [{:name "Dave"}]
-             (xt/q tu/*node* ["SELECT users.name FROM users WHERE users.xt$id = ?" "dave"]
-                   {:basis {:tx tx1}}))
+             (xt/q tu/*node* "SELECT users.name FROM users WHERE users.xt$id = ?"
+                   {:args ["dave"]
+                    :basis {:tx tx1}}))
           "#310")))
 
 (deftest test-bloom-filter-for-num-types-2133
