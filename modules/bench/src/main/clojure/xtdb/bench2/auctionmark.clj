@@ -10,10 +10,6 @@
            (java.util ArrayList Random)
            (java.util.concurrent ConcurrentHashMap)))
 
-(defn q-now [node q+args]
-  (xt/q node q+args
-        {:key-fn :snake_case}))
-
 (defn random-price [worker] (.nextDouble (b2/rng worker)))
 
 (def user-id (partial str "u_"))
@@ -27,16 +23,6 @@
 (def gav-id global-attribute-value-id)
 
 (def user-attribute-id (partial str "ua_"))
-(def item-name (b2/id))
-(def item-description (b2/id))
-(def initial-price (b2/id))
-(def reserve-price (b2/id))
-(def buy-now (b2/id))
-(def item-attributes-blob (b2/id))
-(def item-image-path (b2/id))
-(def auction-start-date (b2/id))
-
-(defn composite-id [& ids] (apply str (butlast (interleave ids (repeat "-")))))
 
 (defn generate-user [worker]
   (let [u_id (b2/increment worker user-id)]
@@ -286,7 +272,7 @@
                           (match :gav {:xt/id gav-id})
                           [gav-id :gav_gag_id gag-id]
                           [gav-id :gav_name gav-name]]}]
-          (->> (q-now (:sut worker) [q gag-ids gav-ids])
+          (->> (xt/q (:sut worker) q {:args [gag-ids gav-ids], :key-fn :snake_case})
                (str/join " ")
                (str description " ")))]
 
@@ -321,24 +307,15 @@
 ;; represents a probable state of an item that can be sampled randomly
 (defrecord ItemSample [i_id, i_u_id, i_status, i_end_date, i_num_bids])
 
-(defn- project-item-status
-  [i_status, ^Instant i_end_date, i_num_bids, ^Instant now]
-  (let [remaining (- (.toEpochMilli i_end_date) (.toEpochMilli now))
-        item-ending-soon-ms (* 36000 1000)]
-    (cond
-      (<= remaining 0) :closed
-      (< remaining item-ending-soon-ms) :ending-soon
-      (and (pos? i_num_bids) (not= :closed i_status)) :waiting-for-purchase
-      :else i_status)))
-
-(defn item-status-groups [node ^Instant now]
-  (let [items (q-now node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
-                            :where [(match :item {:xt/id i})
-                                    [i :i_id i_id]
-                                    [i :i_u_id i_u_id]
-                                    [i :i_status i_status]
-                                    [i :i_end_date i_end_date]
-                                    [i :i_num_bids i_num_bids]]})
+(defn item-status-groups [node]
+  (let [items (xt/q node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
+                           :where [(match :item {:xt/id i})
+                                   [i :i_id i_id]
+                                   [i :i_u_id i_u_id]
+                                   [i :i_status i_status]
+                                   [i :i_end_date i_end_date]
+                                   [i :i_num_bids i_num_bids]]}
+                    {:key-fn :snake_case})
         all (ArrayList.)
         open (ArrayList.)
         ending-soon (ArrayList.)
@@ -370,9 +347,8 @@
 ;; do every now and again to provide inputs for item-dependent computations
 (defn index-item-status-groups [worker]
   (let [{:keys [sut, ^ConcurrentHashMap custom-state]} worker
-        now (b2/current-timestamp worker)
         node sut
-        res (item-status-groups node now)]
+        res (item-status-groups node)]
     (.putAll custom-state {:item-status-groups res #_(item-status-groups node now)})
     #_(with-open [db (xt/open-db sut)]
         (.putAll custom-state {:item-status-groups (item-status-groups db now)}))))
@@ -455,7 +431,7 @@
             :in [i_id]
             :where [(match :item {:xt/id i_id :i_status :open :i_u_id i_u_id
                                   :i_initial_price i_initial_price :i_current_price i_current_price})]}]
-    (q-now sut [q i_id])))
+    (xt/q sut q {:args [i_id], :key-fn :snake_case})))
 
 (defn read-category-tsv []
   (let [cat-tsv-rows
@@ -560,6 +536,7 @@
        #_(.plus ^Instant (b2/current-timestamp worker) (Duration/ofDays 32))
        :i_status i_status})))
 
+#_{:clj-kondo/ignore [:unused-private-var]}
 (defn- wrap-in-logging [f]
   (fn [& args]
     (log/trace (str "Start of " f))
@@ -575,6 +552,7 @@
         (log/error t (str "Error while executing " f))
         (throw t)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn benchmark [{:keys [seed,
                          threads,
                          duration
