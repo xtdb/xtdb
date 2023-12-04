@@ -12,8 +12,7 @@
 
 (defn q-now [node q+args]
   (xt/q node q+args
-        {:basis {:after-tx (:latest-completed-tx (xt/status node))}
-         :key-fn :snake_case}))
+        {:key-fn :snake_case}))
 
 (defn random-price [worker] (.nextDouble (b2/rng worker)))
 
