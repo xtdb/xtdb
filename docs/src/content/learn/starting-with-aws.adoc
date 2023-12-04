@@ -140,4 +140,4 @@ curl http://<LoadBalancerURL>/status
 
 NOTE: As our nodes are behind an application load balancer, be aware that messages sent over HTTP will be spread across the nodes, so you may see some differing values coming back from the status as each node in the cluster processes new transactions.
 
-Should the above be successful, you should be ready to go with an XTDB cluster! For more information on performing operations on the node over HTTP, see **TODO: <HTTP TUTORIAL LINK>**.
+Should the above be successful, you should be ready to go with an XTDB cluster! For more information on performing operations on the node over HTTP, see the https://docs.xtdb.com/openapi/index.html[**HTTP API docs**].
