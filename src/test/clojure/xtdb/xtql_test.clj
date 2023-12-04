@@ -637,17 +637,13 @@
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id e :foo 1}])
                              (where (not (exists? (from :docs [{:xt/id $e} {:first-name "Petr"}])
-                                                  {:args [e]}))))
-                        ))))
+                                                  {:args [e]}))))))))
 
     (t/is (= []
              (xt/q tu/*node*
                    '(-> (from :docs [{:xt/id e :foo n}])
                         (where (not (exists? (from :docs [{:xt/id $e} {:foo $n}])
                                              {:args [e n]})))))))
-
-
-
 
     (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :sergei}}
              (set (xt/q tu/*node*
@@ -667,12 +663,10 @@
 
     (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
              (set (xt/q tu/*node*
-                        '{:find [e n]
-                          :where [(match :docs {:xt/id e})
-                                  [e :first-name n]
-                                  (not-exists? {:find []
-                                                :in [n]
-                                                :where [[(= "Ivan" n)]]})]}))))
+                        '(-> (from :docs [{:xt/id e, :first-name n}])
+                             (where (not (exists? (-> (table [{}] [])
+                                                      (where (= "Ivan" $n)))
+                                                  {:args [n]}))))))))
 
 
     (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
