@@ -371,90 +371,134 @@
              (xt/q tu/*node*
                    '(unify
                      (with {b 2} {b 3})))))))
-#_
+
 (deftest test-aggregate-exprs
-  (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :foo, :category :c0, :v 1})
-                                    (xt/put :docs {:xt/id :bar, :category :c0, :v 2})
-                                    (xt/put :docs {:xt/id :baz, :category :c1, :v 4})])]
-    (t/is (= [{:category :c0, :sum-doubles 6}
-              {:category :c1, :sum-doubles 8}]
-             (xt/q tu/*node*
-                   '{:find [category (sum (* 2 v))]
-                     :keys [category sum-doubles]
-                     :where [(match :docs {:xt/id e})
-                             [e :category category]
-                             [e :v v]]}))))
+  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :foo, :category :c0, :v 1})
+                           (xt/put :docs {:xt/id :bar, :category :c0, :v 2})
+                           (xt/put :docs {:xt/id :baz, :category :c1, :v 4})])
+
+  (t/is (= [{:category :c0, :sum-doubles 6}
+            {:category :c1, :sum-doubles 8}]
+           (xt/q tu/*node*
+                 '(-> (from :docs [{:category category :v v}])
+                      (aggregate category {:sum-doubles (sum (* 2 v))})))))
+
+  (t/is (= [{:cat :c0, :sum-doubles 12}
+            {:cat :c1, :sum-doubles 16}]
+           (xt/q tu/*node*
+                 '(-> (from :docs [{:category category :v v}])
+                      (aggregate {:cat category} {:sum-doubles (* 2 (sum (* 2 v)))})))))
+
+  (t/is (= [{:category :c0, :sum-doubles 72}
+            {:category :c1, :sum-doubles 128}]
+           (xt/q tu/*node*
+                 '(-> (from :docs [{:category category :v v}])
+                      (aggregate category {:sum-doubles (* 2 (*
+                                                              (* 2 (sum v))
+                                                              (sum (* 2 v))))})))))
+  (t/is (= [{:v 1, :v-double 2} {:v 4, :v-double 8} {:v 2, :v-double 4}]
+           (xt/q tu/*node*
+                 '(-> (from :docs [{:category category :v v}])
+                      (aggregate v {:v-double (* 2 v)}))))
+        "non-agg expression over grouping col")
 
   (t/is (= [{:x 0, :sum-y 0, :sum-expr 1}
             {:x 1, :sum-y 1, :sum-expr 5}
             {:x 2, :sum-y 3, :sum-expr 14}
             {:x 3, :sum-y 6, :sum-expr 30}]
            (xt/q tu/*node*
-                 ['{:find [x (sum y) (sum (+ (* y y) x 1))]
-                    :keys [x sum-y sum-expr]
-                    :in [[[x y]]]}
-                  (for [x (range 4)
-                        y (range (inc x))]
-                    [x y])])))
+                  '(-> (table $in [x y])
+                       (aggregate x {:sum-y (sum y)
+                                     :sum-expr (sum (+ (* y y) x 1))}))
+                  {:args {:in (for [x (range 4)
+                                    y (range (inc x))]
+                                {:x x :y y})}})))
 
   (t/is (= [{:sum-evens 20}]
+
            (xt/q tu/*node*
-                 ['{:find [(sum (if (= 0 (mod x 2)) x 0))]
-                    :keys [sum-evens]
-                    :in [[x ...]]}
-                  (range 10)]))
+                 '(-> (table $in [x])
+                      (aggregate {:sum-evens (sum (if (= 0 (mod x 2)) x 0))}))
+                 {:args {:in (map (partial hash-map :x) (range 10))}}))
         "if")
-
-  ;; TODO aggregates nested within other aggregates/forms
-  ;; - doesn't appear in TPC-H but guess we'll want these eventually
-
-  #_
-  (t/is (= #{[28.5]}
-           (xt/q (xt/db *api*)
-                 ['{:find [(/ (double (sum (* ?x ?x)))
-                              (count ?x))]
-                    :in [[?x ...]]}
-                  (range 10)]))
-        "aggregates can be included in exprs")
-
-  #_
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"nested agg"
-                          (xt/q (xt/db *api*)
-                                ['{:find [(sum (sum ?x))]
-                                   :in [[?x ...]]}
-                                 (range 10)]))
-        "aggregates can't be nested")
-
-  (t/testing "implicitly groups by variables present outside of aggregates"
-    (t/is (= [{:x-div-y 1, :sum-z 2} {:x-div-y 2, :sum-z 3} {:x-div-y 2, :sum-z 5}]
-             (xt/q tu/*node*
-                   ['{:find [(/ x y) (sum z)]
-                      :keys [x-div-y sum-z]
-                      :in [[[x y z]]]}
-                    [[1 1 2]
-                     [2 1 3]
-                     [4 2 5]]]))
-          "even though (/ x y) yields the same result in the latter two rows, we group by them individually")
-
-    #_
-    (t/is (= #{[1 3] [1 7] [4 -1]}
-             (xt/q tu/*node*
-                   ['{:find [x (- (sum z) y)]
-                      :in [[[x y z]]]}
-                    [[1 1 4]
-                     [1 3 2]
-                     [1 3 8]
-                     [4 6 5]]]))
-          "groups by x and y in this case"))
 
   (t/testing "stddev aggregate"
     (t/is (= [{:y 23.53720459187964}]
              (xt/q tu/*node*
-                   ['{:find [(stddev-pop x)]
-                      :keys [y]
-                      :in [[x ...]]}
-                    [10 15 20 35 75]])))))
+                   '(-> (table [{:x 10} {:x 15} {:x 20} {:x 35} {:x 75}] [x])
+                        (aggregate {:y (stddev-pop x)}))))))
+
+  (t/is (= [{:out 28.5}]
+           (xt/q tu/*node*
+                  '(-> (table $in [x])
+                       (aggregate {:out (/ (double (sum (* x x)))
+                                           (count x))}))
+                  {:args {:in (map (partial hash-map :x) (range 10))}}))
+        "aggregates can be included in exprs")
+
+  ;TODO currently we require explicit groupings, however detecting the error case of
+  ;variables referenced outside of agg-exprs is the same logic required to add them implicitly as
+  ;grouping cols, so this can be easily done if desired.
+
+  #_(t/testing "implicitly groups by variables present outside of aggregates"
+      (t/is (= [{:x-div-y 1, :sum-z 2} {:x-div-y 2, :sum-z 3} {:x-div-y 2, :sum-z 5}]
+               (xt/q tu/*node*
+                     ['{:find [(/ x y) (sum z)]
+                        :keys [x-div-y sum-z]
+                        :in [[[x y z]]]}
+                      [[1 1 2]
+                       [2 1 3]
+                       [4 2 5]]]))
+            "even though (/ x y) yields the same result in the latter two rows, we group by them individually")
+
+      (t/is (= #{[1 3] [1 7] [4 -1]}
+               (xt/q tu/*node*
+                     ['{:find [x (- (sum z) y)]
+                        :in [[[x y z]]]}
+                      [[1 1 4]
+                       [1 3 2]
+                       [1 3 8]
+                       [4 6 5]]]))
+            "groups by x and y in this case"))
+
+
+  (t/testing "Error Cases"
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Variables outside of aggregate expressions must be grouping columns"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs [{:category category :v v}])
+                                       (aggregate category {:sum-doubles (* v (sum v))})))))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Aggregate functions cannot be nested"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs [v])
+                                       (aggregate {:sum-doubles (sum (count v))})))))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Not all variables in expression are in scope"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs [v])
+                                       (aggregate {:sum-doubles (sum y)})))))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Not all variables in expression are in scope"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs [v])
+                                       (aggregate y {:sum-doubles (+ y (sum v))})))))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Not all variables in expression are in scope"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs [v])
+                                       (aggregate y)))))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Not all variables in expression are in scope"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs [v])
+                                       (aggregate {:sum-doubles (+ y (sum v))})))))))
 
 (deftest test-composite-value-bindings
   (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :map {:foo 1} :set #{1 2 3}})])

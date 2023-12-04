@@ -3,6 +3,7 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
+            [xtdb.operator.group-by :as group-by]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw]
             [xtdb.xtql.edn :as xt.edn])
@@ -102,11 +103,18 @@
 (declare plan-arg-spec)
 
 (def ^:dynamic *subqueries* nil)
+(def ^:dynamic *agg-fns* nil)
 
 (defn expr-subquery-required-vars [subquery-args]
   ;; planning arg-specs here to get required vars, could call required-vars on the exprs
   ;; directly, but wanted to avoid duplicating that code.
   (apply set/union (map (comp :required-vars plan-arg-spec) subquery-args)))
+
+(def ^:private aggregate-fn? (->> group-by/->aggregate-factory
+                                  (methods)
+                                  (keys)
+                                  (map symbol)
+                                  (set)))
 
 (extend-protocol ExprPlan
   Expr$LogicVar
@@ -139,8 +147,20 @@
   (required-vars [_] #{})
 
   Expr$Call
-  (plan-expr [call] (list* (symbol (.f call)) (mapv plan-expr (.args call))))
-  (required-vars [call] (into #{} (mapcat required-vars) (.args call)))
+  (plan-expr [call]
+    (let [fn (symbol (.f call))
+          placeholder (expr-subquery-placeholder)]
+      (if (aggregate-fn? fn)
+        (do (swap! *agg-fns* conj {:agg-fn fn
+                                   :placeholder placeholder
+                                   :sub-expr (.args call)})
+            placeholder)
+
+        (list* (symbol (.f call)) (mapv plan-expr (.args call))))))
+  (required-vars [call]
+    (if (aggregate-fn? (symbol (.f call)))
+      #{} ;; required vars should not traverse into aggregate fns, agg-fn sub-exprs are planned independently
+      (into #{} (mapcat required-vars) (.args call))))
 
   Expr$Get
   (plan-expr [this] (list '. (plan-expr (.expr this)) (keyword (.field this)))) ;;keywords are safer than symbols in the RA plan
@@ -207,10 +227,12 @@
   (required-vars [_] nil))
 
 (defn plan-expr-with-subqueries [expr]
-  (binding [*subqueries* (atom [])]
+  (binding [*subqueries* (atom [])
+            *agg-fns* (atom [])]
     (let [planned-expr (plan-expr expr)]
       {:expr planned-expr
-       :subqueries @*subqueries*})))
+       :subqueries @*subqueries*
+       :agg-fns @*agg-fns*})))
 
 (defn- required-vars-available? [expr provided-vars]
   (let [required-vars (required-vars expr)]
@@ -475,8 +497,13 @@
   (let [col (col-sym (.attr col-spec))
         spec-expr (.expr col-spec)
         _ (required-vars-available? spec-expr provided-vars)
-        {:keys [subqueries expr]} (plan-expr-with-subqueries spec-expr)]
-    {:l col :r expr :subqueries subqueries :logic-var? (instance? Expr$LogicVar spec-expr)}))
+        required-vars (required-vars spec-expr)
+        {:keys [subqueries expr agg-fns]} (plan-expr-with-subqueries spec-expr)]
+    {:l col :r expr
+     :subqueries subqueries
+     :agg-fns agg-fns
+     :required-vars required-vars
+     :logic-var? (instance? Expr$LogicVar spec-expr)}))
 
 (defn- plan-var-spec [^VarSpec spec]
   (let [var (col-sym (.attr spec))
@@ -766,19 +793,62 @@
        :provided-vars provided-vars}))
 
   Query$Aggregate
-  (plan-query-tail [this {:keys [ra-plan _provided-vars]}]
-    ;;TODO check provided vars for all vars in aggr specs
-    ;;TODO check exprs are aggr exprs
-    (let [planned-specs
-          (mapv
-           (fn [col]
-             (if (instance? Expr$LogicVar (.expr ^ColSpec col))
-               (plan-expr (.expr ^ColSpec col))
-               {(col-sym (.attr ^ColSpec col)) (plan-expr (.expr ^ColSpec col))}))
-           (.cols this))]
-      {:ra-plan [:group-by planned-specs
-                 ra-plan]
-       :provided-vars (set (map #(if (map? %) (first (keys %)) %) planned-specs))}))
+  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+    (let [planned-specs (map #(plan-col-spec % provided-vars) (.cols this))
+          groups (group-by (comp boolean seq :agg-fns) planned-specs)
+
+          aggregate-specs (mapcat (fn [{:keys [agg-fns]}]
+                                    (for [{:keys [placeholder sub-expr agg-fn]} agg-fns
+                                          :let [planned-sub-exprs
+                                                (for [sub-e sub-expr]
+                                                  (let [_ (required-vars-available? sub-e provided-vars)
+                                                        {:keys [expr agg-fns subqueries]} (plan-expr-with-subqueries sub-e)]
+                                                    (when (seq subqueries)
+                                                      (throw
+                                                       (UnsupportedOperationException. "TODO: Add support for subqueries in aggr expr")))
+                                                    (when (seq agg-fns)
+                                                      (throw
+                                                       (err/illegal-arg
+                                                        :xtql/invalid-expression
+                                                        {:expr sub-expr
+                                                         ::err/message "Aggregate functions cannot be nested"})))
+                                                    {:sub-expr-placeholder (expr-subquery-placeholder)
+                                                     :expr expr}))]]
+                                      {:sub-exprs planned-sub-exprs
+                                       :agg-fn (list* agg-fn (map :sub-expr-placeholder planned-sub-exprs))
+                                       :placeholder placeholder}))
+                                  (get groups true))
+          grouping-cols (keep #(when (:logic-var? %) (:r %)) (get groups false))
+          output-projections (for [{:keys [l r subqueries]} planned-specs]
+                               (do (when (seq subqueries)
+                                     (throw
+                                      (UnsupportedOperationException. "TODO: Add support for subqueries in aggr output expr")))
+                                   {l r}))
+          grouping-cols-set (set grouping-cols)]
+
+      (doseq [{:keys [required-vars expr]} planned-specs]
+        (when-not (set/subset? required-vars grouping-cols-set)
+          (throw
+           (err/illegal-arg
+            :xtql/invalid-expression
+            {:expr expr :required-vars required-vars :grouping-cols grouping-cols-set
+             ::err/message "Variables outside of aggregate expressions must be grouping columns"}))))
+
+      {:ra-plan  [:project (vec output-projections)
+                  [:group-by
+                   (vec (concat
+                         grouping-cols
+                         (mapv (fn [{:keys [agg-fn placeholder]}]
+                                 {placeholder agg-fn})
+                               aggregate-specs)))
+                   (if-let [sub-expr-projections ;;Handles agg-fns with no-sub-exprs such as count-star
+                            (seq (mapcat #(for [{:keys [sub-expr-placeholder expr]} (:sub-exprs %)]
+                                            {sub-expr-placeholder expr})
+                                         aggregate-specs))]
+                     [:map (vec sub-expr-projections)
+                      ra-plan]
+                     ra-plan)]]
+       :provided-vars (set (map :l planned-specs))}))
 
   Query$Limit
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
