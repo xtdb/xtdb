@@ -18,4 +18,6 @@ applications:
       cache:
         paths:
           - node_modules/**/*
+          - ~/.m2/repository
+          - ~/.gradle/caches
     appRoot: docs
