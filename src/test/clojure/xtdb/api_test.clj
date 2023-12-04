@@ -7,8 +7,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
-           (java.time Duration ZoneId)
-           xtdb.types.ClojureForm))
+           (java.time Duration ZoneId)))
 
 (t/use-fixtures :each
   (tu/with-each-api-implementation
@@ -22,68 +21,56 @@
   (t/is (map? (xt/status *node*))))
 
 (t/deftest test-simple-query
-  (let [tx (xt/submit-tx *node* [(xt/put :xt_docs {:xt/id :foo, :inst #inst "2021"})])]
+  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :inst #inst "2021"})])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
-             (xt/q *node*
-                   '{:find [e inst]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :inst inst]]})))))
+             (xt/q *node* '(from :docs [{:xt/id e} inst]))))))
 
 (t/deftest test-validation-errors
   (t/is (thrown? IllegalArgumentException
-                 (-> (xt/submit-tx *node* [[:pot :xt_docs {:xt/id :foo}]])
+                 (-> (xt/submit-tx *node* [[:pot :docs {:xt/id :foo}]])
                      (util/rethrowing-cause))))
 
   (t/is (thrown? IllegalArgumentException
-                 (-> (xt/submit-tx *node* [(xt/put :xt_docs {})])
+                 (-> (xt/submit-tx *node* [(xt/put :docs {})])
                      (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
-  (let [tx (xt/submit-tx *node* [(xt/put :xt_docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]})
-                                 (-> (xt/sql-op "INSERT INTO xt_docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])")
+  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]})
+                                 (-> (xt/sql-op "INSERT INTO docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])")
                                      (xt/with-op-args [4]))])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
-             (xt/q *node*
-                   '{:find [id list]
-                     :where [(match :xt_docs [{:xt/id id}])
-                             [id :list list]]}
+             (xt/q *node* '(from :docs [{:xt/id id} list])
                    {:basis-timeout (Duration/ofSeconds 1)})))
 
     (t/is (= [{:xt$id :foo, :list [1 2 ["foo" "bar"]]}
               {:xt$id "bar", :list [4 2 8]}]
              (xt/q *node*
-                   "SELECT b.xt$id, b.list FROM xt_docs b"
+                   "SELECT b.xt$id, b.list FROM docs b"
                    {:basis-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
-  (let [tx (xt/submit-tx *node* [(xt/put :xt_docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}})])]
+  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}})])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
-             (xt/q *node*
-                   '{:find [id v]
-                     :where [(match :xt_docs [{:xt/id id}])
-                             [id :v v]]})))
+             (xt/q *node* '(from :docs [{:xt/id id} v]))))
 
     (t/is (= [{:xt$id :foo, :v #{1 2 #{"foo" "bar"}}}]
-             (xt/q *node* "SELECT b.xt$id, b.v FROM xt_docs b")))))
+             (xt/q *node* "SELECT b.xt$id, b.v FROM docs b")))))
 
 (t/deftest round-trips-structs
-  (let [tx (xt/submit-tx *node* [(xt/put :xt_docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}})
-                                 (xt/put :xt_docs {:xt/id :bar, :struct {:a true, :d 42.0}})])]
+  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}})
+                                 (xt/put :docs {:xt/id :bar, :struct {:a true, :d 42.0}})])]
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
-             (set (xt/q *node*
-                        '{:find [id struct]
-                          :where [(match :xt_docs [{:xt/id id}])
-                                  [id :struct struct]]}))))))
+             (set (xt/q *node* '(from :docs [{:xt/id id} struct])))))))
 
 (deftest round-trips-temporal
   (let [vs {:dt #time/date "2022-08-01"
@@ -117,22 +104,20 @@
                           {:default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-system-time-47
-  (let [tx1 (xt/submit-tx *node* [(xt/put :xt_docs {:xt/id :foo})]
+  (let [tx1 (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo})]
                           {:system-time #inst "2012"})
 
-        _invalid-tx (xt/submit-tx *node* [(xt/put :xt_docs {:xt/id :bar})]
+        _invalid-tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :bar})]
                                   {:system-time #inst "2011"})
 
-        tx3 (xt/submit-tx *node* [(xt/put :xt_docs {:xt/id :baz})])]
+        tx3 (xt/submit-tx *node* [(xt/put :docs {:xt/id :baz})])]
 
     (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2012")})
              tx1))
 
     (letfn [(q-at [tx]
               (->> (xt/q *node*
-                         '{:find [id]
-                           :where [(match :xt_docs {:xt/id e})
-                                   [e :xt/id id]]}
+                         '(from :docs [{:xt/id id}])
                          {:basis {:tx tx}
                           :basis-timeout (Duration/ofSeconds 1)})
                    (into #{} (map :id))))]
@@ -459,35 +444,28 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                     VALUES (9012, 5678, 'Happy 2050!', DATE '2050-01-01')")])
 
   (t/is (= [{:text "Happy 2050!"}]
-           (xt/q *node*
-                 "SELECT posts.text FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
+           (xt/q *node* "SELECT posts.text FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
 
   (t/is (= []
-           (xt/q *node*
-                 "SELECT posts.text FROM posts"
-                 {:default-all-valid-time? false})))
+           (xt/q *node* "SELECT posts.text FROM posts")))
 
   (xt/submit-tx *node*
-                [(xt/sql-op
-                   "INSERT INTO t1 SELECT posts.xt$id, posts.text FROM posts")]
-                {:default-all-valid-time? false})
+                [(xt/sql-op "INSERT INTO t1 SELECT posts.xt$id, posts.text FROM posts")])
 
   (t/is (= []
-           (xt/q *node*
-                 "SELECT t1.text FROM t1 FOR ALL VALID_TIME"
-                 {:default-all-valid-time? false}))))
+           (xt/q *node* "SELECT t1.text FROM t1 FOR ALL VALID_TIME"))))
 
 (deftest test-submit-tx-system-time-opt
   (t/is (thrown-with-msg?
          xtdb.IllegalArgumentException
          #"system-time must be an inst, supplied value: null"
-         (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO xt_docs (xt$id) VALUES (1)")]
+         (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO docs (xt$id) VALUES (1)")]
                        {:system-time nil})))
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
          #"system-time must be an inst, supplied value: foo"
-         (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id 1})]
+         (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1})]
                        {:system-time "foo"}))))
 
 (t/deftest test-basic-xtql-dml

@@ -296,11 +296,7 @@
                                           :foo "foo"})])
     (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}
               {:id "no-bar", :foo "foo"}]
-             (xt/q node '{:find [id foo bar]
-                          :where [(match :xt_docs {:xt/id e})
-                                  [e :xt/id id]
-                                  [e :foo foo]
-                                  [e :bar bar]]})))))
+             (xt/q node '(from :xt_docs [{:xt/id id} foo bar]))))))
 
 (t/deftest round-trips-extensions-via-ipc
   (let [node-dir (util/->path "target/round-trips-extensions-via-ipc")
@@ -314,15 +310,11 @@
       (tu/finish-chunk! node)
 
       (t/is (= #{{:id :foo, :uuid uuid}}
-               (set (xt/q node '{:find [id uuid]
-                                 :where [(match :xt_docs {:xt/id id})
-                                         [id :uuid uuid]]})))))
+               (set (xt/q node '(from :xt_docs [{:xt/id id} uuid]))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (t/is (= #{{:id :foo, :uuid uuid}}
-               (set (xt/q node '{:find [id uuid]
-                                 :where [(match :xt_docs {:xt/id id})
-                                         [id :uuid uuid]]})))))))
+               (set (xt/q node '(from :xt_docs [{:xt/id id} uuid]))))))))
 
 (t/deftest writes-log-file
   (let [node-dir (util/->path "target/writes-log-file")]

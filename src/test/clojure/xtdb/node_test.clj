@@ -114,7 +114,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
-            (->> (for [[tk tn] {:xt "xt_docs"
+            (->> (for [[tk tn] {:xt "docs"
                                 :t1 "explicit_table1"
                                 :t2 "explicit_table2"}]
                    [tk (->> (xt/q tu/*node* (format "SELECT t.xt$id, t.v FROM %s t WHERE t.xt$valid_to = END_OF_TIME" tn))
@@ -122,14 +122,14 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                  (into {})))]
 
     (xt/submit-tx tu/*node*
-                  [(xt/put :xt_docs {:xt/id :foo, :v "implicit table"})
+                  [(xt/put :docs {:xt/id :foo, :v "implicit table"})
                    (xt/put :explicit_table1 {:xt/id :foo, :v "explicit table 1"})
                    (xt/put :explicit_table2 {:xt/id :foo, :v "explicit table 2"})])
 
     (t/is (= {:xt #{"implicit table"}, :t1 #{"explicit table 1"}, :t2 #{"explicit table 2"}}
              (foos)))
 
-    (xt/submit-tx tu/*node* [(xt/delete :xt_docs :foo)])
+    (xt/submit-tx tu/*node* [(xt/delete :docs :foo)])
 
     (t/is (= {:xt #{}, :t1 #{"explicit table 1"}, :t2 #{"explicit table 2"}}
              (foos)))
@@ -299,16 +299,13 @@ WHERE foo.xt$id = 1")])]
            (xt/q tu/*node* "SELECT foo.xt$id foo, foo.x FROM foo LEFT JOIN bar USING (xt$id) WHERE foo.x = bar.x"))))
 
 (t/deftest test-c1-importer-abort-op
-  (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :foo})])
+  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :foo})])
 
-  (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id :bar})
+  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :bar})
                            Ops/ABORT
-                           (xt/put :xt_docs {:xt/id :baz})])
+                           (xt/put :docs {:xt/id :baz})])
   (t/is (= [{:id :foo}]
-           (xt/q tu/*node*
-                 '{:find [id]
-                   :where [(match :xt_docs [{:xt/id id}])
-                           [id :xt$id]]}))))
+           (xt/q tu/*node* '(from :docs [{:xt/id id}])))))
 
 (t/deftest test-list-round-trip-2342
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO t3(xt$id, data) VALUES (1, [2, 3])")
@@ -367,41 +364,34 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
                {:tx-id 2, :tx-time (time/->zdt #inst "2020-01-03"), :committed? true}
                {:tx-id 3, :tx-time (time/->zdt #inst "2020-01-04"), :committed? false}}
              (set (xt/q tu/*node*
-                        '{:find [tx-id tx-time committed?]
-                          :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?})]}))))
+                        '(from :xt/txs [{:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?}])))))
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
-                   ['{:find [committed?]
-                      :in [tx-id]
-                      :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
-                    1])))
+                   '(from :xt/txs [{:xt/id $tx-id, :xt/committed? committed?}])
+                   {:args {:tx-id 1}})))
 
     (t/is (thrown-with-msg?
            RuntimeException
            #":xtdb\.call/error-evaluating-tx-fn"
 
            (throw (-> (xt/q tu/*node*
-                            ['{:find [err]
-                               :in [tx-id]
-                               :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
-                             3])
+                            '(from :xt/txs [{:xt/id $tx-id, :xt/error err}])
+                            {:args {:tx-id 3}})
                       first
                       :err))))))
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
     (xt/submit-tx tu/*node*
-                  [(xt/sql-op "INSERT INTO xt_docs (xt$id, xt$valid_from, xt$valid_to)
-                              VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
-                                     (1, DATE '2030-01-01', DATE '2020-01-01')")])
+                  [(xt/sql-op "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to)
+                               VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
+                                      (1, DATE '2030-01-01', DATE '2020-01-01')")])
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
-                   ['{:find [committed?]
-                      :in [tx-id]
-                      :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
-                    0])))))
+                   '(from :xt/txs [{:xt/id $tx-id, :xt/committed? committed?}])
+                   {:args {:tx-id 0}})))))
 
 (t/deftest test-nulling-valid-time-columns-2504
   (xt/submit-tx tu/*node* [(-> (xt/sql-op "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (1, NULL, ?), (2, ?, NULL), (3, NULL, NULL)")
@@ -409,9 +399,8 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
   (t/is (= #{{:id 1, :vf (time/->zdt #inst "2020"), :vt (time/->zdt #inst "3000")}
              {:id 2, :vf (time/->zdt #inst "3000"), :vt nil}
              {:id 3, :vf (time/->zdt #inst "2020"), :vt nil}}
-           (set (xt/q tu/*node* '{:find [id vf vt]
-                                  :where [($ :docs {:xt/id id, :xt/valid-from vf, :xt/valid-to vt}
-                                             {:for-valid-time :all-time})]})))))
+           (set (xt/q tu/*node* '(from :docs {:bind [{:xt/id id, :xt/valid-from vf, :xt/valid-to vt}]
+                                              :for-valid-time :all-time}))))))
 
 (deftest test-select-star
   (xt/submit-tx tu/*node*
@@ -503,9 +492,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
 (t/deftest non-namespaced-keys-for-structs-2418
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO foo(xt$id, bar) VALUES (1, OBJECT('c$d': 'bar'))")])
   (t/is (= [{:bar {:c/d "bar"}}]
-           (xt/q tu/*node*
-                 '{:find [bar]
-                   :where [(match :foo [bar])]}))))
+           (xt/q tu/*node* '(from :foo [bar])))))
 
 (t/deftest large-xt-stars-2484
   (letfn [(rand-str [l]
@@ -519,6 +506,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
         (xt/submit-tx node (for [doc docs]
                              (xt/put :docs doc)))
 
+        #_ ; FIXME #2923
         (t/is (= (set docs)
                  (->> (xt/q node '{:find [e] :where [(match :docs {:xt/* e})]})
                       (into #{} (map :e)))))))))

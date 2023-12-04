@@ -92,9 +92,8 @@
 
               (q []
                 (->> (xt/q node
-                           '{:find [id]
-                             :where [($ :foo {:xt/id id})]
-                             :order-by [[id]]})
+                           '(-> (from :foo [{:xt/id id}])
+                                (order-by id)))
                      (map :id)))]
 
         (submit! (range 100))
