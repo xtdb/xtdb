@@ -36,19 +36,178 @@ where:
 * `to` (timestamp): may be `nil`.
     Defaults to the end-of-time if not provided.
 
+=== `insert-into`
+
+Inserts documents into a table from the given query.
+
+`(xt/insert-into <table> <query>)`
+
+* `table` (keyword): table to insert into.
+* `query` (link:./queries[`Query`]).
+** The query must return an `xt/id` column.
+** To specify a valid-time range, the query may return `xt/valid-from` and/or `xt/valid-to` columns.
+   If not provided, these will default as per link:#_put[`put`].
+
+For example:
+
+[source,clojure]
+----
+(xt/insert-into :users
+                '(from :old-users [xt/id {:first-name given-name} {:last-name family-name}]))
+
+;; equivalent to:
+;; "INSERT INTO users SELECT xt$id, first_name AS given_name, last_name AS family_name FROM old_users"
+----
+
+=== `update-table`
+
+Updates documents in a given table based on the provided query.
+
+`(xt/update-table <table> <opts> <unify-clauses*>)`
+
+* `table` (keyword): table to update.
+* `opts` (map):
+** `:bind-spec` (link:./queries#binding_specs[`BindingSpec`], optional): select the documents to update using binding constraints.
+*** If not provided, this will update every document in the table.
+*** May also bind extra logic variables for use in the `:set` clause or `unify-clauses`.
+** `:set` (map, keyword -> link:./queries#expressions[`Expr`]): columns to update.
+***
+* `unify-clauses` (link:./queries#unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#unify[`unify`] for more details.
+
+For example:
+
+[source,clojure]
+----
+(-> (xt/update-table :users {:bind [{:email $email}, version],
+                             :set {:version (inc version)}})
+    (xt/with-op-args {:email "james@example.com"}))
+
+;; equivalent to:
+;; "UPDATE users SET version = version + 1 WHERE email = 'james@example.com'"
+----
+
+To specify a valid-time range:
+
+* `+(-> (xt/update-table ...) (xt/starting-from <from>))+`
+* `+(-> (xt/update-table ...) (xt/until <to>))+`
+* `+(-> (xt/update-table ...) (xt/during <from> <to))+`
+
+with default behaviour as per link:#_put[`put`], above.
+
 === `delete`
 
 Deletes a document from the given table, optionally during the given valid time period.
 
 `(xt/delete <table> <id>)`
 
-See `put` for options.
+To specify a valid-time range:
+
+* `+(-> (xt/delete ...) (xt/starting-from <from>))+`
+* `+(-> (xt/delete ...) (xt/until <to>))+`
+* `+(-> (xt/delete ...) (xt/during <from> <to))+`
+
+with default behaviour as per link:#_put[`put`], above.
+
+=== `delete-from`
+
+Deletes documents from the given table, based on the provided query.
+
+`(xt/delete-from <table> <bind-spec> <unify-clauses>*)`
+
+* `table` (keyword): table to delete from.
+* `bind-spec` (link:./queries#binding_specs[`BindingSpec`], optional): select the documents to delete using binding constraints.
+** If not provided, this will delete every document in the table.
+** May also bind extra logic variables for use in the `unify-clauses`.
+* `unify-clauses` (link:./queries#unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#unify[`unify`] for more details.
+
+For example:
+
+[source,clojure]
+----
+(xt/delete-from :users {:email "james@example.com"})
+
+;; equivalent to:
+;; "DELETE FROM users WHERE email = 'james@example.com'"
+
+
+(xt/delete-from :posts {:bind [author-id]}
+                (from :authors [{:xt/id author-id, :email "james@example.com"}]))
+
+;; equivalent to:
+;; "DELETE FROM users
+;;  WHERE author_id IN (SELECT author_id FROM email = 'james@example.com'")
+----
+
+To specify a valid-time range:
+
+* `+(-> (xt/delete-from ...) (xt/starting-from <from>))+`
+* `+(-> (xt/delete-from ...) (xt/until <to>))+`
+* `+(-> (xt/delete-from ...) (xt/during <from> <to))+`
+
+with default behaviour as per link:#_put[`put`], above.
 
 === `erase`
 
 Irrevocably erase the document from the given table (including through system time), for all valid-time.
 
 `(xt/erase <table> <id>)`
+
+=== `erase-from`
+
+Irrevocably erase the document from the given table (including through system time), based on the provided query.
+
+`(xt/erase-from <table> <bind-spec> <unify-clauses>*)`
+
+* `table` (keyword): table to erase from.
+* `bind-spec` (link:./queries#binding_specs[BindingSpec]): select the documents to erase using binding constraints.
+  May also bind extra logic variables for use in the `unify-clauses`.
+* `unify-clauses` (link:./queries#unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#unify[`unify`] for more details.
+
+For example:
+[source,clojure]
+----
+(-> (xt/erase-from :users {:email $email})
+    (xt/with-op-args {:email "james@example.com"}))
+
+;; equivalent to:
+;; "ERASE FROM users WHERE email = 'james@example.com'"
+
+
+(-> (xt/erase-from :posts {:bind [author-id]}
+                   (from :authors [{:xt/id author-id, :email $email}]))
+    (xt/with-op-args {:email "james@example.com"}))
+
+;; equivalent to:
+;; "ERASE FROM users
+;;  WHERE author_id IN (SELECT author_id FROM email = ?)
+----
+
+Notes:
+
+* Erase operations apply for all valid-time.
+
+[#asserts]
+=== Asserts: `assert-exists`, `assert-not-exists`
+
+Within a transaction, `assert-exists`/`assert-not-exists` operations assert that the given query returns at least one row/no rows respectively - if not, the transaction will roll back.
+
+`(xt/assert-exists <query>)`
+
+`(xt/assert-not-exists <query>)`
+
+* `query` (link:./queries[`Query`]): query to evaluate.
+
+This can be used to enforce consistency constraints - for example, to assert that there's no user with a certain email address before adding one:
+
+[source,clojure]
+----
+[(-> (xt/assert-not-exists '(from :users [{:email $email}]))
+     (xt/with-op-args [{:email "james@example.com"}]))
+ (xt/put :users {:xt/id :james, :email "james@example.com", ...})]
+----
 
 === `call`
 
