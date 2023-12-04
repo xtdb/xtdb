@@ -1,10 +1,11 @@
-(ns xtdb.datalog.temporal-test
+(ns xtdb.xtql.temporal-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)
 
+#_ ; FIXME port to XTQL
 (deftest simple-temporal-tests
   (let [tx1 (xt/submit-tx tu/*node* [(-> (xt/put :xt_docs {:xt/id 1 :foo "2000-4000"})
                                          (xt/during #inst "2000" #inst "4000"))])
