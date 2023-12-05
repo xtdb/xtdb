@@ -132,7 +132,7 @@ After creation - there will now be a cluster of XTDB nodes running on ECS with t
 
 With the stacks set up in AWS, you should now be able to make calls to the nodes over HTTP using the `LoadBalancerUrl` from the Application Load Balancer. You can call to `GET` the status of one of the nodes:
 
-```
+```bash
 curl $LoadBalancerUrl/status
 ```
 
