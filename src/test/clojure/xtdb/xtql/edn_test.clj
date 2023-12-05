@@ -275,33 +275,33 @@
   (t/is (= '(assert-not-exists (from :users [{:email $email}]))
            (roundtrip-dml '(assert-not-exists (from :users [{:email $email}]))))))
 
-(t/deftest test-parse-table
-  (let [q '(table [{:a 12 :b "foo"} {:a 1 :c "bar"}] [a b c])]
+(t/deftest test-parse-rel
+  (let [q '(rel [{:a 12 :b "foo"} {:a 1 :c "bar"}] [a b c])]
     (t/is (= q
              (roundtrip-q q))
-          "simple static table"))
+          "simple static rel"))
 
-  (let [q '(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name last-name])
+  (let [q '(-> (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name last-name])
                (where (= "Petr" first-name)))]
     (t/is (= q
              (roundtrip-q q))
-          "table in pipeline"))
+          "rel in pipeline"))
 
   (let [q '(unify (from :docs [first-name])
-                  (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))]
+                  (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))]
     (t/is (= q
              (roundtrip-q q))
-          "table in unify"))
+          "rel in unify"))
 
-  (let [q '(table [{:foo :bar :baz {:nested-foo $nested-param}}] [foo baz])]
+  (let [q '(rel [{:foo :bar :baz {:nested-foo $nested-param}}] [foo baz])]
     (t/is (= q
              (roundtrip-q q))
-          "table with paramater in documents"))
+          "rel with paramater in documents"))
 
-  (let [q '(table $bar [foo baz])]
+  (let [q '(rel $bar [foo baz])]
     (t/is (= q
              (roundtrip-q q))
-          "table as a parameter")))
+          "rel as a parameter")))
 
 (deftest test-generated-queries
   (let [q '(unify (from :users [{:xt/id user-id} first-name last-name])

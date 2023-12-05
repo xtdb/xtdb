@@ -103,32 +103,32 @@
   ;; TODO check errors
   )
 
-(t/deftest test-parse-table
-  (let [json-q {"table" [{"a" 12 "b" {"@value" "foo"}} {"a" 1 "c" {"@value" "bar"}}]
+(t/deftest test-parse-rel
+  (let [json-q {"rel" [{"a" 12 "b" {"@value" "foo"}} {"a" 1 "c" {"@value" "bar"}}]
                 "bind" ["a" "b" "c"]}]
-    (t/is (= ['(table [{:a 12 :b "foo"} {:a 1 :c "bar"}] [a b c])
+    (t/is (= ['(rel [{:a 12 :b "foo"} {:a 1 :c "bar"}] [a b c])
               json-q]
              (roundtrip-q json-q))
-          "simple static table"))
+          "simple static rel"))
 
-  (let [json-q [{"table" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
+  (let [json-q [{"rel" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
                  "bind" ["first-name" "last-name"]}
                 {"where" [{"=" [{"@value" "Petr"} "first-name"]}]}]]
-    (t/is (= ['(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name last-name])
+    (t/is (= ['(-> (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name last-name])
                    (where (= "Petr" first-name)))
               json-q]
              (roundtrip-q json-q))
-          "table in pipeline"))
+          "rel in pipeline"))
 
   (let [json-q {"unify" [{"from" "docs"
                           "bind" ["first-name"]}
-                         {"table" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
+                         {"rel" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
                           "bind" ["first-name"]}]}]
     (t/is (= ['(unify (from :docs [first-name])
-                      (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))
+                      (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))
               json-q]
              (roundtrip-q json-q))
-          "table in unify")))
+          "rel in unify")))
 
 (t/deftest test-pipe
   (t/is (= ['(-> (from :foo [a])
@@ -254,20 +254,20 @@
                          {"limit" 10}]))))
 
 (deftest test-unnest
-  (t/is (= ['(unify (table [{:x [1 2 3]}] [x])
+  (t/is (= ['(unify (rel [{:x [1 2 3]}] [x])
                     (unnest {y x}))
-            {"unify" [{"table" [{"x" [1 2 3]}]
+            {"unify" [{"rel" [{"x" [1 2 3]}]
                        "bind" ["x"]}
                       {"unnest" [{"y" "x"}]}]}]
-           (roundtrip-q {"unify" [{"table" [{"x" [1 2 3]}]
+           (roundtrip-q {"unify" [{"rel" [{"x" [1 2 3]}]
                                    "bind" ["x"]}
                                   {"unnest" [{"y" "x"}]}]})))
 
-  (t/is (= ['(-> (table [{:x [1 2 3]}] [x])
+  (t/is (= ['(-> (rel [{:x [1 2 3]}] [x])
                  (unnest {:y x}))
-            [{"table" [{"x" [1 2 3]}]
+            [{"rel" [{"x" [1 2 3]}]
               "bind" ["x"]}
              {"unnest" [{"y" "x"}]}]]
-           (roundtrip-q [{"table" [{"x" [1 2 3]}]
+           (roundtrip-q [{"rel" [{"x" [1 2 3]}]
                           "bind" ["x"]}
                          {"unnest" [{"y" "x"}]}] ))))

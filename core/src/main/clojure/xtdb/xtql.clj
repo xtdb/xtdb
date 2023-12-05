@@ -16,7 +16,7 @@
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
                        Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify
-                       Query$Where Query$With Query$WithCols Query$Without Query$DocsTable Query$ParamTable
+                       Query$Where Query$With Query$WithCols Query$Without Query$DocsRelation Query$ParamRelation
                        Query$UnnestCol Query$UnnestVar
                        TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
 
@@ -432,10 +432,10 @@
   [:project (mapv (fn [{:keys [l r]}] {r l}) out-bindings)
    ra-plan])
 
-(defn- plan-table [table-expr out-bindings]
+(defn- plan-rel [rel-expr out-bindings]
   (when (some :literal? out-bindings)
     (throw (UnsupportedOperationException. "TODO what should literals in out specs do outside of scan")))
-  {:ra-plan (wrap-out-binding-projection {:ra-plan [:table table-expr]} out-bindings)
+  {:ra-plan (wrap-out-binding-projection {:ra-plan [:table rel-expr]} out-bindings)
    :provided-vars (set (map :r out-bindings))})
 
 (extend-protocol PlanQuery
@@ -450,16 +450,16 @@
             (plan-query (.query pipeline))
             (.tails pipeline)))
 
-  Query$DocsTable
-  (plan-query [table]
-    (plan-table (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
-                      (.documents table))
-                (mapv plan-out-spec (.bindings table))))
+  Query$DocsRelation
+  (plan-query [rel]
+    (plan-rel (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
+                    (.documents rel))
+              (mapv plan-out-spec (.bindings rel))))
 
-  Query$ParamTable
-  (plan-query [table]
-    (plan-table (plan-expr (.param table))
-                (mapv plan-out-spec (.bindings table)))))
+  Query$ParamRelation
+  (plan-query [rel]
+    (plan-rel (plan-expr (.param rel))
+              (mapv plan-out-spec (.bindings rel)))))
 
 (defn- wrap-expr-subquery [plan {:keys [placeholder subquery args type]}]
   (case type
@@ -488,7 +488,7 @@
    (fn [plan sq]
      (wrap-expr-subquery plan sq))
    plan
-  subqueries))
+   subqueries))
 
 (defn- wrap-project [plan projection]
   [:project projection plan])
@@ -583,16 +583,16 @@
 (extend-protocol PlanUnifyClause
   Query$From (plan-unify-clause [from] [[:from (plan-from from)]])
 
-  Query$DocsTable
-  (plan-unify-clause [table]
-    [[:from (plan-table (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
-                              (.documents table))
-                        (mapv plan-out-spec (.bindings table)))]])
+  Query$DocsRelation
+  (plan-unify-clause [rel]
+    [[:from (plan-rel (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
+                            (.documents rel))
+                      (mapv plan-out-spec (.bindings rel)))]])
 
-  Query$ParamTable
-  (plan-unify-clause [table]
-    [[:from (plan-table (plan-expr (.param table))
-                        (mapv plan-out-spec (.bindings table)))]])
+  Query$ParamRelation
+  (plan-unify-clause [rel]
+    [[:from (plan-rel (plan-expr (.param rel))
+                      (mapv plan-out-spec (.bindings rel)))]])
 
   Query$Where
   (plan-unify-clause [where]

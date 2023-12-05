@@ -2,8 +2,6 @@ package xtdb.query;
 
 import java.util.*;
 
-import static xtdb.query.Query.OrderDirection.ASC;
-import static xtdb.query.Query.OrderDirection.DESC;
 import static xtdb.query.QueryUtil.*;
 
 public interface Query {
@@ -367,16 +365,16 @@ public interface Query {
         return new Offset(length);
 
     }
-    final class DocsTable implements Query, UnifyClause {
+    final class DocsRelation implements Query, UnifyClause {
         public final List<Map<String, Expr>> documents;
         public final List<OutSpec> bindings;
 
-        private DocsTable(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+        private DocsRelation(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
             this.documents = documents;
             this.bindings = bindings;
         }
 
-        public DocsTable bindings(List<OutSpec> bindings) { return new DocsTable(documents, bindings); }
+        public DocsRelation bindings(List<OutSpec> bindings) { return new DocsRelation(documents, bindings); }
 
         @Override
         public String toString() {
@@ -384,11 +382,11 @@ public interface Query {
         }
     }
 
-    final class ParamTable implements Query, UnifyClause {
+    final class ParamRelation implements Query, UnifyClause {
         public final Expr.Param param;
         public final List<OutSpec> bindings;
 
-        private ParamTable(Expr.Param param, List<OutSpec> bindings) {
+        private ParamRelation(Expr.Param param, List<OutSpec> bindings) {
             this.bindings = bindings;
             this.param = param;
         }
@@ -399,12 +397,12 @@ public interface Query {
         }
     }
 
-    static DocsTable table(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
-        return new DocsTable(documents, bindings);
+    static DocsRelation relation(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+        return new DocsRelation(documents, bindings);
     }
 
-    static ParamTable table(Expr.Param param, List<OutSpec> bindings) {
-        return new ParamTable(param, bindings);
+    static ParamRelation relation(Expr.Param param, List<OutSpec> bindings) {
+        return new ParamRelation(param, bindings);
     }
 
     final class UnnestVar implements UnifyClause {

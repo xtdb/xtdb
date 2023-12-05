@@ -7,7 +7,7 @@
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
                        Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$DocsTable Query$ParamTable
+                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$DocsRelation Query$ParamRelation
                        Query$UnnestVar Query$UnnestCol
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -356,20 +356,20 @@
 
     (Query/unionAll (mapv parse-query union-all))))
 
-(defn parse-table [this]
+(defn parse-rel [this]
   (if-not (map? this)
-    (throw (err/illegal-arg :xtql/malformed-table {:table this}))
+    (throw (err/illegal-arg :xtql/malformed-rel {:rel this}))
 
-    (let [{:strs [table bind]} this
+    (let [{:strs [rel bind]} this
           ^List parsed-bind (parse-out-specs bind this)]
-      (when-not (or (string? table) (vector? table))
-        (throw (err/illegal-arg :xtql/table {:table this})))
-      (if (string? table)
-        (Query/table (Expr/param table) parsed-bind)
-        (Query/table ^List (mapv #(update-vals % parse-expr) table) parsed-bind)))))
+      (when-not (or (string? rel) (vector? rel))
+        (throw (err/illegal-arg :xtql/rel {:rel this})))
+      (if (string? rel)
+        (Query/relation (Expr/param rel) parsed-bind)
+        (Query/relation ^List (mapv #(update-vals % parse-expr) rel) parsed-bind)))))
 
-(defmethod parse-query 'table [this] (parse-table this))
-(defmethod parse-unify-clause 'table [this] (parse-table this))
+(defmethod parse-query 'rel [this] (parse-rel this))
+(defmethod parse-unify-clause 'rel [this] (parse-rel this))
 
 (extend-protocol Unparse
   Query$Pipeline (unparse [q] (into [(unparse (.query q))] (mapv unparse (.tails q))))
@@ -382,10 +382,10 @@
   Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
   Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))})
   Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))})
-  Query$DocsTable (unparse [q] {"table" (mapv #(update-vals % unparse) (.documents q))
-                                "bind" (mapv unparse (.bindings q))})
-  Query$ParamTable (unparse [q] {"table" (.v (.param q))
-                                 "bind" (mapv unparse (.bindings q))})
+  Query$DocsRelation (unparse [q] {"rel" (mapv #(update-vals % unparse) (.documents q))
+                                   "bind" (mapv unparse (.bindings q))})
+  Query$ParamRelation (unparse [q] {"rel" (.v (.param q))
+                                    "bind" (mapv unparse (.bindings q))})
   Query$UnnestVar (unparse [this] {"unnest" [(unparse (.var this))]})
   Query$UnnestCol (unparse [this] {"unnest" [(unparse (.col this))]}))
 

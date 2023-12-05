@@ -648,7 +648,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 
   (t/is (thrown-with-msg? xtdb.RuntimeException
                           #"data exception — division by zero"
-                          (xt/q tu/*node* '(-> (table [{}] [])
+                          (xt/q tu/*node* '(-> (rel [{}] [])
                                                (with {:foo (/ 1 0)})))))
 
   ;; Might need to get updated if this kind of error gets handled differently.

@@ -72,62 +72,62 @@
                  '(from :docs [{:xt/id :petr} first-name last-name])))
         "literal eid"))
 
-(deftest test-table
+(deftest test-rel
   (xt/submit-tx tu/*node* ivan+petr)
 
   (t/is (= [{} {}]
-           (xt/q tu/*node* '(table [{:first-name "Ivan"} {:first-name "Petr"}] []))))
+           (xt/q tu/*node* '(rel [{:first-name "Ivan"} {:first-name "Petr"}] []))))
 
   (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
-           (set (xt/q tu/*node* '(table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])))))
+           (set (xt/q tu/*node* '(rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])))))
 
   (t/is (= [{:first-name "Petr"}]
-           (xt/q tu/*node* '(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])
+           (xt/q tu/*node* '(-> (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])
                                 (where (= "Petr" first-name))))))
 
   #_ ;; TODO literal out specs
   (t/is (= [{:first-name "Petr"}]
-           (xt/q tu/*node* '(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] {:bind [{:xt/id :petr} first-name]})
+           (xt/q tu/*node* '(-> (rel [{:first-name "Ivan"} {:first-name "Petr"}] {:bind [{:xt/id :petr} first-name]})
                                 (where (= "Petr" first-name))))))
 
   (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
            (xt/q tu/*node*
-                 '(table [{:first-name "Ivan"} {:first-name $petr}] [first-name])
+                 '(rel [{:first-name "Ivan"} {:first-name $petr}] [first-name])
                  {:args {:petr "Petr"}}))
         "simple param")
 
   (t/is (= [{:foo :bar, :baz {:nested-foo :bar}}]
            (xt/q tu/*node*
-                 '(table [{:foo :bar :baz {:nested-foo $nested-param}}] [foo baz])
+                 '(rel [{:foo :bar :baz {:nested-foo $nested-param}}] [foo baz])
                  {:args {:nested-param :bar}}))
         "simple param nested")
 
   (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
            (set (xt/q tu/*node* '(unify (from :docs [first-name])
-                                        (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])))))
+                                        (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])))))
         "testing unify")
 
   (t/is (= [{:first-name "Petr"}]
            (xt/q tu/*node* '(unify (from :docs [{:xt/id :petr} first-name])
-                                   (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))))
+                                   (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))))
         "testing unify with restriction")
 
   (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
-           (set (xt/q tu/*node* '(table $ivan+petr [first-name])
+           (set (xt/q tu/*node* '(rel $ivan+petr [first-name])
                       {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}})))
-        "table arg as parameter")
+        "rel arg as parameter")
 
   (t/is (= #{{:first-name "Petr"}}
-           (set (xt/q tu/*node* '(-> (table $ivan+petr [first-name])
+           (set (xt/q tu/*node* '(-> (rel $ivan+petr [first-name])
                                      (where (= "Petr" first-name)))
                       {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}})))
-        "table arg as parameter")
+        "rel arg as parameter")
 
   (t/is (= [{:first-name "Petr"}]
            (xt/q tu/*node* '(unify (from :docs [{:xt/id :petr :first-name first-name}])
-                                   (table $ivan+petr [first-name]))
+                                   (rel $ivan+petr [first-name]))
                  {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}}))
-        "table arg as paramater in unify"))
+        "rel arg as paramater in unify"))
 
 
 (deftest test-order-by
@@ -344,13 +344,13 @@
     ;;Undefined behaviour
     (t/is (= [{:b 3}]
              (xt/q tu/*node*
-                   '(-> (table [{}] [])
+                   '(-> (rel [{}] [])
                         (with {:b 2} {:b 3}))))))
 
   (t/testing "overwriting existing col"
     (t/is (= [{:a 2}]
              (xt/q tu/*node*
-                   '(-> (table [{:a 1}] [a])
+                   '(-> (rel [{:a 1}] [a])
                         (with {:a 2})))))))
 
 (t/deftest test-with-op-errs
@@ -407,7 +407,7 @@
             {:x 2, :sum-y 3, :sum-expr 14}
             {:x 3, :sum-y 6, :sum-expr 30}]
            (xt/q tu/*node*
-                  '(-> (table $in [x y])
+                  '(-> (rel $in [x y])
                        (aggregate x {:sum-y (sum y)
                                      :sum-expr (sum (+ (* y y) x 1))}))
                   {:args {:in (for [x (range 4)
@@ -417,7 +417,7 @@
   (t/is (= [{:sum-evens 20}]
 
            (xt/q tu/*node*
-                 '(-> (table $in [x])
+                 '(-> (rel $in [x])
                       (aggregate {:sum-evens (sum (if (= 0 (mod x 2)) x 0))}))
                  {:args {:in (map (partial hash-map :x) (range 10))}}))
         "if")
@@ -425,12 +425,12 @@
   (t/testing "stddev aggregate"
     (t/is (= [{:y 23.53720459187964}]
              (xt/q tu/*node*
-                   '(-> (table [{:x 10} {:x 15} {:x 20} {:x 35} {:x 75}] [x])
+                   '(-> (rel [{:x 10} {:x 15} {:x 20} {:x 35} {:x 75}] [x])
                         (aggregate {:y (stddev-pop x)}))))))
 
   (t/is (= [{:out 28.5}]
            (xt/q tu/*node*
-                  '(-> (table $in [x])
+                  '(-> (rel $in [x])
                        (aggregate {:out (/ (double (sum (* x x)))
                                            (count x))}))
                   {:args {:in (map (partial hash-map :x) (range 10))}}))
@@ -701,14 +701,14 @@
                {:n 1, :e :ivan, :not-exist true}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id e :foo n}])
-                             (with {:not-exist (not (not (exists? (-> (table [{}] [])
+                             (with {:not-exist (not (not (exists? (-> (rel [{}] [])
                                                                       (where (= $n 1)))
                                                                   {:args [n]})))}))))))
 
     (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id e, :first-name n}])
-                             (where (not (exists? (-> (table [{}] [])
+                             (where (not (exists? (-> (rel [{}] [])
                                                       (where (= "Ivan" $n)))
                                                   {:args [n]}))))))))
 
@@ -724,7 +724,7 @@
                    '(unify
                      (from :docs [{:xt/id e} first-name])
                      (where (not (exists?
-                                  (-> (table [{}] [])
+                                  (-> (rel [{}] [])
                                       (where (= $first-name "Ivan")))
                                   {:args [first-name]}))
                             (not (exists?
@@ -856,7 +856,7 @@
   (t/is (= [{:aid :a2 :a 2 :b 3}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
-                         (join (table [{:b (+ $a 1)}] [b])
+                         (join (rel [{:b (+ $a 1)}] [b])
                                {:args [a]
                                 :bind [b]}))))
         "b is unified"))
@@ -1597,7 +1597,7 @@
                              {:args [customer]})
 
                 :n-qty (q (-> (from :order [{:xt/id order, :customer $customer} items])
-                              ;; TODO unnest relation (through table or from)
+                              ;; TODO unnest relation (through rel or from)
                               (unnest {:item items})
                               (return {:qty (. item qty)})
                               (aggregate {:n-qty (sum qty)}))
@@ -1605,16 +1605,16 @@
     [{:customer 0, :n-orders 2, :n-qty 4}
      {:customer 1, :n-orders 1, :n-qty 3}]
 
-    ;; TODO subqs in table
+    ;; TODO subqs in rel
     #_#_
-    '(table [{:n-orders (q (-> (from :order [])
-                               (aggregate {:n-orders (count-star)})))
-              :n-qty (q (-> (from :order [items])
-                            ;; TODO unnest relation (through table or from)
-                            (unnest {:item items})
-                            (return {:qty (. item qty)})
-                            (aggregate {:n-qty (sum qty)})))}]
-            [n-orders n-qty])
+    '(rel [{:n-orders (q (-> (from :order [])
+                             (aggregate {:n-orders (count-star)})))
+            :n-qty (q (-> (from :order [items])
+                          ;; TODO unnest relation (through rel or from)
+                          (unnest {:item items})
+                          (return {:qty (. item qty)})
+                          (aggregate {:n-qty (sum qty)})))}]
+          [n-orders n-qty])
     [{:n-orders 3, :n-qty 7}]
 
     '(-> (from :order {:bind [{:xt/id order :customer customer}]})
@@ -2012,7 +2012,7 @@
 (deftest test-date-and-time-literals
   (t/is (= [{:a true, :b false, :c true, :d true}]
            (xt/q tu/*node*
-                 '(-> (table [{}] [])
+                 '(-> (rel [{}] [])
                       (with {:a (= #time/date "2020-01-01" #time/date "2020-01-01")
                              :b (= #time/zoned-date-time "3000-01-01T08:12:13.366Z"
                                    #time/zoned-date-time "2020-01-01T08:12:13.366Z")
@@ -2115,30 +2115,30 @@
          [{:orders nil}]
          (xt/q tu/*node*
                '(unify
-                 (with {orders (pull (table [] []))})))))
+                 (with {orders (pull (rel [] []))})))))
 
   (t/is (=
          [{:orders {}}]
          (xt/q tu/*node*
                '(unify
-                 (with {orders (pull (table [{}] []))})))))
+                 (with {orders (pull (rel [{}] []))})))))
 
   (t/is (=
          [{:orders nil}]
          (xt/q tu/*node*
                '(unify
-                 (with {orders (pull* (table [] []))})))))
+                 (with {orders (pull* (rel [] []))})))))
 
   (t/is (=
          [{:orders [{}]}]
          (xt/q tu/*node*
                '(unify
-                 (with {orders (pull* (table [{}] []))}))))))
+                 (with {orders (pull* (rel [{}] []))}))))))
 
 (deftest list-diff-test-2887
   (t/is (= []
            (xt/q tu/*node*
-                 '(-> (table [{:x [1 2 3]}] [x])
+                 '(-> (rel [{:x [1 2 3]}] [x])
                       (where (<> x $foo)))
                  {:args {:foo [1 2 3]}}))))
 
@@ -2146,16 +2146,16 @@
 (deftest test-without
   (t/is (= [{}]
            (xt/q tu/*node*
-                 '(-> (table [{:x 1}] [x])
+                 '(-> (rel [{:x 1}] [x])
                       (without :x)))))
   (t/is (= [{:y 2}]
            (xt/q tu/*node*
-                 '(-> (table [{:x 1 :y 2}] [x y])
+                 '(-> (rel [{:x 1 :y 2}] [x y])
                       (without :x)))))
 
   (t/is (= [{:x 2}]
            (xt/q tu/*node*
-                 '(-> (table [{:x 2}] [x])
+                 '(-> (rel [{:x 2}] [x])
                       (without :z))))
         "ignores missing columns"))
 
@@ -2182,35 +2182,35 @@
 (deftest test-struct-accessors
   (t/is (= [{:r 1}]
            (xt/q tu/*node*
-                 '(-> (table [{:x {:foo 1}}] [x])
+                 '(-> (rel [{:x {:foo 1}}] [x])
                       (return {:r (. x foo)})))))
   (t/is (= [{:r nil}]
            (xt/q tu/*node*
-                 '(-> (table [{:x {:foo 1}}] [x])
+                 '(-> (rel [{:x {:foo 1}}] [x])
                       (return {:r (. x bar)})))))
   (t/is (= [{:r {:bar [1 2 3]}}]
            (xt/q tu/*node*
-                 '(-> (table [{:x 1 :y {:foo {:bar [1 2 3]} :baz 1}}] [x y])
+                 '(-> (rel [{:x 1 :y {:foo {:bar [1 2 3]} :baz 1}}] [x y])
                       (return {:r (. y foo)}))))))
 
 (deftest test-unnest
   (t/is (= [{:y 1} {:y 2} {:y 3}]
            (xt/q tu/*node*
-                 '(-> (unify (table [{:x [1 2 3]}] [x])
+                 '(-> (unify (rel [{:x [1 2 3]}] [x])
                              (unnest {y x}))
                       (return y)))))
 
   (t/is (= [{:y 1} {:y 2} {:y 3}]
            (xt/q tu/*node*
-                 '(-> (table [{:x [1 2 3]}] [x])
+                 '(-> (rel [{:x [1 2 3]}] [x])
                       (unnest {:y x})
                       (return y)))))
 
   (t/is (= [{:y 1} {:y 3}]
            (xt/q tu/*node*
-                 '(-> (unify (table [{:x [1 2 3]}] [x])
+                 '(-> (unify (rel [{:x [1 2 3]}] [x])
                              (unnest {y x})
-                             (table [{:y 1} {:y 3}] [y]))
+                             (rel [{:y 1} {:y 3}] [y]))
                       (return y))))
         "unify unnested column"))
 

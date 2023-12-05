@@ -64,7 +64,7 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 |Operator|Purpose
 
 | link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB
-| link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation
+| link:#_rel[`rel`,role=no-underline] | Sources data from the user-specified relation
 | link:#_unify[`unify`,role=no-underline] | Combines multiple input sources using Datalog-style unification
 |===
 
@@ -98,7 +98,7 @@ This allows for very declarative yet terse method of specifying join conditions;
 | link:#_from[`from`,role=no-underline] | Sources data from a table in XTDB
 | link:#_joins[`join`,role=no-underline] | Further constrains the unification using the given query
 | link:#_joins[`left-join`,role=no-underline] | Optionally joins the unification against the given query
-| link:#_table[`table`,role=no-underline] | Sources data from the user-specified relation
+| link:#_rel[`rel`,role=no-underline] | Sources data from the user-specified relation
 | link:#_unnest[`unnest`,role=no-underline] | Flattens an array within a column into individual rows
 | link:#_where[`where`,role=no-underline] | Filters the rows using the given predicates
 | link:#_with[`with`,role=no-underline] | Defines new logical variables in the unification
@@ -344,16 +344,16 @@ For example:
  ...]
 ----
 
-=== `table`
+=== `rel`
 
-The `table` operator creates an inline table with the provided values.
+The `rel` operator creates an inline relation with the provided values.
 The first argument is array of maps, either as a literal, a parameter, or a value nested within another document.
-The `table` operator yields each element as a row, with the values in the map link:#_binding_specs[bound/constrained] as required.
+The `rel` operator yields each element as a row, with the values in the map link:#_binding_specs[bound/constrained] as required.
 
 [source]
 ----
-Table :: (table TableExpr [BindSpec+])
-TableExpr :: Expr
+Rel :: (rel RelExpr [BindSpec+])
+RelExpr :: Expr
 
 Expr :: <defined separately>
 ----
@@ -363,20 +363,20 @@ For example:
 [source,clojure]
 ----
 ;; as a literal
-(table [{:a 1, :b 2}, {:a 3, :b 4}])
+(rel [{:a 1, :b 2}, {:a 3, :b 4}])
 
 ;; from a parameter
-(xt/q node '(table $t [a b])
+(xt/q node '(rel $t [a b])
       {:args {:t [{:a 1, :b 2}, {:a 3, :b 4}]}})
 
 ;; from a value in another document
-;; assume we have a document {:xt/id <id>, :my-nested-table [{:a 1, :b 2}, ...]}
-(-> (from :docs [my-nested-table])
-    (table my-nested-table [a b]))
+;; assume we have a document {:xt/id <id>, :my-nested-rel [{:a 1, :b 2}, ...]}
+(-> (from :docs [my-nested-rel])
+    (rel my-nested-rel [a b]))
 
 ;; same, but within a `unify`
-(unify (from :docs [my-nested-table])
-       (table my-nested-table [a b]))
+(unify (from :docs [my-nested-rel])
+       (rel my-nested-rel [a b]))
 ----
 
 === `unify`
@@ -386,7 +386,7 @@ The `unify` operator combines multiple input relations using Datalog-style unifi
 [source]
 ----
 Unify :: (unify UnifyClause+)
-UnifyClause :: From | Join | LeftJoin | Table | Where | With
+UnifyClause :: From | Join | LeftJoin | Rel | Where | With
 ----
 
 [[unify_explanation]]
@@ -411,7 +411,7 @@ FROM customers c
   JOIN orders o ON (c.xt$id = o.customer_id)
 ----
 
-* In link:#_table[`table`,role=no-underline] and link:#_from[`from`,role=no-underline] clauses any logic variables specified in its binding specs are unified.
+* In link:#_rel[`rel`,role=no-underline] and link:#_from[`from`,role=no-underline] clauses any logic variables specified in its binding specs are unified.
 * link:#_joins[`join`,role=no-underline] and link:#_joins[`left-join`,role=no-underline] clauses work in a similar way to link:#_from[`from`,role=no-underline], except they execute a full sub-query rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
 * link:#_where[`where`,role=no-underline] clauses further constrain the results using predicates - these have access to any logic variable bound in the containing `unify` operator.
 * link:#_with[`with`,role=no-underline] clauses within `unify` may define additional logic variables or, if these logic variables are used elsewhere, the value of the link:#_with[`with`,role=no-underline] result must agree with the value elsewhere in the `unify`.

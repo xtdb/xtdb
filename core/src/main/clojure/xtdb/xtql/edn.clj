@@ -10,7 +10,7 @@
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
-                       Query$DocsTable Query$ParamTable Query$OrderDirection Query$OrderNulls
+                       Query$DocsRelation Query$ParamRelation Query$OrderDirection Query$OrderNulls
                        Query$UnnestCol Query$UnnestVar
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
 
@@ -434,12 +434,12 @@
   Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
   Query$Limit (unparse [this] (list 'limit (.length this)))
   Query$Offset (unparse [this] (list 'offset (.length this)))
-  Query$DocsTable (unparse [this]
-                    (list 'table
-                          (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) (.documents this))
-                          (mapv unparse (.bindings this))))
-  Query$ParamTable (unparse [this]
-                     (list 'table (symbol (.v (.param this))) (mapv unparse (.bindings this))))
+  Query$DocsRelation (unparse [this]
+                  (list 'rel
+                        (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) (.documents this))
+                        (mapv unparse (.bindings this))))
+  Query$ParamRelation (unparse [this]
+                   (list 'rel (symbol (.v (.param this))) (mapv unparse (.bindings this))))
   Query$UnnestCol (unparse [this] (list 'unnest (unparse (.col this))))
   Query$UnnestVar (unparse [this] (list 'unnest (unparse (.var this)))))
 
@@ -508,23 +508,23 @@
 (defn- keyword-map? [m]
   (every? keyword? (keys m)))
 
-(defn parse-table [[_ param-or-docs bind :as this]]
+(defn parse-rel [[_ param-or-docs bind :as this]]
   (when-not (= 3 (count this))
-    (throw (err/illegal-arg :xtql/table {:table this :message "Table takes exactly 3 arguments"})))
+    (throw (err/illegal-arg :xtql/rel {:rel this :message "`rel` takes exactly 3 arguments"})))
   (when-not (or (symbol? param-or-docs)
                 (and (vector? param-or-docs) (every? keyword-map? param-or-docs)))
-    (throw (err/illegal-arg :xtql/table {:table this :message "Table takes a param or an explicit relation"})))
+    (throw (err/illegal-arg :xtql/rel {:rel this :message "`rel` takes a param or an explicit relation"})))
   (let [parsed-bind (parse-out-specs bind this)]
     (if (symbol? param-or-docs)
       (let [parsed-expr (parse-expr param-or-docs)]
         (if (instance? Expr$Param parsed-expr)
-          (Query/table ^Expr$Param parsed-expr parsed-bind)
-          (throw (err/illegal-arg :xtql/table {::err/message "Illegal second argument to table"
-                                               :arg param-or-docs}))))
-      (Query/table ^List (mapv #(into {} (map (fn [[k v]] (MapEntry/create (subs (str k) 1) (parse-expr v)))) %) param-or-docs) parsed-bind))))
+          (Query/relation ^Expr$Param parsed-expr parsed-bind)
+          (throw (err/illegal-arg :xtql/rel {::err/message "Illegal second argument to `rel`"
+                                             :arg param-or-docs}))))
+      (Query/relation ^List (mapv #(into {} (map (fn [[k v]] (MapEntry/create (subs (str k) 1) (parse-expr v)))) %) param-or-docs) parsed-bind))))
 
-(defmethod parse-query 'table [this] (parse-table this))
-(defmethod parse-unify-clause 'table [this] (parse-table this))
+(defmethod parse-query 'rel [this] (parse-rel this))
+(defmethod parse-unify-clause 'rel [this] (parse-rel this))
 
 (defn check-unnest [binding unnest]
   (when-not (and (= 2 (count unnest))
