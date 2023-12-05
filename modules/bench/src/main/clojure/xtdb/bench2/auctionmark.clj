@@ -48,30 +48,6 @@
   [worker]
   (xt/submit-tx (:sut worker) [(xt/put :user (generate-user worker))]))
 
-(def tx-fn-apply-seller-fee
-  '(fn apply-seller-fee [u_id]
-     (let [[u] (q '{:find [xt/id u_id u_r_id u_rating u_balance u_created
-                           u_sattr0 u_sattr1 u_sattr2 u_sattr3 u_sattr4 u_sattr5 u_sattr6 u_sattr7]
-                    :in [u_id]
-                    :where [(match :user [xt/id {:xt/id id}])
-                            [id :u_id u_id]
-                            [id :u_r_id u_r_id]
-                            [id :u_rating u_rating]
-                            [id :u_balance u_balance]
-                            [id :u_created u_created]
-                            [id :u_sattr0 u_sattr0]
-                            [id :u_sattr1 u_sattr1]
-                            [id :u_sattr2 u_sattr2]
-                            [id :u_sattr3 u_sattr3]
-                            [id :u_sattr4 u_sattr4]
-                            [id :u_sattr5 u_sattr5]
-                            [id :u_sattr6 u_sattr6]
-                            [id :u_sattr7 u_sattr7]]}
-                  {:args [u_id], :key-fn :snake_case})]
-       (if u
-         [(xt/put :user (update u :u_balance dec))]
-         []))))
-
 (def item-query
   '{:find [xt/id i_id i_u_id i_c_id i_name i_description i_user_attributes i_initial_price
            i_current_price i_num_bids i_num_images i_num_global_attrs i_start_date
@@ -273,7 +249,9 @@
                      :ii_u_id u_id
                      :ii_path image}))
           ;; fix BitVector metadata issue
-          (when u_id [(xt/call :apply-seller-fee u_id)]))
+          (when u_id [(-> (xt/update-table :user '{:bind [{:xt/id $uid} u_balance]
+                                                   :set {:u_balance (- u_balance 1)}})
+                          (xt/with-op-args {:uid u_id}))]))
          (xt/submit-tx (:sut worker)))))
 
 ;; represents a probable state of an item that can be sampled randomly
@@ -546,7 +524,7 @@
              [{:t :do
                :stage :load
                :tasks [{:t :call, :f (fn [_] (log/info "start load stage"))}
-                       {:t :call, :f [bxt2/install-tx-fns {:apply-seller-fee tx-fn-apply-seller-fee, :new-bid tx-fn-new-bid}]}
+                       {:t :call, :f [bxt2/install-tx-fns {:new-bid tx-fn-new-bid}]}
                        {:t :call, :f load-categories-tsv}
                        {:t :call, :f [bxt2/generate :region generate-region 75]}
                        {:t :call, :f [bxt2/generate :category generate-category 16908]}

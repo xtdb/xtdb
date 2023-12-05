@@ -129,7 +129,7 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (t/testing "new bid"
-        (bxt2/install-tx-fns worker {:apply-seller-fee am/tx-fn-apply-seller-fee, :new-bid am/tx-fn-new-bid})
+        (bxt2/install-tx-fns worker {:new-bid am/tx-fn-new-bid})
         (bxt2/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
         (bxt2/generate worker :category am/generate-category 1)
@@ -170,7 +170,7 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (t/testing "new item"
-        (bxt2/install-tx-fns worker {:apply-seller-fee am/tx-fn-apply-seller-fee, :new-bid am/tx-fn-new-bid})
+        (bxt2/install-tx-fns worker {:new-bid am/tx-fn-new-bid})
         (bxt2/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
         (bxt2/generate worker :category am/generate-category 10)
