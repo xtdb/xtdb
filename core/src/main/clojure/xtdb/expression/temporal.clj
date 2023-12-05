@@ -1063,30 +1063,30 @@
   (when (> from to)
     (throw (invalid-period-err from to)))
 
-  {"from" (doto (ValueBox.) (.writeLong from))
-   "to" (doto (ValueBox.) (.writeLong to))})
+  {"xt$from" (doto (ValueBox.) (.writeLong from))
+   "xt$to" (doto (ValueBox.) (.writeLong to))})
 
 (defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[from-type to-type] :arg-types}]
-  {:return-type [:struct {'from from-type, 'to to-type}]
+  {:return-type [:struct {'xt$from from-type, 'xt$to to-type}]
    :->call-code (fn [[from-code to-code]]
                   (-> `(->period ~from-code ~to-code)
                       (expr/with-tag Map)))})
 
 (defn ->open-ended-period [^long from]
-  {"from" (doto (ValueBox.) (.writeLong from))
-   "to" (doto (ValueBox.) (.writeLong Long/MAX_VALUE))})
+  {"xt$from" (doto (ValueBox.) (.writeLong from))
+   "xt$to" (doto (ValueBox.) (.writeLong Long/MAX_VALUE))})
 
 (defmethod expr/codegen-call [:period :timestamp-tz :null] [{[from-type _to-type] :arg-types}]
-  {:return-type [:struct {'from from-type, 'to types/temporal-col-type}]
+  {:return-type [:struct {'xt$from from-type, 'xt$to types/temporal-col-type}]
    :->call-code (fn [[from-code _to-code]]
                   (-> `(->open-ended-period ~from-code)
                       (expr/with-tag Map)))})
 
 (defn from ^long [^Map period]
-  (.readLong ^IValueReader (.get period "from")))
+  (.readLong ^IValueReader (.get period "xt$from")))
 
 (defn to ^long [^Map period]
-  (.readLong ^IValueReader (.get period "to")))
+  (.readLong ^IValueReader (.get period "xt$to")))
 
 (defn temporal-contains-point? [p1 ^long ts]
   (and (<= (from p1) ts)

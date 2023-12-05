@@ -855,7 +855,7 @@
 (deftest test-period-constructor
   (let [from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"
         to #time/zoned-date-time "2022-01-01T00:00Z[UTC]"]
-    (t/is (= {:from from :to to}
+    (t/is (= {:xt/from from :xt/to to}
              (et/project1 '(period x y)
                           {:x from, :y to}))))
 
@@ -873,15 +873,15 @@
     (= true
        (et/project1
          '(overlaps? x y)
-         {:x {:from #inst "2020", :to #inst "2022"}
-          :y {:from #inst "2021", :to #inst "2023"}})))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2023"}})))
 
   (t/is
     (= false
        (et/project1
          '(overlaps? x y)
-         {:x {:from #inst "2020", :to #inst "2021"}
-          :y {:from #inst "2021", :to #inst "2023"}}))))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2021"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2023"}}))))
 
 (deftest test-contains?-predicate
   (t/testing "period to period"
@@ -889,29 +889,29 @@
       (= true
          (et/project1
            '(contains? x y)
-           {:x {:from #inst "2020", :to #inst "2025"}
-            :y {:from #inst "2021", :to #inst "2023"}})))
+           {:x {:xt$from #inst "2020", :xt$to #inst "2025"}
+            :y {:xt$from #inst "2021", :xt$to #inst "2023"}})))
 
     (t/is
       (= false
          (et/project1
            '(contains? x y)
-           {:x {:from #inst "2020", :to #inst "2022"}
-            :y {:from #inst "2021", :to #inst "2023"}}))))
+           {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+            :y {:xt$from #inst "2021", :xt$to #inst "2023"}}))))
 
   (t/testing "period to timestamp"
     (t/is
       (= true
          (et/project1
            '(contains? x y)
-           {:x {:from #inst "2020", :to #inst "2025"}
+           {:x {:xt$from #inst "2020", :xt$to #inst "2025"}
             :y #inst "2021"})))
 
     (t/is
       (= false
          (et/project1
            '(contains? x y)
-           {:x {:from #inst "2020", :to #inst "2022"}
+           {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
             :y #inst "2023"})))))
 
 (deftest test-equals?-predicate
@@ -919,222 +919,222 @@
     (= true
        (et/project1
          '(equals? x y)
-         {:x {:from #inst "2020", :to #inst "2022"}
-          :y {:from #inst "2020", :to #inst "2022"}})))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2022"}})))
 
   (t/is
     (= false
        (et/project1
          '(equals? x y)
-         {:x {:from #inst "2020", :to #inst "2021"}
-          :y {:from #inst "2020", :to #inst "2023"}}))))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2021"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2023"}}))))
 
 (deftest test-precedes?-predicate
   (t/is
     (= true
        (et/project1
          '(precedes? x y)
-         {:x {:from #inst "2020", :to #inst "2022"}
-          :y {:from #inst "2023", :to #inst "2025"}})))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+          :y {:xt$from #inst "2023", :xt$to #inst "2025"}})))
 
   (t/is
     (= false
        (et/project1
          '(precedes? x y)
-         {:x {:from #inst "2020", :to #inst "2021"}
-          :y {:from #inst "2020", :to #inst "2023"}}))))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2021"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2023"}}))))
 
 (deftest test-succeeds?-predicate
   (t/is
     (= true
        (et/project1
          '(succeeds? x y)
-         {:x {:from #inst "2023", :to #inst "2025"}
-          :y {:from #inst "2020", :to #inst "2022"}})))
+         {:x {:xt$from #inst "2023", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2022"}})))
 
   (t/is
     (= false
        (et/project1
          '(succeeds? x y)
-         {:x {:from #inst "2020", :to #inst "2021"}
-          :y {:from #inst "2020", :to #inst "2023"}}))))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2021"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2023"}}))))
 
 (deftest test-immediately-precedes?-predicate
   (t/is
     (= true
        (et/project1
          '(immediately-precedes? x y)
-         {:x {:from #inst "2020", :to #inst "2023"}
-          :y {:from #inst "2023", :to #inst "2025"}})))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2023"}
+          :y {:xt$from #inst "2023", :xt$to #inst "2025"}})))
 
   (t/is
     (= false
        (et/project1
          '(immediately-precedes? x y)
-         {:x {:from #inst "2020", :to #inst "2022"}
-          :y {:from #inst "2023", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+          :y {:xt$from #inst "2023", :xt$to #inst "2025"}}))))
 
 (deftest test-immediately-succeeds?-predicate
   (t/is
     (= true
        (et/project1
          '(immediately-succeeds? x y)
-         {:x {:from #inst "2022", :to #inst "2025"}
-          :y {:from #inst "2020", :to #inst "2022"}})))
+         {:x {:xt$from #inst "2022", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2022"}})))
 
   (t/is
     (= false
        (et/project1
          '(immediately-succeeds? x y)
-         {:x {:from #inst "2023", :to #inst "2025"}
-          :y {:from #inst "2020", :to #inst "2022"}}))))
+         {:x {:xt$from #inst "2023", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2022"}}))))
 
 (deftest test-leads?-predicate
   (t/is
     (= true
        (et/project1
          '(leads? x y)
-         {:x {:from #inst "2020", :to #inst "2025"}
-          :y {:from #inst "2021", :to #inst "2025"}})))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2025"}})))
 
   (t/is
     (= false
        (et/project1
          '(leads? x y)
-         {:x {:from #inst "2021", :to #inst "2025"}
-          :y {:from #inst "2021", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2025"}}))))
 
 (deftest test-strictly-leads?-predicate
   (t/is
     (= true
        (et/project1
          '(strictly-leads? x y)
-         {:x {:from #inst "2020", :to #inst "2024"}
-          :y {:from #inst "2021", :to #inst "2025"}})))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2025"}})))
 
   (t/is
     (= false
        (et/project1
          '(strictly-leads? x y)
-         {:x {:from #inst "2020", :to #inst "2025"}
-          :y {:from #inst "2021", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2025"}}))))
 
 (deftest test-lags?-predicate
   (t/is
     (= true
        (et/project1
          '(lags? x y)
-         {:x {:from #inst "2021", :to #inst "2025"}
-          :y {:from #inst "2020", :to #inst "2024"}})))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2020", :xt$to #inst "2024"}})))
 
   (t/is
     (= false
        (et/project1
          '(lags? x y)
-         {:x {:from #inst "2021", :to #inst "2024"}
-          :y {:from #inst "2022", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2022", :xt$to #inst "2025"}}))))
 
 (deftest test-strictly-lags?-predicate
   (t/is
     (= true
        (et/project1
          '(strictly-lags? x y)
-         {:x {:from #inst "2022", :to #inst "2025"}
-          :y {:from #inst "2021", :to #inst "2024"}})))
+         {:x {:xt$from #inst "2022", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2024"}})))
 
   (t/is
     (= false
        (et/project1
          '(strictly-lags? x y)
-         {:x {:from #inst "2021", :to #inst "2025"}
-          :y {:from #inst "2021", :to #inst "2024"}}))))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2024"}}))))
 
 (deftest test-strictly-overlaps?-predicate
   (t/is
     (= true
        (et/project1
          '(strictly-overlaps? x y)
-         {:x {:from #inst "2022", :to #inst "2024"}
-          :y {:from #inst "2021", :to #inst "2025"}})))
+         {:x {:xt$from #inst "2022", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2025"}})))
 
   (t/is
     (= false
        (et/project1
          '(strictly-overlaps? x y)
-         {:x {:from #inst "2021", :to #inst "2024"}
-          :y {:from #inst "2021", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2025"}}))))
 
 (deftest test-strictly-contains?-predicate
   (t/is
     (= true
        (et/project1
          '(strictly-contains? x y)
-         {:x {:from #inst "2021", :to #inst "2025"}
-          :y {:from #inst "2022", :to #inst "2024"}})))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2022", :xt$to #inst "2024"}})))
 
   (t/is
     (= false
        (et/project1
          '(strictly-contains? x y)
-         {:x {:from #inst "2021", :to #inst "2025"}
-          :y {:from #inst "2022", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2022", :xt$to #inst "2025"}}))))
 
 (deftest test-strictly-precedes?-predicate
   (t/is
     (= true
        (et/project1
          '(strictly-precedes? x y)
-         {:x {:from #inst "2020", :to #inst "2022"}
-          :y {:from #inst "2023", :to #inst "2025"}})))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+          :y {:xt$from #inst "2023", :xt$to #inst "2025"}})))
 
   (t/is
     (= false
        (et/project1
          '(strictly-precedes? x y)
-         {:x {:from #inst "2020", :to #inst "2022"}
-          :y {:from #inst "2022", :to #inst "2023"}}))))
+         {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+          :y {:xt$from #inst "2022", :xt$to #inst "2023"}}))))
 
 (deftest test-strictly-succeeds?-predicate
   (t/is
     (= true
        (et/project1
          '(strictly-succeeds? x y)
-         {:x {:from #inst "2023", :to #inst "2024"}
-          :y {:from #inst "2021", :to #inst "2022"}})))
+         {:x {:xt$from #inst "2023", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2022"}})))
 
   (t/is
     (= false
        (et/project1
          '(strictly-succeeds? x y)
-         {:x {:from #inst "2022", :to #inst "2024"}
-          :y {:from #inst "2021", :to #inst "2022"}}))))
+         {:x {:xt$from #inst "2022", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2022"}}))))
 
 (deftest test-immediately-leads?-predicate
   (t/is
     (= true
        (et/project1
          '(immediately-leads? x y)
-         {:x {:from #inst "2021", :to #inst "2024"}
-          :y {:from #inst "2022", :to #inst "2024"}})))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2022", :xt$to #inst "2024"}})))
 
   (t/is
     (= false
        (et/project1
          '(immediately-leads? x y)
-         {:x {:from #inst "2021", :to #inst "2024"}
-          :y {:from #inst "2022", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2022", :xt$to #inst "2025"}}))))
 
 (deftest test-immediately-lags?-predicate
   (t/is
     (= true
        (et/project1
          '(immediately-lags? x y)
-         {:x {:from #inst "2021", :to #inst "2025"}
-          :y {:from #inst "2021", :to #inst "2024"}})))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2025"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2024"}})))
 
   (t/is
     (= false
        (et/project1
          '(immediately-lags? x y)
-         {:x {:from #inst "2021", :to #inst "2024"}
-          :y {:from #inst "2021", :to #inst "2025"}}))))
+         {:x {:xt$from #inst "2021", :xt$to #inst "2024"}
+          :y {:xt$from #inst "2021", :xt$to #inst "2025"}}))))
