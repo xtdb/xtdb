@@ -140,23 +140,16 @@
         ;; item has a new bid
         ;; (t/is (= nil (am/generate-new-bid-params worker)))
         (t/is (= {:i_num_bids 1}
-                 (first (xt/q *node* '{:find [i_num_bids]
-                                       :where [(match :item [{:xt/id id}])
-                                               [id :i_num_bids i_num_bids]]}
+                 (first (xt/q *node* '(from :item [i_num_bids])
                               {:key-fn :snake_case}))))
         ;; there exists a bid
         (t/is (= {:ib_i_id "i_0", :ib_id "ib_0"}
-                 (first (xt/q *node* '{:find [ib_id ib_i_id]
-                                       :where [(match :item-bid {:xt/id ib})
-                                               [ib :ib_id ib_id]
-                                               [ib :ib_i_id ib_i_id]]}
+                 (first (xt/q *node* '(from :item-bid [ib_id ib_i_id])
                               {:key-fn :snake_case}))))
         ;; new max bid
         (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                  (first (xt/q *node*
-                              '{:find [imb imb_i_id]
-                                :where [(match :item-max-bid {:xt/id imb})
-                                        [imb :imb_i_id imb_i_id]]}
+                              '(from :item-max-bid [{:xt/id imb}, imb_i_id])
                               {:key-fn :snake_case})))))
 
       (t/testing "new bid but does not exceed max"
@@ -165,18 +158,12 @@
           (am/proc-new-bid worker)
 
           ;; new bid
-          (t/is (= 2 (-> (xt/q *node*
-                               '{:find [i_num_bids]
-                                 :where
-                                 [(match :item {:xt/id id})
-                                  [id :i_num_bids i_num_bids]]}
+          (t/is (= 2 (-> (xt/q *node* '(from :item [i_num_bids])
                                {:key-fn :snake_case})
                          first :i_num_bids)))
           ;; winning bid remains the same
           (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
-                   (first (xt/q *node* '{:find [imb imb_i_id]
-                                         :where [(match :item-max-bid {:xt/id imb})
-                                                 [imb :imb_i_id imb_i_id]]}
+                   (first (xt/q *node* '(from :item-max-bid [{:xt/id imb} imb_i_id])
                                 {:key-fn :snake_case})))))))))
 
 (t/deftest proc-new-item-test
@@ -192,17 +179,11 @@
         (am/proc-new-item worker)
 
         ;; new item
-        (let [{:keys [i_id i_u_id]} (first (xt/q *node* '{:find [i_id i_u_id]
-                                                          :where [(match :item [{:xt/id id}])
-                                                                  [id :i_id i_id]
-                                                                  [id :i_u_id i_u_id]]}
+        (let [{:keys [i_id i_u_id]} (first (xt/q *node* '(from :item [i_id i_u_id])
                                                  {:key-fn :snake_case}))]
           (t/is (= "i_0" i_id))
           (t/is (= "u_0" i_u_id)))
-        (t/is (< (- (:u_balance (first (xt/q *node* '{:find [u_balance]
-                                                      :where [(match :user {:xt/id u})
-                                                              [u :u_id]
-                                                              [u :u_balance u_balance]]}
+        (t/is (< (- (:u_balance (first (xt/q *node* '(from :user [u_balance])
                                              {:key-fn :snake_case})))
                     (double -1.0))
                  0.0001))))))
