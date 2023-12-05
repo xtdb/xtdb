@@ -111,7 +111,7 @@
   (fn [{:keys [f from-name from-type to-name zero-row?]}]
     (keyword (name f))))
 
-(defmethod ->aggregate-factory :count-star [{:keys [to-name zero-row?]}]
+(defmethod ->aggregate-factory :row-count [{:keys [to-name zero-row?]}]
   (reify IAggregateSpecFactory
     (getToColumnName [_] to-name)
     (getToColumnField [_] (types/col-type->field :i64))

@@ -132,32 +132,32 @@
         (finally
           (util/try-close sum-spec))))))
 
-(t/deftest test-count-star
+(t/deftest test-row-count
   (t/is (= [{:n 0}]
-           (tu/query-ra '[:group-by [{n (count-star)}]
+           (tu/query-ra '[:group-by [{n (row-count)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            []]])))
 
   (t/is (= [{:n 1}]
-           (tu/query-ra '[:group-by [{n (count-star)}]
+           (tu/query-ra '[:group-by [{n (row-count)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            [[{:a nil}]]]])))
 
   (t/is (= [{:n 2}]
-           (tu/query-ra '[:group-by [{n (count-star)}]
+           (tu/query-ra '[:group-by [{n (row-count)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 1}, {:a 2, :n 2}]
-           (tu/query-ra '[:group-by [a {n (count-star)}]
+           (tu/query-ra '[:group-by [a {n (row-count)}]
                           [::tu/blocks {a :i64, b [:union #{:null :i64}]}
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
-           (tu/query-ra '[:group-by [a {bs (count-star)}]
+           (tu/query-ra '[:group-by [a {bs (row-count)}]
                           [::tu/blocks {a :i64, b [:union #{:null :i64}]}
                            []]]))
         "empty if there's a grouping key"))

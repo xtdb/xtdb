@@ -129,7 +129,7 @@ For example:
 (-> (unify (from :customers [{:xt/id customer-id, :name customer-name}])
            (from :orders [customer-id order-value]))
     (aggregate customer-id customer-name
-               {:order-count (count-star)
+               {:order-count (row-count)
                 :total-value (sum order-value)})
     (order-by {:val total-value, :dir :desc})
     (limit 10)

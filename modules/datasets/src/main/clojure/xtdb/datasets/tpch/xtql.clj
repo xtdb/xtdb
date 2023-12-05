@@ -19,7 +19,7 @@
                    :avg-qty (avg l-quantity)
                    :avg-price (avg l-extendedprice)
                    :avg-disc (avg l-discount)
-                   :count-order (count-star)})
+                   :count-order (row-count)})
 
        (order-by l-returnflag l-linestatus)))
 
@@ -237,7 +237,7 @@
                                 (where (not (like o-comment "%special%requests%"))))
                          [c o]))
        (aggregate c {:c-count (count o)})
-       (aggregate c-count {:custdist (count-star)})
+       (aggregate c-count {:custdist (row-count)})
        (order-by {:val custdist, :dir :desc} {:val c-count, :dir :desc})))
 
 (def q14

@@ -14,7 +14,7 @@
                     {avg_qty (avg l_quantity)}
                     {avg_price (avg l_extendedprice)}
                     {avg_disc (avg l_discount)}
-                    {count_order (count-star)}]
+                    {count_order (row-count)}]
          [:project [l_returnflag l_linestatus l_shipdate l_quantity l_extendedprice l_discount l_tax
                     {disc_price (* l_extendedprice (- 1 l_discount))}
                     {charge (* (* l_extendedprice (- 1 l_discount))
@@ -67,7 +67,7 @@
 
 (def q4-order-priority-checking
   (-> '[:order-by [[o_orderpriority]]
-        [:group-by [o_orderpriority {order_count (count-star)}]
+        [:group-by [o_orderpriority {order_count (row-count)}]
          [:semi-join [{o_orderkey l_orderkey}]
           [:scan {:for-valid-time [:at :now] :table orders}
            [{o_orderdate (and (>= o_orderdate ?start-date)
@@ -276,7 +276,7 @@
 
 (def q13-customer-distribution
   (-> '[:order-by [[custdist {:direction :desc}] [c_count {:direction :desc}]]
-        [:group-by [c_count {custdist (count-star)}]
+        [:group-by [c_count {custdist (row-count)}]
          [:group-by [c_custkey {c_count (count o_comment)}]
           [:left-outer-join [{c_custkey o_custkey}]
            [:scan {:for-valid-time [:at :now] :table customer} [c_custkey]]
@@ -450,7 +450,7 @@
                       [:scan {:for-valid-time [:at :now] :table lineitem} [l_orderkey l_suppkey]]]]]
         [:top {:limit 100}
          [:order-by [[numwait {:direction :desc}] [s_name]]
-          [:group-by [s_name {numwait (count-star)}]
+          [:group-by [s_name {numwait (row-count)}]
            [:distinct
             [:project [s_name l1_l_orderkey]
              [:anti-join [{l1_l_orderkey l3_l_orderkey}]
@@ -468,7 +468,7 @@
                             [:scan {:for-valid-time [:at :now] :table customer} [c_custkey c_phone c_acctbal]]]
                            [:table ?cntrycodes]]]
         [:order-by [[cntrycode]]
-         [:group-by [cntrycode {numcust (count-star)} {totacctbal (sum c_acctbal)}]
+         [:group-by [cntrycode {numcust (row-count)} {totacctbal (sum c_acctbal)}]
           [:anti-join [{c_custkey o_custkey}]
            [:join [(> c_acctbal avg_acctbal)]
             Customer

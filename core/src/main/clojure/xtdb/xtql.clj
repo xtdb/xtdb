@@ -841,7 +841,7 @@
                          (mapv (fn [{:keys [agg-fn placeholder]}]
                                  {placeholder agg-fn})
                                aggregate-specs)))
-                   (if-let [sub-expr-projections ;;Handles agg-fns with no-sub-exprs such as count-star
+                   (if-let [sub-expr-projections ;;Handles agg-fns with no-sub-exprs such as row-count
                             (seq (mapcat #(for [{:keys [sub-expr-placeholder expr]} (:sub-exprs %)]
                                             {sub-expr-placeholder expr})
                                          aggregate-specs))]

@@ -1593,7 +1593,7 @@
 
     '(-> (from :customer [{:xt/id customer}])
          (with {:n-orders (q (-> (from :order [{:xt/id order, :customer $customer}])
-                                 (aggregate {:n-orders (count-star)}))
+                                 (aggregate {:n-orders (row-count)}))
                              {:args [customer]})
 
                 :n-qty (q (-> (from :order [{:xt/id order, :customer $customer} items])
@@ -1608,7 +1608,7 @@
     ;; TODO subqs in rel
     #_#_
     '(rel [{:n-orders (q (-> (from :order [])
-                             (aggregate {:n-orders (count-star)})))
+                             (aggregate {:n-orders (row-count)})))
             :n-qty (q (-> (from :order [items])
                           ;; TODO unnest relation (through rel or from)
                           (unnest {:item items})
