@@ -34,18 +34,10 @@
            xtdb.IResultSet
            xtdb.api.TransactionKey))
 
-(def ^:private default-object-mapper
-  (doto (json/object-mapper
-         {:encode-key-fn true
-          :decode-key-fn true
-          :modules [(jackson/json-ld-module
-                     {:handlers jackson/handlers})]})
-    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
-
 (def ^:private muuntaja-opts
   (-> m/default-options
       (m/select-formats #{"application/json" "application/transit+json"})
-      (assoc-in [:formats "application/json" :encoder-opts :mapper] default-object-mapper)
+      (assoc-in [:formats "application/json" :encoder-opts :mapper] jackson/json-ld-mapper)
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                 serde/transit-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
@@ -131,13 +123,13 @@
                       ^OutputStream writer out]
             (try
               (doseq [el (iterator-seq res)]
-                (json/write-value writer el default-object-mapper)
+                (json/write-value writer el jackson/json-ld-mapper)
                 (.write writer ^byte ascii-newline))
               (catch Throwable t
-                (json/write-value writer t default-object-mapper)
+                (json/write-value writer t jackson/json-ld-mapper)
                 (.write writer ^byte ascii-newline))))
           (with-open [writer out]
-            (json/write-value writer res default-object-mapper)))))))
+            (json/write-value writer res jackson/json-ld-mapper)))))))
 
 (s/def ::current-time inst?)
 (s/def ::tx (s/nilable #(instance? TransactionKey %)))
