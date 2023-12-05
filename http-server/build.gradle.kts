@@ -33,5 +33,9 @@ dependencies {
     api("metosin", "reitit-spec", "0.5.15")
 
     api("com.cognitect", "transit-clj", "1.0.329")
+
+    testImplementation(project(":"))
+    testImplementation(project(":http-client-clj"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
+    testImplementation("pro.juxt.clojars-mirrors.hato", "hato", "0.8.2")
 }
