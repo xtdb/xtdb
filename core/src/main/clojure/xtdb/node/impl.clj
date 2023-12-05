@@ -20,6 +20,7 @@
            xtdb.indexer.IIndexer
            xtdb.operator.IRaQuerySource
            (xtdb.tx Sql)
+           (xtdb.query Query)
            (xtdb.tx_producer ITxProducer)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -70,7 +71,7 @@
                                     (let [pq (.prepareRaQuery ra-src ra)]
                                       (sql/open-sql-query allocator wm-src pq query-opts))))
 
-                (seq? query) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)
+                (or (seq? query) (instance? Query query)) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)
 
                 :else (throw (err/illegal-arg :unknown-query-type
                                               {:query query

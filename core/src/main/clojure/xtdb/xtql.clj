@@ -992,8 +992,9 @@
                                         query {:keys [args default-all-valid-time? basis default-tz explain? key-fn]
                                                :or {key-fn :clojure}}]
 
-  (let [plan (-> (xt.edn/parse-query query)
-                 compile-query)]
+  (let [plan (cond-> query
+               (seq? query) xt.edn/parse-query
+               true compile-query)]
     (if explain?
       (lp/explain-result plan)
 

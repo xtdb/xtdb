@@ -5,7 +5,7 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import [xtdb.tx Ops]
-           xtdb.types.ClojureForm))
+           (xtdb.query Expr Query OutSpec)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -575,3 +575,10 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
                   WHERE t.album = a.xt$id
                   GROUP BY a.name"))
         "array-agg distinct"))
+
+(deftest test-query-ast-query
+  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :foo "bar"})])
+
+  (t/is (= [{:my-foo "bar"}]
+           (xt/q tu/*node* (-> (Query/from "docs")
+                               (.binding [(OutSpec/of "foo" (Expr/lVar "my-foo"))]))))))
