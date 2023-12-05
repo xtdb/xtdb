@@ -52,12 +52,10 @@
 (deftest ^:integration concurrent-node-test
   (populate-node node-opts)
   (with-open [node (tu/->local-node node-opts)]
-    (let [open-ids (->> (xt/q node '{:find [id] :where [(match :docs {:xt/id id})]})
+    (let [open-ids (->> (xt/q node '(from :docs [{:xt/id id}]))
                         (mapv :id))
-          q '{:find [id foo bar baz foobar barfoo]
-              :in [id]
-              :where [(match :docs [{:xt/id id} foo bar baz foobar barfoo])]}
-          get-item #(xt/q node q {:args [(rand-nth open-ids)]})
+          get-item #(xt/q node '(from :docs [{:xt/id $id} foo bar baz foobar barfoo])
+                          {:args {:id (rand-nth open-ids)}})
           f-call #(future
                     (dotimes [_ 100]
                       (get-item)))

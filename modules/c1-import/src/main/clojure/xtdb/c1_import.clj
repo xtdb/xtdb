@@ -136,15 +136,3 @@
               @(shutdown-hook-promise)))
 
     (shutdown-agents)))
-
-(comment
-  (require '[xtdb.protocols :as xtp])
-
-  (with-open [node (xtn/start-node {:xtdb/c1-import {:export-log-path "/tmp/tpch"}})]
-    (try
-      (xtp/datalog-query node (-> '{:find [?cust ?nkey ?n_name]
-                                   :where [[?cust :c_nationkey ?nkey]
-                                           [?nkey :n_name ?n_name]]
-                                   :limit 10}
-                                 (assoc :basis {:tx #xt/tx-key {:tx-id 90}})))
-      (catch InterruptedException _))))

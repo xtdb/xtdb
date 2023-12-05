@@ -52,8 +52,7 @@
   
   (.readRecords (:xtdb.azure/event-hub-log (:system node)) 0 100)
   
-  (xt/q node '{:find [text]
-               :where [($ :posts [text])]})
+  (xt/q node '(from :posts [text]))
   (node)
   (.putObject (:xtdb.azure/blob-object-store (:system node)) "bar" (java.nio.ByteBuffer/wrap (.getBytes "helloworld")))
   (ir/halt)

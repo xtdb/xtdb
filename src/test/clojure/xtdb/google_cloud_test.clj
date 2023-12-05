@@ -122,8 +122,7 @@
 
       ;; Ensure can query back out results
       (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
-               (xtdb.api/q node '{:find [e]
-                                  :where [(match :bar {:xt/id e})]})))
+               (xtdb.api/q node '(from :bar [{:xt/id e}]))))
 
       (let [object-store (get-in node [:system ::google-cloud/blob-object-store])]
       ;; Ensure some files are written

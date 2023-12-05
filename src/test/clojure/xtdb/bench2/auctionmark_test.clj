@@ -24,10 +24,8 @@
   (let [worker (->worker *node*)]
     (bxt2/generate worker :user am/generate-user 1)
 
-    (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                 :keys [count-id]
-                                                 :where [(match :user [{:xt/id id}])
-                                                         [id :u_id]]}))))
+    (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user [])
+                                                    (aggregate {:count-id (count-star)}))))))
     (t/is (= "u_0" (b/sample-flat worker am/user-id)))))
 
 (t/deftest generate-categories-test
@@ -35,20 +33,16 @@
     (am/load-categories-tsv worker)
     (bxt2/generate worker :category am/generate-category 1)
 
-    (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                 :keys [count-id]
-                                                 :where [(match :category [{:xt/id id}])
-                                                         [id :c_id]]}))))
+    (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :category [])
+                                                    (aggregate {:count-id (count-star)}))))))
     (t/is (= "c_0" (b/sample-flat worker am/category-id)))))
 
 (t/deftest generate-region-test
   (let [worker (->worker *node*)]
     (bxt2/generate worker :region am/generate-region 1)
 
-    (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                 :keys [count-id]
-                                                 :where [(match :region [{:xt/id id}])
-                                                         [id :r_id]]}))))
+    (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :region [])
+                                                    (aggregate {:count-id (count-star)}))))))
     (t/is (= "r_0" (b/sample-flat worker am/region-id)))))
 
 (t/deftest generate-global-attribute-group-test
@@ -57,10 +51,8 @@
     (bxt2/generate worker :category am/generate-category 1)
     (bxt2/generate worker :gag am/generate-global-attribute-group 1)
 
-    (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                 :keys [count-id]
-                                                 :where [(match :gag [{:xt/id id}])
-                                                         [id :gag_name]]}))))
+    (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :gag [])
+                                                    (aggregate {:count-id (count-star)}))))))
     (t/is (= "gag_0" (b/sample-flat worker am/gag-id)))))
 
 (t/deftest generate-global-attribute-value-test
@@ -70,20 +62,16 @@
     (bxt2/generate worker :gag am/generate-global-attribute-group 1)
     (bxt2/generate worker :gav am/generate-global-attribute-value 1)
 
-    (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                 :keys [count-id]
-                                                 :where [(match :gav [{:xt/id id}])
-                                                         [id :gav_name]]}))))
+    (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :gav [])
+                                                    (aggregate {:count-id (count-star)}))))))
     (t/is (= "gav_0" (b/sample-flat worker am/gav-id)))))
 
 (t/deftest generate-user-attributes-test
   (let [worker (->worker *node*)]
     (bxt2/generate worker :user am/generate-user 1)
     (bxt2/generate worker :user-attribute am/generate-user-attributes 1)
-    (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                 :keys [count-id]
-                                                 :where [(match :user-attribute [{:xt/id id}])
-                                                         [id :ua_u_id]]}))))
+    (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user-attribute [])
+                                                    (aggregate {:count-id (count-star)}))))))
     (t/is (= "ua_0" (b/sample-flat worker am/user-attribute-id)))))
 
 (t/deftest generate-item-test
@@ -94,10 +82,8 @@
       (bxt2/generate worker :category am/generate-category 1)
       (bxt2/generate worker :item am/generate-item 1)
 
-      (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                   :keys [count-id]
-                                                   :where [(match :item [{:xt/id id}])
-                                                           [id :i_id]]}))))
+      (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :item [])
+                                                      (aggregate {:count-id (count-star)}))))))
       (t/is (= "i_0" (:i_id (am/random-item worker :status :open)))))))
 
 (t/deftest proc-get-item-test
@@ -119,10 +105,8 @@
       (bxt2/generate worker :item am/generate-item 1)
       (am/proc-new-user worker)
 
-      (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
-                                                   :keys [count-id]
-                                                   :where [(match :user [{:xt/id id}])
-                                                           [id :u_id]]}))))
+      (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user [])
+                                                      (aggregate {:count-id (count-star)}))))))
       (t/is (= "u_0" (b/sample-flat worker am/user-id))))))
 
 (t/deftest proc-new-bid-test

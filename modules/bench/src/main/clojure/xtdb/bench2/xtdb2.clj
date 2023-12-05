@@ -289,10 +289,8 @@
 
   (def node (xtn/start-node (node-dir->config node-dir)))
 
-  (def get-item-query '{:find [i_id i_u_id i_initial_price i_current_price]
-                        :in [i_id]
-                        :where [(match :item {:xt/id i_id :i_status :open :i_u_id i_u_id
-                                              :i_initial_price i_initial_price :i_current_price i_current_price})]} )
+  (def get-item-query '(from :item [{:xt/id i_id, :i_status :open}
+                                    i_u_id i_initial_price i_current_price]) )
   ;; ra for the above
   (def ra-query
     '[:scan
@@ -304,11 +302,8 @@
        {xt/id (= xt/id ?i_id)}
        id]])
 
-  (def open-ids (->> (xt/q node '{:find [i]
-                                  :where [(match :item {:xt/id i :i_status :open})]})
+  (def open-ids (->> (xt/q node '(from :item [{:xt/id i :i_status :open}]))
                      (map :i)))
-
-
 
   (def q  (fn [open-id]
             (tu/query-ra ra-query {:node node

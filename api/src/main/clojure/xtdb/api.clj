@@ -77,17 +77,13 @@
 
   This tx key is the same map returned by submit-tx
 
-  (q& node
-      '{:find ...
-        :where ...}
+  (q& node '(from ...)
       {:basis {:tx tx}})
 
   Additionally a basis timeout can be supplied to the query map, which if after the specified duration
   the query's requested basis is not complete the query will be cancelled.
 
-  (q& node
-      '{:find ...
-        :where ...}
+  (q& node '(from ...)
       {:basis-timeout (Duration/ofSeconds 1)})"
 
   (^java.util.concurrent.CompletableFuture [node q+args] (q& node q+args {}))
@@ -140,17 +136,13 @@
 
   This tx reference (known as a TransactionKey) is the same map returned by submit-tx
 
-  (q node
-     '{:find ...
-       :where ...}
+  (q node '(from ...)
      {:basis {:tx tx}})
 
   Additionally a Basis Timeout can be supplied to the query map, which if after the specified duration
   the query's requested basis is not complete the query will be cancelled.
 
-  (q node
-     '{:find ...
-       :where ...}
+  (q node '(from ...)
      {:basis-timeout (Duration/ofSeconds 1)})"
   ([node q+args]
    (-> @(q& node q+args)

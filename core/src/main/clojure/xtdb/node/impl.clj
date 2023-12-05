@@ -1,7 +1,6 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.datalog :as d]
             [xtdb.error :as err]
             xtdb.indexer
             [xtdb.logical-plan :as lp]
@@ -70,8 +69,6 @@
                                     (lp/explain-result ra)
                                     (let [pq (.prepareRaQuery ra-src ra)]
                                       (sql/open-sql-query allocator wm-src pq query-opts))))
-
-                (map? query) (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts)
 
                 (seq? query) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)
 

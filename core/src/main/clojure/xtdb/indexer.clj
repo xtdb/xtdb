@@ -4,7 +4,6 @@
             [sci.core :as sci]
             [xtdb.api :as xt]
             [xtdb.await :as await]
-            [xtdb.datalog :as d]
             [xtdb.error :as err]
             xtdb.indexer.live-index
             [xtdb.metadata :as meta]
@@ -193,17 +192,17 @@
               (catch Throwable t
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
-(defn- tx-fn-q [allocator ra-src wm-src scan-emitter tx-opts]
+(defn- tx-fn-q [allocator ra-src wm-src tx-opts]
   (fn tx-fn-q*
     ([query] (tx-fn-q* query {}))
 
     ([query opts]
-     (with-open [^IResultSet res (cond (map? query) (d/open-datalog-query allocator ra-src wm-src scan-emitter query (into tx-opts opts))
-                                       (seq? query) (xtql/open-xtql-query allocator ra-src wm-src query (into tx-opts opts))
+     (with-open [^IResultSet res (if-not (seq? query)
+                                   (throw (err/runtime-err :unknown-query-type
+                                                           {:query query
+                                                            :type (type query)}))
 
-                                       :else (throw (err/runtime-err :unknown-query-type
-                                                                     {:query query
-                                                                      :type (type query)})))]
+                                   (xtql/open-xtql-query allocator ra-src wm-src query (into tx-opts opts)))]
        (vec (iterator-seq res))))))
 
 (defn- tx-fn-sql
@@ -232,14 +231,14 @@
                     'with-op-args 'with-op-arg-rows
                     'during 'starting-at 'until])))
 
-(defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src, scan-emitter
+(defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src
                                                ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
   (let [call-leg (.legReader tx-ops-rdr :call)
         fn-id-rdr (.structKeyReader call-leg "fn-id")
         args-rdr (.structKeyReader call-leg "args")
 
         ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src scan-emitter tx-opts)
+        sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src tx-opts)
                                       'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
                                       '*current-tx* tx-key}
@@ -596,7 +595,7 @@
                             !put-idxer (delay (->put-indexer row-counter live-idx-tx tx-ops-rdr system-time))
                             !delete-idxer (delay (->delete-indexer row-counter live-idx-tx tx-ops-rdr system-time))
                             !erase-idxer (delay (->erase-indexer row-counter live-idx-tx tx-ops-rdr))
-                            !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-rdr tx-opts))
+                            !call-idxer (delay (->call-indexer allocator ra-src wm-src tx-ops-rdr tx-opts))
                             !xtql-idxer (delay (->xtql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
                             !sql-idxer (delay (->sql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
                         (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]

@@ -119,8 +119,7 @@
 ;;                                                             :retention-period-in-days 1}})]
 ;;     (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo}])])
 ;;     (t/is (= [{:id :foo}]
-;;              (xt/q node '{:find [id]
-;;                           :where [($ :xt_docs [{:xt/id id}])]})))))
+;;              (xt/q node '(from :xt_docs [{:xt/id id}])))))
 
 (defn list-filenames [^BlobContainerClient blob-container-client ^Path prefix ^ListBlobsOptions list-opts]
   (->> (.listBlobs blob-container-client list-opts nil)
@@ -204,8 +203,7 @@
 
       ;; Ensure can query back out results
       (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
-               (xtdb.api/q node '{:find [e]
-                                  :where [(match :bar {:xt/id e})]})))
+               (xtdb.api/q node '(from :bar [{:xt/id e}]))))
 
       (let [object-store (get-in node [:system ::azure/blob-object-store])]
       ;; Ensure some files are written
