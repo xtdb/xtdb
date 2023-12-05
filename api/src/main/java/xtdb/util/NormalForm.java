@@ -16,8 +16,8 @@ public class NormalForm {
                     .replace("$", "/")
                     .replace("-", "_");
         } else {
-            return "%s/%s".formatted(
-                    s.substring(0, i).replace("$", ".").replace("-","_"),
+            return String.format("%s/%s",
+                    s.substring(0, i).replace("$", ".").replace("-", "_"),
                     s.substring(i + 1).replace("-", "_"));
         }
     }
@@ -33,13 +33,13 @@ public class NormalForm {
         if (i < 0) {
             return normalise(s);
         } else {
-            return "%s$%s".formatted(normalise(s.substring(0, i)), normalise(s.substring(i + 1)));
+            return String.format("%s$%s", normalise(s.substring(0, i)), normalise(s.substring(i + 1)));
         }
     }
 
     public static Symbol normalForm(Symbol sym) {
         if (sym.getNamespace() != null) {
-            return Symbol.intern("%s$%s".formatted(normalise(sym.getNamespace()), normalise(sym.getName())));
+            return Symbol.intern(String.format("%s$%s", normalise(sym.getNamespace()), normalise(sym.getName())));
         } else {
             return Symbol.intern(normalise(sym.getName()));
         }

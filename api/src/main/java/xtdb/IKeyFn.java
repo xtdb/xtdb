@@ -18,7 +18,7 @@ public interface IKeyFn<V> {
         if (i < 0) {
             return clojureFormString(s);
         } else {
-            return "%s/%s".formatted(clojureFormString(s.substring(0, i)), clojureFormString(s.substring(i + 1)));
+            return String.format("%s/%s", clojureFormString(s.substring(0, i)), clojureFormString(s.substring(i + 1)));
         }
     };
 

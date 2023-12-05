@@ -21,7 +21,7 @@ public interface DmlOps {
 
         @Override
         public String toString() {
-            return "(insert %s %s)".formatted(table, query);
+            return String.format("(insert %s %s)", table, query);
         }
     }
 
@@ -163,7 +163,7 @@ public interface DmlOps {
 
         @Override
         public String toString() {
-            return "(assert-exists %s)".formatted(query);
+            return String.format("(assert-exists %s)", query);
         }
     }
 
@@ -180,7 +180,7 @@ public interface DmlOps {
 
         @Override
         public String toString() {
-            return "(assert-not-exists %s)".formatted(query);
+            return String.format("(assert-not-exists %s)", query);
         }
     }
 
