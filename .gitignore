@@ -1,13 +1,11 @@
-/target
-/classes
+/target/
+/classes/
+/out/
 pom.xml
 pom.xml.asc
 *.jar
 *.class
-/.lein-*
-/.nrepl-port
-.hgignore
-.hg/
+.nrepl-port
 
 # Ignore Gradle project-specific cache directory
 .gradle
@@ -20,6 +18,3 @@ build
 /_manifest
 .DS_Store
 
-# Idea
-.idea/modules.xml
-.idea/modules
