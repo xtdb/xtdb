@@ -326,8 +326,7 @@
         (.putAll custom-state {:item-status-groups (item-status-groups db now)}))))
 
 (defn largest-id [node table prefix-length]
-  (let [id (->> (xt/q node `{:find [~'id]
-                             :where [~(list 'match table {:xt/id 'id})]})
+  (let [id (->> (xt/q node (xt/template (from ~table [{:xt/id id}])))
                 (sort-by :id  #(cond (< (count %1) (count %2)) 1
                                      (< (count %2) (count %1)) -1
                                      :else (compare %2 %1)))
