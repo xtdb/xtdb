@@ -1,6 +1,6 @@
 = Standard Library
 
-XTDB provides a rich standard library of predicates and functions, for use in both Datalog and SQL.
+XTDB provides a rich standard library of predicates and functions, for use in both XTQL and SQL.
 
 The following control structures are available in XTDB:
 
@@ -15,7 +15,7 @@ The following control structures are available in XTDB:
 
 * If the predicate evaluates to `true`, returns the value of `then-expr`, else returns the value of `else-expr`.
 * The predicate must return a boolean value. To turn any value into a boolean use the `boolean` function, which returns `false` if its argument is false, null or absent; otherwise it returns `true`.
-* Datalog only
+* XTQL only
 
 == Case / Cond
 
@@ -75,7 +75,7 @@ Returns the value of `body-expr`, with `symbol` bound to the result of `binding-
 ----
 
 * Only one symbol/binding pair is permitted.
-* Datalog only
+* XTQL only
 
 == If Some
 
@@ -89,7 +89,7 @@ Otherwise, returns the value of `else-expr`.
   <else-expr>)
 ----
 
-* Datalog only.
+* XTQL only.
 
 == Coalesce / Null If
 

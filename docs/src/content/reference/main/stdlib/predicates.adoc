@@ -6,7 +6,7 @@ The standard comparators are available:
 
 [cols='3,3,8']
 |===
-| Datalog | SQL |
+| XTQL | SQL |
 
 | `(< exprs ...)` | `expr1 < expr2` | less than
 | `(<= exprs ...)` | `expr1 <= expr2` | less than or equal to
@@ -29,7 +29,7 @@ These aren't strictly predicates - they return the greatest/least value of their
 
 [cols='3,3,8']
 |===
-| Datalog | SQL |
+| XTQL | SQL |
 
 | `(greatest expr exprs*)` | `GREATEST(expr, ...)`
 | returns the greatest value of the provided arguments, by the usual comparison operators
@@ -43,7 +43,7 @@ These aren't strictly predicates - they return the greatest/least value of their
 
 [cols="3,3,8"]
 |===
-| Datalog | SQL |
+| XTQL | SQL |
 
 | `(and exprs*)` | `expr1 AND expr2` | returns `false` if any are false, otherwise `null` if any are null, otherwise `true`
 | `(or exprs*)` | `expr1 OR expr2` | returns `true` if any are true, otherwise `null` if any are null, otherwise `false`

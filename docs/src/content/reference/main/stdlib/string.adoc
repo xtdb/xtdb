@@ -8,7 +8,7 @@
 
 [cols="4,4,8"]
 |===
-| Datalog | SQL |
+| XTQL | SQL |
 
 | `(character-length s)`
 | `CHARACTER_LENGTH(s)`

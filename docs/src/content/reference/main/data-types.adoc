@@ -6,7 +6,7 @@ XTDB data types are implemented using Apache Arrow.
 
 [cols="3,5,5,6,6"]
 |===
-|XTDB Type |Arrow Vector Type |Description |SQL Example |Datalog Example
+|XTDB Type |Arrow Vector Type |Description |SQL Example |XTQL Example
 
 |`BIGINT`
 |https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/BigIntVector.html[`BigIntVector`]
@@ -269,7 +269,7 @@ XTDB supports arbitrarily nested data.
 
 [cols="3,5,5,6,6"]
 |===
-|XTDB Type |Arrow Vector Type |Description |SQL Example |Datalog Example
+|XTDB Type |Arrow Vector Type |Description |SQL Example |XTQL Example
 
 |`ARRAY`
 |https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/complex/ListVector.html[`ListVector`]

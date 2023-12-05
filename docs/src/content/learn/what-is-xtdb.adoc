@@ -9,7 +9,7 @@ i18nReady: true
 import PackageManagerTabs from '~/components/tabs/PackageManagerTabs.astro'
 ////
 
-XTDB is a **bitemporal** and **dynamic** **relational** database for **SQL** and **Datalog**.
+XTDB is a **bitemporal** and **dynamic** **relational** database for **SQL** and **XTQL**.
 
 At the core of XTDB is a novel relational database engine designed to help developers who are building dynamic and temporal applications with immutable data.
 
