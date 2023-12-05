@@ -920,7 +920,7 @@
                                                                                  extra-dml-bind-specs)))]
                                                           (.unifyClauses delete-query)))
 
-                                       [(Query/ret (dml-colspecs (.forValidTime delete-query) tx-opts))])
+                                       [(Query/returning (dml-colspecs (.forValidTime delete-query) tx-opts))])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:delete {:table table-name}
@@ -934,7 +934,7 @@
                                                                                  [(OutSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])))]
                                                           (.unifyClauses erase-query)))
 
-                                       [(Query/ret [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])])
+                                       [(Query/returning [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:erase {:table table-name}
@@ -958,11 +958,11 @@
                                                                                  extra-dml-bind-specs)))]
                                                           (.unifyClauses update-query)))
 
-                                       [(Query/ret (concat (dml-colspecs (.forValidTime update-query) tx-opts)
-                                                           [(ColSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
-                                                           (for [col unspecified-columns]
-                                                             (ColSpec/of col (Expr/lVar (str "xt$update$" col))))
-                                                           set-specs))])
+                                       [(Query/returning (concat (dml-colspecs (.forValidTime update-query) tx-opts)
+                                                                 [(ColSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                                 (for [col unspecified-columns]
+                                                                   (ColSpec/of col (Expr/lVar (str "xt$update$" col))))
+                                                                 set-specs))])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:update {:table table-name}

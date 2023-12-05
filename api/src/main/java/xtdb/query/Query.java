@@ -172,7 +172,7 @@ public interface Query {
         }
     }
 
-    static Return ret(List<ColSpec> cols) {
+    static Return returning(List<ColSpec> cols) {
         return new Return(cols);
     }
 

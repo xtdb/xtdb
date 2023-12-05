@@ -337,7 +337,7 @@
   (if-not (vector? return)
     (throw (err/illegal-arg :xtql/malformed-return {:return query}))
 
-    (Query/ret (parse-col-specs return query))))
+    (Query/returning (parse-col-specs return query))))
 
 (defmethod parse-query-tail 'aggregate [{:strs [aggregate] :as query}]
   (if-not (vector? aggregate)

@@ -490,7 +490,7 @@
   (Query/without (map (comp str symbol) cols)))
 
 (defmethod parse-query-tail 'return [[_ & cols :as this]]
-  (Query/ret (parse-col-specs cols this)))
+  (Query/returning (parse-col-specs cols this)))
 
 (defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
   (Query/aggregate (parse-col-specs cols this)))
