@@ -202,10 +202,10 @@ dependencies {
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("org.postgresql", "postgresql", "42.5.0")
-    testImplementation("cheshire", "cheshire", "5.11.0")
+    testImplementation("metosin", "jsonista", "0.3.3")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
     testImplementation("org.clojure", "test.check", "1.1.1")
-    
+
     // For generating clojure docs
     testImplementation("codox", "codox", "0.10.8")
 
@@ -253,7 +253,7 @@ tasks.create("build-codox", JavaExec::class) {
         "-e", "(require 'codox.main)",
         "-e", "(codox.main/generate-docs ${codoxOpts})"
     )
-    
+
     this.args = args
 }
 

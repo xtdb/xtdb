@@ -1,5 +1,5 @@
 (ns xtdb.tx-producer-test
-  (:require [cheshire.core :as json]
+  (:require [jsonista.core :as json]
             [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.api :as xt]
@@ -20,8 +20,8 @@
        ;; uncomment this to reset the expected file (but don't commit it)
        #_(spit file actual) ;; <<no-commit>>
 
-       (t/is (= (tj/sort-arrow-json (json/parse-string (slurp file)))
-                (tj/sort-arrow-json (json/parse-string actual))))))))
+       (t/is (= (tj/sort-arrow-json (json/read-value (slurp file)))
+                (tj/sort-arrow-json (json/read-value actual))))))))
 
 (def devices-docs
   [(xt/put :device-info

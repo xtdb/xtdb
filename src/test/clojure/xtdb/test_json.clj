@@ -1,5 +1,5 @@
 (ns xtdb.test-json
-  (:require [cheshire.core :as json]
+  (:require [jsonista.core :as json]
             [clojure.string :as str]
             [clojure.test :as t]
             [clojure.walk :as walk]
@@ -19,12 +19,12 @@
   "For use in tests to provide consitent ordering to where ordering is undefined"
   [arrow-json-tree-as-clojure]
   (walk/postwalk
-    (fn [node]
-      (if (and (map-entry? node)
-               (#{"children" "fields" "columns"} (key node)))
-        (MapEntry/create (key node) (sort-by #(get % "name") (val node)))
-        node))
-    arrow-json-tree-as-clojure))
+   (fn [node]
+     (if (and (map-entry? node)
+              (#{"children" "fields" "columns"} (key node)))
+       (MapEntry/create (key node) (sort-by #(get % "name") (val node)))
+       node))
+   arrow-json-tree-as-clojure))
 
 (defn- file->json-file ^java.nio.file.Path [^Path file]
   (.resolve (.getParent file) (format "%s.json" (.getFileName file))))
@@ -43,8 +43,8 @@
       json-file)))
 
 (defn check-arrow-json-file [^Path expected, ^Path actual]
-  (t/is (= (sort-arrow-json (json/parse-string (Files/readString expected)))
-           (sort-arrow-json (json/parse-string (Files/readString actual))))
+  (t/is (= (sort-arrow-json (json/read-value (Files/readString expected)))
+           (sort-arrow-json (json/read-value (Files/readString actual))))
         actual))
 
 (defn- read-transit-obj [stream]

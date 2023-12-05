@@ -6,7 +6,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [cheshire.core :as json]
+            [jsonista.core :as json]
             [xtdb.test-util :as tu])
   (:import java.io.OutputStream
            java.nio.charset.StandardCharsets
@@ -362,16 +362,17 @@
                        (map #(str/join "-" (take-last 2 (str/split % #"/"))))
                        (str/join "-and-")
                        (str (System/getProperty "user.home") "/slt-results/"))]
-    (json/generate-stream total-results (io/writer (str file-name ".json")))))
+    (json/write-value (io/writer (str file-name ".json") total-results json/keyword-keys-object-mapper))))
 
 (defn print-results-table [& args]
   (let [{:keys [max-failures max-errors]} (first args)
         result-files (->>
-                       (file-seq (io/file (str (System/getProperty "user.home") "/slt-results/")))
-                       (filter #(.isFile ^java.io.File %))
-                       (map str)
-                       (sort))
-        results (map #(assoc (json/parse-stream (clojure.java.io/reader %) true) :name (last (str/split % #"/"))) result-files)
+                      (file-seq (io/file (str (System/getProperty "user.home") "/slt-results/")))
+                      (filter #(.isFile ^java.io.File %))
+                      (map str)
+                      (sort))
+        results (map #(assoc (json/read-value (clojure.java.io/reader %) json/keyword-keys-object-mapper)
+                             :name (last (str/split % #"/"))) result-files)
         {:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (map #(dissoc % :name) results))]
 
     (pprint/print-table
