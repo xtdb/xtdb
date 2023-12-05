@@ -19,3 +19,7 @@ build
 .lsp/.cache/
 /_manifest
 .DS_Store
+
+# Idea
+.idea/modules.xml
+.idea/modules
