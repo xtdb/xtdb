@@ -643,3 +643,15 @@
             '[:scan
               {:table xt_docs} [{xt$id (= "foo" (substring xt$id 1 3))}]]
             {:node tu/*node*}))))
+
+(t/deftest test-iid-col-type-3016
+  (xt/submit-tx tu/*node* [(xt/put :comments {:xt/id 1})])
+
+  (t/is (= {'xt$iid [:fixed-size-binary 16]
+            'xt$valid_from [:timestamp-tz :micro "UTC"]
+            'xt$valid_to [:timestamp-tz :micro "UTC"]}
+
+           (:col-types (tu/query-ra '[:scan {:table comments}
+                                      [xt$iid xt$valid_from xt$valid_to]]
+                                    {:node tu/*node*
+                                     :with-col-types? true})))))

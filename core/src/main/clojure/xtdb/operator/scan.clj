@@ -392,14 +392,17 @@
       (letfn [(->field [[table col-name]]
                 (let [table (str table)
                       col-name (str col-name)]
-                  (if (types/temporal-column? (str col-name))
-                    ;; TODO move to fields here
-                    (types/col-type->field [:timestamp-tz :micro "UTC"])
-                    (types/merge-fields (.columnField metadata-mgr table col-name)
-                                        (some-> (.liveIndex wm)
-                                                (.liveTable table)
-                                                (.columnFields)
-                                                (get col-name))))))]
+
+                  ;; TODO move to fields here
+                  (cond
+                    (= "xt$iid" col-name) (types/col-type->field col-name [:fixed-size-binary 16])
+                    (types/temporal-column? col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
+
+                    :else (types/merge-fields (.columnField metadata-mgr table col-name)
+                                              (some-> (.liveIndex wm)
+                                                      (.liveTable table)
+                                                      (.columnFields)
+                                                      (get col-name))))))]
         (->> scan-cols
              (into {} (map (juxt identity ->field))))))
 
