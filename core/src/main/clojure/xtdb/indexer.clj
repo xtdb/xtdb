@@ -253,11 +253,11 @@
                 args (.form ^ClojureForm (.getObject args-rdr tx-op-idx))
 
                 res (try
-                      (let [res (sci/binding [sci/out *out*
-                                              sci/in *in*]
-                                  (apply tx-fn args))]
-                        (cond-> res
-                          (seqable? res) doall))
+                      (sci/binding [sci/out *out*
+                                    sci/in *in*]
+                        (let [res (apply tx-fn args)]
+                          (cond-> res
+                            (seqable? res) doall)))
                       (catch InterruptedException ie (throw ie))
                       (catch Throwable t
                         (log/warn t "unhandled error evaluating tx fn")
