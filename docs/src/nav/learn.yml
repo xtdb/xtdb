@@ -6,6 +6,10 @@
       label: What is XTDB?
     - slug: key-concepts
       label: Key concepts
+- section: Guides
+  pages:
+    - slug: starting-with-aws
+      label: Setting up an example cluster on AWS
 #    - slug: data-model-and-querying
 #      label: Data model and querying
 #    - slug: plan-your-application
