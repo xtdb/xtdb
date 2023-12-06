@@ -27,8 +27,7 @@
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.util :as util])
-  (:import (clojure.lang Keyword)
-           java.io.OutputStream
+  (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
            xtdb.IResultSet

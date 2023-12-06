@@ -7,6 +7,7 @@
             [xtdb.api :as xt]
             [xtdb.client.impl :as xtc]
             [xtdb.test-util :as tu :refer [*node*]]
+            [xtdb.jackson :as jackson]
             [xtdb.serde :as serde])
   (:import (java.io ByteArrayInputStream EOFException)))
 
@@ -39,15 +40,21 @@
 
 (defn- decode-transit [^String s] (first (decode-transit* s)))
 
+(def ^:private default-object-mapper
+  (doto (json/object-mapper
+         {:encode-key-fn true
+          :decode-key-fn true
+          :modules [(jackson/json-ld-module {:handlers jackson/handlers})]})
+    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
+
 (defn- decode-json* [^String s]
   (let [json-lines (str/split-lines s)]
     (loop [res [] lns json-lines]
       (if-not (seq lns)
         res
-        (recur (conj res (json/read-value (first lns))) (rest lns))))))
+        (recur (conj res (json/read-value (first lns) default-object-mapper)) (rest lns))))))
 
 (defn- decode-json [^String s] (first (decode-json* s)))
-
 
 (def possible-tx-ops
   [(xt/put :docs {:xt/id 1})
@@ -113,8 +120,8 @@
   (xt/submit-tx *node* [(xt/put :foo {:xt/id 1})])
   (Thread/sleep 100)
 
-  (t/is (= {"latest-completed-tx" {"tx-id" 0, "system-time" {"@type" "xt:timestamp", "@value" "2020-01-01T00:00:00Z"}},
-            "latest-submitted-tx" {"tx-id" 0, "system-time" {"@type" "xt:timestamp", "@value" "2020-01-01T00:00:00Z"}}}
+  (t/is (= {:latest-submitted-tx {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"},
+            :latest-completed-tx {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}}
            (-> (http/request {:accept :json
                               :as :string
                               :request-method :get
@@ -123,7 +130,7 @@
                decode-json))
         "testing status")
 
-  (t/is (= {"tx-id" 1, "system-time" {"@type" "xt:timestamp", "@value" "2020-01-02T00:00:00Z"}}
+  (t/is (= {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}
            (-> (http/request {:accept :json
                               :as :string
                               :request-method :post
@@ -138,9 +145,8 @@
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
                  {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
-
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2 :key :some-keyword})])]
-    (t/is (= #{{"xt/id" 1} {"xt/id" 2 "key" {"@type" "xt:keyword", "@value" "some-keyword"} }}
+    (t/is (= #{{:xt/id 1} {:xt/id 2 :key :some-keyword}}
              (-> (http/request {:accept "application/jsonl"
                                 :as :string
                                 :request-method :post
@@ -153,67 +159,59 @@
                  decode-json*
                  set))
           "testing query"))
-  (t/is (= {:status 400,
-            :body
-            {"@type" "xt:error",
-             "@value" {"xtdb.error/message" "Illegal argument: ':xtql/malformed-table'",
-                       "xtdb.error/class" "xtdb.IllegalArgumentException",
-                       "xtdb.error/data" {"xtdb.error/error-type" {"@type" "xt:keyword", "@value" "illegal-argument"},
-                                          "xtdb.error/error-key" {"@type" "xt:keyword", "@value" "xtql/malformed-table"},
-                                          "xtdb.error/message" "Illegal argument: ':xtql/malformed-table'",
-                                          "table" "docs",
-                                          "from" ["from" "docs" ["name"]]}}}}
-           (-> (http/request {:accept "application/jsonl"
-                              :as :string
-                              :request-method :post
-                              :content-type :transit+json
-                              :form-params {:query '(from docs [name])}
-                              :url (http-url "query")
-                              :throw-exceptions? false})
-               (update :body decode-json)
-               (select-keys [:status :body])))
-        "illegal argument error")
 
-  (t/is (= {:status 200,
-            :body
-            [{"@type" "xt:error",
-              "@value" {"xtdb.error/message" "data exception — division by zero",
-                        "xtdb.error/class" "xtdb.RuntimeException",
-                        "xtdb.error/data" {"xtdb.error/error-type" {"@type" "xt:keyword", "@value" "runtime-error"},
-                                           "xtdb.error/error-key" {"@type" "xt:keyword",
-                                                                   "@value" "xtdb.expression/division-by-zero"},
-                                           "xtdb.error/message" "data exception — division by zero"}}}]}
-           (-> (http/request {:accept "application/jsonl"
-                              :as :string
-                              :request-method :post
-                              :content-type :transit+json
-                              :form-params {:query '(-> (rel [{}] [])
-                                                        (with {:foo (/ 1 0)}))}
-                              :transit-opts xtc/transit-opts
-                              :url (http-url "query")
-                              :throw-exceptions? false})
-               (update :body decode-json*)
-               (select-keys [:status :body])))
-        "illegal argument error")
+  (t/testing "illegal argument error"
+    (let [{:keys [status body] :as _resp} (http/request {:accept "application/jsonl"
+                                                         :as :string
+                                                         :request-method :post
+                                                         :content-type :transit+json
+                                                         :form-params {:query '(from docs [name])}
+                                                         :url (http-url "query")
+                                                         :throw-exceptions? false})
+          body (decode-json body)]
+      (t/is (= 400 status))
+      (t/is (instance? xtdb.IllegalArgumentException body))
+      (t/is (= "Illegal argument: ':xtql/malformed-table'" (ex-message body)))
+      (t/is (= {:xtdb.error/error-type :illegal-argument,
+                :xtdb.error/error-key :xtql/malformed-table,
+                :xtdb.error/message "Illegal argument: ':xtql/malformed-table'",
+                :table "docs",
+                :from ["from" "docs" ["name"]]} (ex-data body)))))
 
-  (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :name 2})])]
-    (t/is (= {:status 500,
-              :body
-              {"@type" "xt:error",
-               "@value" {"xtdb.error/message" "No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]",
-                         "xtdb.error/class" "clojure.lang.ExceptionInfo",
-                         "xtdb.error/data" {"xtdb.error/error-type" {"@type" "xt:keyword", "@value" "unknown-runtime-error"},
-                                            "class" "java.lang.IllegalArgumentException",
-                                            "stringified" "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"}}}}
-             (-> (http/request {:accept "application/jsonl"
-                                :as :string
-                                :request-method :post
-                                :content-type :transit+json
-                                :form-params {:query "SELECT UPPER(docs.name) AS name FROM docs"
-                                              :basis {:tx tx}}
-                                :transit-opts xtc/transit-opts
-                                :url (http-url "query")
-                                :throw-exceptions? false})
-                 (update :body decode-json)
-                 (select-keys [:status :body])))
-          "unknown error")))
+  (t/testing "runtime error"
+    (let [{:keys [status body] :as _resp} (http/request {:accept "application/jsonl"
+                                                         :as :string
+                                                         :request-method :post
+                                                         :content-type :transit+json
+                                                         :form-params {:query '(-> (rel [{}] [])
+                                                                                   (with {:foo (/ 1 0)}))}
+                                                         :transit-opts xtc/transit-opts
+                                                         :url (http-url "query")})
+          body (decode-json body)]
+      (t/is (= 200 status))
+      (t/is (instance? xtdb.RuntimeException body))
+      (t/is (= "data exception — division by zero" (ex-message body)))
+      (t/is (= {:xtdb.error/error-type :runtime-error,
+                :xtdb.error/error-key :xtdb.expression/division-by-zero,
+                :xtdb.error/message "data exception — division by zero"}
+               (ex-data body)))))
+
+  (t/testing "unknown runtime error"
+    (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :name 2})])
+          {:keys [status body] :as _resp} (http/request {:accept "application/jsonl"
+                                                         :as :string
+                                                         :request-method :post
+                                                         :content-type :transit+json
+                                                         :form-params {:query "SELECT UPPER(docs.name) AS name FROM docs"
+                                                                       :basis {:tx tx}}
+                                                         :transit-opts xtc/transit-opts
+                                                         :url (http-url "query")
+                                                         :throw-exceptions? false})
+          body (decode-json body)]
+      (t/is (= 500 status))
+      (t/is (= "No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"
+               (ex-message body)))
+      (t/is (= {:xtdb.error/error-type :unknown-runtime-error,
+                :class "java.lang.IllegalArgumentException",
+                :stringified "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"}
+               (ex-data body))))))
