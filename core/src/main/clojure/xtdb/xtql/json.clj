@@ -1,7 +1,7 @@
 (ns xtdb.xtql.json
   (:require [xtdb.xtql.edn :as xtql.edn]
             [xtdb.error :as err])
-  (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
+  (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime Instant]
            (java.util Date List)
            (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
@@ -75,6 +75,7 @@
                   "xt:duration" (Expr/val (try-parse v #(Duration/parse %)))
                   "xt:timestamp" (Expr/val (try-parse v #(LocalDateTime/parse %)))
                   "xt:timestamptz" (Expr/val (try-parse v #(ZonedDateTime/parse %)))
+                  "xt:instant" (Expr/val (try-parse v #(Instant/parse %)))
                   (throw (err/illegal-arg :xtql/unknown-type {:value v, :type t}))))))))
 
 (defn parse-expr [expr]
@@ -125,11 +126,12 @@
         (map? obj) {"@value" (update-vals obj unparse)}
         (keyword? obj) {"@value" (str (symbol obj)), "@type" "xt:keyword"}
         (set? obj) {"@value" (mapv unparse obj), "@type" "xt:set"}
-        (instance? Date obj) {"@value" (str (.toInstant ^Date obj),) "@type" "xt:timestamp"}
+        (instance? Date obj) {"@value" (str (.toInstant ^Date obj),) "@type" "xt:instant"}
         (instance? LocalDate obj) {"@value" (str obj), "@type" "xt:date"}
         (instance? Duration obj) {"@value" (str obj), "@type" "xt:duration"}
         (instance? LocalDateTime obj) {"@value" (str obj), "@type" "xt:timestamp"}
         (instance? ZonedDateTime obj) {"@value" (str obj), "@type" "xt:timestamptz"}
+        (instance? Instant obj) {"@value" (str obj), "@type" "xt:instant"}
         :else (throw (UnsupportedOperationException. (format "obj: %s" (pr-str obj)))))))
 
   Expr$Exists

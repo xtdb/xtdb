@@ -35,6 +35,9 @@
   (t/is (= [#time/duration "PT3H1M35.23S" "PT3H1M35.23S" :duration]
            (roundtrip-value "PT3H1M35.23S" :duration)))
 
+  (t/is (= [#time/instant "2023-12-06T09:31:27.570827956Z" "2023-12-06T09:31:27.570827956Z" :instant]
+           (roundtrip-value "2023-12-06T09:31:27.570827956Z" :instant)))
+
   (t/is (= [[1 2 3] [1 2 3]]
            (roundtrip-expr [1 2 3]))
         "vectors")
