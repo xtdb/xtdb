@@ -43,8 +43,8 @@ Check out our link:/learn/what-is-xtdb[What is XTDB?] breakdown to learn more ab
 == Try it out right now:
 
 ```shell
-docker pull ghcr.io/xtdb/xtdb-ea
-docker run -ti --rm -p 5432:5432 -p 9832:9832 -p 3001:3000 ghcr.io/xtdb/xtdb-ea
+docker pull ghcr.io/xtdb/xtdb-standalone-ea
+docker run -ti --rm -p 5432:5432 -p 9832:9832 -p 3001:3000 ghcr.io/xtdb/xtdb-standalone-ea
 ```
 
 Now follow the instructions for the example snippets over on link:/v2[the 2.x Early Access landing page].

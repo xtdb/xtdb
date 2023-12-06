@@ -8,9 +8,9 @@ You can start the XTDB server using Docker:
 
 [source,shell]
 ----
-docker pull ghcr.io/xtdb/xtdb-ea
+docker pull ghcr.io/xtdb/xtdb-standalone-ea
 
-docker run -tip 3000:3000 ghcr.io/xtdb/xtdb-ea
+docker run -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
 ----
 
 Then, add the thin client to your `deps.edn`:
