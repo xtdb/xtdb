@@ -38,3 +38,9 @@ modules
 
 # Cursive Clojure plugin
 replstate.xml
+
+# ignoring specific stuff
+.name
+ClojureProjectResolveSettings.xml
+misc.xml
+vcs.xml
