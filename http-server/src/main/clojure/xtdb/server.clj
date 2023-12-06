@@ -139,7 +139,7 @@
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
-(s/def ::query (some-fn string? map? seq?))
+(s/def ::query (some-fn string? seq?))
 
 (s/def ::args (s/nilable (s/coll-of any?)))
 
