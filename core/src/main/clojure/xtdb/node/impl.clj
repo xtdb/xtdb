@@ -71,7 +71,11 @@
                                     (let [pq (.prepareRaQuery ra-src ra)]
                                       (sql/open-sql-query allocator wm-src pq query-opts))))
 
-                (or (seq? query) (instance? Query query)) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)
+                (or (seq? query) (instance? Query query)) (xtql/open-xtql-query
+                                                           allocator ra-src wm-src query
+                                                           (assoc query-opts :table-info (scan/tables-with-cols
+                                                                                          (:basis query-opts)
+                                                                                          wm-src scan-emitter)))
 
                 :else (throw (err/illegal-arg :unknown-query-type
                                               {:query query

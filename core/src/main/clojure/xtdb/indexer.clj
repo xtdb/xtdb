@@ -193,6 +193,9 @@
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
 (defn- tx-fn-q [allocator ra-src wm-src tx-opts]
+  ;;TODO tx-fns don't appear collect table-info and so won't work correctly with from *
+  ;;this appears to be true already of the sql-tx fns, leaving this work out for now,
+  ;;can circle back on both.
   (fn tx-fn-q*
     ([query] (tx-fn-q* query {}))
 

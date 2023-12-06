@@ -41,6 +41,34 @@
            (set (xt/q tu/*node* '(from :docs [{:first-name name} {:first-name also-name}]))))
         "projecting col out multiple times to different vars"))
 
+(deftest test-from-star
+  (xt/submit-tx tu/*node* ivan+petr)
+
+  (t/is (= #{{:last-name "Petrov", :first-name "Petr", :xt/id :petr}
+             {:last-name "Ivanov", :first-name "Ivan", :xt/id :ivan}}
+           (set (xt/q tu/*node* '(from :docs [*]))))
+        "Extra short-form projections are redundant")
+
+  (t/is (= #{{:last-name "Petrov", :first-name "Petr", :xt/id :petr}
+             {:last-name "Ivanov", :first-name "Ivan", :xt/id :ivan}}
+           (set (xt/q tu/*node* '(from :docs [first-name *]))))
+        "Extra short-form projections are redundant")
+
+  (t/is (= #{{:last-name "Ivanov", :first-name "Ivan", :xt/id :ivan}}
+           (set (xt/q tu/*node* '(from :docs [{:first-name "Ivan"} *]))))
+        "literal filters still work")
+
+  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :jeff, :first-name "Jeff", :last-name "Jeff"})])
+
+  (t/is (= #{{:last-name "Jeff", :first-name "Jeff", :xt/id :jeff}}
+           (set (xt/q tu/*node* '(from :docs [{:last-name first-name} *]))))
+        "Implicitly projected cols unify with explicitly projected cols")
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"\* is not a valid in from when inside a unify context"
+                          (xt/q tu/*node*
+                                '(unify (from :docs [*]))))))
+
 (deftest test-from-unification
   (xt/submit-tx tu/*node*
                 (conj ivan+petr

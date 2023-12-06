@@ -103,6 +103,12 @@
   ;; TODO check errors
   )
 
+(t/deftest test-from-star
+
+  (t/is (= ['(from :foo [* a {:xt/id b} {:d "fish"}])
+            {"from" "foo", "bind" ["*" "a" {"xt/id" "b"} {"d" {"@value" "fish"}}]}]
+           (roundtrip-q {"from" "foo", "bind" ["a" {"xt/id" "b"} "*" {"d" {"@value" "fish"}}]}))))
+
 (t/deftest test-parse-rel
   (let [json-q {"rel" [{"a" 12 "b" {"@value" "foo"}} {"a" 1 "c" {"@value" "bar"}}]
                 "bind" ["a" "b" "c"]}]

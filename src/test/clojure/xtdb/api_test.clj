@@ -711,3 +711,18 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 
     (t/is (= #{{:id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}}
              (set (xt/q tu/*node* (build-posts-query {:popular? true, :with-author? true})))))))
+
+(t/deftest test-xtql-dml-from-star
+
+  (xt/submit-tx tu/*node* [(xt/put :users {:xt/id :james, :first-name "James"})
+                           (xt/put :users {:xt/id :dave, :first-name "Dave"})
+                           (xt/put :users {:xt/id :rob, :first-name "Rob" :last-name "ert"})])
+
+  (xt/submit-tx tu/*node* [(xt/insert-into :users2 '(from :users [*]))])
+
+
+
+  (t/is (= #{{:first-name "Dave", :xt/id :dave}
+             {:last-name "ert", :first-name "Rob", :xt/id :rob}
+             {:first-name "James", :xt/id :james}}
+           (set (xt/q tu/*node* '(from :users2 [*]))))))

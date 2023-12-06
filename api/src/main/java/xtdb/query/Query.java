@@ -53,24 +53,30 @@ public interface Query {
         public final TemporalFilter forValidTime;
         public final TemporalFilter forSystemTime;
         public final List<OutSpec> bindings;
+        public final boolean projectAllCols;
 
-        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<OutSpec> bindings) {
+        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<OutSpec> bindings, boolean projectAllCols) {
             this.table = table;
             this.forValidTime = forValidTime;
             this.forSystemTime = forSystemTime;
             this.bindings = unmodifiableList(bindings);
+            this.projectAllCols = projectAllCols;
         }
 
         public From forValidTime(TemporalFilter forValidTime) {
-            return new From(table, forValidTime, forSystemTime, bindings);
+            return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
         }
 
         public From forSystemTime(TemporalFilter forSystemTime) {
-            return new From(table, forValidTime, forSystemTime, bindings);
+            return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
+        }
+
+        public From projectAllCols(boolean projectAllCols) {
+            return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
         }
 
         public From binding(List<OutSpec> bindings) {
-            return new From(table, forValidTime, forSystemTime, bindings);
+            return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
         }
 
         @Override
@@ -83,12 +89,12 @@ public interface Query {
                 if (forSystemTime != null) temporalFilters.put("forSystemTime", forSystemTime);
             }
 
-            return String.format("(from %s %s)", stringifyOpts(table, temporalFilters), stringifyList(bindings));
+            return String.format("(from %s [%s %s])", stringifyOpts(table, temporalFilters), (projectAllCols ? "*" : ""), stringifyList(bindings));
         }
     }
 
     static From from(String table) {
-        return new From(table, null, null, null);
+        return new From(table, null, null, null, false);
     }
 
     final class Where implements QueryTail, UnifyClause {

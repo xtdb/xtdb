@@ -25,6 +25,7 @@
 ;;keeps the conversion to java AST to -> clojure sym in one place.
 ;;TODO Document var->cols purpose, and/or give it a more descriptive name
 
+(def ^:dynamic *table-info*)
 
 (defprotocol PlanQuery
   (plan-query [query]))
@@ -402,7 +403,11 @@
     {scan-col (list* 'and col-preds)}))
 
 (defn- plan-from [^Query$From from]
-  (let [planned-bind-specs (mapv plan-out-spec (.bindings from))
+  (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec (.bindings from))
+                                     (.projectAllCols from)
+                                     (concat (->> (get *table-info* (util/str->normal-form-str (.table from)))
+                                                  (mapv symbol)
+                                                  (mapv #(hash-map :l % :r %))))))
         distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))
         literal-preds-by-col (-> (->> planned-bind-specs
                                       (filter :literal?)
@@ -581,7 +586,14 @@
              :required-vars (apply set/union (map :required-vars arg-bindings))}]]))
 
 (extend-protocol PlanUnifyClause
-  Query$From (plan-unify-clause [from] [[:from (plan-from from)]])
+  Query$From
+  (plan-unify-clause [from]
+    (when (.projectAllCols from)
+      (throw (err/illegal-arg
+              :xtql/invalid-from
+              {:from from
+               ::err/message "* is not a valid in from when inside a unify context"})))
+    [[:from (plan-from from)]])
 
   Query$DocsRelation
   (plan-unify-clause [rel]
@@ -860,8 +872,9 @@
     {:ra-plan [:top {:skip (.length this)} ra-plan]
      :provided-vars provided-vars}))
 
-(defn compile-query [query]
-  (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)]
+(defn compile-query [query table-info]
+  (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)
+                                    *table-info* table-info]
                             (plan-query query))]
 
     (-> ra-plan
@@ -976,8 +989,9 @@
   (plan-dml [query _tx-opts]
     [:assert-exists {} (:ra-plan (plan-query (.query query)))]))
 
-(defn compile-dml [query tx-opts]
-  (let [ra-plan (binding [*gensym* (seeded-gensym "_" 0)]
+(defn compile-dml [query {:keys [table-info] :as tx-opts}]
+  (let [ra-plan (binding [*gensym* (seeded-gensym "_" 0)
+                          *table-info* table-info]
                   (plan-dml query tx-opts))
         [dml-op dml-op-opts plan] ra-plan]
     [dml-op dml-op-opts
@@ -989,12 +1003,12 @@
          (doto (lp/validate-plan)))]))
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src,
-                                        query {:keys [args default-all-valid-time? basis default-tz explain? key-fn]
+                                        query {:keys [args default-all-valid-time? basis default-tz explain? key-fn table-info]
                                                :or {key-fn :clojure}}]
 
   (let [plan (cond-> query
                (seq? query) xt.edn/parse-query
-               true compile-query)]
+               true (#(compile-query % table-info)))]
     (if explain?
       (lp/explain-result plan)
 

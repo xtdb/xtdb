@@ -314,6 +314,18 @@
 
 (def from-opt-keys #{:bind :for-valid-time :for-system-time})
 
+(defn find-star-projection [star-ident bindings]
+  ;;TODO worth checking here or in parse-out-specs for * in col/attr position? {* var}??
+  ;;Arguably not checking for this could allow * to be a valid col name?
+  (reduce
+   (fn [acc binding]
+     (if (= binding star-ident)
+       (assoc acc :project-all-cols true)
+       (update acc :bind conj binding)))
+   {:project-all-cols false
+    :bind []}
+   bindings))
+
 (defn parse-from [[_ table opts :as this]]
   (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :from this}))
@@ -334,14 +346,18 @@
               (throw (err/illegal-arg :xtql/malformed-bind {:opts opts, :from this}))
 
               :else
-              (-> q
-                  (cond-> for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
-                          for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this)))
-                  (.binding (parse-out-specs bind this))))))
+              (let [{:keys [bind project-all-cols]} (find-star-projection '* bind)]
+                (-> q
+                    (cond-> for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
+                            for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
+                            project-all-cols (.projectAllCols true))
+                    (.binding (parse-out-specs bind this)))))))
 
         (vector? opts)
-        (-> q
-            (.binding (parse-out-specs opts this)))
+        (let [{:keys [bind project-all-cols]} (find-star-projection '* opts)]
+          (-> q
+              (cond-> project-all-cols (.projectAllCols true))
+              (.binding (parse-out-specs bind this))))
 
         :else (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this}))))))
 
@@ -394,7 +410,8 @@
   (unparse [from]
     (let [for-valid-time (.forValidTime from)
           for-sys-time (.forSystemTime from)
-          bind (mapv unparse (.bindings from))]
+          bind (mapv unparse (.bindings from))
+          bind (if (.projectAllCols from) (vec (cons '* bind)) bind)]
       (list 'from (keyword (.table from))
             (if (or for-valid-time for-sys-time)
               (cond-> {:bind bind}
