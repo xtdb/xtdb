@@ -95,6 +95,15 @@
          IllegalArgumentException #"Attribute in bind spec must be keyword"
          (roundtrip-q '(from :foo [{bar x "fish" y}])))))
 
+(t/deftest test-from-star
+  (t/is (= '(from :foo [* a {:xt/id b} {:d "fish"}])
+           (roundtrip-q '(from :foo [a {:xt/id b} * {:d "fish"}]))))
+
+  (t/is (= '(from :foo {:bind [* a {:xt/id b} {:d "fish"}]
+                        :for-system-time :all-time})
+           (roundtrip-q '(from :foo {:bind [a {:xt/id b} * {:d "fish"}]
+                                     :for-system-time :all-time})))))
+
 (t/deftest test-parse-unify
   (t/is (= '(unify (from :foo [{:baz b}])
                    (from :bar [{:baz b}]))

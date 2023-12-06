@@ -217,10 +217,12 @@
         (throw (err/illegal-arg :xtql/missing-bind {:from this}))
 
         :else
-        (cond-> (Query/from from)
-          forValidTime (.forValidTime (parse-temporal-filter forValidTime :forValidTime this))
-          forSystemTime (.forSystemTime (parse-temporal-filter forSystemTime :forSystemTime this))
-          bind (.binding (parse-out-specs bind this)))))))
+        (let [{:keys [bind project-all-cols]} (xtql.edn/find-star-projection "*" bind)]
+          (cond-> (Query/from from)
+            forValidTime (.forValidTime (parse-temporal-filter forValidTime :forValidTime this))
+            forSystemTime (.forSystemTime (parse-temporal-filter forSystemTime :forSystemTime this))
+            project-all-cols (.projectAllCols true)
+            bind (.binding (parse-out-specs bind this))))))))
 
 (defmethod parse-query 'from [from] (parse-from from))
 (defmethod parse-unify-clause 'from [from] (parse-from from))
@@ -256,11 +258,11 @@
     (let [table (.table from)
           for-valid-time (.forValidTime from)
           for-sys-time (.forSystemTime from)
-          bindings (.bindings from)]
-      (cond-> {"from" table}
+          bind (mapv unparse (.bindings from))
+          bind (if (.projectAllCols from) (vec (cons "*" bind)) bind)]
+      (cond-> {"from" table "bind" bind}
         for-valid-time (assoc "forValidTime" (unparse for-valid-time))
-        for-sys-time (assoc "forSystemTime" (unparse for-sys-time))
-        bindings (assoc "bind" (mapv unparse bindings)))))
+        for-sys-time (assoc "forSystemTime" (unparse for-sys-time)))))
 
   Query$Join
   (unparse [join]
