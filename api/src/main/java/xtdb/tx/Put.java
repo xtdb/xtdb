@@ -4,6 +4,7 @@ import clojure.lang.Keyword;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 
 public final class Put extends Ops implements Ops.HasValidTimeBounds<Put> {
 
@@ -57,5 +58,18 @@ public final class Put extends Ops implements Ops.HasValidTimeBounds<Put> {
     @Override
     public String toString() {
         return String.format("[:put {tableName=%s, doc=%s, validFrom=%s, validTo=%s}]", tableName, doc, validFrom, validTo);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Put put = (Put) o;
+        return Objects.equals(tableName, put.tableName) && Objects.equals(doc, put.doc) && Objects.equals(validFrom, put.validFrom) && Objects.equals(validTo, put.validTo);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(tableName, doc, validFrom, validTo);
     }
 }

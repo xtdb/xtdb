@@ -2,6 +2,7 @@ package xtdb.tx;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Objects;
 
 public final class Sql extends Ops implements Ops.HasArgs<List<?>, Sql> {
     private final String sql;
@@ -46,5 +47,18 @@ public final class Sql extends Ops implements Ops.HasArgs<List<?>, Sql> {
     @Override
     public String toString() {
         return String.format("[:sql '%s' {:argRows=%s, :argBytes=%s}]", sql, argRows, argBytes);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Sql sql1 = (Sql) o;
+        return Objects.equals(sql, sql1.sql) && Objects.equals(argRows, sql1.argRows) && Objects.equals(argBytes, sql1.argBytes);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(sql, argRows, argBytes);
     }
 }

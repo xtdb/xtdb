@@ -58,4 +58,17 @@ public final class Delete extends Ops implements Ops.HasValidTimeBounds<Delete> 
     public String toString() {
         return String.format("[:delete %s %s {validFrom=%s, validTo=%s}]", tableName, entityId, validFrom, validTo);
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Delete delete = (Delete) o;
+        return Objects.equals(tableName, delete.tableName) && Objects.equals(entityId, delete.entityId) && Objects.equals(validFrom, delete.validFrom) && Objects.equals(validTo, delete.validTo);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(tableName, entityId, validFrom, validTo);
+    }
 }
