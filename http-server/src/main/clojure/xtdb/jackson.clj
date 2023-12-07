@@ -15,6 +15,7 @@
            (com.fasterxml.jackson.databind.module SimpleModule)
            (java.time Instant Duration LocalDate LocalDateTime ZonedDateTime)
            (java.util Date Map Set)
+           (java.time Instant Duration LocalDate LocalDateTime ZonedDateTime ZoneId)
            (jsonista.jackson FunctionalSerializer)
            (xtdb.jackson JsonLdValueOrPersistentHashMapDeserializer)))
 
@@ -71,6 +72,8 @@
                               :decode #(LocalDateTime/parse %)}
                ZonedDateTime {:tag "xt:timestamptz"
                               :decode #(ZonedDateTime/parse %)}
+               ZoneId {:tag "xt:timezone"
+                       :decode #(ZoneId/of %)}
                Instant {:tag "xt:instant"
                         :decode #(Instant/parse %)}
                Throwable {:tag "xt:error"
