@@ -494,8 +494,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
       (t/is (= tx1-expected (all-users tx1)))
 
       (t/testing "insert by query"
-        (xt/submit-tx *node* [(xt/insert-into :users2 '(from :users {:bind [xt/id {:first-name given-name, :last-name surname} xt/valid-from xt/valid-to]
-                                                                     :for-valid-time :all-time}))])
+        (xt/submit-tx *node* [(xt/insert-into :users2 (from :users {:bind [xt/id {:first-name given-name, :last-name surname} xt/valid-from xt/valid-to]
+                                                                    :for-valid-time :all-time}))])
 
         (t/is (= #{["Dave" "Davis", (time/->zdt #inst "2018"), nil]
                    ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
@@ -506,8 +506,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                       (into #{} (map (juxt :given-name :surname :xt/valid-from :xt/valid-to)))))))
 
       (let [tx2 (xt/submit-tx *node* [(-> (xt/delete-from :users
-                                                          {:for-valid-time '(from #inst "2020-05-01")
-                                                           :bind '[{:xt/id $uid}]})
+                                                          {:for-valid-time (from #inst "2020-05-01")
+                                                           :bind [{:xt/id $uid}]})
                                           (xt/with-op-args {:uid "dave"}))])
             tx2-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
@@ -517,10 +517,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
         (t/is (= tx2-expected (all-users tx2)))
         (t/is (= tx1-expected (all-users tx1)))
 
-        (let [tx3 (xt/submit-tx *node* [(-> (xt/update-table :users
-                                                             '{:for-valid-time (from #inst "2021-07-01")
-                                                               :bind [{:xt/id $uid}]
-                                                               :set {:first-name "Sue"}})
+        (let [tx3 (xt/submit-tx *node* [(-> (xt/update-table :users {:for-valid-time (from #inst "2021-07-01")
+                                                                     :bind [{:xt/id $uid}]
+                                                                     :set {:first-name "Sue"}})
                                             (xt/with-op-args {:uid "susan"}))]
 
                                 {:default-all-valid-time? true})
@@ -544,7 +543,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
     (let [tx1 (xt/submit-tx *node*
                             [(xt/put :foo {:xt/id "foo", :version 0})
                              (xt/put :foo {:xt/id "bar", :version 0})])
-          tx2 (xt/submit-tx *node* [(xt/update-table :foo '{:set {:version 1}})])
+          tx2 (xt/submit-tx *node* [(xt/update-table :foo {:set {:version 1}})])
           v0 {:version 0,
               :xt/valid-from (time/->zdt #inst "2020-01-01"),
               :xt/valid-to (time/->zdt #inst "2020-01-02")}
@@ -567,7 +566,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                  (assoc v1 :xt/id "bar")}
                (q tx2)))
 
-      (let [tx3 (xt/submit-tx *node* [(xt/erase-from :foo '[{:xt/id "foo"}])])]
+      (let [tx3 (xt/submit-tx *node* [(xt/erase-from :foo [{:xt/id "foo"}])])]
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx3)))
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx2)))
 
@@ -578,15 +577,15 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 
 (t/deftest test-assert-dml
   (t/testing "assert-not-exists"
-    (xt/submit-tx tu/*node* [(-> (xt/assert-not-exists '(from :users [{:first-name $name}]))
+    (xt/submit-tx tu/*node* [(-> (xt/assert-not-exists (from :users [{:first-name $name}]))
                                  (xt/with-op-args {:name "James"}))
                              (xt/put :users {:xt/id :james, :first-name "James"})])
 
-    (xt/submit-tx tu/*node* [(-> (xt/assert-not-exists '(from :users [{:first-name $name}]))
+    (xt/submit-tx tu/*node* [(-> (xt/assert-not-exists (from :users [{:first-name $name}]))
                                  (xt/with-op-args {:name "Dave"}))
                              (xt/put :users {:xt/id :dave, :first-name "Dave"}) ])
 
-    (xt/submit-tx tu/*node* [(-> (xt/assert-not-exists '(from :users [{:first-name $name}]))
+    (xt/submit-tx tu/*node* [(-> (xt/assert-not-exists (from :users [{:first-name $name}]))
                                  (xt/with-op-args {:name "James"}))
                              (xt/put :users {:xt/id :james2, :first-name "James"}) ])
 
@@ -605,11 +604,11 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                          (update row :xt/error ex-data)))))))
 
   (t/testing "assert-exists"
-    (xt/submit-tx tu/*node* [(-> (xt/assert-exists '(from :users [{:first-name $name}]))
+    (xt/submit-tx tu/*node* [(-> (xt/assert-exists (from :users [{:first-name $name}]))
                                  (xt/with-op-args {:name "Mike"}))
                              (xt/put :users {:xt/id :mike, :first-name "Mike"}) ])
 
-    (xt/submit-tx tu/*node* [(-> (xt/assert-exists '(from :users [{:first-name $name}]))
+    (xt/submit-tx tu/*node* [(-> (xt/assert-exists (from :users [{:first-name $name}]))
                                  (xt/with-op-args {:name "James"}))
                              (xt/delete :users :james)
                              (xt/put :users {:xt/id :james2, :first-name "James"})])
@@ -718,7 +717,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                            (xt/put :users {:xt/id :dave, :first-name "Dave"})
                            (xt/put :users {:xt/id :rob, :first-name "Rob" :last-name "ert"})])
 
-  (xt/submit-tx tu/*node* [(xt/insert-into :users2 '(from :users [*]))])
+  (xt/submit-tx tu/*node* [(xt/insert-into :users2 (from :users [*]))])
 
 
 

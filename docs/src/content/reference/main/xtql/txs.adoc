@@ -53,7 +53,7 @@ For example:
 [source,clojure]
 ----
 (xt/insert-into :users
-                '(from :old-users [xt/id {:first-name given-name} {:last-name family-name}]))
+                (from :old-users [xt/id {:first-name given-name} {:last-name family-name}]))
 
 ;; equivalent to:
 ;; "INSERT INTO users SELECT xt$id, first_name AS given_name, last_name AS family_name FROM old_users"
@@ -203,7 +203,7 @@ This can be used to enforce consistency constraints - for example, to assert tha
 
 [source,clojure]
 ----
-[(-> (xt/assert-not-exists '(from :users [{:email $email}]))
+[(-> (xt/assert-not-exists (from :users [{:email $email}]))
      (xt/with-op-args [{:email "james@example.com"}]))
  (xt/put :users {:xt/id :james, :email "james@example.com", ...})]
 ----

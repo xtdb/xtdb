@@ -212,6 +212,21 @@
   [node]
   (xtp/status node))
 
+(defmacro template
+  "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
+
+  Usage:
+
+  (defn build-posts-query [{:keys [with-author?]}]
+    (xt/template (from :posts [{:xt/id id} text
+                               ~@(when with-author?
+                                   '[author])])))"
+
+  {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
+  [query]
+
+  (backtick/quote-fn query))
+
 (def ^:private eid? (some-fn uuid? integer? string? keyword?))
 
 (def ^:private table? keyword?)
@@ -292,38 +307,39 @@
 (defn with-op-arg-rows [^Ops$HasArgs op arg-rows]
   (.withArgs op ^List arg-rows))
 
-(defn insert-into [table-name xtql-query]
-  (Ops/xtql (list 'insert table-name xtql-query)))
+(defmacro insert-into
+  {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
+  [table-name xtql-query]
 
-(defn update-table
+  (template (~`Ops/xtql (list 'insert ~table-name (~`template ~xtql-query)))))
+
+(defmacro update-table
+  {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
   #_{:clj-kondo/ignore [:unused-binding]}
   [table-name {:keys [bind set] :as opts} & unify-clauses]
 
-  (Ops/xtql (list* 'update table-name opts unify-clauses)))
+  (template (~`Ops/xtql (list* 'update ~table-name (~`template ~opts) (~`template [~@unify-clauses])))))
 
-(defn delete-from [table-name bind-or-opts & unify-clauses]
-  (Ops/xtql (list* 'delete table-name bind-or-opts unify-clauses)))
-
-(defn erase-from [table-name bind-or-opts & unify-clauses]
-  (Ops/xtql (list* 'erase table-name bind-or-opts unify-clauses)))
-
-(defn assert-exists [xtql-query]
-  (Ops/xtql (list 'assert-exists xtql-query)))
-
-(defn assert-not-exists [xtql-query]
-  (Ops/xtql (list 'assert-not-exists xtql-query)))
-
-(defmacro template
-  "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
-
-  Usage:
-
-  (defn build-posts-query [{:keys [with-author?]}]
-    (xt/template (from :posts [{:xt/id id} text
-                               ~@(when with-author?
-                                   '[author])])))"
-
+(defmacro delete-from
   {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
-  [query]
+  [table-name bind-or-opts & unify-clauses]
 
-  (backtick/quote-fn query))
+  (template (~`Ops/xtql (list* 'delete ~table-name (~`template ~bind-or-opts) (~`template [~@unify-clauses])))))
+
+(defmacro erase-from
+  {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
+  [table-name bind-or-opts & unify-clauses]
+
+  (template (~`Ops/xtql (list* 'erase ~table-name (~`template ~bind-or-opts) (~`template [~@unify-clauses])))))
+
+(defmacro assert-exists
+  {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
+  [xtql-query]
+
+  (template (~`Ops/xtql (list 'assert-exists (~`template ~xtql-query)))))
+
+(defmacro assert-not-exists
+  {:clj-kondo/ignore [:unresolved-symbol :unresolved-namespace]}
+  [xtql-query]
+
+  (template (~`Ops/xtql (list 'assert-not-exists (~`template ~xtql-query)))))
