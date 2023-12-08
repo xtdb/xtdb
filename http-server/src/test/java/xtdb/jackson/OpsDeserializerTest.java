@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import xtdb.tx.Ops;
 import xtdb.tx.Put;
 import xtdb.tx.Delete;
+import xtdb.tx.Erase;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -28,6 +29,7 @@ class OpsDeserializerTest {
         HashMap<Class<?>, JsonDeserializer<?>> deserializerMapping = new HashMap<>();
         deserializerMapping.put(Put.class, new PutDeserializer());
         deserializerMapping.put(Delete.class, new DeleteDeserializer());
+        deserializerMapping.put(Erase.class, new EraseDeserializer());
         deserializerMapping.put(Ops.class, new OpsDeserializer());
         SimpleDeserializers deserializers = new SimpleDeserializers(deserializerMapping);
         module.setDeserializers(deserializers);
@@ -62,5 +64,19 @@ class OpsDeserializerTest {
 
         // then
         assertEquals( Ops.delete(Keyword.intern("docs"), "my-id"), actual);
+    }
+
+    @Test
+    public void testEraseEquals() throws IOException {
+        // given
+        String erase = """
+                {"erase": "docs", "xt/id": "my-id"}
+                """;
+
+        // when
+        Object actual = objectMapper.readValue(erase, Ops.class);
+
+        // then
+        assertEquals( Ops.erase(Keyword.intern("docs"), "my-id"), actual);
     }
 }

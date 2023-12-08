@@ -51,8 +51,8 @@
              (clj-json-tx-op->tx-op {"put" "docs"
                                      "doc" {"xt/id" "my-id" "foo" :bar}
                                      "valid-from" #inst "2020"
-                                     "valid-to" #inst "2021"})))) 
-  
+                                     "valid-to" #inst "2021"}))))
+
   (t/testing "delete"
     (t/is (= #xt.tx/delete {:table-name :docs,
                             :xt/id "my-id",
@@ -67,7 +67,7 @@
                             :valid-to nil}
              (clj-json-tx-op->tx-op {"delete" "docs"
                                      "xt/id" :keyword-id})))
-    
+
     (t/is (= #xt.tx/delete {:table-name :docs,
                             :xt/id "my-id",
                             :valid-from #time/instant "2020-01-01T00:00:00Z",
@@ -75,4 +75,14 @@
              (clj-json-tx-op->tx-op {"delete" "docs"
                                      "xt/id" "my-id"
                                      "valid-from" #inst "2020"
-                                     "valid-to" #inst "2021"})))))
+                                     "valid-to" #inst "2021"}))))
+  (t/testing "erase"
+    (t/is (= #xt.tx/erase {:table-name :docs,
+                           :xt/id "my-id"}
+             (clj-json-tx-op->tx-op {"erase" "docs"
+                                     "xt/id" "my-id"})))
+
+    (t/is (= #xt.tx/erase {:table-name :docs,
+                           :xt/id :keyword-id}
+             (clj-json-tx-op->tx-op {"erase" "docs"
+                                     "xt/id" :keyword-id})))))

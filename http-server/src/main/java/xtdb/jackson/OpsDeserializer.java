@@ -14,6 +14,7 @@ import xtdb.IllegalArgumentException;
 import xtdb.tx.Ops;
 import xtdb.tx.Put;
 import xtdb.tx.Delete;
+import xtdb.tx.Erase;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -36,6 +37,8 @@ public class OpsDeserializer extends StdDeserializer<Ops>  {
             return mapper.treeToValue(node, Put.class);
         } else if (node.has("delete")) {
             return mapper.treeToValue(node, Delete.class);
+        } else if (node.has("erase")) {
+            return mapper.treeToValue(node, Erase.class);
         } else {
             // TODO DELETE, ERASE, CALL
            throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);

@@ -1,8 +1,8 @@
 (ns xtdb.jackson
   (:require [jsonista.core :as json])
   (:import (com.fasterxml.jackson.databind.module SimpleModule)
-           (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer)
-           (xtdb.tx Ops Put)))
+           (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer DeleteDeserializer EraseDeserializer)
+           (xtdb.tx Ops Put Delete Erase)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -22,4 +22,6 @@
                        :modules [(JsonLdModule.)
                                  (doto (SimpleModule. "xtdb.tx")
                                    (.addDeserializer Ops (OpsDeserializer.))
-                                   (.addDeserializer Put (PutDeserializer.)))]}))
+                                   (.addDeserializer Put (PutDeserializer.))
+                                   (.addDeserializer Delete (DeleteDeserializer.))
+                                   (.addDeserializer Erase (EraseDeserializer.)))]}))
