@@ -26,7 +26,7 @@ public class DeleteDeserializer extends StdDeserializer<Delete> {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);
 
-        Delete op = new Delete(Keyword.intern(node.get("delete").asText()), mapper.convertValue(node.get("xt/id"), Object.class));
+        Delete op = new Delete(Keyword.intern(node.get("delete").asText()), mapper.convertValue(node.get("id"), Object.class));
 
         if (node.has("valid-from")) {
             op = op.startingFrom((Instant) mapper.treeToValue(node.get("valid-from"), Object.class));

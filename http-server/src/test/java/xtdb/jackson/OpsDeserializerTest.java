@@ -56,7 +56,7 @@ class OpsDeserializerTest {
     public void testDeleteEquals() throws IOException {
         // given
         String delete = """
-                {"delete": "docs", "xt/id": "my-id"}
+                {"delete": "docs", "id": "my-id"}
                 """;
 
         // when
@@ -70,7 +70,7 @@ class OpsDeserializerTest {
     public void testEraseEquals() throws IOException {
         // given
         String erase = """
-                {"erase": "docs", "xt/id": "my-id"}
+                {"erase": "docs", "id": "my-id"}
                 """;
 
         // when

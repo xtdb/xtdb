@@ -40,7 +40,7 @@ public class OpsDeserializer extends StdDeserializer<Ops>  {
         } else if (node.has("erase")) {
             return mapper.treeToValue(node, Erase.class);
         } else {
-            // TODO DELETE, ERASE, CALL
+            // TODO CALL
            throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
         }
     }

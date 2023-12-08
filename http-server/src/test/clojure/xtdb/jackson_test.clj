@@ -59,30 +59,30 @@
                             :valid-from nil,
                             :valid-to nil}
              (clj-json-tx-op->tx-op {"delete" "docs"
-                                     "xt/id" "my-id"})))
+                                     "id" "my-id"})))
 
     (t/is (= #xt.tx/delete {:table-name :docs,
                             :xt/id :keyword-id,
                             :valid-from nil,
                             :valid-to nil}
              (clj-json-tx-op->tx-op {"delete" "docs"
-                                     "xt/id" :keyword-id})))
+                                     "id" :keyword-id})))
 
     (t/is (= #xt.tx/delete {:table-name :docs,
                             :xt/id "my-id",
                             :valid-from #time/instant "2020-01-01T00:00:00Z",
                             :valid-to #time/instant "2021-01-01T00:00:00Z"}
              (clj-json-tx-op->tx-op {"delete" "docs"
-                                     "xt/id" "my-id"
+                                     "id" "my-id"
                                      "valid-from" #inst "2020"
                                      "valid-to" #inst "2021"}))))
   (t/testing "erase"
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id "my-id"}
              (clj-json-tx-op->tx-op {"erase" "docs"
-                                     "xt/id" "my-id"})))
+                                     "id" "my-id"})))
 
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id :keyword-id}
              (clj-json-tx-op->tx-op {"erase" "docs"
-                                     "xt/id" :keyword-id})))))
+                                     "id" :keyword-id})))))

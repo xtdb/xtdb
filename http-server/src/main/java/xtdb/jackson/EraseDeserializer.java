@@ -26,7 +26,7 @@ public class EraseDeserializer extends StdDeserializer<Erase> {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);
 
-        Erase op = new Erase(Keyword.intern(node.get("erase").asText()), mapper.convertValue(node.get("xt/id"), Object.class));
+        Erase op = new Erase(Keyword.intern(node.get("erase").asText()), mapper.convertValue(node.get("id"), Object.class));
 
         return op;
     }
