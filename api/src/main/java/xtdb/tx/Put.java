@@ -13,7 +13,7 @@ public final class Put extends Ops implements Ops.HasValidTimeBounds<Put> {
     private final Instant validFrom;
     private final Instant validTo;
 
-    Put(Keyword tableName, Map<Keyword, Object> doc) {
+    public Put (Keyword tableName, Map<Keyword, Object> doc) {
         this(tableName, doc, null, null);
     }
 

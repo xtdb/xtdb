@@ -7,17 +7,18 @@
 ;; The EPL 2.0 license is available at https://opensource.org/license/epl-2-0/
 
 (ns xtdb.jackson
-  (:require [xtdb.error :as err]
-            [jsonista.core :as json]
-            [jsonista.tagged :as jt])
+  (:require [jsonista.core :as json]
+            [jsonista.tagged :as jt]
+            [xtdb.error :as err])
   (:import (clojure.lang Keyword)
            (com.fasterxml.jackson.core JsonGenerator)
+           (com.fasterxml.jackson.databind ObjectMapper)
            (com.fasterxml.jackson.databind.module SimpleModule)
-           (java.time Instant Duration LocalDate LocalDateTime ZonedDateTime)
+           (java.time Duration Instant LocalDate LocalDateTime ZoneId ZonedDateTime)
            (java.util Date Map Set)
-           (java.time Instant Duration LocalDate LocalDateTime ZonedDateTime ZoneId)
            (jsonista.jackson FunctionalSerializer)
-           (xtdb.jackson JsonLdValueOrPersistentHashMapDeserializer)))
+           (xtdb.jackson JsonLdValueOrPersistentHashMapDeserializer OpsDeserializer PutDeserializer)
+           (xtdb.tx Ops Put)))
 
 (defn serializer ^FunctionalSerializer [^String tag encoder]
   (FunctionalSerializer.
@@ -85,4 +86,13 @@
          {:encode-key-fn true
           :decode-key-fn true
           :modules [(json-ld-module {:handlers handlers})]})
+    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
+
+(def ^ObjectMapper tx-op-mapper
+  (doto (json/object-mapper
+         {:encode-key-fn true
+          :decode-key-fn true
+          :modules [(doto (json-ld-module {:handlers handlers})
+                      (.addDeserializer Ops (OpsDeserializer.))
+                      (.addDeserializer Put (PutDeserializer.)))]})
     (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
