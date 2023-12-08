@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import org.junit.jupiter.api.Test;
 import xtdb.tx.Ops;
 import xtdb.tx.Put;
+import xtdb.tx.Delete;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -26,6 +27,7 @@ class OpsDeserializerTest {
 
         HashMap<Class<?>, JsonDeserializer<?>> deserializerMapping = new HashMap<>();
         deserializerMapping.put(Put.class, new PutDeserializer());
+        deserializerMapping.put(Delete.class, new DeleteDeserializer());
         deserializerMapping.put(Ops.class, new OpsDeserializer());
         SimpleDeserializers deserializers = new SimpleDeserializers(deserializerMapping);
         module.setDeserializers(deserializers);
@@ -46,5 +48,19 @@ class OpsDeserializerTest {
 
         // then
         assertEquals( Ops.put(Keyword.intern("docs"), Collections.emptyMap()), actual);
+    }
+
+    @Test
+    public void testDeleteEquals() throws IOException {
+        // given
+        String delete = """
+                {"delete": "docs", "xt/id": "my-id"}
+                """;
+
+        // when
+        Object actual = objectMapper.readValue(delete, Ops.class);
+
+        // then
+        assertEquals( Ops.delete(Keyword.intern("docs"), "my-id"), actual);
     }
 }

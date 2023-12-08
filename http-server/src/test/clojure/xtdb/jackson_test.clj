@@ -35,7 +35,6 @@
 (defn clj-json-tx-op->tx-op [v]
   (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Ops))
 
-
 (deftest deserialize-tx-op-test
   (t/testing "put"
     (t/is (= #xt.tx/put {:table-name :docs,
@@ -51,5 +50,29 @@
                          :valid-to #time/instant "2021-01-01T00:00:00Z"}
              (clj-json-tx-op->tx-op {"put" "docs"
                                      "doc" {"xt/id" "my-id" "foo" :bar}
+                                     "valid-from" #inst "2020"
+                                     "valid-to" #inst "2021"})))) 
+  
+  (t/testing "delete"
+    (t/is (= #xt.tx/delete {:table-name :docs,
+                            :xt/id "my-id",
+                            :valid-from nil,
+                            :valid-to nil}
+             (clj-json-tx-op->tx-op {"delete" "docs"
+                                     "xt/id" "my-id"})))
+
+    (t/is (= #xt.tx/delete {:table-name :docs,
+                            :xt/id :keyword-id,
+                            :valid-from nil,
+                            :valid-to nil}
+             (clj-json-tx-op->tx-op {"delete" "docs"
+                                     "xt/id" :keyword-id})))
+    
+    (t/is (= #xt.tx/delete {:table-name :docs,
+                            :xt/id "my-id",
+                            :valid-from #time/instant "2020-01-01T00:00:00Z",
+                            :valid-to #time/instant "2021-01-01T00:00:00Z"}
+             (clj-json-tx-op->tx-op {"delete" "docs"
+                                     "xt/id" "my-id"
                                      "valid-from" #inst "2020"
                                      "valid-to" #inst "2021"})))))

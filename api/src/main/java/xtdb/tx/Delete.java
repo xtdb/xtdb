@@ -12,7 +12,7 @@ public final class Delete extends Ops implements Ops.HasValidTimeBounds<Delete> 
     private final Instant validFrom;
     private final Instant validTo;
 
-    Delete(Keyword tableName, Object entityId) {
+    public Delete(Keyword tableName, Object entityId) {
         this(tableName, entityId, null, null);
     }
 
