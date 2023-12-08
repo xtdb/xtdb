@@ -63,7 +63,8 @@
                     :encode jt/encode-collection
                     :decode set}
                Date {:tag "xt:instant"
-                     :encode #(str (.toInstant ^Date %))
+                     :encode (fn [^Date d ^JsonGenerator gen]
+                               (.writeString gen (str (.toInstant d))))
                      :decode #(Instant/parse %)}
                LocalDate {:tag "xt:date"
                           :decode #(LocalDate/parse %)}
