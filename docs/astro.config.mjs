@@ -55,6 +55,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'Learn XTQL Today, with Clojure', link: '/tutorials/learn-xtql-today-with-clojure' },
+            { label: 'Discover XTQL with cURL', link: '/learn/xtdb-http' },
           ],
         },
 

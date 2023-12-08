@@ -1,0 +1,206 @@
+= Interacting with XTDB using the HTTP API
+
+This guide will show you how to use the HTTP API to interact with XTDB. +
+We include practical examples and their expected outputs, so please follow along!
+
+In this guide we'll be using `curl` to interact with XTDB. +
+You can also use the HTTP client from your programming language of choice.
+
+// TODO:
+// - Convert all examples to application/json
+// - Style admonitions
+// - Reference for transit extensions
+// - Reference for JSON syntax
+// - Confirm this doc is correct
+// - Special tables doc
+
+== Prerequisites
+
+To get started, ensure Docker is installed. Then pull and run the XTDB Docker image:
+
+[source,bash]
+----
+docker pull ghcr.io/xtdb/xtdb-standalone-ea
+docker run -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
+----
+
+[NOTE]
+====
+In this guide we'll be using a local standalone instance of XTDB, but concepts in
+this guide can be applied to any XTDB instance connected to via HTTP.
+====
+
+[WARNING]
+====
+This setup includes **no persistence**.
+To learn how to setup XTDB's persistence see link:[here].
+====
+
+== Using the XTDB HTTP API
+
+XTDB has a rich query & transaction language behind a very simple REST API with just
+three endpoints: link:#status[`/status`], link:#tx[`/tx`], and link:#query[`/query`].
+
+See the link:https://docs.xtdb.com/openapi/index.html[HTTP API reference] for more detailed information.
+
+[#status]
+=== Checking the Status
+
+Let's start off by checking the status of the server.
+
+To do so, send a GET request to server's status endpoint:
+
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/transit+json" \
+     http://localhost:3000/status
+----
+
+If everything is working correctly, the response should be:
+
+[source,json]
+----
+["^ ",
+ "~:latest-completed-tx",null,
+ "~:latest-submitted-tx",null]
+----
+
+This output indicates that there are no completed or submitted transactions yet.
+
+Once you've executed some transactions, you should see output similar to the following:
+
+[source,json]
+----
+["^ ",
+ "~:latest-completed-tx",["~#xtdb/tx-key",["^ ","~:tx-id",0,"~:system-time",["~#time/instant","2023-12-08T10:31:26.152675Z"]]],
+ "~:latest-submitted-tx",["^1",["^ ","^2",0,"^3",["^4","2023-12-08T10:31:26.152675Z"]]]]
+----
+
+[NOTE]
+====
+In this guide we'll be using the content type `application/json` but for more efficient communication we recommend using `application/transit+json`.
+
+See link:https://github.com/cognitect/transit-format[here,window=_blank] to learn more about transit.
+
+// TODO: Link to our transit extensions reference
+====
+
+[#tx]
+=== Creating a New Transaction
+
+Now let's insert a new user record into the `users` table.
+
+To do so we'll use the link:../reference/main/xtql/txs#_tx-ops[`put`] operation,
+other operations and their related syntax are documented link:../reference/main/xtql/txs#tx-ops[here].
+
+// TODO: Link to JSON syntax docs
+
+To submit a new transaction, send a POST request to the server's transaction endpoint:
+
+[source,bash]
+----
+curl -X POST \
+     -H "Content-Type: application/transit+json" \
+     -H "Accept: application/transit+json" \
+     -d '{"~:tx-ops": [
+           ["~#xtdb.tx/put", {
+             "~:table-name": "~:users",
+             "~:doc": {
+               "~:xt/id": 1,
+               "~:first-name": "John",
+               "~:last-name": "Doe"
+             }
+            }]
+         ]}' \
+     http://localhost:3000/tx 2>/dev/null
+----
+
+The expected output is the `transaction key` for the submitted transaction:
+
+[source,json]
+----
+["~#xtdb/tx-key",["^ ","~:tx-id",0,"~:system-time",["~#time/instant","2023-12-08T09:55:21.010070Z"]]]
+----
+
+This indicates a successfully submitted transaction with a unique transaction ID and timestamp.
+
+[NOTE]
+====
+`/tx` does not wait until the transaction is complete.
+
+This has two important consequences:
+
+// TODO: Confirm
+. As queries only have access to data from the lasted _completed_ transaction. +
+  To ensure your query includes data from a transaction you must pass it's `transaction key` to the query endpoint.
+. To find out if the transaction was successful, you need to query the `:xt/txs` table. See link:[here] for more information.
+====
+
+NOTE: We have stored the `transaction key` in the variable `$last_tx` for later use.
+
+[#query]
+=== Running a Query
+
+Finally let's query the document we just inserted.
+
+// TODO: Reword
+As noted in other guides XTDB supports two query languages, XTQL and SQL.
+The below query is in XTQL, to learn more about XTQL see link:../reference/main/xtql/queries[here] and to learn more about it's JSON syntax see here link:[here].
+
+
+
+==== XTQL
+
+To run a query, send a POST request to the server's query endpoint:
+
+[source,bash]
+----
+curl -X POST \
+     -H "Content-Type: application/transit+json" \
+     -H "Accept: application/transit+json" \
+     -d '{"~:query": ["~#list",["~$from","~:users",["~$first-name", "~$last-name"]]],
+          "~:basis": {"~:after-tx": '"$last_tx"'}}' \
+     http://localhost:3000/query
+----
+
+NOTE: As mentioned in the link:#tx[`\tx`] section we've set `:after-tx` to the previous transaction's `transaction key`.
+
+As you would expect, the data returned is what we put in:
+
+[source,json]
+----
+["^ ","~:first-name","John","~:last-name","Doe"]
+----
+
+==== SQL
+
+Running SQL is as simple as changing XTQL out for a string. +
+To learn more about XTDB's SQL see link:../reference/main/sql/queries[here].
+
+[source,bash]
+----
+curl -X POST \
+     -H "Content-Type: application/transit+json" \
+     -H "Accept: application/transit+json" \
+     -d '{"~:query": "SELECT u.first_name, u.last_name FROM users AS u",
+          "~:basis": {"~:after-tx": '"$last_tx"'}}' \
+     http://localhost:3000/query
+----
+
+Again, we get the same data out that we put in:
+
+[source,json]
+----
+["^ ","~:first_name","John","~:last_name","Doe"]
+----
+
+== Related Resources
+
+Want to learn more? Check out the following resources:
+- link:https://docs.xtdb.com/openapi/index.html[HTTP API reference]
+- link:../reference/main/xtql/queries[XTQL Query reference]
+- link:../reference/main/xtql/txs[XTQL Transaction reference]
+- link:[XTQL JSON syntax]
+- link:../reference/main/sql/queries[SQL Query reference]
+- link:../reference/main/sql/txs[SQL Transaction reference]
