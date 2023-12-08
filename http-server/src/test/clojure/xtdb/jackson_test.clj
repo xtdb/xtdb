@@ -51,7 +51,14 @@
              (clj-json-tx-op->tx-op {"put" "docs"
                                      "doc" {"xt/id" "my-id" "foo" :bar}
                                      "valid-from" #inst "2020"
-                                     "valid-to" #inst "2021"}))))
+                                     "valid-to" #inst "2021"})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-put'"
+                            (clj-json-tx-op->tx-op
+                             {"put" "docs"
+                              "doc" "blob"
+                              "valid-from" #inst "2020"
+                              "valid-to" #inst "2021"}))))
 
   (t/testing "delete"
     (t/is (= #xt.tx/delete {:table-name :docs,

@@ -1,14 +1,14 @@
 package xtdb.jackson;
 
 import clojure.lang.Keyword;
+import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import com.fasterxml.jackson.databind.node.BaseJsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.type.TypeFactory;
-import xtdb.tx.Ops;
+import xtdb.IllegalArgumentException;
 import xtdb.tx.Put;
 
 import java.io.IOException;
@@ -22,17 +22,22 @@ public class PutDeserializer extends StdDeserializer<Put> {
     }
 
     @Override
-    public Put deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public Put deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        ObjectNode node = mapper.readTree(p);
+        BaseJsonNode node =  mapper.readTree(p);
 
-        Put op = new Put(Keyword.intern(node.get("put").asText()), mapper.treeToValue(node.get("doc"), Map.class));
-        if (node.has("valid-from")) {
-            op = op.startingFrom((Instant) mapper.treeToValue(node.get("valid-from"), Object.class));
+        try {
+            ObjectNode objectNode = (ObjectNode) node;
+            Put op = new Put(Keyword.intern(objectNode.get("put").asText()), mapper.treeToValue(objectNode.get("doc"), Map.class));
+            if (objectNode.has("valid-from")) {
+                op = op.startingFrom((Instant) mapper.treeToValue(objectNode.get("valid-from"), Object.class));
+            }
+            if (objectNode.has("valid-to")) {
+                op = op.until((Instant) mapper.treeToValue(objectNode.get("valid-to"), Object.class));
+            }
+            return op;
+        } catch (Exception e) {
+            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-put"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
-        if (node.has("valid-to")) {
-            op = op.until((Instant) mapper.treeToValue(node.get("valid-to"), Object.class));
-        }
-        return op;
     }
 }
