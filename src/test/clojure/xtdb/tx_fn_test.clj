@@ -84,7 +84,7 @@
                {:xt/id :ivan, :balance 200}}
              (set (xt/q tu/*node*
                         '(from :accounts [xt/id balance])
-                        {:basis {:tx tx2}})))
+                        {:basis {:at-tx tx2}})))
           "query in tx-fn with in-args")))
 
 (t/deftest test-tx-fn-sql-q

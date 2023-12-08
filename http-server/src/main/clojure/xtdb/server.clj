@@ -131,11 +131,11 @@
             (json/write-value writer res jackson/json-ld-mapper)))))))
 
 (s/def ::current-time inst?)
-(s/def ::tx (s/nilable #(instance? TransactionKey %)))
+(s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
-(s/def ::basis (s/keys :opt-un [::current-time ::tx ::after-tx]))
+(s/def ::basis (s/keys :opt-un [::current-time ::at-tx]))
 
-(s/def ::basis-timeout
+(s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
@@ -145,7 +145,7 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::basis ::basis-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn]))
+          :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn]))
 
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts

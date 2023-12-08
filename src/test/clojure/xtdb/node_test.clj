@@ -98,19 +98,19 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
     (t/is (= [{:xt$id "thing", :foo "t1-foo"}]
              (xt/q tu/*node* "SELECT t1.xt$id, t1.foo FROM t1"
-                   {:basis {:tx tx1}})))
+                   {:basis {:at-tx tx1}})))
 
     (t/is (= [{:xt$id "thing", :foo "t1-foo"}]
              (xt/q tu/*node* "SELECT t1.xt$id, t1.foo FROM t1"
-                   {:basis {:tx tx2}})))
+                   {:basis {:at-tx tx2}})))
 
     (t/is (= [{:xt$id "thing", :foo "t2-foo"}]
              (xt/q tu/*node* "SELECT t2.xt$id, t2.foo FROM t2"
-                   {:basis {:tx tx1}})))
+                   {:basis {:at-tx tx1}})))
 
     (t/is (= [{:xt$id "thing", :foo "t2-foo-v2"}]
              (xt/q tu/*node* "SELECT t2.xt$id, t2.foo FROM t2"
-                   {:basis {:tx tx2}, :default-all-valid-time? false})))))
+                   {:basis {:at-tx tx2}, :default-all-valid-time? false})))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
@@ -231,10 +231,10 @@ WHERE foo.xt$id = 1")])]
                  :xt$valid_from (time/->zdt #inst "2024")
                  :xt$valid_to nil}]
 
-               (q1 {:basis {:tx tx1}, :default-all-valid-time? true})))
+               (q1 {:basis {:at-tx tx1}, :default-all-valid-time? true})))
 
       (t/is (= {{:xt$id 1, :v 1} 2, {:xt$id 1, :v 2} 1}
-               (q2 {:basis {:tx tx1}, :default-all-valid-time? true})))
+               (q2 {:basis {:at-tx tx1}, :default-all-valid-time? true})))
 
       (t/is (= [{:xt$id 1, :v 1
                  :xt$valid_from (time/->zdt #inst "2020")
@@ -246,17 +246,17 @@ WHERE foo.xt$id = 1")])]
                  :xt$valid_from (time/->zdt #inst "2025")
                  :xt$valid_to nil}]
 
-               (q1 {:basis {:tx tx2}, :default-all-valid-time? true})))
+               (q1 {:basis {:at-tx tx2}, :default-all-valid-time? true})))
 
       (t/is (= [{:xt$id 1, :v 1
                  :xt$valid_from (time/->zdt #inst "2025")
                  :xt$valid_to nil}]
 
-               (q1 {:basis {:tx tx2, :current-time (time/->instant #inst "2026")}
+               (q1 {:basis {:at-tx tx2, :current-time (time/->instant #inst "2026")}
                     :default-all-valid-time? false})))
 
       (t/is (= {{:xt$id 1, :v 1} 2, {:xt$id 1, :v 2} 1}
-               (q2 {:basis {:tx tx2}, :default-all-valid-time? true}))))))
+               (q2 {:basis {:at-tx tx2}, :default-all-valid-time? true}))))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO foo (xt$id, xt$valid_from) VALUES (1, '2018-01-01')")])

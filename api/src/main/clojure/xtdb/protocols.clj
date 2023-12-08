@@ -13,18 +13,6 @@
 (defprotocol PStatus
   (status [node]))
 
-(defn max-tx [l r]
-  (if (or (nil? l)
-          (and r (neg? (compare l r))))
-    r
-    l))
-
-(defn after-latest-submitted-tx [basis node]
-  (cond-> basis
-    (not (or (contains? basis :tx)
-             (contains? basis :after-tx)))
-    (assoc :after-tx (latest-submitted-tx node))))
-
 (def http-routes
   [["/status" {:name :status
                :summary "Status"

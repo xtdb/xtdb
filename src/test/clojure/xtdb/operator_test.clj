@@ -39,11 +39,11 @@
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
                            (set (tu/query-ra '[:scan {:table xt_docs} [xt$id {name (> name "Ivan")}]]
-                                             {:node node, :basis {:tx tx}}))))
+                                             {:node node, :basis {:at-tx tx}}))))
 
                   (t/is (= expected
                            (set (tu/query-ra '[:scan {:table xt_docs} [xt$id {name (> name ?name)}]]
-                                             {:node node, :basis {:tx tx}, :params {'?name "Ivan"}})))))]
+                                             {:node node, :basis {:at-tx tx}, :params {'?name "Ivan"}})))))]
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 

@@ -99,7 +99,7 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
-                 {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
+                 {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2})])]
     (t/is (= #{{:xt/id 1} {:xt/id 2}}
@@ -108,7 +108,7 @@
                                 :request-method :post
                                 :content-type :transit+json
                                 :form-params {:query '(from :docs [xt/id])
-                                              :basis {:tx tx}}
+                                              :basis {:at-tx tx}}
                                 :transit-opts xtc/transit-opts
                                 :url (http-url "query")})
                  :body
@@ -144,7 +144,7 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
-                 {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
+                 {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2 :key :some-keyword})])]
     (t/is (= #{{:xt/id 1} {:xt/id 2 :key :some-keyword}}
              (-> (http/request {:accept "application/jsonl"
@@ -152,7 +152,7 @@
                                 :request-method :post
                                 :content-type :transit+json
                                 :form-params {:query '(from :docs [xt/id key])
-                                              :basis {:tx tx}}
+                                              :basis {:at-tx tx}}
                                 :transit-opts xtc/transit-opts
                                 :url (http-url "query")})
                  :body
@@ -203,7 +203,7 @@
                                                          :request-method :post
                                                          :content-type :transit+json
                                                          :form-params {:query "SELECT UPPER(docs.name) AS name FROM docs"
-                                                                       :basis {:tx tx}}
+                                                                       :basis {:at-tx tx}}
                                                          :transit-opts xtc/transit-opts
                                                          :url (http-url "query")
                                                          :throw-exceptions? false})

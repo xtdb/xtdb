@@ -10,11 +10,11 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.protocols :as xtp]
-            [xtdb.node :as xtn]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
             [xtdb.sql.plan :as plan]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
            (java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream)
@@ -1413,7 +1413,7 @@
     ;; TODO review err log policy
     (try
       (let [tx (xt/submit-tx (:node server) tx-ops {:default-all-valid-time? default-all-valid-time?})]
-        (swap! conn-state update-in [:session :latest-submitted-tx] xtp/max-tx tx)
+        (swap! conn-state update-in [:session :latest-submitted-tx] time/max-tx tx)
         nil)
       (catch Throwable e
         (log/debug e "Error on submit-tx")
@@ -1479,8 +1479,9 @@
 
         default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))
 
-        query-opts {:basis (or basis {:current-time (.instant clock), :after-tx latest-submitted-tx})
-                    :basis-timeout (Duration/ofSeconds 1)
+        query-opts {:basis (or basis {:current-time (.instant clock)})
+                    :after-tx latest-submitted-tx
+                    :tx-timeout (Duration/ofSeconds 1)
                     :default-tz (.getZone clock)
                     :args xt-params
                     :default-all-valid-time? default-all-valid-time?}
@@ -1533,8 +1534,8 @@
              (-> st
                  (assoc :transaction
                         {:basis {:current-time (.instant clock)
-                                 :tx (xtp/max-tx (:latest-completed-tx (xt/status (:node server)))
-                                                 latest-submitted-tx)}
+                                 :tx (time/max-tx (:latest-completed-tx (xt/status (:node server)))
+                                                  latest-submitted-tx)}
 
                          :access-mode (or access-mode
                                           (:access-mode (:next-transaction session))

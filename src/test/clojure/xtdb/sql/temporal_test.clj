@@ -6,7 +6,7 @@
 (use-fixtures :each tu/with-node)
 
 (defn query-at-tx [query tx]
-  (xt/q tu/*node* query {:basis {:tx tx}, :default-all-valid-time? true}))
+  (xt/q tu/*node* query {:basis {:at-tx tx}, :default-all-valid-time? true}))
 
 (deftest all-system-time
   (let [_tx (xt/submit-tx tu/*node* [(xt/put :foo {:xt/id :my-doc, :last_updated "tx1"})] {:system-time #inst "3000"})

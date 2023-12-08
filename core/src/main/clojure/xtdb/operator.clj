@@ -94,13 +94,13 @@
                                           (mapcat scan/->scan-cols))))
            cache (ConcurrentHashMap.)]
        (reify PreparedQuery
-         (bind [_ wm-src {:keys [params basis default-tz default-all-valid-time?]}]
+         (bind [_ wm-src {:keys [params basis after-tx default-tz default-all-valid-time?]}]
            (assert (or scan-emitter (empty? scan-cols)))
 
-           (let [{:keys [tx after-tx current-time]} basis
+           (let [{:keys [at-tx current-time]} basis
                  current-time (or current-time (.instant expr/*clock*))
                  default-tz (or default-tz (.getZone expr/*clock*))
-                 wm-tx (or tx after-tx)
+                 wm-tx (or at-tx after-tx)
                  clock (Clock/fixed current-time default-tz)
                  {:keys [fields ->cursor]} (.computeIfAbsent cache
                                                              {:scan-fields (when (and (seq scan-cols) scan-emitter)
@@ -131,8 +131,7 @@
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :clock clock,
                                       :basis (-> basis
-                                                 (dissoc :after-tx)
-                                                 (update :tx (fnil identity (some-> wm .txBasis)))
+                                                 (update :at-tx (fnil identity (some-> wm .txBasis)))
                                                  (assoc :current-time current-time))
                                       :params params, :default-all-valid-time? default-all-valid-time?})
                            (wrap-cursor wm allocator clock ref-ctr fields)))

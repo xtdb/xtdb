@@ -3,9 +3,10 @@
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
-            [xtdb.protocols :as xtp]
             [xtdb.error :as err]
+            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.io EOFException InputStream]
            java.lang.AutoCloseable
@@ -91,19 +92,19 @@
   xtp/PNode
   (open-query& [client query {:keys [basis] :as query-opts}]
     (validate-query-opts query-opts)
-    (let [{basis-tx :tx} basis
-          ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
-                                         basis-tx
-                                         (CompletableFuture/completedFuture basis-tx))]
-      (-> !basis-tx
+    (let [{:keys [at-tx]} basis
+          ^CompletableFuture !at-tx (if (instance? CompletableFuture at-tx)
+                                      at-tx
+                                      (CompletableFuture/completedFuture at-tx))]
+      (-> !at-tx
           (.thenCompose (reify Function
-                          (apply [_ basis-tx]
+                          (apply [_ at-tx]
                             (request client :post :query
                                      {:content-type :transit+json
                                       :form-params (-> query-opts
                                                        (assoc :query query)
-                                                       (assoc-in [:basis :tx] basis-tx)
-                                                       (update :basis xtp/after-latest-submitted-tx client))
+                                                       (assoc-in [:basis :at-tx] at-tx)
+                                                       (time/after-latest-submitted-tx client))
                                       :as ::transit+json->result-or-error}))))
           (.thenApply (reify Function
                         (apply [_ resp]
@@ -125,7 +126,7 @@
         (.thenApply (reify Function
                       (apply [_ resp]
                         (let [tx (:body resp)]
-                          (swap! !latest-submitted-tx xtp/max-tx tx)
+                          (swap! !latest-submitted-tx time/max-tx tx)
                           tx))))))
 
   xtp/PStatus

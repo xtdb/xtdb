@@ -162,7 +162,7 @@
                                            (some-> (.put :bound-query
                                                          (.bind prepd-query wm-src
                                                                 {:node node, :params new-params,
-                                                                 :basis {:tx (.latestCompletedTx idxer)}}))
+                                                                 :basis {:at-tx (.latestCompletedTx idxer)}}))
                                                    util/try-close))))))
                 (throw (UnsupportedOperationException. "invalid ps-id"))))
 
@@ -186,7 +186,7 @@
                                  ;; HACK need to get the basis from somewhere...
                                  (.bind wm-src
                                         {:node node
-                                         :basis {:tx (.latestCompletedTx idxer)}}))
+                                         :basis {:at-tx (.latestCompletedTx idxer)}}))
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                     (.setStatementHandle ticket-handle))
                                   (.build)

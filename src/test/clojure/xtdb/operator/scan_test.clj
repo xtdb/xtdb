@@ -132,30 +132,31 @@
                                            {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
                                            [xt$id v]]
                                          {:node node}))))
+
       ;; system-time
       (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1 {:v 1, :xt/id :doc3} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
                                            [xt$id v]]
-                                         {:node node :basis {:tx tx1}}))))
+                                         {:node node :basis {:at-tx tx1}}))))
 
       (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
                                            [xt$id v]]
-                                         {:node node :basis {:tx tx1}}))))
+                                         {:node node :basis {:at-tx tx1}}))))
 
       (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
                                            [xt$id v]]
-                                         {:node node :basis {:tx tx2}}))))
+                                         {:node node :basis {:at-tx tx2}}))))
 
       (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 2, :xt/id :doc2} 1}
                (frequencies (tu/query-ra '[:scan
                                            {:table xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
                                            [xt$id v]]
-                                         {:node node :basis {:tx tx2}})))))))
+                                         {:node node :basis {:at-tx tx2}})))))))
 
 (t/deftest test-past-point-point-queries-with-valid-time
   (with-open [node (xtn/start-node tu/*node-opts*)]
@@ -208,7 +209,7 @@
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2023"]}
                                    [xt$id v xt$valid_from xt$valid_to]]
-                                 {:node node :basis {:tx tx1}}))))
+                                 {:node node :basis {:at-tx tx1}}))))
 
       (t/is (= #{{:v 1, :xt/id :doc1,
                   :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
@@ -219,7 +220,7 @@
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2017"]}
                                    [xt$id v xt$valid_from xt$valid_to]]
-                                 {:node node :basis {:tx tx1}}))))
+                                 {:node node :basis {:at-tx tx1}}))))
 
       (t/is (= #{{:v 2, :xt/id :doc1,
                   :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
@@ -230,7 +231,7 @@
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2023"]}
                                    [xt$id v xt$valid_from xt$valid_to]]
-                                 {:node node :basis {:tx tx2}}))))
+                                 {:node node :basis {:at-tx tx2}}))))
 
       (t/is (= #{{:v 2, :xt/id :doc1,
                   :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
@@ -241,7 +242,7 @@
                (set (tu/query-ra '[:scan
                                    {:table xt_docs, :for-valid-time [:at #inst "2100"]}
                                    [xt$id v xt$valid_from xt$valid_to]]
-                                 {:node node :basis {:tx tx2}})))))))
+                                 {:node node :basis {:at-tx tx2}})))))))
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (xtn/start-node {})]
@@ -340,7 +341,7 @@
     (let [^IRaQuerySource ra-src (util/component node :xtdb.operator/ra-query-source)]
       (letfn [(->col-types [tx]
                 (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt$id]])
-                    (.bind (util/component node :xtdb/indexer) {:node node, :basis {:tx tx}})
+                    (.bind (util/component node :xtdb/indexer) {:node node, :basis {:at-tx tx}})
                     (.columnFields)
                     (update-vals types/field->col-type)))]
 

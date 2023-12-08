@@ -219,8 +219,9 @@
            :or {key-fn :clojure}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
-                      node (-> (update :basis xtp/after-latest-submitted-tx node)
-                               (doto (-> :basis :after-tx (then-await-tx node)))))]
+                      node (-> (time/after-latest-submitted-tx node)
+                               (update :after-tx time/max-tx (get-in query-opts [:basis :at-tx]))
+                               (doto (-> :after-tx (then-await-tx node)))))]
 
      (with-open [^RelationReader
                  params-rel (if params
@@ -231,7 +232,7 @@
                                    (.prepareRaQuery ra-src query))
                                  (op/prepare-ra query))
              bq (.bind pq indexer
-                       (-> (select-keys query-opts [:basis :table-args :default-tz :default-all-valid-time?])
+                       (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz :default-all-valid-time?])
                            (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res (util/parse-key-fn key-fn))

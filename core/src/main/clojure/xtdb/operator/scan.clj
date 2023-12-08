@@ -68,7 +68,7 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- ->temporal-bounds [^RelationReader params, {^TransactionKey basis-tx :tx}, {:keys [for-valid-time for-system-time]}]
+(defn- ->temporal-bounds [^RelationReader params, {:keys [^TransactionKey at-tx]}, {:keys [for-valid-time for-system-time]}]
   (let [bounds (TemporalBounds.)]
     (letfn [(->time-μs [[tag arg]]
               (case tag
@@ -80,7 +80,7 @@
                 :now (-> (.instant expr/*clock*)
                          (time/instant->micros))))]
 
-      (when-let [system-time (some-> basis-tx (.system-time) time/instant->micros)]
+      (when-let [system-time (some-> at-tx (.system-time) time/instant->micros)]
         (.lte (.systemFrom bounds) system-time)
 
         (when-not for-system-time
@@ -111,9 +111,9 @@
         (apply-constraint for-system-time (.systemFrom bounds) (.systemTo bounds))))
     bounds))
 
-(defn tables-with-cols [basis ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
-  (let [{:keys [tx, after-tx]} basis
-        wm-tx (or tx after-tx)]
+(defn tables-with-cols [{:keys [basis after-tx]} ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
+  (let [{:keys [at-tx]} basis
+        wm-tx (or at-tx after-tx)]
     (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
       (.allTableColNames scan-emitter wm))))
 

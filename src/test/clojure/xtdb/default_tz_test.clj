@@ -35,7 +35,7 @@
                   :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
                   :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
-               (set (xt/q tu/*node* q {:basis {:tx tx}}))))
+               (set (xt/q tu/*node* q {:basis {:at-tx tx}}))))
 
       (t/is (= #{{:xt$id "foo", :dt #time/date "2020-08-01",
                   :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
@@ -45,7 +45,7 @@
                   :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
                (set (xt/q tu/*node* q
-                          {:basis {:tx tx}
+                          {:basis {:at-tx tx}
                            :default-tz #time/zone "America/Los_Angeles"})))))))
 
 (t/deftest test-datalog-default-tz

@@ -1,6 +1,6 @@
 (ns xtdb.time
   (:require [clojure.spec.alpha :as s]
-            [xtdb.protocols])
+            [xtdb.protocols :as xtp])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime)
            java.time.temporal.ChronoUnit
            (java.util Date)))
@@ -72,3 +72,14 @@
 
 (def ^java.time.Instant end-of-time
   (micros->instant Long/MAX_VALUE))
+
+(defn max-tx [l r]
+  (if (or (nil? l)
+          (and r (neg? (compare l r))))
+    r
+    l))
+
+(defn after-latest-submitted-tx [{:keys [basis] :as opts} node]
+  (cond-> opts
+    (not (or (contains? basis :at-tx) (contains? opts :after-tx)))
+    (assoc :after-tx (xtp/latest-submitted-tx node))))

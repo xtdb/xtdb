@@ -1252,7 +1252,7 @@
   (letfn [(q [query tx current-time]
             (xt/q tu/*node*
                   query
-                  {:basis {:tx tx, :current-time (time/->instant current-time)}}))]
+                  {:basis {:at-tx tx, :current-time (time/->instant current-time)}}))]
 
     ;; Matthew 2015+
 
@@ -1354,7 +1354,7 @@
 (t/deftest test-temporal-opts-from-and-to
   (letfn [(q [query tx current-time]
             (xt/q tu/*node* query
-                  {:basis {:tx tx, :current-time (time/->instant current-time)}}))]
+                  {:basis {:at-tx tx, :current-time (time/->instant current-time)}}))]
 
     ;; tx0
     ;; 2015 - eof : Matthew
@@ -1401,10 +1401,10 @@
 (deftest test-snodgrass-99-tutorial
   (letfn [(q [q tx current-time]
             (xt/q tu/*node* q
-                  {:basis {:tx tx, :current-time (time/->instant current-time)}}))
+                  {:basis {:at-tx tx, :current-time (time/->instant current-time)}}))
           (q-with-args [q args tx current-time]
             (xt/q tu/*node* q
-                  {:args args :basis {:tx tx, :current-time (time/->instant current-time)}}))]
+                  {:args args :basis {:at-tx tx, :current-time (time/->instant current-time)}}))]
 
     (let [tx0 (xt/submit-tx tu/*node*
                             [(-> (xt/put :docs {:xt/id 1 :customer-number 145 :property-number 7797})
@@ -1967,12 +1967,12 @@
     (t/is (= [{:x {:xt/id 0, :b 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}}})))
+                {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}}})))
 
     (t/is (= [{:x {:xt/id 0, :a 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:basis {:tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}})))))
+                {:basis {:at-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}})))))
 
 #_
 (t/deftest test-row-alias-app-time-key-set ;TODO from-star

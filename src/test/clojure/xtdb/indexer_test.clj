@@ -206,7 +206,7 @@
                                 [xt$id version
                                  xt$valid_from, xt$valid_to
                                  xt$system_from, xt$system_to]]
-                              {:node node, :basis {:tx tx}}))
+                              {:node node, :basis {:at-tx tx}}))
               "re-using the original tx basis should see the same result")))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block

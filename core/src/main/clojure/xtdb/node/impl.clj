@@ -47,7 +47,7 @@
 
 (defn- with-after-tx-default [opts]
   (-> opts
-      (update-in [:basis :after-tx] xtp/max-tx (get-in opts [:basis :tx]))))
+      (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
 
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
@@ -60,26 +60,22 @@
   (open-query& [_ query query-opts]
     (let [query-opts (-> (into {:default-tz default-tz} query-opts)
                          (with-after-tx-default))]
-      (-> (.awaitTxAsync indexer (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))
+      (-> (.awaitTxAsync indexer (get query-opts :after-tx) (:tx-timeout query-opts))
           (util/then-apply
             (fn [_]
-              (cond
-                (string? query) (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
-                                      ra (sql/compile-query query (assoc query-opts :table-info tables-with-cols))]
-                                  (if (:explain? query-opts)
-                                    (lp/explain-result ra)
-                                    (let [pq (.prepareRaQuery ra-src ra)]
-                                      (sql/open-sql-query allocator wm-src pq query-opts))))
+              (let [query-opts (-> query-opts (assoc :table-info (scan/tables-with-cols query-opts wm-src scan-emitter)))]
+                (cond
+                  (string? query) (let [ra (sql/compile-query query query-opts)]
+                                    (if (:explain? query-opts)
+                                      (lp/explain-result ra)
+                                      (let [pq (.prepareRaQuery ra-src ra)]
+                                        (sql/open-sql-query allocator wm-src pq query-opts))))
 
-                (or (seq? query) (instance? Query query)) (xtql/open-xtql-query
-                                                           allocator ra-src wm-src query
-                                                           (assoc query-opts :table-info (scan/tables-with-cols
-                                                                                          (:basis query-opts)
-                                                                                          wm-src scan-emitter)))
+                  (or (seq? query) (instance? Query query)) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)
 
-                :else (throw (err/illegal-arg :unknown-query-type
-                                              {:query query
-                                               :type (type query)}))))))))
+                  :else (throw (err/illegal-arg :unknown-query-type
+                                                {:query query
+                                                 :type (type query)})))))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 
@@ -97,7 +93,7 @@
             (.submitTx tx-producer tx-ops opts))
         (util/then-apply
           (fn [tx]
-            (swap! !latest-submitted-tx xtp/max-tx tx)))))
+            (swap! !latest-submitted-tx time/max-tx tx)))))
 
   Closeable
   (close [_]

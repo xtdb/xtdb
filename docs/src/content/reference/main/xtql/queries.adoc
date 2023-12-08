@@ -5,9 +5,18 @@ XTQL queries are submitted through `xtdb.api/q`
 * `(xt/q <node> '<query> <opts>?)` returns the query results as a vector of maps.
 * `(xt/q& <node> '<query> <opts>?)`: returns a `CompletableFuture` of the query results as a vector of maps.
 
+== Query options
+
 XTQL query options are an optional map of the following keys:
 
-* `:args`: a map of arguments to pass to the query. Parameters are prefixed with `$` in the query itself:
+`:after-tx`::
+requires that the node has indexed _at least_ the specified transaction.
+* If not provided, XTDB clients will default it to the latest transaction submitted through that client.
+  This is so that, by default, transactions submitted to a client are guaranteed to be visible to any later query to that same client.
+* If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the transaction token returned from `submit-tx` as the `:after-tx` for subsequent queries to guarantee this same read-after-write consistency level.
+* If the requested transaction hasn't been indexed, the XTDB client will wait (see `:tx-timeout`) before evaluating the query.
+`:args`::
+a map of arguments to pass to the query. Parameters are prefixed with `$` in the query itself:
 +
 [source,clojure]
 ----
@@ -16,26 +25,22 @@ XTQL query options are an optional map of the following keys:
 ----
 +
 [#basis]
-* `:basis`: a map specifying the 'basis' of the query.
+`:basis`:: a map specifying the 'basis' of the query.
++
 This allows for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
 +
-If the requested transaction hasn't been indexed, the XTDB client will wait (see `:basis-timeout`) before evaluating the query.
+If the requested transaction hasn't been indexed, the XTDB client will wait (see `:tx-timeout`) before evaluating the query.
 +
-** `:tx` (overrides `:after-tx`): specifies the _exact_ latest transaction that'll be visible to the query.
-*** If not provided, this will default to the latest available transaction on the node.
-** `:after-tx`: requires that the node has indexed _at least_ the specified transaction.
-*** If not provided, XTDB clients will default it to the latest transaction submitted through that client.
-    This is so that, by default, transactions submitted to a client are guaranteed to be visible to any later query to that same client.
-*** If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the transaction token returned from `submit-tx` as the `:after-tx` for subsequent queries to guarantee this same read-after-write consistency level.
-*** If the requested transaction hasn't been indexed, the XTDB client will wait (see `:basis-timeout`) before evaluating the query.
-** `:current-time` (defaults to the current wall-clock time of the executing node): overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
-+
-In addition, when reading from tables, unless specified explicitly for an individual table, XTDB will also use this time as the valid-time to read the table at.
-* `:basis-timeout`: duration to wait for the basis tx(s) to be indexed before timing out.
-* `:default-tz`: the default timezone to use in link:../stdlib/temporal[functions] that require it - defaults to the JVM timezone of the server.
-* `:explain?` (default `false`): rather than returning results, setting this flag to `true` returns the query plan for the query.
-* `:key-fn`: specifies how keys are returned in query results.
-** `:clojure` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
+* `:at-tx` (overrides `:after-tx`): specifies the _exact_ latest transaction that'll be visible to the query.
+** If not provided, this will default to the latest available transaction on the node.
+* `:current-time` overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
+** If not provided, defaults to the current wall-clock time of the executing node
+** In addition, when reading from tables, unless specified explicitly for an individual table, XTDB will also use this time as the valid-time to read the table at.
+`:default-tz`:: (defaults to JVM timezone on the executing node): the default timezone to use in link:../stdlib/temporal[functions] that require it.
+`:explain?`:: rather than returning results, setting this flag to `true` returns the query plan for the query (default `false`).
+`:key-fn`:: specifies how keys are returned in query results.
+* `:clojure` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
+`:tx-timeout`:: duration to wait for the requested transactions (`:at-tx`, `:after-tx`) to be indexed before timing out (default unlimited).
 
 == Operators
 

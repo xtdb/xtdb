@@ -78,20 +78,20 @@
   This tx key is the same map returned by submit-tx
 
   (q& node '(from ...)
-      {:basis {:tx tx}})
+      {:basis {:at-tx tx}})
 
-  Additionally a basis timeout can be supplied to the query map, which if after the specified duration
+  Additionally a tx timeout can be supplied to the query map, which if after the specified duration
   the query's requested basis is not complete the query will be cancelled.
 
   (q& node '(from ...)
-      {:basis-timeout (Duration/ofSeconds 1)})"
+      {:tx-timeout (Duration/ofSeconds 1)})"
 
   (^java.util.concurrent.CompletableFuture [node q+args] (q& node q+args {}))
 
   (^java.util.concurrent.CompletableFuture
    [node query opts]
    (let [opts (-> (into {:default-all-valid-time? false} opts)
-                  (update :basis xtp/after-latest-submitted-tx node))]
+                  (time/after-latest-submitted-tx node))]
 
      (-> (xtp/open-query& node query opts)
          (.thenApply
@@ -137,13 +137,13 @@
   This tx reference (known as a TransactionKey) is the same map returned by submit-tx
 
   (q node '(from ...)
-     {:basis {:tx tx}})
+     {:basis {:at-tx tx}})
 
   Additionally a Basis Timeout can be supplied to the query map, which if after the specified duration
   the query's requested basis is not complete the query will be cancelled.
 
   (q node '(from ...)
-     {:basis-timeout (Duration/ofSeconds 1)})"
+     {:tx-timeout (Duration/ofSeconds 1)})"
   ([node q+args]
    (-> @(q& node q+args)
        (rethrowing-cause)))

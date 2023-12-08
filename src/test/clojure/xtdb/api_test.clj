@@ -45,13 +45,13 @@
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
              (xt/q *node* '(from :docs [{:xt/id id} list])
-                   {:basis-timeout (Duration/ofSeconds 1)})))
+                   {:tx-timeout (Duration/ofSeconds 1)})))
 
     (t/is (= [{:xt$id :foo, :list [1 2 ["foo" "bar"]]}
               {:xt$id "bar", :list [4 2 8]}]
              (xt/q *node*
                    "SELECT b.xt$id, b.list FROM docs b"
-                   {:basis-timeout (Duration/ofSeconds 1)})))))
+                   {:tx-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}})])]
@@ -118,8 +118,8 @@
     (letfn [(q-at [tx]
               (->> (xt/q *node*
                          '(from :docs [{:xt/id id}])
-                         {:basis {:tx tx}
-                          :basis-timeout (Duration/ofSeconds 1)})
+                         {:basis {:at-tx tx}
+                          :tx-timeout (Duration/ofSeconds 1)})
                    (into #{} (map :id))))]
 
       (t/is (= #{:foo} (q-at tx1)))
@@ -172,7 +172,7 @@
 (t/deftest test-basic-sql-dml
   (letfn [(all-users [tx]
             (->> (xt/q *node* "SELECT u.first_name, u.last_name, u.xt$valid_from, u.xt$valid_to FROM users u"
-                       {:basis {:tx tx}
+                       {:basis {:at-tx tx}
                         :default-all-valid-time? true})
                  (into #{} (map (juxt :first_name :last_name :xt$valid_from :xt$valid_to)))))]
 
@@ -362,7 +362,7 @@
   (letfn [(q [tx]
             (set (xt/q *node*
                        "SELECT foo.xt$id, foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
-                       {:basis {:tx tx}
+                       {:basis {:at-tx tx}
                         :default-all-valid-time? true})))]
     (let [tx1 (xt/submit-tx *node*
                             [(-> (xt/sql-op "INSERT INTO foo (xt$id, version) VALUES (?, ?)")
@@ -471,7 +471,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 (t/deftest test-basic-xtql-dml
   (letfn [(all-users [tx]
             (->> (xt/q *node* '(from :users [first-name last-name xt/valid-from xt/valid-to])
-                       {:basis {:tx tx}
+                       {:basis {:at-tx tx}
                         ;; TODO when `from` supports for-valid-time we can shift this to the query
                         :default-all-valid-time? true})
                  (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
@@ -539,7 +539,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
   (letfn [(q [tx]
             (set (xt/q *node* '(from :foo [xt/id version xt/valid-from xt/valid-to])
                        ;; TODO when `from` supports for-valid-time we can shift this to the query
-                       {:basis {:tx tx}
+                       {:basis {:at-tx tx}
                         :default-all-valid-time? true})))]
     (let [tx1 (xt/submit-tx *node*
                             [(xt/put :foo {:xt/id "foo", :version 0})

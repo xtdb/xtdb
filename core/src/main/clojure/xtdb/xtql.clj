@@ -1003,8 +1003,9 @@
          (doto (lp/validate-plan)))]))
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src,
-                                        query {:keys [args default-all-valid-time? basis default-tz explain? key-fn table-info]
-                                               :or {key-fn :clojure}}]
+                                        query {:keys [args explain? key-fn table-info]
+                                               :or {key-fn :clojure}
+                                               :as query-opts}]
 
   (let [plan (cond-> query
                (seq? query) xt.edn/parse-query
@@ -1018,6 +1019,6 @@
                                       (MapEntry/create (param-sym (str (symbol k))) v)))))]
         (util/with-close-on-catch [params (vw/open-params allocator args)
                                    cursor (-> (.prepareRaQuery ra-src plan)
-                                              (.bind wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+                                              (.bind wm-src (assoc query-opts :params params, :key-fn key-fn))
                                               (.openCursor))]
           (op/cursor->result-set cursor params (util/parse-key-fn key-fn)))))))

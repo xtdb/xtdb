@@ -586,7 +586,7 @@
                          (openWatermark [_ _tx]
                            (wm/->wm nil (.openWatermark live-idx-tx))))
 
-                tx-opts {:basis {:tx tx-key, :current-time system-time}
+                tx-opts {:basis {:at-tx tx-key, :current-time system-time}
                          :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                          (.getObject 0))))
                          :default-all-valid-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
