@@ -82,18 +82,15 @@
                           :encode encode-throwable
                           :decode decode-throwable}})
 
-(def json-ld-mapper
-  (doto (json/object-mapper
-         {:encode-key-fn true
-          :decode-key-fn true
-          :modules [(json-ld-module {:handlers handlers})]})
-    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
+(def ^com.fasterxml.jackson.databind.ObjectMapper json-ld-mapper
+  (json/object-mapper
+   {:encode-key-fn true
+    :decode-key-fn true
+    :modules [(json-ld-module {:handlers handlers})]}))
 
-(def ^ObjectMapper tx-op-mapper
-  (doto (json/object-mapper
-         {:encode-key-fn true
-          :decode-key-fn true
-          :modules [(doto (json-ld-module {:handlers handlers})
-                      (.addDeserializer Ops (OpsDeserializer.))
-                      (.addDeserializer Put (PutDeserializer.)))]})
-    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
+(def ^com.fasterxml.jackson.databind.ObjectMapper tx-op-mapper
+  (json/object-mapper {:encode-key-fn true
+                       :decode-key-fn true
+                       :modules [(doto (json-ld-module {:handlers handlers})
+                                   (.addDeserializer Ops (OpsDeserializer.))
+                                   (.addDeserializer Put (PutDeserializer.)))]}))

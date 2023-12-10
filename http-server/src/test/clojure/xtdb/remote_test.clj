@@ -41,11 +41,9 @@
 (defn- decode-transit [^String s] (first (decode-transit* s)))
 
 (def ^:private default-object-mapper
-  (doto (json/object-mapper
-         {:encode-key-fn true
-          :decode-key-fn true
-          :modules [(jackson/json-ld-module {:handlers jackson/handlers})]})
-    (-> (.getFactory) (.disable com.fasterxml.jackson.core.JsonGenerator$Feature/AUTO_CLOSE_TARGET))))
+  (json/object-mapper {:encode-key-fn true
+                       :decode-key-fn true
+                       :modules [(jackson/json-ld-module {:handlers jackson/handlers})]}))
 
 (defn- decode-json* [^String s]
   (let [json-lines (str/split-lines s)]

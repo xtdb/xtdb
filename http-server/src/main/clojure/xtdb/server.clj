@@ -30,6 +30,7 @@
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
+           (com.fasterxml.jackson.databind ObjectMapper)
            xtdb.IResultSet
            xtdb.api.TransactionKey))
 
@@ -107,7 +108,7 @@
             (let [writer (transit/writer out :json opts)]
               (transit/write writer res))))))))
 
-(def ^:private ascii-newline 10)
+(def ^:private ascii-newline (int \newline))
 
 (defn- ->jsonl-resultset-encoder [_opts]
   (reify
@@ -118,17 +119,23 @@
     (encode-to-output-stream [_ res _]
       (fn [^OutputStream out]
         (if-not (ex-data res)
-          (with-open [^IResultSet res res
-                      ^OutputStream writer out]
+          (with-open [seq-wtr (-> (.writer jackson/json-ld-mapper)
+                                  (.writeValues out))]
             (try
               (doseq [el (iterator-seq res)]
-                (json/write-value writer el jackson/json-ld-mapper)
-                (.write writer ^byte ascii-newline))
+                (.write seq-wtr el)
+                (.write out ^byte ascii-newline))
               (catch Throwable t
-                (json/write-value writer t jackson/json-ld-mapper)
-                (.write writer ^byte ascii-newline))))
-          (with-open [writer out]
-            (json/write-value writer res jackson/json-ld-mapper)))))))
+                (.write seq-wtr t)
+                (.write out ^byte ascii-newline))
+              (finally
+                (util/close res)
+                (util/close out))))
+
+          (try
+            (.writeValue jackson/json-ld-mapper out res)
+            (finally
+              (util/close out))))))))
 
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
