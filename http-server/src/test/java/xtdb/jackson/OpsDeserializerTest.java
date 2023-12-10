@@ -11,6 +11,7 @@ import xtdb.tx.Ops;
 import xtdb.tx.Put;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -44,6 +45,6 @@ class OpsDeserializerTest {
         Object actual = objectMapper.readValue(put, Ops.class);
 
         // then
-        assertEquals( Ops.put(Keyword.intern("docs"), PersistentHashMap.EMPTY), actual);
+        assertEquals( Ops.put(Keyword.intern("docs"), Collections.emptyMap()), actual);
     }
 }
