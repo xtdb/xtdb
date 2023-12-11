@@ -4,8 +4,9 @@
            (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer DeleteDeserializer EraseDeserializer
                          TxDeserializer CallDeserializer)
            (xtdb.tx Ops Put Delete Erase Tx Call)
-           (xtdb.query Query OutSpec Query$From
-                       QueryDeserializer OutSpecDeserializer FromDeserializer)))
+           (xtdb.query Query OutSpec Query$From Query$Limit Query$Offset
+                       QueryDeserializer OutSpecDeserializer FromDeserializer
+                       LimitDeserializer OffsetDeserializer)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -38,4 +39,6 @@
                                  (doto (SimpleModule. "xtdb.query")
                                    (.addDeserializer Query (QueryDeserializer.))
                                    (.addDeserializer Query$From (FromDeserializer.))
+                                   (.addDeserializer Query$Limit (LimitDeserializer.))
+                                   (.addDeserializer Query$Offset (OffsetDeserializer.))
                                    (.addDeserializer OutSpec (OutSpecDeserializer.)))]}))
