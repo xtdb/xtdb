@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
-           (xtdb.query Query Query$Limit Query$Offset Query$QueryTail OutSpec Expr)))
+           (xtdb.query Query Query$QueryTail OutSpec Expr Query$Unify)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -100,7 +100,7 @@
                            :xt/id :keyword-id}
              (roundtrip-tx-op {"erase" "docs"
                                "id" :keyword-id})))
-    
+
     ;; TODO: Add some unsupported type in here
     ;; (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-erase"
     ;;                         (roundtrip-tx-op
@@ -172,16 +172,28 @@
 
 (deftest deserialize-query-tail-test
   (t/testing "limit"
-      (t/is (= (Query/limit 100)
-               (roundtrip-query-tail {"limit" 100})))
+    (t/is (= (Query/limit 100)
+             (roundtrip-query-tail {"limit" 100})))
 
-      (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-limit"
-                              (roundtrip-query-tail {"limit" "not-a-limit"}))))
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-limit"
+                            (roundtrip-query-tail {"limit" "not-a-limit"}))))
 
   (t/testing "offset"
-      (t/is (= (Query/offset 100)
-               (roundtrip-query-tail {"offset" 100})))
+    (t/is (= (Query/offset 100)
+             (roundtrip-query-tail {"offset" 100})))
 
-      (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-offset"
-                              (roundtrip-query-tail {"offset" "not-an-offset"})))))
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-offset"
+                            (roundtrip-query-tail {"offset" "not-an-offset"})))))
 
+(defn roundtrip-unify [v]
+  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
+
+(deftest deserialize-unify-test
+  (t/is (= (Query/unify [(-> (Query/from "docs")
+                             (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))])
+           (roundtrip-unify {"unify" [{"from" "docs"
+                                       "bind" ["xt/id"]}]})))
+
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
+                          (roundtrip-unify {"unify" "foo"}))
+        "unify value not an array"))
