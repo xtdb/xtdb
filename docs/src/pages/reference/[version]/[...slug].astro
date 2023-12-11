@@ -15,10 +15,11 @@ export async function getStaticPaths() {
 
 import ReferenceNav from '/src/components/reference/nav.astro'
 import NextPrevPage from '/src/components/reference/next-prev-page.astro';
-import TableOfContents from '/src/components/table-of-contents.tsx'
+import TableOfContents from '/src/components/table-of-contents.astro'
 
 const { entry, version, slug } = Astro.props;
 const { Content, headings } = await entry.render();
+const toc = {items: headings}
 ---
 
 <Layout>
@@ -30,6 +31,6 @@ const { Content, headings } = await entry.render();
           <NextPrevPage version={version} slug={slug} />
         </div>
 
-        <aside class="row-start-2 lg:row-auto"><TableOfContents headings={headings} client:load /></aside>
+        <aside class="row-start-2 lg:row-auto"><TableOfContents toc={toc} /></aside>
     </div>
 </Layout>
