@@ -92,7 +92,18 @@
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id :keyword-id}
              (roundtrip-tx-op {"erase" "docs"
-                               "id" :keyword-id})))))
+                               "id" :keyword-id}))))
+  
+  (t/testing "call"
+    (t/is (= #xt.tx/call {:fn-id :my-fn
+                          :args ["args"]}
+             (roundtrip-tx-op {"call" :my-fn
+                               "args" ["args"]})))
+  
+    (t/is (= #xt.tx/call {:fn-id "my-fn"
+                          :args ["args"]}
+             (roundtrip-tx-op {"call" "my-fn"
+                               "args" ["args"]})))))
 
 (defn roundtrip-tx [v]
   (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Tx))

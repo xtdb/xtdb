@@ -8,7 +8,7 @@ public final class Call extends Ops {
     private final Object fnId;
     private final List<?> args;
 
-    Call(Object fnId, List<?> args) {
+    public Call(Object fnId, List<?> args) {
         this.fnId = fnId;
         this.args = args;
     }

@@ -15,6 +15,7 @@ import xtdb.tx.Ops;
 import xtdb.tx.Put;
 import xtdb.tx.Delete;
 import xtdb.tx.Erase;
+import xtdb.tx.Call;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -39,6 +40,8 @@ public class OpsDeserializer extends StdDeserializer<Ops>  {
             return mapper.treeToValue(node, Delete.class);
         } else if (node.has("erase")) {
             return mapper.treeToValue(node, Erase.class);
+        } else if (node.has("call")) {
+            return mapper.treeToValue(node, Call.class);
         } else {
             // TODO CALL
            throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);

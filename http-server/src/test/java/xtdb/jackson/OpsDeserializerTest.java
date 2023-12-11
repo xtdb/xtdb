@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -78,5 +79,19 @@ class OpsDeserializerTest {
 
         // then
         assertEquals( Ops.erase(Keyword.intern("docs"), "my-id"), actual);
+    }
+
+    @Test
+    public void testCallEquals() throws IOException {
+        // given
+        String call = """
+                {"call": "my-fn", "args": ["arg1"]}
+                """;
+
+        // when
+        Object actual = objectMapper.readValue(call, Ops.class);
+
+        // then
+        assertEquals( Ops.call("my-fn", List.of("arg1")), actual);
     }
 }
