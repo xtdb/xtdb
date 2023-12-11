@@ -21,7 +21,7 @@ const { Content, headings } = await entry.render();
     <div class="grid grid-cols-1 lg:grid-cols-[12rem_1fr_12rem] gap-4 my-4 lg:my-8 mx-auto max-w-fit">
         <LearnNav slug={entry.slug}/>
 
-        <div class="doc-container prose dark:prose-invert">
+        <div class="doc-container prose dark:prose-invert max-w-none">
             <Content />
             <NextPrevPage slug={entry.slug} />
         </div>
