@@ -32,10 +32,16 @@
 #      label: Datalog
 #    - slug: apache-arrow
 #      label: Apache Arrow
-#- section: Tutorials
-#  pages:
-#    - slug: learn-datalog-today
-#      label: Learn Datalog Today
+- section: Tutorials
+  pages:
+    - slug: bitemporality-in-sql
+      label: Bitemporality in SQL
+    - slug: discover-xtql-with-curl
+      label: Discover XTQL with cURL
+- section: For Clojurists
+  pages:
+    - slug: learn-xtql-today-with-clojure
+      label: Learn XTQL Today, with Clojure
 #    - slug: xtdb-over-http
 #      label: XTDB over HTTP
 #- section: Cookbook

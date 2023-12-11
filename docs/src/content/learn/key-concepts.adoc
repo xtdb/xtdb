@@ -1,6 +1,6 @@
 = Key concepts
 
-== Relational, SQL & Datalog
+== Relational Querying
 
 SQL was first introduced in 1974 and unlike all other languages of its era it has remained completely dominant as the language for databases. SQL is also therefore by far the most well-known façade around the relational model. However unlike SQL—which rather understandably reflects its true age and evolutionary process through its many design flaws—the core of the relational model itself is a timeless manifestation of first-order predicate logic that predates SQL by 5 years (1969!). SQL's undeniable success is because of the strength of the underlying model rather than (and perhaps in spite of) the façade.
 
@@ -10,9 +10,11 @@ SQL is not the only game in town however. Datalog is the alternative query langu
 
 ////
 Datalog = relational algebra + 'iterated fixpoint' operator (i.e. mutually recursive rules)
-////
 
 NOTE: XTDB 2.x does not currently implement recursive Datalog rules
+////
+
+Instead of 'Datalog' XTDB v2 implements 'XTQL' - a novel relational querying language designed for composability whilst embracing the requirement for full interoperability with SQL. XTQL also incorporates key concepts from Datalog, and in particular retains the ability to 'unify' across relations using logic variables.
 
 == Schema-less & Dynamic Tables
 
