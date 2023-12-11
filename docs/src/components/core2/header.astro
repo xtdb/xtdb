@@ -29,7 +29,7 @@ const mobile_anchor_classes = "text-white text-lg font-bold no-underline transit
 
 <a class="!hidden button" href="#main-content">Skip to content</a>
 
-<header class= {"top-header transition-{padding} z-50 duration-200 pt-4 pb-4 text-white font-mono " + sticky_classes + bg_color}>
+<header class= {"shrunk top-header transition-{padding} z-50 duration-200 pt-4 pb-4 text-white font-mono " + sticky_classes + bg_color}>
   <div class="container">
     <div class="relative flex items-center justify-between text-center">
       <a class="ml-0 mr-20" href="/" title="V2 Home">
@@ -160,7 +160,7 @@ const mobile_anchor_classes = "text-white text-lg font-bold no-underline transit
   }
 
   .mobile-nav {
-    @apply flex-grow absolute top-28 right-8 left-8 -z-10 mx-auto p-4 rounded-2xl opacity-0 text-white bg-juxt-orange dark:bg-dark-grey
+    @apply flex-grow absolute top-28 right-8 left-8 -z-10 mx-auto p-4 rounded-2xl opacity-0 text-white bg-juxt-orange dark:bg-dark-grey invisible
   }
 
   .mobile-nav-overlay {
@@ -172,7 +172,7 @@ const mobile_anchor_classes = "text-white text-lg font-bold no-underline transit
   }
 
   .mobile-nav[data-is-open="true"] {
-    @apply opacity-100 z-50
+    @apply opacity-100 z-50 visible
   }
 
   .theme-toggle-menu {
@@ -348,7 +348,7 @@ const mobile_anchor_classes = "text-white text-lg font-bold no-underline transit
   }
 
   if (sticky) {
-    window.onscroll = function() {shrinkOnScroll()};
+//    window.onscroll = function() {shrinkOnScroll()};
   }
 
 })()

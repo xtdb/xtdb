@@ -16,6 +16,35 @@ export class StarlightTOC extends HTMLElement {
         /** All the links in the table of contents. */
         const links = [...this.querySelectorAll('a')];
 
+        links.forEach(link => {
+            link.addEventListener('click', (event: Event) => {
+                event.preventDefault();
+
+                const targetLink = event.currentTarget as HTMLAnchorElement;
+                const href = targetLink.getAttribute('href');
+                if (!href) return;
+
+                const targetId = href.substring(1);
+                const targetElement = document.getElementById(targetId);
+
+                if (targetElement) {
+                    const headerOffset = 110; // Height of your fixed header
+                    const elementPosition = targetElement.getBoundingClientRect().top + window.pageYOffset;
+                    const offsetPosition = elementPosition - headerOffset;
+
+                    window.scrollTo({
+                        top: offsetPosition
+                    });
+
+                    const link = links.find((link) => link.hash === '#' + encodeURIComponent(targetId));
+                    if (link) {
+                        this.current = link;
+                    }
+
+                }
+            });
+        });
+
         /** Test if an element is a table-of-contents heading. */
         const isHeading = (el: Element): el is HTMLHeadingElement => {
             if (el instanceof HTMLHeadingElement) {
@@ -67,7 +96,7 @@ export class StarlightTOC extends HTMLElement {
         // Observe elements with an `id` (most likely headings) and their siblings.
         // Also observe direct children of `.content` to include elements before
         // the first heading.
-        const toObserve = document.querySelectorAll('main [id], main [id] ~ *, main .content > *');
+        const toObserve = document.querySelectorAll('li');// main [id], main [id] ~ *, main .content > *
 
         let observer: IntersectionObserver | undefined;
         const observe = () => {
@@ -76,17 +105,17 @@ export class StarlightTOC extends HTMLElement {
             toObserve.forEach((h) => observer!.observe(h));
         };
 
-        // observe();
+        observe();
 
         const onIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
         let timeout: NodeJS.Timeout;
 
-        // window.addEventListener('resize', () => {
-        //     // Disable intersection observer while window is resizing.
-        //     if (observer) observer.disconnect();
-        //     clearTimeout(timeout);
-        //     timeout = setTimeout(() => onIdle(observe), 200);
-        // });
+        window.addEventListener('resize', () => {
+            // Disable intersection observer while window is resizing.
+            if (observer) observer.disconnect();
+            clearTimeout(timeout);
+            timeout = setTimeout(() => onIdle(observe), 200);
+        });
     }
 
     private getRootMargin(): `-${number}px 0% ${number}px` {
