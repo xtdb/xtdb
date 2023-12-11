@@ -3,7 +3,9 @@
   (:import (com.fasterxml.jackson.databind.module SimpleModule)
            (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer DeleteDeserializer EraseDeserializer
                          TxDeserializer CallDeserializer)
-           (xtdb.tx Ops Put Delete Erase Tx Call)))
+           (xtdb.tx Ops Put Delete Erase Tx Call)
+           (xtdb.query Query OutSpec Query$From
+                       QueryDeserializer OutSpecDeserializer FromDeserializer)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -28,3 +30,12 @@
                                    (.addDeserializer Erase (EraseDeserializer.))
                                    (.addDeserializer Call (CallDeserializer.))
                                    (.addDeserializer Tx (TxDeserializer.)))]}))
+
+(def ^com.fasterxml.jackson.databind.ObjectMapper query-mapper
+  (json/object-mapper {:encode-key-fn true
+                       :decode-key-fn true
+                       :modules [(JsonLdModule.)
+                                 (doto (SimpleModule. "xtdb.query")
+                                   (.addDeserializer Query (QueryDeserializer.))
+                                   (.addDeserializer Query$From (FromDeserializer.))
+                                   (.addDeserializer OutSpec (OutSpecDeserializer.)))]}))

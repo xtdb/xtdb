@@ -3,7 +3,8 @@
             [jsonista.core :as json]
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
-  (:import (xtdb.tx Ops Tx)))
+  (:import (xtdb.tx Ops Tx)
+           (xtdb.query Query OutSpec Expr)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -83,7 +84,7 @@
                                "id" "my-id"
                                "valid_from" #inst "2020"
                                "valid_to" #inst "2021"})))
-    
+
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-delete'"
                             (roundtrip-tx-op
                              {"delete" "docs"
@@ -99,23 +100,23 @@
                            :xt/id :keyword-id}
              (roundtrip-tx-op {"erase" "docs"
                                "id" :keyword-id})))
-    
+
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-erase"
                             (roundtrip-tx-op
                              {"erase" "docs"
                               "id" ["invalid-id-type"]}))))
-  
+
   (t/testing "call"
     (t/is (= #xt.tx/call {:fn-id :my-fn
                           :args ["args"]}
              (roundtrip-tx-op {"call" :my-fn
                                "args" ["args"]})))
-    
+
     (t/is (= #xt.tx/call {:fn-id "my-fn"
                           :args ["args"]}
              (roundtrip-tx-op {"call" "my-fn"
                                "args" ["args"]})))
-    
+
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-call"
                             (roundtrip-tx-op
                              {"call" "my-fn"
@@ -148,3 +149,18 @@
                           (roundtrip-tx {"tx_ops" {"put" "docs"
                                                    "doc" {"xt/id" "my-id"}}}))
         "put not wrapped throws"))
+
+(defn roundtrip-query [v]
+  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query))
+
+(deftest deserialize-query-test
+  (t/is (= (-> (Query/from "docs")
+               (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))
+                          (OutSpec/of "a" (Expr/lVar "b"))]))
+           (roundtrip-query {"from" "docs"
+                             "bind" ["xt/id" {"a" "b"}]})))
+
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-from'"
+                          (roundtrip-query {"from" "docs"
+                                            "bind" "xt/id"} ))
+        "bind not an array"))
