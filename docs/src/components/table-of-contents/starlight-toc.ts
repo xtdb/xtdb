@@ -28,7 +28,7 @@ export class StarlightTOC extends HTMLElement {
                 const targetElement = document.getElementById(targetId);
 
                 if (targetElement) {
-                    const headerOffset = 110; // Height of your fixed header
+                    const headerOffset = 130; // Height of your fixed header
                     const elementPosition = targetElement.getBoundingClientRect().top + window.pageYOffset;
                     const offsetPosition = elementPosition - headerOffset;
 
