@@ -29,11 +29,11 @@ public class PutDeserializer extends StdDeserializer<Put> {
         try {
             ObjectNode objectNode = (ObjectNode) node;
             Put op = new Put(Keyword.intern(objectNode.get("put").asText()), mapper.treeToValue(objectNode.get("doc"), Map.class));
-            if (objectNode.has("valid-from")) {
-                op = op.startingFrom((Instant) mapper.treeToValue(objectNode.get("valid-from"), Object.class));
+            if (objectNode.has("valid_from")) {
+                op = op.startingFrom((Instant) mapper.treeToValue(objectNode.get("valid_from"), Object.class));
             }
-            if (objectNode.has("valid-to")) {
-                op = op.until((Instant) mapper.treeToValue(objectNode.get("valid-to"), Object.class));
+            if (objectNode.has("valid_to")) {
+                op = op.until((Instant) mapper.treeToValue(objectNode.get("valid_to"), Object.class));
             }
             return op;
         } catch (Exception e) {

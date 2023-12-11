@@ -31,21 +31,21 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
         ZoneId defaultTz = null;
 
         try {
-            if (node.has("tx-ops")) {
+            if (node.has("tx_ops")) {
                 // The reason that we are fully walking the nodes is that Jsonista overwrites the standard `List` parser and
                 // something like `mapper.getTypeFactory().constructCollectionType(List.class, Ops.class)`
-                ArrayNode txOpsNode = (ArrayNode)  node.get("tx-ops");
+                ArrayNode txOpsNode = (ArrayNode)  node.get("tx_ops");
                 for (JsonNode txOp: txOpsNode) {
                     ops.add(mapper.treeToValue(txOp, Ops.class));
                 }
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("tx", "missing-tx-ops"), PersistentHashMap.EMPTY);
             }
-            if (node.has("system-time")) {
-                systemTime = (LocalDateTime) mapper.readValue(node.get("system-time").traverse(mapper), Object.class);
+            if (node.has("system_time")) {
+                systemTime = (LocalDateTime) mapper.readValue(node.get("system_time").traverse(mapper), Object.class);
             }
-            if (node.has("default-tz")) {
-                defaultTz = (ZoneId)  mapper.readValue(node.get("default-tz").traverse(mapper), Object.class);
+            if (node.has("default_tz")) {
+                defaultTz = (ZoneId)  mapper.readValue(node.get("default_tz").traverse(mapper), Object.class);
             }
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-tx"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));

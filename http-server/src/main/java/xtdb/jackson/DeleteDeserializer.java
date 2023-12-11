@@ -28,11 +28,11 @@ public class DeleteDeserializer extends StdDeserializer<Delete> {
 
         Delete op = new Delete(Keyword.intern(node.get("delete").asText()), mapper.convertValue(node.get("id"), Object.class));
 
-        if (node.has("valid-from")) {
-            op = op.startingFrom((Instant) mapper.treeToValue(node.get("valid-from"), Object.class));
+        if (node.has("valid_from")) {
+            op = op.startingFrom((Instant) mapper.treeToValue(node.get("valid_from"), Object.class));
         }
-        if (node.has("valid-to")) {
-            op = op.until((Instant) mapper.treeToValue(node.get("valid-to"), Object.class));
+        if (node.has("valid_to")) {
+            op = op.until((Instant) mapper.treeToValue(node.get("valid_to"), Object.class));
         }
         return op;
     }

@@ -50,15 +50,15 @@
                          :valid-to #time/instant "2021-01-01T00:00:00Z"}
              (roundtrip-tx-op {"put" "docs"
                                "doc" {"xt/id" "my-id" "foo" :bar}
-                               "valid-from" #inst "2020"
-                               "valid-to" #inst "2021"})))
+                               "valid_from" #inst "2020"
+                               "valid_to" #inst "2021"})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-put'"
                             (roundtrip-tx-op
                              {"put" "docs"
                               "doc" "blob"
-                              "valid-from" #inst "2020"
-                              "valid-to" #inst "2021"}))))
+                              "valid_from" #inst "2020"
+                              "valid_to" #inst "2021"}))))
 
   (t/testing "delete"
     (t/is (= #xt.tx/delete {:table-name :docs,
@@ -81,8 +81,8 @@
                             :valid-to #time/instant "2021-01-01T00:00:00Z"}
              (roundtrip-tx-op {"delete" "docs"
                                "id" "my-id"
-                               "valid-from" #inst "2020"
-                               "valid-to" #inst "2021"}))))
+                               "valid_from" #inst "2020"
+                               "valid_to" #inst "2021"}))))
   (t/testing "erase"
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id "my-id"}
@@ -113,7 +113,7 @@
                              :doc {:xt/id "my-id"},
                              :valid-from nil,
                              :valid-to nil}], nil, nil)
-           (roundtrip-tx {"tx-ops" [{"put" "docs"
+           (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]})))
 
   (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
@@ -122,13 +122,13 @@
                              :valid-to nil}],
                 #time/date-time "2020-01-01T12:34:56.789"
                 #time/zone "America/Los_Angeles")
-           (roundtrip-tx {"tx-ops" [{"put" "docs"
+           (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]
-                          "system-time" #time/date-time "2020-01-01T12:34:56.789"
-                          "default-tz" #time/zone "America/Los_Angeles"}))
+                          "system_time" #time/date-time "2020-01-01T12:34:56.789"
+                          "default_tz" #time/zone "America/Los_Angeles"}))
         "transaction options")
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-tx'"
-                          (roundtrip-tx {"tx-ops" {"put" "docs"
+                          (roundtrip-tx {"tx_ops" {"put" "docs"
                                                    "doc" {"xt/id" "my-id"}}}))
         "put not wrapped throws"))
