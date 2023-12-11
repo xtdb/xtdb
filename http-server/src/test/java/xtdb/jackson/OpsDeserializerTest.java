@@ -1,7 +1,6 @@
 package xtdb.jackson;
 
 import clojure.lang.Keyword;
-import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleDeserializers;
@@ -11,11 +10,11 @@ import xtdb.tx.Ops;
 import xtdb.tx.Put;
 import xtdb.tx.Delete;
 import xtdb.tx.Erase;
+import xtdb.tx.Call;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +30,7 @@ class OpsDeserializerTest {
         deserializerMapping.put(Put.class, new PutDeserializer());
         deserializerMapping.put(Delete.class, new DeleteDeserializer());
         deserializerMapping.put(Erase.class, new EraseDeserializer());
+        deserializerMapping.put(Call.class, new CallDeserializer());
         deserializerMapping.put(Ops.class, new OpsDeserializer());
         SimpleDeserializers deserializers = new SimpleDeserializers(deserializerMapping);
         module.setDeserializers(deserializers);

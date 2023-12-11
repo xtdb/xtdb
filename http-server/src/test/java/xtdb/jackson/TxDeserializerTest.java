@@ -16,6 +16,7 @@ import xtdb.tx.Put;
 import xtdb.tx.Tx;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,13 +51,13 @@ class TxDeserializerTest {
         // given
         String json =
                     """
-                    {"tx-ops":[{"put":"docs","doc":{}}]} 
+                    {"tx_ops":[{"put":"docs","doc":{}}]} 
                 """;
 
         // when
         Object actual = objectMapper.readValue(json, Tx.class);
 
         // then
-        assertEquals(new Tx(PersistentVector.create(Ops.put(Keyword.intern("docs"), PersistentHashMap.EMPTY)), null, null), actual);
+        assertEquals(new Tx(PersistentVector.create(Ops.put(Keyword.intern("docs"), Collections.emptyMap())), null, null), actual);
     }
 }

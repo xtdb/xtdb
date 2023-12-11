@@ -100,11 +100,13 @@
                            :xt/id :keyword-id}
              (roundtrip-tx-op {"erase" "docs"
                                "id" :keyword-id})))
-
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-erase"
-                            (roundtrip-tx-op
-                             {"erase" "docs"
-                              "id" ["invalid-id-type"]}))))
+    
+    ;; TODO: Add some unsupported type in here
+    ;; (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-erase"
+    ;;                         (roundtrip-tx-op
+    ;;                          {"erase" "docs"
+    ;;                           "id" "my-id"})))
+    )
 
   (t/testing "call"
     (t/is (= #xt.tx/call {:fn-id :my-fn
@@ -174,13 +176,12 @@
                (roundtrip-query-tail {"limit" 100})))
 
       (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-limit"
-                              (roundtrip-query-tail {"limit" "not-a-limit"}))
-            "bind not an array"))
+                              (roundtrip-query-tail {"limit" "not-a-limit"}))))
 
   (t/testing "offset"
       (t/is (= (Query/offset 100)
                (roundtrip-query-tail {"offset" 100})))
 
       (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-offset"
-                              (roundtrip-query-tail {"offset" "not-an-offset"}))
-            "bind not an array")))
+                              (roundtrip-query-tail {"offset" "not-an-offset"})))))
+

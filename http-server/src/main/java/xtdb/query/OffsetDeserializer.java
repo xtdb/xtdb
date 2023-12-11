@@ -24,8 +24,12 @@ public class OffsetDeserializer extends StdDeserializer<Query.Offset> {
 
         try {
             JsonNode offset = node.get("offset");
-            long offsetValue = offset.asLong();
-            return Query.offset(offsetValue);
+            if (offset != null && offset.isNumber()) {
+                long offsetValue = offset.asLong(); // Parse as long
+                return Query.offset(offsetValue);
+            } else {
+                throw new Exception("Offset should be a valid number");
+            }
         }
         catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-offset"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);

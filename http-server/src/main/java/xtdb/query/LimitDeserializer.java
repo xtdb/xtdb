@@ -24,10 +24,13 @@ public class LimitDeserializer extends StdDeserializer<Query.Limit> {
 
         try {
             JsonNode limit = node.get("limit");
-            long limitValue = limit.asLong();
-            return Query.limit(limitValue);
-        }
-        catch (Exception e) {
+            if (limit != null && limit.isNumber()) {
+                long limitValue = limit.asLong(); // Parse as long
+                return Query.limit(limitValue);
+            } else {
+                throw new Exception("Limit should be a valid number");
+            }
+        } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-limit"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
