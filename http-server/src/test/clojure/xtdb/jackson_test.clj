@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
-           (xtdb.query Query Query$Limit Query$Offset OutSpec Expr)))
+           (xtdb.query Query Query$Limit Query$Offset Query$QueryTail OutSpec Expr)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -165,27 +165,22 @@
                                             "bind" "xt/id"} ))
         "bind not an array"))
 
-;; TODO: Will likely be absorbed into the above & use roundtrip-query when querytails implemented properly
+(defn roundtrip-query-tail [v]
+  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$QueryTail))
+
 (deftest deserialize-query-tail-test
   (t/testing "limit"
-    (let [roundtrip-limit #(.readValue jackson/query-mapper 
-                                       (json/write-value-as-string % jackson/json-ld-mapper) 
-                                       Query$Limit)]
       (t/is (= (Query/limit 100)
-               (roundtrip-limit {"limit" 100})))
+               (roundtrip-query-tail {"limit" 100})))
 
       (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-limit"
-                              (roundtrip-limit {"limit" "not-a-limit"}))
-            "bind not an array")))
-  
-  (t/testing "offset"
-    (let [roundtrip-offset #(.readValue jackson/query-mapper
-                                        (json/write-value-as-string % jackson/json-ld-mapper)
-                                        Query$Offset)]
-      (t/is (= (Query/offset 100)
-               (roundtrip-offset {"offset" 100})))
-  
-      (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-offset"
-                              (roundtrip-offset {"offset" "not-an-offset"}))
-            "bind not an array"))))
+                              (roundtrip-query-tail {"limit" "not-a-limit"}))
+            "bind not an array"))
 
+  (t/testing "offset"
+      (t/is (= (Query/offset 100)
+               (roundtrip-query-tail {"offset" 100})))
+
+      (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-offset"
+                              (roundtrip-query-tail {"offset" "not-an-offset"}))
+            "bind not an array")))
