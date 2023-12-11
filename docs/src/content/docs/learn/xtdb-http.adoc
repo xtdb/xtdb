@@ -160,7 +160,7 @@ curl -X POST \
      -H "Content-Type: application/transit+json" \
      -H "Accept: application/transit+json" \
      -d '{"~:query": ["~#list",["~$from","~:users",["~$first-name", "~$last-name"]]],
-          "~:basis": {"~:after-tx": '"$last_tx"'}}' \
+          "~:after-tx": '"$last_tx"'}' \
      http://localhost:3000/query
 ----
 
@@ -184,7 +184,7 @@ curl -X POST \
      -H "Content-Type: application/transit+json" \
      -H "Accept: application/transit+json" \
      -d '{"~:query": "SELECT u.first_name, u.last_name FROM users AS u",
-          "~:basis": {"~:after-tx": '"$last_tx"'}}' \
+          "~:after-tx": '"$last_tx"'}' \
      http://localhost:3000/query
 ----
 
