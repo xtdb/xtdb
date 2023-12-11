@@ -32,7 +32,7 @@
       (t/is (= (ex-data ex)
                (ex-data roundtripped-ex))))))
 
-(defn clj-json-tx-op->tx-op [v]
+(defn roundtrip-tx-op [v]
   (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Ops))
 
 (deftest deserialize-tx-op-test
@@ -41,20 +41,20 @@
                          :doc {:foo :bar, :xt/id "my-id"},
                          :valid-from nil,
                          :valid-to nil}
-             (clj-json-tx-op->tx-op {"put" "docs"
-                                     "doc" {"xt/id" "my-id" "foo" :bar}})))
+             (roundtrip-tx-op {"put" "docs"
+                               "doc" {"xt/id" "my-id" "foo" :bar}})))
 
     (t/is (= #xt.tx/put {:table-name :docs,
                          :doc {:foo :bar, :xt/id "my-id"},
                          :valid-from #time/instant "2020-01-01T00:00:00Z",
                          :valid-to #time/instant "2021-01-01T00:00:00Z"}
-             (clj-json-tx-op->tx-op {"put" "docs"
-                                     "doc" {"xt/id" "my-id" "foo" :bar}
-                                     "valid-from" #inst "2020"
-                                     "valid-to" #inst "2021"})))
+             (roundtrip-tx-op {"put" "docs"
+                               "doc" {"xt/id" "my-id" "foo" :bar}
+                               "valid-from" #inst "2020"
+                               "valid-to" #inst "2021"})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-put'"
-                            (clj-json-tx-op->tx-op
+                            (roundtrip-tx-op
                              {"put" "docs"
                               "doc" "blob"
                               "valid-from" #inst "2020"
@@ -65,34 +65,34 @@
                             :xt/id "my-id",
                             :valid-from nil,
                             :valid-to nil}
-             (clj-json-tx-op->tx-op {"delete" "docs"
-                                     "id" "my-id"})))
+             (roundtrip-tx-op {"delete" "docs"
+                               "id" "my-id"})))
 
     (t/is (= #xt.tx/delete {:table-name :docs,
                             :xt/id :keyword-id,
                             :valid-from nil,
                             :valid-to nil}
-             (clj-json-tx-op->tx-op {"delete" "docs"
-                                     "id" :keyword-id})))
+             (roundtrip-tx-op {"delete" "docs"
+                               "id" :keyword-id})))
 
     (t/is (= #xt.tx/delete {:table-name :docs,
                             :xt/id "my-id",
                             :valid-from #time/instant "2020-01-01T00:00:00Z",
                             :valid-to #time/instant "2021-01-01T00:00:00Z"}
-             (clj-json-tx-op->tx-op {"delete" "docs"
-                                     "id" "my-id"
-                                     "valid-from" #inst "2020"
-                                     "valid-to" #inst "2021"}))))
+             (roundtrip-tx-op {"delete" "docs"
+                               "id" "my-id"
+                               "valid-from" #inst "2020"
+                               "valid-to" #inst "2021"}))))
   (t/testing "erase"
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id "my-id"}
-             (clj-json-tx-op->tx-op {"erase" "docs"
-                                     "id" "my-id"})))
+             (roundtrip-tx-op {"erase" "docs"
+                               "id" "my-id"})))
 
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id :keyword-id}
-             (clj-json-tx-op->tx-op {"erase" "docs"
-                                     "id" :keyword-id})))))
+             (roundtrip-tx-op {"erase" "docs"
+                               "id" :keyword-id})))))
 
 (defn roundtrip-tx [v]
   (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Tx))
