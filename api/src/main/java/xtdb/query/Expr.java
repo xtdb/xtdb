@@ -6,6 +6,7 @@ import clojure.lang.IFn;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static xtdb.query.QueryUtil.stringifyArgs;
@@ -27,6 +28,19 @@ public interface Expr {
         public String toString() {
             return Boolean.toString(bool);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Bool bool1 = (Bool) o;
+            return bool == bool1.bool;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(bool);
+        }
     }
 
     final class Long implements Expr {
@@ -39,6 +53,19 @@ public interface Expr {
         @Override
         public String toString() {
             return java.lang.Long.toString(lng);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Long aLong = (Long) o;
+            return lng == aLong.lng;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(lng);
         }
     }
 
@@ -56,6 +83,19 @@ public interface Expr {
         @Override
         public String toString() {
             return java.lang.Double.toString(dbl);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Double aDouble = (Double) o;
+            return java.lang.Double.compare(dbl, aDouble.dbl) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(dbl);
         }
     }
 
@@ -75,6 +115,19 @@ public interface Expr {
         public String toString() {
             return (String) PR_STR.invoke(obj);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Obj obj1 = (Obj) o;
+            return Objects.equals(obj, obj1.obj);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(obj);
+        }
     }
 
     static Obj val(Object obj) {
@@ -91,6 +144,19 @@ public interface Expr {
         @Override
         public String toString() {
             return lv;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            LogicVar logicVar = (LogicVar) o;
+            return Objects.equals(lv, logicVar.lv);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(lv);
         }
     }
 
@@ -110,6 +176,18 @@ public interface Expr {
             return v;
         }
 
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Param param = (Param) o;
+            return Objects.equals(v, param.v);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(v);
+        }
     }
     static Param param(String v) {
         return new Param(v);
@@ -128,6 +206,19 @@ public interface Expr {
         public String toString() {
             String args = this.args == null || this.args.isEmpty() ? null : " " + this.args.stream().map(Object::toString).collect(Collectors.joining(" "));
             return String.format("(%s%s)", f, args);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Call call = (Call) o;
+            return Objects.equals(f, call.f) && Objects.equals(args, call.args);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(f, args);
         }
     }
 
@@ -148,6 +239,19 @@ public interface Expr {
         public String toString() {
             return String.format("(. %s %s)", expr, field);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Get get = (Get) o;
+            return Objects.equals(expr, get.expr) && Objects.equals(field, get.field);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(expr, field);
+        }
     }
 
     static Get get(Expr expr, String field) {
@@ -166,6 +270,19 @@ public interface Expr {
         @Override
         public String toString() {
             return String.format("(q %s)", stringifyArgs(query, args));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Subquery subquery = (Subquery) o;
+            return Objects.equals(query, subquery.query) && Objects.equals(args, subquery.args);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(query, args);
         }
     }
 
@@ -186,6 +303,19 @@ public interface Expr {
         public String toString() {
             return String.format("(exists? %s)", stringifyArgs(query, args));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Exists exists = (Exists) o;
+            return Objects.equals(query, exists.query) && Objects.equals(args, exists.args);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(query, args);
+        }
     }
 
     static Exists exists(Query query, List<ArgSpec> args) {
@@ -205,6 +335,19 @@ public interface Expr {
         public String toString() {
             return String.format("(pull %s)", stringifyArgs(query, args));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Pull pull = (Pull) o;
+            return Objects.equals(query, pull.query) && Objects.equals(args, pull.args);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(query, args);
+        }
     }
 
     static Pull pull(Query query, List<ArgSpec> args) {
@@ -223,6 +366,19 @@ public interface Expr {
         @Override
         public String toString() {
             return String.format("(pull* %s)", stringifyArgs(query, args));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            PullMany pullMany = (PullMany) o;
+            return Objects.equals(query, pullMany.query) && Objects.equals(args, pullMany.args);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(query, args);
         }
     }
 
