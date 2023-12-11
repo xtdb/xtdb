@@ -21,7 +21,6 @@ public class QueryTailDeserializer extends StdDeserializer<Query.QueryTail> {
     @Override
     public Query.QueryTail deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);
 
         if (node.has("limit")) {

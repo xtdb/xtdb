@@ -165,7 +165,23 @@
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-from'"
                           (roundtrip-query {"from" "docs"
                                             "bind" "xt/id"} ))
-        "bind not an array"))
+        "bind not an array")
+
+  (t/is (= (Query/pipeline (-> (Query/from "docs")
+                               (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                           [(Query/limit 10)])
+           (roundtrip-query [{"from" "docs"
+                              "bind" ["xt/id"]}
+                             {"limit" 10}]))
+        "pipeline")
+
+  (t/is (= (Query/unify [(-> (Query/from "docs") (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                         (-> (Query/from "docs") (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))])
+           (roundtrip-query {"unify" [{"from" "docs"
+                                       "bind" ["xt/id"]}
+                                      {"from" "docs"
+                                       "bind" ["xt/id"]}]}))
+        "unify"))
 
 (defn roundtrip-query-tail [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$QueryTail))

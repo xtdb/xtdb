@@ -23,12 +23,12 @@ public class QueryDeserializer extends StdDeserializer<Query> {
     @Override
     public Query deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);
 
-        // TODO pipeline
         if (node.isArray()) {
-            throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
+            return mapper.treeToValue(node, Query.Pipeline.class);
+        } else if (node.has("unify")) {
+            return mapper.treeToValue(node, Query.Unify.class);
         } else if (node.has("from")) {
             return mapper.treeToValue(node, Query.From.class);
         } else {
