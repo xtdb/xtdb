@@ -82,7 +82,13 @@
              (roundtrip-tx-op {"delete" "docs"
                                "id" "my-id"
                                "valid_from" #inst "2020"
-                               "valid_to" #inst "2021"}))))
+                               "valid_to" #inst "2021"})))
+    
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-delete'"
+                            (roundtrip-tx-op
+                             {"delete" "docs"
+                              "id" "my-id"
+                              "valid_from" ["not-a-date"]}))))
   (t/testing "erase"
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id "my-id"}
@@ -92,18 +98,28 @@
     (t/is (= #xt.tx/erase {:table-name :docs,
                            :xt/id :keyword-id}
              (roundtrip-tx-op {"erase" "docs"
-                               "id" :keyword-id}))))
+                               "id" :keyword-id})))
+    
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-erase"
+                            (roundtrip-tx-op
+                             {"erase" "docs"
+                              "id" ["invalid-id-type"]}))))
   
   (t/testing "call"
     (t/is (= #xt.tx/call {:fn-id :my-fn
                           :args ["args"]}
              (roundtrip-tx-op {"call" :my-fn
                                "args" ["args"]})))
-  
+    
     (t/is (= #xt.tx/call {:fn-id "my-fn"
                           :args ["args"]}
              (roundtrip-tx-op {"call" "my-fn"
-                               "args" ["args"]})))))
+                               "args" ["args"]})))
+    
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-call"
+                            (roundtrip-tx-op
+                             {"call" "my-fn"
+                              "args" {"not" "a-list"}})))))
 
 (defn roundtrip-tx [v]
   (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Tx))
