@@ -3,7 +3,7 @@
             [jsonista.core :as json]
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
-  (:import (xtdb.tx Ops)))
+  (:import (xtdb.tx Ops Tx)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -93,3 +93,31 @@
                            :xt/id :keyword-id}
              (clj-json-tx-op->tx-op {"erase" "docs"
                                      "id" :keyword-id})))))
+
+(defn roundtrip-tx [v]
+  (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Tx))
+
+(deftest deserialize-tx-test
+  (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
+                             :doc {:xt/id "my-id"},
+                             :valid-from nil,
+                             :valid-to nil}], nil, nil)
+           (roundtrip-tx {"tx-ops" [{"put" "docs"
+                                     "doc" {"xt/id" "my-id"}}]})))
+
+  (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
+                             :doc {:xt/id "my-id"},
+                             :valid-from nil,
+                             :valid-to nil}],
+                #time/date-time "2020-01-01T12:34:56.789"
+                #time/zone "America/Los_Angeles")
+           (roundtrip-tx {"tx-ops" [{"put" "docs"
+                                     "doc" {"xt/id" "my-id"}}]
+                          "system-time" #time/date-time "2020-01-01T12:34:56.789"
+                          "default-tz" #time/zone "America/Los_Angeles"}))
+        "transaction options")
+
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-tx'"
+                          (roundtrip-tx {"tx-ops" {"put" "docs"
+                                                   "doc" {"xt/id" "my-id"}}}))
+        "put not wrapped throws"))
