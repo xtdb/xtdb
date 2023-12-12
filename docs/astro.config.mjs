@@ -87,6 +87,11 @@ export default defineConfig({
       ],
 
       customCss: ['./src/styles/tailwind.css'],
+
+      components: {
+        TableOfContents: './src/components/table-of-contents.astro',
+        MobileTableOfContents: './src/components/mobile-table-of-contents.astro',
+      },
     }),
 
     tailwind({ applyBaseStyles: false }),
