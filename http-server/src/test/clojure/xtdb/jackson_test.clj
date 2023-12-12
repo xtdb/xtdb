@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
-           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail OutSpec Expr Query$Unify QueryMap Basis TransactionKey)))
+           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail ColSpec OutSpec Expr Query$Unify QueryMap Basis TransactionKey)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -212,7 +212,19 @@
                             (roundtrip-query-tail {"orderBy" [{"val" "someField", "dir" "invalid-direction"}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-order-by'"
-                            (roundtrip-query-tail {"orderBy" [{"val" "someField", "nulls" "invalid-nulls"}]})))))
+                            (roundtrip-query-tail {"orderBy" [{"val" "someField", "nulls" "invalid-nulls"}]}))))
+  
+  (t/testing "return"
+    (t/is (= (Query/returning [(ColSpec/of "a" (Expr/lVar "a"))
+                               (ColSpec/of "b" (Expr/lVar "b"))])
+             (roundtrip-query-tail {"return" ["a" "b"]})))
+    
+    (t/is (= (Query/returning [(ColSpec/of "a" (Expr/lVar "a"))
+                               (ColSpec/of "b" (Expr/lVar "c"))])
+             (roundtrip-query-tail {"return" ["a" {"b" "c"}]})))
+    
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-return"
+                            (roundtrip-query-tail {"return" "a"})))))
 
 (defn roundtrip-unify [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
@@ -223,7 +235,7 @@
            (roundtrip-unify {"unify" [{"from" "docs"
                                        "bind" ["xt/id"]}]})))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal ar3gument: ':xtdb/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))
         "unify value not an array"))
 
