@@ -11,14 +11,6 @@ We include practical examples and their expected outputs, so please follow along
 In this guide we'll be using `curl` to interact with XTDB. +
 You can also use the HTTP client from your programming language of choice.
 
-// TODO:
-// - Convert all examples to application/json
-// - Style admonitions
-// - Reference for transit extensions
-// - Reference for JSON syntax
-// - Confirm this doc is correct
-// - Special tables doc
-
 == Prerequisites
 
 To get started, ensure Docker is installed. Then pull and run the XTDB Docker image:
@@ -82,7 +74,7 @@ In this guide we'll be using the content type `application/json` but for more ef
 
 See link:https://github.com/cognitect/transit-format[here,window=_blank] to learn more about transit.
 
-// TODO: Link to our transit extensions reference
+See our transit extensions link:../reference/main/formats/transit#_transit_extensions[here].
 ====
 
 [#tx]

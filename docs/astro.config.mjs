@@ -103,6 +103,11 @@ export default defineConfig({
                 { label: 'Temporal functions', link: '/reference/main/stdlib/temporal'},
                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates'},
               ]
+            }, {
+              label: 'Formats',
+              items: [
+                { label: 'Transit', link: '/reference/main/formats/transit'},
+              ]
             },
 
             {
