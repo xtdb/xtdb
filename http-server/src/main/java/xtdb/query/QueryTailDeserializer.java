@@ -31,6 +31,8 @@ public class QueryTailDeserializer extends StdDeserializer<Query.QueryTail> {
             return mapper.treeToValue(node, Query.OrderBy.class);
         } else if (node.has("return")) {
             return mapper.treeToValue(node, Query.Return.class);
+        } else if (node.has("unnest")) {
+            return mapper.treeToValue(node, Query.UnnestCol.class);
         } else {
             // TODO everything else
             throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);

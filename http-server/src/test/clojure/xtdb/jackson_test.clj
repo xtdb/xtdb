@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
-           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail ColSpec OutSpec Expr Query$Unify QueryMap Basis TransactionKey)))
+           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -224,7 +224,16 @@
              (roundtrip-query-tail {"return" ["a" {"b" "c"}]})))
     
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-return"
-                            (roundtrip-query-tail {"return" "a"})))))
+                            (roundtrip-query-tail {"return" "a"}))))
+
+  (t/testing "unnest"
+    (t/is (= (Query/unnestCol (ColSpec/of "a" (Expr/lVar "b")))
+             (roundtrip-query-tail {"unnest" {"a" "b"}})))
+    
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unnest"
+                            (roundtrip-query-tail {"unnest" {"a" "b"
+                                                             "c" "d"}}))
+          "should fail with >1 binding")))
 
 (defn roundtrip-unify [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
@@ -234,8 +243,15 @@
                              (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))])
            (roundtrip-unify {"unify" [{"from" "docs"
                                        "bind" ["xt/id"]}]})))
+  
+  (t/is (= (Query/unify [(-> (Query/from "docs")
+                             (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                         (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))])
+           (roundtrip-unify {"unify" [{"from" "docs"
+                                       "bind" ["xt/id"]}
+                                      {"unnest" {"a" "b"}}]})))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal ar3gument: ':xtdb/malformed-unify"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))
         "unify value not an array"))
 

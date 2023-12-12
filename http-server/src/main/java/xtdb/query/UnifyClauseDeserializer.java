@@ -27,8 +27,10 @@ public class UnifyClauseDeserializer extends StdDeserializer<Query.UnifyClause> 
 
         if (node.has("from")) {
             return mapper.treeToValue(node, Query.From.class);
+        } if (node.has("unnest")) {
+            return mapper.treeToValue(node, Query.UnnestVar.class);
         } else {
-            // TODO join, left-join, rel, unnest, where, with
+            // TODO join, left-join, rel, where, with
             throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
         }
     }
