@@ -156,6 +156,8 @@
 (defn- roundtrip-expr [e]
   (.readValue jackson/query-mapper (json/write-value-as-string e jackson/json-ld-mapper) Expr))
 
+(type (.readValue jackson/json-ld-mapper (json/write-value-as-string 1 jackson/json-ld-mapper) Object))
+
 
 (deftest deserialize-expr-test
   (t/is (= (Expr/lVar "foo")
@@ -163,9 +165,8 @@
         "logic-var")
   (t/is (= Expr/FALSE
            (roundtrip-expr false)))
-  ;; TODO don't know why this fails
-  #_(t/is (= (Expr/val (long 1))
-             (roundtrip-expr (long 1))))
+  (t/is (= (Expr/val (long 1))
+           (roundtrip-expr (long 1))))
   (t/is (= (Expr/val (double 1.2))
            (roundtrip-expr 1.2)))
 
@@ -185,10 +186,26 @@
                             "bind" []}))
         "subquery")
 
+  (t/is (= (Expr/pull (-> (Query/from "docs")
+                          (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                      [])
+           (roundtrip-expr {"pull" {"from" "docs"
+                                    "bind" ["xt/id"]}
+                            "bind" []}))
+        "pull")
+
+  (t/is (= (Expr/pullMany (-> (Query/from "docs")
+                              (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                          [])
+           (roundtrip-expr {"pull_many" {"from" "docs"
+                                         "bind" ["xt/id"]}
+                            "bind" []}))
+        "pull")
+
   (t/is (= (Expr/call "+" [(Expr/lVar "foo") (Expr/lVar "bar")])
            (roundtrip-expr {"call" "+"
                             "args" ["foo" "bar"]}))
-        "subquery"))
+        "call"))
 
 (defn roundtrip-query [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query))

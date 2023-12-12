@@ -14,6 +14,7 @@ import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class ExprDeserializer extends StdDeserializer<Expr> {
@@ -22,8 +23,12 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
         super(Expr.class);
     }
 
+    static private List<String> supportedObjectFields = Arrays.asList("exists", "q", "call", "pull", "pull_many");
     private boolean supportedObjectDeserialization(ObjectNode node) {
-        return node.has("exists") || node.has("q") || node.has("call");
+        for (String field : supportedObjectFields) {
+            if (node.has(field)) return true;
+        }
+        return false;
     }
 
    private List<ArgSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
@@ -39,14 +44,20 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         JsonNode node = mapper.readTree(p);
 
-        //TODO this currently does not deal with String and Map literals as we still need to decide on syntax here
-        //TODO pull, pull-many, param
+        //TODO this currently does not deal with String and Map literals, as we still need to decide on syntax here
         try {
             if (node.isTextual()) {
-                return Expr.lVar(node.asText());
+                var symbolOrParam = node.asText();
+                if (symbolOrParam.startsWith("$")) {
+                    return Expr.param(symbolOrParam);
+                }
+                return Expr.lVar(symbolOrParam);
             }
             if (node.isBoolean()) {
                 return node.asBoolean() ? Expr.TRUE : Expr.FALSE;
+            }
+            if (node.isInt()) {
+                return Expr.val((long) node.asInt());
             }
             if (node.isLong()) {
                 return Expr.val(node.asLong());
@@ -61,6 +72,12 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
                 }
                 if (node.has("q")) {
                     return Expr.q(mapper.treeToValue(objectNode.get("q"), Query.class), deserializeBind(mapper, (ArrayNode) objectNode.get("bind")));
+                }
+                if (node.has("pull")) {
+                    return Expr.pull(mapper.treeToValue(objectNode.get("pull"), Query.class), deserializeBind(mapper, (ArrayNode) objectNode.get("bind")));
+                }
+                if (node.has("pull_many")) {
+                    return Expr.pullMany(mapper.treeToValue(objectNode.get("pull_many"), Query.class), deserializeBind(mapper, (ArrayNode) objectNode.get("bind")));
                 }
                 if (node.has("call")) {
                     List<Expr> args = new ArrayList<>();
