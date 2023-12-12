@@ -27,6 +27,8 @@ public class QueryTailDeserializer extends StdDeserializer<Query.QueryTail> {
             return mapper.treeToValue(node, Query.Limit.class);
         } else if (node.has("offset")) {
             return mapper.treeToValue(node, Query.Offset.class);
+        } else if (node.has("orderBy")) {
+            return mapper.treeToValue(node, Query.OrderBy.class);
         } else {
             // TODO everything else
             throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);

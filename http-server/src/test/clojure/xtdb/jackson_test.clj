@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
-           (xtdb.query Query Query$QueryTail OutSpec Expr Query$Unify QueryMap Basis TransactionKey)))
+           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail OutSpec Expr Query$Unify QueryMap Basis TransactionKey)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -199,7 +199,20 @@
              (roundtrip-query-tail {"offset" 100})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-offset"
-                            (roundtrip-query-tail {"offset" "not-an-offset"})))))
+                            (roundtrip-query-tail {"offset" "not-an-offset"}))))
+
+  (t/testing "orderBy"
+    (t/is (= (Query/orderBy [(Query/orderSpec (Expr/lVar "someField") nil nil)])
+             (roundtrip-query-tail {"orderBy" ["someField"]})))
+
+    (t/is (= (Query/orderBy [(Query/orderSpec (Expr/lVar "someField") Query$OrderDirection/ASC Query$OrderNulls/FIRST)])
+             (roundtrip-query-tail {"orderBy" [{"val" "someField", "dir" "asc", "nulls" "first"}]})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-order-by'"
+                            (roundtrip-query-tail {"orderBy" [{"val" "someField", "dir" "invalid-direction"}]})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-order-by'"
+                            (roundtrip-query-tail {"orderBy" [{"val" "someField", "nulls" "invalid-nulls"}]})))))
 
 (defn roundtrip-unify [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
