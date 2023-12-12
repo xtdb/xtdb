@@ -5,7 +5,8 @@
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
-                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey Expr)))
+                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey Expr
+                       ArgSpec)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -248,11 +249,11 @@
                            (Expr/val {:< ["bar" "baz"]})])
              (roundtrip-query-tail {"where" [{">=" ["foo" "bar"]}
                                              {"<" ["bar" "baz"]}]})))
-    
+
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-where"
                             (roundtrip-query-tail {"where" "not-a-list"}))
-          "should fail when not a list")) 
-  
+          "should fail when not a list"))
+
   (t/testing "limit"
     (t/is (= (Query/limit 100)
              (roundtrip-query-tail {"limit" 100})))
@@ -325,22 +326,34 @@
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
 
 (deftest deserialize-unify-test
-  (t/is (= (Query/unify [(-> (Query/from "docs")
-                             (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))])
-           (roundtrip-unify {"unify" [{"from" "docs"
-                                       "bind" ["xt/id"]}]})))
+  (let [parsed-q (-> (Query/from "docs")
+                     (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))]
+    (t/is (= (Query/unify [parsed-q])
+             (roundtrip-unify {"unify" [{"from" "docs"
+                                         "bind" ["xt/id"]}]})))
 
-  (t/is (= (Query/unify [(-> (Query/from "docs")
-                             (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
-                         (Query/where [(Expr/val {:>= ["foo" "bar"]})])
-                         (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))
-                         (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
-                                      (VarSpec/of "b" (Expr/lVar "b"))])])
-           (roundtrip-unify {"unify" [{"from" "docs"
-                                       "bind" ["xt/id"]} 
-                                      {"where" [{">=" ["foo" "bar"]}]}
-                                      {"unnest" {"a" "b"}}
-                                      {"with" ["a" "b"]}]})))
+    (t/is (= (Query/unify [parsed-q
+                           (Query/where [(Expr/val {:>= ["foo" "bar"]})])
+                           (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))
+                           (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
+                                        (VarSpec/of "b" (Expr/lVar "b"))])
+                           (-> (Query/join parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
+                               (.binding [(OutSpec/of "id" (Expr/lVar "id"))]))
+                           (-> (Query/leftJoin parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
+                               (.binding [(OutSpec/of "id" (Expr/lVar "id"))]))])
+             (roundtrip-unify {"unify" [{"from" "docs"
+                                         "bind" ["xt/id"]}
+                                        {"where" [{">=" ["foo" "bar"]}]}
+                                        {"unnest" {"a" "b"}}
+                                        {"with" ["a" "b"]}
+                                        {"join" {"from" "docs"
+                                                 "bind" ["xt/id"]}
+                                         "args" ["id"]
+                                         "bind" ["id"]}
+                                        {"left_join" {"from" "docs"
+                                                      "bind" ["xt/id"]}
+                                         "args" ["id"]
+                                         "bind" ["id"]}]}))))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))

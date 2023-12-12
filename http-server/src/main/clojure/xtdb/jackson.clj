@@ -7,14 +7,15 @@
            (xtdb.query Query OutSpec Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
-                       TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap
+                       TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap Query$Join Query$LeftJoin
                        QueryDeserializer OutSpecDeserializer FromDeserializer WhereDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
                        UnnestColDeserializer ReturnDeserializer QueryTailDeserializer
                        WithDeserializer WithColsDeserializer WithoutDeserializer
                        VarSpecDeserializer UnnestVarDeserializer UnifyDeserializer UnifyClauseDeserializer
                        PipelineDeserializer TxKeyDeserializer ArgSpecDeserializer ColSpecDeserializer
-                       BasisDeserializer QueryMapDeserializer ExprDeserializer)))
+                       BasisDeserializer QueryMapDeserializer ExprDeserializer
+                       JoinDeserializer LeftJoinDeserializer)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -62,6 +63,8 @@
                                    (.addDeserializer Query$With (WithDeserializer.))
                                    (.addDeserializer Query$WithCols (WithColsDeserializer.))
                                    (.addDeserializer Query$Without (WithoutDeserializer.))
+                                   (.addDeserializer Query$Join (JoinDeserializer.))
+                                   (.addDeserializer Query$LeftJoin (LeftJoinDeserializer.))
                                    (.addDeserializer OutSpec (OutSpecDeserializer.))
                                    (.addDeserializer ColSpec (ColSpecDeserializer.))
                                    (.addDeserializer ArgSpec (ArgSpecDeserializer.))
