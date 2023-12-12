@@ -1,5 +1,9 @@
 # build output
 dist/
+
+# generated docs
+public/clients
+
 # generated types
 .astro/
 

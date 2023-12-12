@@ -82,6 +82,13 @@ export default defineConfig({
                 { label: 'Temporal functions', link: '/reference/main/stdlib/temporal'},
                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates'},
               ]
+            }, {
+              label: 'Clients',
+              items: [
+                { label: 'Clojure', link: '/clients/clojure/index.html'},
+                { label: 'Java', link: '/clients/java/index.html'},
+                { label: 'HTTP (OpenAPI)', link: '/clients/openapi/index.html'},
+              ]
             },
           ]
         },

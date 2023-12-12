@@ -8,8 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-openapi-docs": "redoc-cli bundle openapi/openapi.yaml --output=dist/openapi/index.html",
-    "build-javadoc": "cd ../ && ./gradlew aggregateJavadoc && cp -r ./build/docs/aggregateJavadoc docs/dist/javadoc",
+    "build-openapi-docs": "redoc-cli bundle openapi/openapi.yaml --output=public/clients/openapi/index.html",
+    "build-javadoc": "cd ../ && ./gradlew aggregateJavadoc && cp -r ./build/docs/aggregateJavadoc docs/public/clients/java",
     "build-clj-docs": "cd ../ && ./gradlew build-codox"
   },
   "dependencies": {
