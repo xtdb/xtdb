@@ -2,11 +2,18 @@
 title: Transit
 ---
 
-Coming soon!
+XTDB's link:https://docs.xtdb.com/openapi/index.html[HTTP API] supports multiple formats including link:https://github.com/cognitect/transit-format[Transit,window=_blank].
 
-////
+We expect most developers to prefer using link:json[JSON].
+
+To have XTDB return Transit, set the `Accept` header to `application/transit+json`. +
+Similarly to send Transit to XTDB, set the `Content-Type` header to `application/transit+json`.
+
 
 == Transit Extensions
+
+XTDB supports the extensions from the link:https://github.com/henryw374/time-literals#usage[time-literals,window=_blank] library. +
+As well as the following custom extensions:
 
 [cols="1,2"]
 |===
@@ -61,4 +68,3 @@ Coming soon!
 |
 
 |===
-////
