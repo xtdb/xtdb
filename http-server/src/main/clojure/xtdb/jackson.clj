@@ -6,14 +6,14 @@
            (xtdb.tx Ops Put Delete Erase Tx Call)
            (xtdb.query Query OutSpec Query$From Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
-                       Query$UnnestCol Query$UnnestVar
-                       TransactionKey ArgSpec ColSpec Basis QueryMap
+                       Query$UnnestCol Query$UnnestVar Expr
+                       TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap
                        QueryDeserializer OutSpecDeserializer FromDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
                        UnnestColDeserializer ReturnDeserializer QueryTailDeserializer
                        VarSpecDeserializer UnnestVarDeserializer UnifyDeserializer UnifyClauseDeserializer
                        PipelineDeserializer TxKeyDeserializer ArgSpecDeserializer ColSpecDeserializer
-                       BasisDeserializer QueryMapDeserializer)))
+                       BasisDeserializer QueryMapDeserializer ExprDeserializer)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -58,6 +58,9 @@
                                    (.addDeserializer Query$UnnestCol (UnnestColDeserializer.))
                                    (.addDeserializer Query$UnnestVar (UnnestVarDeserializer.))
                                    (.addDeserializer OutSpec (OutSpecDeserializer.))
+                                   (.addDeserializer ColSpec (ColSpecDeserializer.))
                                    (.addDeserializer ArgSpec (ArgSpecDeserializer.))
+                                   (.addDeserializer VarSpec (VarSpecDeserializer.))
                                    (.addDeserializer TransactionKey (TxKeyDeserializer.))
-                                   (.addDeserializer Basis (BasisDeserializer.)))]}))
+                                   (.addDeserializer Basis (BasisDeserializer.))
+                                   (.addDeserializer Expr (ExprDeserializer.)))]}))

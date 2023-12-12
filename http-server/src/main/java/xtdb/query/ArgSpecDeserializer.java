@@ -10,8 +10,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.type.TypeFactory;
-import org.eclipse.jetty.websocket.core.internal.util.InvokerUtils;
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
@@ -27,7 +25,6 @@ public class ArgSpecDeserializer extends StdDeserializer<ArgSpec> {
     @Override
     public ArgSpec deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);
 
         try {
@@ -38,7 +35,7 @@ public class ArgSpecDeserializer extends StdDeserializer<ArgSpec> {
                 ObjectNode objectNode= (ObjectNode) node;
                 Iterator<Map.Entry<String, JsonNode>> itr = objectNode.fields();
                 Map.Entry<String, JsonNode> entry = itr.next();
-                return ArgSpec.of(entry.getKey(), Expr.lVar(entry.getValue().asText()));
+                return ArgSpec.of(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-arg-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }

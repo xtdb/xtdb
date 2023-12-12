@@ -43,19 +43,16 @@ public class OrderByDeserializer extends StdDeserializer<Query.OrderBy> {
         }
     }
 
-    private Query.OrderSpec parseOrderSpec(JsonNode orderSpecNode) throws Exception {
+    private Query.OrderSpec parseOrderSpec(ObjectMapper mapper, JsonNode orderSpecNode) throws Exception {
         if (orderSpecNode.isTextual()) {
             String var = orderSpecNode.asText();
-            // TODO: Very basic parsing to Expr - replace when we have proper Expr deserializer
             Expr varExpr = Expr.lVar(var);
             return Query.orderSpec(varExpr, null, null);
         } else {
-            String var = orderSpecNode.get("val").asText();
-            // TODO: Very basic parsing to Expr - replace when we have proper Expr deserializer
-            Expr varExpr = Expr.lVar(var);
+            Expr valExpr = mapper.treeToValue(orderSpecNode.get("val"), Expr.class);
             Query.OrderDirection direction = parseDirection(orderSpecNode.get("dir").asText());
             Query.OrderNulls nulls = parseNulls(orderSpecNode.get("nulls").asText());
-            return Query.orderSpec(varExpr, direction, nulls);
+            return Query.orderSpec(valExpr, direction, nulls);
         }
     }
 
@@ -73,7 +70,7 @@ public class OrderByDeserializer extends StdDeserializer<Query.OrderBy> {
         try {
             List<Query.OrderSpec> orderSpecs = new ArrayList<>();
             for (JsonNode orderSpecNode : orderBy) {
-                orderSpecs.add(parseOrderSpec(orderSpecNode));
+                orderSpecs.add(parseOrderSpec(mapper, orderSpecNode));
             }
             return Query.orderBy(orderSpecs);
         } catch (Exception e) {

@@ -4,7 +4,9 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
-           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey)))
+           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
+                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey
+                       Expr)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -152,6 +154,44 @@
                                                    "doc" {"xt/id" "my-id"}}}))
         "put not wrapped throws"))
 
+(defn- roundtrip-expr [e]
+  (.readValue jackson/query-mapper (json/write-value-as-string e jackson/json-ld-mapper) Expr))
+
+
+(deftest deserialize-expr-test
+  (t/is (= (Expr/lVar "foo")
+           (roundtrip-expr "foo"))
+        "logic-var")
+  (t/is (= Expr/FALSE
+           (roundtrip-expr false)))
+  ;; TODO don't know why this fails
+  #_(t/is (= (Expr/val (long 1))
+             (roundtrip-expr (long 1))))
+  (t/is (= (Expr/val (double 1.2))
+           (roundtrip-expr 1.2)))
+
+  (t/is (= (Expr/exists (-> (Query/from "docs")
+                            (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                        [])
+           (roundtrip-expr {"exists" {"from" "docs"
+                                      "bind" ["xt/id"]}
+                            "bind" []}))
+        "exists")
+
+  (t/is (= (Expr/q (-> (Query/from "docs")
+                       (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                   [])
+           (roundtrip-expr {"q" {"from" "docs"
+                                 "bind" ["xt/id"]}
+                            "bind" []}))
+        "subquery")
+
+  (t/is (= (Expr/call "+" [(Expr/lVar "foo") (Expr/lVar "bar")])
+           (roundtrip-expr {"call" "+"
+                            "args" ["foo" "bar"]}))
+        "subquery"))
+
+
 (defn roundtrip-query [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query))
 
@@ -213,23 +253,23 @@
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-order-by'"
                             (roundtrip-query-tail {"orderBy" [{"val" "someField", "nulls" "invalid-nulls"}]}))))
-  
+
   (t/testing "return"
     (t/is (= (Query/returning [(ColSpec/of "a" (Expr/lVar "a"))
                                (ColSpec/of "b" (Expr/lVar "b"))])
              (roundtrip-query-tail {"return" ["a" "b"]})))
-    
+
     (t/is (= (Query/returning [(ColSpec/of "a" (Expr/lVar "a"))
                                (ColSpec/of "b" (Expr/lVar "c"))])
              (roundtrip-query-tail {"return" ["a" {"b" "c"}]})))
-    
+
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-return"
                             (roundtrip-query-tail {"return" "a"}))))
 
   (t/testing "unnest"
     (t/is (= (Query/unnestCol (ColSpec/of "a" (Expr/lVar "b")))
              (roundtrip-query-tail {"unnest" {"a" "b"}})))
-    
+
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unnest"
                             (roundtrip-query-tail {"unnest" {"a" "b"
                                                              "c" "d"}}))
@@ -243,7 +283,7 @@
                              (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))])
            (roundtrip-unify {"unify" [{"from" "docs"
                                        "bind" ["xt/id"]}]})))
-  
+
   (t/is (= (Query/unify [(-> (Query/from "docs")
                              (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
                          (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))])

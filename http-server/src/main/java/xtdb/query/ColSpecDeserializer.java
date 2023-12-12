@@ -26,7 +26,6 @@ public class ColSpecDeserializer extends StdDeserializer<ColSpec> {
     @Override
     public ColSpec deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);
 
         try {
@@ -37,7 +36,7 @@ public class ColSpecDeserializer extends StdDeserializer<ColSpec> {
                 ObjectNode objectNode= (ObjectNode) node;
                 Iterator<Map.Entry<String, JsonNode>> itr = objectNode.fields();
                 Map.Entry<String, JsonNode> entry = itr.next();
-                return ColSpec.of(entry.getKey(), Expr.lVar(entry.getValue().asText()));
+                return ColSpec.of(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-col-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }

@@ -39,7 +39,7 @@ public class OutSpecDeserializer extends StdDeserializer<OutSpec> {
                 ObjectNode objectNode = (ObjectNode) node;
                 Iterator<Map.Entry<String, JsonNode>> itr = objectNode.fields();
                 Map.Entry<String, JsonNode> entry = itr.next();
-                return OutSpec.of(entry.getKey(), Expr.lVar(entry.getValue().asText()));
+                return OutSpec.of(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-out-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
