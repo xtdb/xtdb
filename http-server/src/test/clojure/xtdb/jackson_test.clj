@@ -5,8 +5,7 @@
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
-                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey
-                       Expr)))
+                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey Expr)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -225,7 +224,18 @@
 (defn roundtrip-query-tail [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$QueryTail))
 
+
 (deftest deserialize-query-tail-test
+  (t/testing "where"
+    (t/is (= (Query/where [(Expr/val {:>= ["foo" "bar"]})
+                           (Expr/val {:< ["bar" "baz"]})])
+             (roundtrip-query-tail {"where" [{">=" ["foo" "bar"]}
+                                             {"<" ["bar" "baz"]}]})))
+    
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-where"
+                            (roundtrip-query-tail {"where" "not-a-list"}))
+          "should fail when not a list")) 
+  
   (t/testing "limit"
     (t/is (= (Query/limit 100)
              (roundtrip-query-tail {"limit" 100})))

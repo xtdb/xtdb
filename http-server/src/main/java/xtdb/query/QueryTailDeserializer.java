@@ -23,7 +23,9 @@ public class QueryTailDeserializer extends StdDeserializer<Query.QueryTail> {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         JsonNode node = mapper.readTree(p);
 
-        if (node.has("limit")) {
+        if (node.has("where")) {
+            return mapper.treeToValue(node, Query.Where.class);
+        } else if (node.has("limit")) {
             return mapper.treeToValue(node, Query.Limit.class);
         } else if (node.has("offset")) {
             return mapper.treeToValue(node, Query.Offset.class);

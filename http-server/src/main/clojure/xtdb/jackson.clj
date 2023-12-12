@@ -4,11 +4,11 @@
            (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer DeleteDeserializer EraseDeserializer
                          TxDeserializer CallDeserializer)
            (xtdb.tx Ops Put Delete Erase Tx Call)
-           (xtdb.query Query OutSpec Query$From Query$Limit Query$Offset Query$OrderBy
+           (xtdb.query Query OutSpec Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
                        TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap
-                       QueryDeserializer OutSpecDeserializer FromDeserializer
+                       QueryDeserializer OutSpecDeserializer FromDeserializer WhereDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
                        UnnestColDeserializer ReturnDeserializer QueryTailDeserializer
                        WithDeserializer WithColsDeserializer WithoutDeserializer
@@ -52,6 +52,7 @@
                                    (.addDeserializer Query$UnifyClause (UnifyClauseDeserializer.))
                                    (.addDeserializer Query$Pipeline (PipelineDeserializer.))
                                    (.addDeserializer Query$From (FromDeserializer.))
+                                   (.addDeserializer Query$Where (WhereDeserializer.))
                                    (.addDeserializer Query$Limit (LimitDeserializer.))
                                    (.addDeserializer Query$Offset (OffsetDeserializer.))
                                    (.addDeserializer Query$OrderBy (OrderByDeserializer.))
