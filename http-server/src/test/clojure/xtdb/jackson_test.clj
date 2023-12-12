@@ -3,7 +3,8 @@
             [jsonista.core :as json]
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
-  (:import (xtdb.tx Ops Tx)
+  (:import (java.util List)
+           (xtdb.tx Ops Tx)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
                        ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey Expr
                        ArgSpec)))
@@ -240,11 +241,18 @@
                                        "bind" ["xt/id"]}
                                       {"from" "docs"
                                        "bind" ["xt/id"]}]}))
-        "unify"))
+        "unify")
+
+  (t/testing "rel"
+    (t/is (= (Query/relation ^List (list {"foo" (Expr/val :bar)}) ^List (list (OutSpec/of "foo" (Expr/lVar "foo"))))
+             (roundtrip-query {"rel" [{"foo" :bar}]
+                               "bind" ["foo"]})))
+    (t/is (= (Query/relation (Expr/param "$bar") ^List (list (OutSpec/of "foo" (Expr/lVar "foo"))))
+             (roundtrip-query {"rel" "$bar"
+                               "bind" ["foo"]})))))
 
 (defn roundtrip-query-tail [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$QueryTail))
-
 
 (deftest deserialize-query-tail-test
   (t/testing "where"
@@ -353,7 +361,8 @@
                            (-> (Query/join parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
                                (.binding [(OutSpec/of "id" (Expr/lVar "id"))]))
                            (-> (Query/leftJoin parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
-                               (.binding [(OutSpec/of "id" (Expr/lVar "id"))]))])
+                               (.binding [(OutSpec/of "id" (Expr/lVar "id"))]))
+                           (Query/relation (Expr/param "$bar") ^List (list (OutSpec/of "foo" (Expr/lVar "foo"))))])
              (roundtrip-unify {"unify" [{"from" "docs"
                                          "bind" ["xt/id"]}
                                         {"where" [{">=" ["foo" "bar"]}]}
@@ -366,7 +375,9 @@
                                         {"left_join" {"from" "docs"
                                                       "bind" ["xt/id"]}
                                          "args" ["id"]
-                                         "bind" ["id"]}]}))))
+                                         "bind" ["id"]}
+                                        {"rel" "$bar"
+                                         "bind" ["foo"]}]}))))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))

@@ -39,6 +39,8 @@ public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-unify"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
+        } catch (IllegalArgumentException i) {
+            throw i;
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-unify"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }

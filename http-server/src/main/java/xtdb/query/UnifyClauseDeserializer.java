@@ -33,13 +33,14 @@ public class UnifyClauseDeserializer extends StdDeserializer<Query.UnifyClause> 
             return mapper.treeToValue(node, Query.UnnestVar.class);
         } if (node.has("with")) {
             return mapper.treeToValue(node, Query.With.class);
-        } else if (node.has("join")) {
+        } if (node.has("join")) {
             return mapper.treeToValue(node, Query.Join.class);
-        } else if (node.has("left_join")) {
+        } if (node.has("left_join")) {
             return mapper.treeToValue(node, Query.LeftJoin.class);
-        } else {
-            // TODO rel
-            throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
+        } if (node.has("rel")) {
+            return mapper.treeToValue(node, Query.Relation.class);
         }
+
+        throw IllegalArgumentException.create(Keyword.intern("xtql", "unsupported-unify-clause"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
     }
 }

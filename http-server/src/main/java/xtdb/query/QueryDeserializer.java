@@ -27,14 +27,17 @@ public class QueryDeserializer extends StdDeserializer<Query> {
 
         if (node.isArray()) {
             return mapper.treeToValue(node, Query.Pipeline.class);
-        } else if (node.has("unify")) {
-            return mapper.treeToValue(node, Query.Unify.class);
-        } else if (node.has("from")) {
-            return mapper.treeToValue(node, Query.From.class);
-        } else {
-            // TODO everything else
-            throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
         }
+        if (node.has("unify")) {
+            return mapper.treeToValue(node, Query.Unify.class);
+        }
+        if (node.has("from")) {
+            return mapper.treeToValue(node, Query.From.class);
+        }
+        if (node.has("rel")) {
+            return mapper.treeToValue(node, Query.Relation.class);
+        }
+        // TODO everything else
+        throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
     }
-
 }
