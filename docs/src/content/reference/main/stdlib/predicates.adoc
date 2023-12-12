@@ -20,8 +20,8 @@ The standard comparators are available:
 * These apply to any data types that are naturally comparable: numbers, strings, date-times, durations, etc.
 * If any input expression is null, the result will also be null.
 * The XTQL variants are variadic - they can accept any amount of arguments.
-
-  e.g. `(<= a b c d)` is short-hand for `(and (<= a b) (<= b c) (<= c d))`
++
+e.g. `+(<= a b c d)+` is short-hand for `+(and (<= a b) (<= b c) (<= c d))+`
   
 == Greatest / Least
 
