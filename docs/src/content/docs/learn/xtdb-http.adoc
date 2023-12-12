@@ -1,4 +1,6 @@
-= Interacting with XTDB using the HTTP API
+---
+title: Interacting with XTDB using the HTTP API
+---
 :resources: ../src/test/resources/docs/
 :script: {resources}/xtdb_http.sh
 :output: {resources}/xtdb_http.expected-output.txt
