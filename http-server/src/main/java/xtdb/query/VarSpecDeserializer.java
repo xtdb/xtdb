@@ -37,7 +37,7 @@ public class VarSpecDeserializer extends StdDeserializer<VarSpec> {
                 ObjectNode objectNode= (ObjectNode) node;
                 Iterator<Map.Entry<String, JsonNode>> itr = objectNode.fields();
                 Map.Entry<String, JsonNode> entry = itr.next();
-                return VarSpec.of(entry.getKey(), Expr.lVar(entry.getValue().asText()));
+                return VarSpec.of(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-var-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
