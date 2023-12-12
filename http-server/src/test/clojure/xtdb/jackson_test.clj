@@ -191,7 +191,6 @@
                             "args" ["foo" "bar"]}))
         "subquery"))
 
-
 (defn roundtrip-query [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query))
 
@@ -306,7 +305,9 @@
 
   (t/is (= (Query/unify [(-> (Query/from "docs")
                              (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
-                         (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))])
+                         (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))
+                         (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
+                                      (VarSpec/of "b" (Expr/lVar "b"))])])
            (roundtrip-unify {"unify" [{"from" "docs"
                                        "bind" ["xt/id"]}
                                       {"unnest" {"a" "b"}}
