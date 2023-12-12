@@ -98,3 +98,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
 :root {
     --sl-content-width: 60rem;
 }
+
+.sl-markdown-content pre {
+    padding: initial
+}
