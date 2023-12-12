@@ -44,12 +44,12 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
+            { label: 'Getting started', link: '/guides/getting-started'},
             { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
           ],
         }, {
           label: 'Reference',
           items: [
-            { label: 'Installation', link: '/reference/main/installation'},
             { label: 'Data Types', link: '/reference/main/data-types'},
             {
               label: 'XTQL',

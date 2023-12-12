@@ -1,0 +1,113 @@
+---
+title: Getting started
+---
+
+XTDB can run in-process (in a JVM), or through traditional client-server connections.
+
+== Client/Server
+
+You can start an XTDB server using the 'standalone' Docker image:
+
+[source,shell]
+----
+docker pull ghcr.io/xtdb/xtdb-standalone-ea
+
+docker run -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
+----
+
+This starts a server on http://localhost:3000.
+By default, your data will be saved in a local directory in the Docker image, but you can also attach a host volume in the usual Docker way, to preserve your data on your host machine:
+
+[source,sh]
+----
+docker run \
+  -tip 3000:3000 \
+  -v /path/to/host/dir:/var/lib/xtdb \
+  ghcr.io/xtdb/xtdb-standalone-ea
+----
+
+=== Connecting through HTTP
+
+You can then connect to your XTDB server using cURL, or similar tools.
+For example, to check its status:
+
+[source,shell]
+----
+curl http://localhost:3000/status
+----
+
+From here, check out the link:/clients/openapi/index.html[OpenAPI docs] to see what else is available.
+
+=== Connecting from Clojure
+
+NOTE: other client libraries coming soon!
+
+If you're using Clojure, you can use the Clojure client library to connect to this node.
+
+First, add the thin client to your `deps.edn`, or dependency manager of choice:
+
+[source,clojure]
+----
+;; deps.edn
+
+{:mvn/repos {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
+
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        com.xtdb.labs/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
+        com.xtdb.labs/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}}}
+----
+
+Once you have a REPL (e.g. by running `clj`), you can connect to the XTDB node with:
+
+[source,clojure]
+----
+(require '[xtdb.client :as xtc]
+         '[xtdb.api :as xt])
+
+(with-open [node (xtc/start-client "http://localhost:3000")]
+  (xt/status node)
+
+  ;; ...
+  )
+----
+
+From here, check out the link:/clients/clojure/index.html[Clojure API docs] to submit data and run queries.
+
+== In process (JVM/Clojure)
+
+If you're running a JVM, you can also use XTDB directly, in-process.
+In-process XTDB is particularly useful for testing and interactive development - you can start an in-memory node quickly and with little hassle, which makes it a great tool for unit tests and REPL experimentation.
+
+NOTE: This part of the guide uses Clojure - support for Java and other JVM languages is coming soon!
+
+First, ensure you are running JDK 17+ and then add the XTDB dependencies to your `deps.edn`:
+
+.deps.edn
+[source,clojure]
+----
+
+{:mvn/repos {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
+
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        com.xtdb.labs/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
+        com.xtdb.labs/xtdb-core {:mvn/version "2.0.0-SNAPSHOT"}}
+
+ :aliases {:xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
+                             "-Dio.netty.tryReflectionSetAccessible=true"]}}}
+----
+
+Once you have a REPL (started with `clj -A:xtdb`), you can create an in-memory XTDB node with:
+
+[source,clojure]
+----
+(require '[xtdb.node :as xtn]
+         '[xtdb.api :as xt])
+
+(with-open [node (xtn/start-node {})]
+  (xt/status node)
+
+  ;; ...
+  )
+----
+
+This node uses exactly the same API as the thin client - so, again, from here, check out the link:/clients/clojure/index.html[Clojure API docs] to submit data and run queries.
