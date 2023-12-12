@@ -26,36 +26,27 @@ export default defineConfig({
 
       sidebar: [
         { label: 'xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
+        { label: 'Welcome!', link: '/index' },
+
         {
-          label: 'Learn',
+          label: 'Concepts',
           items: [
-            {
-              label: 'Introduction',
-              items: [
-                { label: 'Getting started', link: '/learn/getting-started' },
-                { label: 'What is XTDB?', link: '/learn/what-is-xtdb' },
-                { label: 'Key Concepts', link: '/learn/key-concepts' },
-              ],
-            }, {
-              label: 'Guides',
-              items: [
-                { label: 'Setting up an example cluster on AWS', link: '/learn/starting-with-aws' },
-              ],
-            }, /*{
-              label: 'Tutorials',
-              items: [
-                { label: 'Bitemporality in SQL', link: '/learn/bitemporality-in-sql' },
-                { label: 'Discover XTQL with cURL', link: '/learn/discover-xtql-with-curl' },
-              ],
-            },*/ /* {
-              label: 'For Clojurists',
-              items: [
-                { label: 'Learn XTQL Today, with Clojure', link: '/learn/learn-xtql-today-with-clojure' },
-              ],
-            },*/
+            { label: 'What is XTDB?', link: '/concepts/what-is-xtdb' },
+            { label: 'Key Concepts', link: '/concepts/key-concepts' },
           ],
-        },
+        },/* {
+          label: 'Tutorials',
+          items: [
+            { label: 'Bitemporality in SQL', link: '/tutorials/bitemporality-in-sql' },
+            { label: 'Discover XTQL with cURL', link: '/tutorials/discover-xtql-with-curl' },
+          ],
+        }, */
         {
+          label: 'Guides',
+          items: [
+            { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
+          ],
+        }, {
           label: 'Reference',
           items: [
             { label: 'Installation', link: '/reference/main/installation'},
@@ -122,10 +113,4 @@ export default defineConfig({
   vite: {
     plugins: [yaml()]
   },
-
-  redirects: {
-    '/': '/learn',
-    '/learn': '/learn/getting-started',
-    '/reference': '/reference/main/installation',
-  }
 });
