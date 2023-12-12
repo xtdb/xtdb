@@ -107,6 +107,7 @@ export default defineConfig({
               label: 'Formats',
               items: [
                 { label: 'Transit', link: '/reference/main/formats/transit'},
+                { label: 'JSON', link: '/reference/main/formats/json'},
               ]
             },
 

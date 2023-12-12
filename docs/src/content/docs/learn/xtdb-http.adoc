@@ -85,7 +85,7 @@ Now let's insert a new user record into the `users` table.
 To do so we'll use the link:../reference/main/xtql/txs#_tx-ops[`put`] operation,
 other operations and their related syntax are documented link:../reference/main/xtql/txs#tx-ops[here].
 
-// TODO: Link to JSON syntax docs
+To learn more about the JSON syntax for XTQL see link:../reference/main/formats/json[here].
 
 To submit a new transaction, send a POST request to the server's transaction endpoint:
 
@@ -124,7 +124,7 @@ Finally let's query the document we just inserted.
 
 // TODO: Reword
 As noted in other guides XTDB supports two query languages, XTQL and SQL.
-The below query is in XTQL, to learn more about XTQL see link:../reference/main/xtql/queries[here] and to learn more about it's JSON syntax see here link:[here].
+The below query is in XTQL, to learn more about XTQL see link:../reference/main/xtql/queries[here] and to learn more about it's JSON syntax see here link:../reference/main/formats/json[here].
 
 
 
@@ -169,6 +169,6 @@ Want to learn more? Check out the following resources:
 - link:https://docs.xtdb.com/openapi/index.html[HTTP API reference]
 - link:../reference/main/xtql/queries[XTQL Query reference]
 - link:../reference/main/xtql/txs[XTQL Transaction reference]
-- link:[XTQL JSON syntax]
+- link:../reference/main/formats/json[XTQL JSON syntax]
 - link:../reference/main/sql/queries[SQL Query reference]
 - link:../reference/main/sql/txs[SQL Transaction reference]
