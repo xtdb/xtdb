@@ -166,6 +166,7 @@ include::{output}[tags=xtdb-sql]
 == Related Resources
 
 Want to learn more? Check out the following resources:
+
 - link:https://docs.xtdb.com/openapi/index.html[HTTP API reference]
 - link:../reference/main/xtql/queries[XTQL Query reference]
 - link:../reference/main/xtql/txs[XTQL Transaction reference]
