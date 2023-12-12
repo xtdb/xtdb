@@ -164,6 +164,9 @@
   (t/is (= (Expr/lVar "foo")
            (roundtrip-expr "foo"))
         "logic-var")
+  (t/is (= (Expr/param "$foo")
+           (roundtrip-expr "$foo"))
+        "param")
   (t/is (= Expr/FALSE
            (roundtrip-expr false)))
   (t/is (= (Expr/val (long 1))
