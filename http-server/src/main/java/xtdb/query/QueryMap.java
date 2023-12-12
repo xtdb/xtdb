@@ -4,8 +4,8 @@ import clojure.lang.Keyword;
 
 import java.time.Duration;
 import java.time.ZoneId;
-import java.util.List;
+import java.util.Map;
 
-public record QueryMap(Query query, List<ArgSpec> args, Basis basis, Object afterTx, Duration txTimeout,
+public record QueryMap(Query query, Map<Keyword, Object> args, Basis basis, Object afterTx, Duration txTimeout,
                        ZoneId defaultTz, Boolean explain, Keyword keyFn){};
 

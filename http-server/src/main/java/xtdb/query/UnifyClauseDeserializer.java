@@ -20,6 +20,7 @@ public class UnifyClauseDeserializer extends StdDeserializer<Query.UnifyClause> 
     public UnifyClauseDeserializer() {
         super(Query.UnifyClause.class);
     }
+
     public Query.UnifyClause deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);

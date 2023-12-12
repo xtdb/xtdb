@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (xtdb.tx Ops Tx)
-           (xtdb.query Query Query$QueryTail OutSpec Expr Query$Unify)))
+           (xtdb.query Query Query$QueryTail OutSpec Expr Query$Unify QueryMap Basis TransactionKey)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -213,3 +213,33 @@
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))
         "unify value not an array"))
+
+(defn roundtrip-query-map [v]
+  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) QueryMap))
+
+(deftest deserialize-query-map-test
+  (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")]
+    (t/is (= (QueryMap. (-> (Query/from "docs")
+                            (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                        {:id :foo}
+                        (Basis. tx-key)
+                        tx-key
+                        #time/duration "PT3H"
+                        #time/zone "America/Los_Angeles"
+                        true
+                        :clojure)
+             (roundtrip-query-map {"query" {"from" "docs"
+                                            "bind" ["xt/id"]}
+                                   "args" {"id" :foo}
+                                   "basis" {"at_tx" {"tx_id" 1
+                                                     "system_time" #time/instant "2023-12-06T09:31:27.570827956Z"}}
+                                   "after_tx" {"tx_id" 1
+                                               "system_time" #time/instant "2023-12-06T09:31:27.570827956Z"}
+                                   "tx_timeout" #time/duration "PT3H"
+                                   "default_tz" #time/zone "America/Los_Angeles"
+                                   "explain" true
+                                   "key_fn" :clojure}))))
+
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/missing-query"
+                          (roundtrip-query-map {"explain" true}))
+        "query map without query"))

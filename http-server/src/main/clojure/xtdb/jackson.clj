@@ -6,10 +6,12 @@
            (xtdb.tx Ops Put Delete Erase Tx Call)
            (xtdb.query Query OutSpec Query$From Query$Limit Query$Offset
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline
+                       TransactionKey ArgSpec Basis QueryMap
                        QueryDeserializer OutSpecDeserializer FromDeserializer
                        LimitDeserializer OffsetDeserializer QueryTailDeserializer
                        UnifyDeserializer UnifyClauseDeserializer
-                       PipelineDeserializer)))
+                       PipelineDeserializer TxKeyDeserializer ArgSpecDeserializer
+                       BasisDeserializer QueryMapDeserializer)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -40,6 +42,7 @@
                        :decode-key-fn true
                        :modules [(JsonLdModule.)
                                  (doto (SimpleModule. "xtdb.query")
+                                   (.addDeserializer QueryMap (QueryMapDeserializer.))
                                    (.addDeserializer Query (QueryDeserializer.))
                                    (.addDeserializer Query$QueryTail (QueryTailDeserializer.))
                                    (.addDeserializer Query$Unify (UnifyDeserializer.))
@@ -48,4 +51,7 @@
                                    (.addDeserializer Query$From (FromDeserializer.))
                                    (.addDeserializer Query$Limit (LimitDeserializer.))
                                    (.addDeserializer Query$Offset (OffsetDeserializer.))
-                                   (.addDeserializer OutSpec (OutSpecDeserializer.)))]}))
+                                   (.addDeserializer OutSpec (OutSpecDeserializer.))
+                                   (.addDeserializer ArgSpec (ArgSpecDeserializer.))
+                                   (.addDeserializer TransactionKey (TxKeyDeserializer.))
+                                   (.addDeserializer Basis (BasisDeserializer.)))]}))
