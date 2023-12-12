@@ -112,7 +112,7 @@ This has two important consequences:
 // TODO: Confirm
 . As queries only have access to data from the lasted _completed_ transaction. +
   To ensure your query includes data from a transaction you must pass it's `transaction key` to the query endpoint.
-. To find out if the transaction was successful, you need to query the `:xt/txs` table. See link:[here] for more information.
+. To find out if the transaction was successful, you need to query the `:xt/txs` table. See link:../reference/main/special-tables[here] for more information.
 ====
 
 NOTE: We have stored the `transaction key` in the variable `$last_tx` for later use.

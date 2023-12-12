@@ -1,0 +1,46 @@
+---
+title: Special Tables
+---
+:test: ../src/test/clojure/xtdb/docs/reference/special_tables.clj
+
+// TODO: Can users write/delete these tables? If so, what happens?
+
+XTDB only has one special table (link:https://github.com/xtdb/xtdb/issues/2500[at the moment]).
+
+== `:xt/txs`
+
+// TODO: Is this correct?
+Contains all submitted transactions on the node.
+
+=== Columns
+
+[cols="1,2"]
+|===
+| Column | Description
+
+| `:xt/id`
+| The transaction ID.
+
+| `:xt/committed?`
+| Boolean indicating whether the transaction has been committed.
+
+| `:xt/error`
+| If the transaction errored, this will contain the error message.
+|===
+
+=== Example Usage
+
+To figure out why a transaction failed:
+
+[source,clojure]
+----
+;; We've run this transaction
+include::{test}[tags=try-update,indent=0]
+
+;; Let's see why it's failed
+include::{test}[tags=query-txs,indent=0]
+
+;; As you can see, the assert failed.
+;; So the user `:john` must not exist!
+include::{test}[tags=query-result,indent=0]
+----
