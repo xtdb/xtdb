@@ -1,5 +1,5 @@
 ---
-title: Interacting with XTDB using the HTTP API
+title: Discover XTQL with cURL
 ---
 :resources: ../src/test/resources/docs/
 :script: {resources}/xtdb_http.sh
@@ -29,22 +29,20 @@ this guide can be applied to any XTDB instance connected to via HTTP.
 
 [WARNING]
 ====
-This setup includes **no persistence**.
+This setup includes **no persistence**. +
 To learn how to setup XTDB's persistence see link:[here].
 ====
 
 == Using the XTDB HTTP API
 
 XTDB has a rich query & transaction language behind a very simple REST API with just
-three endpoints: link:#status[`/status`], link:#tx[`/tx`], and link:#query[`/query`].
-
+three endpoints: link:#status[/status], link:#tx[/tx], and link:#query[/query]. +
 See the link:https://docs.xtdb.com/openapi/index.html[HTTP API reference] for more detailed information.
 
 [#status]
 === Checking the Status
 
-Let's start off by checking the status of the server.
-
+Let's start off by checking the status of the server. +
 To do so, send a GET request to server's status endpoint:
 
 [source,bash]
@@ -59,8 +57,7 @@ If everything is working correctly, the response should be:
 include::{output}[tags=xtdb-status]
 ----
 
-This output indicates that there are no completed or submitted transactions yet.
-
+This output indicates that there are no completed or submitted transactions yet. +
 Once you've executed some transactions, you should see output similar to the following:
 
 [source,json]
@@ -80,13 +77,10 @@ See our transit extensions link:../reference/main/formats/transit#_transit_exten
 [#tx]
 === Creating a New Transaction
 
-Now let's insert a new user record into the `users` table.
-
+Now let's insert a new user record into the `users` table. +
 To do so we'll use the link:../reference/main/xtql/txs#_tx-ops[`put`] operation,
-other operations and their related syntax are documented link:../reference/main/xtql/txs#tx-ops[here].
-
-To learn more about the JSON syntax for XTQL see link:../reference/main/formats/json[here].
-
+other operations and their related syntax are documented link:../reference/main/xtql/txs#tx-ops[here]. +
+You can learn more about the JSON syntax for XTQL see link:../reference/main/formats/json[here]. +
 To submit a new transaction, send a POST request to the server's transaction endpoint:
 
 [source,bash]
@@ -105,8 +99,7 @@ This indicates a successfully submitted transaction with a unique transaction ID
 
 [NOTE]
 ====
-`/tx` does not wait until the transaction is complete.
-
+`/tx` does not wait until the transaction is complete. +
 This has two important consequences:
 
 // TODO: Confirm
@@ -120,12 +113,9 @@ NOTE: We have stored the `transaction key` in the variable `$last_tx` for later 
 [#query]
 === Running a Query
 
-Finally let's query the document we just inserted.
-
-// TODO: Reword
-As noted in other guides XTDB supports two query languages, XTQL and SQL.
+Finally let's query the document we just inserted. +
+As noted in other guides XTDB supports two query languages, XTQL and SQL. +
 The below query is in XTQL, to learn more about XTQL see link:../reference/main/xtql/queries[here] and to learn more about it's JSON syntax see here link:../reference/main/formats/json[here].
-
 
 
 ==== XTQL
