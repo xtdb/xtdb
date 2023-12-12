@@ -332,11 +332,13 @@
 
   (t/is (= (Query/unify [(-> (Query/from "docs")
                              (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                         (Query/where [(Expr/val {:>= ["foo" "bar"]})])
                          (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))
                          (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
                                       (VarSpec/of "b" (Expr/lVar "b"))])])
            (roundtrip-unify {"unify" [{"from" "docs"
-                                       "bind" ["xt/id"]}
+                                       "bind" ["xt/id"]} 
+                                      {"where" [{">=" ["foo" "bar"]}]}
                                       {"unnest" {"a" "b"}}
                                       {"with" ["a" "b"]}]})))
 
