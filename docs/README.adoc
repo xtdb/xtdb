@@ -1,6 +1,7 @@
 = XTDB Docs
 
-This is a static site based on the https://astro.build[Astro framework] - the project structure follows a standard https://docs.astro.build/en/core-concepts/project-structure/[Astro structure].
+This is a static site based on the https://astro.build[Astro framework], using the https://starlight.astro.build/[Starlight] documentation template.
+The project structure follows a standard https://docs.astro.build/en/core-concepts/project-structure/[Astro structure].
 
 == Pre-requisites
 

@@ -1,3 +1,0 @@
-= Bitemporality in SQL
-
-Coming soon!

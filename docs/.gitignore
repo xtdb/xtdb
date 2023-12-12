@@ -17,10 +17,7 @@ pnpm-debug.log*
 .env
 .env.production
 
-# misc typesense files
-typesense/typesense-data
-typesense/typesense-docsearch-scraper
-typesense/typesense-output
-
 # macOS-specific files
 .DS_Store
+
+.vscode

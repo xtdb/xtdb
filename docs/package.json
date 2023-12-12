@@ -13,18 +13,18 @@
     "build-clj-docs": "cd ../ && ./gradlew build-codox"
   },
   "dependencies": {
-    "@astrojs/mdx": "2.0.1",
-    "@astrojs/preact": "^3.0.1",
-    "@astrojs/rss": "4.0.1",
     "@astrojs/sitemap": "3.0.3",
-    "@astrojs/tailwind": "5.0.3",
-    "astro": "4.0.4",
+    "@astrojs/starlight": "^0.15.0",
+    "@astrojs/starlight-tailwind": "^2.0.1",
+    "@astrojs/tailwind": "^5.0.3",
+    "astro": "^4.0.1",
     "date-fns": "^2.29.3",
-    "preact": "^10.13.2",
     "redoc-cli": "^0.13.21",
-    "rehype-highlight": "^6.0.0",
-    "tailwindcss": "^3.3.1"
+    "sharp": "^0.32.5",
+    "tailwindcss": "^3.3.3",
+    "rehype-highlight": "^6.0.0"
   },
+
   "devDependencies": {
     "@rollup/plugin-yaml": "^4.0.1",
     "@tailwindcss/typography": "^0.5.9",
