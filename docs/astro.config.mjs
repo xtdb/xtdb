@@ -89,7 +89,13 @@ export default defineConfig({
                 { label: 'Java', link: '/clients/java/index.html'},
                 { label: 'HTTP (OpenAPI)', link: '/clients/openapi/index.html'},
               ]
-            },
+            }, {
+              label: 'Modules',
+              items: [
+                { label: 'Kafka', link: '/reference/main/modules/kafka'},
+                { label: 'S3', link: '/reference/main/modules/s3'},
+              ]
+            }
           ]
         },
       ],

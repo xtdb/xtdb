@@ -5,7 +5,8 @@
                 "core/src/main"
                 "http-client-clj/src/main"]
  :namespaces '[xtdb.api xtdb.node xtdb.client]
- :doc-files ["modules/s3/docs/module.md"]
+ :doc-files ["modules/kafka/docs/kafka-module.md"
+             "modules/s3/docs/s3-module.md"]
 
  :name "XTDB"
  :version "2.0.0-SNAPSHOT"

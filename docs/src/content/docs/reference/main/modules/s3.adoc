@@ -1,0 +1,9 @@
+---
+title: S3
+---
+
+Coming https://github.com/xtdb/xtdb/issues/3036[soon^]
+
+For details on how to enable the S3 module in each client library, see the individual client documentation:
+
+* link:/clients/clojure/s3-module.html[Clojure]
