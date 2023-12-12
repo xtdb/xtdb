@@ -1,0 +1,20 @@
+>> Status
+# tag::xtdb-status[]
+["^ ","~:latest-completed-tx",null,"~:latest-submitted-tx",null]
+# end::xtdb-status[]
+>> Transaction
+# tag::xtdb-tx[]
+["~#xtdb/tx-key",["^ ","~:tx-id",0,"~:system-time",["~#time/instant","2020-01-01T00:00:00Z"]]]
+# end::xtdb-tx[]
+>> Post Transaction Status
+# tag::xtdb-post-tx-status[]
+["^ ","~:latest-completed-tx",["~#xtdb/tx-key",["^ ","~:tx-id",0,"~:system-time",["~#time/instant","2020-01-01T00:00:00Z"]]],"~:latest-submitted-tx",["^1",["^ ","^2",0,"^3",["^4","2020-01-01T00:00:00Z"]]]]
+# end::xtdb-post-tx-status[]
+>> XTQL Query
+# tag::xtdb-xtql[]
+["^ ","~:last-name","Doe","~:first-name","John"]
+# end::xtdb-xtql[]
+>> SQL Query
+# tag::xtdb-sql[]
+["^ ","~:first_name","John","~:last_name","Doe"]
+# end::xtdb-sql[]

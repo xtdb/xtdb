@@ -1,4 +1,7 @@
 = Interacting with XTDB using the HTTP API
+:resources: ../src/test/resources/docs/
+:script: {resources}/xtdb_http.sh
+:output: {resources}/xtdb_http.expected-output.txt
 
 This guide will show you how to use the HTTP API to interact with XTDB. +
 We include practical examples and their expected outputs, so please follow along!
@@ -52,18 +55,14 @@ To do so, send a GET request to server's status endpoint:
 
 [source,bash]
 ----
-curl -X GET \
-     -H "Accept: application/transit+json" \
-     http://localhost:3000/status
+include::{script}[tags=xtdb-status]
 ----
 
 If everything is working correctly, the response should be:
 
 [source,json]
 ----
-["^ ",
- "~:latest-completed-tx",null,
- "~:latest-submitted-tx",null]
+include::{output}[tags=xtdb-status]
 ----
 
 This output indicates that there are no completed or submitted transactions yet.
@@ -72,9 +71,7 @@ Once you've executed some transactions, you should see output similar to the fol
 
 [source,json]
 ----
-["^ ",
- "~:latest-completed-tx",["~#xtdb/tx-key",["^ ","~:tx-id",0,"~:system-time",["~#time/instant","2023-12-08T10:31:26.152675Z"]]],
- "~:latest-submitted-tx",["^1",["^ ","^2",0,"^3",["^4","2023-12-08T10:31:26.152675Z"]]]]
+include::{output}[tags=xtdb-post-tx-status]
 ----
 
 [NOTE]
@@ -100,27 +97,14 @@ To submit a new transaction, send a POST request to the server's transaction end
 
 [source,bash]
 ----
-curl -X POST \
-     -H "Content-Type: application/transit+json" \
-     -H "Accept: application/transit+json" \
-     -d '{"~:tx-ops": [
-           ["~#xtdb.tx/put", {
-             "~:table-name": "~:users",
-             "~:doc": {
-               "~:xt/id": 1,
-               "~:first-name": "John",
-               "~:last-name": "Doe"
-             }
-            }]
-         ]}' \
-     http://localhost:3000/tx 2>/dev/null
+include::{script}[tags=xtdb-tx]
 ----
 
 The expected output is the `transaction key` for the submitted transaction:
 
 [source,json]
 ----
-["~#xtdb/tx-key",["^ ","~:tx-id",0,"~:system-time",["~#time/instant","2023-12-08T09:55:21.010070Z"]]]
+include::{output}[tags=xtdb-tx]
 ----
 
 This indicates a successfully submitted transaction with a unique transaction ID and timestamp.
@@ -156,12 +140,7 @@ To run a query, send a POST request to the server's query endpoint:
 
 [source,bash]
 ----
-curl -X POST \
-     -H "Content-Type: application/transit+json" \
-     -H "Accept: application/transit+json" \
-     -d '{"~:query": ["~#list",["~$from","~:users",["~$first-name", "~$last-name"]]],
-          "~:after-tx": '"$last_tx"'}' \
-     http://localhost:3000/query
+include::{script}[tags=xtdb-xtql]
 ----
 
 NOTE: As mentioned in the link:#tx[`\tx`] section we've set `:after-tx` to the previous transaction's `transaction key`.
@@ -170,7 +149,7 @@ As you would expect, the data returned is what we put in:
 
 [source,json]
 ----
-["^ ","~:first-name","John","~:last-name","Doe"]
+include::{output}[tags=xtdb-xtql]
 ----
 
 ==== SQL
@@ -180,19 +159,14 @@ To learn more about XTDB's SQL see link:../reference/main/sql/queries[here].
 
 [source,bash]
 ----
-curl -X POST \
-     -H "Content-Type: application/transit+json" \
-     -H "Accept: application/transit+json" \
-     -d '{"~:query": "SELECT u.first_name, u.last_name FROM users AS u",
-          "~:after-tx": '"$last_tx"'}' \
-     http://localhost:3000/query
+include::{script}[tags=xtdb-sql]
 ----
 
 Again, we get the same data out that we put in:
 
 [source,json]
 ----
-["^ ","~:first_name","John","~:last_name","Doe"]
+include::{output}[tags=xtdb-sql]
 ----
 
 == Related Resources
