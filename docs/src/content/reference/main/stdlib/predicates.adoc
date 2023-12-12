@@ -9,12 +9,12 @@ The standard comparators are available:
 | XTQL | SQL |
 
 | `(< exprs ...)` | `expr1 < expr2` | less than
-| `(<= exprs ...)` | `expr1 <= expr2` | less than or equal to
+| `(<= exprs ...)` | `+expr1 <= expr2+` | less than or equal to
 | `(> exprs ...)` | `expr1 > expr2` | greater than
 | `(>= exprs ...)` | `expr1 >= expr2` | greater than or equal to
 | `(= exprs ...)` | `expr1 = expr2` | equal to
 | `(<> exprs ...)` | `expr1 <> expr2` | not equal to
-| | `expr BETWEEN expr1 AND expr2` | shorthand for `expr1 <= expr <= expr2`
+| | `expr BETWEEN expr1 AND expr2` | shorthand for `+expr1 <= expr <= expr2+`
 |===
 
 * These apply to any data types that are naturally comparable: numbers, strings, date-times, durations, etc.
