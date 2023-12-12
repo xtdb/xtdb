@@ -6,11 +6,12 @@
            (xtdb.tx Ops Put Delete Erase Tx Call)
            (xtdb.query Query OutSpec Query$From Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
-                       Query$UnnestCol Query$UnnestVar Expr
+                       Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
                        TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap
                        QueryDeserializer OutSpecDeserializer FromDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
                        UnnestColDeserializer ReturnDeserializer QueryTailDeserializer
+                       WithDeserializer WithColsDeserializer WithoutDeserializer
                        VarSpecDeserializer UnnestVarDeserializer UnifyDeserializer UnifyClauseDeserializer
                        PipelineDeserializer TxKeyDeserializer ArgSpecDeserializer ColSpecDeserializer
                        BasisDeserializer QueryMapDeserializer ExprDeserializer)))
@@ -57,6 +58,9 @@
                                    (.addDeserializer Query$Return (ReturnDeserializer.))
                                    (.addDeserializer Query$UnnestCol (UnnestColDeserializer.))
                                    (.addDeserializer Query$UnnestVar (UnnestVarDeserializer.))
+                                   (.addDeserializer Query$With (WithDeserializer.))
+                                   (.addDeserializer Query$WithCols (WithColsDeserializer.))
+                                   (.addDeserializer Query$Without (WithoutDeserializer.))
                                    (.addDeserializer OutSpec (OutSpecDeserializer.))
                                    (.addDeserializer ColSpec (ColSpecDeserializer.))
                                    (.addDeserializer ArgSpec (ArgSpecDeserializer.))

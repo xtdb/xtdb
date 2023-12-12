@@ -204,7 +204,7 @@
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-from'"
                           (roundtrip-query {"from" "docs"
-                                            "bind" "xt/id"} ))
+                                            "bind" "xt/id"}))
         "bind not an array")
 
   (t/is (= (Query/pipeline (-> (Query/from "docs")
@@ -273,7 +273,27 @@
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unnest"
                             (roundtrip-query-tail {"unnest" {"a" "b"
                                                              "c" "d"}}))
-          "should fail with >1 binding")))
+          "should fail with >1 binding"))
+
+  (t/testing "with"
+    (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "a"))
+                              (ColSpec/of "b" (Expr/lVar "b"))])
+             (roundtrip-query-tail {"with" ["a" "b"]})))
+
+    (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "b"))])
+             (roundtrip-query-tail {"with" [{"a" "b"}]})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-with"
+                            (roundtrip-query-tail {"with" "a"}))
+          "should fail when not a list"))
+
+  (t/testing "without"
+    (t/is (= (Query/without ["a" "b"])
+             (roundtrip-query-tail {"without" ["a" "b"]})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-without"
+                            (roundtrip-query-tail {"without" "a"}))
+          "should fail when not a list")))
 
 (defn roundtrip-unify [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
@@ -289,7 +309,8 @@
                          (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))])
            (roundtrip-unify {"unify" [{"from" "docs"
                                        "bind" ["xt/id"]}
-                                      {"unnest" {"a" "b"}}]})))
+                                      {"unnest" {"a" "b"}}
+                                      {"with" ["a" "b"]}]})))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))
