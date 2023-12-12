@@ -25,7 +25,7 @@ export default defineConfig({
       },
 
       sidebar: [
-        { label: 'xtdb.com', link: 'https://xtdb.com'},
+        { label: 'xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
         {
           label: 'Learn',
           items: [
@@ -85,9 +85,9 @@ export default defineConfig({
             }, {
               label: 'Client libraries',
               items: [
-                { label: 'Clojure', link: '/clients/clojure/index.html'},
-                { label: 'Java', link: '/clients/java/index.html'},
-                { label: 'HTTP (OpenAPI)', link: '/clients/openapi/index.html'},
+                { label: 'Clojure', link: '/clients/clojure/index.html', attrs: {target: '_blank'} },
+                { label: 'Java', link: '/clients/java/index.html', attrs: {target: '_blank'}},
+                { label: 'HTTP (OpenAPI)', link: '/clients/openapi/index.html', attrs: {target: '_blank'}},
               ]
             }, {
               label: 'Modules',
