@@ -1,4 +1,13 @@
 (ns xtdb.api
+  "This namespace is the main public Clojure API to XTDB.
+
+  It lives in the `com.xtdb/xtdb-api` artifact - include this in your dependency manager of choice.
+
+  To start a node, you will additionally need:
+
+  * `xtdb.node`, for an in-process node.
+  * `xtdb.client`, for a remote client."
+
   (:require [clojure.spec.alpha :as s]
             [xtdb.backtick :as backtick]
             [xtdb.error :as err]

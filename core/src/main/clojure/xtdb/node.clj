@@ -1,4 +1,7 @@
 (ns xtdb.node
+  "This namespace is for starting an in-process XTDB node.
+
+  It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
   (:require [xtdb.node.impl :as impl]))
 
 (defn start-node

@@ -1,4 +1,7 @@
 (ns xtdb.client
+  "This namespace is for starting a client for a remote XTDB node.
+
+  It lives in the `com.xtdb/xtdb-http-client-clj` artifact - ensure you've included this in your dependency manager of choice to use remote clients."
   (:require [xtdb.client.impl :as impl]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
