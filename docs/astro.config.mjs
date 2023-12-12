@@ -83,7 +83,7 @@ export default defineConfig({
                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates'},
               ]
             }, {
-              label: 'Clients',
+              label: 'Client libraries',
               items: [
                 { label: 'Clojure', link: '/clients/clojure/index.html'},
                 { label: 'Java', link: '/clients/java/index.html'},
