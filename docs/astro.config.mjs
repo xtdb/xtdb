@@ -41,18 +41,18 @@ export default defineConfig({
               items: [
                 { label: 'Setting up an example cluster on AWS', link: '/learn/starting-with-aws' },
               ],
-            }, {
+            }, /*{
               label: 'Tutorials',
               items: [
                 { label: 'Bitemporality in SQL', link: '/learn/bitemporality-in-sql' },
                 { label: 'Discover XTQL with cURL', link: '/learn/discover-xtql-with-curl' },
               ],
-            }, {
+            },*/ /* {
               label: 'For Clojurists',
               items: [
                 { label: 'Learn XTQL Today, with Clojure', link: '/learn/learn-xtql-today-with-clojure' },
               ],
-            },
+            },*/
           ],
         },
         {
