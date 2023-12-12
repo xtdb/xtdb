@@ -320,6 +320,16 @@
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-without"
                             (roundtrip-query-tail {"without" "a"}))
+          "should fail when not a list"))
+
+  (t/testing "aggregate"
+    (t/is (= (Query/aggregate [(ColSpec/of "bar" (Expr/lVar "bar"))
+                               (ColSpec/of "baz" (Expr/call "sum" [(Expr/lVar "foo")]))])
+             (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"call" "sum"
+                                                               "args" ["foo"]}}]})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-aggregate"
+                            (roundtrip-query-tail {"aggregate" "a"}))
           "should fail when not a list")))
 
 (defn roundtrip-unify [v]

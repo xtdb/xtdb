@@ -25,23 +25,31 @@ public class QueryTailDeserializer extends StdDeserializer<Query.QueryTail> {
 
         if (node.has("where")) {
             return mapper.treeToValue(node, Query.Where.class);
-        } else if (node.has("limit")) {
-            return mapper.treeToValue(node, Query.Limit.class);
-        } else if (node.has("offset")) {
-            return mapper.treeToValue(node, Query.Offset.class);
-        } else if (node.has("orderBy")) {
-            return mapper.treeToValue(node, Query.OrderBy.class);
-        } else if (node.has("return")) {
-            return mapper.treeToValue(node, Query.Return.class);
-        } else if (node.has("unnest")) {
-            return mapper.treeToValue(node, Query.UnnestCol.class);
-        } else if (node.has("with")) {
-            return mapper.treeToValue(node, Query.WithCols.class);
-        } else if (node.has("without")) {
-            return mapper.treeToValue(node, Query.Without.class);
-        } else {
-            // TODO everything else
-            throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
         }
+        if (node.has("limit")) {
+            return mapper.treeToValue(node, Query.Limit.class);
+        }
+        if (node.has("offset")) {
+            return mapper.treeToValue(node, Query.Offset.class);
+        }
+        if (node.has("orderBy")) {
+            return mapper.treeToValue(node, Query.OrderBy.class);
+        }
+        if (node.has("return")) {
+            return mapper.treeToValue(node, Query.Return.class);
+        }
+        if (node.has("unnest")) {
+            return mapper.treeToValue(node, Query.UnnestCol.class);
+        }
+        if (node.has("with")) {
+            return mapper.treeToValue(node, Query.WithCols.class);
+        }
+        if (node.has("without")) {
+            return mapper.treeToValue(node, Query.Without.class);
+        }
+        if (node.has("aggregate")) {
+            return mapper.treeToValue(node, Query.Aggregate.class);
+        }
+        throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
     }
 }
