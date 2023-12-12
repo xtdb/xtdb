@@ -7,10 +7,10 @@ applications:
             - yarn install
         build:
           commands:
-            - yarn run build
             - yarn run build-openapi-docs
             - yarn run build-javadoc
             - yarn run build-clj-docs
+            - yarn run build
       artifacts:
         baseDirectory: /dist
         files:
