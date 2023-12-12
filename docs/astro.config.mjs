@@ -25,6 +25,7 @@ export default defineConfig({
       },
 
       sidebar: [
+        { label: 'xtdb.com', link: 'https://xtdb.com'},
         {
           label: 'Learn',
           items: [
