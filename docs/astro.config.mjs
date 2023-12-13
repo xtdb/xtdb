@@ -29,6 +29,7 @@ export default defineConfig({
 
         {
           label: 'Introduction',
+          collapsed: true,
           items: [
             { label: 'Overview', link: '/index' },
             { label: 'Getting started', link: '/intro/getting-started'},
@@ -48,6 +49,7 @@ export default defineConfig({
 
         /* {
           label: 'Tutorials',
+          collapsed: true,
           items: [
             { label: 'Learn XTQL today! (Clojure)', link: '/tutorials/learn-xtql-today-clojure' },
           ],
@@ -55,6 +57,7 @@ export default defineConfig({
 
         {
           label: 'Guides',
+          collapsed: true,
           items: [
             { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
           ],
@@ -62,10 +65,12 @@ export default defineConfig({
 
         {
           label: 'Reference',
+          collapsed: true,
           items: [
             { label: 'Overview', link: '/reference/main' },
             {
               label: 'XTQL',
+              collapsed: true,
               items: [
                 { label: 'Transactions', link: '/reference/main/xtql/txs'},
                 { label: 'Queries', link: '/reference/main/xtql/queries'},
@@ -74,6 +79,7 @@ export default defineConfig({
 
             {
               label: 'SQL',
+              collapsed: true,
               items: [
                 { label: 'Transactions', link: '/reference/main/sql/txs'},
                 { label: 'Queries', link: '/reference/main/sql/queries'},
@@ -84,6 +90,7 @@ export default defineConfig({
 
             {
               label: 'Standard Library',
+              collapsed: true,
               items: [
                 { label: 'Overview', link: '/reference/main/stdlib'},
                 { label: 'Predicates', link: '/reference/main/stdlib/predicates'},
@@ -96,6 +103,7 @@ export default defineConfig({
 
             {
               label: 'SDKs',
+              collapsed: true,
               items: [
                 { label: 'Overview', link: '/reference/main/sdks' },
                 { label: 'Clojure', link: '/sdks/clojure/index.html', attrs: {target: '_blank'} },
@@ -106,6 +114,7 @@ export default defineConfig({
 
             {
               label: 'Modules',
+              collapsed: true,
               items: [
                 { label: 'Kafka', link: '/reference/main/modules/kafka'},
                 { label: 'S3', link: '/reference/main/modules/s3'},
