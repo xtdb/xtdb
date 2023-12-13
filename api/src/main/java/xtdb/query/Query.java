@@ -370,7 +370,7 @@ public interface Query {
 
         @Override
         public String toString() {
-            return stringifySeq("join", stringifyArgs(query, args), stringifyList(bindings));
+            return stringifySeq("left-join", stringifyArgs(query, args), stringifyList(bindings));
         }
 
         @Override
