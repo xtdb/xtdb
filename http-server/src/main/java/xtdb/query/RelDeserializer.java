@@ -37,12 +37,8 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
         }
         return res;
     }
-    private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
-        List<OutSpec> res = new ArrayList<>();
-        for (JsonNode argSpecNode : node) {
-            res.add(mapper.treeToValue(argSpecNode, OutSpec.class));
-        }
-        return res;
+    private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
+        return SpecListDeserializer.nodeToOutSpecs(mapper, node);
     }
     public Query.Relation deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();

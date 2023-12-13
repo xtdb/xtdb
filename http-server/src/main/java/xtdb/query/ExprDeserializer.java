@@ -31,12 +31,8 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
         return false;
     }
 
-   private List<ArgSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
-        List<ArgSpec> res = new ArrayList<>();
-        for (JsonNode argSpecNode : node) {
-            res.add(mapper.treeToValue(argSpecNode, ArgSpec.class));
-        }
-        return res;
+   private List<ArgSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
+        return SpecListDeserializer.nodeToArgSpecs(mapper, node);
    }
 
     @Override

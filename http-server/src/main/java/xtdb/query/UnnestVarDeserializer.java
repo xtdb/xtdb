@@ -10,11 +10,16 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
+import java.util.List;
 
 public class UnnestVarDeserializer extends StdDeserializer<Query.UnnestVar> {
 
     public UnnestVarDeserializer() {
         super(Query.UnnestVar.class);
+    }
+
+    private List<VarSpec> deserializeVars(ObjectMapper mapper, JsonNode node) throws Exception {
+        return SpecListDeserializer.nodeToVarSpecs(mapper, node);
     }
 
     @Override
@@ -25,8 +30,8 @@ public class UnnestVarDeserializer extends StdDeserializer<Query.UnnestVar> {
         try {
             JsonNode unnest = node.get("unnest");
             if (unnest.isObject() && unnest.size() == 1) {
-                VarSpec varSpec = mapper.treeToValue(unnest, VarSpec.class);
-                return Query.unnestVar(varSpec);
+                List<VarSpec> varSpecs = deserializeVars(mapper, unnest);
+                return Query.unnestVar(varSpecs.get(0));
             } else {
                 throw new IllegalArgumentException("Unnest should be an object with only a single binding", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }

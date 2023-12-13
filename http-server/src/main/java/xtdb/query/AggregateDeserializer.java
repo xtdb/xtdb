@@ -5,7 +5,6 @@ import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -13,7 +12,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class AggregateDeserializer extends StdDeserializer<Query.Aggregate> {
@@ -22,12 +20,8 @@ public class AggregateDeserializer extends StdDeserializer<Query.Aggregate> {
         super(Query.Aggregate.class);
     }
 
-    private List<ColSpec> deserializeColSpec(ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
-        List<ColSpec> res = new ArrayList<>();
-        for (JsonNode argSpecNode : node) {
-            res.add(mapper.treeToValue(argSpecNode, ColSpec.class));
-        }
-        return res;
+    private List<ColSpec> deserializeColSpec(ObjectMapper mapper, ArrayNode node) throws Exception {
+        return SpecListDeserializer.nodeToColSpecs(mapper, node);
     }
     public Query.Aggregate deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
@@ -19,6 +20,10 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
         super(Query.Return.class);
     }
 
+    private List<ColSpec> deserializeCols(ObjectMapper mapper, JsonNode node) throws Exception {
+        return SpecListDeserializer.nodeToColSpecs(mapper, node);
+    }
+
     @Override
     public Query.Return deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -27,14 +32,7 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
             JsonNode returnNode = node.get("return");
 
             if (returnNode.isArray()) {
-                List<ColSpec> cols = new ArrayList<>();
-
-                for (JsonNode colNode : returnNode) {
-                    ColSpec colSpec = mapper.treeToValue(colNode, ColSpec.class);
-                    cols.add(colSpec);
-                }
-
-                return Query.returning(cols);
+                return Query.returning(deserializeCols(mapper, returnNode));
             } else {
                 throw new IllegalArgumentException("Return should be a list of values", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }

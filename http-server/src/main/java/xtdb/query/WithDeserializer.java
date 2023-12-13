@@ -19,6 +19,10 @@ public class WithDeserializer extends StdDeserializer<Query.With> {
         super(Query.With.class);
     }
 
+    private List<VarSpec> deserializeVars(ObjectMapper mapper, JsonNode node) throws Exception {
+        return SpecListDeserializer.nodeToVarSpecs(mapper, node);
+    }
+
     @Override
     public Query.With deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -27,12 +31,7 @@ public class WithDeserializer extends StdDeserializer<Query.With> {
             JsonNode with = node.get("with");
 
             if (with.isArray()) {
-                List<VarSpec> vars = new ArrayList<>();
-
-                for (JsonNode varNode : with) {
-                    VarSpec varSpec = mapper.treeToValue(varNode, VarSpec.class);
-                    vars.add(varSpec);
-                }
+                List<VarSpec> vars = deserializeVars(mapper, with);
         
                 return Query.with(vars);
             } else {

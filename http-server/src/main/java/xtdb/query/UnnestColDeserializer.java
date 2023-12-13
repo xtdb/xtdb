@@ -10,11 +10,16 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
+import java.util.List;
 
 public class UnnestColDeserializer extends StdDeserializer<Query.UnnestCol> {
 
     public UnnestColDeserializer() {
         super(Query.UnnestCol.class);
+    }
+
+    private List<ColSpec> deserializeCols(ObjectMapper mapper, JsonNode node) throws Exception {
+        return SpecListDeserializer.nodeToColSpecs(mapper, node);
     }
 
     @Override
@@ -25,8 +30,8 @@ public class UnnestColDeserializer extends StdDeserializer<Query.UnnestCol> {
         try {
             JsonNode unnest = node.get("unnest");
             if (unnest.isObject() && unnest.size() == 1) {
-                ColSpec colSpec = mapper.treeToValue(unnest, ColSpec.class);
-                return Query.unnestCol(colSpec);
+                List<ColSpec> colSpecs = deserializeCols(mapper, unnest);
+                return Query.unnestCol(colSpecs.get(0));
             } else {
                 throw new IllegalArgumentException("Unnest should be an object with only a single binding", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }

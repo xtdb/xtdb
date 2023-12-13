@@ -4,17 +4,16 @@
            (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer DeleteDeserializer EraseDeserializer
                          TxDeserializer CallDeserializer)
            (xtdb.tx Ops Put Delete Erase Tx Call)
-           (xtdb.query Query OutSpec Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
+           (xtdb.query Query Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
-                       TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap
+                       TransactionKey Basis QueryMap
                        Query$Aggregate Query$Relation Query$AJoin
-                       QueryDeserializer OutSpecDeserializer FromDeserializer WhereDeserializer
+                       QueryDeserializer FromDeserializer WhereDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
                        UnnestColDeserializer ReturnDeserializer QueryTailDeserializer
-                       WithDeserializer WithColsDeserializer WithoutDeserializer
-                       VarSpecDeserializer UnnestVarDeserializer UnifyDeserializer UnifyClauseDeserializer
-                       PipelineDeserializer TxKeyDeserializer ArgSpecDeserializer ColSpecDeserializer
+                       WithDeserializer WithColsDeserializer WithoutDeserializer UnnestVarDeserializer
+                       UnifyDeserializer UnifyClauseDeserializer PipelineDeserializer TxKeyDeserializer
                        BasisDeserializer QueryMapDeserializer ExprDeserializer
                        AggregateDeserializer RelDeserializer AJoinDeserializer)))
 
@@ -67,10 +66,6 @@
                                    (.addDeserializer Query$AJoin (AJoinDeserializer.))
                                    (.addDeserializer Query$Aggregate (AggregateDeserializer.))
                                    (.addDeserializer Query$Relation (RelDeserializer.))
-                                   (.addDeserializer OutSpec (OutSpecDeserializer.))
-                                   (.addDeserializer ColSpec (ColSpecDeserializer.))
-                                   (.addDeserializer ArgSpec (ArgSpecDeserializer.))
-                                   (.addDeserializer VarSpec (VarSpecDeserializer.))
                                    (.addDeserializer TransactionKey (TxKeyDeserializer.))
                                    (.addDeserializer Basis (BasisDeserializer.))
                                    (.addDeserializer Expr (ExprDeserializer.)))]}))

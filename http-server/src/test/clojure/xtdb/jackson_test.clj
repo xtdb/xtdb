@@ -300,7 +300,8 @@
 
     (t/is (= (Query/returning [(ColSpec/of "a" (Expr/lVar "a"))
                                (ColSpec/of "b" (Expr/lVar "c"))])
-             (roundtrip-query-tail {"return" ["a" {"b" "c"}]})))
+             (roundtrip-query-tail {"return" [{"a" "a"
+                                               "b" "c"}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Return should be a list of values"
                             (roundtrip-query-tail {"return" "a"}))))
@@ -319,8 +320,10 @@
                               (ColSpec/of "b" (Expr/lVar "b"))])
              (roundtrip-query-tail {"with" ["a" "b"]})))
 
-    (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "b"))])
-             (roundtrip-query-tail {"with" [{"a" "b"}]})))
+    (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "b"))
+                              (ColSpec/of "c" (Expr/lVar "d"))])
+             (roundtrip-query-tail {"with" [{"a" "b"
+                                             "c" "d"}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"With should be a list of bindings"
                             (roundtrip-query-tail {"with" "a"}))

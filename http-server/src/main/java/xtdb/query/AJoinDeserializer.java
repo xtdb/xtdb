@@ -5,7 +5,6 @@ import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -13,7 +12,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class AJoinDeserializer extends StdDeserializer<Query.AJoin> {
@@ -22,20 +20,12 @@ public class AJoinDeserializer extends StdDeserializer<Query.AJoin> {
         super(Query.Join.class);
     }
 
-    private List<ArgSpec> deserializeArgs(ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
-        List<ArgSpec> res = new ArrayList<>();
-        for (JsonNode argSpecNode : node) {
-            res.add(mapper.treeToValue(argSpecNode, ArgSpec.class));
-        }
-        return res;
+    private List<ArgSpec> deserializeArgs(ObjectMapper mapper, ArrayNode node) throws Exception {
+        return SpecListDeserializer.nodeToArgSpecs(mapper, node);
     }
 
-    private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
-        List<OutSpec> res = new ArrayList<>();
-        for (JsonNode argSpecNode : node) {
-            res.add(mapper.treeToValue(argSpecNode, OutSpec.class));
-        }
-        return res;
+    private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
+        return SpecListDeserializer.nodeToOutSpecs(mapper, node);
     }
 
     public Query.AJoin deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
