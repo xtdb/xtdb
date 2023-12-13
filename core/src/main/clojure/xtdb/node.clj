@@ -11,7 +11,7 @@
 
   This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
-  For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/clients/clojure/index.html)"
+  For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
   (^java.lang.AutoCloseable [] (start-node {}))
 
   (^java.lang.AutoCloseable [opts]
@@ -23,6 +23,6 @@
 
   This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
-  For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/clients/clojure/index.html)"
+  For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
   ^java.lang.AutoCloseable [opts]
   (impl/start-submit-node opts))

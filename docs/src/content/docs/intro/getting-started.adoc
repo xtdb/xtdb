@@ -36,7 +36,7 @@ For example, to check its status:
 curl http://localhost:3000/status
 ----
 
-From here, check out the link:/clients/openapi/index.html[OpenAPI docs] to see what else is available.
+From here, check out the link:/sdks/openapi/index.html[OpenAPI docs] to see what else is available.
 
 === Connecting from Clojure
 
@@ -71,7 +71,7 @@ Once you have a REPL (e.g. by running `clj`), you can connect to the XTDB node w
   )
 ----
 
-From here, check out the link:/clients/clojure/index.html[Clojure API docs] to submit data and run queries.
+From here, check out the link:/sdks/clojure/index.html[Clojure API docs] to submit data and run queries.
 
 == In process (JVM/Clojure)
 
@@ -110,4 +110,4 @@ Once you have a REPL (started with `clj -A:xtdb`), you can create an in-memory X
   )
 ----
 
-This node uses exactly the same API as the thin client - so, again, from here, check out the link:/clients/clojure/index.html[Clojure API docs] to submit data and run queries.
+This node uses exactly the same API as the thin client - so, again, from here, check out the link:/sdks/clojure/index.html[Clojure API docs] to submit data and run queries.

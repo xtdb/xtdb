@@ -2,7 +2,7 @@
 dist/
 
 # generated docs
-public/clients
+public/sdks
 
 # generated types
 .astro/

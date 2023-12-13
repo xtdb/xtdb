@@ -26,44 +26,63 @@ export default defineConfig({
 
       sidebar: [
         { label: 'xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
-        { label: 'Welcome!', link: '/index' },
+
+        { label: 'Overview', link: '/index' },
 
         {
-          label: 'Concepts',
+          label: 'Introduction',
           items: [
-            { label: 'What is XTDB?', link: '/concepts/what-is-xtdb' },
-            { label: 'Key Concepts', link: '/concepts/key-concepts' },
+            { label: 'Getting started', link: '/intro/getting-started'},
+            {
+              label: 'What is XTDB?',
+              items: [
+                { label: 'Overview', link: '/intro/what-is-xtdb' },
+                // { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
+                // { label: 'Architecture', link: '/intro/architecture' },
+                // { label: 'Bitemporality', link: '/intro/bitemporality' },
+              ]
+            },
+            // { label: 'Roadmap', link: '/intro/roadmap'},
+            // { label: 'Community', link: '/intro/community'},
           ],
-        },/* {
+        },
+
+        /* {
           label: 'Tutorials',
           items: [
-            { label: 'Bitemporality in SQL', link: '/tutorials/bitemporality-in-sql' },
-            { label: 'Discover XTQL with cURL', link: '/tutorials/discover-xtql-with-curl' },
+            { label: 'Learn XTQL today! (Clojure)', link: '/tutorials/learn-xtql-today-clojure' },
           ],
         }, */
+
         {
           label: 'Guides',
           items: [
-            { label: 'Getting started', link: '/guides/getting-started'},
             { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
           ],
-        }, {
+        },
+
+        {
           label: 'Reference',
           items: [
-            { label: 'Data Types', link: '/reference/main/data-types'},
             {
               label: 'XTQL',
               items: [
                 { label: 'Transactions', link: '/reference/main/xtql/txs'},
                 { label: 'Queries', link: '/reference/main/xtql/queries'},
               ]
-            }, {
+            },
+
+            {
               label: 'SQL',
               items: [
                 { label: 'Transactions', link: '/reference/main/sql/txs'},
                 { label: 'Queries', link: '/reference/main/sql/queries'},
               ]
-            }, {
+            },
+
+            { label: 'Data Types', link: '/reference/main/data-types'},
+
+            {
               label: 'Standard Library',
               items: [
                 { label: 'Introduction', link: '/reference/main/stdlib'},
@@ -73,14 +92,18 @@ export default defineConfig({
                 { label: 'Temporal functions', link: '/reference/main/stdlib/temporal'},
                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates'},
               ]
-            }, {
-              label: 'Client libraries',
+            },
+
+            {
+              label: 'SDKs',
               items: [
-                { label: 'Clojure', link: '/clients/clojure/index.html', attrs: {target: '_blank'} },
-                { label: 'Java', link: '/clients/java/index.html', attrs: {target: '_blank'}},
-                { label: 'HTTP (OpenAPI)', link: '/clients/openapi/index.html', attrs: {target: '_blank'}},
+                { label: 'Clojure', link: '/sdks/clojure/index.html', attrs: {target: '_blank'} },
+                { label: 'Java', link: '/sdks/java/index.html', attrs: {target: '_blank'}},
+                { label: 'HTTP (OpenAPI)', link: '/sdks/openapi/index.html', attrs: {target: '_blank'}},
               ]
-            }, {
+            },
+
+            {
               label: 'Modules',
               items: [
                 { label: 'Kafka', link: '/reference/main/modules/kafka'},
