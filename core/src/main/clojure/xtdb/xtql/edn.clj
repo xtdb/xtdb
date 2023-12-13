@@ -620,6 +620,9 @@
             (when-not (map? set-specs)
               (throw (err/illegal-arg :xtql/malformed-set {:set set-specs, :update this})))
 
+            (when-not (vector? bind)
+              (throw (err/illegal-arg :xtql/malformed-bind {:bind bind, :update this})))
+
             (cond-> (DmlOps/update (str (symbol table)) (parse-col-specs set-specs this))
               for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
               bind (.binding (parse-out-specs bind this))
