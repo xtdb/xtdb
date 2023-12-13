@@ -32,51 +32,54 @@ public class QueryMapDeserializer extends StdDeserializer<QueryMap> {
         JsonNode node = mapper.readTree(p);
 
         try {
-            ObjectNode objectNode = (ObjectNode) node;
-            Query query;
-            if (node.has("query")) {
-                query = mapper.treeToValue(node.get("query"), Query.class);
-            } else {
-                throw IllegalArgumentException.create(Keyword.intern("xtql", "missing-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
-            }
+            if (node.isObject()) {
+                Query query;
+                if (node.has("query")) {
+                    query = mapper.treeToValue(node.get("query"), Query.class);
+                } else {
+                    throw IllegalArgumentException.create(Keyword.intern("xtql", "missing-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+                }
 
-            // TODO this only works in connection with keyword deserialization
-            Map<Keyword, Object> args =  null;
-            if (node.has("args")) {
-                args = (Map<Keyword, Object>) mapper.treeToValue(node.get("args"), Object.class);
-            }
+                // TODO this only works in connection with keyword deserialization
+                Map<Keyword, Object> args =  null;
+                if (node.has("args")) {
+                    args = (Map<Keyword, Object>) mapper.treeToValue(node.get("args"), Object.class);
+                }
 
-            Basis basis = null;
-            if (node.has("basis")) {
-                basis = mapper.treeToValue(node.get("basis"), Basis.class);
-            }
+                Basis basis = null;
+                if (node.has("basis")) {
+                    basis = mapper.treeToValue(node.get("basis"), Basis.class);
+                }
 
-            TransactionKey afterTx = null;
-            if (node.has("after_tx")) {
-                afterTx = mapper.treeToValue(node.get("after_tx"), TransactionKey.class);
-            }
+                TransactionKey afterTx = null;
+                if (node.has("after_tx")) {
+                    afterTx = mapper.treeToValue(node.get("after_tx"), TransactionKey.class);
+                }
 
-            Duration txTimeout = null;
-            if (node.has("tx_timeout")) {
-                txTimeout = (Duration) mapper.treeToValue(node.get("tx_timeout"), Object.class);
-            }
+                Duration txTimeout = null;
+                if (node.has("tx_timeout")) {
+                    txTimeout = (Duration) mapper.treeToValue(node.get("tx_timeout"), Object.class);
+                }
 
-            ZoneId defaultTz = null;
-            if (node.has("default_tz")) {
-                defaultTz = (ZoneId) mapper.treeToValue(node.get("default_tz"), Object.class);
-            }
+                ZoneId defaultTz = null;
+                if (node.has("default_tz")) {
+                    defaultTz = (ZoneId) mapper.treeToValue(node.get("default_tz"), Object.class);
+                }
 
-            Boolean explain = false;
-            if (node.has("explain")) {
-                explain = node.get("explain").asBoolean();
-            }
+                Boolean explain = false;
+                if (node.has("explain")) {
+                    explain = node.get("explain").asBoolean();
+                }
 
-            Keyword keyFn = snakeCase;
-            if (node.has("key_fn")) {
-                keyFn = (Keyword) mapper.treeToValue(node.get("key_fn"), Object.class);;
-            }
+                Keyword keyFn = snakeCase;
+                if (node.has("key_fn")) {
+                    keyFn = (Keyword) mapper.treeToValue(node.get("key_fn"), Object.class);;
+                }
 
-            return new QueryMap(query, args, basis, afterTx, txTimeout, defaultTz, explain, keyFn);
+                return new QueryMap(query, args, basis, afterTx, txTimeout, defaultTz, explain, keyFn);
+            } else  {
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-query-map"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            }
         } catch (IllegalArgumentException e) {
           throw e;
         } catch (Exception e) {

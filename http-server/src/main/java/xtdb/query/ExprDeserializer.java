@@ -61,19 +61,18 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
             if (node.isDouble()) {
                 return Expr.val(node.asDouble());
             }
-            if (node.isObject() && supportedObjectDeserialization((ObjectNode) node)){
-                ObjectNode objectNode = (ObjectNode) node;
+            if (node instanceof ObjectNode  && supportedObjectDeserialization((ObjectNode) node)){
                 if (node.has("exists")) {
-                    return Expr.exists(mapper.treeToValue(objectNode.get("exists"), Query.class), deserializeBind(mapper, (ArrayNode) objectNode.get("bind")));
+                    return Expr.exists(mapper.treeToValue(node.get("exists"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
                 }
                 if (node.has("q")) {
-                    return Expr.q(mapper.treeToValue(objectNode.get("q"), Query.class), deserializeBind(mapper, (ArrayNode) objectNode.get("bind")));
+                    return Expr.q(mapper.treeToValue(node.get("q"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
                 }
                 if (node.has("pull")) {
-                    return Expr.pull(mapper.treeToValue(objectNode.get("pull"), Query.class), deserializeBind(mapper, (ArrayNode) objectNode.get("bind")));
+                    return Expr.pull(mapper.treeToValue(node.get("pull"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
                 }
                 if (node.has("pull_many")) {
-                    return Expr.pullMany(mapper.treeToValue(objectNode.get("pull_many"), Query.class), deserializeBind(mapper, (ArrayNode) objectNode.get("bind")));
+                    return Expr.pullMany(mapper.treeToValue(node.get("pull_many"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
                 }
                 if (node.has("call")) {
                     List<Expr> args = new ArrayList<>();

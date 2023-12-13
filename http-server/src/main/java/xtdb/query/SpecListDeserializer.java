@@ -32,8 +32,7 @@ public class SpecListDeserializer {
             AttrExpr attrExpr = new AttrExpr(var, expr); 
             specs.add(attrExpr);
         } else if (itemNode.isObject()) {
-            ObjectNode objectNode = (ObjectNode) itemNode;
-            Iterator<Map.Entry<String, JsonNode>> itr = objectNode.fields();
+            Iterator<Map.Entry<String, JsonNode>> itr = itemNode.fields();
             while (itr.hasNext()) {
                 Map.Entry<String, JsonNode> entry = itr.next();
                 AttrExpr attrExpr = new AttrExpr(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));

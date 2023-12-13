@@ -25,16 +25,19 @@ public class BasisDeserializer extends StdDeserializer<Basis> {
         JsonNode node = mapper.readTree(p);
 
         try {
-            ObjectNode objectNode = (ObjectNode) node;
-            TransactionKey atTx;
-            Instant currentTime = null;
-            if (node.has("current_time")) {
-                currentTime = (Instant) mapper.treeToValue(node.get("current_time"), Object.class);
+            if (node instanceof ObjectNode) {
+                TransactionKey atTx;
+                Instant currentTime = null;
+                if (node.has("current_time")) {
+                    currentTime = (Instant) mapper.treeToValue(node.get("current_time"), Object.class);
+                }
+                if (node.has("at_tx")) {
+                    return new Basis(mapper.treeToValue(node.get("at_tx"), TransactionKey.class), currentTime);
+                }
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-basis"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            } else {
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-basis"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
-            if (node.has("at_tx")) {
-                return new Basis(mapper.treeToValue(node.get("at_tx"), TransactionKey.class), currentTime);
-            }
-            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-basis"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {

@@ -28,7 +28,6 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
     @Override
     public Query.From deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);
 
         try {

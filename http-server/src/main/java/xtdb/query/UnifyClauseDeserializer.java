@@ -28,15 +28,20 @@ public class UnifyClauseDeserializer extends StdDeserializer<Query.UnifyClause> 
         try {
             if (node.has("from")) {
                 return mapper.treeToValue(node, Query.From.class);
-            } if (node.has("where")) {
+            }
+            if (node.has("where")) {
                 return mapper.treeToValue(node, Query.Where.class);
-            } if (node.has("unnest")) {
+            }
+            if (node.has("unnest")) {
                 return mapper.treeToValue(node, Query.UnnestVar.class);
-            } if (node.has("with")) {
+            }
+            if (node.has("with")) {
                 return mapper.treeToValue(node, Query.With.class);
-            } if (node.has("join") || node.has("left_join")) {
+            }
+            if (node.has("join") || node.has("left_join")) {
                 return mapper.treeToValue(node, Query.IJoin.class);
-            } if (node.has("rel")) {
+            }
+            if (node.has("rel")) {
                 return mapper.treeToValue(node, Query.Relation.class);
             }
             throw IllegalArgumentException.create(Keyword.intern("xtql", "unsupported-unify-clause"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));

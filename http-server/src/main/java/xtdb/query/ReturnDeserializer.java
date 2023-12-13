@@ -30,7 +30,6 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
         JsonNode node = mapper.readTree(p);
         try {
             JsonNode returnNode = node.get("return");
-
             if (returnNode.isArray()) {
                 return Query.returning(deserializeCols(mapper, returnNode));
             } else {

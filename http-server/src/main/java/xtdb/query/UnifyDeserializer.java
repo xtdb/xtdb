@@ -28,10 +28,9 @@ public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
         JsonNode node = mapper.readTree(p);
 
         try {
-            ObjectNode objectNode = (ObjectNode) node;
-            if (objectNode.has("unify")) {
+            if (node.isObject() && node.has("unify")) {
                 ArrayList<Query.UnifyClause> clauses = new ArrayList<>();
-                ArrayNode clauseArray = (ArrayNode) objectNode.get("unify");
+                ArrayNode clauseArray = (ArrayNode) node.get("unify");
                 for (JsonNode clauseNode: clauseArray) {
                     clauses.add(mapper.treeToValue(clauseNode, Query.UnifyClause.class));
                 }
