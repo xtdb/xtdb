@@ -1,3 +1,6 @@
 package xtdb.query;
-public record Basis(Object atTx){};
+
+import java.time.Instant;
+
+public record Basis(TransactionKey atTx, Instant currentTime){};
 

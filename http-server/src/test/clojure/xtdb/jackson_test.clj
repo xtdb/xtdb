@@ -4,6 +4,7 @@
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
   (:import (java.util List)
+           (java.time Instant)
            (xtdb.tx Ops Tx)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
                        ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey Expr
@@ -391,7 +392,7 @@
     (t/is (= (QueryMap. (-> (Query/from "docs")
                             (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
                         {:id :foo}
-                        (Basis. tx-key)
+                        (Basis. tx-key Instant/EPOCH)
                         tx-key
                         #time/duration "PT3H"
                         #time/zone "America/Los_Angeles"
@@ -401,7 +402,8 @@
                                             "bind" ["xt/id"]}
                                    "args" {"id" :foo}
                                    "basis" {"at_tx" {"tx_id" 1
-                                                     "system_time" #time/instant "2023-12-06T09:31:27.570827956Z"}}
+                                                     "system_time" #time/instant "2023-12-06T09:31:27.570827956Z"}
+                                            "current_time" Instant/EPOCH}
                                    "after_tx" {"tx_id" 1
                                                "system_time" #time/instant "2023-12-06T09:31:27.570827956Z"}
                                    "tx_timeout" #time/duration "PT3H"
