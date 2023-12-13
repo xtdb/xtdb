@@ -25,7 +25,7 @@ export default defineConfig({
       },
 
       sidebar: [
-        { label: 'xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
+        { label: '← xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
 
         {
           label: 'Introduction',
