@@ -360,9 +360,9 @@
                            (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
                                         (VarSpec/of "b" (Expr/lVar "b"))])
                            (-> (Query/join parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
-                               (.binding [(OutSpec/of "id" (Expr/lVar "id"))]))
+                               (.binding ^List (list (OutSpec/of "id" (Expr/lVar "id")))))
                            (-> (Query/leftJoin parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
-                               (.binding [(OutSpec/of "id" (Expr/lVar "id"))]))
+                               (.binding ^List (list (OutSpec/of "id" (Expr/lVar "id")))))
                            (Query/relation (Expr/param "$bar") ^List (list (OutSpec/of "foo" (Expr/lVar "foo"))))])
              (roundtrip-unify {"unify" [{"from" "docs"
                                          "bind" ["xt/id"]}
