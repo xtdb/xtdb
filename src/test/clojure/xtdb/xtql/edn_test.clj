@@ -251,7 +251,12 @@
 
            (roundtrip-dml '(update :foo {:set {:version (inc v)},
                                          :bind [{:xt/id foo, :version v}]}
-                                   (from :bar [{:xt/id $bar-id, :foo foo}]))))))
+                                   (from :bar [{:xt/id $bar-id, :foo foo}])))))
+
+  (t/is (thrown-with-msg?
+          xtdb.IllegalArgumentException #"Illegal argument: ':xtql/malformed-bind'"
+          (roundtrip-dml '(update :foo {:bind {:not-a vector}
+                                        :set {:version (inc v)}})))))
 
 (t/deftest test-parse-delete
   (t/is (= '(delete :foo {:for-valid-time (in #inst "2020" nil),

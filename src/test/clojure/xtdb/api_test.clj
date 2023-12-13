@@ -535,6 +535,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
           (t/is (= tx2-expected (all-users tx2)))
           (t/is (= tx1-expected (all-users tx1))))))))
 
+(t/deftest test-update-ingestion-error-3035
+  (xt/submit-tx tu/*node*
+    [(xt/update-table :users '{:bind {:xt/id :john :age age}
+                               :set {:age (inc age)}})])
+
+  (t/is (not (empty? (xt/q tu/*node* '(from :xt/txs [xt/id]))))))
+
 (t/deftest test-erase-xtql
   (letfn [(q [tx]
             (set (xt/q *node* '(from :foo [xt/id version xt/valid-from xt/valid-to])
