@@ -28,7 +28,7 @@ public class UnnestColDeserializer extends StdDeserializer<Query.UnnestCol> {
                 ColSpec colSpec = mapper.treeToValue(unnest, ColSpec.class);
                 return Query.unnestCol(colSpec);
             } else {
-                throw new Exception("Unnest should be an object with only a single binding");
+                throw new IllegalArgumentException("Unnest should be an object with only a single binding", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-unnest"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);

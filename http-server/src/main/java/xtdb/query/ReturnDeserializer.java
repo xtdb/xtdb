@@ -36,11 +36,12 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
 
                 return Query.returning(cols);
             } else {
-                throw new Exception("Return should be a list of values");
+                throw new IllegalArgumentException("Return should be a list of values", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
+        } catch (IllegalArgumentException i) {
+           throw i;
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-return"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
-        
     }
 }

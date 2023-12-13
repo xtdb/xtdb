@@ -73,6 +73,8 @@ public class OrderByDeserializer extends StdDeserializer<Query.OrderBy> {
                 orderSpecs.add(parseOrderSpec(mapper, orderSpecNode));
             }
             return Query.orderBy(orderSpecs);
+        } catch (IllegalArgumentException i) {
+            throw i;
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-order-by"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }

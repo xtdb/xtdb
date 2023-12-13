@@ -36,8 +36,10 @@ public class WithDeserializer extends StdDeserializer<Query.With> {
         
                 return Query.with(vars);
             } else {
-                throw new Exception("With should be a list of bindings");
+                throw new IllegalArgumentException("With should be a list of bindings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
+        } catch (IllegalArgumentException i) {
+            throw i;
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-with"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }

@@ -1,5 +1,6 @@
 package xtdb.query;
 
+import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -25,19 +26,26 @@ public class QueryDeserializer extends StdDeserializer<Query> {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         JsonNode node = mapper.readTree(p);
 
-        if (node.isArray()) {
-            return mapper.treeToValue(node, Query.Pipeline.class);
+        try {
+            if (node.isArray()) {
+                return mapper.treeToValue(node, Query.Pipeline.class);
+            }
+            if (node.isObject()) {
+                if (node.has("unify")) {
+                    return mapper.treeToValue(node, Query.Unify.class);
+                }
+                if (node.has("from")) {
+                    return mapper.treeToValue(node, Query.From.class);
+                }
+                if (node.has("rel")) {
+                    return mapper.treeToValue(node, Query.Relation.class);
+                }
+            }
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+        } catch (IllegalArgumentException i) {
+            throw i;
+        } catch (Exception e) {
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
-        if (node.has("unify")) {
-            return mapper.treeToValue(node, Query.Unify.class);
-        }
-        if (node.has("from")) {
-            return mapper.treeToValue(node, Query.From.class);
-        }
-        if (node.has("rel")) {
-            return mapper.treeToValue(node, Query.Relation.class);
-        }
-        // TODO everything else
-        throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
     }
 }

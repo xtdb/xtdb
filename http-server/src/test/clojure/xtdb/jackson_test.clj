@@ -262,7 +262,7 @@
              (roundtrip-query-tail {"where" [{">=" ["foo" "bar"]}
                                              {"<" ["bar" "baz"]}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-where"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Where should be a list of expressions"
                             (roundtrip-query-tail {"where" "not-a-list"}))
           "should fail when not a list"))
 
@@ -270,14 +270,14 @@
     (t/is (= (Query/limit 100)
              (roundtrip-query-tail {"limit" 100})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-limit"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Limit should be a valid number"
                             (roundtrip-query-tail {"limit" "not-a-limit"}))))
 
   (t/testing "offset"
     (t/is (= (Query/offset 100)
              (roundtrip-query-tail {"offset" 100})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-offset"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Offset should be a valid number"
                             (roundtrip-query-tail {"offset" "not-an-offset"}))))
 
   (t/testing "orderBy"
@@ -302,7 +302,7 @@
                                (ColSpec/of "b" (Expr/lVar "c"))])
              (roundtrip-query-tail {"return" ["a" {"b" "c"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-return"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Return should be a list of values"
                             (roundtrip-query-tail {"return" "a"}))))
 
   (t/testing "unnest"
@@ -322,7 +322,7 @@
     (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "b"))])
              (roundtrip-query-tail {"with" [{"a" "b"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-with"
+    (t/is (thrown-with-msg? IllegalArgumentException #"With should be a list of bindings"
                             (roundtrip-query-tail {"with" "a"}))
           "should fail when not a list"))
 

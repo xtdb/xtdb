@@ -28,10 +28,11 @@ public class OffsetDeserializer extends StdDeserializer<Query.Offset> {
                 long offsetValue = offset.asLong(); // Parse as long
                 return Query.offset(offsetValue);
             } else {
-                throw new Exception("Offset should be a valid number");
+                throw new IllegalArgumentException("Offset should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
-        }
-        catch (Exception e) {
+        } catch (IllegalArgumentException i) {
+            throw i;
+        } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-offset"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }

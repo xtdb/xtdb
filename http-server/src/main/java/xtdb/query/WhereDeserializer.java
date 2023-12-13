@@ -28,7 +28,6 @@ public class WhereDeserializer extends StdDeserializer<Query.Where> {
 
         try {
             JsonNode where = node.get("where");
-
             if (where.isArray()) {
                 List<Expr> predicates = new ArrayList<>();
 
@@ -39,9 +38,10 @@ public class WhereDeserializer extends StdDeserializer<Query.Where> {
 
                 return Query.where(predicates);
             } else {
-                throw new Exception("Where should be a list of expressions");
+                throw new IllegalArgumentException("Where should be a list of expressions", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
-            
+        } catch (IllegalArgumentException i) {
+            throw i;
         } catch (Exception e)  {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-where"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }

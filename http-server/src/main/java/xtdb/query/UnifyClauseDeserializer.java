@@ -25,20 +25,25 @@ public class UnifyClauseDeserializer extends StdDeserializer<Query.UnifyClause> 
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);
 
-        if (node.has("from")) {
-            return mapper.treeToValue(node, Query.From.class);
-        } if (node.has("where")) {
-            return mapper.treeToValue(node, Query.Where.class);
-        } if (node.has("unnest")) {
-            return mapper.treeToValue(node, Query.UnnestVar.class);
-        } if (node.has("with")) {
-            return mapper.treeToValue(node, Query.With.class);
-        } if (node.has("join") || node.has("left_join")) {
-            return mapper.treeToValue(node, Query.AJoin.class);
-        } if (node.has("rel")) {
-            return mapper.treeToValue(node, Query.Relation.class);
+        try {
+            if (node.has("from")) {
+                return mapper.treeToValue(node, Query.From.class);
+            } if (node.has("where")) {
+                return mapper.treeToValue(node, Query.Where.class);
+            } if (node.has("unnest")) {
+                return mapper.treeToValue(node, Query.UnnestVar.class);
+            } if (node.has("with")) {
+                return mapper.treeToValue(node, Query.With.class);
+            } if (node.has("join") || node.has("left_join")) {
+                return mapper.treeToValue(node, Query.AJoin.class);
+            } if (node.has("rel")) {
+                return mapper.treeToValue(node, Query.Relation.class);
+            }
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "unsupported-unify-clause"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+        } catch (IllegalArgumentException i) {
+            throw i;
+        } catch (Exception e) {
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "unsupported-unify-clause"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
-
-        throw IllegalArgumentException.create(Keyword.intern("xtql", "unsupported-unify-clause"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
     }
 }

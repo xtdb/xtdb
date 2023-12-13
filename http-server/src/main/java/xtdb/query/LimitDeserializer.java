@@ -28,8 +28,10 @@ public class LimitDeserializer extends StdDeserializer<Query.Limit> {
                 long limitValue = limit.asLong(); // Parse as long
                 return Query.limit(limitValue);
             } else {
-                throw new Exception("Limit should be a valid number");
+                throw new IllegalArgumentException("Limit should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
+        } catch (IllegalArgumentException i) {
+            throw i;
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-limit"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
