@@ -16,10 +16,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class LeftJoinDeserializer extends StdDeserializer<Query.LeftJoin> {
+public class AJoinDeserializer extends StdDeserializer<Query.AJoin> {
 
-    public LeftJoinDeserializer() {
-        super(Query.LeftJoin.class);
+    public AJoinDeserializer() {
+        super(Query.Join.class);
     }
 
     private List<ArgSpec> deserializeArgs(ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
@@ -38,20 +38,25 @@ public class LeftJoinDeserializer extends StdDeserializer<Query.LeftJoin> {
         return res;
     }
 
-    public Query.LeftJoin deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public Query.AJoin deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);
 
         try {
-            var leftJoin = Query.leftJoin(mapper.treeToValue(node.get("left_join"), Query.class), deserializeArgs(mapper, (ArrayNode) node.get("args")));
-            if (node.has("bind")) {
-                leftJoin = leftJoin.binding(deserializeBind(mapper, (ArrayNode) node.get("bind")));
+            Query.AJoin join = null;
+            if (node.has("join")) {
+                join = Query.join(mapper.treeToValue(node.get("join"), Query.class), deserializeArgs(mapper, (ArrayNode) node.get("args")));
+            } else {
+                join = Query.leftJoin(mapper.treeToValue(node.get("left_join"), Query.class), deserializeArgs(mapper, (ArrayNode) node.get("args")));
             }
-            return leftJoin;
+            if (node.has("bind")) {
+                join = join.binding(deserializeBind(mapper, (ArrayNode) node.get("bind")));
+            }
+            return join;
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-left-join"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-join"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

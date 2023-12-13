@@ -7,8 +7,8 @@
            (xtdb.query Query OutSpec Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
-                       TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap Query$Join Query$LeftJoin
-                       Query$Aggregate Query$Relation
+                       TransactionKey ArgSpec ColSpec VarSpec Basis QueryMap
+                       Query$Aggregate Query$Relation Query$AJoin
                        QueryDeserializer OutSpecDeserializer FromDeserializer WhereDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
                        UnnestColDeserializer ReturnDeserializer QueryTailDeserializer
@@ -16,8 +16,7 @@
                        VarSpecDeserializer UnnestVarDeserializer UnifyDeserializer UnifyClauseDeserializer
                        PipelineDeserializer TxKeyDeserializer ArgSpecDeserializer ColSpecDeserializer
                        BasisDeserializer QueryMapDeserializer ExprDeserializer
-                       JoinDeserializer LeftJoinDeserializer AggregateDeserializer
-                       RelDeserializer)))
+                       AggregateDeserializer RelDeserializer AJoinDeserializer)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -65,8 +64,7 @@
                                    (.addDeserializer Query$With (WithDeserializer.))
                                    (.addDeserializer Query$WithCols (WithColsDeserializer.))
                                    (.addDeserializer Query$Without (WithoutDeserializer.))
-                                   (.addDeserializer Query$Join (JoinDeserializer.))
-                                   (.addDeserializer Query$LeftJoin (LeftJoinDeserializer.))
+                                   (.addDeserializer Query$AJoin (AJoinDeserializer.))
                                    (.addDeserializer Query$Aggregate (AggregateDeserializer.))
                                    (.addDeserializer Query$Relation (RelDeserializer.))
                                    (.addDeserializer OutSpec (OutSpecDeserializer.))

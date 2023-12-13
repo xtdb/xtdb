@@ -33,10 +33,8 @@ public class UnifyClauseDeserializer extends StdDeserializer<Query.UnifyClause> 
             return mapper.treeToValue(node, Query.UnnestVar.class);
         } if (node.has("with")) {
             return mapper.treeToValue(node, Query.With.class);
-        } if (node.has("join")) {
-            return mapper.treeToValue(node, Query.Join.class);
-        } if (node.has("left_join")) {
-            return mapper.treeToValue(node, Query.LeftJoin.class);
+        } if (node.has("join") || node.has("left_join")) {
+            return mapper.treeToValue(node, Query.AJoin.class);
         } if (node.has("rel")) {
             return mapper.treeToValue(node, Query.Relation.class);
         }
