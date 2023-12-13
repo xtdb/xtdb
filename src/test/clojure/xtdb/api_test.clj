@@ -668,7 +668,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
             {:xt/id :ivan :first-name "Ivan", :last-name "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :clojure}))
-        "datalog key-fn")
+        "clojure key-fn")
 
   (t/is (= [{:xt$id :petr :first_name "Petr", :last_name "Petrov"}
             {:xt$id :ivan :first_name "Ivan", :last_name "Ivanov"}]

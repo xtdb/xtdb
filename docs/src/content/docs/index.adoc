@@ -73,7 +73,7 @@ To start querying XTDB from your application code, choose your language:
 - Curl (HTTP)
 ////
 
-To start querying XTDB from your application code, you can currently use the Clojure client library or the HTTP interfaces directly, for both SQL and Datalog.
+To start querying XTDB from your application code, you can currently use the Clojure client library or the HTTP interfaces directly, for both SQL and XTQL.
 The HTTP SQL interface is stateless. An experimental pgwire-server is also available to connect from any Postgres client driver if you wish to use SQL.
 
 ////

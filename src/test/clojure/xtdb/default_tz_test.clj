@@ -48,9 +48,9 @@
                           {:basis {:at-tx tx}
                            :default-tz #time/zone "America/Los_Angeles"})))))))
 
-(t/deftest test-datalog-default-tz
+(t/deftest test-xtql-default-tz
   #_ ; FIXME #3020
   (t/is (= [{:time #time/time "16:00"}]
-           (xt/q tu/*node* '(table [{:time (local-time)}] [time])
+           (xt/q tu/*node* '(rel [{:time (local-time)}] [time])
                  {:basis {:current-time (time/->instant #inst "2024-01-01")}
                   :default-tz #time/zone "America/Los_Angeles"}))))
