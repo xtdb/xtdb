@@ -39,7 +39,7 @@ public class WithColsDeserializer extends StdDeserializer<Query.WithCols> {
                 throw new Exception("With should be a list of bindings");
             }
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-with"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-with"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

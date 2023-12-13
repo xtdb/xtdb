@@ -28,7 +28,7 @@ public class TxKeyDeserializer extends StdDeserializer<TransactionKey> {
             ObjectNode objectNode = (ObjectNode) node;
             return new TransactionKey(objectNode.get("tx_id").asLong(), (Instant) mapper.treeToValue(objectNode.get("system_time"), Object.class));
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-tx-key"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-tx-key"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

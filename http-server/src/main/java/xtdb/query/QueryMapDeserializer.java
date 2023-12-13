@@ -37,7 +37,7 @@ public class QueryMapDeserializer extends StdDeserializer<QueryMap> {
             if (node.has("query")) {
                 query = mapper.treeToValue(node.get("query"), Query.class);
             } else {
-                throw IllegalArgumentException.create(Keyword.intern("xtdb", "missing-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "missing-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
 
             // TODO this only works in connection with keyword deserialization
@@ -80,7 +80,7 @@ public class QueryMapDeserializer extends StdDeserializer<QueryMap> {
         } catch (IllegalArgumentException e) {
           throw e;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-query-map"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-query-map"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

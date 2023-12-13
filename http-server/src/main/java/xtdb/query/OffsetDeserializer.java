@@ -32,7 +32,7 @@ public class OffsetDeserializer extends StdDeserializer<Query.Offset> {
             }
         }
         catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-offset"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-offset"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

@@ -51,7 +51,7 @@ public class LeftJoinDeserializer extends StdDeserializer<Query.LeftJoin> {
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-left-join"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-left-join"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

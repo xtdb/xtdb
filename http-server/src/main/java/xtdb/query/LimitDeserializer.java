@@ -31,7 +31,7 @@ public class LimitDeserializer extends StdDeserializer<Query.Limit> {
                 throw new Exception("Limit should be a valid number");
             }
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-limit"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-limit"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

@@ -36,7 +36,7 @@ public class PipelineDeserializer extends StdDeserializer<Query.Pipeline> {
             }
             return Query.pipeline(query, tails);
         } catch(Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-pipeline"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-pipeline"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 

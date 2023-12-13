@@ -64,7 +64,7 @@ public class OrderByDeserializer extends StdDeserializer<Query.OrderBy> {
         JsonNode orderBy = node.get("orderBy");
 
         if (!orderBy.isArray()) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-order-by"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-order-by"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
         try {
@@ -74,7 +74,7 @@ public class OrderByDeserializer extends StdDeserializer<Query.OrderBy> {
             }
             return Query.orderBy(orderSpecs);
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-order-by"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-order-by"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

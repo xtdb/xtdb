@@ -34,11 +34,11 @@ public class BasisDeserializer extends StdDeserializer<Basis> {
             if (node.has("at_tx")) {
                 return new Basis(mapper.treeToValue(node.get("at_tx"), TransactionKey.class), currentTime);
             }
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-basis"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-basis"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-basis"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-basis"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

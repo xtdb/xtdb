@@ -38,7 +38,7 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
             return query.binding(outSpecs);
         }
         catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-from"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-from"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

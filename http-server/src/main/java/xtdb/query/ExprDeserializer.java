@@ -91,7 +91,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-expr"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-expr"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
     }
 }

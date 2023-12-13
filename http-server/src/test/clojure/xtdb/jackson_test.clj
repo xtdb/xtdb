@@ -223,7 +223,7 @@
            (roundtrip-query {"from" "docs"
                              "bind" ["xt/id" {"a" "b"}]})))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-from'"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-from'"
                           (roundtrip-query {"from" "docs"
                                             "bind" "xt/id"}))
         "bind not an array")
@@ -262,7 +262,7 @@
              (roundtrip-query-tail {"where" [{">=" ["foo" "bar"]}
                                              {"<" ["bar" "baz"]}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-where"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-where"
                             (roundtrip-query-tail {"where" "not-a-list"}))
           "should fail when not a list"))
 
@@ -270,14 +270,14 @@
     (t/is (= (Query/limit 100)
              (roundtrip-query-tail {"limit" 100})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-limit"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-limit"
                             (roundtrip-query-tail {"limit" "not-a-limit"}))))
 
   (t/testing "offset"
     (t/is (= (Query/offset 100)
              (roundtrip-query-tail {"offset" 100})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-offset"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-offset"
                             (roundtrip-query-tail {"offset" "not-an-offset"}))))
 
   (t/testing "orderBy"
@@ -287,10 +287,10 @@
     (t/is (= (Query/orderBy [(Query/orderSpec (Expr/lVar "someField") Query$OrderDirection/ASC Query$OrderNulls/FIRST)])
              (roundtrip-query-tail {"orderBy" [{"val" "someField", "dir" "asc", "nulls" "first"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-order-by'"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-order-by'"
                             (roundtrip-query-tail {"orderBy" [{"val" "someField", "dir" "invalid-direction"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-order-by'"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-order-by'"
                             (roundtrip-query-tail {"orderBy" [{"val" "someField", "nulls" "invalid-nulls"}]}))))
 
   (t/testing "return"
@@ -302,14 +302,14 @@
                                (ColSpec/of "b" (Expr/lVar "c"))])
              (roundtrip-query-tail {"return" ["a" {"b" "c"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-return"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-return"
                             (roundtrip-query-tail {"return" "a"}))))
 
   (t/testing "unnest"
     (t/is (= (Query/unnestCol (ColSpec/of "a" (Expr/lVar "b")))
              (roundtrip-query-tail {"unnest" {"a" "b"}})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unnest"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-unnest"
                             (roundtrip-query-tail {"unnest" {"a" "b"
                                                              "c" "d"}}))
           "should fail with >1 binding"))
@@ -322,7 +322,7 @@
     (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "b"))])
              (roundtrip-query-tail {"with" [{"a" "b"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-with"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-with"
                             (roundtrip-query-tail {"with" "a"}))
           "should fail when not a list"))
 
@@ -330,7 +330,7 @@
     (t/is (= (Query/without ["a" "b"])
              (roundtrip-query-tail {"without" ["a" "b"]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-without"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-without"
                             (roundtrip-query-tail {"without" "a"}))
           "should fail when not a list"))
 
@@ -340,7 +340,7 @@
              (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"call" "sum"
                                                                "args" ["foo"]}}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-aggregate"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-aggregate"
                             (roundtrip-query-tail {"aggregate" "a"}))
           "should fail when not a list")))
 
@@ -380,7 +380,7 @@
                                         {"rel" "$bar"
                                          "bind" ["foo"]}]}))))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-unify"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))
         "unify value not an array"))
 
@@ -411,6 +411,6 @@
                                    "explain" true
                                    "key_fn" :clojure}))))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/missing-query"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/missing-query"
                           (roundtrip-query-map {"explain" true}))
         "query map without query"))

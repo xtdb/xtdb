@@ -41,12 +41,12 @@ public class OutSpecDeserializer extends StdDeserializer<OutSpec> {
                 Map.Entry<String, JsonNode> entry = itr.next();
                 return OutSpec.of(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
             } else {
-                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-out-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-out-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-out-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-out-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
     }
 }

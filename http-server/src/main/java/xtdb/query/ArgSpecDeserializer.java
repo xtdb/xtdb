@@ -37,12 +37,12 @@ public class ArgSpecDeserializer extends StdDeserializer<ArgSpec> {
                 Map.Entry<String, JsonNode> entry = itr.next();
                 return ArgSpec.of(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
             } else {
-                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-arg-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-arg-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-arg-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-arg-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
     }
 }

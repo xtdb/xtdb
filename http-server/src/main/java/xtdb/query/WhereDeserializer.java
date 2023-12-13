@@ -43,7 +43,7 @@ public class WhereDeserializer extends StdDeserializer<Query.Where> {
             }
             
         } catch (Exception e)  {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-where"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-where"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
     }
 }

@@ -39,12 +39,12 @@ public class VarSpecDeserializer extends StdDeserializer<VarSpec> {
                 Map.Entry<String, JsonNode> entry = itr.next();
                 return VarSpec.of(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
             } else {
-                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-var-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-var-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-var-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-var-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
     }
 }
