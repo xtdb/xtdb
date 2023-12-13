@@ -8,9 +8,9 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-openapi-docs": "redoc-cli bundle openapi/openapi.yaml --output=dist/openapi/index.html",
-    "build-javadoc": "cd ../ && ./gradlew aggregateJavadoc && cp -r ./build/docs/aggregateJavadoc docs/dist/javadoc",
-    "build-clj-docs": "cd ../ && ./gradlew build-codox"
+    "build-openapi-docs": "rm -rf public/sdks/openapi && redoc-cli bundle openapi/openapi.yaml --output=public/sdks/openapi/index.html",
+    "build-javadoc": "rm -rf public/sdks/java && cd ../ && ./gradlew aggregateJavadoc && cp -r ./build/docs/aggregateJavadoc docs/public/sdks/java",
+    "build-clj-docs": "rm -rf public/sdks/clojure && cd ../ && ./gradlew build-codox"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.0.3",

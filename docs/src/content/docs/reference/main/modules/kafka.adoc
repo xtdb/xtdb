@@ -1,0 +1,9 @@
+---
+title: Kafka
+---
+
+Coming https://github.com/xtdb/xtdb/issues/3037[soon^]
+
+For details on how to enable the Kafka module in each client library, see the individual SDK documentation:
+
+* link:/sdks/clojure/kafka-module.html[Clojure]

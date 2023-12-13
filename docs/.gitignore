@@ -1,5 +1,9 @@
 # build output
 dist/
+
+# generated docs
+public/sdks
+
 # generated types
 .astro/
 

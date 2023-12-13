@@ -25,57 +25,74 @@ export default defineConfig({
       },
 
       sidebar: [
-        { label: 'xtdb.com', link: 'https://xtdb.com'},
+        { label: '← xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
+
         {
-          label: 'Learn',
+          label: 'Introduction',
+          collapsed: true,
           items: [
+            { label: 'Overview', link: '/index' },
+            { label: 'Getting started', link: '/intro/getting-started'},
             {
-              label: 'Introduction',
+              label: 'What is XTDB?',
               items: [
-                { label: 'Getting started', link: '/learn/getting-started' },
-                { label: 'What is XTDB?', link: '/learn/what-is-xtdb' },
-                { label: 'Key Concepts', link: '/learn/key-concepts' },
-              ],
-            }, {
-              label: 'Guides',
-              items: [
-                { label: 'Setting up an example cluster on AWS', link: '/learn/starting-with-aws' },
-              ],
-            }, {
-              label: 'Tutorials',
-              items: [
-                { label: 'Bitemporality in SQL', link: '/learn/bitemporality-in-sql' },
-                { label: 'Discover XTQL with cURL', link: '/learn/discover-xtql-with-curl' },
-              ],
-            }, {
-              label: 'For Clojurists',
-              items: [
-                { label: 'Learn XTQL Today, with Clojure', link: '/learn/learn-xtql-today-with-clojure' },
-              ],
+                { label: 'Overview', link: '/intro/what-is-xtdb' },
+                { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
+                // { label: 'Architecture', link: '/intro/architecture' },
+                // { label: 'Bitemporality', link: '/intro/bitemporality' },
+              ]
             },
+            { label: 'Community', link: '/intro/community'},
+            { label: 'Roadmap', link: '/intro/roadmap'},
           ],
         },
+
+        /* {
+          label: 'Tutorials',
+          collapsed: true,
+          items: [
+            { label: 'Learn XTQL today! (Clojure)', link: '/tutorials/learn-xtql-today-clojure' },
+          ],
+        }, */
+
+        {
+          label: 'Guides',
+          collapsed: true,
+          items: [
+            { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
+          ],
+        },
+
         {
           label: 'Reference',
+          collapsed: true,
           items: [
-            { label: 'Installation', link: '/reference/main/installation'},
-            { label: 'Data Types', link: '/reference/main/data-types'},
+            { label: 'Overview', link: '/reference/main' },
             {
               label: 'XTQL',
+              collapsed: true,
               items: [
                 { label: 'Transactions', link: '/reference/main/xtql/txs'},
                 { label: 'Queries', link: '/reference/main/xtql/queries'},
               ]
-            }, {
+            },
+
+            {
               label: 'SQL',
+              collapsed: true,
               items: [
                 { label: 'Transactions', link: '/reference/main/sql/txs'},
                 { label: 'Queries', link: '/reference/main/sql/queries'},
               ]
-            }, {
+            },
+
+            { label: 'Data Types', link: '/reference/main/data-types'},
+
+            {
               label: 'Standard Library',
+              collapsed: true,
               items: [
-                { label: 'Introduction', link: '/reference/main/stdlib'},
+                { label: 'Overview', link: '/reference/main/stdlib'},
                 { label: 'Predicates', link: '/reference/main/stdlib/predicates'},
                 { label: 'Numeric functions', link: '/reference/main/stdlib/numeric'},
                 { label: 'String functions', link: '/reference/main/stdlib/string'},
@@ -83,6 +100,26 @@ export default defineConfig({
                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates'},
               ]
             },
+
+            {
+              label: 'SDKs',
+              collapsed: true,
+              items: [
+                { label: 'Overview', link: '/reference/main/sdks' },
+                { label: 'Clojure ↗', link: '/sdks/clojure/index.html', attrs: {target: '_blank'} },
+                { label: 'Java ↗', link: '/sdks/java/index.html', attrs: {target: '_blank'}},
+                { label: 'HTTP (OpenAPI) ↗', link: '/sdks/openapi/index.html', attrs: {target: '_blank'}},
+              ]
+            },
+
+            {
+              label: 'Modules',
+              collapsed: true,
+              items: [
+                { label: 'Kafka', link: '/reference/main/modules/kafka'},
+                { label: 'S3', link: '/reference/main/modules/s3'},
+              ]
+            }
           ]
         },
       ],
@@ -109,10 +146,4 @@ export default defineConfig({
   vite: {
     plugins: [yaml()]
   },
-
-  redirects: {
-    '/': '/learn',
-    '/learn': '/learn/getting-started',
-    '/reference': '/reference/main/installation',
-  }
 });

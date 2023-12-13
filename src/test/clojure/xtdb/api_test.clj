@@ -535,12 +535,18 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
           (t/is (= tx2-expected (all-users tx2)))
           (t/is (= tx1-expected (all-users tx1))))))))
 
+(t/deftest test-update-ingestion-error-3035
+  (xt/submit-tx tu/*node*
+    [(xt/update-table :users '{:bind {:xt/id :john :age age}
+                               :set {:age (inc age)}})])
+
+  (t/is (not (empty? (xt/q tu/*node* '(from :xt/txs [xt/id]))))))
+
 (t/deftest test-erase-xtql
   (letfn [(q [tx]
-            (set (xt/q *node* '(from :foo [xt/id version xt/valid-from xt/valid-to])
-                       ;; TODO when `from` supports for-valid-time we can shift this to the query
-                       {:basis {:at-tx tx}
-                        :default-all-valid-time? true})))]
+            (set (xt/q *node* '(from :foo {:bind [xt/id version xt/valid-from xt/valid-to]
+                                           :for-valid-time :all-time})
+                       {:basis {:at-tx tx}})))]
     (let [tx1 (xt/submit-tx *node*
                             [(xt/put :foo {:xt/id "foo", :version 0})
                              (xt/put :foo {:xt/id "bar", :version 0})])
@@ -668,7 +674,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
             {:xt/id :ivan :first-name "Ivan", :last-name "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :clojure}))
-        "datalog key-fn")
+        "clojure key-fn")
 
   (t/is (= [{:xt$id :petr :first_name "Petr", :last_name "Petrov"}
             {:xt$id :ivan :first_name "Ivan", :last_name "Ivanov"}]

@@ -1,0 +1,21 @@
+---
+title: Welcome to XTDB!
+---
+
+XTDB is a bitemporal, dynamic database, queryable with SQL and XTQL, that reduces the time and cost of building and maintaining safe systems of record.
+It is free-to-use and open-source, under the https://opensource.org/license/mpl-2-0/[MPL license^].
+
+This is the documentation site for XTDB version 2, which is currently in early access.
+For documentation on the stable, production-ready 1.x releases of XTDB, see link:https://v1-docs.xtdb.com[here^].
+
+To quickly get up-and-running, check out our link:/intro/getting-started[getting started] guide.
+
+For the time being, XTDB is accessible through our HTTP API and Clojure SDK - we are hard at work on SDKs for Java/Kotlin, JavaScript, Python and many more, which will be available shortly.
+
+Next up:
+
+* Find out link:/intro/what-is-xtdb[what makes XTDB great].
+* Find out more about link:/intro/what-is-xtql[XTQL].
+* For help and support, visit the link:/intro/community[XTDB community].
+* Learn more about the individual link:/reference/main/sdks[client SDKs].
+* Check out the link:/reference/main[XTDB reference documentation].

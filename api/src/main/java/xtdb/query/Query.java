@@ -22,6 +22,19 @@ public interface Query {
         public String toString() {
             return stringifySeq("->", query, stringifyList(tails));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Pipeline pipeline = (Pipeline) o;
+            return Objects.equals(query, pipeline.query) && Objects.equals(tails, pipeline.tails);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(query, tails);
+        }
     }
 
     static Pipeline pipeline(Query query, List<QueryTail> tails) {
@@ -41,6 +54,19 @@ public interface Query {
         @Override
         public String toString() {
             return stringifySeq("unify", stringifyList(clauses));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Unify unify = (Unify) o;
+            return Objects.equals(clauses, unify.clauses);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(clauses);
         }
     }
 
@@ -91,6 +117,19 @@ public interface Query {
 
             return String.format("(from %s [%s %s])", stringifyOpts(table, temporalFilters), (projectAllCols ? "*" : ""), stringifyList(bindings));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            From from = (From) o;
+            return projectAllCols == from.projectAllCols && Objects.equals(table, from.table) && Objects.equals(forValidTime, from.forValidTime) && Objects.equals(forSystemTime, from.forSystemTime) && Objects.equals(bindings, from.bindings);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(table, forValidTime, forSystemTime, bindings, projectAllCols);
+        }
     }
 
     static From from(String table) {
@@ -107,6 +146,19 @@ public interface Query {
         @Override
         public String toString() {
             return stringifySeq("where", stringifyList(preds));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Where where = (Where) o;
+            return Objects.equals(preds, where.preds);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(preds);
         }
     }
 
@@ -125,6 +177,19 @@ public interface Query {
         public String toString() {
             return String.format("(with %s)", stringifyList(vars));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            With with = (With) o;
+            return Objects.equals(vars, with.vars);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(vars);
+        }
     }
 
     static With with(List<VarSpec> vars) {
@@ -141,6 +206,19 @@ public interface Query {
         @Override
         public String toString() {
             return String.format("(with %s)", stringifyList(cols));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            WithCols withCols = (WithCols) o;
+            return Objects.equals(cols, withCols.cols);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(cols);
         }
     }
 
@@ -159,6 +237,19 @@ public interface Query {
         public String toString() {
             return stringifySeq("without", stringifyList(cols));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Without without = (Without) o;
+            return Objects.equals(cols, without.cols);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(cols);
+        }
     }
 
     static Without without(List<String> cols) {
@@ -175,6 +266,19 @@ public interface Query {
         @Override
         public String toString() {
             return String.format("(return %s)", stringifyList(cols));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Return returnObj = (Return) o;
+            return Objects.equals(cols, returnObj.cols);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(cols);
         }
     }
 
@@ -226,6 +330,19 @@ public interface Query {
         public String toString() {
             return stringifySeq("join", stringifyArgs(query, args), stringifyList(bindings));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Join join = (Join) o;
+            return Objects.equals(query, join.query) && Objects.equals(args, join.args) && Objects.equals(bindings, join.bindings);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(query, args, bindings);
+        }
     }
 
     static Join join(Query query, List<ArgSpec> args) {
@@ -251,6 +368,19 @@ public interface Query {
         public String toString() {
             return stringifySeq("left-join", stringifyArgs(query, args), stringifyList(bindings));
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            LeftJoin leftJoin = (LeftJoin) o;
+            return Objects.equals(query, leftJoin.query) && Objects.equals(args, leftJoin.args) && Objects.equals(bindings, leftJoin.bindings);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(query, args, bindings);
+        }
     }
 
     static LeftJoin leftJoin(Query query, List<ArgSpec> args) {
@@ -267,6 +397,19 @@ public interface Query {
         @Override
         public String toString() {
             return stringifySeq("aggregate", stringifyList(cols));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Aggregate aggregate = (Aggregate) o;
+            return Objects.equals(cols, aggregate.cols);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(cols);
         }
     }
 
@@ -297,6 +440,21 @@ public interface Query {
         public String toString() {
             return String.format("%s %s %s", expr, direction, nulls);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            OrderSpec orderSpec = (OrderSpec) o;
+            return Objects.equals(expr, orderSpec.expr) &&
+                direction == orderSpec.direction &&
+                nulls == orderSpec.nulls;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(expr, direction, nulls);
+        }
     }
 
     static OrderSpec orderSpec(Expr expr, OrderDirection direction, OrderNulls nulls) {
@@ -313,6 +471,19 @@ public interface Query {
         @Override
         public String toString() {
             return String.format("(%s %s)", "order-by", stringifyList(orderSpecs));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            OrderBy orderBy = (OrderBy) o;
+            return Objects.equals(orderSpecs, orderBy.orderSpecs);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(orderSpecs);
         }
     }
 
@@ -348,6 +519,19 @@ public interface Query {
         public String toString() {
             return String.format("(%s %s)", "limit", length);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Limit limit = (Limit) o;
+            return length == limit.length;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(length);
+        }
     }
 
     static Limit limit(long length) {
@@ -365,13 +549,28 @@ public interface Query {
         public String toString() {
             return String.format("(%s %s)", "offset", length);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Offset offset = (Offset) o;
+            return length == offset.length;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(length);
+        }
     }
 
     static Offset offset(long length) {
         return new Offset(length);
 
     }
-    final class DocsRelation implements Query, UnifyClause {
+
+    abstract class Relation implements Query, UnifyClause {}
+    final class DocsRelation extends Relation {
         public final List<Map<String, Expr>> documents;
         public final List<OutSpec> bindings;
 
@@ -384,11 +583,24 @@ public interface Query {
 
         @Override
         public String toString() {
-            return String.format("(%s [%s])", "table", stringifyList(documents));
+            return stringifySeq("rel", stringifyList(documents), stringifyList(bindings));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            DocsRelation that = (DocsRelation) o;
+            return Objects.equals(documents, that.documents) && Objects.equals(bindings, that.bindings);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(documents, bindings);
         }
     }
 
-    final class ParamRelation implements Query, UnifyClause {
+    final class ParamRelation extends Relation {
         public final Expr.Param param;
         public final List<OutSpec> bindings;
 
@@ -399,7 +611,20 @@ public interface Query {
 
         @Override
         public String toString() {
-            return String.format("(%s %s)", "table", this.param.toString());
+            return stringifySeq("rel", param.toString(), stringifyList(bindings));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ParamRelation that = (ParamRelation) o;
+            return Objects.equals(param, that.param) && Objects.equals(bindings, that.bindings);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(param, bindings);
         }
     }
 
@@ -422,6 +647,19 @@ public interface Query {
         public String toString() {
             return String.format("(unnest %s)", var);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            UnnestVar unnestVar = (UnnestVar) o;
+            return Objects.equals(var, unnestVar.var);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(var);
+        }
     }
 
     static UnnestVar unnestVar(VarSpec var) {
@@ -439,10 +677,22 @@ public interface Query {
         public String toString() {
             return String.format("(unnest %s)", col);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            UnnestCol unnestCol = (UnnestCol) o;
+            return Objects.equals(col, unnestCol.col);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(col);
+        }
     }
 
     static UnnestCol unnestCol(ColSpec col) {
         return new UnnestCol(col);
     }
-
 }

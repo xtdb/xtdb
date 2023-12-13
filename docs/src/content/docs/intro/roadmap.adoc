@@ -1,0 +1,17 @@
+---
+title: XTDB roadmap
+---
+
+Over the last couple of years, we've been working hard on the next version of XTDB, and we're excited to share it with you now!
+
+We're now at a point where we can start to gather feedback on what we have so far, particularly from a usability point-of-view.
+Throughout the alpha process, as we work towards general availability, we'll naturally be spending more time improving the performance, stability and operational aspects, as well as extending its reach via client libraries for other languages.
+
+As we work towards a stable, general-availability release, we will primarily be focusing on:
+
+* First-class support for link:/sdks[other client languages] - primarily Java/Kotlin, JavaScript, and Python.
+* Iterating on link:/intro/what-is-xtql[XTQL], based on user feedback.
+* Improving the performance and stability to production quality.
+* Operational support for production installations - deployment and monitoring tools.
+
+If you'd like to be part of this journey, come say hi in the link:/intro/community[XTDB community]!
