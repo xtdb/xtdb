@@ -1,3 +1,0 @@
----
-title: XTDB reference guide
----

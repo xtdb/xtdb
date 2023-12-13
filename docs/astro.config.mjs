@@ -63,7 +63,7 @@ export default defineConfig({
         {
           label: 'Reference',
           items: [
-            { label: 'Overview', link: '/reference' },
+            { label: 'Overview', link: '/reference/main' },
             {
               label: 'XTQL',
               items: [
@@ -97,7 +97,7 @@ export default defineConfig({
             {
               label: 'SDKs',
               items: [
-                { label: 'Overview', link: '/sdks' },
+                { label: 'Overview', link: '/reference/main/sdks' },
                 { label: 'Clojure', link: '/sdks/clojure/index.html', attrs: {target: '_blank'} },
                 { label: 'Java', link: '/sdks/java/index.html', attrs: {target: '_blank'}},
                 { label: 'HTTP (OpenAPI)', link: '/sdks/openapi/index.html', attrs: {target: '_blank'}},
