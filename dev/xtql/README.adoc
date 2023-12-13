@@ -1,4 +1,5 @@
 = XTQL Tutorial
+:test: ../src/test/clojure/xtdb/tutorial_test.clj
 
 XTDB 2.x will support two query languages: SQL, but also 'XTQL' - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
 XTQL can be written in JSON, Java/Scala/Kotlin (full DSL coming soon) and Clojure's EDN.
@@ -13,69 +14,51 @@ We'll save the in-depth XTQL specification for another article - for now, let's 
 +
 [source,clojure]
 ----
-(from :users [{:xt/id user-id} first-name last-name])
+include::{test}[tags=bo-xtql-1,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-{
-  "from": "users",
-  "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
-}
+include::{test}[tags=bo-json-1,string,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT xt$id AS user_id, first_name, last_name FROM users
+include::{test}[tags=bo-sql-1,string,indent=0]
 ----
 +
 * We can look up a single user-id by binding it in the `from` clause:
 +
 [source,clojure]
 ----
-(from :users [{:xt/id "james"} first-name last-name])
+include::{test}[tags=bo-xtql-2,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-{
-  "from": "users",
-  "bind": [ { "xt/id": { "@value": "james" } }, "first-name", "last-name" ]
-}
+include::{test}[tags=bo-json-2,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT first_name, last_name FROM users WHERE xt$id = 'james'
+include::{test}[tags=bo-sql-2,indent=0]
 ----
 +
 * `from` is a valid query in isolation but, for anything more powerful, we'll need a 'pipeline':
 +
 [source,clojure]
 ----
-(-> (from :users [{:xt/id user-id} first-name last-name])
-    (order-by last-name first-name)
-    (limit 10))
+include::{test}[tags=bo-xtql-3,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "from": "users",
-    "bind": [{ "xt/id": "user-id" }, "first-name", "last-name"]
-  },
-  { "orderBy": ["last-name", "first-name"] },
-  { "limit": 10 }
-]
+include::{test}[tags=bo-json-3,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT xt$id AS user_id, first_name, last_name
-FROM users
-ORDER BY last_name, first_name
-LIMIT 10
+include::{test}[tags=bo-sql-3,indent=0]
 ----
 
 XTQL operations are independently composable - unlike SQL/EDN Datalog, for example, you don't need a whole 'SELECT, FROM, WHERE'/`{:find ..., :where ...}` frame every time.
@@ -90,30 +73,17 @@ In this case, we re-use the `user-id` logic variable to indicate that the `:xt/i
 +
 [source,clojure]
 ----
-(unify (from :users [{:xt/id user-id} first-name last-name])
-       (from :articles [{:author-id user-id} title content]))
+include::{test}[tags=joins-xtql-1,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-{
-  "unify": [
-    {
-      "from": "users",
-      "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
-    },
-    {
-      "from": "articles",
-      "bind": [ { "author-id": "user-id" }, "title", "content" ]
-    }
-  ]
-}
+include::{test}[tags=joins-json-1,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT u.xt$id AS user_id, first_name, last_name, title, content
-FROM users u JOIN articles a ON u.xt$id = a.author_id
+include::{test}[tags=joins-sql-1,indent=0]
 ----
 
 +
@@ -122,76 +92,34 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 [source,clojure]
 ----
 ;; 'find me all the users who are the same age'
-(unify (from :users [{:xt/id uid1} age])
-       (from :users [{:xt/id uid2} age])
-       (where (<> uid1 uid2)))
+include::{test}[tags=joins-xtql-2,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-{
-  "unify": [
-    {
-      "from": "users",
-      "bind": [ { "xt/id": "uid1" }, "age" ]
-    },
-    {
-      "from": "users",
-      "bind": [ { "xt/id": "uid2" }, "age" ]
-    },
-    {
-      "where": [ { "<>": [ "uid1", "uid2" ] } ]
-    }
-  ]
-}
+include::{test}[tags=joins-json-2,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT u1.xt$id AS uid1, u2.xt$id AS u2, age
-FROM users u1
-  JOIN users u2 ON (u1.age = u2.age)
-WHERE u1.xt$id <> u2.xt$id
+include::{test}[tags=joins-sql-2,indent=0]
 ----
 +
 * We can specify that a certain match is optional using `left-join`:
 +
 [source,clojure]
 ----
-(-> (unify (from :customers [{:xt/id cid}])
-           (left-join (from :orders [{:xt/id oid, :customer-id cid} currency order-value])
-                      [cid currency order-value]))
-    (limit 100))
+include::{test}[tags=joins-xtql-3,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "unify": [
-      {
-        "from": "customers",
-        "bind": [{ "xt/id": "cid" }]
-      },
-      {
-        "leftJoin": {
-          "from": "orders",
-          "bind": [{ "xt/id": "oid", "customer-id": "cid" }, "currency", "order-value"]
-        },
-        "bind": ["cid", "currency", "order-value"]
-      }
-    ]
-  },
-  { "limit": 100 }
-]
+include::{test}[tags=joins-json-3,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT c.xt$id AS cid, o.xt$id AS oid, currency, order_value
-FROM customers c
-  LEFT JOIN orders o ON (c.xt$id = o.customer_id)
-LIMIT 100
+include::{test}[tags=joins-sql-3,indent=0]
 ----
 +
 Here, we're asking to additionally return customers who haven't yet any orders (for which the order-table columns will be absent in the results).
@@ -199,49 +127,17 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 +
 [source,clojure]
 ----
-(-> (unify (from :customers [{:xt/id cid}])
-           (where (not (exists? (from :orders [{:customer-id $cid}])
-                                {:args [cid]}))))
-    (limit 100))
+include::{test}[tags=joins-xtql-4,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "unify": [
-      {
-        "from": "customers",
-        "bind": [{ "xt/id": "cid" }]
-      },
-      {
-        "where": [
-          {
-            "not": [
-              {
-                "exists": {
-                  "from": "orders",
-                  "bind": [ { "customer-id": "$cid" } ]
-                },
-                "args": [ "cid" ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  },
-  { "limit": 100 }
-]
-
+include::{test}[tags=joins-json-4,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT c.xt$id AS cid
-FROM customers c
-WHERE c.xt$id NOT IN (SELECT customer_id FROM orders)
-LIMIT 100
+include::{test}[tags=joins-sql-4,indent=0]
 ----
 +
 (naturally, `IN` is also available, but uses `exists?` instead)
@@ -252,33 +148,17 @@ LIMIT 100
 +
 [source,clojure]
 ----
-(-> (from :users [first-name last-name])
-    (with {:full-name (concat first-name " " last-name)}))
+include::{test}[tags=proj-xtql-1,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "from": "users",
-    "bind": ["first-name", "last-name"]
-  },
-  {
-    "with": [
-      {
-        "full-name": {
-          "concat": ["first-name", { "@value": " " }, "last-name"]
-        }
-      }
-    ]
-  }
-]
+include::{test}[tags=proj-json-1,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT users.first_name, users.last_name, (users.first_name || ' ' || users.last_name) AS full_name
-FROM users
+include::{test}[tags=proj-sql-1,indent=0]
 ----
 +
 We can also use `with` within `unify` - this creates new logic variables which we can then unify in the same way.
@@ -287,76 +167,33 @@ We can also use `with` within `unify` - this creates new logic variables which w
 +
 [source,clojure]
 ----
-(-> (unify (from :users [{:xt/id user-id} first-name last-name])
-           (from :articles [{:author-id user-id} title content]))
-    (return {:full-name (str first-name " " last-name)} :title :content))
+include::{test}[tags=proj-xtql-2,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "unify": [
-      {
-        "from": "users",
-        "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
-      },
-      {
-        "from": "articles",
-        "bind": [ { "author-id": "user-id" }, "title", "content" ]
-      }
-    ]
-  },
-  {
-    "return": [
-      {
-        "full-name": {
-          "str": [ "first-name", { "@value": " " }, "last-name" ]
-        }
-      }
-    ]
-  }
-]
+include::{test}[tags=proj-json-2,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT CONCAT(u.first_name, ' ', u.last_name) AS full_name, a.title, a.content
-FROM users u JOIN articles a ON u.xt$id = a.author_id
+include::{test}[tags=proj-sql-2,indent=0]
 ----
 * Where we don't need any additional projections, we can use `without`:
 +
 [source,clojure]
 ----
-(-> (unify (from :users [{:xt/id user-id} first-name last-name])
-           (from :articles [{:author-id user-id} title content]))
-    (without :user-id))
+include::{test}[tags=proj-xtql-3,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "unify": [
-      {
-        "from": "users",
-        "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
-      },
-      {
-        "from": "articles",
-        "bind": [ { "author-id": "user-id" }, "title", "content" ]
-      }
-    ]
-  },
-  { "without": [ "user-id" ] }
-]
+include::{test}[tags=proj-json-3,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT u.first_name, u.last_name, a.title, a.content
-FROM users u
-  JOIN articles a ON u.xt$id = a.author_id
+include::{test}[tags=proj-sql-3,indent=0]
 ----
 
 == Aggregations
@@ -365,53 +202,17 @@ To count/sum/average values, we use `aggregate`:
 
 [source,clojure]
 ----
-(-> (unify (from :customers [{:xt/id cid}])
-           (left-join (from :orders [{:customer-id cid} currency order-value])
-                      [cid currency order-value]))
-    (aggregate cid currency
-               {:order-count (count*)
-                :total-value (sum order-value)})
-    (order-by [total-value {:dir :desc}])
-    (limit 100))
+include::{test}[tags=aggr-xtql-1,indent=0]
 ----
 
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "unify": [
-      {
-        "from": "customers",
-        "bind": [ { "xt/id": "cid" } ]
-      },
-      {
-        "leftJoin": {
-          "from": "orders",
-          "bind": [ { "customer-id": "cid" }, "currency", "order-value" ]
-        },
-        "bind": [ "cid", "currency", "order-value" ]
-      }
-    ]
-  },
-  {
-    "aggregate": [
-      { "order-count": { "count*": [] } },
-      { "total-value": { "sum": [ "order-value" ] } }
-    ]
-  },
-  { "orderBy": [ [ "total-value", { "dir": "desc" } ] ] },
-  { "limit": 100 }
-]
+include::{test}[tags=aggr-json-1,indent=0]
 ----
 
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT c.xt$id AS cid, currency, COUNT(*) AS order_count, SUM(order_value) AS total_value
-FROM customers c
-  LEFT JOIN orders o ON (c.xt$id = o.customer_id)
-GROUP BY cid, currency
-ORDER BY order_value DESC
-LIMIT 100
+include::{test}[tags=aggr-sql-1,indent=0]
 ----
 
 == 'Pull'
@@ -423,17 +224,7 @@ For example, if a user is reading an article, we might also want to show them de
 
 [source,clojure]
 ----
-(-> (from :articles [{:xt/id article-id} title content author-id])
- 
-    (with {:author (pull (from :authors [{:xt/id $author-id} first-name last-name])
-                         {:args [author-id]})
- 
-
-           :comments (pull* (-> (from :comments [{:article-id $article-id} created-at comment])
-                                (order-by {:val created-at :dir :desc})
-                                (limit 10))
-                            {:args [article-id]})})))
-
+include::{test}[tags=pull-xtql-1,indent=0]
 
 ;; => [{:title "...", :content "...",
 ;;      :author {:first-name "...", :last-name "..."}
@@ -444,42 +235,9 @@ For example, if a user is reading an article, we might also want to show them de
 ;; Lots of nested left-joins, array-aggs, and vendor-specific JSON functions required there to guarantee this same output.
 ----
 
-[source,json]
+[source,json,string=unescape]
 ----
-[
-  {
-    "from": "articles",
-    "bind": [{ "xt/id": "article-id" }, "title", "content", "author-id"]
-  },
-  {
-    "with": [
-      {
-        "author": {
-          "pull": [
-            {
-              "from": "authors",
-              "bind": [{ "xt/id": "author-id" }, "first-name", "last-name"]
-            },
-            { "without": ["author-id"] }
-          ],
-          "args": ["author-id"]
-        },
-        "comments": {
-          "pullMany": [
-            {
-              "from": "comments",
-              "bind": ["article-id", "created-at", "comment"]
-            },
-            { "without": ["article-id"] },
-            { "orderBy": [["created-at", { "dir": "desc" }]] },
-            { "limit": 10 }
-          ],
-          "args": ["article-id"]
-        }
-      }
-    ]
-  }
-]
+include::{test}[tags=pull-json-1,indent=0]
 ----
 
 In this example, we use `pull` to pull back a single map - we know that there's only one author per article (in our system).
@@ -500,32 +258,23 @@ In XTQL, while there are sensible defaults set for the whole query, you can over
 +
 [source,clojure]
 ----
-(from :users {:for-valid-time (at #inst "2020-01-01")
-              :bind [first-name last-name]})
+include::{test}[tags=bitemp-xtql-1,indent=0]
 
-(from :users {:for-valid-time :all-time
-              :bind [first-name last-name]})
+include::{test}[tags=bitemp-xtql-2,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-{
-  "from": "users",
-  "forValidTime": { "at": { "@value": "2020-01-01", "@type": "xt:date" } },
-  "bind": "first-name", "last-name"
-}
+include::{test}[tags=bitemp-json-1,indent=0]
 
-{
-  "from": "users",
-  "forValidTime": "allTime",
-  "bind": [ "first-name", "last-name" ]
-}
+include::{test}[tags=bitemp-json-2,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-SELECT users.first_name, users.last_name FROM users FOR VALID_TIME AS OF DATE '2020-01-01'
-SELECT users.first_name, users.last_name FROM users FOR ALL VALID_TIME
+include::{test}[tags=bitemp-sql-1,indent=0]
+
+include::{test}[tags=bitemp-sql-2,indent=0]
 ----
 +
 ** You can also specify `(from <time>)`, `(to <time>)` or `(in <from-time> <to-time>)`, to give fine-grained, in-query control over the history returned for the given rows.
@@ -534,29 +283,12 @@ SELECT users.first_name, users.last_name FROM users FOR ALL VALID_TIME
 +
 [source,clojure]
 ----
-(unify (from :users {:for-valid-time (at #inst "2018")
-                     :bind [{:xt/id user-id}]})
-
-       (from :users {:for-valid-time (at #inst "2023")
-                     :bind [{:xt/id user-id}]}))
+include::{test}[tags=bitemp-xtql-3,indent=0]
 ----
 +
-[source,json]
+[source,json,string=unescape]
 ----
-{
-  "unify": [
-    {
-      "from": "users",
-      "forValidTime": { "at": { "@value": "2018-01-01", "@type": "xt:date" } },
-      "bind": [ { "xt/id": "user-id"} ]
-    },
-    {
-      "from": "users",
-      "forValidTime": { "at": { "@value": "2023-01-01", "@type": "xt:date" } },
-      "bind": [ { "xt/id": "user-id" } ]
-    }
-  ]
-}
+include::{test}[tags=bitemp-json-3,indent=0]
 ----
 
 == DML
@@ -573,20 +305,14 @@ We submit `insert` operations to `xt/submit-tx`.
 
 [source,clojure]
 ----
-(xt/submit-tx node
-  [(xt/insert-into :users
-     '(from :old-users [xt/id {:first-name given-name, :last-name surname}
-                        xt/valid-from xt/valid-to]))])
+include::{test}[tags=DML-Insert-xtql,indent=0]
 ----
 
-[source,sql]
+[source,sql,string=unescape]
 ----
 -- we omit the submission boilerplate in the SQL equivalents
 
-INSERT INTO users
-SELECT xt$id, first_name AS given_name, last_name AS surname,
-       xt$valid_from, xt$valid_to
-FROM old_users;
+include::{test}[tags=DML-Insert-sql,indent=0]
 ----
 
 Here we're preserving the valid-from and valid-to of the rows we're copying, but we could just as easily specify/calculate a different value.
@@ -602,15 +328,12 @@ We can delete documents using queries as well.
 +
 [source,clojure]
 ----
-(defn delete-a-post [node the-post-id]
-  (xt/submit-tx node
-    [(-> (xt/delete-from :comments '[{:post-id $post-id}])
-         (xt/with-op-args {:post-id the-post-id}))]))
+include::{test}[tags=DML-Delete-xtql,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-DELETE FROM comments WHERE post_id = ?
+include::{test}[tags=DML-Delete-sql,indent=0]
 ----
 +
 Here, we're passing a dynamic parameter to specify the post to delete.
@@ -620,16 +343,12 @@ Let's say instead we wanted to delete all comments on posts by a certain author 
 +
 [source,clojure]
 ----
-(xt/submit-tx node
-  [(-> (xt/delete-from :comments '[{:post-id pid}]
-                       '(from :posts [{:xt/id pid, :author-id $author}]))
-       (with-op-args {:author "james"}))])
+include::{test}[tags=DML-Delete-additional-unify-clauses-xtql,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-DELETE FROM comments
-WHERE post_id IN (SELECT xt$id FROM posts WHERE author_id = ?)
+include::{test}[tags=DML-Delete-additional-unify-clauses-sql,indent=0]
 ----
 +
 Additional clauses passed to `delete` in this way are unified, in the same way variables within a `unify` are.
@@ -640,29 +359,24 @@ For example, if we want to take down all Christmas promotions on the 26th Decemb
 +
 [source,clojure]
 ----
-(xt/submit-tx node
-  [(xt/delete-from :promotions '{:bind [{:promotion-type "christmas"}]
-                                 :for-valid-time (from #inst "2023-12-26")})])
+include::{test}[tags=DML-Delete-bitemporal-xtql,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-DELETE FROM promotions
-FOR PORTION OF VALID_TIME FROM DATE '2023-12-26' TO END_OF_TIME
-WHERE promotion_type = 'christmas'
+include::{test}[tags=DML-Delete-bitemporal-sql,indent=0]
 ----
 +
 * Finally, we can delete every entry in a table by omitting any `:bind` predicates:
 +
 [source,clojure]
 ----
-(xt/submit-tx node
-  [(xt/delete-from :comments '{})])
+include::{test}[tags=DML-Delete-everything-xtql,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-DELETE FROM comments
+include::{test}[tags=DML-Delete-everything-sql,indent=0]
 ----
 
 === Update
@@ -671,17 +385,12 @@ DELETE FROM comments
 +
 [source,clojure]
 ----
-(xt/submit-tx node
-  [(-> (xt/update-table :documents {:bind [{:xt/id $doc-id, :version v}]
-                                    :set {:version (inc v)}})
-       (xt/with-op-args {:doc-id "doc-id"}))])
+include::{test}[tags=DML-Update-xtql,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-UPDATE documents
-SET version = version + 1
-WHERE xt$id = ?
+include::{test}[tags=DML-Update-sql,indent=0]
 ----
 +
 * Like deletes, updates also accept `:for-valid-time` and extra sub-queries to join from.
@@ -689,23 +398,14 @@ You can, for example, copy a value from another related table, or even update a 
 +
 [source,clojure]
 ----
-(xt/submit-tx node
-  [(xt/put :comments {:xt/id (random-uuid), :post-id post-id})
-   (-> (xt/update-table :posts '{:bind [{:xt/id $post-id}], :set {:comment-count cc}}
-
-                        '(with {cc (q (-> (from :comments [{:post-id $post-id}])
-                                          (aggregate {cc (count)}))
-                                      [cc])}))
-       (xt/with-op-args {:post-id "my-post-id"}))])
+include::{test}[tags=DML-Update-bitemporal-xtql,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-INSERT INTO comments (xt$id, post_id) VALUES (?, ?);
+include::{test}[tags=DML-Update-bitemporal-sql-1,indent=0]
 
-UPDATE posts AS p
-SET comment_count = (SELECT COUNT(*) FROM comments WHERE post_id = $post_id)
-WHERE p.post_id = $post_id;
+include::{test}[tags=DML-Update-bitemporal-sql-2,indent=0]
 ----
 
 This is the operation that we envisage replacing a lot of XT1 transaction functions - it makes it trivial to patch a single value within a document, for example.
@@ -718,13 +418,12 @@ We can irretrievably erase a document using an `erase` query.
 +
 [source,clojure]
 ----
-(xt/submit-tx node
-  ['(xt/erase-from :users [{:email "jms@example.com"}])])
+include::{test}[tags=DML-Erase-xtql,indent=0]
 ----
 +
-[source,sql]
+[source,sql,string=unescape]
 ----
-ERASE FROM users WHERE email = 'jms@example.com'
+include::{test}[tags=DML-Erase-sql,indent=0]
 ----
 
 === Assert
@@ -737,33 +436,24 @@ This query asserts that no user has the email `james@example.com` before inserti
 
 [source,clojure]
 ----
-(xt/submit-tx node
-  [(-> (xt/assert-not-exists '(from :users [{:email $email}]))
-       (xt/with-op-args {:email "james@example.com"}))
-
-   (xt/put :users {:xt/id :james, :email "james@example.com"})])
+include::{test}[tags=DML-Assert-xtql,indent=0]
 ----
 
-[source,sql]
+[source,sql,string=unescape]
 ----
 -- not implemented yet
-ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@juxt.pro')
+include::{test}[tags=DML-Assert-sql,indent=0]
 ----
 
 You can check the `:xt/txs` table to see whether and why a transaction failed:
 
 [source,clojure]
 ----
-(xt/q node '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
-      {:args {:tx-id my-tx-id}})
+include::{test}[tags=DML-Assert-query,indent=0]
 
 ;; =>
 
-[{:xt/committed? false
-  :xt/error {::err/error-type :runtime-error,
-             ::err/error-key :xtdb/assert-failed,
-             ::err/message "Precondition failed: assert-not-exists",
-             :row-count 1}}]
+include::{test}[tags=DML-Assert-query-result,indent=0]
 ----
 
 
