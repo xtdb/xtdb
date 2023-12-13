@@ -35,7 +35,7 @@ public class UnifyClauseDeserializer extends StdDeserializer<Query.UnifyClause> 
             } if (node.has("with")) {
                 return mapper.treeToValue(node, Query.With.class);
             } if (node.has("join") || node.has("left_join")) {
-                return mapper.treeToValue(node, Query.AJoin.class);
+                return mapper.treeToValue(node, Query.IJoin.class);
             } if (node.has("rel")) {
                 return mapper.treeToValue(node, Query.Relation.class);
             }

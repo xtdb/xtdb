@@ -14,9 +14,9 @@ import xtdb.IllegalArgumentException;
 import java.io.IOException;
 import java.util.List;
 
-public class AJoinDeserializer extends StdDeserializer<Query.AJoin> {
+public class IJoinDeserializer extends StdDeserializer<Query.IJoin> {
 
-    public AJoinDeserializer() {
+    public IJoinDeserializer() {
         super(Query.Join.class);
     }
 
@@ -28,12 +28,12 @@ public class AJoinDeserializer extends StdDeserializer<Query.AJoin> {
         return SpecListDeserializer.nodeToOutSpecs(mapper, node);
     }
 
-    public Query.AJoin deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public Query.IJoin deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);
 
         try {
-            Query.AJoin join = null;
+            Query.IJoin join = null;
             if (node.has("join")) {
                 join = Query.join(mapper.treeToValue(node.get("join"), Query.class), deserializeArgs(mapper, (ArrayNode) node.get("args")));
             } else {

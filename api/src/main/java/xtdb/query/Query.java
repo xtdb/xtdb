@@ -311,12 +311,11 @@ public interface Query {
         return new Call(ruleName, args, null);
     }
 
-    abstract class AJoin implements UnifyClause {
-
-        abstract AJoin binding(List<OutSpec> bindings);
+    abstract interface IJoin extends UnifyClause {
+        IJoin binding(List<OutSpec> bindings);
     }
 
-    final class Join extends AJoin {
+    final class Join implements IJoin {
         public final Query query;
         public final List<ArgSpec> args;
         public final List<OutSpec> bindings;
@@ -327,7 +326,6 @@ public interface Query {
             this.bindings = unmodifiableList(bindings);
         }
 
-        @Override
         public Join binding(List<OutSpec> bindings) {
             return new Join(query, args, bindings);
         }
@@ -355,7 +353,7 @@ public interface Query {
         return new Join(query, args, null);
     }
 
-    final class LeftJoin extends AJoin {
+    final class LeftJoin implements IJoin {
         public final Query query;
         public final List<ArgSpec> args;
         public final List<OutSpec> bindings;
@@ -366,7 +364,6 @@ public interface Query {
             this.bindings = unmodifiableList(bindings);
         }
 
-        @Override
         public LeftJoin binding(List<OutSpec> bindings) {
             return new LeftJoin(query, args, bindings);
         }
