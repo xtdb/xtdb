@@ -12,7 +12,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: normal;
     font-family: "Atkinson Hyperlegible";
     src: url("/shared/fonts/Atkinson-Hyperlegible-Regular.woff2") format("woff2");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -20,7 +20,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: italic;
     font-family: "Atkinson Hyperlegible";
     src: url("/shared/fonts/Atkinson-Hyperlegible-Italic.woff2") format("woff2");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -28,7 +28,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: normal;
     font-family: "Atkinson Hyperlegible";
     src: url("/shared/fonts/Atkinson-Hyperlegible-Bold.woff2") format("woff2");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -36,7 +36,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: normal;
     font-family: "Source Code Pro";
     src: url("/shared/fonts/SourceCodePro-Regular.ttf") format("truetype");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -44,7 +44,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: italic;
     font-family: "Source Code Pro";
     src: url("/shared/fonts/SourceCodePro-Italic.ttf") format("truetype");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -52,7 +52,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: normal;
     font-family: "Source Code Pro";
     src: url("/shared/fonts/SourceCodePro-Bold.ttf") format("truetype");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -60,7 +60,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: normal;
     font-family: "Space Mono";
     src: url("/shared/fonts/SpaceMono-Regular.ttf") format("truetype");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -68,7 +68,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: italic;
     font-family: "Space Mono";
     src: url("/shared/fonts/SourceCodePro-Italic.ttf") format("truetype");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -76,7 +76,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: normal;
     font-family: "Space Mono";
     src: url("/shared/fonts/SpaceMono-Bold.ttf") format("truetype");
-    font-display: swap;
+    font-display: block;
 }
 
 @font-face {
@@ -84,7 +84,7 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-style: italic;
     font-family: "Space Mono";
     src: url("/shared/fonts/SpaceMono-BoldItalic.ttf") format("truetype");
-    font-display: swap;
+    font-display: block;
 }
 
 * {
