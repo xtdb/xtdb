@@ -27,23 +27,22 @@ export default defineConfig({
       sidebar: [
         { label: 'xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
 
-        { label: 'Overview', link: '/index' },
-
         {
           label: 'Introduction',
           items: [
+            { label: 'Overview', link: '/index' },
             { label: 'Getting started', link: '/intro/getting-started'},
             {
               label: 'What is XTDB?',
               items: [
                 { label: 'Overview', link: '/intro/what-is-xtdb' },
-                // { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
+                { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
                 // { label: 'Architecture', link: '/intro/architecture' },
                 // { label: 'Bitemporality', link: '/intro/bitemporality' },
               ]
             },
-            // { label: 'Roadmap', link: '/intro/roadmap'},
-            // { label: 'Community', link: '/intro/community'},
+            { label: 'Community', link: '/intro/community'},
+            { label: 'Roadmap', link: '/intro/roadmap'},
           ],
         },
 
@@ -64,6 +63,7 @@ export default defineConfig({
         {
           label: 'Reference',
           items: [
+            { label: 'Overview', link: '/reference' },
             {
               label: 'XTQL',
               items: [
@@ -85,7 +85,7 @@ export default defineConfig({
             {
               label: 'Standard Library',
               items: [
-                { label: 'Introduction', link: '/reference/main/stdlib'},
+                { label: 'Overview', link: '/reference/main/stdlib'},
                 { label: 'Predicates', link: '/reference/main/stdlib/predicates'},
                 { label: 'Numeric functions', link: '/reference/main/stdlib/numeric'},
                 { label: 'String functions', link: '/reference/main/stdlib/string'},
@@ -97,6 +97,7 @@ export default defineConfig({
             {
               label: 'SDKs',
               items: [
+                { label: 'Overview', link: '/sdks' },
                 { label: 'Clojure', link: '/sdks/clojure/index.html', attrs: {target: '_blank'} },
                 { label: 'Java', link: '/sdks/java/index.html', attrs: {target: '_blank'}},
                 { label: 'HTTP (OpenAPI)', link: '/sdks/openapi/index.html', attrs: {target: '_blank'}},
