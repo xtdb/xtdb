@@ -544,10 +544,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 
 (t/deftest test-erase-xtql
   (letfn [(q [tx]
-            (set (xt/q *node* '(from :foo [xt/id version xt/valid-from xt/valid-to])
-                       ;; TODO when `from` supports for-valid-time we can shift this to the query
-                       {:basis {:at-tx tx}
-                        :default-all-valid-time? true})))]
+            (set (xt/q *node* '(from :foo {:bind [xt/id version xt/valid-from xt/valid-to]
+                                           :for-valid-time :all-time})
+                       {:basis {:at-tx tx}})))]
     (let [tx1 (xt/submit-tx *node*
                             [(xt/put :foo {:xt/id "foo", :version 0})
                              (xt/put :foo {:xt/id "bar", :version 0})])

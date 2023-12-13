@@ -620,7 +620,7 @@
             (when-not (map? set-specs)
               (throw (err/illegal-arg :xtql/malformed-set {:set set-specs, :update this})))
 
-            (when-not (vector? bind)
+            (when-not (or (nil? bind) (vector? bind))
               (throw (err/illegal-arg :xtql/malformed-bind {:bind bind, :update this})))
 
             (cond-> (DmlOps/update (str (symbol table)) (parse-col-specs set-specs this))
