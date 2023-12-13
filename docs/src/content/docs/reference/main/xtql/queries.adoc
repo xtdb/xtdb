@@ -196,6 +196,28 @@ For example:
 (from :users [{:username $username} first-name last-name])
 ----
 
+Additionally `from` supports a special column reference `*`, like in SQL this can be used to specify that all columns of a given table are to be projected out.
+
+[source,clojure]
+----
+;; `SELECT * FROM users`
+(from :users [*])
+
+;; `SELECT *, username AS login FROM users`
+(from :users [* {:username login}])
+----
+
+Note that, due to the implicit unification properties of `from` outlined in the link:#_binding_specs[binding specs] section, explicitly projected columns will unify with those projected out as a result of `*`.
+
+It is due to this property of implicit unification and projection that `*` as a column reference in `from` is not supported within a unification context.
+
+[source,clojure]
+----
+;; INVALID
+(unify (from :users [*])
+       (from :customers [*]))
+----
+
 ==== Temporal filters
 
 Temporal filters control the document versions that are visible to the query.
