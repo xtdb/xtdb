@@ -29,7 +29,7 @@ export default defineConfig({
 
         {
           label: 'Introduction',
-          collapsed: false,
+          collapsed: true,
           items: [
             { label: 'Overview', link: '/' },
             { label: 'Why XTDB?', link: '/intro/why-xtdb'},
