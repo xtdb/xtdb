@@ -31,7 +31,7 @@ export default defineConfig({
           label: 'Introduction',
           collapsed: true,
           items: [
-            { label: 'Overview', link: '/index' },
+            { label: 'Overview', link: '/' },
             { label: 'Why XTDB?', link: '/intro/why-xtdb'},
             { label: 'Getting started', link: '/intro/getting-started'},
             {
@@ -138,12 +138,6 @@ export default defineConfig({
 
     adoc(),
   ],
-
-  trailingSlash: 'never',
-
-  build: {
-    format: 'file'
-  },
 
   vite: {
     plugins: [yaml()]
