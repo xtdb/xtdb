@@ -41,8 +41,8 @@
         ^Runnable f
         (bound-fn heartbeat []
           (on-heartbeat {:last-flush @!last-flush-tx-id, :last-seen @previously-seen-chunk-tx-id})
-          (when-some [{latest-tx-id :tx-id} (.latestCompletedTx indexer)]
-            (let [{latest-chunk-tx-id :tx-id} (.latestCompletedChunkTx indexer)]
+          (when-some [latest-tx-id (some-> (.latestCompletedTx indexer) (.txId))]
+            (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx indexer) (.txId))]
               (try
                 (when (and (= @previously-seen-chunk-tx-id latest-chunk-tx-id)
                            (or (nil? @!last-flush-tx-id)
@@ -54,7 +54,7 @@
                                        (.putLong (or latest-chunk-tx-id -1))
                                        .flip)
                         record @(.appendRecord log record-buf)]
-                   (reset! !last-flush-tx-id (:tx-id (:tx record)))))
+                   (reset! !last-flush-tx-id (some-> (:tx record) (.txId)))))
                 (catch InterruptedException _)
                 (catch ClosedByInterruptException _)
                 (catch Throwable e

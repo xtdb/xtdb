@@ -5,6 +5,7 @@
   (:import java.time.InstantSource
            java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture
+           (xtdb.api TransactionKey)
            (xtdb.log INotifyingSubscriberHandler Log LogRecord)))
 
 (deftype InMemoryLog [!records, ^INotifyingSubscriberHandler subscriber-handler, ^InstantSource instant-src]
@@ -13,7 +14,7 @@
     (CompletableFuture/completedFuture
      (let [^LogRecord record (-> (swap! !records (fn [records]
                                                    (let [system-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))]
-                                                     (conj records (log/->LogRecord (xt/->TransactionKey (count records) system-time) record)))))
+                                                     (conj records (log/->LogRecord (TransactionKey. (count records) system-time) record)))))
                                  peek)]
        (.notifyTx subscriber-handler (.tx record))
        record)))

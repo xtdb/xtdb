@@ -7,7 +7,8 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
-           (java.time Duration ZoneId)))
+           (java.time Duration ZoneId)
+           (xtdb.api TransactionKey)))
 
 (t/use-fixtures :each
   (tu/with-each-api-implementation
@@ -22,7 +23,7 @@
 
 (t/deftest test-simple-query
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :inst #inst "2021"})])]
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
              (xt/q *node* '(from :docs [{:xt/id e} inst]))))))
@@ -40,7 +41,7 @@
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]})
                                  (-> (xt/sql-op "INSERT INTO docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])")
                                      (xt/with-op-args [4]))])]
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
@@ -55,7 +56,7 @@
 
 (t/deftest round-trips-sets
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}})])]
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
              (xt/q *node* '(from :docs [{:xt/id id} v]))))
@@ -66,7 +67,7 @@
 (t/deftest round-trips-structs
   (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}})
                                  (xt/put :docs {:xt/id :bar, :struct {:a true, :d 42.0}})])]
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
@@ -112,7 +113,7 @@
 
         tx3 (xt/submit-tx *node* [(xt/put :docs {:xt/id :baz})])]
 
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2012")})
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2012"))
              tx1))
 
     (letfn [(q-at [tx]
@@ -153,7 +154,7 @@
 (t/deftest test-sql-roundtrip
   (let [tx (xt/submit-tx *node* devs)]
 
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:name "James"}]
              (xt/q *node* "SELECT u.name FROM users u WHERE u.name = 'James'")))))
@@ -187,7 +188,7 @@
                          ["Alan" "Andrews", (time/->zdt #inst "2020"), nil]
                          ["Susan" "Smith", (time/->zdt #inst "2021") nil]}]
 
-      (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx1))
+      (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx1))
 
       (t/is (= tx1-expected (all-users tx1)))
 
@@ -221,7 +222,7 @@
                                  ["dave", "Dave", #inst "2018"]
                                  ["claire", "Claire", #inst "2019"]))])]
 
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx1))
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx1))
 
     (xt/submit-tx *node*
                   [(xt/sql-op "INSERT INTO people (xt$id, renamed_name, xt$valid_from)
@@ -236,7 +237,7 @@
   (let [tx (xt/submit-tx *node*
                          [(xt/sql-op "INSERT INTO foo (xt$id, xt$valid_from) VALUES ('foo', DATE '2018-01-01')")])]
 
-    (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx))
+    (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:xt$id "foo", :xt$valid_from (time/->zdt #inst "2018"), :xt$valid_to nil}]
              (xt/q *node* "SELECT foo.xt$id, foo.xt$valid_from, foo.xt$valid_to FROM foo")))))
@@ -489,7 +490,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
                          ["Alan" "Andrews", (time/->zdt #inst "2020"), nil]
                          ["Susan" "Smith", (time/->zdt #inst "2021") nil]}]
 
-      (t/is (= (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")}) tx1))
+      (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx1))
 
       (t/is (= tx1-expected (all-users tx1)))
 

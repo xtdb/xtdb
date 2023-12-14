@@ -113,8 +113,10 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (xtn/start-node {})]
-    (let [{tt1 :system-time} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx1"})])
-          {tt2 :system-time} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx2"})])]
+    (let [tx1 (xt/submit-tx node [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx1"})])
+          tt1 (.systemTime tx1)
+          tx2 (xt/submit-tx node [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx2"})])
+          tt2 (.systemTime tx2)]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time}
                                    (into '[last_updated] temporal-constraints)]

@@ -28,18 +28,6 @@
      (catch ExecutionException e#
        (throw (.getCause e#)))))
 
-(defrecord TransactionKey [^long tx-id, ^Instant system-time]
-  Comparable
-  (compareTo [_ tx-key]
-    (Long/compare tx-id (.tx-id ^TransactionKey tx-key))))
-
-(defmethod print-dup TransactionKey [tx-key ^Writer w]
-  (.write w "#xt/tx-key ")
-  (print-method (into {} tx-key) w))
-
-(defmethod print-method TransactionKey [tx-key w]
-  (print-dup tx-key w))
-
 (defn ->ClojureForm [form]
   (ClojureForm. form))
 

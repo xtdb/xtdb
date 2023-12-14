@@ -18,7 +18,8 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
-           xtdb.IBufferPool
+           xtdb.IBufferPool 
+           (xtdb.api TransactionKey)
            (xtdb.metadata IMetadataManager)
            (xtdb.watermark IWatermarkSource)))
 
@@ -75,7 +76,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (time/->instant #inst "2020-01-02")})]
+        last-tx-key (TransactionKey. magic-last-tx-id (time/->instant #inst "2020-01-02"))]
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -161,8 +162,9 @@
 
 (t/deftest temporal-watermark-is-immutable-2354
   (with-open [node (xtn/start-node {})]
-    (let [{tt :system-time, :as tx} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 0})]
-                                                  {:default-all-valid-time? false})]
+    (let [tx (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 0})]
+                           {:default-all-valid-time? false})
+          tt (.systemTime tx)]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
                  :xt/valid-to nil
@@ -174,8 +176,9 @@
                                xt$system_from, xt$system_to]]
                             {:node node})))
 
-      (let [{tt2 :system-time} (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 1})]
-                                             {:default-all-valid-time? false})]
+      (let [tx1 (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 1})]
+                              {:default-all-valid-time? false})
+            tt2 (.systemTime tx1)]
         (t/is (= #{{:xt/id :foo, :version 0,
                     :xt/valid-from (time/->zdt tt2)
                     :xt/valid-to nil
@@ -340,7 +343,7 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (xt/map->TransactionKey {:tx-id magic-last-tx-id, :system-time (time/->instant #inst "2020-01-02")})]
+        last-tx-key (TransactionKey. magic-last-tx-id (time/->instant #inst "2020-01-02"))]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -484,7 +487,7 @@
               (let [{:keys [latest-completed-tx, next-chunk-idx]}
                     (meta/latest-chunk-metadata mm)]
 
-                (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
+                (t/is (< (.txId latest-completed-tx) (.txId first-half-tx-key)))
                 (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
                 (Thread/sleep 250) ; wait for the chunk to finish writing to disk
@@ -506,18 +509,18 @@
                                         nil
                                         (partition-all 100 second-half-tx-ops))]
 
-                (t/is (<= (:tx-id first-half-tx-key)
-                          (:tx-id (tu/latest-completed-tx node))
-                          (:tx-id second-half-tx-key)))
+                (t/is (<= (.txId first-half-tx-key)
+                          (.txId (tu/latest-completed-tx node))
+                          (.txId second-half-tx-key)))
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                   (doseq [node [new-node node]
                           :let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
-                    (t/is (<= (:tx-id first-half-tx-key)
-                              (:tx-id (-> first-half-tx-key
-                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
-                              (:tx-id second-half-tx-key)))
+                    (t/is (<= (.txId first-half-tx-key)
+                              (.txId (-> first-half-tx-key
+                                         (tu/then-await-tx node (Duration/ofSeconds 10))))
+                              (.txId second-half-tx-key)))
 
                     (t/is (= :utf8
                              (types/field->col-type (.columnField mm "device_info" "xt$id")))))
@@ -612,7 +615,7 @@
       (let [mm (tu/component node ::meta/metadata-manager)]
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-        (let [last-tx-key (xt/map->TransactionKey {:tx-id 0, :system-time (time/->instant #inst "2020-01-01")})]
+        (let [last-tx-key (TransactionKey. 0 (time/->instant #inst "2020-01-01"))]
           (t/is (= last-tx-key
                    (xt/submit-tx node [(-> (xt/sql-op "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)")
                                            (xt/with-op-args

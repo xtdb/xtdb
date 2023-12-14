@@ -34,7 +34,7 @@
 
     (.acceptRecord subscriber record)
 
-    (.tx-id ^TransactionKey (.tx record))))
+    (.txId ^TransactionKey (.tx record))))
 
 (defn handle-polling-subscription [^Log log after-tx-id {:keys [^Duration poll-sleep-duration]} ^LogSubscriber subscriber]
   (doto (.newThread subscription-thread-factory
@@ -71,7 +71,7 @@
 (defrecord NotifyingSubscriberHandler [!state]
   INotifyingSubscriberHandler
   (notifyTx [_ tx]
-    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (.tx-id tx))]
+    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (.txId tx))]
       (doseq [^Semaphore semaphore semaphores]
         (.release semaphore))))
 
@@ -95,7 +95,7 @@
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
                                                          (->> (.readRecords log after-tx-id 100)
-                                                              (take-while #(<= ^long (.tx-id ^TransactionKey (.tx ^LogRecord %))
+                                                              (take-while #(<= ^long (.txId ^TransactionKey (.tx ^LogRecord %))
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live

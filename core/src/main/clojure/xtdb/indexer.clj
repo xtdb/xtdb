@@ -10,6 +10,7 @@
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
             [xtdb.rewrite :refer [zmatch]]
+            [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -244,7 +245,7 @@
         sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src tx-opts)
                                       'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
-                                      '*current-tx* tx-key}
+                                      '*current-tx* (serde/tx-key-write-fn tx-key)}
                            :namespaces {'xt xt-sci-ns}})]
 
     (reify OpIndexer
@@ -514,8 +515,8 @@
   "xt$txs")
 
 (defn- add-tx-row! [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
-  (let [tx-id (.tx-id tx-key)
-        system-time-µs (time/instant->micros (.system-time tx-key))
+  (let [tx-id (.txId tx-key)
+        system-time-µs (time/instant->micros (.systemTime tx-key))
 
         live-table (.liveTable live-idx-tx txs-table)
         doc-writer (.docWriter live-table)]
@@ -560,108 +561,110 @@
                   ^StampedLock wm-lock]
 
   IIndexer
-  (indexTx [this {:keys [system-time] :as tx-key} tx-root]
-    (try
-      (if (and (not (nil? latest-completed-tx))
-               (neg? (compare system-time
-                              (.system-time latest-completed-tx))))
-        (do
-          (log/warnf "specified system-time '%s' older than current tx '%s'"
-                     (pr-str tx-key)
-                     (pr-str latest-completed-tx))
+  (indexTx [this tx-key tx-root]
+    (let [system-time (some-> tx-key (.systemTime))]
+      (try
+        (if (and (not (nil? latest-completed-tx))
+                 (neg? (compare system-time
+                                (.systemTime latest-completed-tx))))
+          (do
+            (log/warnf "specified system-time '%s' older than current tx '%s'"
+                       (pr-str tx-key)
+                       (pr-str latest-completed-tx))
 
-          (let [live-idx-tx (.startTx live-idx tx-key)]
-            (add-tx-row! row-counter live-idx-tx tx-key
-                         (err/illegal-arg :invalid-system-time
-                                          {::err/message "specified system-time older than current tx"
-                                           :tx-key tx-key
-                                           :latest-completed-tx latest-completed-tx}))
-            (.commit live-idx-tx)))
+            (let [live-idx-tx (.startTx live-idx tx-key)]
+              (add-tx-row! row-counter live-idx-tx tx-key
+                           (err/illegal-arg :invalid-system-time
+                                            {::err/message "specified system-time older than current tx"
+                                             :tx-key tx-key
+                                             :latest-completed-tx latest-completed-tx}))
+              (.commit live-idx-tx)))
 
-        (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
-          (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                                                 (.getDataVector))
+          (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+            (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
+                                                   (.getDataVector))
 
-                wm-src (reify IWatermarkSource
-                         (openWatermark [_ _tx]
-                           (wm/->wm nil (.openWatermark live-idx-tx))))
+                  wm-src (reify IWatermarkSource
+                           (openWatermark [_ _tx]
+                             (wm/->wm nil (.openWatermark live-idx-tx))))
 
-                tx-opts {:basis {:at-tx tx-key, :current-time system-time}
-                         :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
-                                                         (.getObject 0))))
-                         :default-all-valid-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
-                                                            (.get 0)))
-                         :tx-key tx-key}]
+                  tx-opts {:basis {:at-tx tx-key, :current-time system-time}
+                           :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
+                                                           (.getObject 0))))
+                           :default-all-valid-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
+                                                              (.get 0)))
+                           :tx-key tx-key}]
 
-            (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
-                      (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
-                            !put-idxer (delay (->put-indexer row-counter live-idx-tx tx-ops-rdr system-time))
-                            !delete-idxer (delay (->delete-indexer row-counter live-idx-tx tx-ops-rdr system-time))
-                            !erase-idxer (delay (->erase-indexer row-counter live-idx-tx tx-ops-rdr))
-                            !call-idxer (delay (->call-indexer allocator ra-src wm-src tx-ops-rdr tx-opts))
-                            !xtql-idxer (delay (->xtql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
-                            !sql-idxer (delay (->sql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
-                        (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
-                          (when-let [more-tx-ops (case (.getLeg tx-ops-rdr tx-op-idx)
-                                                   :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
-                                                   :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                   :put (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
-                                                   :delete (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
-                                                   :erase (.indexOp ^OpIndexer @!erase-idxer tx-op-idx)
-                                                   :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
-                                                   :abort (throw abort-exn))]
-                            (try
-                              (index-tx-ops more-tx-ops)
-                              (finally
-                                (util/try-close more-tx-ops)))))))]
-              (let [e (try
-                        (index-tx-ops tx-ops-vec)
-                        (catch xtdb.RuntimeException e e)
-                        (catch xtdb.IllegalArgumentException e e)
-                        (catch ClosedByInterruptException e
-                          (throw (InterruptedException. (.toString e))))
-                        (catch InterruptedException e
-                          (throw e))
-                        (catch Throwable t
-                          (log/error t "error in indexer")
-                          (throw t)))
-                    wm-lock-stamp (.writeLock wm-lock)]
-                (try
-                  (if e
-                    (do
-                      (when (not= e abort-exn)
-                        (log/debug e "aborted tx")
-                        (.abort live-idx-tx))
+              (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
+                        (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
+                              !put-idxer (delay (->put-indexer row-counter live-idx-tx tx-ops-rdr system-time))
+                              !delete-idxer (delay (->delete-indexer row-counter live-idx-tx tx-ops-rdr system-time))
+                              !erase-idxer (delay (->erase-indexer row-counter live-idx-tx tx-ops-rdr))
+                              !call-idxer (delay (->call-indexer allocator ra-src wm-src tx-ops-rdr tx-opts))
+                              !xtql-idxer (delay (->xtql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
+                              !sql-idxer (delay (->sql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
+                          (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
+                            (when-let [more-tx-ops (case (.getLeg tx-ops-rdr tx-op-idx)
+                                                     :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
+                                                     :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                     :put (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
+                                                     :delete (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
+                                                     :erase (.indexOp ^OpIndexer @!erase-idxer tx-op-idx)
+                                                     :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
+                                                     :abort (throw abort-exn))]
+                              (try
+                                (index-tx-ops more-tx-ops)
+                                (finally
+                                  (util/try-close more-tx-ops)))))))]
+                (let [e (try
+                          (index-tx-ops tx-ops-vec)
+                          (catch xtdb.RuntimeException e e)
+                          (catch xtdb.IllegalArgumentException e e)
+                          (catch ClosedByInterruptException e
+                            (throw (InterruptedException. (.toString e))))
+                          (catch InterruptedException e
+                            (throw e))
+                          (catch Throwable t
+                            (log/error t "error in indexer")
+                            (throw t)))
+                      wm-lock-stamp (.writeLock wm-lock)]
+                  (try
+                    (if e
+                      (do
+                        (when (not= e abort-exn)
+                          (log/debug e "aborted tx")
+                          (.abort live-idx-tx))
 
-                      (let [live-idx-tx (.startTx live-idx tx-key)]
-                        (add-tx-row! row-counter live-idx-tx tx-key e)
+                        (let [live-idx-tx (.startTx live-idx tx-key)]
+                          (add-tx-row! row-counter live-idx-tx tx-key e)
+                          (.commit live-idx-tx)))
+
+                      (do
+                        (add-tx-row! row-counter live-idx-tx tx-key nil)
+
                         (.commit live-idx-tx)))
 
-                    (do
-                      (add-tx-row! row-counter live-idx-tx tx-key nil)
+                    (set! (.-latest-completed-tx this) tx-key)
 
-                      (.commit live-idx-tx)))
+                    (finally
+                      (.unlock wm-lock wm-lock-stamp)))))
 
-                  (set! (.-latest-completed-tx this) tx-key)
+              (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
+                (finish-chunk! this))
 
-                  (finally
-                    (.unlock wm-lock wm-lock-stamp)))))
+              tx-key)))
 
-            (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
-              (finish-chunk! this))
+        (await/notify-tx tx-key awaiters)
 
-            tx-key)))
-
-      (await/notify-tx tx-key awaiters)
-
-      (catch Throwable t
-        (set! (.indexer-error this) t)
-        (await/notify-ex t awaiters)
-        (throw t))))
+        (catch Throwable t
+          (set! (.indexer-error this) t)
+          (await/notify-ex t awaiters)
+          (throw t)))))
 
   (forceFlush [this tx-key expected-last-chunk-tx-id]
-    (when (= (:tx-id latest-completed-chunk-tx -1) expected-last-chunk-tx-id)
-      (finish-chunk! this))
+    (let [latest-chunk-tx-id (some-> latest-completed-chunk-tx (.txId))]
+      (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
+        (finish-chunk! this)))
 
     (set! (.-latest_completed_tx this) tx-key))
 
@@ -672,7 +675,7 @@
                 (let [wm-tx-key (.txBasis wm)]
                   (when (or (nil? tx-key)
                             (and wm-tx-key
-                                 (<= (.tx-id tx-key) (.tx-id wm-tx-key))))
+                                 (<= (.txId tx-key) (.txId wm-tx-key))))
                     (doto wm .retain)))))]
       (or (let [wm-lock-stamp (.readLock wm-lock)]
             (try

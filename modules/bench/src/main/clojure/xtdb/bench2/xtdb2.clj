@@ -92,11 +92,13 @@
           (let [{:keys [latest-completed-tx] :as res} (xt/status node)]
             (or
              (when-some [[fut ms] @last-submitted]
-               (let [tx-id (:tx-id @fut)]
-                 (when-some [{completed-tx-id :tx-id
-                              completed-tx-time :system-time} latest-completed-tx]
-                   (when (< completed-tx-id tx-id)
-                     (* (long 1e6) (- ms (inst-ms completed-tx-time)))))))
+               (let [tx-id (.txId @fut)
+                     completed-tx-id (.txId latest-completed-tx)
+                     completed-tx-time (.systemTime latest-completed-tx)]
+                 (when (and (some? completed-tx-id)
+                            (some? completed-tx-time)
+                            (< completed-tx-id tx-id))
+                   (* (long 1e6) (- ms (inst-ms completed-tx-time))))))
              0)))
 
         compute-lag-abs
@@ -104,8 +106,9 @@
           (let [{:keys [latest-completed-tx] :as res} (xt/status node)]
             (or
              (when-some [[fut _] @last-submitted]
-               (let [tx-id (:tx-id @fut)]
-                 (when-some [{completed-tx-id :tx-id} latest-completed-tx ]
+               (let [tx-id (.txId @fut)
+                     completed-tx-id (.txId latest-completed-tx)]
+                 (when (some? completed-tx-id)
                    (- tx-id completed-tx-id))))
              0)))]
 
