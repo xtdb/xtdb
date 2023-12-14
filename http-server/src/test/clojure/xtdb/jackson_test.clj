@@ -6,9 +6,9 @@
   (:import (java.util List)
            (java.time Instant)
            (xtdb.tx Ops Tx)
+           (xtdb.api TransactionKey)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
-                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis TransactionKey Expr
-                       ArgSpec)))
+                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis Expr ArgSpec)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)

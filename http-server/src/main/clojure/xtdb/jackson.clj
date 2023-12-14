@@ -5,12 +5,12 @@
            (com.fasterxml.jackson.databind.module SimpleModule)
            (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer DeleteDeserializer EraseDeserializer
                          TxDeserializer CallDeserializer)
+           (xtdb.api TransactionKey)
            (xtdb.tx Ops Put Delete Erase Tx Call)
            (xtdb.query Query Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
-                       VarSpec ColSpec
-                       TransactionKey Basis QueryMap
+                       VarSpec ColSpec Basis QueryMap
                        Query$Aggregate Query$Relation Query$IJoin
                        QueryDeserializer FromDeserializer WhereDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
