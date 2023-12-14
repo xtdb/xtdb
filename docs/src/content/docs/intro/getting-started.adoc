@@ -36,6 +36,8 @@ For example, to check its status:
 curl http://localhost:3000/status
 ----
 
+NOTE: currently only link:https://github.com/cognitect/transit-format[transit] (via `Content-Type: application/transit+json`) is enabled for use, however a more universal JSON encoding is coming very soon!
+
 From here, check out the link:/sdks/openapi/index.html[OpenAPI docs] to see what else is available.
 
 === Connecting from Clojure
