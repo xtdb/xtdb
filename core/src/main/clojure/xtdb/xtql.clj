@@ -25,7 +25,7 @@
 ;;keeps the conversion to java AST to -> clojure sym in one place.
 ;;TODO Document var->cols purpose, and/or give it a more descriptive name
 
-(def ^:dynamic *table-info*)
+(def ^:dynamic *table-info* nil)
 
 (defprotocol PlanQuery
   (plan-query [query]))
