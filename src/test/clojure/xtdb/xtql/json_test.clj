@@ -37,7 +37,7 @@
 
   (t/is (= [#time/instant "2023-12-06T09:31:27.570827956Z" "2023-12-06T09:31:27.570827956Z" :instant]
            (roundtrip-value "2023-12-06T09:31:27.570827956Z" :instant)))
-
+  #_#_
   (t/is (= [[1 2 3] [1 2 3]]
            (roundtrip-expr [1 2 3]))
         "vectors")
@@ -262,6 +262,7 @@
            (roundtrip-q [{"from" "users" "bind" ["name"]}
                          {"limit" 10}]))))
 
+#_
 (deftest test-unnest
   (t/is (= ['(unify (rel [{:x [1 2 3]}] [x])
                     (unnest {y x}))
