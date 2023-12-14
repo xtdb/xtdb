@@ -7,6 +7,7 @@
            (xtdb.query Query Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
+                       VarSpec ColSpec
                        TransactionKey Basis QueryMap
                        Query$Aggregate Query$Relation Query$IJoin
                        QueryDeserializer FromDeserializer WhereDeserializer
@@ -15,7 +16,8 @@
                        WithDeserializer WithColsDeserializer WithoutDeserializer UnnestVarDeserializer
                        UnifyDeserializer UnifyClauseDeserializer PipelineDeserializer TxKeyDeserializer
                        BasisDeserializer QueryMapDeserializer ExprDeserializer
-                       AggregateDeserializer RelDeserializer IJoinDeserializer)))
+                       AggregateDeserializer RelDeserializer IJoinDeserializer
+                       VarSpecDeserializer ColSpecDeserializer)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -66,6 +68,8 @@
                                    (.addDeserializer Query$IJoin (IJoinDeserializer.))
                                    (.addDeserializer Query$Aggregate (AggregateDeserializer.))
                                    (.addDeserializer Query$Relation (RelDeserializer.))
+                                   (.addDeserializer VarSpec (VarSpecDeserializer.))
+                                   (.addDeserializer ColSpec (ColSpecDeserializer.))
                                    (.addDeserializer TransactionKey (TxKeyDeserializer.))
                                    (.addDeserializer Basis (BasisDeserializer.))
                                    (.addDeserializer Expr (ExprDeserializer.)))]}))
