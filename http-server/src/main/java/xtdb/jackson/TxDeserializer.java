@@ -47,6 +47,8 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
             if (node.has("default_tz")) {
                 defaultTz = (ZoneId)  mapper.readValue(node.get("default_tz").traverse(mapper), Object.class);
             }
+        } catch (IllegalArgumentException i) {
+           throw i;
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-tx"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }

@@ -40,6 +40,8 @@ public class WithoutDeserializer extends StdDeserializer<Query.Without> {
             } else {
                 throw new IllegalArgumentException("Without should be a list of strings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
+        } catch (IllegalArgumentException i) {
+            throw i;
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-without"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }
