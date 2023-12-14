@@ -3,10 +3,7 @@ package xtdb.query;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static xtdb.query.QueryUtil.stringifyArgs;
@@ -320,6 +317,81 @@ public interface Expr {
 
     static Exists exists(Query query, List<ArgSpec> args) {
         return new Exists(query, args);
+    }
+
+    final class Vec implements Expr {
+        public final List<Expr> elements;
+
+        private Vec(List<Expr> elements) {
+            this.elements = elements;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Vec vec = (Vec) o;
+            return Objects.equals(elements, vec.elements);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(elements);
+        }
+    }
+
+    static Vec vec(List<Expr> elements){
+       return new Vec(elements);
+    }
+
+    final class Set implements Expr {
+        public final java.util.Set<Expr> elements;
+
+        private Set(java.util.Set<Expr> elements) {
+            this.elements = elements;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Set set = (Set) o;
+            return Objects.equals(elements, set.elements);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(elements);
+        }
+    }
+
+    static Set set(java.util.Set<Expr> elements){
+        return new Set(elements);
+    }
+
+    final class Map implements Expr {
+        public final java.util.Map<String, Expr> elements;
+
+        public Map(java.util.Map<String, Expr> elements) {
+            this.elements = elements;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Map map = (Map) o;
+            return Objects.equals(elements, map.elements);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(elements);
+        }
+    }
+
+    static Map map(java.util.Map<String, Expr> elements){
+        return new Map(elements);
     }
 
     final class Pull implements Expr {
