@@ -1020,7 +1020,7 @@
     ;; tag::DML-Update-xtql[]
     (xt/submit-tx node
       [(-> (xt/update-table :documents '{:bind [{:xt/id $doc-id, :version v}]
-                                         :set {:version (inc v)}})
+                                         :set {:version (+ v 1)}})
            (xt/with-op-args {:doc-id "doc-id"}))])
     ;; end::DML-Update-xtql[]
     ,)
