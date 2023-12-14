@@ -1070,6 +1070,7 @@
   (t/is (= [{:comment-count 2}]
            (xt/q tu/*node* '(from :posts [comment-count])))))
 
+#_ ;; TODO: Uncomment when supported: https://github.com/xtdb/xtdb/issues/3050
 (deftest DML-Update-bitemporal-sql
   (xt/submit-tx tu/*node*
     [(xt/put :posts {:xt/id "my-post-id" :comment-count 1})
