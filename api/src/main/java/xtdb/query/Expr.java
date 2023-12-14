@@ -10,6 +10,32 @@ import static xtdb.query.QueryUtil.stringifyArgs;
 import static xtdb.query.QueryUtil.unmodifiableList;
 
 public interface Expr {
+
+    final class Null implements Expr {
+
+        public Null() {}
+
+        @Override
+        public String toString() {
+            return "null";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (getClass() == o.getClass()) return true;
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            return 1;
+        }
+    }
+
+    static Null val() {
+        return new Null();
+    }
+
     Bool TRUE = new Bool(true);
     Bool FALSE = new Bool(false);
 
