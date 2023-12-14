@@ -2,6 +2,7 @@ package xtdb.query;
 
 import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
+import clojure.lang.Var;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -20,7 +21,7 @@ public class WithDeserializer extends StdDeserializer<Query.With> {
     }
 
     private List<VarSpec> deserializeVars(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.nodeToVarSpecs(mapper, node);
+        return SpecListDeserializer.<VarSpec>nodeToSpecs(mapper, node, VarSpec::of);
     }
 
     @Override

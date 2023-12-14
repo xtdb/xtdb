@@ -19,7 +19,7 @@ public class UnnestVarDeserializer extends StdDeserializer<Query.UnnestVar> {
     }
 
     private List<VarSpec> deserializeVars(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.nodeToVarSpecs(mapper, node);
+        return SpecListDeserializer.<VarSpec>nodeToSpecs(mapper, node, VarSpec::of);
     }
 
     @Override

@@ -21,7 +21,7 @@ public class AggregateDeserializer extends StdDeserializer<Query.Aggregate> {
     }
 
     private List<ColSpec> deserializeColSpec(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.nodeToColSpecs(mapper, node);
+        return SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node, ColSpec::of);
     }
     public Query.Aggregate deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();

@@ -21,7 +21,7 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
     }
 
     private List<ColSpec> deserializeCols(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.nodeToColSpecs(mapper, node);
+        return SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node, ColSpec::of);
     }
 
     @Override

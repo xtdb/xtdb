@@ -21,11 +21,11 @@ public class IJoinDeserializer extends StdDeserializer<Query.IJoin> {
     }
 
     private List<ArgSpec> deserializeArgs(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.nodeToArgSpecs(mapper, node);
+        return SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node, ArgSpec::of);
     }
 
     private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.nodeToOutSpecs(mapper, node);
+        return SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node, OutSpec::of);
     }
 
     public Query.IJoin deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {

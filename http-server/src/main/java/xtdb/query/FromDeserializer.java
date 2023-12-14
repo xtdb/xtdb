@@ -22,7 +22,7 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
     }
 
     private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.nodeToOutSpecs(mapper, node);
+        return SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node, OutSpec::of);
     }
 
     @Override

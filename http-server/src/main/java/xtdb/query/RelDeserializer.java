@@ -38,7 +38,7 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
         return res;
     }
     private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.nodeToOutSpecs(mapper, node);
+        return SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node, OutSpec::of);
     }
     public Query.Relation deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();

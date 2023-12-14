@@ -32,7 +32,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
     }
 
    private List<ArgSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.nodeToArgSpecs(mapper, node);
+        return SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node, ArgSpec::of);
    }
 
     @Override
