@@ -7,10 +7,13 @@ XTDB is queryable using two query languages: **SQL** and **XTQL**.
 XTQL is our new, data-oriented, composable query language, inspired by the strong theoretical bases of both **Datalog** and **relational algebra**.
 These two combine to create a joyful, productive, interactive development experience, with the ability to build queries iteratively, testing and debugging smaller parts in isolation.
 
-XTQL is also designed to be highly amenable to dynamic query generation - we believe that our industry has spent more than enough time trying to generate SQL strings (not to mention the concomitant https://owasp.org/www-community/attacks/SQL_Injection[security vulnerabilities^]).
+* It is designed to be highly amenable to dynamic query generation - we believe that our industry has spent more than enough time trying to generate SQL strings (not to mention the concomitant https://owasp.org/www-community/attacks/SQL_Injection[security vulnerabilities^]).
+* It has **JSON** footnote:[in active development, arriving shortly] and **EDN** flavours, with client libraries to come in Java/Kotlin, JavaScript, and many more.
+* It can be used for both link:#operators_and_relations[queries] and link:#dml[transactions].
 
-It has **JSON** footnote:[in active development, arriving shortly] and **EDN** flavours, with client libraries to come in Java/Kotlin, JavaScript, and many more.
+Let's start with XTQL queries:
 
+[#operators_and_relations]
 == 'Operators' and 'relations'
 
 XTQL is built up of small, composable 'operators', which combine together using 'pipelines' into larger queries.
@@ -45,6 +48,61 @@ In this first example, we're reading the first-name and last-name fields from th
 [source,clojure]
 ----
 (from :users [first-name last-name])
+----
+====
+
+It's in the `from` operator that we specify the temporal filter for the table.
+By default, this shows the table at the current time, but it can be overridden:
+
+* to view the table at another point in time
+* to view the changes to the table within a given range
+* to view the entire history of the table
+
+.JSON
+[%collapsible%open]
+====
+[source,json]
+----
+{
+  "from": "users",
+  "bind": [ "first_name", "last_name" ],
+
+  // at another point in time
+  "for_valid_time": { "at": "2023-01-01" },
+
+  // within a given range
+  "for_valid_time": { "in": [ "2023-01-01", "2024-01-01" ] },
+  "for_valid_time": { "from": "2023-01-01" },
+  "for_valid_time": { "to": "2024-01-01" },
+
+  // for all time
+  "for_valid_time": "all_time",
+
+  // and all of the above "for_system_time" too.
+}
+----
+====
+
+.Clojure
+[%collapsible]
+====
+[source,clojure]
+----
+(from :users {:bind [first-name last-name]
+
+              ;; at another point in time
+              :for-valid-time (at #inst "2023-01-01")
+
+              ;; within a given range
+              :for-valid-time (in #inst "2023-01-01", #inst "2024-01-01")
+              :for-valid-time (from #inst "2023-01-01")
+              :for-valid-time (to #inst "2024-01-01")
+
+              ;; for all time
+              :for-valid-time :all-time
+
+              ;; and all of the above :for-system-time too.
+              })
 ----
 ====
 
@@ -137,7 +195,7 @@ In XTQL, we specify the join condition by re-using a logic variable (`customer_i
 ====
 
 .Clojure
-[%collapsible%open]
+[%collapsible]
 ====
 [source,clojure]
 ----
@@ -148,6 +206,116 @@ In XTQL, we specify the join condition by re-using a logic variable (`customer_i
 ====
 
 The `unify` operator accepts 'unify clauses' - e.g. `from`, `where`, `with`, `join`, `left-join` - a full list of which can be found in the link:/reference/main/xtql/queries.html#_unify_clauses[unify clause reference guide].
+
+[#dml]
+== XTQL transactions - DML
+
+XTQL can also be used in XTDB transactions to insert, update, delete and erase documents based on an XTQL query.
+It uses the same query language as above, with a small wrapper for each of the operations.
+
+These queries are evaluated on XTDB's single writer thread, so are guaranteed the strongest level of consistency.
+
+=== `insert`
+
+We can submit link:/reference/main/xtql/txs#_insert_into['insert' operations] to XTDB - these evaluate a query, and insert every result into the given table.
+
+e.g. `INSERT INTO users2 SELECT xt$id, first_name AS given_name, last_name AS family_name FROM users`:
+
+.JSON
+[%collapsible%open]
+====
+[source,json]
+----
+{
+  "insert": "users2",
+  "query": {
+    "from": "users",
+    "bind": [ "xt$id", { "first_name": "given_name", "last_name": "family_name" } ]
+  }
+}
+----
+====
+
+.Clojure
+[%collapsible]
+====
+In Clojure, we use the builder functions in `xtdb.api`:
+
+[source,clojure]
+----
+(xt/insert-into :users2
+  '(from :users [xt/id {:first-name given-name, :last-name family-name}
+                 xt/valid-from xt/valid-to]))
+----
+====
+
+=== `update`
+
+link:/reference/main/xtql/txs#_update_table[Update operations] find rows, and specify which fields to update.
+
+Here, we're incrementing a 'version' attribute - `UPDATE docs SET version = version + 1 WHERE xt$id = ?`
+
+.JSON
+[%collapsible%open]
+====
+[source,javascript]
+----
+{
+  "update": "documents",
+  "bind": [ { "xt$id": "$doc_id", "version": "v" }],
+  "set": { "version": { "@call": "+", "@args": [ "v", 1 ] } }
+}
+
+// separately, we pass the following as the arguments to the query:
+{ "doc_id": "my-doc-id" }
+----
+====
+
+.Clojure
+[%collapsible]
+====
+[source,clojure]
+----
+(-> (xt/update-table :documents {:bind [{:xt/id $doc-id, :version v}]
+                                 :set {:version (+ v 1)}})
+
+    ;; specifying a value for the parameter with `with-op-args`
+    (xt/with-op-args {:doc-id "doc-id"}))
+----
+====
+
+=== `delete`
+
+link:/reference/main/xtql/txs#_delete_from[Delete operations] work like 'update' operations, but without the `set` clause.
+
+Here, we delete all the comments for a given post-id - `DELETE FROM comments WHERE post_id = ?`
+
+.JSON
+[%collapsible%open]
+====
+[source,javascript]
+----
+{
+  "delete": "comments",
+  "bind": [ { "post_id": "$post_id" }]
+}
+
+// separately, we pass the following as the arguments to the query:
+{ "post_id": "my-post-id" }
+----
+====
+
+.Clojure
+[%collapsible]
+====
+[source,clojure]
+----
+(-> (xt/delete-from :posts {:bind [{:post-id $post-id}]})
+
+    ;; specifying a value for the parameter with `with-op-args`
+    (xt/with-op-args {:post-id "post-id"}))
+----
+====
 
 == For more information
 
