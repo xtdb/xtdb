@@ -36,12 +36,6 @@ class TxDeserializerTest {
         SimpleDeserializers deserializers = new SimpleDeserializers(deserializerMapping);
         module.setDeserializers(deserializers);
 
-        IFn require = Clojure.var("clojure.core", "require");
-        require.invoke(Clojure.read("jsonista.core"));
-        IFn clojureModuleFn = Clojure.var("jsonista.core", "clojure-module");
-        Module clojureModule = (Module) clojureModuleFn.invoke(PersistentHashMap.EMPTY);
-
-        objectMapper.registerModule(clojureModule);
         objectMapper.registerModule(module);
         this.objectMapper = objectMapper;
     }
