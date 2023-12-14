@@ -235,7 +235,7 @@
           (util/then-apply
            (fn [^LogRecord result]
              (cond-> (.tx result)
-               system-time (.setSystemTime system-time)))))))
+               system-time (.withSystemTime system-time)))))))
   AutoCloseable
   (close [_] (.close allocator)))
 

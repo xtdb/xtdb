@@ -50,9 +50,8 @@
 
                           (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
                                 ^TransactionKey record-tx (.tx record)
-                                tx-key (cond-> record-tx
-                                         (not (.isNull system-time-vec 0))
-                                         (.setSystemTime (-> (.get system-time-vec 0) (time/micros->instant))))]
+                                tx-key (cond-> record-tx (not (.isNull system-time-vec 0))
+                                         (.withSystemTime (-> (.get system-time-vec 0) (time/micros->instant))))]
 
                             (.indexTx indexer tx-key tx-root)))
 

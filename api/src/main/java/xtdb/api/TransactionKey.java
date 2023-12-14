@@ -25,29 +25,12 @@ public class TransactionKey implements Comparable<TransactionKey> {
         return txId == that.txId && Objects.equals(systemTime, that.systemTime);
     }
 
-    public long getTxId() {
-        return txId;
-    }
-
-    public Instant getSystemTime() {
-        return systemTime;
-    }
-
-    public TransactionKey setTxId(long txId) {
-        this.txId = txId;
-
-        return this;
-    }
-
-    public TransactionKey setSystemTime(Instant systemTime) {
-        this.systemTime = systemTime;
-
-        return this;
-    }
-    
-
     @Override
     public int hashCode() {
         return Objects.hash(txId, systemTime);
+    }
+
+    public TransactionKey withSystemTime(Instant systemTime) {
+        return new TransactionKey(this.txId, systemTime);
     }
 }
