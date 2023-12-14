@@ -2,9 +2,9 @@
 title: What is XTDB?
 ---
 
-XTDB is a 'bitemporal' and 'dynamic' relational database for handling regulated data. XTDB is a transactional system designed for powering applications while also being amenable to analytic querying thanks to its internal columnar architecture built on link:https://arrow.apache.org/[Apache Arrow]. XTDB is open source and runs on the JVM.
+XTDB is a 'bitemporal' and 'dynamic' relational database for handling regulated data. XTDB is a transactional system designed for powering applications while also being amenable to analytical querying thanks to its internal columnar architecture built on link:https://arrow.apache.org/[Apache Arrow]. XTDB is open source and runs on the JVM.
 
-== Bitemporal
+== Bitemporal versioning made easy
 
 XTDB tracks both the *system time* when data is inserted (or `UPDATE`-d) into the database, and also the *valid time* periods that define exactly when a given row/record/document is considered *valid*/*effective* in your application. This combination of *system* and *valid* time dimensions is called "bitemporality" and in XTDB all data is bitemporal without having to think about storing or updating additional columns. All data is time-versioned automatically.
 
@@ -16,11 +16,11 @@ XTDB’s approach to temporality is inspired by link:https://en.wikipedia.org/wi
 
 Unlike most transactional database systems, XTDB implements a columnar data architecture that "separates storage and compute" - this modern, Big-Data-inspired architecture is built around link:https://arrow.apache.org/[Apache Arrow] and commodity object storage (e.g. S3). Most importantly, this design reduces operational costs when retaining large volumes of historical data.
 
-Transaction processing is strictly serial and strongly consistent, based on deterministic ordering of non-interactive transactions. The design implies a hard upper limit on transaction throughput (since all processing must ultimately happen via a single thread) but key advantage of this design is the concrete link:https://www.youtube.com/watch?v=Cym4TZwTCNU[information guarantees] about _exactly when, how & why_ data across the database has changed.
+Transaction processing is strictly serial and strongly consistent (ACID), based on deterministic ordering of non-interactive transactions. All nodes in an XTDB cluster are replicas reading from a single, shared Write-Ahead Log. This design implies a hard upper limit on transaction throughput (since all processing must ultimately happen via a single thread) but the key advantage of this design is the concrete link:https://www.youtube.com/watch?v=Cym4TZwTCNU[information guarantees] about _exactly when, how & why_ data across the database has changed.
 
 == Dynamic relational engine
 
-The columnar engine within XTDB amenable to handling "documents" as wide rows in sparse tables, where any given value in a column may contain arbitrarily nested data without any need for upfront schema design. This enables developers to use XTDB either as a store of loosely structured documents, or as more traditional normalized database, or both at the same time.
+The columnar engine within XTDB is able to handle "documents" as wide rows in sparse tables, where any given value in a column may contain arbitrarily nested data without any need for upfront schema design. The full range of built-in types is supported within these nested structures (i.e. unlike JSONB). This enables developers to easily use XTDB either as a store of loosely structured documents, or as a more traditional normalized database, or both at the same time.
 
 Unlike typical SQL tables with row-oriented storage, XTDB's columnar tables are always 'sparse' (storing NULLs is cheap) and 'wide' (storing lots of columns is efficient).
 

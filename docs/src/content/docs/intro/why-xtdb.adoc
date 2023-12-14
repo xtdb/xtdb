@@ -4,18 +4,18 @@ title: Why XTDB?
 
 == The Mission
 
-At link:https://juxt.pro/[JUXT] (the company behind XTDB), our mission is *to simplify how the world makes software*.
+At link:https://juxt.pro/[JUXT], the company behind XTDB, our mission is *to simplify how the world makes software*.
 
 Experience has made clear to us that no single piece of software infrastructure is more central to the success of an IT system than a well-designed database.
-However, we believe existing database technologies (Postgres, SQL Server, MongoDB etc.) are far from "finished" and that many important problems still remain unsolved across the database industry. Instead these problems are left for users of such databases to work around and solve ad hoc in their application code.
+However, we believe existing database technologies (Postgres, SQL Server, MongoDB etc.) are far from "finished" and that many important problems still remain unsolved across the database industry. Instead, these problems are left for users of such databases to work around and solve ad-hoc in their application code.
 
-For XTDB, the biggest source of complexity in application code we hope to address is *time*, and therefore XTDB is a database built for the hard problems of: accurate record keeping, time-travel queries (XT == "across time"!), and data evolution. These problems are most acute whenever an organization is handling *regulated data*.
+For XTDB, the biggest source of complexity in application code we hope to address is *time*, and therefore XTDB is a database built for the hard problems of: accurate record keeping (with full ACID transaction support), time-travel queries (XT stands for "across time"), and data evolution. These problems are most acute wherever an organization is handling *regulated data*.
 
 == The Problems
 
 In this era of rapidly evolving regulatory requirements, we see an increasing number of organizations across all industries feeling frustrated by the friction with link:https://www.youtube.com/watch?v=JxMz-tyicgo[update-in-place] databases that don't support basic auditing requirements, let alone the accurate time-based versioning that many applications working with regulated data demand.
 
-From GDPR to HIPAA to MiFID II, all kinds of regulatory requirements justify a fundamental level of accuracy and accountability in how your software stack stores and represents key information. XTDB is our answer to this problem, with its ubiquitous link:https://en.wikipedia.org/wiki/Bitemporal_modeling['bitemporal'] time-based versioning of records.
+From GDPR to HIPAA to MiFID II, all kinds of regulatory requirements justify a fundamental level of accuracy and accountability in how your software stack stores and represents key information. The implications extend across the entire transactional to analytical data lifecycle. XTDB is our answer for how a database can better support developers with satisfying basic regulatory requirements, thanks to its ubiquitous link:https://en.wikipedia.org/wiki/Bitemporal_modeling['bitemporal'] time-based versioning of records.
 
 We believe that DIY versioning within database schemas should be a thing of the past, and that all database technologies should offer link:https://www.juxt.pro/blog/bitemporality-and-the-art-of-maintaining-accurate-databases/[reliable & well-understood methods] for versioning. Preserving historical data should not have to be an explicit process which requires conscious design effort and careful development work.
 
@@ -28,4 +28,4 @@ In support of this mission, XTDB solves 4 distinct problems we see with existing
 
 == The Solution: XTDB
 
-We have designed XTDB to solve each of these problems in a single, coherent system that we believe can reduce the time & costs required for organizations to build and maintain *safe* systems of record and their associated APIs.
+We have designed XTDB to solve each of these problems in a cohesive way that we believe can reduce the time & costs required for organizations to build and maintain link:https://www.juxt.pro/blog/kent-beck-podcast/[*safe*] systems of record and their associated APIs.
