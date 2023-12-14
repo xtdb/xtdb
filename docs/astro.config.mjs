@@ -26,6 +26,7 @@ export default defineConfig({
 
       sidebar: [
         { label: '← xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
+        { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: {target: '_blank'}},
 
         {
           label: 'Introduction',
