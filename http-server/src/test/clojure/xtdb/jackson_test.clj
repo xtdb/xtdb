@@ -333,7 +333,7 @@
     (t/is (= (Query/without ["a" "b"])
              (roundtrip-query-tail {"without" ["a" "b"]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-without"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Without should be a list of strings"
                             (roundtrip-query-tail {"without" "a"}))
           "should fail when not a list"))
 

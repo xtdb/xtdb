@@ -30,8 +30,7 @@ public class UnnestColDeserializer extends StdDeserializer<Query.UnnestCol> {
         try {
             JsonNode unnest = node.get("unnest");
             if (unnest.isObject() && unnest.size() == 1) {
-                List<ColSpec> colSpecs = deserializeCols(mapper, unnest);
-                return Query.unnestCol(colSpecs.get(0));
+                return Query.unnestCol(mapper.treeToValue(unnest, ColSpec.class));
             } else {
                 throw new IllegalArgumentException("Unnest should be an object with only a single binding", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }

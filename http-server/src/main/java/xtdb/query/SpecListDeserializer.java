@@ -53,11 +53,10 @@ public class SpecListDeserializer {
                 specs.addAll(processItemNode(mapper, itemNode));
             }
         } else {
-            specs.addAll(processItemNode(mapper, node));
+            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
         return specs;
-
     }
 
     public static List<ArgSpec> nodeToArgSpecs(ObjectMapper mapper, JsonNode node) throws Exception { 
