@@ -9,7 +9,7 @@ Throughout the alpha process, as we work towards general availability, we'll nat
 
 As we work towards a stable, general-availability release, we will primarily be focusing on:
 
-* First-class support for link:/sdks[other client languages] - primarily Java/Kotlin, JavaScript, and Python.
+* First-class support for link:/reference/main/sdks[more client languages] - primarily Java/Kotlin, JavaScript, and Python.
 * Iterating on link:/intro/what-is-xtql[XTQL], based on user feedback.
 * Improving the performance and stability to production quality.
 * Operational support for production installations - deployment and monitoring tools.
