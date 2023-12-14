@@ -5,8 +5,9 @@
   (:import (clojure.lang MapEntry)
            (java.util List)
            (xtdb.query ArgSpec ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
-                       Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
-                       Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany
+                       Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
+                       Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$Set
+                       Expr$Vec Expr$Map
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
@@ -75,8 +76,10 @@
 
 (declare parse-arg-specs)
 
+
 (defn parse-expr [expr]
   (cond
+    (nil? expr) (Expr/val)
     (true? expr) Expr/TRUE
     (false? expr) Expr/FALSE
     (int? expr) (Expr/val (long expr))
@@ -86,9 +89,9 @@
                        (Expr/param str-expr)
                        (Expr/lVar str-expr)))
     (keyword? expr) (Expr/val expr)
-    (vector? expr) (Expr/val (mapv parse-expr expr))
-    (set? expr) (Expr/val (into #{} (map parse-expr) expr))
-    (map? expr) (Expr/val (into {} (map (juxt key (comp parse-expr val))) expr))
+    (vector? expr) (Expr/vec (mapv parse-expr expr))
+    (set? expr) (Expr/set (into #{} (map parse-expr) expr))
+    (map? expr) (Expr/map (into {} (map (juxt (comp #(subs % 1) str key) (comp parse-expr val))) expr))
 
     (seq? expr) (do
                   (when (empty? expr)
@@ -132,22 +135,21 @@
   (unparse [this]))
 
 (extend-protocol Unparse
+  Expr$Null (unparse [_] nil)
   Expr$LogicVar (unparse [e] (symbol (.lv e)))
   Expr$Param (unparse [e] (symbol (.v e)))
   Expr$Call (unparse [e] (list* (symbol (.f e)) (mapv unparse (.args e))))
   Expr$Bool (unparse [e] (.bool e))
   Expr$Double (unparse [e] (.dbl e))
   Expr$Long (unparse [e] (.lng e))
+  Expr$Vec (unparse [v] (mapv unparse (.elements v)))
+  Expr$Set (unparse [s] (into #{} (map unparse (.elements s))))
+  Expr$Map (unparse [m] (-> (.elements m)
+                            (update-keys keyword)
+                            (update-vals unparse)))
 
   Expr$Obj
-  (unparse [e]
-    (let [obj (.obj e)]
-      (cond
-        (vector? obj) (mapv unparse obj)
-        (set? obj) (into #{} (map unparse) obj)
-        (map? obj) (->> (map #(MapEntry/create (key %) (unparse (val %))) obj)
-                        (into {}))
-        :else obj)))
+  (unparse [e] (.obj e))
 
   Expr$Get
   (unparse [e]
