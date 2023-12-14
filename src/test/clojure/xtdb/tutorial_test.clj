@@ -55,22 +55,6 @@
   [(xt/put :promotions {:xt/id 1, :promotion-type "christmas"})
    (xt/put :promotions {:xt/id 2, :promotion-type "general"})])
 
-#_
-(ns-unmap *ns* 'test-issue)
-
-#_
-(deftest test-issue
-  (xt/submit-tx tu/*node*
-    [(xt/put :users {:xt/id "ivan"})])
-
-  #_
-  (xt/q tu/*node* '(-> (from :users [xt/id])
-                       (where true)))
-  #_
-  (t/is (= (xt/q tu/*node* '(from :users [xt/id]))
-           (xt/q tu/*node* '(from :users [xt/id])
-                 {:key-fn :clojure}))))
-
 (deftest basic-operations
 
   (xt/submit-tx tu/*node* users)
