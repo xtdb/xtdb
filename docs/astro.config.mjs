@@ -29,7 +29,7 @@ export default defineConfig({
 
         {
           label: 'Introduction',
-          collapsed: true,
+          collapsed: false,
           items: [
             { label: 'Overview', link: '/' },
             { label: 'Why XTDB?', link: '/intro/why-xtdb'},
@@ -37,7 +37,7 @@ export default defineConfig({
             {
               label: 'What is XTDB?',
               items: [
-                { label: 'Overview', link: '/intro/what-is-xtdb' },
+                { label: 'At a glance', link: '/intro/what-is-xtdb' },
 
                 { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
                 // { label: 'Architecture', link: '/intro/architecture' },
