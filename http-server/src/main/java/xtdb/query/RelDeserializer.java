@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
@@ -48,9 +49,9 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
             var relNode = node.get("rel");
             Query.Relation rel;
             if (relNode.isArray()) {
-                rel = Query.relation(deserializeDocuments(mapper, (ArrayNode) node.get("rel")), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
+                rel = Query.relation(deserializeDocuments(mapper, (ArrayNode) relNode), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
             } else {
-                rel = Query.relation((Expr.Param) mapper.treeToValue(node.get("rel"), Expr.class), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
+                rel = Query.relation((Expr.Param) mapper.treeToValue(relNode, Expr.class), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
             }
             return rel;
         } catch (IllegalArgumentException i) {

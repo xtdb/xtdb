@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 import xtdb.IllegalArgumentException;
 import xtdb.tx.Ops;
 import xtdb.tx.Tx;
@@ -25,19 +26,15 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
     @Override
     public Tx deserialize(com.fasterxml.jackson.core.JsonParser jp, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) jp.getCodec();
+
         ObjectNode node = mapper.readTree(jp);
-        List<Ops> ops = new ArrayList<>();
+        List<Ops> ops = null;
         LocalDateTime systemTime = null;
         ZoneId defaultTz = null;
 
         try {
             if (node.has("tx_ops")) {
-                // The reason that we are fully walking the nodes is that Jsonista overwrites the standard `List` parser and
-                // something like `mapper.getTypeFactory().constructCollectionType(List.class, Ops.class)`
-                ArrayNode txOpsNode = (ArrayNode)  node.get("tx_ops");
-                for (JsonNode txOp: txOpsNode) {
-                    ops.add(mapper.treeToValue(txOp, Ops.class));
-                }
+                ops = mapper.treeToValue(node.get("tx_ops"), mapper.getTypeFactory().constructCollectionType(List.class, Ops.class));
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("tx", "missing-tx-ops"), PersistentHashMap.EMPTY);
             }

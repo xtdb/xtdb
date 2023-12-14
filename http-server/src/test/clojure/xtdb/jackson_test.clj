@@ -43,14 +43,14 @@
 (deftest deserialize-tx-op-test
   (t/testing "put"
     (t/is (= #xt.tx/put {:table-name :docs,
-                         :doc {:foo :bar, :xt/id "my-id"},
+                         :doc {"foo" :bar, "xt/id" "my-id"},
                          :valid-from nil,
                          :valid-to nil}
              (roundtrip-tx-op {"put" "docs"
                                "doc" {"xt/id" "my-id" "foo" :bar}})))
 
     (t/is (= #xt.tx/put {:table-name :docs,
-                         :doc {:foo :bar, :xt/id "my-id"},
+                         :doc {"foo" :bar, "xt/id" "my-id"},
                          :valid-from #time/instant "2020-01-01T00:00:00Z",
                          :valid-to #time/instant "2021-01-01T00:00:00Z"}
              (roundtrip-tx-op {"put" "docs"
@@ -257,8 +257,8 @@
 
 (deftest deserialize-query-tail-test
   (t/testing "where"
-    (t/is (= (Query/where [(Expr/val {:>= ["foo" "bar"]})
-                           (Expr/val {:< ["bar" "baz"]})])
+    (t/is (= (Query/where [(Expr/val {">=" ["foo" "bar"]})
+                           (Expr/val {"<" ["bar" "baz"]})])
              (roundtrip-query-tail {"where" [{">=" ["foo" "bar"]}
                                              {"<" ["bar" "baz"]}]})))
 
@@ -343,12 +343,13 @@
              (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"call" "sum"
                                                                "args" ["foo"]}}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-aggregate"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-spec'"
                             (roundtrip-query-tail {"aggregate" "a"}))
           "should fail when not a list")))
 
 (defn roundtrip-unify [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
+
 
 (deftest deserialize-unify-test
   (let [parsed-q (-> (Query/from "docs")
@@ -358,7 +359,7 @@
                                          "bind" ["xt/id"]}]})))
 
     (t/is (= (Query/unify [parsed-q
-                           (Query/where [(Expr/val {:>= ["foo" "bar"]})])
+                           (Query/where [(Expr/val {">=" ["foo" "bar"]})])
                            (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))
                            (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
                                         (VarSpec/of "b" (Expr/lVar "b"))])

@@ -15,6 +15,7 @@ import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
 
@@ -29,12 +30,7 @@ public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
 
         try {
             if (node.isObject() && node.has("unify")) {
-                ArrayList<Query.UnifyClause> clauses = new ArrayList<>();
-                ArrayNode clauseArray = (ArrayNode) node.get("unify");
-                for (JsonNode clauseNode: clauseArray) {
-                    clauses.add(mapper.treeToValue(clauseNode, Query.UnifyClause.class));
-                }
-                return Query.unify(clauses);
+                return Query.unify(mapper.treeToValue(node.get("unify"), mapper.getTypeFactory().constructCollectionType(List.class, Query.UnifyClause.class)));
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-unify"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
