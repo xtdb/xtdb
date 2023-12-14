@@ -101,13 +101,14 @@
                  '(from :docs [xt/id doc-count])))))
 
 (t/deftest test-tx-fn-current-tx
-  (let [{tt0 :system-time} (xt/submit-tx tu/*node* [(xt/put-fn :with-tx
-                                                               '(fn [id]
-                                                                  [(xt/put :docs (into {:xt/id id} *current-tx*))]))
-                                                    (xt/call :with-tx :foo)
-                                                    (xt/call :with-tx :bar)])
-
-        {tt1 :system-time} (xt/submit-tx tu/*node* [(xt/call :with-tx :baz)])]
+  (let [tx0 (xt/submit-tx tu/*node* [(xt/put-fn :with-tx
+                                                '(fn [id]
+                                                   [(xt/put :docs (into {:xt/id id} *current-tx*))]))
+                                     (xt/call :with-tx :foo)
+                                     (xt/call :with-tx :bar)])
+        tt0 (.systemTime tx0)
+        tx1 (xt/submit-tx tu/*node* [(xt/call :with-tx :baz)])
+        tt1 (.systemTime tx1)]
 
     (t/is (= #{{:xt/id :foo, :tx-id 0, :system-time (time/->zdt tt0)}
                {:xt/id :bar, :tx-id 0, :system-time (time/->zdt tt0)}

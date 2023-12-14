@@ -78,7 +78,7 @@
          (when-some [records (seq (.readRecords log (long offset) 100))]
            (concat
              (map clj-record records)
-             (! (:tx-id (:tx (last records))))))))
+             (! (.txId (:tx (last records))))))))
      -1)))
 
 (defn node-log [node]
@@ -110,8 +110,8 @@
       (let [[_ _ _ msg4] (node-log node)]
         (let [flush-tx-id (:flush-tx-id msg4)]
           (t/is flush-tx-id)
-          (t/is (= (:tx-id (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer))) flush-tx-id))))))
-
+          (t/is (= (some-> (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer)) (.txId)) 
+                   flush-tx-id))))))
 
   (t/testing "test :duration actually does something"
     (with-open [node (start-node #time/duration "PT1H")]

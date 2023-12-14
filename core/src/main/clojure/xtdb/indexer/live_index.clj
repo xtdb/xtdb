@@ -91,7 +91,7 @@
   ILiveTable
   (startTx [this-table tx-key new-live-table?]
     (let [!transient-trie (atom live-trie)
-          system-from-µs (time/instant->micros (.system-time tx-key))]
+          system-from-µs (time/instant->micros (.systemTime tx-key))]
       (reify ILiveTableTx
         (docWriter [_] put-wtr)
 

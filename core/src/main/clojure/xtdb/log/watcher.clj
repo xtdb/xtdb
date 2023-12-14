@@ -32,7 +32,7 @@
 (defn- watch-log! [{:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
   (let [!cancel-hook (promise)]
     (.subscribe log
-                (:tx-id (.latestCompletedTx indexer))
+                (some-> (.latestCompletedTx indexer) (.txId))
                 (reify LogSubscriber
                   (onSubscribe [_ cancel-hook]
                     (deliver !cancel-hook cancel-hook))
@@ -49,9 +49,9 @@
                           (.loadNextBatch sr)
 
                           (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
-                                ^TransactionKey tx-key (cond-> (.tx record)
-                                                         (not (.isNull system-time-vec 0))
-                                                         (assoc :system-time (-> (.get system-time-vec 0) (time/micros->instant))))]
+                                ^TransactionKey record-tx (.tx record)
+                                tx-key (cond-> record-tx (not (.isNull system-time-vec 0))
+                                         (.withSystemTime (-> (.get system-time-vec 0) (time/micros->instant))))]
 
                             (.indexTx indexer tx-key tx-root)))
 

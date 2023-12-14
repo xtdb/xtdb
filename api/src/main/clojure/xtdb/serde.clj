@@ -133,13 +133,28 @@
 (defn- call-op-reader [{:keys [fn-id args]}]
   (Ops/call fn-id args))
 
+(defmethod print-dup TransactionKey [^TransactionKey tx-key ^Writer w]
+  (.write w "#xt/tx-key ")
+  (print-method {:tx-id (.txId tx-key) :system-time (.systemTime tx-key)} w))
+
+(defmethod print-method TransactionKey [tx-key w]
+  (print-dup tx-key w))
+
+(defn tx-key-read-fn 
+  [{:keys [tx-id system-time]}]
+  (TransactionKey. tx-id system-time))
+
+(defn tx-key-write-fn
+  [^TransactionKey tx-key]
+  {:tx-id (.txId tx-key) :system-time (.systemTime tx-key)})
+
 (def transit-read-handlers
   (merge transit/default-read-handlers
          (-> time-literals/tags
              (update-keys str)
              (update-vals transit/read-handler))
          {"xtdb/clj-form" (transit/read-handler xt/->ClojureForm)
-          "xtdb/tx-key" (transit/read-handler xt/map->TransactionKey)
+          "xtdb/tx-key" (transit/read-handler tx-key-read-fn)
           "xtdb/illegal-arg" (transit/read-handler err/-iae-reader)
           "xtdb/runtime-err" (transit/read-handler err/-runtime-err-reader)
           "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
@@ -177,7 +192,7 @@
               YearMonth "time/year-month"
               MonthDay "time/month-day"}
              (update-vals #(transit/write-handler % str)))
-         {TransactionKey (transit/write-handler "xtdb/tx-key" #(select-keys % [:tx-id :system-time]))
+         {TransactionKey (transit/write-handler "xtdb/tx-key" tx-key-write-fn)
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" ex-data)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" ex-data)
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" #(vector (ex-message %) (ex-data %)))

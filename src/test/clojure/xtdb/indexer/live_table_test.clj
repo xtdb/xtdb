@@ -13,6 +13,7 @@
            (java.util Arrays HashMap)
            (org.apache.arrow.memory RootAllocator)
            xtdb.IBufferPool
+           (xtdb.api TransactionKey)
            (xtdb.indexer.live_index ILiveIndex TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util RefCounter)
@@ -40,7 +41,7 @@
                     allocator (RootAllocator.)
                     live-table (live-index/->live-table allocator bp "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
 
-          (let [live-table-tx (.startTx live-table (xt/->TransactionKey 0 (.toInstant #inst "2000")) false)]
+          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
             (let [wp (IVectorPosition/build)]
               (dotimes [_n n]
                 (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
@@ -77,7 +78,7 @@
                     ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                     allocator (RootAllocator.)
                     live-table (live-index/->live-table allocator bp "foo")]
-          (let [live-table-tx (.startTx live-table (xt/->TransactionKey 0 (.toInstant #inst "2000")) false)]
+          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
 
             (let [wp (IVectorPosition/build)]
               (dotimes [_n n]
@@ -129,7 +130,7 @@
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp "foo")]
-      (let [live-table-tx (.startTx live-table (xt/->TransactionKey 0 (.toInstant #inst "2000")) false)]
+      (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
 
         (let [wp (IVectorPosition/build)]
           (doseq [uuid uuids]
@@ -161,7 +162,7 @@
                 allocator (RootAllocator.)]
       (let [live-index-allocator (util/->child-allocator allocator "live-index")]
         (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp (HashMap.) (RefCounter.) 64 1024)]
-          (let [live-index-tx (.startTx live-index (xt/->TransactionKey 0 (.toInstant #inst "2000")))
+          (let [live-index-tx (.startTx live-index (TransactionKey. 0 (.toInstant #inst "2000")))
                 live-table-tx (.liveTable live-index-tx table-name)]
 
             (let [wp (IVectorPosition/build)]

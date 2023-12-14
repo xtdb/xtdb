@@ -118,8 +118,8 @@
   (xt/submit-tx *node* [(xt/put :foo {:xt/id 1})])
   (Thread/sleep 100)
 
-  (t/is (= {:latest-submitted-tx {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"},
-            :latest-completed-tx {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}}
+  (t/is (= {:latest-submitted-tx {:txId 0, :systemTime #time/instant "2020-01-01T00:00:00Z"},
+            :latest-completed-tx {:txId 0, :systemTime #time/instant "2020-01-01T00:00:00Z"}}
            (-> (http/request {:accept :json
                               :as :string
                               :request-method :get
@@ -128,7 +128,7 @@
                decode-json))
         "testing status")
 
-  (t/is (= {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}
+  (t/is (= {:txId 1, :systemTime #time/instant "2020-01-02T00:00:00Z"}
            (-> (http/request {:accept :json
                               :as :string
                               :request-method :post

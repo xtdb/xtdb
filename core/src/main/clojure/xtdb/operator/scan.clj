@@ -80,7 +80,7 @@
                 :now (-> (.instant expr/*clock*)
                          (time/instant->micros))))]
 
-      (when-let [system-time (some-> at-tx (.system-time) time/instant->micros)]
+      (when-let [system-time (some-> at-tx (.systemTime) time/instant->micros)]
         (.lte (.systemFrom bounds) system-time)
 
         (when-not for-system-time

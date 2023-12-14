@@ -233,9 +233,9 @@
                                              (util/maybe-update :system-time time/->instant))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
-            (fn [^LogRecord result]
-              (cond-> (.tx result)
-                system-time (assoc :system-time system-time)))))))
+           (fn [^LogRecord result]
+             (cond-> (.tx result)
+               system-time (.withSystemTime system-time)))))))
   AutoCloseable
   (close [_] (.close allocator)))
 

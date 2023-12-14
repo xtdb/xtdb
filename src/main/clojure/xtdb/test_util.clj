@@ -365,8 +365,9 @@
 (defn open-live-table [table-name]
   (li/->live-table *allocator* nil table-name))
 
-(defn index-tx! [^ILiveTable live-table, {:keys [system-time] :as tx-key}, docs]
-  (let [live-table-tx (.startTx live-table tx-key true)]
+(defn index-tx! [^ILiveTable live-table, tx-key, docs]
+  (let [system-time (.systemTime tx-key)
+        live-table-tx (.startTx live-table tx-key true)]
     (try
       (let [doc-wtr (.docWriter live-table-tx)]
         (doseq [{eid :xt/id, :as doc} docs

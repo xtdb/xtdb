@@ -8,6 +8,7 @@
            java.nio.ByteBuffer
            java.time.Duration
            java.util.concurrent.CompletableFuture
+           [xtdb.api TransactionKey]
            [xtdb.log INotifyingSubscriberHandler Log]))
 
 (defn ->consumer [f]
@@ -17,7 +18,7 @@
      (f val))))
 
 (defn event-data->tx-instant [^EventData data]
-  (xt/->TransactionKey (.getOffset data) (.getEnqueuedTime data)))
+  (TransactionKey. (.getOffset data) (.getEnqueuedTime data)))
 
 (def producer-send-options
   (.setPartitionId (SendOptions.) "0"))
@@ -46,7 +47,7 @@
                       (->consumer (fn [e]
                                     (.completeExceptionally fut e)))
                       (fn [] (let [{:keys [offset timestamp]} (get-partition-properties consumer)]
-                               (.complete fut (log/->LogRecord (xt/->TransactionKey offset timestamp) record))))))
+                               (.complete fut (log/->LogRecord (TransactionKey. offset timestamp) record))))))
       fut))
 
   (readRecords [_ after-tx-id limit]
