@@ -39,10 +39,10 @@ export default defineConfig({
               label: 'What is XTDB?',
               items: [
                 { label: 'At a glance', link: '/intro/what-is-xtdb' },
-
                 { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
+                { label: 'Data model', link: '/intro/data-model' },
                 // { label: 'Architecture', link: '/intro/architecture' },
-                // { label: 'Bitemporality', link: '/intro/bitemporality' },
+                // { label: 'Bitemporality', link: '/intro/bitemporality' }
               ]
             },
             { label: 'Community', link: '/intro/community'},
