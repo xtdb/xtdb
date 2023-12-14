@@ -32,11 +32,13 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'Overview', link: '/index' },
+            { label: 'Why XTDB?', link: '/intro/why-xtdb'},
             { label: 'Getting started', link: '/intro/getting-started'},
             {
               label: 'What is XTDB?',
               items: [
                 { label: 'Overview', link: '/intro/what-is-xtdb' },
+
                 { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
                 // { label: 'Architecture', link: '/intro/architecture' },
                 // { label: 'Bitemporality', link: '/intro/bitemporality' },
