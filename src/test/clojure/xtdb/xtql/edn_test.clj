@@ -8,6 +8,7 @@
   (edn/unparse (edn/parse-expr expr)))
 
 (t/deftest test-parse-expr
+  (t/is (= nil (roundtrip-expr nil)))
   (t/is (= 'a (roundtrip-expr 'a)))
 
   (t/is (= 12 (roundtrip-expr 12)))
@@ -34,6 +35,9 @@
 
   (t/is (= #{1 2 3} (roundtrip-expr #{1 2 3}))
         "sets")
+
+  (t/is (= '{:foo (+ 1 a)} (roundtrip-expr '{:foo (+ 1 a)}))
+        "maps")
 
   (t/testing "calls"
     (t/is (= '(foo) (roundtrip-expr '(foo)))

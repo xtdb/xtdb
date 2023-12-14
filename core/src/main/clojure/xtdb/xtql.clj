@@ -10,9 +10,11 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator IRaQuerySource)
-           (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
-                       Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
+           (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
+                       DmlOps$Insert DmlOps$Update
+                       Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
                        Expr$Subquery Expr$Exists Expr$Pull Expr$PullMany Expr$Get
+                       Expr$Vec Expr$Set Expr$Map
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
                        Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify
@@ -118,6 +120,10 @@
                                   (set)))
 
 (extend-protocol ExprPlan
+  Expr$Null
+  (plan-expr [_this] nil)
+  (required-vars [_this] #{})
+
   Expr$LogicVar
   (plan-expr [this] (col-sym (.lv this)))
   (required-vars [this] #{(col-sym (.lv this))})
@@ -126,13 +132,20 @@
   (plan-expr [this] (param-sym (subs (.v this) 1)))
   (required-vars [_this] #{})
 
+  Expr$Vec
+  (plan-expr [this] (into [] (map plan-expr) (.elements this)))
+  (required-vars [this] (into #{} (mapv required-vars (.elements this))))
+
+  Expr$Set
+  (plan-expr [this] (into #{} (map plan-expr (.elements this)) ))
+  (required-vars [this] (into #{} (mapv required-vars (.elements this))))
+
+  Expr$Map
+  (plan-expr [this] (into {} (map (juxt (comp keyword util/str->normal-form-str key) (comp plan-expr val)) (.elements this))))
+  (required-vars [this] (into #{} (mapv required-vars (vals (.elements this)))))
+
   Expr$Obj
-  (plan-expr [o]
-    (let [obj (.obj o)]
-      (cond (vector? obj) (into [] (map plan-expr) obj)
-            (set? obj) (into #{} (map plan-expr) obj)
-            (map? obj) (into {} (map (juxt (comp util/kw->normal-form-kw key) (comp plan-expr val))) obj)
-            :else obj)))
+  (plan-expr [o] (.obj o))
   (required-vars [_] #{})
 
   Expr$Bool
