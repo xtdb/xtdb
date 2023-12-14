@@ -8,6 +8,9 @@ For your peace of mind, though, XTDB is the flagship product of link:https://jux
 
 JUXT additionally provide https://xtdb.com/support[enterprise XTDB support^] for companies looking to adopt or extend their usage of XTDB - including training, consultancy and production support.
 
+[#oss-community]
+== Open-source community
+
 XTDB also has an active open-source community:
 
 * on our https://discuss.xtdb.com[public forum^].
