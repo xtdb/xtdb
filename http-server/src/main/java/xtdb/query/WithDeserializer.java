@@ -20,10 +20,6 @@ public class WithDeserializer extends StdDeserializer<Query.With> {
         super(Query.With.class);
     }
 
-    private List<VarSpec> deserializeVars(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.<VarSpec>nodeToSpecs(mapper, node, VarSpec::of);
-    }
-
     @Override
     public Query.With deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -32,9 +28,7 @@ public class WithDeserializer extends StdDeserializer<Query.With> {
             JsonNode with = node.get("with");
 
             if (with.isArray()) {
-                List<VarSpec> vars = deserializeVars(mapper, with);
-        
-                return Query.with(vars);
+                return Query.with(SpecListDeserializer.<VarSpec>nodeToSpecs(mapper, with, VarSpec::of));
             } else {
                 throw new IllegalArgumentException("With should be a list of bindings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }

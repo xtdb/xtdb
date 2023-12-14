@@ -20,10 +20,6 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
         super(Query.Return.class);
     }
 
-    private List<ColSpec> deserializeCols(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node, ColSpec::of);
-    }
-
     @Override
     public Query.Return deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -31,7 +27,7 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
         try {
             JsonNode returnNode = node.get("return");
             if (returnNode.isArray()) {
-                return Query.returning(deserializeCols(mapper, returnNode));
+                return Query.returning(SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, returnNode, ColSpec::of));
             } else {
                 throw new IllegalArgumentException("Return should be a list of values", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }

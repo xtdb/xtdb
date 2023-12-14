@@ -48,9 +48,9 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
             var relNode = node.get("rel");
             Query.Relation rel;
             if (relNode.isArray()) {
-                rel = Query.relation(deserializeDocuments(mapper, (ArrayNode) node.get("rel")), deserializeBind(mapper, (ArrayNode) node.get("bind")));
+                rel = Query.relation(deserializeDocuments(mapper, (ArrayNode) node.get("rel")), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
             } else {
-                rel = Query.relation((Expr.Param) mapper.treeToValue(node.get("rel"), Expr.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
+                rel = Query.relation((Expr.Param) mapper.treeToValue(node.get("rel"), Expr.class), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
             }
             return rel;
         } catch (IllegalArgumentException i) {

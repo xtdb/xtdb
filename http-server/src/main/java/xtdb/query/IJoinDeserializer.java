@@ -20,14 +20,6 @@ public class IJoinDeserializer extends StdDeserializer<Query.IJoin> {
         super(Query.Join.class);
     }
 
-    private List<ArgSpec> deserializeArgs(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node, ArgSpec::of);
-    }
-
-    private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node, OutSpec::of);
-    }
-
     public Query.IJoin deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);
@@ -35,12 +27,12 @@ public class IJoinDeserializer extends StdDeserializer<Query.IJoin> {
         try {
             Query.IJoin join = null;
             if (node.has("join")) {
-                join = Query.join(mapper.treeToValue(node.get("join"), Query.class), deserializeArgs(mapper, (ArrayNode) node.get("args")));
+                join = Query.join(mapper.treeToValue(node.get("join"), Query.class), SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node.get("args"), ArgSpec::of));
             } else {
-                join = Query.leftJoin(mapper.treeToValue(node.get("left_join"), Query.class), deserializeArgs(mapper, (ArrayNode) node.get("args")));
+                join = Query.leftJoin(mapper.treeToValue(node.get("left_join"), Query.class), SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node.get("args"), ArgSpec::of));
             }
             if (node.has("bind")) {
-                join = join.binding(deserializeBind(mapper, (ArrayNode) node.get("bind")));
+                join = join.binding(SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
             }
             return join;
         } catch (IllegalArgumentException i) {

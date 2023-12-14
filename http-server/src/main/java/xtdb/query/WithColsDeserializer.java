@@ -19,10 +19,6 @@ public class WithColsDeserializer extends StdDeserializer<Query.WithCols> {
         super(Query.WithCols.class);
     }
 
-    private List<ColSpec> deserializeCols(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node, ColSpec::of);
-    }
-
     @Override
     public Query.WithCols deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -31,8 +27,7 @@ public class WithColsDeserializer extends StdDeserializer<Query.WithCols> {
             JsonNode with = node.get("with");
 
             if (with.isArray()) {
-                List<ColSpec> colSpecs = deserializeCols(mapper, with);
-                return Query.withCols(colSpecs);
+                return Query.withCols(SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, with, ColSpec::of));
             } else {
                 throw new IllegalArgumentException("With should be a list of bindings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }

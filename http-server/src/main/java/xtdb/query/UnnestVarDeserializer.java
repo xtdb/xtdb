@@ -18,10 +18,6 @@ public class UnnestVarDeserializer extends StdDeserializer<Query.UnnestVar> {
         super(Query.UnnestVar.class);
     }
 
-    private List<VarSpec> deserializeVars(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.<VarSpec>nodeToSpecs(mapper, node, VarSpec::of);
-    }
-
     @Override
     public Query.UnnestVar deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();

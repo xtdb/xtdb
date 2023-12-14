@@ -223,7 +223,7 @@
            (roundtrip-query {"from" "docs"
                              "bind" ["xt/id" {"a" "b"}]})))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-from'"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-spec'"
                           (roundtrip-query {"from" "docs"
                                             "bind" "xt/id"}))
         "bind not an array")

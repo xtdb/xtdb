@@ -21,10 +21,6 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
         super(Query.From.class);
     }
 
-    private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node, OutSpec::of);
-    }
-
     @Override
     public Query.From deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -32,7 +28,7 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
 
         try {
             var query = Query.from(node.get("from").asText());
-            query = query.binding(deserializeBind(mapper, (ArrayNode) node.get("bind")));
+            query = query.binding(SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
             return query;
         } catch (IllegalArgumentException i) {
             throw i;

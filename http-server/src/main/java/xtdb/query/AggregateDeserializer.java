@@ -20,15 +20,12 @@ public class AggregateDeserializer extends StdDeserializer<Query.Aggregate> {
         super(Query.Aggregate.class);
     }
 
-    private List<ColSpec> deserializeColSpec(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node, ColSpec::of);
-    }
     public Query.Aggregate deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         ObjectNode node = mapper.readTree(p);
 
         try {
-            return Query.aggregate(deserializeColSpec(mapper, (ArrayNode) node.get("aggregate")));
+            return Query.aggregate(SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node.get("aggregate"), ColSpec::of));
         } catch (IllegalArgumentException i) {
             throw i;
         } catch (Exception e) {

@@ -31,10 +31,6 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
         return false;
     }
 
-   private List<ArgSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node, ArgSpec::of);
-   }
-
     @Override
     public Expr deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -63,16 +59,16 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
             }
             if (node instanceof ObjectNode  && supportedObjectDeserialization((ObjectNode) node)){
                 if (node.has("exists")) {
-                    return Expr.exists(mapper.treeToValue(node.get("exists"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
+                    return Expr.exists(mapper.treeToValue(node.get("exists"), Query.class), SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node.get("bind"), ArgSpec::of));
                 }
                 if (node.has("q")) {
-                    return Expr.q(mapper.treeToValue(node.get("q"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
+                    return Expr.q(mapper.treeToValue(node.get("q"), Query.class),SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node.get("bind"), ArgSpec::of));
                 }
                 if (node.has("pull")) {
-                    return Expr.pull(mapper.treeToValue(node.get("pull"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
+                    return Expr.pull(mapper.treeToValue(node.get("pull"), Query.class), SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node.get("bind"), ArgSpec::of));
                 }
                 if (node.has("pull_many")) {
-                    return Expr.pullMany(mapper.treeToValue(node.get("pull_many"), Query.class), deserializeBind(mapper, (ArrayNode) node.get("bind")));
+                    return Expr.pullMany(mapper.treeToValue(node.get("pull_many"), Query.class), SpecListDeserializer.<ArgSpec>nodeToSpecs(mapper, node.get("bind"), ArgSpec::of));
                 }
                 if (node.has("call")) {
                     List<Expr> args = new ArrayList<>();

@@ -18,10 +18,6 @@ public class UnnestColDeserializer extends StdDeserializer<Query.UnnestCol> {
         super(Query.UnnestCol.class);
     }
 
-    private List<ColSpec> deserializeCols(ObjectMapper mapper, JsonNode node) throws Exception {
-        return SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node, ColSpec::of);
-    }
-
     @Override
     public Query.UnnestCol deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
