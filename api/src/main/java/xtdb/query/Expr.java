@@ -25,7 +25,7 @@ public interface Expr {
 
         @Override
         public boolean equals(Object o) {
-            if (getClass() == o.getClass()) return true;
+            if (o == null || getClass() == o.getClass()) return true;
             return false;
         }
 
