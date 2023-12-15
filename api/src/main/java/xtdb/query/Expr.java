@@ -343,10 +343,10 @@ public interface Expr {
         return new Exists(query, args);
     }
 
-    final class Vec implements Expr {
+    final class ListExpr implements Expr {
         public final List<Expr> elements;
 
-        private Vec(List<Expr> elements) {
+        private ListExpr(List<Expr> elements) {
             this.elements = elements;
         }
 
@@ -354,7 +354,7 @@ public interface Expr {
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            Vec vec = (Vec) o;
+            ListExpr vec = (ListExpr) o;
             return Objects.equals(elements, vec.elements);
         }
 
@@ -364,14 +364,14 @@ public interface Expr {
         }
     }
 
-    static Vec vec(List<Expr> elements){
-       return new Vec(elements);
+    static ListExpr list(List<Expr> elements){
+       return new ListExpr(elements);
     }
 
-    final class Set implements Expr {
-        public final java.util.Set<Expr> elements;
+    final class SetExpr implements Expr {
+        public final Set<Expr> elements;
 
-        private Set(java.util.Set<Expr> elements) {
+        private SetExpr(Set<Expr> elements) {
             this.elements = elements;
         }
 
@@ -379,7 +379,7 @@ public interface Expr {
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            Set set = (Set) o;
+            SetExpr set = (SetExpr) o;
             return Objects.equals(elements, set.elements);
         }
 
@@ -389,14 +389,14 @@ public interface Expr {
         }
     }
 
-    static Set set(java.util.Set<Expr> elements){
-        return new Set(elements);
+    static SetExpr set(Set<Expr> elements){
+        return new SetExpr(elements);
     }
 
-    final class Map implements Expr {
-        public final java.util.Map<String, Expr> elements;
+    final class MapExpr implements Expr {
+        public final Map<String, Expr> elements;
 
-        public Map(java.util.Map<String, Expr> elements) {
+        public MapExpr(Map<String, Expr> elements) {
             this.elements = elements;
         }
 
@@ -404,7 +404,7 @@ public interface Expr {
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            Map map = (Map) o;
+            MapExpr map = (MapExpr) o;
             return Objects.equals(elements, map.elements);
         }
 
@@ -414,8 +414,8 @@ public interface Expr {
         }
     }
 
-    static Map map(java.util.Map<String, Expr> elements){
-        return new Map(elements);
+    static MapExpr map(Map<String, Expr> elements){
+        return new MapExpr(elements);
     }
 
     final class Pull implements Expr {

@@ -14,7 +14,7 @@
                        DmlOps$Insert DmlOps$Update
                        Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
                        Expr$Subquery Expr$Exists Expr$Pull Expr$PullMany Expr$Get
-                       Expr$Vec Expr$Set Expr$Map
+                       Expr$ListExpr Expr$SetExpr Expr$MapExpr
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
                        Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify
@@ -132,15 +132,15 @@
   (plan-expr [this] (param-sym (subs (.v this) 1)))
   (required-vars [_this] #{})
 
-  Expr$Vec
+  Expr$ListExpr
   (plan-expr [this] (into [] (map plan-expr) (.elements this)))
   (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
 
-  Expr$Set
+  Expr$SetExpr
   (plan-expr [this] (into #{} (map plan-expr (.elements this)) ))
   (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
 
-  Expr$Map
+  Expr$MapExpr
   (plan-expr [this] (into {} (map (juxt (comp keyword util/str->normal-form-str key) (comp plan-expr val)) (.elements this))))
   (required-vars [this] (into #{} (mapcat required-vars (vals (.elements this)))))
 
