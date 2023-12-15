@@ -142,6 +142,10 @@ export default defineConfig({
 
   trailingSlashes: "never",
 
+  build: {
+    format: "file"
+  },
+
   vite: {
     plugins: [yaml()]
   },
