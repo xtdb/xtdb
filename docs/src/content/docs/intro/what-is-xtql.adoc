@@ -324,7 +324,7 @@ You now understand the fundamentals behind how to construct XTQL queries from it
 
 You can:
 
-* check out the reference guides for XTQL link:xtql/queries[queries] and link:xtql/txs[transactions].
+* check out the reference guides for XTQL link:/reference/main/xtql/queries[queries] and link:/reference/main/xtql/txs[transactions].
 
 We're very much in **listening mode** right now - as a keen early adopter, we'd love to hear your first impressions, thoughts and opinions on where we're headed with XTQL.
-Please do get in touch via the http://localhost:4321/intro/community.html#oss-community[usual channels]!
+Please do get in touch via the link:/intro/community.html#oss-community[usual channels]!
