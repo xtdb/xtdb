@@ -554,10 +554,6 @@
                                        (key-fn s)))
                      :else (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))))
 
-(defn validate-remote-key-fn [key-fn]
-  (when-not (#{:clojure :sql :snake_case} key-fn)
-    (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))
-
 (defn ->child-allocator [^BufferAllocator allocator name]
   (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))
 

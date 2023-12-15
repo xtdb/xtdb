@@ -6,8 +6,7 @@
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
-            [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.time :as time])
   (:import [java.io EOFException InputStream]
            java.lang.AutoCloseable
            java.util.concurrent.CompletableFuture
@@ -85,8 +84,12 @@
       ;; This should be an error we know how to decode
       (parse-body transit/read))))
 
+(defn- validate-remote-key-fn [key-fn]
+  (when-not (#{:clojure :sql :snake_case} key-fn)
+    (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))
+
 (defn validate-query-opts [{:keys [key-fn] :as _query-opts}]
-  (some-> key-fn util/validate-remote-key-fn))
+  (some-> key-fn validate-remote-key-fn))
 
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   xtp/PNode
