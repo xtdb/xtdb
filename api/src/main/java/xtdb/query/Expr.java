@@ -2,6 +2,7 @@ package xtdb.query;
 
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
+import clojure.lang.MapEntry;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -350,6 +351,12 @@ public interface Expr {
         }
 
         @Override
+        public String toString() {
+            String args = this.elements.isEmpty() ? null : " " + this.elements.stream().map(Object::toString).collect(Collectors.joining(" "));
+            return String.format("(list%s)", args);
+        }
+
+        @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
@@ -375,6 +382,12 @@ public interface Expr {
         }
 
         @Override
+        public String toString() {
+            String args = this.elements.isEmpty() ? null : " " + this.elements.stream().map(Object::toString).collect(Collectors.joining(" "));
+            return String.format("(set%s)", args);
+        }
+
+        @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
@@ -397,6 +410,12 @@ public interface Expr {
 
         public MapExpr(Map<String, Expr> elements) {
             this.elements = elements;
+        }
+
+        @Override
+        public String toString() {
+            String args = this.elements.isEmpty() ? null : " " + this.elements.entrySet().stream().map(e -> "[" + e.getKey() + " " + e.getValue().toString() + "]").collect(Collectors.joining(" "));
+            return String.format("(map%s)", args);
         }
 
         @Override
