@@ -5,8 +5,7 @@
             [time-literals.read-write :as time-literals]
             [xtdb.api :as xt]
             [xtdb.error :as err]
-            [xtdb.time :as time]
-            [xtdb.types :as types])
+            [xtdb.time :as time])
   (:import java.io.Writer
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
