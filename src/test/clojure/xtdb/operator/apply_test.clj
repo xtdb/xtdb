@@ -132,6 +132,17 @@
                 [:select (= ?x2 y)
                  [:table [{:y 0}, {:y 1}]]]]] {}))))
 
+(t/deftest test-shadowed-param
+  (t/is (= [{:z 0, :x 1, :y nil}
+            {:z 1, :x 1, :y nil}]
+           (tu/query-ra
+             '[:apply :cross-join {z ?foo}
+               [:table [{:z 0}, {:z 1}]]
+               [:apply :single-join {x ?foo}
+                [:table [{:x 1}]]
+                [:select (= ?foo y)
+                 [:table [{:y 0}]]]]] {}))))
+
 (t/deftest test-forwarding-nullable-type-information-494
   (t/is (= [{:x 0, :z 0, :y 0}]
            (tu/query-ra
