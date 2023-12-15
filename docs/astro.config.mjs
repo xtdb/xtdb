@@ -140,6 +140,8 @@ export default defineConfig({
     adoc(),
   ],
 
+  trailingSlashes: "never",
+
   vite: {
     plugins: [yaml()]
   },
