@@ -91,7 +91,7 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 | link:#_aggregate[`aggregate`,role=no-underline] | Groups the relation rows by the given aggregate-specs
 | link:#_limit[`limit`,role=no-underline] | Only returns the top N rows of the relation
 | link:#_offset[`offset`,role=no-underline] | Skips the first N rows of the relation
-| link:#_order-by[`order-by`,role=no-underline] | Orders the relation by the given columns
+| link:#_order_by[`order-by`,role=no-underline] | Orders the relation by the given columns
 | link:#_return[`return`,role=no-underline] | Restricts the output to the given columns
 | link:#_where[`where`,role=no-underline] | Filters the relation using the given predicates
 | link:#_with[`with`,role=no-underline] | Adds columns to the relation
@@ -281,7 +281,7 @@ In this case, `customer-id` is specified multiple times, so this adds a join-con
 === `limit`
 
 The `limit` operator limits the rows returned by the query.
-Without an explicit preceding link:#_order-by[`order-by`,role=no-underline], the rows selected for return are undefined.
+Without an explicit preceding link:#_order_by[`order-by`,role=no-underline], the rows selected for return are undefined.
 
 [source]
 ----
@@ -301,7 +301,7 @@ For example:
 === `offset`
 
 The `offset` operator skips the first N rows that would have otherwise been returned by the query.
-Without an explicit preceding link:#_order-by[`order-by`,role=no-underline], the rows selected for return are undefined.
+Without an explicit preceding link:#_order_by[`order-by`,role=no-underline], the rows selected for return are undefined.
 
 [source]
 ----
