@@ -2290,3 +2290,15 @@
                (required-vars '[1 #{(+ a $b)}  2])))
       (t/is (= #{'a}
                (required-vars '{"foo" #{(+ a $b)}}))))))
+
+(deftest test-push-selection-down-past-map
+  (xt/submit-tx tu/*node* [(xt/put :users {:xt/id :ben :x "foo" :y "foo"})
+                           (xt/put :users {:xt/id :jeff :x "bar" :y "baz"})])
+
+  (t/is (= [{:x "foo", :y "foo", :id :ben}]
+           (xt/q tu/*node*
+                 '(unify
+                   (from :users [{:xt/id id} x y])
+                   (with {y x}))))
+        "tests that columns in projections are rewritten correctly when pushed
+         down past map operators of col to col"))
