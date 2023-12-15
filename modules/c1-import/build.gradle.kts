@@ -5,6 +5,10 @@ plugins {
     signing
 }
 
+ext {
+    set("labs", true)
+}
+
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {

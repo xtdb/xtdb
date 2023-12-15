@@ -27,7 +27,9 @@ val sixGBJvmArgs = listOf(
 allprojects {
     val proj = this
 
-    group = "com.xtdb.labs"
+    // labs sub-projects set this explicitly - this runs afterwards
+    group = if (proj.hasProperty("labs")) "com.xtdb.labs" else "com.xtdb"
+
     version = System.getenv("XTDB_VERSION") ?: "dev-SNAPSHOT"
 
     repositories {
@@ -113,7 +115,6 @@ allprojects {
         if (plugins.hasPlugin("maven-publish")) {
             extensions.configure(PublishingExtension::class) {
                 publications.named("maven", MavenPublication::class) {
-                    groupId = "com.xtdb.labs"
                     artifactId = "xtdb-${proj.name}"
                     version = proj.version.toString()
                     from(components["java"])
@@ -232,7 +233,7 @@ tasks.create("run-auctionmark", JavaExec::class) {
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val args = mutableListOf<String>(
+    val args = mutableListOf(
         "-m", "xtdb.bench2.xtdb2"
     )
 
@@ -249,7 +250,7 @@ tasks.create("build-codox", JavaExec::class) {
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val args = mutableListOf<String>(
+    val args = mutableListOf(
         "-e", "(require 'codox.main)",
         "-e", "(codox.main/generate-docs ${codoxOpts})"
     )
@@ -261,7 +262,7 @@ tasks.create("create-reports", JavaExec::class) {
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs)
-    val args = mutableListOf<String>(
+    val args = mutableListOf(
         "-m", "xtdb.bench2.report"
     )
 
