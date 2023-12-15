@@ -55,8 +55,8 @@ First, add the thin client to your `deps.edn`, or dependency manager of choice:
 {:mvn/repos {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
-        com.xtdb.labs/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
-        com.xtdb.labs/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}}}
+        com.xtdb/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
+        com.xtdb/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}}}
 ----
 
 Once you have a REPL (e.g. by running `clj`), you can connect to the XTDB node with:
@@ -91,8 +91,8 @@ First, ensure you are running JDK 17+ and then add the XTDB dependencies to your
 {:mvn/repos {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
-        com.xtdb.labs/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
-        com.xtdb.labs/xtdb-core {:mvn/version "2.0.0-SNAPSHOT"}}
+        com.xtdb/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
+        com.xtdb/xtdb-core {:mvn/version "2.0.0-SNAPSHOT"}}
 
  :aliases {:xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
                              "-Dio.netty.tryReflectionSetAccessible=true"]}}}

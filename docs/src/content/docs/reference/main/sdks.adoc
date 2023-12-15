@@ -34,21 +34,21 @@ The XTDB artifacts for each release are deployed to Maven Central:
 <dependencies>
     <!-- xtdb-api for the main public API, for both remote-client and in-process nodes -->
     <dependency>
-        <groupId>com.xtdb.labs</groupId>
+        <groupId>com.xtdb</groupId>
         <artifactId>xtdb-api</artifactId>
         <version>2.0.0-SNAPSHOT</version>
     </dependency>
 
-    <!-- xtdb-client for connecting to a remote server -->
+    <!-- xtdb-http-client-clj for connecting to a remote server -->
     <dependency>
-        <groupId>com.xtdb.labs</groupId>
-        <artifactId>xtdb-client</artifactId>
+        <groupId>com.xtdb</groupId>
+        <artifactId>xtdb-http-client-clj</artifactId>
         <version>2.0.0-SNAPSHOT</version>
     </dependency>
 
     <!-- xtdb-core for running an in-process (test) node -->
     <dependency>
-        <groupId>com.xtdb.labs</groupId>
+        <groupId>com.xtdb</groupId>
         <artifactId>xtdb-core</artifactId>
         <version>2.0.0-SNAPSHOT</version>
     </dependency>
@@ -67,13 +67,13 @@ The XTDB artifacts for each release are deployed to Maven Central:
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
 
         ;; xtdb-api for the main public API, for both remote-client and in-process nodes
-        com.xtdb.labs/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
+        com.xtdb/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
 
-        ;; xtdb-client for connecting to a remote server
-        com.xtdb.labs/xtdb-client {:mvn/version "2.0.0-SNAPSHOT"}
+        ;; xtdb-http-client-clj for connecting to a remote server
+        com.xtdb/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}
 
         ;; xtdb-core for running an in-process (test) node (JDK 17+)
-        com.xtdb.labs/xtdb-core {:mvn/version "2.0.0-SNAPSHOT"}}
+        com.xtdb/xtdb-core {:mvn/version "2.0.0-SNAPSHOT"}}
 
  ;; JVM options required for in-process node
  :aliases {:xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
