@@ -152,6 +152,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionKey'
+        400:
+          description: A validation error, parsing error or runtime error occurred.
+          content:
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        500:
+          description: Server error. An unknown error occurred server side.
+          content:
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /query:
     post:
       summary: Query
@@ -187,7 +206,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         500:
-          description: Server error. An unknown server occured server side.
+          description: Server error. An unknown error occurred server side.
           content:
             application/transit+json:
               schema:
