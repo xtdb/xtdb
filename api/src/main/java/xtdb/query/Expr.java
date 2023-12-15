@@ -11,9 +11,11 @@ import static xtdb.query.QueryUtil.unmodifiableList;
 
 public interface Expr {
 
+    Null NULL = new Null();
+
     final class Null implements Expr {
 
-        public Null() {}
+        private Null() {}
 
         @Override
         public String toString() {
@@ -30,10 +32,6 @@ public interface Expr {
         public int hashCode() {
             return 1;
         }
-    }
-
-    static Null val() {
-        return new Null();
     }
 
     Bool TRUE = new Bool(true);

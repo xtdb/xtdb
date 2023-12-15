@@ -79,7 +79,7 @@
 
 (defn parse-expr [expr]
   (cond
-    (nil? expr) (Expr/val)
+    (nil? expr) Expr/NULL
     (true? expr) Expr/TRUE
     (false? expr) Expr/FALSE
     (int? expr) (Expr/val (long expr))
