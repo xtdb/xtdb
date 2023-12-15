@@ -24,7 +24,7 @@ public class LimitDeserializer extends StdDeserializer<Query.Limit> {
 
         try {
             JsonNode limit = node.get("limit");
-            if (limit != null && limit.isNumber()) {
+            if (limit != null && (limit.isLong() || limit.isInt())) {
                 long limitValue = limit.asLong(); // Parse as long
                 return Query.limit(limitValue);
             } else {

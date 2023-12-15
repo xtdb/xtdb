@@ -48,7 +48,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
             if (node.isInt()) {
                 return Expr.val((long) node.asInt());
             }
-            if (node.isLong()) {
+            if (node.isLong() || node.isInt()) {
                 return Expr.val(node.asLong());
             }
             if (node.isDouble()) {

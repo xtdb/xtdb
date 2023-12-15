@@ -24,7 +24,7 @@ public class OffsetDeserializer extends StdDeserializer<Query.Offset> {
 
         try {
             JsonNode offset = node.get("offset");
-            if (offset != null && offset.isNumber()) {
+            if (offset != null && (offset.isLong() || offset.isInt())) {
                 long offsetValue = offset.asLong(); // Parse as long
                 return Query.offset(offsetValue);
             } else {
