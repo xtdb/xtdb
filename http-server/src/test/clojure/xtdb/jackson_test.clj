@@ -159,10 +159,10 @@
 (defn- roundtrip-expr [e]
   (.readValue jackson/query-mapper (json/write-value-as-string e jackson/json-ld-mapper) Expr))
 
-(type (.readValue jackson/json-ld-mapper (json/write-value-as-string 1 jackson/json-ld-mapper) Object))
-
-
 (deftest deserialize-expr-test
+  (t/is (= Expr/NULL
+           (roundtrip-expr nil))
+        "null")
   (t/is (= (Expr/lVar "foo")
            (roundtrip-expr "foo"))
         "logic-var")
@@ -179,39 +179,56 @@
   (t/is (= (Expr/exists (-> (Query/from "docs")
                             (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
                         [])
-           (roundtrip-expr {"exists" {"from" "docs"
-                                      "bind" ["xt/id"]}
+           (roundtrip-expr {"xt:exists" {"from" "docs"
+                                         "bind" ["xt/id"]}
                             "bind" []}))
         "exists")
 
   (t/is (= (Expr/q (-> (Query/from "docs")
                        (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
                    [])
-           (roundtrip-expr {"q" {"from" "docs"
-                                 "bind" ["xt/id"]}
+           (roundtrip-expr {"xt:q" {"from" "docs"
+                                    "bind" ["xt/id"]}
                             "bind" []}))
         "subquery")
 
   (t/is (= (Expr/pull (-> (Query/from "docs")
                           (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
                       [])
-           (roundtrip-expr {"pull" {"from" "docs"
-                                    "bind" ["xt/id"]}
+           (roundtrip-expr {"xt:pull" {"from" "docs"
+                                       "bind" ["xt/id"]}
                             "bind" []}))
         "pull")
 
   (t/is (= (Expr/pullMany (-> (Query/from "docs")
                               (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
                           [])
-           (roundtrip-expr {"pull_many" {"from" "docs"
-                                         "bind" ["xt/id"]}
+           (roundtrip-expr {"xt:pull_many" {"from" "docs"
+                                            "bind" ["xt/id"]}
                             "bind" []}))
         "pull")
 
   (t/is (= (Expr/call "+" [(Expr/lVar "foo") (Expr/lVar "bar")])
-           (roundtrip-expr {"call" "+"
+           (roundtrip-expr {"xt:call" "+"
                             "args" ["foo" "bar"]}))
-        "call"))
+        "call")
+
+  (t/is (= (Expr/call "+" [(Expr/lVar "foo") (Expr/lVar "bar")])
+           (roundtrip-expr {"xt:call" "+"
+                            "args" ["foo" "bar"]}))
+        "call")
+
+  (t/is (= (Expr/list (list (Expr/val 1) (Expr/val 2)))
+           (roundtrip-expr [1 2]))
+        "list")
+
+  (t/is (= (Expr/map {"foo" (Expr/val 1)})
+           (roundtrip-expr {"foo" 1}))
+        "maps")
+
+  (t/is (= (Expr/set #{(Expr/val 1) (Expr/val :foo)})
+           (roundtrip-expr #{1 :foo}))
+        "sets"))
 
 (defn roundtrip-query [v]
   (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query))
@@ -257,10 +274,12 @@
 
 (deftest deserialize-query-tail-test
   (t/testing "where"
-    (t/is (= (Query/where [(Expr/val {">=" ["foo" "bar"]})
-                           (Expr/val {"<" ["bar" "baz"]})])
-             (roundtrip-query-tail {"where" [{">=" ["foo" "bar"]}
-                                             {"<" ["bar" "baz"]}]})))
+    (t/is (= (Query/where [(Expr/call ">=" [(Expr/val 1) (Expr/val 2)])
+                           (Expr/call "<" [(Expr/val 1) (Expr/val 2)])])
+             (roundtrip-query-tail {"where" [{"xt:call" ">="
+                                              "args" [1 2]}
+                                             {"xt:call" "<"
+                                              "args" [1 2]}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Where should be a list of expressions"
                             (roundtrip-query-tail {"where" "not-a-list"}))
@@ -340,7 +359,7 @@
   (t/testing "aggregate"
     (t/is (= (Query/aggregate [(ColSpec/of "bar" (Expr/lVar "bar"))
                                (ColSpec/of "baz" (Expr/call "sum" [(Expr/lVar "foo")]))])
-             (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"call" "sum"
+             (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"xt:call" "sum"
                                                                "args" ["foo"]}}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-spec'"
@@ -359,7 +378,7 @@
                                          "bind" ["xt/id"]}]})))
 
     (t/is (= (Query/unify [parsed-q
-                           (Query/where [(Expr/val {">=" ["foo" "bar"]})])
+                           (Query/where [(Expr/call ">=" [(Expr/val 1) (Expr/val 2)])])
                            (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))
                            (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
                                         (VarSpec/of "b" (Expr/lVar "b"))])
@@ -370,7 +389,8 @@
                            (Query/relation (Expr/param "$bar") ^List (list (OutSpec/of "foo" (Expr/lVar "foo"))))])
              (roundtrip-unify {"unify" [{"from" "docs"
                                          "bind" ["xt/id"]}
-                                        {"where" [{">=" ["foo" "bar"]}]}
+                                        {"where" [{"xt:call" ">="
+                                                   "args"[1 2]}]}
                                         {"unnest" {"a" "b"}}
                                         {"with" ["a" "b"]}
                                         {"join" {"from" "docs"
