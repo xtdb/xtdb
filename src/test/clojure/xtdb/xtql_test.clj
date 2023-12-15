@@ -2302,3 +2302,29 @@
                    (with {y x}))))
         "tests that columns in projections are rewritten correctly when pushed
          down past map operators of col to col"))
+
+(deftest test-nested-subqueries
+  (xt/submit-tx tu/*node* [(xt/put :users {:xt/id :ben :friends [:jimmy :bob]})
+                           (xt/put :users {:xt/id :bob :friends []})
+                           (xt/put :users {:xt/id :jimmy :friends [:ben]})])
+
+  (t/is (= [{:friends nil, :id :bob}
+            {:friends [{:id :ben, :friends [{:id :bob, :friends []}
+                                            {:id :jimmy, :friends [:ben]}]}], :id :jimmy}
+            {:friends [{:id :bob, :friends nil}
+                       {:id :jimmy, :friends [{:id :ben, :friends [:jimmy :bob]}]}], :id :ben}]
+           (xt/q tu/*node* '(-> (from :users [{:xt/id id} friends])
+                                (with {:friends
+                                       (pull* (-> (unify
+                                                   (from :users [{:xt/id id} friends])
+                                                   (with {outer-friends $friends})
+                                                   (unnest {id outer-friends}))
+                                                  (with {:friends (pull*
+                                                                   (-> (unify
+                                                                        (from :users [{:xt/id id} friends])
+                                                                        (with {outer-friends $friends})
+                                                                        (unnest {id outer-friends}))
+                                                                       (return id friends))
+                                                                   {:args [friends]})})
+                                                  (return id friends))
+                                              {:args [friends]})}))))))

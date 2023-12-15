@@ -1114,6 +1114,18 @@
     (decorrelate-group-by-apply nil group-by-columns
                                 :cross-join columns independent-relation dependent-relation)))
 
+(defn- contains-invalid-rule-9-agg-fns?
+  "Rule 9 requires that agg-fn(null) = agg-fn(empty-rel) this isn't true for these fns"
+  [group-by-specs]
+  (let [found? (volatile! false)]
+    (w/prewalk
+     #(if (and (= 'array-agg %)
+               (not (column? %)))
+        (vreset! found? true)
+        %)
+     group-by-specs)
+    @found?))
+
 (defn- decorrelate-apply-rule-9
   "R A× (G F1 E) = G columns(R),F' (R A⟕ E)"
   [z]
@@ -1124,16 +1136,18 @@
       [:group-by group-by-columns
        dependent-relation]]]
     ;;=>
-    (decorrelate-group-by-apply post-group-by-projection group-by-columns
-                                :left-outer-join columns independent-relation dependent-relation)
+    (when-not (contains-invalid-rule-9-agg-fns? group-by-columns)
+      (decorrelate-group-by-apply post-group-by-projection group-by-columns
+                                  :left-outer-join columns independent-relation dependent-relation))
 
     [:apply :single-join columns
      independent-relation
      [:group-by group-by-columns
       dependent-relation]]
     ;;=>
-    (decorrelate-group-by-apply nil group-by-columns
-                                :left-outer-join columns independent-relation dependent-relation)))
+    (when-not (contains-invalid-rule-9-agg-fns? group-by-columns)
+      (decorrelate-group-by-apply nil group-by-columns
+                                  :left-outer-join columns independent-relation dependent-relation))))
 
 (defn- as-equi-condition [expr lhs rhs]
   (when (equals-predicate? expr)
@@ -1365,7 +1379,6 @@
    #'decorrelate-apply-rule-4
    #'decorrelate-apply-rule-8
    #'decorrelate-apply-rule-9])
-
 
 (defn rewrite-plan [plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}, :as opts}]
   (let [!fired-rules (atom [])]
