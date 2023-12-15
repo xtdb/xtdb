@@ -134,15 +134,15 @@
 
   Expr$Vec
   (plan-expr [this] (into [] (map plan-expr) (.elements this)))
-  (required-vars [this] (into #{} (mapv required-vars (.elements this))))
+  (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
 
   Expr$Set
   (plan-expr [this] (into #{} (map plan-expr (.elements this)) ))
-  (required-vars [this] (into #{} (mapv required-vars (.elements this))))
+  (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
 
   Expr$Map
   (plan-expr [this] (into {} (map (juxt (comp keyword util/str->normal-form-str key) (comp plan-expr val)) (.elements this))))
-  (required-vars [this] (into #{} (mapv required-vars (vals (.elements this)))))
+  (required-vars [this] (into #{} (mapcat required-vars (vals (.elements this)))))
 
   Expr$Obj
   (plan-expr [o] (.obj o))

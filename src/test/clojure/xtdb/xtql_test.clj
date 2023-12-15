@@ -6,6 +6,8 @@
 (ns xtdb.xtql-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.edn :as edn]
             [xtdb.james-bond :as bond]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
@@ -2268,7 +2270,7 @@
   (t/is (empty? (xt/q tu/*node* '(from :comments []))))
 
   (xt/submit-tx tu/*node*
-    [(xt/put :comments {:xt/id 1})])
+                [(xt/put :comments {:xt/id 1})])
 
   ;; Query works after insert
   (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
@@ -2278,3 +2280,13 @@
 
   ;; Ingester error after delete
   (t/is (empty? (xt/q tu/*node* '(from :xt/txs [{:xt/committed? false}])))))
+
+(deftest plan-expr-test
+  (let [required-vars (comp xtql/required-vars edn/parse-expr)]
+    (t/testing "required-vars"
+      (t/is (= #{'a}
+               (required-vars '#{1 (+ a $b) 2})))
+      (t/is (= #{'a}
+               (required-vars '[1 #{(+ a $b)}  2])))
+      (t/is (= #{'a}
+               (required-vars '{"foo" #{(+ a $b)}}))))))
