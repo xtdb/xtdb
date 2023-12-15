@@ -8,4 +8,4 @@ In the reference guide, you can find:
 * Specifications for SQL link:sql/txs[transactions] and link:sql/queries[queries].
 * Details of the XTDB link:stdlib[standard library] of functions.
 * How to use XTDB from its link:sdks[client library SDKs].
-* Information on how to configure external XTDB transaction-log and object-store link:modules[modules].
+// TODO * Information on how to configure external XTDB transaction-log and object-store link:modules[modules].
