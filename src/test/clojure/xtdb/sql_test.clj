@@ -1149,3 +1149,14 @@
     (t/is (=plan-file "test-table-period-specification-ordering-2260-s-v" s-v))
 
     (t/is (= v-s s-v))))
+
+(deftest array-agg-decorrelation
+
+  (t/testing "ARRAY_AGG is not decorrelated using rule-9 as array_agg(null) =/= array_agg(empty-rel)"
+
+    (t/is (=plan-file
+           "array-agg-decorrelation-1"
+           (plan-sql "SELECT (SELECT sum(x.y) FROM (VALUES (1), (2), (3), (tab0.z)) AS x(y)) FROM tab0")))
+    (t/is (=plan-file
+           "array-agg-decorrelation-2"
+           (plan-sql "SELECT (SELECT ARRAY_AGG(x.y) FROM (VALUES (1), (2), (3), (tab0.z)) AS x(y)) FROM tab0")))))

@@ -1,0 +1,11 @@
+[:rename
+ {x5 $column_1$}
+ [:project
+  [x5]
+  [:apply
+   :single-join
+   {x1 ?x7}
+   [:rename {z x1} [:scan {:table tab0} [z]]]
+   [:group-by
+    [{x5 (array-agg x3)}]
+    [:table [x3] [{x3 1} {x3 2} {x3 3} {x3 ?x7}]]]]]]
