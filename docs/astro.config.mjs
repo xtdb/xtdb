@@ -50,13 +50,13 @@ export default defineConfig({
           ],
         },
 
-        /* {
+        {
           label: 'Tutorials',
           collapsed: true,
           items: [
-            { label: 'Learn XTQL today! (Clojure)', link: '/tutorials/learn-xtql-today-clojure' },
+            { label: 'Learn XTQL today, with Clojure', link: '/tutorials/learn-xtql-today-with-clojure' },
           ],
-        }, */
+        },
 
         {
           label: 'Guides',

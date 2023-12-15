@@ -2,4 +2,4 @@
 title: Learn XTQL Today, with Clojure
 ---
 
-Coming soon!
+See link:/static/learn-xtql-today-with-clojure.html[the pre-generated Clerk notebook] or clone & run from link:https://github.com/xtdb/2x-playground/blob/main/clojure/src/learn-xtql-today-with-clojure.clj[the Clojure source].
