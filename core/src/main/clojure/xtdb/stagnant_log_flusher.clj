@@ -9,7 +9,7 @@
   (:import (java.nio ByteBuffer)
            (java.nio.channels ClosedByInterruptException)
            (java.time Duration)
-           (java.util.concurrent ExecutorService Executors ThreadFactory TimeUnit)
+           (java.util.concurrent ExecutorService Executors TimeUnit)
            (xtdb.indexer IIndexer)
            (xtdb.log Log)))
 
