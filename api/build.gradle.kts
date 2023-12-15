@@ -23,10 +23,10 @@ dependencies {
     api("com.cognitect", "transit-clj", "1.0.333")
     api("com.cognitect", "transit-java", "1.0.371")
 
-    implementation("org.apache.arrow", "arrow-algorithm", "14.0.0")
-    implementation("org.apache.arrow", "arrow-compression", "14.0.0")
-    implementation("org.apache.arrow", "arrow-vector", "14.0.0")
-    implementation("org.apache.arrow", "arrow-memory-netty", "14.0.0")
+    api("org.apache.arrow", "arrow-algorithm", "14.0.0")
+    api("org.apache.arrow", "arrow-compression", "14.0.0")
+    api("org.apache.arrow", "arrow-vector", "14.0.0")
+    api("org.apache.arrow", "arrow-memory-netty", "14.0.0")
 }
 
 tasks.javadoc {
