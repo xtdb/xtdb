@@ -8,28 +8,24 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 import xtdb.IllegalArgumentException;
 import xtdb.api.TransactionKey;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
-public class QueryMapDeserializer extends StdDeserializer<QueryMap> {
+public class QueryRequestDeserializer extends StdDeserializer<QueryRequest> {
 
-    public static Keyword snakeCase = Keyword.intern("snake_case");
-
-    public QueryMapDeserializer() {
-        super(QueryMap.class);
+    public QueryRequestDeserializer() {
+        super(QueryRequest.class);
     }
 
-    public QueryMap deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public QueryRequest deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
+        TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);
 
         try {
@@ -41,10 +37,9 @@ public class QueryMapDeserializer extends StdDeserializer<QueryMap> {
                     throw IllegalArgumentException.create(Keyword.intern("xtql", "missing-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
                 }
 
-                // TODO this only works in connection with keyword deserialization
-                Map<Keyword, Object> args =  null;
+                Map<String, Object> args =  null;
                 if (node.has("args")) {
-                    args = (Map<Keyword, Object>) mapper.treeToValue(node.get("args"), Object.class);
+                    args = mapper.treeToValue(node.get("args"), typeFactory.constructMapType(Map.class, String.class, Object.class));
                 }
 
                 Basis basis = null;
@@ -72,12 +67,12 @@ public class QueryMapDeserializer extends StdDeserializer<QueryMap> {
                     explain = node.get("explain").asBoolean();
                 }
 
-                Keyword keyFn = snakeCase;
+                String keyFn = "snake_case";
                 if (node.has("key_fn")) {
-                    keyFn = (Keyword) mapper.treeToValue(node.get("key_fn"), Object.class);;
+                    keyFn = node.get("key_fn").asText();
                 }
 
-                return new QueryMap(query, args, basis, afterTx, txTimeout, defaultTz, explain, keyFn);
+                return new QueryRequest(query, args, basis, afterTx, txTimeout, defaultTz, explain, keyFn);
             } else  {
                 throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-query-map"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }

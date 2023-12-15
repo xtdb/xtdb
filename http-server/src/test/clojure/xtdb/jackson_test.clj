@@ -8,7 +8,7 @@
            (xtdb.tx Ops Tx)
            (xtdb.api TransactionKey)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
-                       ColSpec OutSpec VarSpec Expr Query$Unify QueryMap Basis Expr ArgSpec)))
+                       ColSpec OutSpec VarSpec Expr Query$Unify QueryRequest Basis Expr ArgSpec)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -409,19 +409,19 @@
         "unify value not an array"))
 
 (defn roundtrip-query-map [v]
-  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) QueryMap))
+  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) QueryRequest))
 
 (deftest deserialize-query-map-test
   (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")]
-    (t/is (= (QueryMap. (-> (Query/from "docs")
-                            (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
-                        {"id" :foo}
-                        (Basis. tx-key Instant/EPOCH)
-                        tx-key
-                        #time/duration "PT3H"
-                        #time/zone "America/Los_Angeles"
-                        true
-                        :clojure)
+    (t/is (= (QueryRequest. (-> (Query/from "docs")
+                                (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))]))
+                            {"id" :foo}
+                            (Basis. tx-key Instant/EPOCH)
+                            tx-key
+                            #time/duration "PT3H"
+                            #time/zone "America/Los_Angeles"
+                            true
+                            "clojure")
              (roundtrip-query-map {"query" {"from" "docs"
                                             "bind" ["xt/id"]}
                                    "args" {"id" :foo}
@@ -433,7 +433,7 @@
                                    "tx_timeout" #time/duration "PT3H"
                                    "default_tz" #time/zone "America/Los_Angeles"
                                    "explain" true
-                                   "key_fn" :clojure}))))
+                                   "key_fn" "clojure"}))))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/missing-query"
                           (roundtrip-query-map {"explain" true}))

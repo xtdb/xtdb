@@ -10,14 +10,14 @@
            (xtdb.query Query Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
-                       VarSpec ColSpec Basis QueryMap
+                       VarSpec ColSpec Basis QueryRequest
                        Query$Aggregate Query$Relation Query$IJoin
                        QueryDeserializer FromDeserializer WhereDeserializer
                        LimitDeserializer OffsetDeserializer OrderByDeserializer
                        UnnestColDeserializer ReturnDeserializer QueryTailDeserializer
                        WithDeserializer WithColsDeserializer WithoutDeserializer UnnestVarDeserializer
                        UnifyDeserializer UnifyClauseDeserializer PipelineDeserializer TxKeyDeserializer
-                       BasisDeserializer QueryMapDeserializer ExprDeserializer
+                       BasisDeserializer QueryRequestDeserializer ExprDeserializer
                        AggregateDeserializer RelDeserializer IJoinDeserializer
                        VarSpecDeserializer ColSpecDeserializer)))
 
@@ -50,7 +50,7 @@
     (.registerModule (JavaTimeModule.))
     (.registerModule (JsonLdModule.))
     (.registerModule (doto (SimpleModule. "xtdb.query")
-                       (.addDeserializer QueryMap (QueryMapDeserializer.))
+                       (.addDeserializer QueryRequest (QueryRequestDeserializer.))
                        (.addDeserializer Query (QueryDeserializer.))
                        (.addDeserializer Query$QueryTail (QueryTailDeserializer.))
                        (.addDeserializer Query$Unify (UnifyDeserializer.))
