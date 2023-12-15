@@ -125,7 +125,6 @@ public interface Expr {
     }
 
     final class Obj implements Expr {
-        private static final IFn PR_STR = Clojure.var("clojure.core/pr-str");
         public final Object obj;
 
         private Obj(Object obj) {
@@ -134,7 +133,7 @@ public interface Expr {
 
         @Override
         public String toString() {
-            return (String) PR_STR.invoke(obj);
+            return obj.toString();
         }
 
         @Override
