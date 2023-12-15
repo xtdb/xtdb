@@ -725,7 +725,7 @@
     (when (and (or push-correlated? (no-correlated-columns? predicate))
                (not (predicate-depends-on-calculated-column? predicate projection)))
       [:map projection
-       [:select predicate
+       [:select (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)
         relation]])))
 
 (defn- push-selection-down-past-group-by [push-correlated? z]
