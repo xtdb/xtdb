@@ -72,9 +72,9 @@ Updates documents in a given table based on the provided query.
 ** `:bind-spec` (link:./queries#_binding_specs[`BindingSpec`], optional): select the documents to update using binding constraints.
 *** If not provided, this will update every document in the table.
 *** May also bind extra logic variables for use in the `:set` clause or `unify-clauses`.
-** `:set` (map, keyword -> link:./queries#expressions[`Expr`]): columns to update.
-* `unify-clauses` (link:./queries#unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#unify[`unify`] for more details.
+** `:set` (map, keyword -> link:./queries#_expressions[`Expr`]): columns to update.
+* `unify-clauses` (link:./queries#_unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[`unify`] for more details.
 
 For example:
 
@@ -120,8 +120,8 @@ Deletes documents from the given table, based on the provided query.
 * `bind-spec` (link:./queries#_binding_specs[`BindingSpec`], optional): select the documents to delete using binding constraints.
 ** If not provided, this will delete every document in the table.
 ** May also bind extra logic variables for use in the `unify-clauses`.
-* `unify-clauses` (link:./queries#unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#unify[`unify`] for more details.
+* `unify-clauses` (link:./queries#_unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[`unify`] for more details.
 
 For example:
 
@@ -164,8 +164,8 @@ Irrevocably erase the document from the given table (including through system ti
 * `table` (keyword): table to erase from.
 * `bind-spec` (link:./queries#_binding_specs[BindingSpec]): select the documents to erase using binding constraints.
   May also bind extra logic variables for use in the `unify-clauses`.
-* `unify-clauses` (link:./queries#unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#unify[`unify`] for more details.
+* `unify-clauses` (link:./queries#_unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[`unify`] for more details.
 
 For example:
 [source,clojure]
