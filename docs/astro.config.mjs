@@ -30,7 +30,7 @@ export default defineConfig({
 
         {
           label: 'Introduction',
-          collapsed: true,
+          collapsed: false,
           items: [
             { label: 'Overview', link: '/' },
             { label: 'Why XTDB?', link: '/intro/why-xtdb'},
@@ -54,7 +54,7 @@ export default defineConfig({
           label: 'Tutorials',
           collapsed: true,
           items: [
-            { label: 'Learn XTQL today, with Clojure', link: '/tutorials/learn-xtql-today-with-clojure' },
+            { label: 'Learn XTQL Today, with Clojure', link: '/tutorials/learn-xtql-today-with-clojure' },
           ],
         },
 
