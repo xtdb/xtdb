@@ -110,7 +110,7 @@
                                                  (fn [^Keyword table]
                                                    (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :struct)))))]
         (vw/write-value! (->> (.doc op)
-                              (into {} (map (juxt (comp util/kw->normal-form-kw key)
+                              (into {} (map (juxt (comp util/str->normal-form-str str symbol key)
                                                   val))))
                          table-doc-writer))
 
