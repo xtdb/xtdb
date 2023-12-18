@@ -4,9 +4,9 @@
            (com.fasterxml.jackson.datatype.jsr310 JavaTimeModule)
            (com.fasterxml.jackson.databind.module SimpleModule)
            (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer DeleteDeserializer EraseDeserializer
-                         TxDeserializer CallDeserializer)
+                         TxDeserializer CallDeserializer TxOptionsDeserializer)
            (xtdb.api TransactionKey)
-           (xtdb.tx Ops Put Delete Erase Tx Call)
+           (xtdb.tx Ops Put Delete Erase Tx Call TxOptions)
            (xtdb.query Query Query$From Query$Where Query$Limit Query$Offset Query$OrderBy
                        Query$QueryTail Query$Unify Query$UnifyClause Query$Pipeline Query$Return
                        Query$With Query$WithCols Query$Without Query$UnnestCol Query$UnnestVar Expr
@@ -43,7 +43,8 @@
                        (.addDeserializer Delete (DeleteDeserializer.))
                        (.addDeserializer Erase (EraseDeserializer.))
                        (.addDeserializer Call (CallDeserializer.))
-                       (.addDeserializer Tx (TxDeserializer.))))))
+                       (.addDeserializer Tx (TxDeserializer.))
+                       (.addDeserializer TxOptions (TxOptionsDeserializer.))))))
 
 (def ^com.fasterxml.jackson.databind.ObjectMapper query-mapper
   (doto (ObjectMapper.)

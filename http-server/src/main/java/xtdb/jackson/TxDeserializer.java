@@ -4,17 +4,13 @@ import clojure.lang.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import xtdb.IllegalArgumentException;
 import xtdb.tx.Ops;
 import xtdb.tx.Tx;
+import xtdb.tx.TxOptions;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.List;
 
 public class TxDeserializer extends StdDeserializer<Tx>  {
@@ -29,8 +25,7 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
 
         ObjectNode node = mapper.readTree(jp);
         List<Ops> ops = null;
-        LocalDateTime systemTime = null;
-        ZoneId defaultTz = null;
+        TxOptions txOptions = null;
 
         try {
             if (node.has("tx_ops")) {
@@ -38,11 +33,8 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
             } else {
                 throw IllegalArgumentException.create(Keyword.intern("tx", "missing-tx-ops"), PersistentHashMap.EMPTY);
             }
-            if (node.has("system_time")) {
-                systemTime = (LocalDateTime) mapper.readValue(node.get("system_time").traverse(mapper), Object.class);
-            }
-            if (node.has("default_tz")) {
-                defaultTz = (ZoneId)  mapper.readValue(node.get("default_tz").traverse(mapper), Object.class);
+            if (node.has("tx_options")) {
+                txOptions = mapper.treeToValue(node.get("tx_options"), TxOptions.class);
             }
         } catch (IllegalArgumentException i) {
            throw i;
@@ -50,6 +42,6 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-tx"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
-        return new Tx(ops, systemTime, defaultTz);
+        return new Tx(ops, txOptions);
     }
 }

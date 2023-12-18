@@ -5,7 +5,7 @@
             [xtdb.jackson :as jackson])
   (:import (java.util List)
            (java.time Instant)
-           (xtdb.tx Ops Tx)
+           (xtdb.tx Ops Tx TxOptions)
            (xtdb.api TransactionKey)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
                        ColSpec OutSpec VarSpec Expr Query$Unify QueryRequest QueryOpts Basis Expr ArgSpec)))
@@ -135,7 +135,7 @@
   (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
                              :doc {"xt/id" "my-id"},
                              :valid-from nil,
-                             :valid-to nil}], nil, nil)
+                             :valid-to nil}], nil)
            (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]})))
 
@@ -143,12 +143,12 @@
                              :doc {"xt/id" "my-id"},
                              :valid-from nil,
                              :valid-to nil}],
-                #time/date-time "2020-01-01T12:34:56.789"
-                #time/zone "America/Los_Angeles")
+                (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
+                            #time/zone "America/Los_Angeles"))
            (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]
-                          "system_time" #time/date-time "2020-01-01T12:34:56.789"
-                          "default_tz" #time/zone "America/Los_Angeles"}))
+                          "tx_options" {"system_time" #time/instant "2020-01-01T12:34:56.789Z"
+                                        "default_tz" #time/zone "America/Los_Angeles"}}))
         "transaction options")
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-tx'"
