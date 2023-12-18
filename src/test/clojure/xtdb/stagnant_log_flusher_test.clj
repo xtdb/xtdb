@@ -13,7 +13,8 @@
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            xtdb.IBufferPool
            (xtdb.indexer IIndexer)
-           (xtdb.log Log)))
+           (xtdb.log Log)
+           (xtdb.api TransactionKey)))
 
 (defonce log-level :error)
 
@@ -75,10 +76,10 @@
               (throw (Exception. "Unrecognized record header"))))]
     ((fn ! [offset]
        (lazy-seq
-         (when-some [records (seq (.readRecords log (long offset) 100))]
-           (concat
-             (map clj-record records)
-             (! (.txId (:tx (last records))))))))
+        (when-some [records (seq (.readRecords log (long offset) 100))]
+          (concat
+           (map clj-record records)
+           (! (.txId ^TransactionKey (:tx (last records))))))))
      -1)))
 
 (defn node-log [node]
