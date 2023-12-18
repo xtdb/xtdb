@@ -164,7 +164,7 @@ public interface Expr {
 
         @Override
         public String toString() {
-            return lv;
+            return String.format("(logic-var %s)", lv);
         }
 
         @Override
@@ -194,7 +194,7 @@ public interface Expr {
 
         @Override
         public String toString() {
-            return v;
+            return String.format("(param %s)", v);
         }
 
         @Override
