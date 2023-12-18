@@ -98,6 +98,22 @@
             "children" : [ ]
           }]
         },{
+          "name" : "device_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "utf8",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          }]
+        },{
           "name" : "battery_level",
           "nullable" : false,
           "type" : {
@@ -111,22 +127,6 @@
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "device_id",
-          "nullable" : false,
-          "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
-          },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
             },
             "children" : [ ]
           }]
@@ -180,6 +180,22 @@
             "children" : [ ]
           }]
         },{
+          "name" : "battery_status",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "utf8",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          }]
+        },{
           "name" : "battery_temperature",
           "nullable" : false,
           "type" : {
@@ -193,22 +209,6 @@
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "battery_status",
-          "nullable" : false,
-          "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
-          },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
             },
             "children" : [ ]
           }]
@@ -246,6 +246,23 @@
             "children" : [ ]
           }]
         },{
+          "name" : "cpu_avg_1min",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "f64",
+            "nullable" : false,
+            "type" : {
+              "name" : "floatingpoint",
+              "precision" : "DOUBLE"
+            },
+            "children" : [ ]
+          }]
+        },{
           "name" : "time",
           "nullable" : false,
           "type" : {
@@ -260,23 +277,6 @@
               "name" : "timestamp",
               "unit" : "MICROSECOND",
               "timezone" : "UTC"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "cpu_avg_1min",
-          "nullable" : false,
-          "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
-          },
-          "children" : [{
-            "name" : "f64",
-            "nullable" : false,
-            "type" : {
-              "name" : "floatingpoint",
-              "precision" : "DOUBLE"
             },
             "children" : [ ]
           }]
@@ -381,17 +381,6 @@
             "DATA" : [-50.0,-61.0]
           }]
         },{
-          "name" : "battery_level",
-          "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "f64",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "DATA" : [59.0,86.0]
-          }]
-        },{
           "name" : "device_id",
           "count" : 2,
           "TYPE_ID" : [0,0],
@@ -402,6 +391,17 @@
             "VALIDITY" : [1,1],
             "OFFSET" : [0,22,44],
             "DATA" : ["device-info-demo000000","device-info-demo000001"]
+          }]
+        },{
+          "name" : "battery_level",
+          "count" : 2,
+          "TYPE_ID" : [0,0],
+          "OFFSET" : [0,1],
+          "children" : [{
+            "name" : "f64",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "DATA" : [59.0,86.0]
           }]
         },{
           "name" : "bssid",
@@ -439,17 +439,6 @@
             "DATA" : ["demo-net","stealth-net"]
           }]
         },{
-          "name" : "battery_temperature",
-          "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "f64",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "DATA" : [89.5,93.7]
-          }]
-        },{
           "name" : "battery_status",
           "count" : 2,
           "TYPE_ID" : [0,0],
@@ -460,6 +449,17 @@
             "VALIDITY" : [1,1],
             "OFFSET" : [0,11,22],
             "DATA" : ["discharging","discharging"]
+          }]
+        },{
+          "name" : "battery_temperature",
+          "count" : 2,
+          "TYPE_ID" : [0,0],
+          "OFFSET" : [0,1],
+          "children" : [{
+            "name" : "f64",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "DATA" : [89.5,93.7]
           }]
         },{
           "name" : "xt$id",
@@ -485,17 +485,6 @@
             "DATA" : [4.10011078E8,7.20742332E8]
           }]
         },{
-          "name" : "time",
-          "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "timestamp-tz-micro-utc",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "DATA" : [1479211200000000,1479211200000000]
-          }]
-        },{
           "name" : "cpu_avg_1min",
           "count" : 2,
           "TYPE_ID" : [0,0],
@@ -505,6 +494,17 @@
             "count" : 2,
             "VALIDITY" : [1,1],
             "DATA" : [24.81,4.93]
+          }]
+        },{
+          "name" : "time",
+          "count" : 2,
+          "TYPE_ID" : [0,0],
+          "OFFSET" : [0,1],
+          "children" : [{
+            "name" : "timestamp-tz-micro-utc",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "DATA" : [1479211200000000,1479211200000000]
           }]
         },{
           "name" : "cpu_avg_5min",

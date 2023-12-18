@@ -20,7 +20,7 @@
            xtdb.indexer.IIndexer
            xtdb.operator.IRaQuerySource
            (xtdb.tx Sql TxOptions)
-           (xtdb.query Query)
+           (xtdb.query Basis Query)
            (xtdb.tx_producer ITxProducer)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -49,11 +49,6 @@
   (-> opts
       (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
 
-(defn- TxOptions->map [^TxOptions tx-options]
-  (cond-> {}
-    (.systemTime tx-options) (assoc :system-time (.systemTime tx-options))
-    (.defaultTz tx-options) (assoc :default-tz (.defaultTz tx-options))))
-
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
                  ^ITxProducer tx-producer
@@ -64,6 +59,7 @@
   xtp/PNode
   (open-query& [_ query query-opts]
     (let [query-opts (-> (into {:default-tz default-tz} query-opts)
+                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
                          (with-after-tx-default))]
       (-> (.awaitTxAsync indexer (get query-opts :after-tx) (:tx-timeout query-opts))
           (util/then-apply
