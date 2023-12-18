@@ -8,7 +8,8 @@
             [xtdb.client.impl :as xtc]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.jackson :as jackson]
-            [xtdb.serde :as serde])
+            [xtdb.serde :as serde]
+            [xtdb.error :as err])
   (:import (java.io ByteArrayInputStream EOFException)))
 
 ;; ONLY put stuff here where remote DIFFERS to in-memory
@@ -208,3 +209,127 @@
                 :class "java.lang.IllegalArgumentException",
                 :stringified "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"}
                (ex-data body))))))
+
+(defn- inst->json-ld [^java.util.Date d]
+  {"@type" "xt:instant" "@value" (str (.toInstant d))})
+
+(def json-tx-ops
+  [{"put" "docs"
+    "doc" {"xt/id" 1}}
+   {"put" "docs"
+    "doc" {"xt/id" 2}}
+   {"delete" "docs"
+    "id" 1}
+   {"put" "docs"
+    "doc" {"xt/id" 3}
+    "valid_from" (inst->json-ld #inst "2050")
+    "valid_to" (inst->json-ld #inst "2051")}
+   {"erase" "docs"
+    "id" 3}
+
+   #_#_#_#_#_ ;TODO deserializer for sql
+   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
+   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
+   [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]
+   [:sql "DELETE FROM docs WHERE docs.bar = 2"]
+   [:sql "ERASE FROM docs WHERE docs.xt$id = 4"]])
+
+(defn- tx-key->json-tx-key [{:keys [tx-id system-time] :as _tx-key}]
+  {"tx_id" tx-id "system_time" {"@type" "xt:instant"
+                                "@value" (str system-time)}})
+
+(deftest json-request-test
+  (let [_tx1 (xt/submit-tx *node* [(xt/put :docs {:xt/id 1})])
+        {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
+
+    (t/is (= tx2
+             (-> (http/request {:accept :transit+json
+                                :as :string
+                                :request-method :post
+                                :content-type :json
+                                :form-params {:tx_ops json-tx-ops}
+                                :url (http-url "tx")})
+                 :body
+                 decode-transit))
+          "testing tx")
+
+    (t/is (= [{:xt/id 2}]
+             (xt/q *node* '(from :docs [xt/id])
+                   {:basis {:at-tx tx2}})))
+
+
+    (t/is (= [{:xt/id 2}]
+             (-> (http/request {:accept :transit+json
+                                :as :string
+                                :request-method :post
+                                :content-type :json
+                                :form-params {:query {"from" "docs", "bind" ["xt/id"]}
+                                              :query_opts {:basis {:at_tx (tx-key->json-tx-key tx2)}}}
+                                :url (http-url "query")})
+                 :body
+                 decode-transit*
+                 ))
+          "testing query")
+
+    (t/is (= [{:xt$id 2}]
+             (-> (http/request {:accept :transit+json
+                                :as :string
+                                :request-method :post
+                                :content-type :json
+                                :form-params {:query {"from" "docs", "bind" ["xt/id"]}
+                                              :query_opts {:basis {:at_tx (tx-key->json-tx-key tx2)}
+                                                           :key_fn "sql"}}
+                                :url (http-url "query")})
+                 :body
+                 decode-transit*
+                 ))
+          "testing query opts")
+
+    (t/testing "malformed tx request "
+      (let [{:keys [status body] :as _resp}
+            (http/request {:accept :transit+json
+                           :as :string
+                           :request-method :post
+                           :content-type :json
+                           :form-params {:tx_ops [{"evict" "docs" "id" 3}]}
+                           :url (http-url "tx")
+                           :throw-exceptions? false})
+            body (decode-transit body)]
+        (t/is (= 400 status))
+        (t/is (= "Illegal argument: ':xtql/malformed-tx-op'" (ex-message body)))
+        (t/is (= {:xtdb.error/error-type :illegal-argument
+                  :xtdb.error/error-key :xtql/malformed-tx-op
+                  :xtdb.error/message "Illegal argument: ':xtql/malformed-tx-op'"}
+                 (-> (ex-data body) (select-keys [::err/error-type ::err/error-key ::err/message]))))))
+
+    (t/testing "malformed query request (see xt:instat)"
+      (let [{:keys [status body] :as _resp}
+            (http/request {:accept :transit+json
+                           :as :string
+                           :request-method :post
+                           :content-type :json
+                           :form-params {:query {"from" "docs", "bind" ["xt/id"]}
+                                         :query_opts {:basis {:at_tx
+                                                              {"tx-id" tx-id
+                                                               "system-time" {"@type" "xt:instat" "@value" (str system-time)}}}}}
+                           :url (http-url "query")
+                           :throw-exceptions? false})
+            body (decode-transit body)]
+        (t/is (= 400 status))
+        (t/is (= "Illegal argument: ':xtql/malformed-tx-key'" (ex-message body)))
+        (t/is (= {:xtdb.error/error-type :illegal-argument
+                  :xtdb.error/error-key :xtql/malformed-tx-key
+                  :xtdb.error/message "Illegal argument: ':xtql/malformed-tx-key'"}
+                 (-> (ex-data body) (select-keys [::err/error-type ::err/error-key ::err/message]))))))))
+
+(deftest json-both-ways-test
+  (t/is (= [{:foo_bar 1} {:foo_bar 2}]
+           (-> (http/request {:accept "application/jsonl"
+                              :as :string
+                              :request-method :post
+                              :content-type :json
+                              :form-params {:query {"rel" [{"foo-bar" 1} {"foo-bar" 2}] "bind" ["foo-bar"]}
+                                            :query_opts {:key_fn "sql"}}
+                              :url (http-url "query")})
+               :body
+               decode-json*))))
