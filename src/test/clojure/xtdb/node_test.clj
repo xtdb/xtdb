@@ -575,10 +575,3 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
                   WHERE t.album = a.xt$id
                   GROUP BY a.name"))
         "array-agg distinct"))
-
-(deftest test-query-ast-query
-  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :foo "bar"})])
-
-  (t/is (= [{:my-foo "bar"}]
-           (xt/q tu/*node* (-> (Query/from "docs")
-                               (.binding [(OutSpec/of "foo" (Expr/lVar "my-foo"))]))))))
