@@ -37,42 +37,12 @@ public class QueryRequestDeserializer extends StdDeserializer<QueryRequest> {
                     throw IllegalArgumentException.create(Keyword.intern("xtql", "missing-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
                 }
 
-                Map<String, Object> args =  null;
-                if (node.has("args")) {
-                    args = mapper.treeToValue(node.get("args"), typeFactory.constructMapType(Map.class, String.class, Object.class));
+                QueryOpts queryOpts = null;
+                if (node.has("query_opts")) {
+                   queryOpts = mapper.treeToValue(node.get("query_opts"), QueryOpts.class);
                 }
 
-                Basis basis = null;
-                if (node.has("basis")) {
-                    basis = mapper.treeToValue(node.get("basis"), Basis.class);
-                }
-
-                TransactionKey afterTx = null;
-                if (node.has("after_tx")) {
-                    afterTx = mapper.treeToValue(node.get("after_tx"), TransactionKey.class);
-                }
-
-                Duration txTimeout = null;
-                if (node.has("tx_timeout")) {
-                    txTimeout = (Duration) mapper.treeToValue(node.get("tx_timeout"), Object.class);
-                }
-
-                ZoneId defaultTz = null;
-                if (node.has("default_tz")) {
-                    defaultTz = (ZoneId) mapper.treeToValue(node.get("default_tz"), Object.class);
-                }
-
-                Boolean explain = false;
-                if (node.has("explain")) {
-                    explain = node.get("explain").asBoolean();
-                }
-
-                String keyFn = "snake_case";
-                if (node.has("key_fn")) {
-                    keyFn = node.get("key_fn").asText();
-                }
-
-                return new QueryRequest(query, args, basis, afterTx, txTimeout, defaultTz, explain, keyFn);
+                return new QueryRequest(query, queryOpts);
             } else  {
                 throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-query-map"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
             }
