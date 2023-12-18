@@ -15,7 +15,8 @@
            (java.time Clock Duration InstantSource)
            (java.util Random)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.concurrent.atomic AtomicLong)))
+           (java.util.concurrent.atomic AtomicLong)
+           (xtdb.api TransactionKey)))
 
 (set! *warn-on-reflection* false)
 
@@ -89,10 +90,10 @@
 
         compute-lag-nanos #_(partial compute-nanos node last-completed last-submitted)
         (fn []
-          (let [{:keys [latest-completed-tx] :as res} (xt/status node)]
+          (let [{:keys [^TransactionKey latest-completed-tx] :as res} (xt/status node)]
             (or
              (when-some [[fut ms] @last-submitted]
-               (let [tx-id (.txId @fut)
+               (let [tx-id (.txId ^TransactionKey @fut)
                      completed-tx-id (.txId latest-completed-tx)
                      completed-tx-time (.systemTime latest-completed-tx)]
                  (when (and (some? completed-tx-id)
@@ -103,10 +104,10 @@
 
         compute-lag-abs
         (fn []
-          (let [{:keys [latest-completed-tx] :as res} (xt/status node)]
+          (let [{:keys [^TransactionKey latest-completed-tx] :as res} (xt/status node)]
             (or
              (when-some [[fut _] @last-submitted]
-               (let [tx-id (.txId @fut)
+               (let [tx-id (.txId ^TransactionKey @fut)
                      completed-tx-id (.txId latest-completed-tx)]
                  (when (some? completed-tx-id)
                    (- tx-id completed-tx-id))))

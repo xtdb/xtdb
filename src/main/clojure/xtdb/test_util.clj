@@ -31,6 +31,7 @@
            (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
            (xtdb ICursor IKeyFn)
+           (xtdb.api TransactionKey)
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            (xtdb.operator IRaQuerySource PreparedQuery)
@@ -365,7 +366,7 @@
 (defn open-live-table [table-name]
   (li/->live-table *allocator* nil table-name))
 
-(defn index-tx! [^ILiveTable live-table, tx-key, docs]
+(defn index-tx! [^ILiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.systemTime tx-key)
         live-table-tx (.startTx live-table tx-key true)]
     (try
