@@ -1,5 +1,6 @@
 (ns xtdb.server
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [juxt.clojars-mirrors.integrant.core :as ig]
@@ -29,12 +30,15 @@
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
            (xtdb.api TransactionKey TxOptions)
-           xtdb.IResultSet))
+           xtdb.IResultSet
+           (xtdb.query Basis Query)
+           (xtdb.tx Tx)))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
       (m/select-formats #{"application/json" "application/transit+json"})
       (assoc-in [:formats "application/json" :encoder-opts :mapper] jackson/json-ld-mapper)
+      (assoc-in [:formats "application/json" :decoder-opts :mapper] jackson/json-ld-mapper)
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                 serde/transit-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
@@ -43,9 +47,10 @@
 
 (defmulti ^:private route-handler :name, :default ::default)
 
-(s/def ::tx-ops vector?)
+(s/def ::tx-ops seqable?)
 
 (s/def ::key-fn keyword?)
+(s/def ::tx-id int?)
 
 (s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
@@ -57,8 +62,19 @@
   {:get (fn [{:keys [node] :as _req}]
           {:status 200, :body (xtp/status node)})})
 
+(defn json-tx-decoder []
+  (reify
+    mf/Decode
+    (decode [_ data _]
+      (with-open [rdr (io/reader data)]
+        (let [^Tx tx (jackson/read-tx rdr)]
+          {:tx-ops (.getTxOps tx) :opts (.getOpts tx)})))))
+
 (defmethod route-handler :tx [_]
-  {:post {:handler (fn [{:keys [node] :as req}]
+  {:muuntaja (m/create (-> muuntaja-opts
+                           (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
+
+   :post {:handler (fn [{:keys [node] :as req}]
                      (let [{:keys [tx-ops opts]} (get-in req [:parameters :body])]
                        (-> (xtp/submit-tx& node tx-ops opts)
                            (util/then-apply (fn [tx]
@@ -103,7 +119,6 @@
 (defn- ->jsonl-resultset-encoder [_opts]
   (reify
     mf/EncodeToBytes
-    ;; we're required to be a sub-type of ETB but don't need to implement its fn.
 
     mf/EncodeToOutputStream
     (encode-to-output-stream [_ res _]
@@ -130,19 +145,31 @@
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
-(s/def ::basis (s/keys :opt-un [::current-time ::at-tx]))
+(s/def ::basis (s/or :class #(instance? Basis %)
+                     :map (s/keys :opt-un [::current-time ::at-tx])))
 
 (s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
-(s/def ::query (some-fn string? seq?))
+(s/def ::query (some-fn string? seq? #(instance? Query %)))
 
 (s/def ::args (s/nilable (s/coll-of any?)))
+
+(s/def ::key-fn (some-fn keyword? string?))
 
 (s/def ::query-body
   (s/keys :req-un [::query],
           :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn ::explain?]))
+
+(defn json-query-decoder []
+  (reify
+    mf/Decode
+    (decode [_ data _]
+      (with-open [rdr (io/reader data)]
+        (let [query-request (jackson/read-query-request rdr)]
+          (-> (into {} (.queryOpts query-request))
+              (assoc :query (.query query-request))))))))
 
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts
@@ -152,7 +179,9 @@
                                      [->tj-resultset-encoder {:handlers serde/transit-write-handlers}])
 
                            (assoc-in [:formats "application/jsonl" :encoder]
-                                     [->jsonl-resultset-encoder {}])))
+                                     [->jsonl-resultset-encoder {}])
+
+                           (assoc-in [:formats "application/json" :decoder] (json-query-decoder))))
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
@@ -177,10 +206,19 @@
                           (merge (r.coercion/encode-error (ex-data ex))
                                  {::err/message "Malformed request."}))})
 
+(defn- unroll-xt-iae [ex]
+  (if (instance? xtdb.IllegalArgumentException ex)
+    ex
+    (when-let [ex (ex-cause ex)]
+      (recur ex))))
+
 (defn- handle-muuntaja-decode-error [ex _req]
-  {:status 400
-   :body (err/illegal-arg :malformed-request
-                          {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})})
+  (if-let [xt-iae (unroll-xt-iae ex)]
+    {:status 400
+     :body xt-iae}
+    {:status 400
+     :body (err/illegal-arg :malformed-request
+                            {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})}))
 
 (defn- default-handler
   [^Exception e _]

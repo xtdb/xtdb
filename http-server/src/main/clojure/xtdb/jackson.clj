@@ -1,6 +1,9 @@
 (ns xtdb.jackson
   (:require [jsonista.core :as json])
-  (:import (xtdb.jackson JsonLdModule)))
+  (:import (java.io Reader)
+           (xtdb.jackson JsonLdModule XtdbMapper)
+           (xtdb.tx Tx)
+           (xtdb.query QueryRequest)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -13,3 +16,9 @@
   (json/object-mapper {:encode-key-fn true
                        :decode-key-fn true
                        :modules [(JsonLdModule.)]}))
+
+(defn read-tx ^Tx [^Reader rdr]
+  (.readValue XtdbMapper/TX_OP_MAPPER rdr Tx))
+
+(defn read-query-request ^QueryRequest [^Reader rdr]
+  (.readValue XtdbMapper/QUERY_MAPPER rdr QueryRequest))
