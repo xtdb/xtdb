@@ -2,6 +2,7 @@ package xtdb.query;
 
 import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -16,7 +17,7 @@ import java.util.function.Function;
 
 public class SpecListDeserializer {
 
-    public static <T> List<T> nodeToSpecs(ObjectMapper mapper, JsonNode node, BiFunction<String, Expr, T> ofFn) throws Exception {
+    public static <T> List<T> nodeToSpecs(ObjectMapper mapper, JsonNode node, BiFunction<String, Expr, T> ofFn) throws JsonProcessingException, IllegalArgumentException {
         List <T> specs = new ArrayList<>();
 
         if (node.isArray()) {
