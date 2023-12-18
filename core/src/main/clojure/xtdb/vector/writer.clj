@@ -695,6 +695,7 @@
           Iterable
           (iterator [_] (.iterator (.entrySet writers))))))))
 
+
 (extend-protocol ArrowWriteable
   List
   (value->arrow-type [_] #xt.arrow/type :list)
@@ -713,7 +714,7 @@
 
   Map
   (value->arrow-type [v]
-    (if (every? keyword? (keys v))
+    (if (or (every? keyword? (keys v)) (every? string? (keys v)))
       #xt.arrow/type :struct
       #_                                ;TODO
       (ArrowType$Map. false)
@@ -721,7 +722,7 @@
       (throw (UnsupportedOperationException. "Arrow maps currently not supported"))))
 
   (value->col-type [v]
-    (if (every? keyword? (keys v))
+    (if (or (every? keyword? (keys v)) (every? string? (keys v)))
       [:struct (->> v
                     (into {} (map (juxt (comp symbol key)
                                         (comp value->col-type val)))))]
@@ -732,7 +733,7 @@
       (throw (UnsupportedOperationException. "Arrow Maps currently not supported"))))
 
   (write-value! [m ^IVectorWriter writer]
-    (if (every? keyword? (keys m))
+    (if (or (every? keyword? (keys m)) (every? string? (keys m)))
       (do
         (.startStruct writer)
 

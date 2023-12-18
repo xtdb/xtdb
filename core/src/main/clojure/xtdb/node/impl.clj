@@ -19,7 +19,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            xtdb.indexer.IIndexer
            xtdb.operator.IRaQuerySource
-           (xtdb.tx Sql)
+           (xtdb.tx Sql TxOptions)
            (xtdb.query Query)
            (xtdb.tx_producer ITxProducer)))
 
@@ -48,6 +48,11 @@
 (defn- with-after-tx-default [opts]
   (-> opts
       (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
+
+(defn- TxOptions->map [^TxOptions tx-options]
+  (cond-> {}
+    (.systemTime tx-options) (assoc :system-time (.systemTime tx-options))
+    (.defaultTz tx-options) (assoc :default-tz (.defaultTz tx-options))))
 
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
@@ -89,11 +94,13 @@
     (xtp/submit-tx& this tx-ops {}))
 
   (submit-tx& [_ tx-ops opts]
-    (-> (or (validate-tx-ops tx-ops)
-            (.submitTx tx-producer tx-ops opts))
-        (util/then-apply
-          (fn [tx]
-            (swap! !latest-submitted-tx time/max-tx tx)))))
+    (let [opts (cond->> opts
+                 (instance? TxOptions opts) (into {}))]
+      (-> (or (validate-tx-ops tx-ops)
+              (.submitTx tx-producer tx-ops opts))
+          (util/then-apply
+            (fn [tx]
+              (swap! !latest-submitted-tx time/max-tx tx))))))
 
   Closeable
   (close [_]

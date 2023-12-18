@@ -240,7 +240,7 @@
   (when-not (map? doc)
     (throw (err/illegal-arg :xtdb.tx/expected-doc
                             {::err/message "expected doc map", :doc doc})))
-  (expect-eid (:xt/id doc))
+  (expect-eid (or (:xt/id doc) (get doc "xt/id")))
 
   doc)
 
