@@ -108,13 +108,13 @@
 
   For example:
 
-  (q& node '(from ...))
+  (q node '(from ...))
 
-  (q& node '(from :foo [{:a $a, :b $b}])
+  (q node '(from :foo [{:a $a, :b $b}])
       {:a a-value, :b b-value})
 
-  (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
-  (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" {:args [foo-id]})
+  (q node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
+  (q node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" {:args [foo-id]})
 
   Please see XTQL/SQL query language docs for more details.
 
