@@ -38,6 +38,8 @@ dependencies {
     testImplementation(project(":http-client-clj"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
     testImplementation("pro.juxt.clojars-mirrors.hato", "hato", "0.8.2")
+    // hato uses cheshire for application/json encoding
+    testImplementation("cheshire", "cheshire", "5.12.0")
 }
 
 tasks.javadoc.get().enabled = false
