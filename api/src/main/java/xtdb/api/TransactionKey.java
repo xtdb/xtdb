@@ -3,11 +3,12 @@ package xtdb.api;
 import clojure.lang.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 public class TransactionKey implements Comparable<TransactionKey>, ILookup, Seqable {
-    private static Keyword txIdKey = Keyword.intern("tx-id");
-    private static Keyword systemTimeKey = Keyword.intern("system-time");
+    private static final Keyword TX_ID_KEY = Keyword.intern("tx-id");
+    private static final Keyword SYSTEM_TIME_KEY = Keyword.intern("system-time");
 
     public long txId;
     public Instant systemTime;
@@ -45,9 +46,9 @@ public class TransactionKey implements Comparable<TransactionKey>, ILookup, Seqa
     }
     @Override
     public Object valAt(Object key, Object notFound) {
-        if (key == txIdKey) {
+        if (key == TX_ID_KEY) {
             return txId;
-        } else if (key == systemTimeKey) {
+        } else if (key == SYSTEM_TIME_KEY) {
            return systemTime;
         } else {
             return notFound;
@@ -56,7 +57,6 @@ public class TransactionKey implements Comparable<TransactionKey>, ILookup, Seqa
 
     @Override
     public ISeq seq() {
-        IPersistentList persistentList = PersistentList.EMPTY;
-        return persistentList.cons(MapEntry.create(txIdKey, txId)).cons(MapEntry.create(systemTimeKey, systemTime)).seq();
+        return PersistentList.create(List.of(MapEntry.create(TX_ID_KEY, txId), MapEntry.create(SYSTEM_TIME_KEY, systemTime))).seq();
     }
 }
