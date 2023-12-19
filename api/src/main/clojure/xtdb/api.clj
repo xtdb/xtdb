@@ -17,6 +17,7 @@
            java.util.concurrent.ExecutionException
            java.util.function.Function
            java.util.List
+           (xtdb.api TransactionKey)
            xtdb.IResultSet
            [xtdb.tx Ops Ops$HasArgs Ops$HasValidTimeBounds]
            xtdb.types.ClojureForm))
@@ -206,8 +207,8 @@
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
 
-  ([node tx-ops] (submit-tx node tx-ops {}))
-  ([node tx-ops tx-opts]
+  (^TransactionKey [node tx-ops] (submit-tx node tx-ops {}))
+  (^TransactionKey [node tx-ops tx-opts]
    (-> @(submit-tx& node tx-ops tx-opts)
        (rethrowing-cause))))
 
