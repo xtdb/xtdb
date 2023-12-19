@@ -14,7 +14,6 @@
             [xtdb.protocols :as xtp]
             [xtdb.time :as time])
   (:import [java.io Writer]
-           [java.time Instant]
            java.util.concurrent.ExecutionException
            java.util.function.Function
            java.util.List
