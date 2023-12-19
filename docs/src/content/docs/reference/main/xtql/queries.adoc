@@ -386,6 +386,8 @@ The `rel` operator creates an inline relation with the provided values.
 The first argument is array of maps, either as a literal, a parameter, or a value nested within another document.
 The `rel` operator yields each element as a row, with the values in the map link:#_binding_specs[bound/constrained] as required.
 
+* To unwrap an array of values rather than an array of maps, with a variable bound to each row instead, see link:#_unnest[`unnest`].
+
 [source]
 ----
 Rel :: (rel RelExpr [BindSpec+])
@@ -457,6 +459,8 @@ FROM customers c
 
 The `unnest` operator extracts values from an array - returning one row for each element.
 The other columns in the query are duplicated for each row.
+
+* To unwrap an array of maps (a relation) rather than an array of values, with a variable bound to each map-key instead, see link:#_rel[`rel`].
 
 [source]
 ----
