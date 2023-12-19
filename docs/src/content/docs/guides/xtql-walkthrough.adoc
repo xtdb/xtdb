@@ -1,17 +1,19 @@
-= XTQL Tutorial
+---
+title: XTQL Walkthrough
+---
 :test: ../src/test/clojure/xtdb/tutorial_test.clj
 :example: ../src/test/resources/docs/xtql_tutorial_examples.yaml
 
-XTDB 2.x will support two query languages: SQL, but also 'XTQL' - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
+XTDB supports two query languages: link:../reference/main/sql/queries.html[SQL], and link:../reference/main/xtql/queries.html[XTQL] - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
 XTQL can be written in JSON, Java/Scala/Kotlin (full DSL coming soon) and Clojure's EDN.
 
 XTQL queries are structured pipeline of operations - e.g. scanning a table, joining multiple tables/queries, grouping/aggregations and sorting/limiting.
 
-We'll save the in-depth XTQL specification for another article - for now, let's walk through a brief introduction to XTQL:
+Let's walk through a brief introduction to XTQL:
 
 == Basic operations
 
-* To read a table, we use `from`.
+* To read a table, we use link:../reference/main/xtql/queries.html#_from[`from`].
 +
 [source,clojure]
 ----
@@ -28,7 +30,7 @@ include::{example}[tags=bo-json-1,indent=0]
 include::{example}[tags=bo-sql-1,indent=0]
 ----
 +
-* We can look up a single user-id by binding it in the `from` clause:
+* We can look up a single user-id by binding it in the link:../reference/main/xtql/queries.html#_from[`from`] clause:
 +
 [source,clojure]
 ----
@@ -45,7 +47,7 @@ include::{example}[tags=bo-json-2,indent=0]
 include::{example}[tags=bo-sql-2,indent=0]
 ----
 +
-* `from` is a valid query in isolation but, for anything more powerful, we'll need a 'pipeline':
+* link:../reference/main/xtql/queries.html#_from[`from`] is a valid query in isolation but, for anything more powerful, we'll need a 'pipeline':
 +
 [source,clojure]
 ----
@@ -66,9 +68,9 @@ XTQL operations are independently composable - unlike SQL/EDN Datalog, for examp
 
 == Joins
 
-Joins in XTQL are achieved using Datalog-based 'unification':
+Joins in XTQL are achieved using link:../reference/main/xtql/queries.html#unify_explanation[Datalog-style unification]:
 
-* Within a `unify`, we use 'logic variables' (e.g. `user-id`, `first-name` etc in the above example) to specify how the inputs should be joined together.
+* Within a link:../reference/main/xtql/queries.html#_unify[`unify`], we use 'logic variables' (e.g. `user-id`, `first-name` etc in the above example) to specify how the inputs should be joined together.
 +
 In this case, we re-use the `user-id` logic variable to indicate that the `:xt/id` from the `:users` table should be matched with the `:author-id` of the `:articles` table.
 +
@@ -88,7 +90,7 @@ include::{example}[tags=joins-sql-1,indent=0]
 ----
 
 +
-* For non-equality cases, we can use a `where` clause (where we have a full SQL-inspired expression standard library at our disposal)
+* For non-equality cases, we can use a link:../reference/main/xtql/queries.html#_where[`where`] clause (where we have a full SQL-inspired expression standard library at our disposal)
 +
 [source,clojure]
 ----
@@ -106,7 +108,7 @@ include::{example}[tags=joins-json-2,indent=0]
 include::{example}[tags=joins-sql-2,indent=0]
 ----
 +
-* We can specify that a certain match is optional using `left-join`:
+* We can specify that a certain match is optional using link:../reference/main/xtql/queries.html#_joins[`left-join`]:
 +
 [source,clojure]
 ----
@@ -124,7 +126,7 @@ include::{example}[tags=joins-sql-3,indent=0]
 ----
 +
 Here, we're asking to additionally return customers who haven't yet any orders (for which the order-table columns will be absent in the results).
-* Or, we can specify that we only want to return customers who _don't_ have any orders, using `not-exists?`:
+* Or, we can specify that we only want to return customers who _don't_ have any orders, using link:../reference/main/stdlib/predicates.html#_boolean_functions[`not`] link:../reference/main/xtql/queries.html#_subqueries[`exists?`]:
 +
 [source,clojure]
 ----
@@ -141,11 +143,11 @@ include::{example}[tags=joins-json-4,indent=0]
 include::{example}[tags=joins-sql-4,indent=0]
 ----
 +
-(naturally, `IN` is also available, but uses `exists?` instead)
+(naturally, `IN` is also available, but uses link:../reference/main/xtql/queries.html#_subqueries[`exists?`] instead)
 
 == Projections
 
-* We can create new columns from old ones using `with`:
+* We can create new columns from old ones using link:../reference/main/xtql/queries.html#_with[`with`]:
 +
 [source,clojure]
 ----
@@ -162,9 +164,9 @@ include::{example}[tags=proj-json-1,indent=0]
 include::{example}[tags=proj-sql-1,indent=0]
 ----
 +
-We can also use `with` within `unify` - this creates new logic variables which we can then unify in the same way.
+We can also use link:../reference/main/xtql/queries.html#_with[`with`] within link:../reference/main/xtql/queries.html#_unify[`unify`] - this creates new logic variables which we can then unify in the same way.
 +
-* Where `with` adds to the available columns, `return` _only_ yields the specified columns to the next operation:
+* Where link:../reference/main/xtql/queries.html#_with[`with`] adds to the available columns, link:../reference/main/xtql/queries.html#_return[`return`] only yields the specified columns to the next operation:
 +
 [source,clojure]
 ----
@@ -180,7 +182,7 @@ include::{example}[tags=proj-json-2,indent=0]
 ----
 include::{example}[tags=proj-sql-2,indent=0]
 ----
-* Where we don't need any additional projections, we can use `without`:
+* Where we don't need any additional projections, we can use link:../reference/main/xtql/queries.html#_without[`without`]:
 +
 [source,clojure]
 ----
@@ -199,7 +201,7 @@ include::{example}[tags=proj-sql-3,indent=0]
 
 == Aggregations
 
-To count/sum/average values, we use `aggregate`:
+To count/sum/average values, we use link:../reference/main/xtql/queries.html#_aggregate[`aggregate`]:
 
 [source,clojure]
 ----
@@ -221,7 +223,7 @@ include::{example}[tags=aggr-sql-1,indent=0]
 When we've found the documents we're interested in, it's common to then want a tree of related information.
 For example, if a user is reading an article, we might also want to show them details about the author as well as any comments.
 
-(Users of existing EDN Datalog databases may already be familiar with 'pull' - in XTQL, because subqueries are a first-class concept, we rely on extensively on these to express a more powerful/composable behaviour.)
+(Users of existing EDN Datalog databases may already be familiar with link:../reference/main/xtql/queries.html#_subqueries['pull'] - in XTQL, because subqueries are a first-class concept, we rely on extensively on these to express a more powerful/composable behaviour.)
 
 [source,clojure]
 ----
@@ -241,10 +243,10 @@ include::{test}[tags=pull-xtql-1,indent=0]
 include::{example}[tags=pull-json-1,indent=0]
 ----
 
-In this example, we use `pull` to pull back a single map - we know that there's only one author per article (in our system).
-When it's a one-to-many relationship, we use `pull*` - this returns any matches in a vector.
+In this example, we use link:../reference/main/xtql/queries.html#_subqueries[`pull`] to pull back a single map - we know that there's only one author per article (in our system).
+When it's a one-to-many relationship, we use link:../reference/main/xtql/queries.html#_subqueries[`pull*`] - this returns any matches in a vector.
 
-Also note that, because we have the full power of subqueries, we can express requirements like 'only get me the most recent 10 comments' using ordinary query operations, without any support within `pull` itself.
+Also note that, because we have the full power of subqueries, we can express requirements like 'only get me the most recent 10 comments' using ordinary query operations, without any support within link:../reference/main/xtql/queries.html#_subqueries[`pull`] itself.
 
 == Bitemporality
 
@@ -255,7 +257,7 @@ It wouldn't be XTDB without bitemporality, of course - indeed, some may be wonde
 
 * In XTDB 1.x, queries had to be 'point-in-time' - you had to pick a single valid/transaction time for the whole query.
 +
-In XTQL, while there are sensible defaults set for the whole query, you can override this on a per-`from` basis by wrapping the table name in a vector and providing temporal parameters:
+In XTQL, while there are sensible defaults set for the whole query, you can override this on a per-link:../reference/main/xtql/queries.html#_from[`from`] basis by wrapping the table name in a vector and providing temporal parameters:
 +
 [source,clojure]
 ----
@@ -301,8 +303,8 @@ We're hoping that a reasonable proportion of use-cases that previously required 
 
 === Insert
 
-We submit `insert` operations to `xt/submit-tx`.
-`insert` accepts a query that inserts every result into the given table:
+We submit link:../reference/main/xtql/txs.html#_insert_into[`insert-into`] operations to link:../reference/main/xtql/txs.html[`xt/submit-tx`].
+link:../reference/main/xtql/txs.html#_insert_into[`insert-into`] accepts a query that inserts every result into the given table:
 
 [source,clojure]
 ----
@@ -317,9 +319,9 @@ include::{example}[tags=DML-Insert-sql,indent=0]
 ----
 
 Here we're preserving the valid-from and valid-to of the rows we're copying, but we could just as easily specify/calculate a different value.
-Naturally, substitute your query of choice from above for the `from` (`unify`, for example) for an arbitrarily powerful XTQL command.
+Naturally, substitute your query of choice from above for the link:../reference/main/xtql/queries.html#_from[`from`] (link:../reference/main/xtql/queries.html#_unify[`unify`], for example) for an arbitrarily powerful XTQL command.
 
-(As in XT2 SQL, XTQL `insert` behaves more like an upsert - if a document with that `xt/id` already exists, it will be overwritten for the specified period of valid-time.)
+(As in XT2 SQL, XTQL link:../reference/main/xtql/txs.html#_insert_into[`insert-into`] behaves more like an upsert - if a document with that `xt/id` already exists, it will be overwritten for the specified period of valid-time.)
 
 === Delete
 
@@ -339,7 +341,7 @@ include::{example}[tags=DML-Delete-sql,indent=0]
 +
 Here, we're passing a dynamic parameter to specify the post to delete.
 +
-* `delete` can also take a collection of extra `unify` clauses.
+* link:../reference/main/xtql/txs.html#[`delete-from`] can also take a collection of extra link:../reference/main/xtql/queries.html#_unify[`unify`] clauses.
 Let's say instead we wanted to delete all comments on posts by a certain author - we can do that as follows:
 +
 [source,clojure]
@@ -352,9 +354,9 @@ include::{test}[tags=DML-Delete-additional-unify-clauses-xtql,indent=0]
 include::{example}[tags=DML-Delete-additional-unify-clauses-sql,indent=0]
 ----
 +
-Additional clauses passed to `delete` in this way are unified, in the same way variables within a `unify` are.
+Additional clauses passed to link:../reference/main/xtql/txs.html#[`delete-from`] in this way are unified, in the same way variables within a link:../reference/main/xtql/queries.html#_unify[`unify`] are.
 In this case, because we've re-used the `pid` logic variable, XT implicitly joins the two values - the `post-id` from the `comments` table with the `xt/id` on the `posts` table.
-* We can specify a valid-time range to delete using `for-valid-time`, in a similar manner to the `from` clause.
+* We can specify a valid-time range to delete using `for-valid-time`, in a similar manner to the link:../reference/main/xtql/queries.html#_from[`from`] clause.
 +
 For example, if we want to take down all Christmas promotions on the 26th December (but we don't want to be in the office to actually delete them), we could run the following:
 +
@@ -413,7 +415,7 @@ This is the operation that we envisage replacing a lot of XT1 transaction functi
 
 === Erase
 
-We can irretrievably erase a document using an `erase` query.
+We can irretrievably erase a document using an link:../reference/main/xtql/txs.html#_erase_from[`erase`] query.
 
 * Erases also look the same as deletes, but these don't support `:for-valid-time`:
 +
@@ -429,7 +431,7 @@ include::{example}[tags=DML-Erase-sql,indent=0]
 
 === Assert
 
-`assert-exists` and `assert-not-exists` can be used to assert the state of the database during a transaction.
+link:../reference/main/xtql/txs.html#asserts[`assert-exists`] and link:../reference/main/xtql/txs.html#asserts[`assert-not-exists`] can be used to assert the state of the database during a transaction.
 If an assertion fails, the whole transaction rolls back.
 This can be used to check pre-conditions, for example.
 
@@ -459,10 +461,3 @@ include::{test}[tags=DML-Assert-query-result,indent=0]
 
 
 Those familiar with XT1 might recognise this as `::xt/match` - albeit more powerful because you have the full query language available rather than just matching a whole document.
-
-== Get in touch!
-
-We'd love to know what you think - please do come tell us:
-
-* hello@xtdb.com
-* https://discuss.xtdb.com
