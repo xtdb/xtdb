@@ -1,9 +1,15 @@
 package xtdb.api;
 
+import clojure.lang.ILookup;
+import clojure.lang.Keyword;
+
 import java.time.Instant;
 import java.util.Objects;
 
-public class TransactionKey implements Comparable<TransactionKey> {
+public class TransactionKey implements Comparable<TransactionKey>, ILookup {
+    private static Keyword txIdKey = Keyword.intern("tx-id");
+    private static Keyword systemTimeKey = Keyword.intern("system-time");
+
     public long txId;
     public Instant systemTime;
 
@@ -32,5 +38,20 @@ public class TransactionKey implements Comparable<TransactionKey> {
 
     public TransactionKey withSystemTime(Instant systemTime) {
         return new TransactionKey(this.txId, systemTime);
+    }
+
+    @Override
+    public Object valAt(Object key){
+        return valAt(key, null);
+    }
+    @Override
+    public Object valAt(Object key, Object notFound) {
+        if (key == txIdKey) {
+            return txId;
+        } else if (key == systemTimeKey) {
+           return systemTime;
+        } else {
+            return notFound;
+        }
     }
 }
