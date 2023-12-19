@@ -18,7 +18,7 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
-           xtdb.IBufferPool 
+           xtdb.IBufferPool
            (xtdb.api TransactionKey)
            (xtdb.metadata IMetadataManager)
            (xtdb.watermark IWatermarkSource)))
@@ -470,11 +470,11 @@
         (t/is (= 5500 (count first-half-tx-ops)))
         (t/is (= 5500 (count second-half-tx-ops)))
 
-        (let [first-half-tx-key (reduce
-                                 (fn [_ tx-ops]
-                                   (xt/submit-tx submit-node tx-ops))
-                                 nil
-                                 (partition-all 100 first-half-tx-ops))]
+        (let [^TransactionKey first-half-tx-key (reduce
+                                                 (fn [_ tx-ops]
+                                                   (xt/submit-tx submit-node tx-ops))
+                                                 nil
+                                                 (partition-all 100 first-half-tx-ops))]
 
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
             (let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
@@ -484,7 +484,7 @@
                            (tu/then-await-tx node (Duration/ofSeconds 10)))))
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
-              (let [{:keys [latest-completed-tx, next-chunk-idx]}
+              (let [{:keys [^TransactionKey latest-completed-tx, next-chunk-idx]}
                     (meta/latest-chunk-metadata mm)]
 
                 (t/is (< (.txId latest-completed-tx) (.txId first-half-tx-key)))
@@ -503,11 +503,11 @@
               (t/is (= :utf8
                        (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
 
-              (let [second-half-tx-key (reduce
-                                        (fn [_ tx-ops]
-                                          (xt/submit-tx submit-node tx-ops))
-                                        nil
-                                        (partition-all 100 second-half-tx-ops))]
+              (let [^TransactionKey second-half-tx-key (reduce
+                                                        (fn [_ tx-ops]
+                                                          (xt/submit-tx submit-node tx-ops))
+                                                        nil
+                                                        (partition-all 100 second-half-tx-ops))]
 
                 (t/is (<= (.txId first-half-tx-key)
                           (.txId (tu/latest-completed-tx node))

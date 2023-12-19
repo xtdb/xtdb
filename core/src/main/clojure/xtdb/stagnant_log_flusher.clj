@@ -54,7 +54,7 @@
                                        (.putLong (or latest-chunk-tx-id -1))
                                        .flip)
                         record @(.appendRecord log record-buf)]
-                   (reset! !last-flush-tx-id (some-> (:tx record) (.txId)))))
+                   (reset! !last-flush-tx-id (:tx-id (:tx record)))))
                 (catch InterruptedException _)
                 (catch ClosedByInterruptException _)
                 (catch Throwable e
