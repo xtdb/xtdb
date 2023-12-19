@@ -714,6 +714,8 @@ Within unify operators, these output names (`first-name`, `last-name` etc.) crea
 
 Argument specs are used to fulfil parameters in a sub-query.
 
+Where link:#_binding_specs[bindings] specify how to join the _output_ of the sub-query to the outer query, arguments specify the _inputs_ to the sub-query from the outer query.
+
 [source]
 ----
 ArgSpec :: ArgVariable | {Parameter Expr, ...}
@@ -724,18 +726,30 @@ Expr :: <defined separately>
 
 For example:
 
+* This is commonly used in 'pull' queries:
++
 [source,clojure]
 ----
 ;; find the most recent 5 posts and, for each, their most recent 3 comments
-(-> (from :posts [{:xt/id post-id, :title post-title, :content post-content} posted-at])
-    (with {:comments (pull* (-> (from :comments [{:post-id $post-id} comment commented-at])
-                                (order-by {:val commented-at, :dir :desc})
-                                (limit 3))
-                            {:args [post-id]})})
-    (order-by {:val posted-at, :dir :desc})
-    (limit 5))
 
+;; in this query, the `post-id` argument fulfils the `$post-id` parameter in the sub-query
+(-> (from :posts [{:xt/id post-id} ...])
+    (with {:comments (pull* (-> (from :comments [{:post-id $post-id} comment commented-at])
+                                (limit 3))
+                            {:args [post-id]})}))
+----
++
+* As well as 'pull', this is quite commonly used in left joins, because we don't want to filter out rows that don't match (which would happen if the `<>` here was in the outer unify).
++
+Instead, we want to preserve them, albeit without values for the columns in the RHS of the left-join.
++
+[source,clojure]
+----
 ;; find everybody and, for those who have them, their siblings
+
+;; in this query, the `person` argument fulfils the `$person` parameter in the sub-query;
+;; `sibling` and `parent` (in `bind`) are joined on the way out.
+
 (-> (unify (from :people [{:xt/id person, :parent parent}])
            (left-join (-> (from :people [{:xt/id sibling, :parent parent}])
                           (where (<> $person sibling)))
