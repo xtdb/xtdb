@@ -1,19 +1,41 @@
 (ns xtdb.tutorial-test
-  (:require [clojure.data.json :as json]
+  (:require [jsonista.core :as json]
+            [clj-yaml.core :as yaml]
             [clojure.test :as t :refer [deftest testing]]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.xtql.edn :as x-edn]
             [xtdb.xtql.json :as x-json]
-            [xtdb.error :as err]))
+            [xtdb.error :as err])
+  (:import (com.fasterxml.jackson.core JsonParser$Feature)))
 
 (t/use-fixtures :each tu/with-node)
 
-(defn str-json-query->edn [str-query]
-  (-> str-query
-      json/read-str
+(def comment-object-mapper
+  (-> (json/object-mapper)
+      (.configure JsonParser$Feature/ALLOW_COMMENTS true)))
+
+(def examples
+  (-> "./src/test/resources/docs/xtql_tutorial_examples.yaml"
+      slurp
+      (yaml/parse-string :keywords false)))
+
+(defn json-example [name]
+  (-> (get examples name)
+      (json/read-value comment-object-mapper)
       x-json/parse-query
       x-edn/unparse))
+
+(deftest test-issue
+  (t/is
+    (thrown-with-msg? java.lang.ClassCastException
+                      #"class clojure.lang.PersistentVector cannot be cast to class clojure.lang.MapEntry"
+      (x-json/parse-query
+        #ordered/map {"from" "users"
+                      "bind" ["age"]}))))
+
+(defn sql-example [name]
+  (get examples name))
 
 ;; TODO: Inline some
 (def users
@@ -70,25 +92,11 @@
 
   (t/is (= #{{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
              {:user-id "petr", :first-name "Petr", :last-name "Petrov"}}
-           (set
-             (xt/q tu/*node*
-                      (str-json-query->edn
-                       ;; tag::bo-json-1[]
-                       "{
-                          \"from\": \"users\",
-                          \"bind\": [ { \"xt/id\": \"user-id\" }, \"first-name\", \"last-name\" ]
-                        }"
-                       ;; end::bo-json-1[]
-                        ,)))))
+           (set (xt/q tu/*node* (json-example "bo-json-1")))))
 
   (t/is (= #{{:user_id "ivan", :first_name "Ivan", :last_name "Ivanov"}
              {:user_id "petr", :first_name "Petr", :last_name "Petrov"}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::bo-sql-1[]
-                   "SELECT users.xt$id AS user_id, users.first_name, users.last_name FROM users"
-                   ;; end::bo-sql-1[]
-                   ,))))
+           (set (xt/q tu/*node* (sql-example "bo-sql-1")))))
 
   (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
            (xt/q tu/*node*
@@ -99,22 +107,10 @@
                  ,)))
 
   (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
-           (xt/q tu/*node*
-                 (str-json-query->edn
-                   ;; tag::bo-json-2[]
-                   "{
-                      \"from\": \"users\",
-                      \"bind\": [ { \"xt/id\": { \"@value\": \"ivan\" } }, \"first-name\", \"last-name\" ]
-                    }"
-                   ;; end::bo-json-2[]
-                   ,))))
+           (xt/q tu/*node* (json-example "bo-json-2"))))
 
   (t/is (= [{:first_name "Ivan", :last_name "Ivanov"}]
-           (xt/q tu/*node*
-                 ;; tag::bo-sql-2[]
-                 "SELECT users.first_name, users.last_name FROM users WHERE users.xt$id = 'ivan'"
-                 ;; end::bo-sql-2[]
-                 ,)))
+           (xt/q tu/*node* (sql-example "bo-sql-2"))))
 
   (t/is (= [{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
             {:user-id "petr", :first-name "Petr", :last-name "Petrov"}]
@@ -129,30 +125,11 @@
 
   (t/is (= [{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
             {:user-id "petr", :first-name "Petr", :last-name "Petrov"}]
-           (xt/q tu/*node*
-                 (str-json-query->edn
-                   ;; tag::bo-json-3[]
-                   "[
-                      {
-                        \"from\": \"users\",
-                        \"bind\": [{ \"xt/id\": \"user-id\" }, \"first-name\", \"last-name\"]
-                      },
-                      { \"orderBy\": [\"last-name\", \"first-name\"] },
-                      { \"limit\": 10 }
-                    ]"
-                   ;; end::bo-json-3[]
-                   ,))))
+           (xt/q tu/*node* (json-example "bo-json-3"))))
 
   (t/is (= [{:user_id "ivan", :first_name "Ivan", :last_name "Ivanov"}
             {:user_id "petr", :first_name "Petr", :last_name "Petrov"}]
-           (xt/q tu/*node*
-                 ;; tag::bo-sql-3[]
-                 "SELECT users.xt$id AS user_id, users.first_name, users.last_name
-                  FROM users
-                  ORDER BY last_name, first_name
-                  LIMIT 10"
-                 ;; end::bo-sql-3[]
-                 ,))))
+           (xt/q tu/*node* (sql-example "bo-sql-3")))))
 
 (deftest joins
 
@@ -173,34 +150,11 @@
 
   (t/is (= #{{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov", :content "My first blog", :title "First"}
              {:user-id "ivan", :first-name "Ivan", :last-name "Ivanov", , :content "My second blog", :title "Second"}}
-           (set
-             (xt/q tu/*node*
-                     (str-json-query->edn
-                       ;; tag::joins-json-1[]
-                       "{
-                          \"unify\": [
-                            {
-                              \"from\": \"users\",
-                              \"bind\": [ { \"xt/id\": \"user-id\" }, \"first-name\", \"last-name\" ]
-                            },
-                            {
-                              \"from\": \"articles\",
-                              \"bind\": [ { \"author-id\": \"user-id\" }, \"title\", \"content\" ]
-                            }
-                          ]
-                        }"
-                       ;; end::joins-json-1[]
-                       ,)))))
+           (set (xt/q tu/*node* (json-example "joins-json-1")))))
 
   (t/is (= #{{:user_id "ivan", :first_name "Ivan", :last_name "Ivanov", :content "My first blog", :title "First"}
              {:user_id "ivan", :first_name "Ivan", :last_name "Ivanov", , :content "My second blog", :title "Second"}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::joins-sql-1[]
-                   "SELECT u.xt$id AS user_id, u.first_name, u.last_name, a.title, a.content
-                    FROM users u JOIN articles a ON u.xt$id = a.author_id"
-                    ;; end::joins-sql-1[]
-                    ,))))
+           (set (xt/q tu/*node* (sql-example "joins-sql-1")))))
 
   (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
              {:age 25, :uid1 "petr", :uid2 "ivan"}}
@@ -216,39 +170,11 @@
 
   (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
              {:age 25, :uid1 "petr", :uid2 "ivan"}}
-           (set
-             (xt/q tu/*node*
-                   (str-json-query->edn
-                     ;; tag::joins-json-2[]
-                     "{
-                        \"unify\": [
-                          {
-                            \"from\": \"users\",
-                            \"bind\": [ { \"xt/id\": \"uid1\" }, \"age\" ]
-                          },
-                          {
-                            \"from\": \"users\",
-                            \"bind\": [ { \"xt/id\": \"uid2\" }, \"age\" ]
-                          },
-                          {
-                            \"where\": [ { \"<>\": [ \"uid1\", \"uid2\" ] } ]
-                          }
-                        ]
-                      }"
-                     ;; end::joins-json-2[]
-                     ,)))))
+           (set (xt/q tu/*node* (json-example "joins-json-2")))))
 
   (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
              {:age 25, :uid1 "petr", :uid2 "ivan"}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::joins-sql-2[]
-                   "SELECT u1.xt$id AS uid1, u2.xt$id AS uid2, u1.age
-                    FROM users u1
-                      JOIN users u2 ON (u1.age = u2.age)
-                    WHERE u1.xt$id <> u2.xt$id"
-                   ;; end::joins-sql-2[]
-                   ,))))
+           (set (xt/q tu/*node* (sql-example "joins-sql-2")))))
 
   (t/is (= #{{:cid "ivan", :order-value 150, :currency :gbp}
              {:cid "ivan", :order-value 100, :currency :gbp}
@@ -267,43 +193,12 @@
   (t/is (= #{{:cid "ivan", :order-value 150, :currency :gbp}
              {:cid "ivan", :order-value 100, :currency :gbp}
              {:cid "petr", :order-value nil, :currency nil}}
-           (set
-             (xt/q tu/*node*
-                     (str-json-query->edn
-                       ;; tag::joins-json-3[]
-                       "[
-                          {
-                            \"unify\": [
-                              {
-                                \"from\": \"customers\",
-                                \"bind\": [{ \"xt/id\": \"cid\" }]
-                              },
-                              {
-                                \"leftJoin\": {
-                                  \"from\": \"orders\",
-                                  \"bind\": [{ \"xt/id\": \"oid\", \"customer-id\": \"cid\" }, \"currency\", \"order-value\"]
-                                },
-                                \"bind\": [\"cid\", \"currency\", \"order-value\"]
-                              }
-                            ]
-                          },
-                          { \"limit\": 100 }
-                        ]"
-                       ;; end::joins-json-3[]
-                       ,)))))
+           (set (xt/q tu/*node* (json-example "joins-json-3")))))
 
   (t/is (= #{{:cid "ivan", :order_value 150, :currency :gbp}
              {:cid "ivan", :order_value 100, :currency :gbp}
              {:cid "petr", :order_value nil, :currency nil}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::joins-sql-3[]
-                   "SELECT c.xt$id AS cid, o.currency, o.order_value
-                    FROM customers c
-                      LEFT JOIN orders o ON (c.xt$id = o.customer_id)
-                    LIMIT 100"
-                   ;; end::joins-sql-3[]
-                   ,))))
+           (set (xt/q tu/*node* (sql-example "joins-sql-3")))))
 
   (t/is (= [{:cid "petr"}]
            (xt/q tu/*node*
@@ -317,47 +212,10 @@
                  ,)))
 
   (t/is (= [{:cid "petr"}]
-           (xt/q tu/*node*
-                 (str-json-query->edn
-                   ;; tag::joins-json-4[]
-                   "[
-                      {
-                        \"unify\": [
-                          {
-                            \"from\": \"customers\",
-                            \"bind\": [{ \"xt/id\": \"cid\" }]
-                          },
-                          {
-                            \"where\": [
-                              {
-                                \"not\": [
-                                  {
-                                    \"exists\": {
-                                      \"from\": \"orders\",
-                                      \"bind\": [ { \"customer-id\": \"$cid\" } ]
-                                    },
-                                    \"args\": [ \"cid\" ]
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      },
-                      { \"limit\": 100 }
-                    ]"
-                   ;; end::joins-json-4[]
-                   ,))))
+           (xt/q tu/*node* (json-example "joins-json-4"))))
 
   (t/is (= [{:cid "petr"}]
-           (xt/q tu/*node*
-                 ;; tag::joins-sql-4[]
-                 "SELECT c.xt$id AS cid
-                  FROM customers c
-                  WHERE c.xt$id NOT IN (SELECT orders.customer_id FROM orders)
-                  LIMIT 100"
-                 ;; end::joins-sql-4[]
-                 ,))))
+           (xt/q tu/*node* (sql-example "joins-sql-4")))))
 
 (deftest projections
 
@@ -376,37 +234,11 @@
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :full-name "Ivan Ivanov"}
              {:first-name "Petr", :last-name "Petrov", :full-name "Petr Petrov"}}
-           (set
-             (xt/q tu/*node*
-                   (str-json-query->edn
-                     ;; tag::proj-json-1[]
-                     "[
-                        {
-                          \"from\": \"users\",
-                          \"bind\": [\"first-name\", \"last-name\"]
-                        },
-                        {
-                          \"with\": [
-                            {
-                              \"full-name\": {
-                                \"concat\": [\"first-name\", { \"@value\": \" \" }, \"last-name\"]
-                              }
-                            }
-                          ]
-                        }
-                      ]"
-                     ;; end::proj-json-1[]
-                     ,)))))
+           (set (xt/q tu/*node* (json-example "proj-json-1")))))
 
   (t/is (= #{{:first_name "Ivan", :last_name "Ivanov", :full_name "Ivan Ivanov"}
              {:first_name "Petr", :last_name "Petrov", :full_name "Petr Petrov"}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::proj-sql-1[]
-                   "SELECT users.first_name, users.last_name, (users.first_name || ' ' || users.last_name) AS full_name
-                    FROM users"
-                   ;; end::proj-sql-1[]
-                   ,))))
+           (set (xt/q tu/*node* (sql-example "proj-sql-1")))))
 
   (t/is (= #{{:full-name "Ivan Ivanov", :title "First", :content "My first blog"}
              {:full-name "Ivan Ivanov", :title "Second", :content "My second blog"}}
@@ -422,48 +254,11 @@
 
   (t/is (= #{{:full-name "Ivan Ivanov", :title "First", :content "My first blog"}
              {:full-name "Ivan Ivanov", :title "Second", :content "My second blog"}}
-           (set
-             (xt/q tu/*node*
-                   (str-json-query->edn
-                     ;; tag::proj-json-2[]
-                     "[
-                        {
-                          \"unify\": [
-                            {
-                              \"from\": \"users\",
-                              \"bind\": [ { \"xt/id\": \"user-id\" }, \"first-name\", \"last-name\" ]
-                            },
-                            {
-                              \"from\": \"articles\",
-                              \"bind\": [ { \"author-id\": \"user-id\" }, \"title\", \"content\" ]
-                            }
-                          ]
-                        },
-                        {
-                          \"return\": [
-                            {
-                              \"full-name\": {
-                                \"concat\": [ \"first-name\", { \"@value\": \" \" }, \"last-name\" ]
-                              }
-                            },
-                            \"title\",
-                            \"content\"
-                          ]
-                        }
-                      ]"
-                     ;; end::proj-json-2[]
-                     ,)))))
+           (set (xt/q tu/*node* (json-example "proj-json-2")))))
 
   (t/is (= #{{:full_name "Ivan Ivanov", :title "First", :content "My first blog"}
              {:full_name "Ivan Ivanov", :title "Second", :content "My second blog"}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::proj-sql-2[]
-                   "SELECT (u.first_name || ' ' || u.last_name) AS full_name, a.title, a.content
-                    FROM users u
-                      JOIN articles a ON u.xt$id = a.author_id"
-                   ;; end::proj-sql-2[]
-                   ,))))
+           (set (xt/q tu/*node* (sql-example "proj-sql-2")))))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :title "Second", :content "My second blog"}
              {:first-name "Ivan", :last-name "Ivanov", :title "First", :content "My first blog"}}
@@ -479,38 +274,11 @@
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :title "Second", :content "My second blog"}
              {:first-name "Ivan", :last-name "Ivanov", :title "First", :content "My first blog"}}
-           (set
-             (xt/q tu/*node*
-                   (str-json-query->edn
-                     ;; tag::proj-json-3[]
-                     "[
-                        {
-                          \"unify\": [
-                            {
-                              \"from\": \"users\",
-                              \"bind\": [ { \"xt/id\": \"user-id\" }, \"first-name\", \"last-name\" ]
-                            },
-                            {
-                              \"from\": \"articles\",
-                              \"bind\": [ { \"author-id\": \"user-id\" }, \"title\", \"content\" ]
-                            }
-                          ]
-                        },
-                        { \"without\": [ \"user-id\" ] }
-                      ]"
-                     ;; end::proj-json-3[]
-                     ,)))))
+           (set (xt/q tu/*node* (json-example "proj-json-3")))))
 
   (t/is (= #{{:first_name "Ivan", :last_name "Ivanov", :title "Second", :content "My second blog"}
              {:first_name "Ivan", :last_name "Ivanov", :title "First", :content "My first blog"}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::proj-sql-3[]
-                   "SELECT u.first_name, u.last_name, a.title, a.content
-                    FROM users u
-                      JOIN articles a ON u.xt$id = a.author_id"
-                   ;; end::proj-sql-3[]
-                   ,)))))
+           (set (xt/q tu/*node* (sql-example "proj-sql-3"))))))
 
 (deftest aggregations
 
@@ -536,66 +304,13 @@
                  ;; end::aggr-xtql-1[]
                  ,))))
 
-
     (t/is (= #{{:cid "ivan", :currency :gbp, :order-count 2, :total-value 250}
                {:cid "petr", :currency nil, :order-count 0, :total-value 0}}
-             (set
-               (xt/q tu/*node*
-                 (str-json-query->edn
-                   ;; tag::aggr-json-1[]
-                   "[
-                      {
-                        \"unify\": [
-                          {
-                            \"from\": \"customers\",
-                            \"bind\": [ { \"xt/id\": \"cid\" } ]
-                          },
-                          {
-                            \"leftJoin\": {
-                              \"from\": \"orders\",
-                              \"bind\": [ { \"xt/id\": \"oid\", \"customer-id\": \"cid\" }, \"currency\", \"order-value\" ]
-                            },
-                            \"bind\": [ \"oid\", \"cid\", \"currency\", \"order-value\" ]
-                          }
-                        ]
-                      },
-                      {
-                        \"aggregate\": [
-                          { \"cid\": \"cid\" },
-                          { \"currency\": \"currency\" },
-                          { \"order-count\": { \"count\": [\"oid\"] } },
-                          { \"total-value\": { \"sum\": [ \"order-value\" ] } }
-                        ]
-                      },
-                      { 
-                         \"with\": [
-                           {
-                             \"total-value\": {
-                               \"coalesce\": [\"total-value\", 0]
-                             }
-                           }
-                         ]
-                      },
-                      { \"orderBy\": [ { \"val\": \"total-value\", \"dir\": \"desc\" } ] },
-                      { \"limit\": 100 }
-                    ]"
-                   ;; end::aggr-json-1[]
-                   ,)))))
+             (set (xt/q tu/*node* (json-example "aggr-json-1")))))
 
     (t/is (= #{{:cid "ivan", :currency :gbp, :order_count 2, :total_value 250}
                {:cid "petr", :currency nil, :order_count 0, :total_value 0}}
-             (set
-               (xt/q tu/*node*
-                 ;; tag::aggr-sql-1[]
-                 "SELECT c.xt$id AS cid, o.currency, COUNT(o.xt$id) AS order_count, COALESCE(SUM(o.order_value), 0) AS total_value
-                  FROM customers c
-                    LEFT JOIN orders o ON (c.xt$id = o.customer_id)
-                  GROUP BY c.xt$id, o.currency
-                  ORDER BY total_value DESC
-                  LIMIT 100"
-                 ;; end::aggr-sql-1[]
-                 ,))))))
-
+             (set (xt/q tu/*node* (sql-example "aggr-sql-1")))))))
 
 
 (deftest pull
@@ -649,44 +364,7 @@
                 :author-id "ivan",
                 :author {:last-name "Ivanov", :first-name "Ivan"},
                 :comments [{:created-at #time/zoned-date-time "2022-01-01T00:00Z[UTC]", :comment "1"}],}}
-             (set
-               (xt/q tu/*node*
-                 (str-json-query->edn
-                   ;; tag::pull-json-1[]
-                   "[
-                      {
-                        \"from\": \"articles\",
-                        \"bind\": [{ \"xt/id\": \"article-id\" }, \"title\", \"content\", \"author-id\"]
-                      },
-                      {
-                        \"with\": [
-                          {
-                            \"author\": {
-                              \"pull\": [
-                                {
-                                  \"from\": \"authors\",
-                                  \"bind\": [{ \"xt/id\": \"$author-id\" }, \"first-name\", \"last-name\"]
-                                }
-                              ],
-                              \"args\": [\"author-id\"]
-                            },
-                            \"comments\": {
-                              \"pullMany\": [
-                                {
-                                  \"from\": \"comments\",
-                                  \"bind\": [{\"article-id\": \"$article-id\"}, \"created-at\", \"comment\"]
-                                },
-                                { \"orderBy\": [{ \"val\": \"created-at\", \"dir\": \"desc\" }] },
-                                { \"limit\": 10 }
-                              ],
-                              \"args\": [\"article-id\"]
-                            }
-                          }
-                        ]
-                      }
-                    ]"
-                   ;; end::pull-json-1[]
-                   ,)))))
+             (set (xt/q tu/*node* (json-example "pull-json-1")))))
 
     ;; NO SQL for this one
     ,))
@@ -715,49 +393,19 @@
                ;; end::bitemp-xtql-2[]
                ,))))
 
-
   (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
-           (xt/q tu/*node*
-             (str-json-query->edn
-               ;; tag::bitemp-json-1[]
-               "{
-                  \"from\": \"users\",
-                  \"forValidTime\": { \"at\": { \"@value\": \"2020-01-01\", \"@type\": \"xt:date\" } },
-                  \"bind\": [ \"first-name\", \"last-name\" ]
-                }"
-               ;; end::bitemp-json-1[]
-               ,))))
+           (xt/q tu/*node* (json-example "bitemp-json-1"))))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
              {:first-name "Petr", :last-name "Petrov"}}
-           (set
-             (xt/q tu/*node*
-               (str-json-query->edn
-                 ;; tag::bitemp-json-2[]
-                 "{
-                    \"from\": \"users\",
-                    \"forValidTime\": \"allTime\",
-                    \"bind\": [ \"first-name\", \"last-name\" ]
-                  }"
-                 ;; end::bitemp-json-2[]
-                 ,)))))
-
+           (set (xt/q tu/*node* (json-example "bitemp-json-2")))))
 
   (t/is (= [{:first_name "Petr", :last_name "Petrov"}]
-           (xt/q tu/*node*
-                 ;; tag::bitemp-sql-1[]
-                 "SELECT users.first_name, users.last_name FROM users FOR VALID_TIME AS OF DATE '2020-01-01'"
-                 ;; end::bitemp-sql-1[]
-                 ,)))
+           (xt/q tu/*node* (sql-example "bitemp-sql-1"))))
 
   (t/is (= #{{:first_name "Ivan", :last_name "Ivanov"}
              {:first_name "Petr", :last_name "Petrov"}}
-           (set
-             (xt/q tu/*node*
-                   ;; tag::bitemp-sql-2[]
-                   "SELECT users.first_name, users.last_name FROM users FOR ALL VALID_TIME"
-                   ;; end::bitemp-sql-2[]
-                   ,))))
+           (set (xt/q tu/*node* (sql-example "bitemp-sql-2")))))
 
   (t/is (= [{:user-id "petr"}]
            (xt/q tu/*node*
@@ -772,25 +420,8 @@
                  ,)))
 
   (t/is (= [{:user-id "petr"}]
-           (xt/q tu/*node*
-             (str-json-query->edn
-               ;; tag::bitemp-json-3[]
-               "{
-                  \"unify\": [
-                    {
-                      \"from\": \"users\",
-                      \"forValidTime\": { \"at\": { \"@value\": \"2018-01-01\", \"@type\": \"xt:date\" } },
-                      \"bind\": [ { \"xt/id\": \"user-id\"} ]
-                    },
-                    {
-                      \"from\": \"users\",
-                      \"forValidTime\": { \"at\": { \"@value\": \"2023-01-01\", \"@type\": \"xt:date\" } },
-                      \"bind\": [ { \"xt/id\": \"user-id\" } ]
-                    }
-                  ]
-                }"
-               ;; end::bitemp-json-3[]
-               ,)))))
+           (xt/q tu/*node* (json-example "bitemp-json-3")))))
+
 
 (deftest DML-Insert-xtql
   (xt/submit-tx tu/*node* old-users)
@@ -823,15 +454,8 @@
                  '(from :users [first-name last-name]))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op
-       ;; tag::DML-Insert-sql[]
-      "INSERT INTO users
-      SELECT ou.xt$id, ou.given_name AS first_name, ou.surname AS last_name,
-             ou.xt$valid_from, ou.xt$valid_to
-      FROM old_users AS ou"
-       ;; end::DML-Insert-sql[]
-       ,)])
-  
+    [(xt/sql-op (sql-example "DML-Insert-sql"))])
+
   ;; TODO: Test valid time
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
              {:first-name "Petr", :last-name "Petrov"}}
@@ -860,12 +484,8 @@
   (xt/submit-tx tu/*node* comments)
 
   (xt/submit-tx tu/*node*
-                [(-> (xt/sql-op
-                       ;; tag::DML-Delete-sql[]
-                       "DELETE FROM comments WHERE comments.post_id = ?"
-                       ;; end::DML-Delete-sql[]
-                       ,)
-                     (xt/with-op-args [1]))])
+    [(-> (xt/sql-op (sql-example "DML-Delete-sql"))
+         (xt/with-op-args [1]))])
 
   (t/is (= []
            (xt/q tu/*node*
@@ -894,13 +514,8 @@
   (xt/submit-tx tu/*node* (concat posts comments))
 
   (xt/submit-tx tu/*node*
-                [(-> (xt/sql-op
-                       ;; tag::DML-Delete-additional-unify-clauses-sql[]
-                       "DELETE FROM comments
-                        WHERE comments.post_id IN (SELECT posts.xt$id FROM posts WHERE posts.author_id = ?)"
-                       ;; end::DML-Delete-additional-unify-clauses-sql[]
-                       ,)
-                     (xt/with-op-args ["ivan"]))])
+    [(-> (xt/sql-op (sql-example "DML-Delete-additional-unify-clauses-sql"))
+         (xt/with-op-args ["ivan"]))])
 
   (t/is (= []
            (xt/q tu/*node*
@@ -949,13 +564,7 @@
                                               :for-valid-time (from #inst "2023-12-26")}))))))
 
   (xt/submit-tx tu/*node*
-                [(xt/sql-op
-                   ;; tag::DML-Delete-bitemporal-sql[]
-                   "DELETE FROM promotions
-                    FOR PORTION OF VALID_TIME FROM DATE '2023-12-26' TO END_OF_TIME
-                    WHERE promotions.promotion_type = 'christmas'"
-                   ;; end::DML-Delete-bitemporal-sql[]
-                   ,)])
+    [(xt/sql-op (sql-example "DML-Delete-bitemporal-sql"))])
 
   (t/is (= #{{:promotion-type "general"}}
            (set
@@ -985,11 +594,7 @@
   (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op
-       ;; tag::DML-Delete-everything-sql[]
-       "DELETE FROM comments"
-       ;; end::DML-Delete-everything-sql[]
-       ,)])
+    [(xt/sql-op (sql-example "DML-Delete-everything-sql"))])
 
   (t/is (empty? (xt/q tu/*node* '(from :comments [])))))
 
@@ -1020,14 +625,8 @@
            (xt/q tu/*node* '(from :documents [version]))))
 
   (xt/submit-tx tu/*node*
-                [(-> (xt/sql-op
-                       ;; tag::DML-Update-sql[]
-                       "UPDATE documents
-                        SET version = documents.version + 1
-                        WHERE documents.xt$id = ?"
-                       ;; end::DML-Update-sql[]
-                       ,)
-                     (xt/with-op-args ["doc-id"]))])
+    [(-> (xt/sql-op (sql-example "DML-Update-sql"))
+         (xt/with-op-args ["doc-id"]))])
 
   (t/is (= [{:version 2}]
            (xt/q tu/*node* '(from :documents [version])))))
@@ -1064,19 +663,9 @@
            (xt/q tu/*node* '(from :posts [comment-count]))))
   
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op
-           ;; tag::DML-Update-bitemporal-sql-1[]
-           "INSERT INTO comments (xt$id, post_id) VALUES (?, ?)"
-           ;; end::DML-Update-bitemporal-sql-1[]
-           ,)
+    [(-> (xt/sql-op (sql-example "DML-Update-bitemporal-sql-1"))
          (xt/with-op-args [(random-uuid), "my-post-id"]))
-     (-> (xt/sql-op
-           ;; tag::DML-Update-bitemporal-sql-2[]
-           "UPDATE posts AS p
-            SET comment_count = (SELECT COUNT(*) FROM comments WHERE comments.post_id = ?)
-            WHERE p.post_id = ?" 
-           ;; end::DML-Update-bitemporal-sql-2[]
-           ,)
+     (-> (xt/sql-op (sql-example "DML-Update-bitemporal-sql-2"))
          (xt/with-op-args ["my-post-id" "my-post-id"]))])
 
   (t/is (= [{:comment-count 2}]
@@ -1105,11 +694,7 @@
   (t/is (not (empty? (xt/q tu/*node* '(from :users [])))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op
-       ;; tag::DML-Erase-sql[]
-       "ERASE FROM users WHERE users.email = 'jms@example.com'"
-       ;; end::DML-Erase-sql[]
-       ,)])
+    [(xt/sql-op (sql-example "DML-Erase-sql"))])
 
   ;; TODO: Test valid time
   (t/is (empty? (xt/q tu/*node* '(from :users [])))))
@@ -1145,11 +730,7 @@
   #_
   (let [{:keys [tx-id]}
         (xt/submit-tx tu/*node*
-          [(xt/sql-op
-             ;; tag::DML-Assert-sql[]
-             "ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@juxt.pro')"
-             ;; end::DML-Assert-sql[]
-             ,)])]
+          [(xt/sql-op (sql-example "DML-Assert-sql"))])]
     (t/is (= [{:xt/committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed?])
                    {:args {:tx-id tx-id}})))))

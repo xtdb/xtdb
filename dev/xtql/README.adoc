@@ -1,5 +1,6 @@
 = XTQL Tutorial
 :test: ../src/test/clojure/xtdb/tutorial_test.clj
+:example: ../src/test/resources/docs/xtql_tutorial_examples.yaml
 
 XTDB 2.x will support two query languages: SQL, but also 'XTQL' - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
 XTQL can be written in JSON, Java/Scala/Kotlin (full DSL coming soon) and Clojure's EDN.
@@ -17,14 +18,14 @@ We'll save the in-depth XTQL specification for another article - for now, let's 
 include::{test}[tags=bo-xtql-1,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=bo-json-1,string,indent=0]
+include::{example}[tags=bo-json-1,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=bo-sql-1,string,indent=0]
+include::{example}[tags=bo-sql-1,indent=0]
 ----
 +
 * We can look up a single user-id by binding it in the `from` clause:
@@ -34,14 +35,14 @@ include::{test}[tags=bo-sql-1,string,indent=0]
 include::{test}[tags=bo-xtql-2,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=bo-json-2,indent=0]
+include::{example}[tags=bo-json-2,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=bo-sql-2,indent=0]
+include::{example}[tags=bo-sql-2,indent=0]
 ----
 +
 * `from` is a valid query in isolation but, for anything more powerful, we'll need a 'pipeline':
@@ -51,14 +52,14 @@ include::{test}[tags=bo-sql-2,indent=0]
 include::{test}[tags=bo-xtql-3,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=bo-json-3,indent=0]
+include::{example}[tags=bo-json-3,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=bo-sql-3,indent=0]
+include::{example}[tags=bo-sql-3,indent=0]
 ----
 
 XTQL operations are independently composable - unlike SQL/EDN Datalog, for example, you don't need a whole 'SELECT, FROM, WHERE'/`{:find ..., :where ...}` frame every time.
@@ -76,14 +77,14 @@ In this case, we re-use the `user-id` logic variable to indicate that the `:xt/i
 include::{test}[tags=joins-xtql-1,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=joins-json-1,indent=0]
+include::{example}[tags=joins-json-1,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=joins-sql-1,indent=0]
+include::{example}[tags=joins-sql-1,indent=0]
 ----
 
 +
@@ -95,14 +96,14 @@ include::{test}[tags=joins-sql-1,indent=0]
 include::{test}[tags=joins-xtql-2,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=joins-json-2,indent=0]
+include::{example}[tags=joins-json-2,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=joins-sql-2,indent=0]
+include::{example}[tags=joins-sql-2,indent=0]
 ----
 +
 * We can specify that a certain match is optional using `left-join`:
@@ -112,14 +113,14 @@ include::{test}[tags=joins-sql-2,indent=0]
 include::{test}[tags=joins-xtql-3,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=joins-json-3,indent=0]
+include::{example}[tags=joins-json-3,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=joins-sql-3,indent=0]
+include::{example}[tags=joins-sql-3,indent=0]
 ----
 +
 Here, we're asking to additionally return customers who haven't yet any orders (for which the order-table columns will be absent in the results).
@@ -130,14 +131,14 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 include::{test}[tags=joins-xtql-4,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=joins-json-4,indent=0]
+include::{example}[tags=joins-json-4,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=joins-sql-4,indent=0]
+include::{example}[tags=joins-sql-4,indent=0]
 ----
 +
 (naturally, `IN` is also available, but uses `exists?` instead)
@@ -151,14 +152,14 @@ include::{test}[tags=joins-sql-4,indent=0]
 include::{test}[tags=proj-xtql-1,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=proj-json-1,indent=0]
+include::{example}[tags=proj-json-1,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=proj-sql-1,indent=0]
+include::{example}[tags=proj-sql-1,indent=0]
 ----
 +
 We can also use `with` within `unify` - this creates new logic variables which we can then unify in the same way.
@@ -170,14 +171,14 @@ We can also use `with` within `unify` - this creates new logic variables which w
 include::{test}[tags=proj-xtql-2,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=proj-json-2,indent=0]
+include::{example}[tags=proj-json-2,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=proj-sql-2,indent=0]
+include::{example}[tags=proj-sql-2,indent=0]
 ----
 * Where we don't need any additional projections, we can use `without`:
 +
@@ -186,14 +187,14 @@ include::{test}[tags=proj-sql-2,indent=0]
 include::{test}[tags=proj-xtql-3,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=proj-json-3,indent=0]
+include::{example}[tags=proj-json-3,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=proj-sql-3,indent=0]
+include::{example}[tags=proj-sql-3,indent=0]
 ----
 
 == Aggregations
@@ -205,14 +206,14 @@ To count/sum/average values, we use `aggregate`:
 include::{test}[tags=aggr-xtql-1,indent=0]
 ----
 
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=aggr-json-1,indent=0]
+include::{example}[tags=aggr-json-1,indent=0]
 ----
 
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=aggr-sql-1,indent=0]
+include::{example}[tags=aggr-sql-1,indent=0]
 ----
 
 == 'Pull'
@@ -235,9 +236,9 @@ include::{test}[tags=pull-xtql-1,indent=0]
 ;; Lots of nested left-joins, array-aggs, and vendor-specific JSON functions required there to guarantee this same output.
 ----
 
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=pull-json-1,indent=0]
+include::{example}[tags=pull-json-1,indent=0]
 ----
 
 In this example, we use `pull` to pull back a single map - we know that there's only one author per article (in our system).
@@ -263,18 +264,18 @@ include::{test}[tags=bitemp-xtql-1,indent=0]
 include::{test}[tags=bitemp-xtql-2,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=bitemp-json-1,indent=0]
+include::{example}[tags=bitemp-json-1,indent=0]
 
-include::{test}[tags=bitemp-json-2,indent=0]
+include::{example}[tags=bitemp-json-2,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=bitemp-sql-1,indent=0]
+include::{example}[tags=bitemp-sql-1,indent=0]
 
-include::{test}[tags=bitemp-sql-2,indent=0]
+include::{example}[tags=bitemp-sql-2,indent=0]
 ----
 +
 ** You can also specify `(from <time>)`, `(to <time>)` or `(in <from-time> <to-time>)`, to give fine-grained, in-query control over the history returned for the given rows.
@@ -286,9 +287,9 @@ include::{test}[tags=bitemp-sql-2,indent=0]
 include::{test}[tags=bitemp-xtql-3,indent=0]
 ----
 +
-[source,json,string=unescape]
+[source,json]
 ----
-include::{test}[tags=bitemp-json-3,indent=0]
+include::{example}[tags=bitemp-json-3,indent=0]
 ----
 
 == DML
@@ -308,11 +309,11 @@ We submit `insert` operations to `xt/submit-tx`.
 include::{test}[tags=DML-Insert-xtql,indent=0]
 ----
 
-[source,sql,string=unescape]
+[source,sql]
 ----
 -- we omit the submission boilerplate in the SQL equivalents
 
-include::{test}[tags=DML-Insert-sql,indent=0]
+include::{example}[tags=DML-Insert-sql,indent=0]
 ----
 
 Here we're preserving the valid-from and valid-to of the rows we're copying, but we could just as easily specify/calculate a different value.
@@ -331,9 +332,9 @@ We can delete documents using queries as well.
 include::{test}[tags=DML-Delete-xtql,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=DML-Delete-sql,indent=0]
+include::{example}[tags=DML-Delete-sql,indent=0]
 ----
 +
 Here, we're passing a dynamic parameter to specify the post to delete.
@@ -346,9 +347,9 @@ Let's say instead we wanted to delete all comments on posts by a certain author 
 include::{test}[tags=DML-Delete-additional-unify-clauses-xtql,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=DML-Delete-additional-unify-clauses-sql,indent=0]
+include::{example}[tags=DML-Delete-additional-unify-clauses-sql,indent=0]
 ----
 +
 Additional clauses passed to `delete` in this way are unified, in the same way variables within a `unify` are.
@@ -362,9 +363,9 @@ For example, if we want to take down all Christmas promotions on the 26th Decemb
 include::{test}[tags=DML-Delete-bitemporal-xtql,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=DML-Delete-bitemporal-sql,indent=0]
+include::{example}[tags=DML-Delete-bitemporal-sql,indent=0]
 ----
 +
 * Finally, we can delete every entry in a table by omitting any `:bind` predicates:
@@ -374,9 +375,9 @@ include::{test}[tags=DML-Delete-bitemporal-sql,indent=0]
 include::{test}[tags=DML-Delete-everything-xtql,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=DML-Delete-everything-sql,indent=0]
+include::{example}[tags=DML-Delete-everything-sql,indent=0]
 ----
 
 === Update
@@ -388,9 +389,9 @@ include::{test}[tags=DML-Delete-everything-sql,indent=0]
 include::{test}[tags=DML-Update-xtql,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=DML-Update-sql,indent=0]
+include::{example}[tags=DML-Update-sql,indent=0]
 ----
 +
 * Like deletes, updates also accept `:for-valid-time` and extra sub-queries to join from.
@@ -401,11 +402,11 @@ You can, for example, copy a value from another related table, or even update a 
 include::{test}[tags=DML-Update-bitemporal-xtql,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=DML-Update-bitemporal-sql-1,indent=0]
+include::{example}[tags=DML-Update-bitemporal-sql-1,indent=0]
 
-include::{test}[tags=DML-Update-bitemporal-sql-2,indent=0]
+include::{example}[tags=DML-Update-bitemporal-sql-2,indent=0]
 ----
 
 This is the operation that we envisage replacing a lot of XT1 transaction functions - it makes it trivial to patch a single value within a document, for example.
@@ -421,9 +422,9 @@ We can irretrievably erase a document using an `erase` query.
 include::{test}[tags=DML-Erase-xtql,indent=0]
 ----
 +
-[source,sql,string=unescape]
+[source,sql]
 ----
-include::{test}[tags=DML-Erase-sql,indent=0]
+include::{example}[tags=DML-Erase-sql,indent=0]
 ----
 
 === Assert
@@ -439,10 +440,10 @@ This query asserts that no user has the email `james@example.com` before inserti
 include::{test}[tags=DML-Assert-xtql,indent=0]
 ----
 
-[source,sql,string=unescape]
+[source,sql]
 ----
 -- not implemented yet
-include::{test}[tags=DML-Assert-sql,indent=0]
+include::{example}[tags=DML-Assert-sql,indent=0]
 ----
 
 You can check the `:xt/txs` table to see whether and why a transaction failed:
