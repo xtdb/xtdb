@@ -213,6 +213,9 @@ dependencies {
 
     // for AWS profiles (managing datasets)
     devImplementation("software.amazon.awssdk", "sts", "2.16.76")
+
+    // hato uses cheshire for application/json encoding
+    testImplementation("cheshire", "cheshire", "5.12.0")
 }
 
 if (hasProperty("fin")) {
