@@ -63,6 +63,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
+            { label: 'XTQL Walkthrough', link: '/guides/xtql-walkthrough' },
           ],
         },
 

@@ -204,6 +204,7 @@ dependencies {
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("org.postgresql", "postgresql", "42.5.0")
     testImplementation("metosin", "jsonista", "0.3.3")
+    testImplementation("clj-commons", "clj-yaml", "1.0.27")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
     testImplementation("org.clojure", "test.check", "1.1.1")
 
