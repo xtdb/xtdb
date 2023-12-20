@@ -80,15 +80,10 @@
                    ';; tag::bo-xtql-1[]
                    (from :users [{:xt/id user-id} first-name last-name])
                    ;; end::bo-xtql-1[]
-                   ,))))
-
-  (t/is (= #{{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
-             {:user-id "petr", :first-name "Petr", :last-name "Petrov"}}
-           (set (xt/q tu/*node* (json-example "bo-json-1")))))
-
-  (t/is (= #{{:user_id "ivan", :first_name "Ivan", :last_name "Ivanov"}
-             {:user_id "petr", :first_name "Petr", :last_name "Petrov"}}
-           (set (xt/q tu/*node* (sql-example "bo-sql-1")))))
+                   ,))
+           (set (xt/q tu/*node* (json-example "bo-json-1")))
+           (set (xt/q tu/*node* (sql-example "bo-sql-1")
+                      {:key-fn :clojure}))))
 
   (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
            (xt/q tu/*node*
@@ -96,13 +91,10 @@
                  ;; tag::bo-xtql-2[]
                  (from :users [{:xt/id "ivan"} first-name last-name])
                  ;; end::bo-xtql-2[]
-                 ,)))
-
-  (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
-           (xt/q tu/*node* (json-example "bo-json-2"))))
-
-  (t/is (= [{:first_name "Ivan", :last_name "Ivanov"}]
-           (xt/q tu/*node* (sql-example "bo-sql-2"))))
+                 ,)
+           (xt/q tu/*node* (json-example "bo-json-2"))
+           (xt/q tu/*node* (sql-example "bo-sql-2")
+                 {:key-fn :clojure})))
 
   (t/is (= [{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
             {:user-id "petr", :first-name "Petr", :last-name "Petrov"}]
@@ -113,15 +105,10 @@
                      (order-by last-name first-name)
                      (limit 10))
                  ;; end::bo-xtql-3[]
-                 ,)))
-
-  (t/is (= [{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
-            {:user-id "petr", :first-name "Petr", :last-name "Petrov"}]
-           (xt/q tu/*node* (json-example "bo-json-3"))))
-
-  (t/is (= [{:user_id "ivan", :first_name "Ivan", :last_name "Ivanov"}
-            {:user_id "petr", :first_name "Petr", :last_name "Petrov"}]
-           (xt/q tu/*node* (sql-example "bo-sql-3")))))
+                 ,)
+           (xt/q tu/*node* (json-example "bo-json-3"))
+           (xt/q tu/*node* (sql-example "bo-sql-3")
+                 {:key-fn :clojure}))))
 
 (deftest joins
 
@@ -138,15 +125,10 @@
                    (unify (from :users [{:xt/id user-id} first-name last-name])
                           (from :articles [{:author-id user-id} title content]))
                    ;; end::joins-xtql-1[]
-                   ,))))
-
-  (t/is (= #{{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov", :content "My first blog", :title "First"}
-             {:user-id "ivan", :first-name "Ivan", :last-name "Ivanov", , :content "My second blog", :title "Second"}}
-           (set (xt/q tu/*node* (json-example "joins-json-1")))))
-
-  (t/is (= #{{:user_id "ivan", :first_name "Ivan", :last_name "Ivanov", :content "My first blog", :title "First"}
-             {:user_id "ivan", :first_name "Ivan", :last_name "Ivanov", , :content "My second blog", :title "Second"}}
-           (set (xt/q tu/*node* (sql-example "joins-sql-1")))))
+                   ,))
+           (set (xt/q tu/*node* (json-example "joins-json-1")))
+           (set (xt/q tu/*node* (sql-example "joins-sql-1")
+                      {:key-fn :clojure}))))
 
   (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
              {:age 25, :uid1 "petr", :uid2 "ivan"}}
@@ -158,15 +140,10 @@
                           (from :users [{:xt/id uid2} age])
                           (where (<> uid1 uid2)))
                    ;; end::joins-xtql-2[]
-                   ,))))
-
-  (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
-             {:age 25, :uid1 "petr", :uid2 "ivan"}}
-           (set (xt/q tu/*node* (json-example "joins-json-2")))))
-
-  (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
-             {:age 25, :uid1 "petr", :uid2 "ivan"}}
-           (set (xt/q tu/*node* (sql-example "joins-sql-2")))))
+                   ,))
+           (set (xt/q tu/*node* (json-example "joins-json-2")))
+           (set (xt/q tu/*node* (sql-example "joins-sql-2")
+                      {:key-fn :clojure}))))
 
   (t/is (= #{{:cid "ivan", :order-value 150, :currency :gbp}
              {:cid "ivan", :order-value 100, :currency :gbp}
@@ -180,17 +157,10 @@
                                          [cid currency order-value]))
                        (limit 100))
                    ;; end::joins-xtql-3[]
-                   ,))))
-
-  (t/is (= #{{:cid "ivan", :order-value 150, :currency :gbp}
-             {:cid "ivan", :order-value 100, :currency :gbp}
-             {:cid "petr", :order-value nil, :currency nil}}
-           (set (xt/q tu/*node* (json-example "joins-json-3")))))
-
-  (t/is (= #{{:cid "ivan", :order_value 150, :currency :gbp}
-             {:cid "ivan", :order_value 100, :currency :gbp}
-             {:cid "petr", :order_value nil, :currency nil}}
-           (set (xt/q tu/*node* (sql-example "joins-sql-3")))))
+                   ,))
+           (set (xt/q tu/*node* (json-example "joins-json-3")))
+           (set (xt/q tu/*node* (sql-example "joins-sql-3")
+                      {:key-fn :clojure}))))
 
   (t/is (= [{:cid "petr"}]
            (xt/q tu/*node*
@@ -201,13 +171,10 @@
                                                  {:args [cid]}))))
                      (limit 100))
                  ;; end::joins-xtql-4[]
-                 ,)))
-
-  (t/is (= [{:cid "petr"}]
-           (xt/q tu/*node* (json-example "joins-json-4"))))
-
-  (t/is (= [{:cid "petr"}]
-           (xt/q tu/*node* (sql-example "joins-sql-4")))))
+                 ,)
+           (xt/q tu/*node* (json-example "joins-json-4"))
+           (xt/q tu/*node* (sql-example "joins-sql-4")
+                 {:key-fn :clojure}))))
 
 (deftest projections
 
@@ -222,15 +189,10 @@
                    (-> (from :users [first-name last-name])
                        (with {:full-name (concat first-name " " last-name)}))
                    ;; end::proj-xtql-1[]
-                   ,))))
-
-  (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :full-name "Ivan Ivanov"}
-             {:first-name "Petr", :last-name "Petrov", :full-name "Petr Petrov"}}
-           (set (xt/q tu/*node* (json-example "proj-json-1")))))
-
-  (t/is (= #{{:first_name "Ivan", :last_name "Ivanov", :full_name "Ivan Ivanov"}
-             {:first_name "Petr", :last_name "Petrov", :full_name "Petr Petrov"}}
-           (set (xt/q tu/*node* (sql-example "proj-sql-1")))))
+                   ,))
+           (set (xt/q tu/*node* (json-example "proj-json-1")))
+           (set (xt/q tu/*node* (sql-example "proj-sql-1")
+                      {:key-fn :clojure}))))
 
   (t/is (= #{{:full-name "Ivan Ivanov", :title "First", :content "My first blog"}
              {:full-name "Ivan Ivanov", :title "Second", :content "My second blog"}}
@@ -242,15 +204,10 @@
                               (from :articles [{:author-id user-id} title content]))
                        (return {:full-name (concat first-name " " last-name)} title content))
                    ;; end::proj-xtql-2[]
-                   ,))))
-
-  (t/is (= #{{:full-name "Ivan Ivanov", :title "First", :content "My first blog"}
-             {:full-name "Ivan Ivanov", :title "Second", :content "My second blog"}}
-           (set (xt/q tu/*node* (json-example "proj-json-2")))))
-
-  (t/is (= #{{:full_name "Ivan Ivanov", :title "First", :content "My first blog"}
-             {:full_name "Ivan Ivanov", :title "Second", :content "My second blog"}}
-           (set (xt/q tu/*node* (sql-example "proj-sql-2")))))
+                   ,))
+           (set (xt/q tu/*node* (json-example "proj-json-2")))
+           (set (xt/q tu/*node* (sql-example "proj-sql-2")
+                      {:key-fn :clojure}))))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :title "Second", :content "My second blog"}
              {:first-name "Ivan", :last-name "Ivanov", :title "First", :content "My first blog"}}
@@ -262,15 +219,10 @@
                               (from :articles [{:author-id user-id} title content]))
                        (without :user-id))
                    ;; end::proj-xtql-3[]
-                   ,))))
-
-  (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :title "Second", :content "My second blog"}
-             {:first-name "Ivan", :last-name "Ivanov", :title "First", :content "My first blog"}}
-           (set (xt/q tu/*node* (json-example "proj-json-3")))))
-
-  (t/is (= #{{:first_name "Ivan", :last_name "Ivanov", :title "Second", :content "My second blog"}
-             {:first_name "Ivan", :last_name "Ivanov", :title "First", :content "My first blog"}}
-           (set (xt/q tu/*node* (sql-example "proj-sql-3"))))))
+                   ,))
+           (set (xt/q tu/*node* (json-example "proj-json-3")))
+           (set (xt/q tu/*node* (sql-example "proj-sql-3")
+                      {:key-fn :clojure})))))
 
 (deftest aggregations
 
@@ -294,15 +246,10 @@
                      (order-by {:val total-value :dir :desc})
                      (limit 100))
                  ;; end::aggr-xtql-1[]
-                 ,))))
-
-    (t/is (= #{{:cid "ivan", :currency :gbp, :order-count 2, :total-value 250}
-               {:cid "petr", :currency nil, :order-count 0, :total-value 0}}
-             (set (xt/q tu/*node* (json-example "aggr-json-1")))))
-
-    (t/is (= #{{:cid "ivan", :currency :gbp, :order_count 2, :total_value 250}
-               {:cid "petr", :currency nil, :order_count 0, :total_value 0}}
-             (set (xt/q tu/*node* (sql-example "aggr-sql-1")))))))
+                 ,))
+             (set (xt/q tu/*node* (json-example "aggr-json-1")))
+             (set (xt/q tu/*node* (sql-example "aggr-sql-1")
+                        {:key-fn :clojure}))))))
 
 
 (deftest pull
@@ -339,27 +286,10 @@
                                                  (limit 10))
                                              {:args [article-id]})}))
                  ;; end::pull-xtql-1[]
-                 ,))))
-
-    ;; TODO: Waiting for `pull` to be implemented:
-    #_
-    (t/is (= #{{:article-id 1
-                :title "First",
-                :content "My first blog",
-                :author-id "ivan",
-                :author {:last-name "Ivanov", :first-name "Ivan"},
-                :comments [{:created-at #time/zoned-date-time "2021-01-01T00:00Z[UTC]", :comment "2"}
-                           {:created-at #time/zoned-date-time "2020-01-01T00:00Z[UTC]", :comment "1"}],}
-               {:article-id 2
-                :title "Second",
-                :content "My second blog",
-                :author-id "ivan",
-                :author {:last-name "Ivanov", :first-name "Ivan"},
-                :comments [{:created-at #time/zoned-date-time "2022-01-01T00:00Z[UTC]", :comment "1"}],}}
-             (set (xt/q tu/*node* (json-example "pull-json-1")))))
-
-    ;; NO SQL for this one
-    ,))
+                 ,))
+             #_ ;; TODO: Waiting for `pull` to be implemented:
+             (set (xt/q tu/*node* (json-example "pull-json-1")))))))
+            ;; No SQL for this one
 
 (deftest bitemporality
 
@@ -372,7 +302,10 @@
              (from :users {:for-valid-time (at #inst "2020-01-01")
                            :bind [first-name last-name]})
              ;; end::bitemp-xtql-1[]
-             ,)))
+             ,)
+           (xt/q tu/*node* (json-example "bitemp-json-1"))
+           (xt/q tu/*node* (sql-example "bitemp-sql-1")
+                 {:key-fn :clojure})))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
              {:first-name "Petr", :last-name "Petrov"}}
@@ -383,21 +316,10 @@
                (from :users {:for-valid-time :all-time
                              :bind [first-name last-name]})
                ;; end::bitemp-xtql-2[]
-               ,))))
-
-  (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
-           (xt/q tu/*node* (json-example "bitemp-json-1"))))
-
-  (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
-             {:first-name "Petr", :last-name "Petrov"}}
-           (set (xt/q tu/*node* (json-example "bitemp-json-2")))))
-
-  (t/is (= [{:first_name "Petr", :last_name "Petrov"}]
-           (xt/q tu/*node* (sql-example "bitemp-sql-1"))))
-
-  (t/is (= #{{:first_name "Ivan", :last_name "Ivanov"}
-             {:first_name "Petr", :last_name "Petrov"}}
-           (set (xt/q tu/*node* (sql-example "bitemp-sql-2")))))
+               ,))
+           (set (xt/q tu/*node* (json-example "bitemp-json-2")))
+           (set (xt/q tu/*node* (sql-example "bitemp-sql-2")
+                      {:key-fn :clojure}))))
 
   (t/is (= [{:user-id "petr"}]
            (xt/q tu/*node*
@@ -409,9 +331,7 @@
                         (from :users {:for-valid-time (at #inst "2023")
                                       :bind [{:xt/id user-id}]}))
                  ;; end::bitemp-xtql-3[]
-                 ,)))
-
-  (t/is (= [{:user-id "petr"}]
+                 ,)
            (xt/q tu/*node* (json-example "bitemp-json-3")))))
 
 
