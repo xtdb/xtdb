@@ -554,11 +554,11 @@ For example:
 ----
 ;; as a 'tail' operator - N.B. `:full-name` is a column here
 (-> (from :users [username first-name last-name])
-    (with {:full-name (str last-name ", " first-name)}))
+    (with {:full-name (concat last-name ", " first-name)}))
 
 ;; in 'unify' - N.B. `full-name` is a logic variable here
 (unify (from :users [username first-name last-name])
-       (with {full-name (str last-name ", " first-name)}))
+       (with {full-name (concat last-name ", " first-name)}))
 
 ;; =>
 
