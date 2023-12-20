@@ -29,7 +29,6 @@
 (defn sql-example [name]
   (get examples name))
 
-;; TODO: Inline some
 (def users
   [(xt/put :users {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov", :age 25})
    (-> (xt/put :users {:xt/id "petr", :first-name "Petr", :last-name "Petrov", :age 25})
@@ -39,10 +38,6 @@
   [(xt/put :old-users {:xt/id "ivan", :given-name "Ivan", :surname "Ivanov"})
    (-> (xt/put :old-users {:xt/id "petr", :given-name "Petr", :surname "Petrov"})
        (xt/starting-from #inst "2018"))])
-
-(def authors
-  [(xt/put :authors {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov"})
-   (xt/put :authors {:xt/id "petr", :first-name "Petr", :last-name "Petrov"})])
 
 (def articles
   [(xt/put :articles {:xt/id 1, :author-id "ivan", :title "First" :content "My first blog"})
@@ -254,7 +249,11 @@
 
 (deftest pull
 
-  (xt/submit-tx tu/*node* (concat authors articles comments))
+  (xt/submit-tx tu/*node*
+    (concat
+      articles comments
+      [(xt/put :authors {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov"})
+       (xt/put :authors {:xt/id "petr", :first-name "Petr", :last-name "Petrov"})]))
 
   (testing "For example, if a user is reading an article, we might also want to show them details about the author as well as any comments."
 
