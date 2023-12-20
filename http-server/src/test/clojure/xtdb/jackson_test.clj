@@ -7,6 +7,7 @@
            (java.time Instant)
            (xtdb.tx Ops Tx TxOptions)
            (xtdb.api TransactionKey)
+           (xtdb.jackson XtdbMapper)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
                        ColSpec OutSpec VarSpec Expr Query$Unify QueryRequest QueryOpts Basis Expr ArgSpec)))
 
@@ -38,7 +39,7 @@
                (ex-data roundtripped-ex))))))
 
 (defn roundtrip-tx-op [v]
-  (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Ops))
+  (.readValue XtdbMapper/TX_OP_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Ops))
 
 (deftest deserialize-tx-op-test
   (t/testing "put"
@@ -129,7 +130,7 @@
                               "args" {"not" "a-list"}})))))
 
 (defn roundtrip-tx [v]
-  (.readValue jackson/tx-op-mapper (json/write-value-as-string v jackson/json-ld-mapper) Tx))
+  (.readValue XtdbMapper/TX_OP_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Tx))
 
 (deftest deserialize-tx-test
   (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
@@ -157,7 +158,7 @@
         "put not wrapped throws"))
 
 (defn- roundtrip-expr [e]
-  (.readValue jackson/query-mapper (json/write-value-as-string e jackson/json-ld-mapper) Expr))
+  (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string e jackson/json-ld-mapper) Expr))
 
 (deftest deserialize-expr-test
   (t/is (= Expr/NULL
@@ -233,8 +234,8 @@
            (roundtrip-expr #{1 :foo}))
         "sets"))
 
-(defn roundtrip-query [v]
-  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query))
+(defn- roundtrip-query [v]
+  (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Query))
 
 (deftest deserialize-query-test
   (t/is (= (-> (Query/from "docs")
@@ -272,8 +273,8 @@
              (roundtrip-query {"rel" {"xt:param" "bar"}
                                "bind" ["foo"]})))))
 
-(defn roundtrip-query-tail [v]
-  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$QueryTail))
+(defn- roundtrip-query-tail [v]
+  (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Query$QueryTail))
 
 (deftest deserialize-query-tail-test
   (t/testing "where"
@@ -367,7 +368,7 @@
           "should fail when not a list")))
 
 (defn roundtrip-unify [v]
-  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
+  (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Query$Unify))
 
 
 (deftest deserialize-unify-test
@@ -409,7 +410,7 @@
         "unify value not an array"))
 
 (defn roundtrip-query-map [v]
-  (.readValue jackson/query-mapper (json/write-value-as-string v jackson/json-ld-mapper) QueryRequest))
+  (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) QueryRequest))
 
 (deftest deserialize-query-map-test
   (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")]

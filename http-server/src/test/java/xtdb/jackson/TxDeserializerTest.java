@@ -23,18 +23,7 @@ class TxDeserializerTest {
     private final ObjectMapper objectMapper;
 
     public TxDeserializerTest() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        SimpleModule module = new SimpleModule("JsonLd-test");
-
-        HashMap<Class<?>, JsonDeserializer<?>> deserializerMapping = new HashMap<>();
-        deserializerMapping.put(Put.class, new PutDeserializer());
-        deserializerMapping.put(Ops.class, new OpsDeserializer());
-        deserializerMapping.put(Tx.class, new TxDeserializer());
-        SimpleDeserializers deserializers = new SimpleDeserializers(deserializerMapping);
-        module.setDeserializers(deserializers);
-
-        objectMapper.registerModule(module);
-        this.objectMapper = objectMapper;
+        this.objectMapper = XtdbMapper.TX_OP_MAPPER;
     }
 
     @Test

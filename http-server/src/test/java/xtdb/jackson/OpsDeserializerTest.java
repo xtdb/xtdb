@@ -23,20 +23,7 @@ class OpsDeserializerTest {
     private final ObjectMapper objectMapper;
 
     public OpsDeserializerTest() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        SimpleModule module = new SimpleModule("StandardModule");
-
-        HashMap<Class<?>, JsonDeserializer<?>> deserializerMapping = new HashMap<>();
-        deserializerMapping.put(Put.class, new PutDeserializer());
-        deserializerMapping.put(Delete.class, new DeleteDeserializer());
-        deserializerMapping.put(Erase.class, new EraseDeserializer());
-        deserializerMapping.put(Call.class, new CallDeserializer());
-        deserializerMapping.put(Ops.class, new OpsDeserializer());
-        SimpleDeserializers deserializers = new SimpleDeserializers(deserializerMapping);
-        module.setDeserializers(deserializers);
-
-        objectMapper.registerModule(module);
-        this.objectMapper = objectMapper;
+        this.objectMapper = XtdbMapper.TX_OP_MAPPER;
     }
 
     @Test
