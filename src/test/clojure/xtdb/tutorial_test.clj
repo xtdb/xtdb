@@ -35,7 +35,8 @@
        (xt/starting-from #inst "2018"))])
 
 (def old-users
-  [(xt/put :old-users {:xt/id "ivan", :given-name "Ivan", :surname "Ivanov"})
+  [(-> (xt/put :old-users {:xt/id "ivan", :given-name "Ivan", :surname "Ivanov"})
+       (xt/starting-from #inst "2017"))
    (-> (xt/put :old-users {:xt/id "petr", :given-name "Petr", :surname "Petrov"})
        (xt/starting-from #inst "2018"))])
 
@@ -350,12 +351,18 @@
     ;; end::DML-Insert-xtql[]
     ,)
 
-  ;; TODO: Test valid time
-  (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
-             {:first-name "Petr", :last-name "Petrov"}}
+  (t/is (= #{{:first-name "Ivan"
+              :last-name "Ivanov"
+              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"
+              :xt/valid-to nil}
+             {:first-name "Petr"
+              :last-name "Petrov"
+              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"
+              :xt/valid-to nil}}
            (set
              (xt/q tu/*node*
-                   '(from :users [first-name last-name]))))))
+                   '(from :users [first-name last-name
+                                  xt/valid-from xt/valid-to]))))))
 
 (deftest DML-Insert-sql
   (xt/submit-tx tu/*node* old-users)
@@ -367,12 +374,18 @@
   (xt/submit-tx tu/*node*
     [(xt/sql-op (sql-example "DML-Insert-sql"))])
 
-  ;; TODO: Test valid time
-  (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
-             {:first-name "Petr", :last-name "Petrov"}}
+  (t/is (= #{{:first-name "Ivan"
+              :last-name "Ivanov"
+              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"
+              :xt/valid-to nil}
+             {:first-name "Petr"
+              :last-name "Petrov"
+              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"
+              :xt/valid-to nil}}
            (set
              (xt/q tu/*node*
-                   '(from :users [first-name last-name]))))))
+                   '(from :users [first-name last-name
+                                  xt/valid-from xt/valid-to]))))))
 
 ;; tag::DML-Delete-xtql[]
 (defn delete-a-post [node the-post-id]
@@ -386,10 +399,13 @@
 
   (delete-a-post tu/*node* 1)
 
-  (t/is (= []
-           (xt/q tu/*node*
-                 '(from :comments [{:post-id $post-id}])
-                 {:args {:post-id 1}}))))
+  (t/is (empty? (xt/q tu/*node* '(from :comments [{:post-id $post-id}])
+                      {:args {:post-id 1}})))
+
+  (t/is (not (empty?
+               (xt/q tu/*node* '(from :comments {:bind [{:post-id $post-id}]
+                                                 :for-valid-time :all-time})
+                     {:args {:post-id 1}})))))
 
 (deftest DML-Delete-sql
   (xt/submit-tx tu/*node* comments)
@@ -398,10 +414,13 @@
     [(-> (xt/sql-op (sql-example "DML-Delete-sql"))
          (xt/with-op-args [1]))])
 
-  (t/is (= []
-           (xt/q tu/*node*
-                 '(from :comments [{:post-id $post-id}])
-                 {:args {:post-id 1}}))))
+  (t/is (empty? (xt/q tu/*node* '(from :comments [{:post-id $post-id}])
+                      {:args {:post-id 1}})))
+
+  (t/is (not (empty?
+               (xt/q tu/*node* '(from :comments {:bind [{:post-id $post-id}]
+                                                 :for-valid-time :all-time})
+                     {:args {:post-id 1}})))))
 
 (deftest DML-Delete-additional-unify-clauses-xtql
   (xt/submit-tx tu/*node* (concat posts comments))
@@ -415,11 +434,17 @@
     ;; end::DML-Delete-additional-unify-clauses-xtql[]
     ,)
 
-  (t/is (= []
-           (xt/q tu/*node*
-                 '(unify (from :comments [{:post-id pid}])
-                         (from :posts [{:xt/id pid, :author-id $author}]))
-                 {:args {:author "ivan"}}))))
+  (t/is (empty? (xt/q tu/*node*
+                      '(unify (from :comments [{:post-id pid}])
+                              (from :posts [{:xt/id pid, :author-id $author}]))
+                      {:args {:author "ivan"}})))
+
+  (t/is (not (empty?
+               (xt/q tu/*node*
+                     '(unify (from :comments {:bind [{:post-id pid}]
+                                              :for-valid-time :all-time})
+                             (from :posts [{:xt/id pid, :author-id $author}]))
+                     {:args {:author "ivan"}})))))
 
 (deftest DML-Delete-additional-unify-clauses-sql
   (xt/submit-tx tu/*node* (concat posts comments))
@@ -428,11 +453,17 @@
     [(-> (xt/sql-op (sql-example "DML-Delete-additional-unify-clauses-sql"))
          (xt/with-op-args ["ivan"]))])
 
-  (t/is (= []
-           (xt/q tu/*node*
-                 '(unify (from :comments [{:post-id pid}])
-                         (from :posts [{:xt/id pid, :author-id $author}]))
-                 {:args {:author "ivan"}}))))
+  (t/is (empty? (xt/q tu/*node*
+                      '(unify (from :comments [{:post-id pid}])
+                              (from :posts [{:xt/id pid, :author-id $author}]))
+                      {:args {:author "ivan"}})))
+
+  (t/is (not (empty?
+               (xt/q tu/*node*
+                     '(unify (from :comments {:bind [{:post-id pid}]
+                                              :for-valid-time :all-time})
+                             (from :posts [{:xt/id pid, :author-id $author}]))
+                     {:args {:author "ivan"}})))))
 
 (deftest DML-Delete-bitemporal-xtql
   (xt/submit-tx tu/*node* promotions)
@@ -497,7 +528,9 @@
     ;; end::DML-Delete-everything-xtql[]
     ,)
 
-  (t/is (empty? (xt/q tu/*node* '(from :comments [])))))
+  (t/is (empty? (xt/q tu/*node* '(from :comments []))))
+
+  (t/is (not (empty? (xt/q tu/*node* '(from :comments {:bind [] :for-valid-time :all-time}))))))
 
 (deftest DML-Delete-everything-sql
   (xt/submit-tx tu/*node* comments)
@@ -507,7 +540,9 @@
   (xt/submit-tx tu/*node*
     [(xt/sql-op (sql-example "DML-Delete-everything-sql"))])
 
-  (t/is (empty? (xt/q tu/*node* '(from :comments [])))))
+  (t/is (empty? (xt/q tu/*node* '(from :comments []))))
+
+  (t/is (not (empty? (xt/q tu/*node* '(from :comments {:bind [] :for-valid-time :all-time}))))))
 
 (deftest DML-Update-xtql
   (xt/submit-tx tu/*node*
@@ -595,8 +630,8 @@
     ;; end::DML-Erase-xtql[]
     ,)
 
-  ;; TODO: Test valid time
-  (t/is (empty? (xt/q tu/*node* '(from :users [])))))
+  (t/is (empty? (xt/q tu/*node* '(from :users []))))
+  (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
 
 (deftest DML-Erase-sql
   (xt/submit-tx tu/*node*
@@ -607,8 +642,8 @@
   (xt/submit-tx tu/*node*
     [(xt/sql-op (sql-example "DML-Erase-sql"))])
 
-  ;; TODO: Test valid time
-  (t/is (empty? (xt/q tu/*node* '(from :users [])))))
+  (t/is (empty? (xt/q tu/*node* '(from :users []))))
+  (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
 
 (deftest DML-Assert
   (xt/submit-tx tu/*node*
