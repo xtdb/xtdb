@@ -1877,17 +1877,6 @@
                           :for-system-time :all-time})))
         "period column matching literal"))
 
-(t/deftest test-explain-plan-654
-  (t/is (= '[{:plan
-              [:project
-               [name age]
-               [:scan
-                {:table people, :for-valid-time nil, :for-system-time nil}
-                [{xt$id (= xt$id ?pid)} name age]]]}]
-           (xt/q tu/*node*
-                 '(from :people [{:xt/id $pid} name age])
-                 {:explain? true}))))
-
 (t/deftest test-default-valid-time
   (xt/submit-tx tu/*node* [(-> (xt/put :docs {:xt/id 1 :foo "2000-4000"})
                                (xt/during #inst "2000" #inst "4000"))

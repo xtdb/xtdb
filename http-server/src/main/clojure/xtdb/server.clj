@@ -48,8 +48,6 @@
 
 (s/def ::tx-ops vector?)
 
-(s/def ::tx-id int?)
-
 (s/def ::key-fn keyword?)
 
 (s/def ::system-time
@@ -60,8 +58,9 @@
 
 (s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
+(s/def ::explain? boolean?)
 
-(s/def ::opts (s/keys :opt-un [::system-time ::default-all-valid-time? ::default-tz]))
+(s/def ::opts (s/keys :opt-un [::system-time ::default-all-valid-time? ::default-tz ::explain?]))
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]
@@ -152,7 +151,7 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn]))
+          :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn ::explain?]))
 
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts
