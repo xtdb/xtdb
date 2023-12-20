@@ -1,7 +1,7 @@
 ---
 title: XTQL Walkthrough
 ---
-:test: ../src/test/clojure/xtdb/tutorial_test.clj
+:test: ../src/test/clojure/xtdb/docs/xtql_walkthrough_test.clj
 :example: ../src/test/resources/docs/xtql_tutorial_examples.yaml
 
 XTDB supports two query languages: link:../reference/main/sql/queries.html[SQL], and link:../reference/main/xtql/queries.html[XTQL] - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
