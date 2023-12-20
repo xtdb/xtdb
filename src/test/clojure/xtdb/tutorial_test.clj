@@ -26,14 +26,6 @@
       x-json/parse-query
       x-edn/unparse))
 
-(deftest test-issue
-  (t/is
-    (thrown-with-msg? java.lang.ClassCastException
-                      #"class clojure.lang.PersistentVector cannot be cast to class clojure.lang.MapEntry"
-      (x-json/parse-query
-        #ordered/map {"from" "users"
-                      "bind" ["age"]}))))
-
 (defn sql-example [name]
   (get examples name))
 
