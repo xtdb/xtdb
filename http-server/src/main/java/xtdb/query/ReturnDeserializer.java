@@ -3,16 +3,13 @@ package xtdb.query;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 public class ReturnDeserializer extends StdDeserializer<Query.Return> {
 
@@ -22,19 +19,18 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
 
     @Override
     public Query.Return deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
-        ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        JsonNode node = mapper.readTree(p);
-        try {
-            JsonNode returnNode = node.get("return");
-            if (returnNode.isArray()) {
-                return Query.returning(SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, returnNode, ColSpec::of));
-            } else {
-                throw new IllegalArgumentException("Return should be a list of values", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
-            }
-        } catch (IllegalArgumentException i) {
-           throw i;
-        } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-return"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+        ObjectCodec codec = p.getCodec();
+        JsonNode node = codec.readTree(p);
+
+        if (!node.isObject() || !node.has("return")){
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-return"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+        }
+
+        JsonNode returnNode = node.get("return");
+        if (returnNode.isArray()) {
+            return Query.returning(SpecListDeserializer.<ColSpec>nodeToSpecs(codec, returnNode, ColSpec::of));
+        } else {
+            throw new IllegalArgumentException("Return should be a list of values", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
         }
     }
 }

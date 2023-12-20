@@ -151,7 +151,7 @@
                                         "default_tz" #time/zone "America/Los_Angeles"}}))
         "transaction options")
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-tx'"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-tx-ops'"
                           (roundtrip-tx {"tx_ops" {"put" "docs"
                                                    "doc" {"xt/id" "my-id"}}}))
         "put not wrapped throws"))
@@ -309,10 +309,10 @@
     (t/is (= (Query/orderBy [(Query/orderSpec (Expr/lVar "someField") Query$OrderDirection/ASC Query$OrderNulls/FIRST)])
              (roundtrip-query-tail {"orderBy" [{"val" {"xt:lvar" "someField"}, "dir" "asc", "nulls" "first"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-order-by'"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Invalid orderBy direction"
                             (roundtrip-query-tail {"orderBy" [{"val" {"lvar" "someField"}, "dir" "invalid-direction"}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-order-by'"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Invalid orderBy nulls"
                             (roundtrip-query-tail {"orderBy" [{"val" {"lvar" "someField"}, "nulls" "invalid-nulls"}]}))))
 
   (t/testing "return"
@@ -331,7 +331,7 @@
     (t/is (= (Query/unnestCol (ColSpec/of "a" (Expr/lVar "b")))
              (roundtrip-query-tail {"unnest" {"a" {"xt:lvar" "b"}}})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-unnest"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Unnest should be an object with only a single binding"
                             (roundtrip-query-tail {"unnest" {"a" {"xt:lvar" "b"} "c" {"xt:lvar" "d"}}}))
           "should fail with >1 binding"))
 

@@ -3,11 +3,10 @@ package xtdb.jackson;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.BaseJsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import xtdb.IllegalArgumentException;
 import xtdb.tx.Delete;
 
@@ -22,21 +21,28 @@ public class DeleteDeserializer extends StdDeserializer<Delete> {
 
     @Override
     public Delete deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
-        ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        BaseJsonNode node = mapper.readTree(p);
+        ObjectCodec codec = p.getCodec();
+        BaseJsonNode node = codec.readTree(p);
 
-        try {
-            ObjectNode objectNode = (ObjectNode) node;
-            Delete op = new Delete(Keyword.intern(objectNode.get("delete").asText()), mapper.convertValue(objectNode.get("id"), Object.class));
-            if (node.has("valid_from")) {
-                op = op.startingFrom((Instant) mapper.treeToValue(objectNode.get("valid_from"), Object.class));
-            }
-            if (node.has("valid_to")) {
-                op = op.until((Instant) mapper.treeToValue(objectNode.get("valid_to"), Object.class));
-            }
-            return op;
-        } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-delete"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+        if(!node.isObject()) {
+            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-delete"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
+
+        Delete op = new Delete(Keyword.intern(node.get("delete").asText()), codec.treeToValue(node.get("id"), Object.class));
+        if (node.has("valid_from")) {
+            var instant = codec.treeToValue(node.get("valid_from"), Object.class);
+            if (!(instant instanceof Instant)) {
+                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-delete"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            }
+            op = op.startingFrom((Instant) instant);
+        }
+        if (node.has("valid_to")) {
+            var instant = codec.treeToValue(node.get("valid_to"), Object.class);
+            if (!(instant instanceof Instant)) {
+                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-delete"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            }
+            op = op.until((Instant) instant);
+        }
+        return op;
     }
 }

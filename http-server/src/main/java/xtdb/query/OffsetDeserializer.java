@@ -6,7 +6,6 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
 
@@ -19,21 +18,18 @@ public class OffsetDeserializer extends StdDeserializer<Query.Offset> {
 
     @Override
     public Query.Offset deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
-        ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        JsonNode node = mapper.readTree(p);
+        var codec = p.getCodec();
+        JsonNode node = codec.readTree(p);
 
-        try {
-            JsonNode offset = node.get("offset");
-            if (offset != null && (offset.isLong() || offset.isInt())) {
-                long offsetValue = offset.asLong(); // Parse as long
-                return Query.offset(offsetValue);
-            } else {
-                throw new IllegalArgumentException("Offset should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
-            }
-        } catch (IllegalArgumentException i) {
-            throw i;
-        } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-offset"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+        if (!node.isObject() || !node.has("offset")) {
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-offset"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
+
+        JsonNode offsetNode = node.get("offset");
+        if (!(offsetNode.isLong() || offsetNode.isInt())) {
+            throw new IllegalArgumentException("Offset should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+        }
+        long offset = offsetNode.asLong(); // Parse as long
+        return Query.offset(offset);
     }
 }

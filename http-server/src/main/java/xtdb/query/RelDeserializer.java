@@ -1,17 +1,14 @@
 package xtdb.query;
 
-import clojure.lang.Keyword;
-import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.type.TypeFactory;
-import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -25,14 +22,14 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
         super(Query.Relation.class);
     }
 
-    private List<Map<String, Expr>> deserializeDocuments (ObjectMapper mapper, ArrayNode node) throws JsonProcessingException {
+    private List<Map<String, Expr>> deserializeDocuments (ObjectCodec codec, ArrayNode node) throws JsonProcessingException {
         List<Map<String, Expr>> res = new ArrayList<>();
         for (JsonNode documentNode: node) {
             Map<String, Expr> document = new HashMap <>();
             var itr = documentNode.fields();
             while(itr.hasNext()) {
                 var entry = itr.next();
-                document.put(entry.getKey(), mapper.treeToValue(entry.getValue(), Expr.class));
+                document.put(entry.getKey(), codec.treeToValue(entry.getValue(), Expr.class));
             }
             res.add(document);
         }
@@ -42,22 +39,16 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
         return SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node, OutSpec::of);
     }
     public Query.Relation deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
-        ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        ObjectNode node = mapper.readTree(p);
+        ObjectCodec codec = p.getCodec();
+        ObjectNode node = codec.readTree(p);
 
-        try {
-            var relNode = node.get("rel");
-            Query.Relation rel;
-            if (relNode.isArray()) {
-                rel = Query.relation(deserializeDocuments(mapper, (ArrayNode) relNode), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
-            } else {
-                rel = Query.relation((Expr.Param) mapper.treeToValue(relNode, Expr.class), SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node.get("bind"), OutSpec::of));
-            }
-            return rel;
-        } catch (IllegalArgumentException i) {
-            throw i;
-        } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-rel"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+        var relNode = node.get("rel");
+        Query.Relation rel;
+        if (relNode.isArray()) {
+            rel = Query.relation(deserializeDocuments(codec, (ArrayNode) relNode), SpecListDeserializer.<OutSpec>nodeToSpecs(codec, node.get("bind"), OutSpec::of));
+        } else {
+            rel = Query.relation((Expr.Param) codec.treeToValue(relNode, Expr.class), SpecListDeserializer.<OutSpec>nodeToSpecs(codec, node.get("bind"), OutSpec::of));
         }
+        return rel;
     }
 }

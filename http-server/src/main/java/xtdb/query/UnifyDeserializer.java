@@ -8,13 +8,9 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import xtdb.IllegalArgumentException;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
@@ -28,16 +24,9 @@ public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         JsonNode node = mapper.readTree(p);
 
-        try {
-            if (node.isObject() && node.has("unify")) {
-                return Query.unify(mapper.treeToValue(node.get("unify"), mapper.getTypeFactory().constructCollectionType(List.class, Query.UnifyClause.class)));
-            } else {
-                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-unify"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
-            }
-        } catch (IllegalArgumentException i) {
-            throw i;
-        } catch (Exception e) {
-            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-unify"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
+        if (!node.isObject() || !node.has("unify") || !node.get("unify").isArray()) {
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-unify"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
+        return Query.unify(mapper.treeToValue(node.get("unify"), mapper.getTypeFactory().constructCollectionType(List.class, Query.UnifyClause.class)));
     }
 }
