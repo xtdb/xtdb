@@ -40,17 +40,12 @@
 
 (defn- decode-transit [^String s] (first (decode-transit* s)))
 
-(def ^:private default-object-mapper
-  (json/object-mapper {:encode-key-fn true
-                       :decode-key-fn true
-                       :modules [(jackson/json-ld-module {:handlers jackson/handlers})]}))
-
 (defn- decode-json* [^String s]
   (let [json-lines (str/split-lines s)]
     (loop [res [] lns json-lines]
       (if-not (seq lns)
         res
-        (recur (conj res (json/read-value (first lns) default-object-mapper)) (rest lns))))))
+        (recur (conj res (json/read-value (first lns) jackson/json-ld-mapper)) (rest lns))))))
 
 (defn- decode-json [^String s] (first (decode-json* s)))
 

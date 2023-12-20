@@ -1,10 +1,8 @@
 package xtdb.jackson;
 
-import clojure.lang.IFn;
 import clojure.lang.ITransientMap;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.deser.ContextualDeserializer;
@@ -15,24 +13,25 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
-public class JsonLdValueOrPersistentHashMapDeserializer extends StdDeserializer<Object> implements ContextualDeserializer {
-    private final Map<String, IFn> decoders;
+class JsonLdValueOrPersistentHashMapDeserializer extends StdDeserializer<Object> implements ContextualDeserializer {
+
+    private final Map<String, Class<?>> typeMapping;
     private KeyDeserializer _keyDeserializer;
     private JsonDeserializer<?> _valueDeserializer;
 
-    public JsonLdValueOrPersistentHashMapDeserializer(Map<String, IFn> decoders) {
+    public JsonLdValueOrPersistentHashMapDeserializer(Map<String, Class<?>> typeMapping) {
         super(Map.class);
-        this.decoders = decoders;
+        this.typeMapping = typeMapping;
     }
 
-    public JsonLdValueOrPersistentHashMapDeserializer(KeyDeserializer keyDeser, JsonDeserializer<?> valueDeser, Map<String, IFn> decoders) {
-        this(decoders);
+    public JsonLdValueOrPersistentHashMapDeserializer(KeyDeserializer keyDeser, JsonDeserializer<?> valueDeser, Map<String, Class<?>> typeMapping) {
+        this(typeMapping);
         _keyDeserializer = keyDeser;
         _valueDeserializer = valueDeser;
     }
 
     protected JsonLdValueOrPersistentHashMapDeserializer withResolved(KeyDeserializer keyDeser, JsonDeserializer<?> valueDeser) {
-        return this._keyDeserializer == keyDeser && this._valueDeserializer == valueDeser ? this : new JsonLdValueOrPersistentHashMapDeserializer(keyDeser, valueDeser, this.decoders);
+        return this._keyDeserializer == keyDeser && this._valueDeserializer == valueDeser ? this : new JsonLdValueOrPersistentHashMapDeserializer(keyDeser, valueDeser, this.typeMapping);
     }
 
     @Override
@@ -44,15 +43,14 @@ public class JsonLdValueOrPersistentHashMapDeserializer extends StdDeserializer<
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public Object deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException, JsonProcessingException {
-        ObjectCodec mapper = jp.getCodec();
-        ObjectNode node = mapper.readTree(jp);
+    public Object deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
+        ObjectCodec codec = jp.getCodec();
+        ObjectNode node = codec.readTree(jp);
 
         if (node.has("@type")) {
-            IFn decode = this.decoders.get(node.get("@type").asText());
-            if (decode != null) {
-                return decode.invoke(mapper.readValue(node.get("@value").traverse(mapper), Object.class));
+            Class<?> decodeType = typeMapping.get(node.get("@type").asText());
+            if (decodeType != null) {
+                return codec.readValue(node.get("@value").traverse(codec), decodeType);
             }
         }
 
@@ -61,8 +59,7 @@ public class JsonLdValueOrPersistentHashMapDeserializer extends StdDeserializer<
         while (entries.hasNext()) {
             var entry = entries.next();
             var key = _keyDeserializer.deserializeKey(entry.getKey() , ctxt);
-            //var value = _valueDeserializer.deserialize(entry.getValue().traverse(), ctxt);
-            var value = mapper.readValue(entry.getValue().traverse(mapper), Object.class);
+            var value = codec.readValue(entry.getValue().traverse(codec), Object.class);
             t = t.assoc(key, value);
         }
 
