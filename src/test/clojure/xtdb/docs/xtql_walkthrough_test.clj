@@ -1,4 +1,4 @@
-(ns xtdb.tutorial-test
+(ns xtdb.docs.xtql-walkthrough-test
   (:require [jsonista.core :as json]
             [clj-yaml.core :as yaml]
             [clojure.test :as t :refer [deftest testing]]
