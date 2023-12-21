@@ -311,7 +311,11 @@ public interface Query {
         return new Call(ruleName, args, null);
     }
 
-    final class Join implements UnifyClause {
+    abstract interface IJoin extends UnifyClause {
+        IJoin binding(List<OutSpec> bindings);
+    }
+
+    final class Join implements IJoin {
         public final Query query;
         public final List<ArgSpec> args;
         public final List<OutSpec> bindings;
@@ -349,7 +353,7 @@ public interface Query {
         return new Join(query, args, null);
     }
 
-    final class LeftJoin implements UnifyClause {
+    final class LeftJoin implements IJoin {
         public final Query query;
         public final List<ArgSpec> args;
         public final List<OutSpec> bindings;

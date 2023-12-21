@@ -1,8 +1,6 @@
 (ns xtdb.jackson
   (:require [jsonista.core :as json])
-  (:import (com.fasterxml.jackson.databind.module SimpleModule)
-           (xtdb.jackson JsonLdModule OpsDeserializer PutDeserializer)
-           (xtdb.tx Ops Put)))
+  (:import (xtdb.jackson JsonLdModule)))
 
 #_
 (defn decode-throwable [{:xtdb.error/keys [message class data] :as _err}]
@@ -15,11 +13,3 @@
   (json/object-mapper {:encode-key-fn true
                        :decode-key-fn true
                        :modules [(JsonLdModule.)]}))
-
-(def ^com.fasterxml.jackson.databind.ObjectMapper tx-op-mapper
-  (json/object-mapper {:encode-key-fn true
-                       :decode-key-fn true
-                       :modules [(JsonLdModule.)
-                                 (doto (SimpleModule. "xtdb.tx")
-                                   (.addDeserializer Ops (OpsDeserializer.))
-                                   (.addDeserializer Put (PutDeserializer.)))]}))

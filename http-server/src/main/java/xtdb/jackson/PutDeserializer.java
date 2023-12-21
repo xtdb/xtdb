@@ -1,14 +1,13 @@
 package xtdb.jackson;
 
 import clojure.lang.Keyword;
+import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.type.TypeFactory;
-import xtdb.tx.Ops;
+import com.fasterxml.jackson.databind.node.BaseJsonNode;
+import xtdb.IllegalArgumentException;
 import xtdb.tx.Put;
 
 import java.io.IOException;
@@ -22,16 +21,29 @@ public class PutDeserializer extends StdDeserializer<Put> {
     }
 
     @Override
-    public Put deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
-        ObjectMapper mapper = (ObjectMapper) p.getCodec();
-        ObjectNode node = mapper.readTree(p);
+    public Put deserialize(JsonParser p, DeserializationContext ctxt) throws IllegalArgumentException, IOException {
+        ObjectCodec codec = p.getCodec();
+        BaseJsonNode node =  codec.readTree(p);
 
-        Put op = new Put(Keyword.intern(node.get("put").asText()), mapper.treeToValue(node.get("doc"), Map.class));
-        if (node.has("valid-from")) {
-            op = op.startingFrom((Instant) mapper.treeToValue(node.get("valid-from"), Object.class));
+        if(!node.isObject() || !node.has("put") || !node.has("doc") || !node.get("put").isTextual() || !node.get("doc").isObject()) {
+            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-put"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
-        if (node.has("valid-to")) {
-            op = op.until((Instant) mapper.treeToValue(node.get("valid-to"), Object.class));
+
+        // TODO remove keyword casting
+        Put op = new Put(Keyword.intern(node.get("put").asText()), codec.treeToValue(node.get("doc"), Map.class));
+        if (node.has("valid_from")) {
+            var instant = codec.treeToValue(node.get("valid_from"), Object.class);
+            if (!(instant instanceof Instant)) {
+                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-put"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            }
+            op = op.startingFrom((Instant) instant);
+        }
+        if (node.has("valid_to")) {
+            var instant = codec.treeToValue(node.get("valid_to"), Object.class);
+            if (!(instant instanceof Instant)) {
+                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-put"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            }
+            op = op.until((Instant) instant);
         }
         return op;
     }

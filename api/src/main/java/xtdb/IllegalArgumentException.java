@@ -26,6 +26,14 @@ public class IllegalArgumentException extends java.lang.IllegalArgumentException
         return data;
     }
 
+    public static IllegalArgumentException create(Keyword error, IPersistentMap data) {
+        return create(error, null, data,null);
+    }
+
+    public static IllegalArgumentException create(Keyword error, IPersistentMap data, Throwable cause) {
+        return create(error, null, data, cause);
+    }
+
     public static IllegalArgumentException create(Keyword error, String message, IPersistentMap data) {
         return create(error, message, data,null);
     }

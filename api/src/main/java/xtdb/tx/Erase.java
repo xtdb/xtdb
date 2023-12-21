@@ -9,7 +9,7 @@ public final class Erase extends Ops {
     private final Keyword tableName;
     private final Object entityId;
 
-    Erase(Keyword tableName, Object entityId) {
+    public Erase(Keyword tableName, Object entityId) {
         this.tableName = tableName;
         this.entityId = entityId;
     }
