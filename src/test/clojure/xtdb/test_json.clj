@@ -52,7 +52,7 @@
 
 (defn check-transit-json-file [^Path expected, ^Path actual]
   (with-open [expected-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))
-              actual-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))]
+              actual-stream (Files/newInputStream actual (into-array OpenOption #{StandardOpenOption/READ}))]
     (t/is (= (read-transit-obj expected-stream)
              (read-transit-obj actual-stream))
           actual)))
