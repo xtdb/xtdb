@@ -8,7 +8,7 @@
            (xtdb.tx Ops Tx TxOptions)
            (xtdb.api TransactionKey)
            (xtdb.jackson XtdbMapper)
-           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail
+           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail TemporalFilter
                        ColSpec OutSpec VarSpec Expr Query$Unify QueryRequest QueryOpts Basis Expr ArgSpec)))
 
 (defn- roundtrip-json-ld [v]
@@ -233,6 +233,32 @@
   (t/is (= (Expr/set #{(Expr/val 1) (Expr/val :foo)})
            (roundtrip-expr #{1 :foo}))
         "sets"))
+
+(defn- roundtrip-temporal-filter [v]
+  (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) TemporalFilter))
+
+(deftest deserialize-temporal-filter-test
+  (t/is (= TemporalFilter/ALL_TIME (roundtrip-temporal-filter "all_time"))
+        "all-time")
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-temporal-filter'"
+                          (roundtrip-temporal-filter "all_times"))
+        "all-time (wrong format)")
+
+  (t/is (= (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z"))
+           (roundtrip-temporal-filter {"at" #inst "2020"}))
+        "at")
+  (t/is (= (TemporalFilter/from (Expr/val #time/instant "2020-01-01T00:00:00Z"))
+           (roundtrip-temporal-filter {"from" #inst "2020"}))
+        "from")
+  (t/is (= (TemporalFilter/to (Expr/val #time/instant "2020-01-01T00:00:00Z"))
+           (roundtrip-temporal-filter {"to" #inst "2020"}))
+        "to")
+  (t/is (= (TemporalFilter/in (Expr/val #time/instant "2020-01-01T00:00:00Z") (Expr/val #time/instant "2021-01-01T00:00:00Z"))
+           (roundtrip-temporal-filter {"in" [#inst "2020" #inst "2021"]}))
+        "in")
+  (t/is (thrown-with-msg? IllegalArgumentException #"In TemporalFilter expects array of 2 timestamps"
+                          (roundtrip-temporal-filter {"in" [#inst "2020"]}))
+        "in with wrong arguments"))
 
 (defn- roundtrip-query [v]
   (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Query))

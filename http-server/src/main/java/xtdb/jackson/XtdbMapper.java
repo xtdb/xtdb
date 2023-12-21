@@ -51,7 +51,8 @@ public class XtdbMapper {
             .addDeserializer(ColSpec.class, new ColSpecDeserializer())
             .addDeserializer(TransactionKey.class, new TxKeyDeserializer())
             .addDeserializer(Basis.class, new BasisDeserializer())
-            .addDeserializer(Expr.class, new ExprDeserializer());
+            .addDeserializer(Expr.class, new ExprDeserializer())
+            .addDeserializer(TemporalFilter.class, new TemporalFilterDeserializer());
 
     public static final ObjectMapper QUERY_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
