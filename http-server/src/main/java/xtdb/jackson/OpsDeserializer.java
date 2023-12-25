@@ -1,6 +1,7 @@
 package xtdb.jackson;
 
 
+import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -33,7 +34,7 @@ public class OpsDeserializer extends StdDeserializer<Ops>  {
         } else if (node.has("call")) {
             return codec.treeToValue(node, Call.class);
         } else {
-           throw new IllegalArgumentException("unsupported", PersistentHashMap.EMPTY, null);
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-tx-op"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
     }
 }
