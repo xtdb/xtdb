@@ -1,5 +1,7 @@
 package xtdb.query;
 
+import java.util.Objects;
+
 public interface TemporalFilter {
 
     interface TemporalExtents extends TemporalFilter {
@@ -37,6 +39,19 @@ public interface TemporalFilter {
         public String toString() {
             return String.format("(at %s)", at);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            At at1 = (At) o;
+            return Objects.equals(at, at1.at);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(at);
+        }
     }
 
     static At at(Expr atExpr) {
@@ -65,6 +80,19 @@ public interface TemporalFilter {
         @Override
         public String toString() {
             return String.format("(in %s %s)", from, to);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            In in = (In) o;
+            return Objects.equals(from, in.from) && Objects.equals(to, in.to);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(from, to);
         }
     }
 
