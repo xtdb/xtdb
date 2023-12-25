@@ -27,6 +27,12 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
         }
         var query = Query.from(node.get("from").asText());
         query = query.binding(SpecListDeserializer.<OutSpec>nodeToSpecs(codec, node.get("bind"), OutSpec::of));
+        if (node.has("for_valid_time")) {
+            query = query.forValidTime(codec.treeToValue(node.get("for_valid_time"), TemporalFilter.class));
+        }
+        if (node.has("for_system_time")) {
+            query = query.forSystemTime(codec.treeToValue(node.get("for_system_time"), TemporalFilter.class));
+        }
         return query;
     }
 }

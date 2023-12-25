@@ -270,6 +270,16 @@
            (roundtrip-query {"from" "docs"
                              "bind" ["xt/id" {"a" {"xt:lvar" "b"}}]})))
 
+  (t/is (= (-> (Query/from "docs")
+               (.binding [(OutSpec/of "xt/id" (Expr/lVar "xt/id"))])
+               (.forValidTime (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z")))
+               (.forSystemTime TemporalFilter/ALL_TIME))
+           (roundtrip-query {"from" "docs"
+                             "bind" ["xt/id"]
+                             "for_valid_time" {"at" #inst "2020"}
+                             "for_system_time" "all_time"}))
+        "from with temporal bounds")
+
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-spec'"
                           (roundtrip-query {"from" "docs"
                                             "bind" "xt/id"}))
