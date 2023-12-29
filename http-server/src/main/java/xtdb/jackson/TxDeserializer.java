@@ -4,9 +4,9 @@ import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import xtdb.IllegalArgumentException;
 import xtdb.tx.Ops;
 import xtdb.tx.Tx;
@@ -24,7 +24,7 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
     @Override
     public Tx deserialize(com.fasterxml.jackson.core.JsonParser jp, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) jp.getCodec();
-        ObjectNode node = mapper.readTree(jp);
+        JsonNode node = mapper.readTree(jp);
 
         if (!node.isObject()) {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-tx"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
