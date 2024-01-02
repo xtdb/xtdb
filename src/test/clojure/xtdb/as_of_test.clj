@@ -31,7 +31,7 @@
   (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :doc, :version 1})
                                     (-> (xt/put :docs {:xt/id :doc-with-app-time})
                                         (xt/starting-from #inst "2021"))])
-        system-time (time/->zdt (.systemTime tx))]
+        system-time (time/->zdt (.getSystemTime tx))]
 
     (t/is (= {:doc {:xt/id :doc,
                     :xt/valid-from system-time
@@ -52,10 +52,10 @@
 
 (t/deftest test-system-time
   (let [tx1 (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :doc, :version 0})])
-        tt1 (time/->zdt (.systemTime tx1))
+        tt1 (time/->zdt (.getSystemTime tx1))
 
         tx2 (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :doc, :version 1})])
-        tt2 (time/->zdt (.systemTime tx2))
+        tt2 (time/->zdt (.getSystemTime tx2))
 
         original-v0-doc {:xt/id :doc, :version 0
                          :xt/valid-from tt1

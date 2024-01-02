@@ -367,7 +367,7 @@
   (li/->live-table *allocator* nil table-name))
 
 (defn index-tx! [^ILiveTable live-table, ^TransactionKey tx-key, docs]
-  (let [system-time (.systemTime tx-key)
+  (let [system-time (.getSystemTime tx-key)
         live-table-tx (.startTx live-table tx-key true)]
     (try
       (let [doc-wtr (.docWriter live-table-tx)]

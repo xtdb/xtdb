@@ -93,9 +93,9 @@
           (let [{:keys [^TransactionKey latest-completed-tx] :as res} (xt/status node)]
             (or
              (when-some [[fut ms] @last-submitted]
-               (let [tx-id (.txId ^TransactionKey @fut)
-                     completed-tx-id (.txId latest-completed-tx)
-                     completed-tx-time (.systemTime latest-completed-tx)]
+               (let [tx-id (.getTxId ^TransactionKey @fut)
+                     completed-tx-id (.getTxId latest-completed-tx)
+                     completed-tx-time (.getSystemTime latest-completed-tx)]
                  (when (and (some? completed-tx-id)
                             (some? completed-tx-time)
                             (< completed-tx-id tx-id))
@@ -107,8 +107,8 @@
           (let [{:keys [^TransactionKey latest-completed-tx] :as res} (xt/status node)]
             (or
              (when-some [[fut _] @last-submitted]
-               (let [tx-id (.txId ^TransactionKey @fut)
-                     completed-tx-id (.txId latest-completed-tx)]
+               (let [tx-id (.getTxId ^TransactionKey @fut)
+                     completed-tx-id (.getTxId latest-completed-tx)]
                  (when (some? completed-tx-id)
                    (- tx-id completed-tx-id))))
              0)))]

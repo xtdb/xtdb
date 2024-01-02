@@ -106,9 +106,9 @@
                                                    [(xt/put :docs (into {:xt/id id} *current-tx*))]))
                                      (xt/call :with-tx :foo)
                                      (xt/call :with-tx :bar)])
-        tt0 (.systemTime tx0)
+        tt0 (.getSystemTime tx0)
         tx1 (xt/submit-tx tu/*node* [(xt/call :with-tx :baz)])
-        tt1 (.systemTime tx1)]
+        tt1 (.getSystemTime tx1)]
 
     (t/is (= #{{:xt/id :foo, :tx-id 0, :system-time (time/->zdt tt0)}
                {:xt/id :bar, :tx-id 0, :system-time (time/->zdt tt0)}

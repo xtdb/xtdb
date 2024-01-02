@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 publishing {
@@ -27,8 +30,15 @@ dependencies {
     api("org.apache.arrow", "arrow-compression", "14.0.0")
     api("org.apache.arrow", "arrow-vector", "14.0.0")
     api("org.apache.arrow", "arrow-memory-netty", "14.0.0")
+    api(kotlin("stdlib-jdk8"))
 }
 
 tasks.javadoc {
     exclude("xtdb/IResultSet", "xtdb/util/*")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
+    }
 }

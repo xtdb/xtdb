@@ -272,7 +272,7 @@
 (t/deftest test-only-scanning-temporal-cols-45
   (with-open [node (xtn/start-node {})]
     (let [tx (xt/submit-tx node [(xt/put :xt_docs {:xt/id :doc})])
-          tt (.systemTime tx)]
+          tt (.getSystemTime tx)]
 
       (t/is (= #{{:xt/valid-from (time/->zdt tt)
                   :xt/valid-to nil

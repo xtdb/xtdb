@@ -515,8 +515,8 @@
   "xt$txs")
 
 (defn- add-tx-row! [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
-  (let [tx-id (.txId tx-key)
-        system-time-µs (time/instant->micros (.systemTime tx-key))
+  (let [tx-id (.getTxId tx-key)
+        system-time-µs (time/instant->micros (.getSystemTime tx-key))
 
         live-table (.liveTable live-idx-tx txs-table)
         doc-writer (.docWriter live-table)]
@@ -562,11 +562,11 @@
 
   IIndexer
   (indexTx [this tx-key tx-root]
-    (let [system-time (some-> tx-key (.systemTime))]
+    (let [system-time (some-> tx-key (.getSystemTime))]
       (try
         (if (and (not (nil? latest-completed-tx))
                  (neg? (compare system-time
-                                (.systemTime latest-completed-tx))))
+                                (.getSystemTime latest-completed-tx))))
           (do
             (log/warnf "specified system-time '%s' older than current tx '%s'"
                        (pr-str tx-key)
@@ -662,7 +662,7 @@
           (throw t)))))
 
   (forceFlush [this tx-key expected-last-chunk-tx-id]
-    (let [latest-chunk-tx-id (some-> latest-completed-chunk-tx (.txId))]
+    (let [latest-chunk-tx-id (some-> latest-completed-chunk-tx (.getTxId))]
       (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
         (finish-chunk! this)))
 
@@ -675,7 +675,7 @@
                 (let [wm-tx-key (.txBasis wm)]
                   (when (or (nil? tx-key)
                             (and wm-tx-key
-                                 (<= (.txId tx-key) (.txId wm-tx-key))))
+                                 (<= (.getTxId tx-key) (.getTxId wm-tx-key))))
                     (doto wm .retain)))))]
       (or (let [wm-lock-stamp (.readLock wm-lock)]
             (try

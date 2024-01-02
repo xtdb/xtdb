@@ -164,7 +164,7 @@
   (with-open [node (xtn/start-node {})]
     (let [tx (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 0})]
                            {:default-all-valid-time? false})
-          tt (.systemTime tx)]
+          tt (.getSystemTime tx)]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
                  :xt/valid-to nil
@@ -178,7 +178,7 @@
 
       (let [tx1 (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo, :version 1})]
                               {:default-all-valid-time? false})
-            tt2 (.systemTime tx1)]
+            tt2 (.getSystemTime tx1)]
         (t/is (= #{{:xt/id :foo, :version 0,
                     :xt/valid-from (time/->zdt tt2)
                     :xt/valid-to nil
@@ -487,7 +487,7 @@
               (let [{:keys [^TransactionKey latest-completed-tx, next-chunk-idx]}
                     (meta/latest-chunk-metadata mm)]
 
-                (t/is (< (.txId latest-completed-tx) (.txId first-half-tx-key)))
+                (t/is (< (.getTxId latest-completed-tx) (.getTxId first-half-tx-key)))
                 (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
                 (Thread/sleep 250) ; wait for the chunk to finish writing to disk
@@ -509,18 +509,18 @@
                                                         nil
                                                         (partition-all 100 second-half-tx-ops))]
 
-                (t/is (<= (.txId first-half-tx-key)
-                          (.txId (tu/latest-completed-tx node))
-                          (.txId second-half-tx-key)))
+                (t/is (<= (.getTxId first-half-tx-key)
+                          (.getTxId (tu/latest-completed-tx node))
+                          (.getTxId second-half-tx-key)))
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                   (doseq [node [new-node node]
                           :let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
-                    (t/is (<= (.txId first-half-tx-key)
-                              (.txId (-> first-half-tx-key
+                    (t/is (<= (.getTxId first-half-tx-key)
+                              (.getTxId (-> first-half-tx-key
                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
-                              (.txId second-half-tx-key)))
+                              (.getTxId second-half-tx-key)))
 
                     (t/is (= :utf8
                              (types/field->col-type (.columnField mm "device_info" "xt$id")))))

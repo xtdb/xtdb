@@ -76,10 +76,10 @@
               (throw (Exception. "Unrecognized record header"))))]
     ((fn ! [offset]
        (lazy-seq
-        (when-some [records (seq (.readRecords log (long offset) 100))]
-          (concat
-           (map clj-record records)
-           (! (.txId ^TransactionKey (:tx (last records))))))))
+         (when-some [records (seq (.readRecords log (long offset) 100))]
+           (concat
+             (map clj-record records)
+             (! (.getTxId ^TransactionKey (:tx (last records))))))))
      -1)))
 
 (defn node-log [node]
@@ -111,7 +111,7 @@
       (let [[_ _ _ msg4] (node-log node)]
         (let [flush-tx-id (:flush-tx-id msg4)]
           (t/is flush-tx-id)
-          (t/is (= (some-> (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer)) (.txId)) 
+          (t/is (= (some-> (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer)) (.getTxId))
                    flush-tx-id))))))
 
   (t/testing "test :duration actually does something"

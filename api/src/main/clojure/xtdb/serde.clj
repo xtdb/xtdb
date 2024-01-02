@@ -134,7 +134,7 @@
 
 (defmethod print-dup TransactionKey [^TransactionKey tx-key ^Writer w]
   (.write w "#xt/tx-key ")
-  (print-method {:tx-id (.txId tx-key) :system-time (.systemTime tx-key)} w))
+  (print-method {:tx-id (.getTxId tx-key) :system-time (.getSystemTime tx-key)} w))
 
 (defmethod print-method TransactionKey [tx-key w]
   (print-dup tx-key w))
@@ -145,7 +145,7 @@
 
 (defn tx-key-write-fn
   [^TransactionKey tx-key]
-  {:tx-id (.txId tx-key) :system-time (.systemTime tx-key)})
+  {:tx-id (.getTxId tx-key) :system-time (.getSystemTime tx-key)})
 
 (def transit-read-handlers
   (merge transit/default-read-handlers

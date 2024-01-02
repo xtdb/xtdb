@@ -32,7 +32,7 @@
 (defn- watch-log! [{:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
   (let [!cancel-hook (promise)]
     (.subscribe log
-                (some-> (.latestCompletedTx indexer) (.txId))
+                (some-> (.latestCompletedTx indexer) (.getTxId))
                 (reify LogSubscriber
                   (onSubscribe [_ cancel-hook]
                     (deliver !cancel-hook cancel-hook))
