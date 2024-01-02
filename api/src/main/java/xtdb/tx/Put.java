@@ -9,15 +9,15 @@ import java.util.Objects;
 public final class Put extends Ops implements Ops.HasValidTimeBounds<Put> {
 
     private final Keyword tableName;
-    private final Map<Keyword, Object> doc;
+    private final Map<?, ?> doc;
     private final Instant validFrom;
     private final Instant validTo;
 
-    public Put (Keyword tableName, Map<Keyword, Object> doc) {
+    public Put (Keyword tableName, Map<?, ?> doc) {
         this(tableName, doc, null, null);
     }
 
-    private Put(Keyword tableName, Map<Keyword, Object> doc, Instant validFrom, Instant validTo) {
+    private Put(Keyword tableName, Map<?, ?> doc, Instant validFrom, Instant validTo) {
         this.tableName = tableName;
         this.doc = doc;
         this.validFrom = validFrom;
@@ -28,7 +28,7 @@ public final class Put extends Ops implements Ops.HasValidTimeBounds<Put> {
         return tableName;
     }
 
-    public Map<Keyword, Object> doc() {
+    public Map<?, ?> doc() {
         return doc;
     }
 
