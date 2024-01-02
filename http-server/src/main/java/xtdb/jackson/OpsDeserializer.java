@@ -21,7 +21,7 @@ public class OpsDeserializer extends StdDeserializer<Ops>  {
     }
 
     @Override
-    public Ops deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public Ops deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
         ObjectCodec codec = p.getCodec();
         ObjectNode node = codec.readTree(p);
 

@@ -338,7 +338,7 @@
 
   See also: `put-fn`"
   [f & args]
-  (Ops/call (expect-fn-id f) args))
+  (Ops/call (expect-fn-id f) (or args [])))
 
 (defn sql-op
   "Returns an SQL DML operation for passing to `submit-tx`

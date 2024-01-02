@@ -28,7 +28,6 @@ public class CallDeserializer extends StdDeserializer<Call> {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-call"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
-        Call op = new Call(codec.treeToValue(node.get("call"), Object.class), codec.treeToValue(node.get("args"), List.class));
-        return op;
+        return new Call(codec.treeToValue(node.get("call"), Object.class), codec.treeToValue(node.get("args"), List.class));
     }
 }

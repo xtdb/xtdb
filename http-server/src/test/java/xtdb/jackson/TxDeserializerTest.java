@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import xtdb.tx.Ops;
 import xtdb.tx.Put;
 import xtdb.tx.Tx;
+import xtdb.tx.TxOptions;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -40,6 +41,6 @@ class TxDeserializerTest {
         // then
         ArrayList<Ops> ops = new ArrayList<Ops>();
         ops.add(Ops.put(Keyword.intern("docs"), Collections.emptyMap()));
-        assertEquals(new Tx(ops, null), actual);
+        assertEquals(new Tx(ops, new TxOptions()), actual);
     }
 }

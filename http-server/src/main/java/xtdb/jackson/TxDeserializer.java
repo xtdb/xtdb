@@ -37,10 +37,8 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
         }
 
         List<Ops> ops = mapper.treeToValue(node.get("tx_ops"), mapper.getTypeFactory().constructCollectionType(List.class, Ops.class));
-        TxOptions txOptions = null;
-        if (node.has("tx_options")) {
-            txOptions = mapper.treeToValue(node.get("tx_options"), TxOptions.class);
-        }
+
+        TxOptions txOptions = !node.has("tx_options") ? new TxOptions() : mapper.treeToValue(node.get("tx_options"), TxOptions.class);
 
         return new Tx(ops, txOptions);
     }

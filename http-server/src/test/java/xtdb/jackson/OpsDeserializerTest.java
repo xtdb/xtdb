@@ -1,23 +1,15 @@
 package xtdb.jackson;
 
 import clojure.lang.Keyword;
-import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.module.SimpleDeserializers;
-import com.fasterxml.jackson.databind.module.SimpleModule;
 import org.junit.jupiter.api.Test;
 import xtdb.tx.Ops;
-import xtdb.tx.Put;
-import xtdb.tx.Delete;
-import xtdb.tx.Erase;
-import xtdb.tx.Call;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class OpsDeserializerTest {
     private final ObjectMapper objectMapper;

@@ -8,11 +8,14 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.BaseJsonNode;
 import xtdb.IllegalArgumentException;
+import xtdb.tx.Ops;
 import xtdb.tx.Put;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
+
+import static xtdb.tx.Ops.put;
 
 public class PutDeserializer extends StdDeserializer<Put> {
 
@@ -30,7 +33,7 @@ public class PutDeserializer extends StdDeserializer<Put> {
         }
 
         // TODO remove keyword casting
-        Put op = new Put(Keyword.intern(node.get("put").asText()), codec.treeToValue(node.get("doc"), Map.class));
+        Put op = put(Keyword.intern(node.get("put").asText()), codec.treeToValue(node.get("doc"), Map.class));
         if (node.has("valid_from")) {
             var instant = codec.treeToValue(node.get("valid_from"), Object.class);
             if (!(instant instanceof Instant)) {

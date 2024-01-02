@@ -26,8 +26,7 @@ public class EraseDeserializer extends StdDeserializer<Erase> {
 
         try {
             ObjectNode objectNode = (ObjectNode) node;
-            Erase op = new Erase(Keyword.intern(objectNode.get("erase").asText()), codec.treeToValue(objectNode.get("id"), Object.class));
-            return op;
+            return new Erase(Keyword.intern(objectNode.get("erase").asText()), codec.treeToValue(objectNode.get("id"), Object.class));
         } catch (Exception e) {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-erase"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), e);
         }  

@@ -136,7 +136,8 @@
   (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
                              :doc {"xt/id" "my-id"},
                              :valid-from nil,
-                             :valid-to nil}], nil)
+                             :valid-to nil}],
+                (TxOptions.))
            (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]})))
 
