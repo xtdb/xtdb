@@ -201,7 +201,7 @@
       (when-not (= (count provided-vars) 1)
         (throw (err/illegal-arg
                 :xtql/invalid-scalar-subquery
-                {:subquery (.query this) :provided-vars provided-vars
+                {:subquery (str (.query this)) :provided-vars provided-vars
                  ::err/message "Scalar subquery must only return a single column"})))
       (swap! *subqueries* conj
              {:type :scalar
@@ -253,7 +253,7 @@
     (when (not (set/subset? required-vars provided-vars))
       (throw (err/illegal-arg
               :xtql/invalid-expression
-              {:expr expr :required-vars required-vars :available-vars provided-vars
+              {:expr (str expr) :required-vars required-vars :available-vars provided-vars
                ::err/message "Not all variables in expression are in scope"})))))
 
 (defn- wrap-select [ra-plan predicates]
@@ -604,7 +604,7 @@
     (when (.projectAllCols from)
       (throw (err/illegal-arg
               :xtql/invalid-from
-              {:from from
+              {:from (str from)
                ::err/message "* is not a valid in from when inside a unify context"})))
     [[:from (plan-from from)]])
 
@@ -835,7 +835,7 @@
                                                       (throw
                                                        (err/illegal-arg
                                                         :xtql/invalid-expression
-                                                        {:expr sub-expr
+                                                        {:expr (str sub-expr)
                                                          ::err/message "Aggregate functions cannot be nested"})))
                                                     {:sub-expr-placeholder (expr-subquery-placeholder)
                                                      :expr expr}))]]
@@ -856,7 +856,7 @@
           (throw
            (err/illegal-arg
             :xtql/invalid-expression
-            {:expr expr :required-vars required-vars :grouping-cols grouping-cols-set
+            {:expr (str expr) :required-vars required-vars :grouping-cols grouping-cols-set
              ::err/message "Variables outside of aggregate expressions must be grouping columns"}))))
 
       {:ra-plan  [:project (vec output-projections)
