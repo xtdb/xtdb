@@ -20,7 +20,7 @@ data class TxOptions(val systemTime: Instant? = null, private val defaultTz: Zon
             else -> notFound
         }
 
-    override fun seq(): ISeq =
+    override fun seq(): ISeq? =
         PersistentList.create(
             listOfNotNull(
                 systemTime?.let { MapEntry.create(SYSTEM_TIME_KEY, it) },

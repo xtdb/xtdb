@@ -20,7 +20,7 @@ data class TransactionKey(val txId: Long, val systemTime: Instant) : Comparable<
             else -> notFound
         }
 
-    override fun seq(): ISeq =
+    override fun seq(): ISeq? =
         PersistentList.create(
             listOf(MapEntry.create(TX_ID_KEY, txId), MapEntry.create(SYSTEM_TIME_KEY, systemTime))
         ).seq()
