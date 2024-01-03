@@ -18,12 +18,12 @@
            (java.util.concurrent CompletableFuture)
            [java.util.function Function]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           xtdb.api.IXtdb
+           (xtdb.api IXtdb)
            xtdb.indexer.IIndexer
            xtdb.IResultSet
            xtdb.operator.IRaQuerySource
            (xtdb.query Basis Query)
-           (xtdb.tx Sql TxOptions)
+           (xtdb.tx Sql)
            (xtdb.tx_producer ITxProducer)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -60,8 +60,12 @@
                  !latest-submitted-tx
                  system, close-fn]
   IXtdb
-  (submitTxAsync [this ops tx-opts]
-    (xtp/submit-tx& this ops tx-opts))
+  (submitTxAsync [_ tx-ops opts]
+    (-> (or (validate-tx-ops tx-ops)
+            (.submitTx tx-producer tx-ops opts))
+        (util/then-apply
+          (fn [tx]
+            (swap! !latest-submitted-tx time/max-tx tx)))))
 
   (queryAsync [this query opts]
     (let [opts (-> (into {:default-all-valid-time? false} opts)
@@ -102,19 +106,6 @@
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx (xtp/latest-submitted-tx this)})
-
-  xtp/PSubmitNode
-  (submit-tx& [this tx-ops]
-    (xtp/submit-tx& this tx-ops {}))
-
-  (submit-tx& [_ tx-ops opts]
-    (let [opts (cond->> opts
-                 (instance? TxOptions opts) (into {}))]
-      (-> (or (validate-tx-ops tx-ops)
-              (.submitTx tx-producer tx-ops opts))
-          (util/then-apply
-            (fn [tx]
-              (swap! !latest-submitted-tx time/max-tx tx))))))
 
   Closeable
   (close [_]
@@ -177,11 +168,8 @@
                             #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
-  xtp/PSubmitNode
-  (submit-tx& [this tx-ops]
-    (xtp/submit-tx& this tx-ops {}))
-
-  (submit-tx& [_ tx-ops opts]
+  IXtdb
+  (submitTxAsync [_ tx-ops opts]
     (or (validate-tx-ops tx-ops)
         (.submitTx tx-producer tx-ops opts)))
 

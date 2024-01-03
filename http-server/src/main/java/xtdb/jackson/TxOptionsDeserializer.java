@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import xtdb.IllegalArgumentException;
-import xtdb.tx.TxOptions;
+import xtdb.api.TxOptions;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -29,8 +29,11 @@ public class TxOptionsDeserializer extends StdDeserializer<TxOptions> {
         if (!node.isObject()){
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-tx-options"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
+
         Instant systemTime = null;
         ZoneId defaultTz = null;
+        boolean defaultAllValidTime = false;
+
         if (node.has("system_time")) {
             var candidateSystemTime = codec.readValue(node.get("system_time").traverse(codec), Object.class);
             if (!(candidateSystemTime instanceof Instant)) {
@@ -45,6 +48,11 @@ public class TxOptionsDeserializer extends StdDeserializer<TxOptions> {
             }
             defaultTz = (ZoneId) candidateZoneId;
         }
-        return new TxOptions(systemTime, defaultTz);
+
+        if(node.has("default_all_valid_time")) {
+            defaultAllValidTime = node.get("default_all_valid_time").asBoolean();
+        }
+
+        return new TxOptions(systemTime, defaultTz, defaultAllValidTime);
     }
 }

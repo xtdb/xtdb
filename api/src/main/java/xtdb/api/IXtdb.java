@@ -3,7 +3,6 @@ package xtdb.api;
 import xtdb.query.Query;
 import xtdb.query.QueryOpts;
 import xtdb.tx.Ops;
-import xtdb.tx.TxOptions;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;

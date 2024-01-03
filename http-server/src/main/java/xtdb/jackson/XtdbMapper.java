@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import xtdb.api.TransactionKey;
+import xtdb.api.TxOptions;
 import xtdb.query.*;
 import xtdb.tx.*;
 import xtdb.tx.Call;

@@ -10,7 +10,7 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
 import xtdb.tx.Ops;
 import xtdb.tx.Tx;
-import xtdb.tx.TxOptions;
+import xtdb.api.TxOptions;
 
 import java.io.IOException;
 import java.util.List;

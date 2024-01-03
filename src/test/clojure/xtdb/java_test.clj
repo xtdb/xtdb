@@ -4,8 +4,8 @@
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu])
   (:import (xtdb IResultSet)
-           (xtdb.query Query Binding Expr QueryOpts Basis)
-           (xtdb.tx TxOptions)))
+           (xtdb.api TxOptions)
+           (xtdb.query Basis Binding Expr Query QueryOpts)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -16,7 +16,7 @@
 (deftest java-api-test
   (t/testing "transactions"
     (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {"xt/id" 1 "foo" "bar"})]
-                           (TxOptions. #time/instant "2020-01-01T12:34:56.000Z" nil))]
+                           (TxOptions. #time/instant "2020-01-01T12:34:56.000Z" nil false))]
       (t/is (= [{:xt/id 1 :xt/system-from #time/zoned-date-time "2020-01-01T12:34:56Z[UTC]"}]
                (xt/q tu/*node*
                      '(from :docs [xt/id xt/system-from])
@@ -25,7 +25,7 @@
 
     (let [sql-op "INSERT INTO docs (xt$id, tstz) VALUES (2, CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE))"
           tx (xt/submit-tx tu/*node* [(xt/sql-op sql-op) ]
-                           (TxOptions. nil #time/zone "America/Los_Angeles"))]
+                           (TxOptions. nil #time/zone "America/Los_Angeles" false))]
       (t/is (= [{:tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
                (xt/q tu/*node*
                      '(from :docs [{:xt/id 2} tstz])

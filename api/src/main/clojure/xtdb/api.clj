@@ -13,13 +13,13 @@
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
             [xtdb.time :as time])
-  (:import [java.io Writer]
+  (:import (java.io Writer)
            java.util.concurrent.ExecutionException
            java.util.function.Function
            java.util.List
-           (xtdb.api TransactionKey)
+           (xtdb.api IXtdb TransactionKey TxOptions)
            xtdb.IResultSet
-           [xtdb.tx Ops Ops$HasArgs Ops$HasValidTimeBounds]
+           (xtdb.tx Ops Ops$HasArgs Ops$HasValidTimeBounds)
            xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]
@@ -27,6 +27,14 @@
      ~form
      (catch ExecutionException e#
        (throw (.getCause e#)))))
+
+(defn- expect-instant [instant]
+  (when-not (s/valid? ::time/datetime-value instant)
+    (throw (err/illegal-arg :xtdb/invalid-date-time
+                            {::err/message "expected date-time"
+                             :timestamp instant})))
+
+  (time/->instant instant))
 
 (defn ->ClojureForm [form]
   (ClojureForm. form))
@@ -149,6 +157,21 @@
    (-> @(q& node q+args opts)
        (rethrowing-cause))))
 
+(extend-protocol xtp/PSubmitNode
+  IXtdb
+  (submit-tx& [this tx-ops]
+    (xtp/submit-tx& this tx-ops nil))
+
+  (submit-tx& [this tx-ops opts]
+    (.submitTxAsync this tx-ops
+                    (cond
+                      (instance? TxOptions opts) opts
+                      (nil? opts) (TxOptions.)
+                      (map? opts) (let [{:keys [system-time default-tz default-all-valid-time?]} opts]
+                                    (TxOptions. (some-> system-time expect-instant)
+                                                default-tz
+                                                (boolean default-all-valid-time?)))))))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx&
   "Writes transactions to the log for processing. Non-blocking.
@@ -243,14 +266,6 @@
   (expect-eid (or (:xt/id doc) (get doc "xt/id")))
 
   doc)
-
-(defn- expect-instant [instant]
-  (when-not (s/valid? ::time/datetime-value instant)
-    (throw (err/illegal-arg :xtdb.tx/invalid-date-time
-                            {::err/message "expected date-time"
-                             :timestamp instant})))
-
-  (time/->instant instant))
 
 (defn put
   "Returns a put operation for passing to `submit-tx`.

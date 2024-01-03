@@ -3,13 +3,12 @@
             [jsonista.core :as json]
             [xtdb.error :as err]
             [xtdb.jackson :as jackson])
-  (:import (java.util List)
-           (java.time Instant)
-           (xtdb.tx Ops Tx TxOptions)
-           (xtdb.api TransactionKey)
+  (:import (java.time Instant)
+           (java.util List)
+           (xtdb.api TransactionKey TxOptions)
            (xtdb.jackson XtdbMapper)
-           (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail TemporalFilter
-                       Binding Expr Query$Unify QueryRequest QueryOpts Basis Expr)))
+           (xtdb.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOpts QueryRequest TemporalFilter)
+           (xtdb.tx Ops Tx)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -146,7 +145,8 @@
                              :valid-from nil,
                              :valid-to nil}],
                 (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
-                            #time/zone "America/Los_Angeles"))
+                            #time/zone "America/Los_Angeles"
+                            false))
            (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]
                           "tx_options" {"system_time" #time/instant "2020-01-01T12:34:56.789Z"

@@ -3,7 +3,6 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [jsonista.core :as json]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
@@ -30,9 +29,8 @@
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
-           (com.fasterxml.jackson.databind ObjectMapper)
-           xtdb.IResultSet
-           xtdb.api.TransactionKey))
+           xtdb.api.TransactionKey
+           xtdb.IResultSet))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
