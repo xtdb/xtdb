@@ -1,21 +1,20 @@
-package xtdb
+package xtdb.api
 
 import clojure.lang.Keyword
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
-import xtdb.InProcessXtdb.startNode
-import xtdb.query.Expr.lVar
 import xtdb.query.Binding
-import xtdb.query.Query.from
-import xtdb.tx.Ops.Companion.put
+import xtdb.query.Expr
+import xtdb.query.Query
+import xtdb.tx.Ops
 
 internal class InProcessXtdbTest {
     @Test
     fun startsInMemoryNode() {
-        startNode().use { node ->
+        InProcessXtdb.startNode().use { node ->
             node.submitTx(
                 listOf(
-                    put(Keyword.intern("foo"), mapOf("xt/id" to "jms"))
+                    Ops.put(Keyword.intern("foo"), mapOf("xt/id" to "jms"))
                 )
             )
 
@@ -23,8 +22,8 @@ internal class InProcessXtdbTest {
                 listOf(mapOf(Keyword.intern("id") to "jms")),
 
                 node.query(
-                    from("foo")
-                        .binding(listOf(Binding("xt/id", lVar("id"))))
+                    Query.from("foo")
+                        .binding(listOf(Binding("xt/id", Expr.lVar("id"))))
                 )
             )
         }

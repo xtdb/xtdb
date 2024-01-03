@@ -1,9 +1,8 @@
-package xtdb
+package xtdb.api
 
 import clojure.java.api.Clojure
 import clojure.lang.IFn
 import clojure.lang.Symbol
-import xtdb.api.IXtdb
 
 object InProcessXtdb {
     init {
