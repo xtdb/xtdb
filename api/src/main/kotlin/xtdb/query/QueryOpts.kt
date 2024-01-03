@@ -1,11 +1,10 @@
 package xtdb.query
 
 import clojure.lang.*
-import xtdb.IKeyFn
 import xtdb.api.TransactionKey
 import java.time.Duration
 import java.time.ZoneId
-import java.util.*
+import java.util.ArrayList
 
 private val ARGS_KEY: Keyword = Keyword.intern("args")
 private val BASIS_KEY: Keyword = Keyword.intern("basis")

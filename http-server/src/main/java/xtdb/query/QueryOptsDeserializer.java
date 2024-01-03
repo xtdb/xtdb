@@ -19,11 +19,11 @@ import java.util.Map;
 
 public class QueryOptsDeserializer extends StdDeserializer<QueryOpts> {
 
-    public QueryOptsDeserializer () {
+    public QueryOptsDeserializer() {
         super(QueryOpts.class);
     }
 
-    public QueryOpts deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public QueryOpts deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);
@@ -32,7 +32,7 @@ public class QueryOptsDeserializer extends StdDeserializer<QueryOpts> {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-query-map"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
-        Map<String, Object> args =  null;
+        Map<String, Object> args = null;
         if (node.has("args")) {
             args = mapper.treeToValue(node.get("args"), typeFactory.constructMapType(Map.class, String.class, Object.class));
         }
