@@ -16,8 +16,8 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api TransactionKey)
-           (xtdb.log Log LogRecord)
+           xtdb.api.TransactionKey
+           (xtdb.api.log Log LogRecord)
            (xtdb.tx Abort Call Delete Erase Put Sql Xtql)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
@@ -234,8 +234,8 @@
                                              (util/maybe-update :system-time time/->instant))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
-            (fn [^LogRecord result]
-              (cond-> ^TransactionKey (.tx result)
+            (fn [^TransactionKey tx-key]
+              (cond-> tx-key
                 system-time (.withSystemTime system-time)))))))
   AutoCloseable
   (close [_] (.close allocator)))

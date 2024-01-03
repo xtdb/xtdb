@@ -3,26 +3,12 @@
             xtdb.protocols
             [xtdb.util :as util])
   (:import java.lang.AutoCloseable
-           java.nio.ByteBuffer
            (java.nio.channels ClosedChannelException)
            java.time.Duration
            java.util.concurrent.Semaphore
-           xtdb.api.TransactionKey))
+           (xtdb.api.log Log LogRecord LogSubscriber)))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defrecord LogRecord [^TransactionKey tx ^ByteBuffer record])
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface LogSubscriber
-  (onSubscribe [^java.lang.AutoCloseable cancelHook])
-  (acceptRecord [^xtdb.log.LogRecord record]))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface Log
-  (^java.util.concurrent.CompletableFuture #_<LogRecord> appendRecord [^java.nio.ByteBuffer record])
-  (^java.util.List #_<LogRecord> readRecords [^Long afterOffset ^int limit])
-  (^void subscribe [^Long afterTxId, ^xtdb.log.LogSubscriber subscriber]))
 
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
   (util/->prefix-thread-factory "xtdb-tx-subscription"))
@@ -34,7 +20,7 @@
 
     (.acceptRecord subscriber record)
 
-    (.getTxId ^TransactionKey (.tx record))))
+    (.getTxId (.getTxKey record))))
 
 (defn handle-polling-subscription [^Log log after-tx-id {:keys [^Duration poll-sleep-duration]} ^LogSubscriber subscriber]
   (doto (.newThread subscription-thread-factory
@@ -66,7 +52,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
   (notifyTx [^xtdb.api.TransactionKey tx])
-  (subscribe [^xtdb.log.Log log, ^Long after-tx-id, ^xtdb.log.LogSubscriber subscriber]))
+  (subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.LogSubscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]
   INotifyingSubscriberHandler
@@ -95,7 +81,7 @@
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
                                                          (->> (.readRecords log after-tx-id 100)
-                                                              (take-while #(<= ^long (.getTxId ^TransactionKey (.tx ^LogRecord %))
+                                                              (take-while #(<= ^long (.getTxId (.getTxKey ^LogRecord %))
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live

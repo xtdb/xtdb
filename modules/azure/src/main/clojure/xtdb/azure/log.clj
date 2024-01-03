@@ -9,7 +9,8 @@
            java.time.Duration
            java.util.concurrent.CompletableFuture
            [xtdb.api TransactionKey]
-           [xtdb.log INotifyingSubscriberHandler Log]))
+           (xtdb.api.log Log LogRecord)
+           [xtdb.log INotifyingSubscriberHandler]))
 
 (defn ->consumer [f]
   (reify java.util.function.Consumer
@@ -30,7 +31,7 @@
 
 (defn- ->log-record [^PartitionEvent event]
   (let [data ^EventData (.getData event)]
-    (log/->LogRecord (event-data->tx-instant data) (ByteBuffer/wrap (.getBody data)))))
+    (LogRecord. (event-data->tx-instant data) (ByteBuffer/wrap (.getBody data)))))
 
 ;; consumer class: https://learn.microsoft.com/en-us/java/api/com.azure.messaging.eventhubs.eventhubconsumerclient?view=azure-java-stable
 (defrecord EventHubLog [^INotifyingSubscriberHandler subscriber-handler
@@ -47,7 +48,7 @@
                       (->consumer (fn [e]
                                     (.completeExceptionally fut e)))
                       (fn [] (let [{:keys [offset timestamp]} (get-partition-properties consumer)]
-                               (.complete fut (log/->LogRecord (TransactionKey. offset timestamp) record))))))
+                               (.complete fut (LogRecord. (TransactionKey. offset timestamp) record))))))
       fut))
 
   (readRecords [_ after-tx-id limit]

@@ -11,7 +11,8 @@
            (java.time Duration)
            (java.util.concurrent ExecutorService Executors TimeUnit)
            (xtdb.indexer IIndexer)
-           (xtdb.log Log)))
+           xtdb.api.TransactionKey
+           (xtdb.api.log Log)))
 
 ;; see https://github.com/xtdb/xtdb/issues/2548
 
@@ -53,8 +54,8 @@
                                        (.put (byte xt-log/hb-flush-chunk))
                                        (.putLong (or latest-chunk-tx-id -1))
                                        .flip)
-                        record @(.appendRecord log record-buf)]
-                   (reset! !last-flush-tx-id (:tx-id (:tx record)))))
+                        ^TransactionKey tx-key @(.appendRecord log record-buf)]
+                    (reset! !last-flush-tx-id (.getTxId tx-key))))
                 (catch InterruptedException _)
                 (catch ClosedByInterruptException _)
                 (catch Throwable e

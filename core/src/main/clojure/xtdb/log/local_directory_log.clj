@@ -15,7 +15,7 @@
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
            (xtdb.api TransactionKey)
-           (xtdb.log Log LogRecord)))
+           (xtdb.api.log Log LogRecord)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
 (def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))
@@ -53,11 +53,11 @@
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (xt.log/->LogRecord (TransactionKey. offset system-time) (ByteBuffer/wrap record))))
+                                  (LogRecord. (TransactionKey. offset system-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
-                     (+ offset header-size (.capacity ^ByteBuffer (.record ^LogRecord record)) footer-size))
+                     (+ offset header-size (.capacity ^ByteBuffer (.getRecord ^LogRecord record)) footer-size))
               (if after-offset
                 (subvec acc 1)
                 acc)))))))
@@ -114,15 +114,15 @@
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (xt.log/->LogRecord (TransactionKey. offset system-time) record)))
+                      (.set elements n (MapEntry/create f (LogRecord. (TransactionKey. offset system-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)
                   (throw t)))
               (.flush log-out)
               (.force log-channel true)
-              (doseq [[^CompletableFuture f log-record] elements]
-                (.complete f log-record))))
+              (doseq [[^CompletableFuture f, ^LogRecord log-record] elements]
+                (.complete f (.getTxKey log-record)))))
           (catch ClosedByInterruptException e
             (log/warn e "channel interrupted while closing")
             (doseq [[^CompletableFuture f] elements

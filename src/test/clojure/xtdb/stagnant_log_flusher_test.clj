@@ -13,8 +13,8 @@
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            xtdb.IBufferPool
            (xtdb.indexer IIndexer)
-           (xtdb.log Log)
-           (xtdb.api TransactionKey)))
+           (xtdb.api TransactionKey)
+           (xtdb.api.log Log LogRecord)))
 
 (defonce log-level :error)
 
@@ -58,20 +58,20 @@
 (t/use-fixtures :each each-fixture)
 
 (defn log-seq [^Log log ^BufferAllocator allocator]
-  (letfn [(clj-record [record]
-            (condp = (Byte/toUnsignedInt (.get ^ByteBuffer (:record record) 0))
+  (letfn [(clj-record [^LogRecord record]
+            (condp = (Byte/toUnsignedInt (.get (.getRecord record) 0))
               xt-log/hb-flush-chunk
               {:header-byte xt-log/hb-flush-chunk
-               :flush-tx-id (.getLong ^ByteBuffer (:record record) 1)
-               :tx (:tx record)}
+               :flush-tx-id (.getLong (.getRecord record) 1)
+               :tx (.getTxKey record)}
 
               xt-log/hb-user-arrow-transaction
-              (with-open [tx-ops-ch (util/->seekable-byte-channel (:record record))
+              (with-open [tx-ops-ch (util/->seekable-byte-channel (.getRecord record))
                           sr (ArrowStreamReader. tx-ops-ch allocator)
                           tx-root (.getVectorSchemaRoot sr)]
                 (.loadNextBatch sr)
                 {:header-byte xt-log/hb-user-arrow-transaction
-                 :tx (:tx record)
+                 :tx (.getTxKey record)
                  :record (first (ivr/rel->rows (ivr/<-root tx-root)))})
               (throw (Exception. "Unrecognized record header"))))]
     ((fn ! [offset]
@@ -79,7 +79,7 @@
          (when-some [records (seq (.readRecords log (long offset) 100))]
            (concat
              (map clj-record records)
-             (! (.getTxId ^TransactionKey (:tx (last records))))))))
+             (! (.getTxId (.getTxKey ^LogRecord (last records))))))))
      -1)))
 
 (defn node-log [node]

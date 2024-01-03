@@ -18,7 +18,7 @@
            [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
            org.apache.kafka.common.TopicPartition
            [xtdb.api TransactionKey]
-           [xtdb.log Log LogSubscriber]))
+           [xtdb.api.log Log LogRecord LogSubscriber]))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -58,8 +58,8 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (log/->LogRecord (TransactionKey. (.offset record) (Instant/ofEpochMilli (.timestamp record)))
-                   (.value record)))
+  (LogRecord. (TransactionKey. (.offset record) (Instant/ofEpochMilli (.timestamp record)))
+              (.value record)))
 
 (defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^LogSubscriber subscriber]
   (doto (.newThread log/subscription-thread-factory
@@ -99,9 +99,8 @@
                (onCompletion [_ record-metadata e]
                  (if e
                    (.completeExceptionally fut e)
-                   (.complete fut (log/->LogRecord (TransactionKey. (.offset record-metadata)
-                                                                    (Instant/ofEpochMilli (.timestamp record-metadata)))
-                                                   record))))))
+                   (.complete fut (TransactionKey. (.offset record-metadata)
+                                                   (Instant/ofEpochMilli (.timestamp record-metadata))))))))
       fut))
 
   (readRecords [_ after-tx-id limit]
