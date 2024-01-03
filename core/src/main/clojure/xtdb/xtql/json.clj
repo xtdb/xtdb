@@ -3,11 +3,11 @@
             [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime Instant]
            (java.util Date List)
-           (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
+           (xtdb.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
                        Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$DocsRelation Query$ParamRelation
+                       Query$WithCols Query$DocsRelation Query$ParamRelation
                        Query$UnnestVar Query$UnnestCol
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -190,9 +190,9 @@
                                                       )
                                                     (spec-of attr (parse-expr expr))))))))))
 
-(def parse-out-specs (partial parse-binding-specs #(OutSpec/of %1 %2)))
-(def parse-arg-specs (partial parse-binding-specs #(ArgSpec/of %1 %2)))
-(def parse-col-specs (partial parse-binding-specs #(ColSpec/of %1 %2)))
+(def parse-out-specs (partial parse-binding-specs #(Binding. %1 %2)))
+(def parse-arg-specs (partial parse-binding-specs #(Binding. %1 %2)))
+(def parse-col-specs (partial parse-binding-specs #(Binding. %1 %2)))
 
 (defn- parse-var-specs
   [specs _query]
@@ -203,7 +203,7 @@
                               (do
                                 (when-not (string? attr)
                                   (throw (err/illegal-arg :xtql/malformed-var-spec)))
-                                (VarSpec/of (str attr) (parse-expr expr))))
+                                (Binding. (str attr) (parse-expr expr))))
                             (throw (err/illegal-arg :xtql/malformed-var-spec))))))))
 
 (defn- parse-from [this]
@@ -234,26 +234,24 @@
     (throw (err/illegal-arg :xtql/malformed-join {:join query}))
 
     (cond-> (Query/join (parse-query join) (some-> args (parse-arg-specs query)))
-      bind (.binding (parse-out-specs bind join)))))
+      bind (.binding ^List (parse-out-specs bind join)))))
 
 (defmethod parse-unify-clause 'leftJoin [{left-join "leftJoin", :strs [args bind], :as query}]
   (if-not (map? left-join)
     (throw (err/illegal-arg :xtql/malformed-join {:join query}))
 
     (cond-> (Query/leftJoin (parse-query left-join) (some-> args (parse-arg-specs query)))
-      bind (.binding (parse-out-specs bind left-join)))))
-
-(defn unparse-binding-spec [attr expr]
-  (if (and (instance? Expr$LogicVar expr)
-           (= (.lv ^Expr$LogicVar expr) attr))
-    attr
-    {attr (unparse expr)}))
+      bind (.binding ^List (parse-out-specs bind left-join)))))
 
 (extend-protocol Unparse
-  OutSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec)))
-  ArgSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec)))
-  VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec)))
-  ColSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec)))
+  Binding
+  (unparse [binding]
+    (let [attr (.getBinding binding)
+          expr (.getExpr binding)]
+      (if (and (instance? Expr$LogicVar expr)
+               (= (.lv ^Expr$LogicVar expr) attr))
+        attr
+        {attr (unparse expr)})))
 
   Query$From
   (unparse [from]

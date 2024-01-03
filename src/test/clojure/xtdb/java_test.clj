@@ -4,7 +4,7 @@
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu])
   (:import (xtdb IResultSet)
-           (xtdb.query Query OutSpec Expr QueryOpts Basis)
+           (xtdb.query Query Binding Expr QueryOpts Basis)
            (xtdb.tx TxOptions)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -37,14 +37,14 @@
 
       (t/is (= [{:my-foo "bar"}]
                (-> @(xtp/open-query& tu/*node* (-> (Query/from "docs2")
-                                                   (.binding [(OutSpec/of "foo" (Expr/lVar "my-foo"))]))
+                                                   (.binding [(Binding. "foo" (Expr/lVar "my-foo"))]))
                                      (QueryOpts. nil (Basis. tx nil) nil nil nil false "clojure"))
                    result-set->vec))
             "java ast queries")
 
       (t/is (= [{:my_foo "bar"}]
                (-> @(xtp/open-query& tu/*node* (-> (Query/from "docs2")
-                                                   (.binding [(OutSpec/of "foo" (Expr/lVar "my-foo"))]))
+                                                   (.binding [(Binding. "foo" (Expr/lVar "my-foo"))]))
                                      (QueryOpts. nil (Basis. tx nil) nil nil nil false "snake_case"))
                    result-set->vec))
             "key-fn")

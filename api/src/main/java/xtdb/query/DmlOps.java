@@ -31,12 +31,12 @@ public interface DmlOps {
 
     final class Update implements DmlOps {
         public final String table;
-        public final List<ColSpec> setSpecs;
+        public final List<Binding> setSpecs;
         public final TemporalExtents forValidTime;
-        public final List<OutSpec> bindSpecs;
+        public final List<Binding> bindSpecs;
         public final List<? extends UnifyClause> unifyClauses;
 
-        private Update(String table, List<ColSpec> setSpecs, TemporalExtents forValidTime, List<OutSpec> bindSpecs,
+        private Update(String table, List<Binding> setSpecs, TemporalExtents forValidTime, List<Binding> bindSpecs,
                        List<? extends UnifyClause> unifyClauses) {
             this.table = table;
             this.setSpecs = setSpecs;
@@ -49,7 +49,7 @@ public interface DmlOps {
             return new Update(table, setSpecs, forValidTime, bindSpecs, unifyClauses);
         }
 
-        public Update binding(List<OutSpec> bindSpecs) {
+        public Update binding(List<Binding> bindSpecs) {
             return new Update(table, setSpecs, forValidTime, bindSpecs, unifyClauses);
         }
 
@@ -72,17 +72,17 @@ public interface DmlOps {
         }
     }
 
-    static Update update(String table, List<ColSpec> setSpecs) {
+    static Update update(String table, List<Binding> setSpecs) {
         return new Update(table, setSpecs, null, null, null);
     }
 
     final class Delete implements DmlOps {
         public final String table;
         public final TemporalExtents forValidTime;
-        public final List<OutSpec> bindSpecs;
+        public final List<Binding> bindSpecs;
         public final List<? extends UnifyClause> unifyClauses;
 
-        private Delete(String table, TemporalExtents forValidTime, List<OutSpec> bindSpecs,
+        private Delete(String table, TemporalExtents forValidTime, List<Binding> bindSpecs,
                        List<? extends UnifyClause> unifyClauses) {
             this.table = table;
             this.forValidTime = forValidTime;
@@ -94,7 +94,7 @@ public interface DmlOps {
             return new Delete(table, forValidTime, bindSpecs, unifyClauses);
         }
 
-        public Delete binding(List<OutSpec> bindSpecs) {
+        public Delete binding(List<Binding> bindSpecs) {
             return new Delete(table, forValidTime, bindSpecs, unifyClauses);
         }
 
@@ -122,17 +122,17 @@ public interface DmlOps {
 
     final class Erase implements DmlOps {
         public final String table;
-        public final List<OutSpec> bindSpecs;
+        public final List<Binding> bindSpecs;
         public final List<? extends UnifyClause> unifyClauses;
 
-        private Erase(String table, List<OutSpec> bindSpecs,
+        private Erase(String table, List<Binding> bindSpecs,
                       List<? extends UnifyClause> unifyClauses) {
             this.table = table;
             this.bindSpecs = bindSpecs;
             this.unifyClauses = unifyClauses;
         }
 
-        public Erase binding(List<OutSpec> bindSpecs) {
+        public Erase binding(List<Binding> bindSpecs) {
             return new Erase(table, bindSpecs, unifyClauses);
         }
 

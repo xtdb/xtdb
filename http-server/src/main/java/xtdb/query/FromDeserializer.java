@@ -26,7 +26,7 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-from"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
         var query = Query.from(node.get("from").asText());
-        query = query.binding(SpecListDeserializer.<OutSpec>nodeToSpecs(codec, node.get("bind"), OutSpec::of));
+        query = query.binding(SpecListDeserializer.<Binding>nodeToSpecs(codec, node.get("bind"), Binding::new));
         if (node.has("for_valid_time")) {
             query = query.forValidTime(codec.treeToValue(node.get("for_valid_time"), TemporalFilter.class));
         }

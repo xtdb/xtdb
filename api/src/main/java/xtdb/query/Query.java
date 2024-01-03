@@ -78,10 +78,10 @@ public interface Query {
         public final String table;
         public final TemporalFilter forValidTime;
         public final TemporalFilter forSystemTime;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
         public final boolean projectAllCols;
 
-        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<OutSpec> bindings, boolean projectAllCols) {
+        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<Binding> bindings, boolean projectAllCols) {
             this.table = table;
             this.forValidTime = forValidTime;
             this.forSystemTime = forSystemTime;
@@ -101,7 +101,7 @@ public interface Query {
             return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
         }
 
-        public From binding(List<OutSpec> bindings) {
+        public From binding(List<Binding> bindings) {
             return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
         }
 
@@ -167,9 +167,9 @@ public interface Query {
     }
 
     final class With implements UnifyClause {
-        public final List<VarSpec> vars;
+        public final List<Binding> vars;
 
-        private With(List<VarSpec> vars) {
+        private With(List<Binding> vars) {
             this.vars = unmodifiableList(vars);
         }
 
@@ -192,14 +192,14 @@ public interface Query {
         }
     }
 
-    static With with(List<VarSpec> vars) {
+    static With with(List<Binding> vars) {
         return new With(vars);
     }
 
     final class WithCols implements QueryTail {
-        public final List<ColSpec> cols;
+        public final List<Binding> cols;
 
-        private WithCols(List<ColSpec> cols) {
+        private WithCols(List<Binding> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -222,7 +222,7 @@ public interface Query {
         }
     }
 
-    static WithCols withCols(List<ColSpec> cols) {
+    static WithCols withCols(List<Binding> cols) {
         return new WithCols(cols);
     }
 
@@ -257,9 +257,9 @@ public interface Query {
     }
 
     final class Return implements QueryTail {
-        public final List<ColSpec> cols;
+        public final List<Binding> cols;
 
-        private Return(List<ColSpec> cols) {
+        private Return(List<Binding> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -282,22 +282,22 @@ public interface Query {
         }
     }
 
-    static Return returning(List<ColSpec> cols) {
+    static Return returning(List<Binding> cols) {
         return new Return(cols);
     }
 
     final class Call implements UnifyClause {
         public final String ruleName;
         public final List<Expr> args;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private Call(String ruleName, List<Expr> args, List<OutSpec> bindings) {
+        private Call(String ruleName, List<Expr> args, List<Binding> bindings) {
             this.ruleName = ruleName;
             this.args = unmodifiableList(args);
             this.bindings = bindings;
         }
 
-        public Call binding(List<OutSpec> bindings) {
+        public Call binding(List<Binding> bindings) {
             return new Call(ruleName, args, unmodifiableList(bindings));
         }
 
@@ -312,21 +312,21 @@ public interface Query {
     }
 
     abstract interface IJoin extends UnifyClause {
-        IJoin binding(List<OutSpec> bindings);
+        IJoin binding(List<Binding> bindings);
     }
 
     final class Join implements IJoin {
         public final Query query;
-        public final List<ArgSpec> args;
-        public final List<OutSpec> bindings;
+        public final List<Binding> args;
+        public final List<Binding> bindings;
 
-        private Join(Query query, List<ArgSpec> args, List<OutSpec> bindings) {
+        private Join(Query query, List<Binding> args, List<Binding> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
         }
 
-        public Join binding(List<OutSpec> bindings) {
+        public Join binding(List<Binding> bindings) {
             return new Join(query, args, bindings);
         }
 
@@ -349,22 +349,22 @@ public interface Query {
         }
     }
 
-    static Join join(Query query, List<ArgSpec> args) {
+    static Join join(Query query, List<Binding> args) {
         return new Join(query, args, null);
     }
 
     final class LeftJoin implements IJoin {
         public final Query query;
-        public final List<ArgSpec> args;
-        public final List<OutSpec> bindings;
+        public final List<Binding> args;
+        public final List<Binding> bindings;
 
-        private LeftJoin(Query query, List<ArgSpec> args, List<OutSpec> bindings) {
+        private LeftJoin(Query query, List<Binding> args, List<Binding> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
         }
 
-        public LeftJoin binding(List<OutSpec> bindings) {
+        public LeftJoin binding(List<Binding> bindings) {
             return new LeftJoin(query, args, bindings);
         }
 
@@ -387,14 +387,14 @@ public interface Query {
         }
     }
 
-    static LeftJoin leftJoin(Query query, List<ArgSpec> args) {
+    static LeftJoin leftJoin(Query query, List<Binding> args) {
         return new LeftJoin(query, args, null);
     }
 
     final class Aggregate implements QueryTail {
-        public final List<ColSpec> cols;
+        public final List<Binding> cols;
 
-        private Aggregate(List<ColSpec> cols) {
+        private Aggregate(List<Binding> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -417,7 +417,7 @@ public interface Query {
         }
     }
 
-    static Aggregate aggregate(List<ColSpec> cols) {
+    static Aggregate aggregate(List<Binding> cols) {
         return new Aggregate(cols);
     }
 
@@ -576,14 +576,14 @@ public interface Query {
     abstract class Relation implements Query, UnifyClause {}
     final class DocsRelation extends Relation {
         public final List<Map<String, Expr>> documents;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private DocsRelation(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+        private DocsRelation(List<Map<String, Expr>> documents, List<Binding> bindings) {
             this.documents = documents;
             this.bindings = bindings;
         }
 
-        public DocsRelation bindings(List<OutSpec> bindings) { return new DocsRelation(documents, bindings); }
+        public DocsRelation bindings(List<Binding> bindings) { return new DocsRelation(documents, bindings); }
 
         @Override
         public String toString() {
@@ -606,9 +606,9 @@ public interface Query {
 
     final class ParamRelation extends Relation {
         public final Expr.Param param;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private ParamRelation(Expr.Param param, List<OutSpec> bindings) {
+        private ParamRelation(Expr.Param param, List<Binding> bindings) {
             this.bindings = bindings;
             this.param = param;
         }
@@ -632,18 +632,18 @@ public interface Query {
         }
     }
 
-    static DocsRelation relation(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+    static DocsRelation relation(List<Map<String, Expr>> documents, List<Binding> bindings) {
         return new DocsRelation(documents, bindings);
     }
 
-    static ParamRelation relation(Expr.Param param, List<OutSpec> bindings) {
+    static ParamRelation relation(Expr.Param param, List<Binding> bindings) {
         return new ParamRelation(param, bindings);
     }
 
     final class UnnestVar implements UnifyClause {
-        public final VarSpec var;
+        public final Binding var;
 
-        private UnnestVar(VarSpec var) {
+        private UnnestVar(Binding var) {
             this.var = var;
         }
 
@@ -666,14 +666,14 @@ public interface Query {
         }
     }
 
-    static UnnestVar unnestVar(VarSpec var) {
+    static UnnestVar unnestVar(Binding var) {
         return new UnnestVar(var);
     }
 
     final class UnnestCol implements QueryTail {
-        public final ColSpec col;
+        public final Binding col;
 
-        private UnnestCol(ColSpec col) {
+        private UnnestCol(Binding col) {
             this.col = col;
         }
 
@@ -696,7 +696,7 @@ public interface Query {
         }
     }
 
-    static UnnestCol unnestCol(ColSpec col) {
+    static UnnestCol unnestCol(Binding col) {
         return new UnnestCol(col);
     }
 }
