@@ -16,11 +16,14 @@
            (java.lang AutoCloseable)
            (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
+           [java.util.function Function]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
+           xtdb.api.IXtdb
            xtdb.indexer.IIndexer
+           xtdb.IResultSet
            xtdb.operator.IRaQuerySource
-           (xtdb.tx Sql TxOptions)
            (xtdb.query Basis Query)
+           (xtdb.tx Sql TxOptions)
            (xtdb.tx_producer ITxProducer)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -56,6 +59,21 @@
                  default-tz
                  !latest-submitted-tx
                  system, close-fn]
+  IXtdb
+  (submitTxAsync [this ops tx-opts]
+    (xtp/submit-tx& this ops tx-opts))
+
+  (queryAsync [this query opts]
+    (let [opts (-> (into {:default-all-valid-time? false} opts)
+                   (time/after-latest-submitted-tx this))]
+
+      (-> (xtp/open-query& this query opts)
+          (.thenApply
+           (reify Function
+             (apply [_ res]
+               (with-open [^IResultSet res res]
+                 (vec (iterator-seq res)))))))))
+
   xtp/PNode
   (open-query& [_ query query-opts]
     (let [query-opts (-> (into {:default-tz default-tz} query-opts)

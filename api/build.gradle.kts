@@ -40,5 +40,9 @@ tasks.javadoc {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_11)
+
+        java {
+            freeCompilerArgs.add("-Xjvm-default=all")
+        }
     }
 }

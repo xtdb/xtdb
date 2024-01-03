@@ -38,7 +38,7 @@
       (t/is (= [{:my-foo "bar"}]
                (-> @(xtp/open-query& tu/*node* (-> (Query/from "docs2")
                                                    (.binding [(OutSpec/of "foo" (Expr/lVar "my-foo"))]))
-                                     (QueryOpts. nil (Basis. tx nil) nil nil nil false nil))
+                                     (QueryOpts. nil (Basis. tx nil) nil nil nil false "clojure"))
                    result-set->vec))
             "java ast queries")
 
@@ -51,14 +51,14 @@
 
       (t/is (= [{:foo "bar"}]
                (-> @(xtp/open-query& tu/*node* '(from :docs [{:xt/id $id} foo])
-                                     (QueryOpts. {"id" 1} (Basis. tx nil) nil nil nil false nil))
+                                     (QueryOpts. {"id" 1} (Basis. tx nil) nil nil nil false "snake_case"))
                    result-set->vec))
             "params")
 
       (t/is (= [{:current-time #time/date "2020-01-01"}]
                (-> @(xtp/open-query& tu/*node* '(-> (rel [{}] [])
                                                     (with {:current-time (current-date)}))
-                                     (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil nil false nil))
+                                     (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil nil false "clojure"))
                    result-set->vec))
             "current-time")
 
@@ -66,7 +66,7 @@
                (-> @(xtp/open-query& tu/*node* '(-> (rel [{}] [])
                                                     (with {:timestamp (current-timestamp 10)}))
                                      (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil
-                                                 #time/zone "America/Los_Angeles" false nil))
+                                                 #time/zone "America/Los_Angeles" false "snake_case"))
                    result-set->vec))
             "default tz")
 
@@ -74,6 +74,6 @@
                          {:table docs, :for-valid-time nil, :for-system-time nil}
                          [foo]]}]
                (-> @(xtp/open-query& tu/*node* '(from :docs [foo])
-                                     (QueryOpts. nil nil nil nil nil true nil))
+                                     (QueryOpts. nil nil nil nil nil true "snake_case"))
                    result-set->vec))
             "default tz"))))

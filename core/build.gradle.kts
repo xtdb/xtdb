@@ -3,6 +3,7 @@ plugins {
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 publishing {
@@ -38,6 +39,8 @@ dependencies {
     api("org.babashka", "sci", "0.6.37")
     api("commons-codec", "commons-codec", "1.15")
     api("com.carrotsearch", "hppc", "0.9.1")
+
+    api(kotlin("stdlib-jdk8"))
 }
 
 tasks.javadoc.get().enabled = false
