@@ -33,7 +33,7 @@ public class IJoinDeserializer extends StdDeserializer<Query.IJoin> {
             join = Query.leftJoin(codec.treeToValue(node.get("left_join"), Query.class), SpecListDeserializer.<ArgSpec>nodeToSpecs(codec, node.get("args"), ArgSpec::of));
         }
         if (node.has("bind")) {
-            join = join.binding(SpecListDeserializer.<OutSpec>nodeToSpecs(codec, node.get("bind"), OutSpec::of));
+            join = join.binding(SpecListDeserializer.<Binding>nodeToSpecs(codec, node.get("bind"), Binding::new));
         }
         return join;
     }

@@ -4,11 +4,11 @@
             [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.query ArgSpec ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+           (xtdb.query ArgSpec Binding ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                        Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
                        Expr$ListExpr Expr$MapExpr
-                       OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        Query$DocsRelation Query$ParamRelation Query$OrderDirection Query$OrderNulls
@@ -232,14 +232,14 @@
               (throw (err/illegal-arg :xtql/malformed-bind-spec
                                       {:attr attr :expr expr ::err/message "Attribute in bind spec must be keyword"})))
 
-            (OutSpec/of (str (symbol attr)) (parse-expr expr)))]
+            (Binding. (str (symbol attr)) (parse-expr expr)))]
 
     (if (vector? specs)
       (->> specs
            (into [] (mapcat (fn [spec]
                               (cond
                                 (symbol? spec) (let [attr (str spec)]
-                                                 [(OutSpec/of attr (Expr/lVar attr))])
+                                                 [(Binding. attr (Expr/lVar attr))])
                                 (map? spec) (map parse-out-spec spec))))))
 
       (throw (UnsupportedOperationException.)))))
@@ -403,7 +403,7 @@
     {(nested-type attr) (unparse expr)}))
 
 (extend-protocol Unparse
-  OutSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
+  Binding (unparse [spec] (unparse-binding-spec (.getBinding spec) (.getExpr spec) symbol keyword))
   ArgSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
   VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) false symbol))
   ColSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))

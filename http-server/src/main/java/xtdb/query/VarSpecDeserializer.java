@@ -18,7 +18,7 @@ import java.util.Map;
 public class VarSpecDeserializer extends StdDeserializer<VarSpec> {
 
     public VarSpecDeserializer() {
-        super(OutSpec.class);
+        super(Binding.class);
     }
 
     @Override

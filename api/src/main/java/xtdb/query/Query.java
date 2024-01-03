@@ -78,10 +78,10 @@ public interface Query {
         public final String table;
         public final TemporalFilter forValidTime;
         public final TemporalFilter forSystemTime;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
         public final boolean projectAllCols;
 
-        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<OutSpec> bindings, boolean projectAllCols) {
+        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<Binding> bindings, boolean projectAllCols) {
             this.table = table;
             this.forValidTime = forValidTime;
             this.forSystemTime = forSystemTime;
@@ -101,7 +101,7 @@ public interface Query {
             return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
         }
 
-        public From binding(List<OutSpec> bindings) {
+        public From binding(List<Binding> bindings) {
             return new From(table, forValidTime, forSystemTime, bindings, projectAllCols);
         }
 
@@ -289,15 +289,15 @@ public interface Query {
     final class Call implements UnifyClause {
         public final String ruleName;
         public final List<Expr> args;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private Call(String ruleName, List<Expr> args, List<OutSpec> bindings) {
+        private Call(String ruleName, List<Expr> args, List<Binding> bindings) {
             this.ruleName = ruleName;
             this.args = unmodifiableList(args);
             this.bindings = bindings;
         }
 
-        public Call binding(List<OutSpec> bindings) {
+        public Call binding(List<Binding> bindings) {
             return new Call(ruleName, args, unmodifiableList(bindings));
         }
 
@@ -312,21 +312,21 @@ public interface Query {
     }
 
     abstract interface IJoin extends UnifyClause {
-        IJoin binding(List<OutSpec> bindings);
+        IJoin binding(List<Binding> bindings);
     }
 
     final class Join implements IJoin {
         public final Query query;
         public final List<ArgSpec> args;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private Join(Query query, List<ArgSpec> args, List<OutSpec> bindings) {
+        private Join(Query query, List<ArgSpec> args, List<Binding> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
         }
 
-        public Join binding(List<OutSpec> bindings) {
+        public Join binding(List<Binding> bindings) {
             return new Join(query, args, bindings);
         }
 
@@ -356,15 +356,15 @@ public interface Query {
     final class LeftJoin implements IJoin {
         public final Query query;
         public final List<ArgSpec> args;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private LeftJoin(Query query, List<ArgSpec> args, List<OutSpec> bindings) {
+        private LeftJoin(Query query, List<ArgSpec> args, List<Binding> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
         }
 
-        public LeftJoin binding(List<OutSpec> bindings) {
+        public LeftJoin binding(List<Binding> bindings) {
             return new LeftJoin(query, args, bindings);
         }
 
@@ -576,14 +576,14 @@ public interface Query {
     abstract class Relation implements Query, UnifyClause {}
     final class DocsRelation extends Relation {
         public final List<Map<String, Expr>> documents;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private DocsRelation(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+        private DocsRelation(List<Map<String, Expr>> documents, List<Binding> bindings) {
             this.documents = documents;
             this.bindings = bindings;
         }
 
-        public DocsRelation bindings(List<OutSpec> bindings) { return new DocsRelation(documents, bindings); }
+        public DocsRelation bindings(List<Binding> bindings) { return new DocsRelation(documents, bindings); }
 
         @Override
         public String toString() {
@@ -606,9 +606,9 @@ public interface Query {
 
     final class ParamRelation extends Relation {
         public final Expr.Param param;
-        public final List<OutSpec> bindings;
+        public final List<Binding> bindings;
 
-        private ParamRelation(Expr.Param param, List<OutSpec> bindings) {
+        private ParamRelation(Expr.Param param, List<Binding> bindings) {
             this.bindings = bindings;
             this.param = param;
         }
@@ -632,11 +632,11 @@ public interface Query {
         }
     }
 
-    static DocsRelation relation(List<Map<String, Expr>> documents, List<OutSpec> bindings) {
+    static DocsRelation relation(List<Map<String, Expr>> documents, List<Binding> bindings) {
         return new DocsRelation(documents, bindings);
     }
 
-    static ParamRelation relation(Expr.Param param, List<OutSpec> bindings) {
+    static ParamRelation relation(Expr.Param param, List<Binding> bindings) {
         return new ParamRelation(param, bindings);
     }
 

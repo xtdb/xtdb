@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import xtdb.InProcessXtdb.startNode
 import xtdb.query.Expr.lVar
-import xtdb.query.OutSpec
+import xtdb.query.Binding
 import xtdb.query.Query.from
 import xtdb.tx.Ops.Companion.put
 
@@ -24,7 +24,7 @@ internal class InProcessXtdbTest {
 
                 node.query(
                     from("foo")
-                        .binding(listOf(OutSpec.of("xt/id", lVar("id"))))
+                        .binding(listOf(Binding("xt/id", lVar("id"))))
                 )
             )
         }

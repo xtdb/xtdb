@@ -35,8 +35,8 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
         }
         return res;
     }
-    private List<OutSpec> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
-        return SpecListDeserializer.<OutSpec>nodeToSpecs(mapper, node, OutSpec::of);
+    private List<Binding> deserializeBind(ObjectMapper mapper, ArrayNode node) throws Exception {
+        return SpecListDeserializer.<Binding>nodeToSpecs(mapper, node, Binding::new);
     }
     public Query.Relation deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectCodec codec = p.getCodec();
@@ -45,9 +45,9 @@ public class RelDeserializer extends StdDeserializer<Query.Relation> {
         var relNode = node.get("rel");
         Query.Relation rel;
         if (relNode.isArray()) {
-            rel = Query.relation(deserializeDocuments(codec, (ArrayNode) relNode), SpecListDeserializer.<OutSpec>nodeToSpecs(codec, node.get("bind"), OutSpec::of));
+            rel = Query.relation(deserializeDocuments(codec, (ArrayNode) relNode), SpecListDeserializer.<Binding>nodeToSpecs(codec, node.get("bind"), Binding::new));
         } else {
-            rel = Query.relation((Expr.Param) codec.treeToValue(relNode, Expr.class), SpecListDeserializer.<OutSpec>nodeToSpecs(codec, node.get("bind"), OutSpec::of));
+            rel = Query.relation((Expr.Param) codec.treeToValue(relNode, Expr.class), SpecListDeserializer.<Binding>nodeToSpecs(codec, node.get("bind"), Binding::new));
         }
         return rel;
     }

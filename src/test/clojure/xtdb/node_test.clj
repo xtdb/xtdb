@@ -5,7 +5,7 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import [xtdb.tx Ops]
-           (xtdb.query Expr Query OutSpec)))
+           (xtdb.query Expr Query Binding)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 

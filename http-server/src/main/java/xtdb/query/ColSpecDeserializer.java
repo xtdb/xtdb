@@ -17,7 +17,7 @@ import java.util.Map;
 public class ColSpecDeserializer extends StdDeserializer<ColSpec> {
 
     public ColSpecDeserializer() {
-        super(OutSpec.class);
+        super(Binding.class);
     }
 
     @Override

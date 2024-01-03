@@ -10,9 +10,9 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator IRaQuerySource)
-           (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
+           (xtdb.query ArgSpec Binding ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
                        DmlOps$Insert DmlOps$Update
-                       Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
+                       Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param
                        Expr$Subquery Expr$Exists Expr$Pull Expr$PullMany Expr$Get
                        Expr$ListExpr Expr$SetExpr Expr$MapExpr
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
@@ -313,9 +313,9 @@
           {:ra-plan [:mega-join [] (mapv :ra-plan rels)]})
         (wrap-unify var->cols))))
 
-(defn- plan-out-spec [^OutSpec bind-spec]
-  (let [col (col-sym (.attr bind-spec))
-        expr (.expr bind-spec)]
+(defn- plan-out-spec [^Binding bind-spec]
+  (let [col (col-sym (.getBinding bind-spec))
+        expr (.getExpr bind-spec)]
     {:l col :r (plan-expr expr) :literal? (not (instance? Expr$LogicVar expr))}))
 ;;TODO defining literal as not an LV seems flakey, but might be okay?
 ;;this seems like the kind of thing the AST should encode as a type/interface?
@@ -899,9 +899,9 @@
         (doto (lp/validate-plan)))))
 
 (def ^:private extra-dml-bind-specs
-  [(OutSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))
-   (OutSpec/of "xt$valid_from" (Expr/lVar "xt$dml$valid_from"))
-   (OutSpec/of "xt$valid_to" (Expr/lVar "xt$dml$valid_to"))])
+  [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))
+   (Binding. "xt$valid_from" (Expr/lVar "xt$dml$valid_from"))
+   (Binding. "xt$valid_to" (Expr/lVar "xt$dml$valid_to"))])
 
 (defn- dml-colspecs [^TemporalFilter$TemporalExtents for-valid-time, {:keys [default-all-valid-time?]}]
   [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))
@@ -957,7 +957,7 @@
     (let [table-name (.table erase-query)
           target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
                                                                (.binding (concat (.bindSpecs erase-query)
-                                                                                 [(OutSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])))]
+                                                                                 [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))])))]
                                                           (.unifyClauses erase-query)))
 
                                        [(Query/returning [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])])
@@ -978,9 +978,9 @@
 
           target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
                                                                (.binding (concat (.bindSpecs update-query)
-                                                                                 [(OutSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                                                 [(Binding. "xt$id" (Expr/lVar "xt$dml$id"))]
                                                                                  (for [col unspecified-columns]
-                                                                                   (OutSpec/of col (Expr/lVar (str "xt$update$" col))))
+                                                                                   (Binding. col (Expr/lVar (str "xt$update$" col))))
                                                                                  extra-dml-bind-specs)))]
                                                           (.unifyClauses update-query)))
 
