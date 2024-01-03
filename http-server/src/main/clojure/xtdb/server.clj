@@ -1,6 +1,5 @@
 (ns xtdb.server
-  (:require [clojure.instant :as inst]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [juxt.clojars-mirrors.integrant.core :as ig]
@@ -29,7 +28,7 @@
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
-           xtdb.api.TransactionKey
+           (xtdb.api TransactionKey TxOptions)
            xtdb.IResultSet))
 
 (def ^:private muuntaja-opts
@@ -48,17 +47,11 @@
 
 (s/def ::key-fn keyword?)
 
-(s/def ::system-time
-  (st/spec {:decode/string (fn [_ s]
-                             (cond
-                               (inst? s) s
-                               (string? s) (inst/read-instant-date s)))}))
-
 (s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
 (s/def ::explain? boolean?)
 
-(s/def ::opts (s/keys :opt-un [::system-time ::default-all-valid-time? ::default-tz ::explain?]))
+(s/def ::opts (s/nilable #(instance? TxOptions %)))
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]

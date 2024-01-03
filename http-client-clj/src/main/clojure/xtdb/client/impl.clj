@@ -12,7 +12,8 @@
            java.util.concurrent.CompletableFuture
            java.util.function.Function
            java.util.NoSuchElementException
-           xtdb.IResultSet))
+           xtdb.IResultSet
+           xtdb.api.IXtdb))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}
@@ -92,6 +93,8 @@
   (some-> key-fn validate-remote-key-fn))
 
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
+  IXtdb
+
   xtp/PNode
   (open-query& [client query {:keys [basis] :as query-opts}]
     (validate-query-opts query-opts)
@@ -115,11 +118,7 @@
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 
-  xtp/PSubmitNode
-  (submit-tx& [client tx-ops]
-    (xtp/submit-tx& client tx-ops {}))
-
-  (submit-tx& [client tx-ops opts]
+  (submitTxAsync [client tx-ops opts]
     (-> ^CompletableFuture
         (request client :post :tx
                  {:content-type :transit+json

@@ -10,7 +10,7 @@
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
-           xtdb.api.TransactionKey
+           (xtdb.api TransactionKey TxOptions)
            (xtdb.tx Ops Call Delete Erase Put Sql Xtql)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -139,13 +139,24 @@
 (defmethod print-method TransactionKey [tx-key w]
   (print-dup tx-key w))
 
-(defn tx-key-read-fn 
-  [{:keys [tx-id system-time]}]
+(defn tx-key-read-fn [{:keys [tx-id system-time]}]
   (TransactionKey. tx-id system-time))
 
-(defn tx-key-write-fn
-  [^TransactionKey tx-key]
+(defn tx-key-write-fn [^TransactionKey tx-key]
   {:tx-id (.getTxId tx-key) :system-time (.getSystemTime tx-key)})
+
+(defn tx-opts-read-fn [{:keys [system-time default-tz default-all-valid-time?]}]
+  (TxOptions. system-time default-tz default-all-valid-time?))
+
+(defn tx-opts-write-fn [^TxOptions tx-opts]
+  {:system-time (.getSystemTime tx-opts), :default-tz (.getDefaultTz tx-opts), :default-all-valid-time? (.getDefaultAllValidTime tx-opts)})
+
+(defmethod print-dup TxOptions [tx-opts ^Writer w]
+  (.write w "#xt/tx-opts ")
+  (print-method (tx-opts-write-fn tx-opts) w))
+
+(defmethod print-method TxOptions [tx-opts w]
+  (print-dup tx-opts w))
 
 (def transit-read-handlers
   (merge transit/default-read-handlers
@@ -167,7 +178,8 @@
           "xtdb.tx/put" (transit/read-handler put-op-reader)
           "xtdb.tx/delete" (transit/read-handler delete-op-reader)
           "xtdb.tx/erase" (transit/read-handler erase-op-reader)
-          "xtdb.tx/call" (transit/read-handler call-op-reader)}))
+          "xtdb.tx/call" (transit/read-handler call-op-reader)
+          "xtdb/tx-opts" (transit/read-handler tx-opts-read-fn)}))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; TransitVector
 (defn transit-msgpack-reader [in]
@@ -192,6 +204,7 @@
               MonthDay "time/month-day"}
              (update-vals #(transit/write-handler % str)))
          {TransactionKey (transit/write-handler "xtdb/tx-key" tx-key-write-fn)
+          TxOptions (transit/write-handler "xtdb/tx-opts" tx-opts-write-fn)
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" ex-data)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" ex-data)
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" #(vector (ex-message %) (ex-data %)))

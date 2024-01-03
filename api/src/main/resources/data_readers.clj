@@ -1,4 +1,5 @@
 {xt/tx-key xtdb.serde/tx-key-read-fn
+ xt/tx-opts xtdb.serde/tx-opts-read-fn
  xt/clj-form xtdb.api/->ClojureForm
  xt/illegal-arg xtdb.error/-iae-reader
  xt/runtime-err xtdb.error/-runtime-err-reader
