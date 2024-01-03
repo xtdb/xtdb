@@ -77,7 +77,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "all-application-time?",
+      "name" : "default-all-valid-time?",
       "nullable" : false,
       "type" : {
         "name" : "bool"
@@ -134,7 +134,7 @@
       "OFFSET" : [0,0],
       "DATA" : [""]
     },{
-      "name" : "all-application-time?",
+      "name" : "default-all-valid-time?",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [0]

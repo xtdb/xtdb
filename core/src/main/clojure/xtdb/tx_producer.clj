@@ -35,7 +35,7 @@
 
             (types/col-type->field "system-time" types/nullable-temporal-type)
             (types/col-type->field "default-tz" :utf8)
-            (types/col-type->field "all-application-time?" :bool)]))
+            (types/col-type->field "default-all-valid-time?" :bool)]))
 
 (defn- ->xtql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
   (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
@@ -199,7 +199,7 @@
     (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
           default-tz-writer (vw/->writer (.getVector root "default-tz"))
-          app-time-behaviour-writer (vw/->writer (.getVector root "all-application-time?"))]
+          app-time-behaviour-writer (vw/->writer (.getVector root "default-all-valid-time?"))]
 
       (when system-time
         (vw/write-value! system-time (vw/->writer (.getVector root "system-time"))))
