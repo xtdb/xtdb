@@ -281,9 +281,9 @@ public interface Expr {
 
     final class Subquery implements Expr {
         public final Query query;
-        public final List<ArgSpec> args;
+        public final List<Binding> args;
 
-        private Subquery(Query query, List<ArgSpec> args) {
+        private Subquery(Query query, List<Binding> args) {
             this.query = query;
             this.args = unmodifiableList(args);
         }
@@ -307,15 +307,15 @@ public interface Expr {
         }
     }
 
-    static Subquery q(Query query, List<ArgSpec> args) {
+    static Subquery q(Query query, List<Binding> args) {
         return new Subquery(query, args);
     }
 
     final class Exists implements Expr {
         public final Query query;
-        public final List<ArgSpec> args;
+        public final List<Binding> args;
 
-        private Exists(Query query, List<ArgSpec> args) {
+        private Exists(Query query, List<Binding> args) {
             this.query = query;
             this.args = unmodifiableList(args);
         }
@@ -339,7 +339,7 @@ public interface Expr {
         }
     }
 
-    static Exists exists(Query query, List<ArgSpec> args) {
+    static Exists exists(Query query, List<Binding> args) {
         return new Exists(query, args);
     }
 
@@ -438,9 +438,9 @@ public interface Expr {
 
     final class Pull implements Expr {
         public final Query query;
-        public final List<ArgSpec> args;
+        public final List<Binding> args;
 
-        private Pull(Query query, List<ArgSpec> args) {
+        private Pull(Query query, List<Binding> args) {
             this.query = query;
             this.args = unmodifiableList(args);
         }
@@ -464,15 +464,15 @@ public interface Expr {
         }
     }
 
-    static Pull pull(Query query, List<ArgSpec> args) {
+    static Pull pull(Query query, List<Binding> args) {
         return new Pull(query, args);
     }
 
     final class PullMany implements Expr {
         public final Query query;
-        public final List<ArgSpec> args;
+        public final List<Binding> args;
 
-        private PullMany(Query query, List<ArgSpec> args) {
+        private PullMany(Query query, List<Binding> args) {
             this.query = query;
             this.args = unmodifiableList(args);
         }
@@ -496,7 +496,7 @@ public interface Expr {
         }
     }
 
-    static PullMany pullMany(Query query, List<ArgSpec> args) {
+    static PullMany pullMany(Query query, List<Binding> args) {
         return new PullMany(query, args);
     }
 }

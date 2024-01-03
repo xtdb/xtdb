@@ -4,7 +4,7 @@
             [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.query ArgSpec Binding DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+           (xtdb.query Binding DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                        Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
                        Expr$ListExpr Expr$MapExpr
@@ -134,6 +134,20 @@
 (defprotocol Unparse
   (unparse [this]))
 
+(defn unparse-binding [base-type nested-type, ^Binding binding]
+  (let [attr (.getBinding binding)
+        expr (.getExpr binding)]
+    (if base-type
+      (if (and (instance? Expr$LogicVar expr)
+               (= (.lv ^Expr$LogicVar expr) attr))
+        (base-type attr)
+        {(nested-type attr) (unparse expr)})
+      {(nested-type attr) (unparse expr)})))
+
+(def unparse-out-spec (partial unparse-binding symbol keyword))
+(def unparse-col-spec (partial unparse-binding symbol keyword))
+(def unparse-arg-spec (partial unparse-binding symbol keyword))
+
 (extend-protocol Unparse
   Expr$Null (unparse [_] nil)
   Expr$LogicVar (unparse [e] (symbol (.lv e)))
@@ -159,26 +173,26 @@
   (unparse [e]
     (list* 'exists? (unparse (.query e))
            (when-let [args (.args e)]
-             [{:args (mapv unparse args)}])))
+             [{:args (mapv unparse-arg-spec args)}])))
 
 
   Expr$Subquery
   (unparse [e]
     (list* 'q (unparse (.query e))
            (when-let [args (.args e)]
-             [{:args (mapv unparse args)}])))
+             [{:args (mapv unparse-arg-spec args)}])))
 
   Expr$Pull
   (unparse [e]
     (list* 'q (unparse (.query e))
            (when-let [args (.args e)]
-             [{:args (mapv unparse args)}])))
+             [{:args (mapv unparse-arg-spec args)}])))
 
   Expr$PullMany
   (unparse [e]
     (list* 'q (unparse (.query e))
            (when-let [args (.args e)]
-             [{:args (mapv unparse args)}]))))
+             [{:args (mapv unparse-arg-spec args)}]))))
 
 (defn- parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
@@ -251,13 +265,13 @@
        (into [] (mapcat (fn [spec]
                           (cond
                             (symbol? spec) (let [attr (str spec)]
-                                             [(ArgSpec/of attr (Expr/lVar attr))])
+                                             [(Binding. attr (Expr/lVar attr))])
                             (map? spec) (for [[attr expr] spec]
                                           (do
                                             (when-not (keyword? attr)
                                               ;; TODO error
                                               )
-                                            (ArgSpec/of (str (symbol attr)) (parse-expr expr))))))))))
+                                            (Binding. (str (symbol attr)) (parse-expr expr))))))))))
 (defn- parse-var-specs
   "[{to-var (from-expr)}]"
   [specs _query]
@@ -402,21 +416,7 @@
       {(nested-type attr) (unparse expr)})
     {(nested-type attr) (unparse expr)}))
 
-(defn unparse-binding [base-type nested-type, ^Binding binding]
-  (let [attr (.getBinding binding)
-        expr (.getExpr binding)]
-    (if base-type
-      (if (and (instance? Expr$LogicVar expr)
-               (= (.lv ^Expr$LogicVar expr) attr))
-        (base-type attr)
-        {(nested-type attr) (unparse expr)})
-      {(nested-type attr) (unparse expr)})))
-
-(def unparse-out-spec (partial unparse-binding symbol keyword))
-(def unparse-col-spec (partial unparse-binding symbol keyword))
-
 (extend-protocol Unparse
-  ArgSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
   VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) false symbol))
 
   Query$From
@@ -439,7 +439,7 @@
       (list 'join (unparse (.query join))
             (if args
               (cond-> {:bind bind}
-                (seq args) (assoc :args (mapv unparse args)))
+                (seq args) (assoc :args (mapv unparse-arg-spec args)))
               bind))))
 
   Query$LeftJoin
@@ -449,7 +449,7 @@
       (list 'left-join (unparse (.query left-join))
             (if args
               (cond-> {:bind bind}
-                (seq args) (assoc :args (mapv unparse args)))
+                (seq args) (assoc :args (mapv unparse-arg-spec args)))
               bind)))))
 
 (extend-protocol Unparse

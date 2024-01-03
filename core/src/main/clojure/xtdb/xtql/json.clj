@@ -7,7 +7,7 @@
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
                        Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
-                       ArgSpec VarSpec Query$WithCols Query$DocsRelation Query$ParamRelation
+                       VarSpec Query$WithCols Query$DocsRelation Query$ParamRelation
                        Query$UnnestVar Query$UnnestCol
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -191,7 +191,7 @@
                                                     (spec-of attr (parse-expr expr))))))))))
 
 (def parse-out-specs (partial parse-binding-specs #(Binding. %1 %2)))
-(def parse-arg-specs (partial parse-binding-specs #(ArgSpec/of %1 %2)))
+(def parse-arg-specs (partial parse-binding-specs #(Binding. %1 %2)))
 (def parse-col-specs (partial parse-binding-specs #(Binding. %1 %2)))
 
 (defn- parse-var-specs
@@ -251,7 +251,6 @@
 
 (extend-protocol Unparse
   Binding (unparse [spec] (unparse-binding-spec (.getBinding spec) (.getExpr spec)))
-  ArgSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec)))
   VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec)))
 
   Query$From

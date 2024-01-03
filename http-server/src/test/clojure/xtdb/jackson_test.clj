@@ -9,7 +9,7 @@
            (xtdb.api TransactionKey)
            (xtdb.jackson XtdbMapper)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail TemporalFilter
-                       Binding Binding VarSpec Expr Query$Unify QueryRequest QueryOpts Basis Expr ArgSpec)))
+                       Binding VarSpec Expr Query$Unify QueryRequest QueryOpts Basis Expr)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -420,9 +420,9 @@
                            (Query/unnestVar (VarSpec/of "a" (Expr/lVar "b")))
                            (Query/with [(VarSpec/of "a" (Expr/lVar "a"))
                                         (VarSpec/of "b" (Expr/lVar "b"))])
-                           (-> (Query/join parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
+                           (-> (Query/join parsed-q [(Binding. "id" (Expr/lVar "id"))])
                                (.binding ^List (list (Binding. "id" (Expr/lVar "id")))))
-                           (-> (Query/leftJoin parsed-q [(ArgSpec/of "id" (Expr/lVar "id"))])
+                           (-> (Query/leftJoin parsed-q [(Binding. "id" (Expr/lVar "id"))])
                                (.binding ^List (list (Binding. "id" (Expr/lVar "id")))))
                            (Query/relation (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))])
              (roundtrip-unify {"unify" [{"from" "docs"

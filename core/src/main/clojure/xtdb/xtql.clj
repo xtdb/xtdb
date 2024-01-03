@@ -10,7 +10,7 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator IRaQuerySource)
-           (xtdb.query ArgSpec Binding DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
+           (xtdb.query Binding DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
                        DmlOps$Insert DmlOps$Update
                        Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param
                        Expr$Subquery Expr$Exists Expr$Pull Expr$PullMany Expr$Get
@@ -320,14 +320,14 @@
 ;;TODO defining literal as not an LV seems flakey, but might be okay?
 ;;this seems like the kind of thing the AST should encode as a type/interface?
 
-(defn- plan-arg-spec [^ArgSpec bind-spec]
+(defn- plan-arg-spec [^Binding bind-spec]
   ;;TODO expr here is far to permissive.
   ;;In the outer query this has to be a literal
   ;;in the subquery case it must be a col, as thats all apply supports
   ;;In reality we could support a full expr here, additionally top level query args perhaps should
   ;;use a different spec. Delaying decision here for now.
-  (let [var (col-sym (.attr bind-spec))
-        expr (.expr bind-spec)]
+  (let [var (col-sym (.getBinding bind-spec))
+        expr (.getExpr bind-spec)]
     {:l var :r (plan-expr expr) :required-vars (required-vars expr)}))
 
 (def app-time-period-sym 'xt$valid_time)

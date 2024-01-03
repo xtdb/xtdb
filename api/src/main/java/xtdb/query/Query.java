@@ -317,10 +317,10 @@ public interface Query {
 
     final class Join implements IJoin {
         public final Query query;
-        public final List<ArgSpec> args;
+        public final List<Binding> args;
         public final List<Binding> bindings;
 
-        private Join(Query query, List<ArgSpec> args, List<Binding> bindings) {
+        private Join(Query query, List<Binding> args, List<Binding> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
@@ -349,16 +349,16 @@ public interface Query {
         }
     }
 
-    static Join join(Query query, List<ArgSpec> args) {
+    static Join join(Query query, List<Binding> args) {
         return new Join(query, args, null);
     }
 
     final class LeftJoin implements IJoin {
         public final Query query;
-        public final List<ArgSpec> args;
+        public final List<Binding> args;
         public final List<Binding> bindings;
 
-        private LeftJoin(Query query, List<ArgSpec> args, List<Binding> bindings) {
+        private LeftJoin(Query query, List<Binding> args, List<Binding> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
@@ -387,7 +387,7 @@ public interface Query {
         }
     }
 
-    static LeftJoin leftJoin(Query query, List<ArgSpec> args) {
+    static LeftJoin leftJoin(Query query, List<Binding> args) {
         return new LeftJoin(query, args, null);
     }
 
