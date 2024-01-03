@@ -7,7 +7,7 @@
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
                        Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
-                       VarSpec Query$WithCols Query$DocsRelation Query$ParamRelation
+                       Query$WithCols Query$DocsRelation Query$ParamRelation
                        Query$UnnestVar Query$UnnestCol
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -203,7 +203,7 @@
                               (do
                                 (when-not (string? attr)
                                   (throw (err/illegal-arg :xtql/malformed-var-spec)))
-                                (VarSpec/of (str attr) (parse-expr expr))))
+                                (Binding. (str attr) (parse-expr expr))))
                             (throw (err/illegal-arg :xtql/malformed-var-spec))))))))
 
 (defn- parse-from [this]
@@ -243,15 +243,15 @@
     (cond-> (Query/leftJoin (parse-query left-join) (some-> args (parse-arg-specs query)))
       bind (.binding ^List (parse-out-specs bind left-join)))))
 
-(defn unparse-binding-spec [attr expr]
-  (if (and (instance? Expr$LogicVar expr)
-           (= (.lv ^Expr$LogicVar expr) attr))
-    attr
-    {attr (unparse expr)}))
-
 (extend-protocol Unparse
-  Binding (unparse [spec] (unparse-binding-spec (.getBinding spec) (.getExpr spec)))
-  VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec)))
+  Binding
+  (unparse [binding]
+    (let [attr (.getBinding binding)
+          expr (.getExpr binding)]
+      (if (and (instance? Expr$LogicVar expr)
+               (= (.lv ^Expr$LogicVar expr) attr))
+        attr
+        {attr (unparse expr)})))
 
   Query$From
   (unparse [from]

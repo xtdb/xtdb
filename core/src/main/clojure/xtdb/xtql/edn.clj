@@ -13,7 +13,7 @@
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        Query$DocsRelation Query$ParamRelation Query$OrderDirection Query$OrderNulls
                        Query$UnnestCol Query$UnnestVar
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 ;; TODO inline once the type we support is fixed
 (defn- query-type? [q] (seq? q))
@@ -147,6 +147,7 @@
 (def unparse-out-spec (partial unparse-binding symbol keyword))
 (def unparse-col-spec (partial unparse-binding symbol keyword))
 (def unparse-arg-spec (partial unparse-binding symbol keyword))
+(def unparse-var-spec (partial unparse-binding nil symbol))
 
 (extend-protocol Unparse
   Expr$Null (unparse [_] nil)
@@ -282,7 +283,7 @@
                        ::err/message "Attribute in var spec must be symbol"})))
 
 
-            (VarSpec/of (str attr) (parse-expr expr)))]
+            (Binding. (str attr) (parse-expr expr)))]
 
     (cond
       (map? specs) (mapv parse-var-spec specs)
@@ -408,17 +409,7 @@
     :else (-> (Query/leftJoin (parse-query query) nil)
               (.binding (parse-out-specs opts left-join)))))
 
-(defn- unparse-binding-spec [attr expr base-type nested-type]
-  (if base-type
-    (if (and (instance? Expr$LogicVar expr)
-             (= (.lv ^Expr$LogicVar expr) attr))
-      (base-type attr)
-      {(nested-type attr) (unparse expr)})
-    {(nested-type attr) (unparse expr)}))
-
 (extend-protocol Unparse
-  VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) false symbol))
-
   Query$From
   (unparse [from]
     (let [for-valid-time (.forValidTime from)
@@ -455,7 +446,7 @@
 (extend-protocol Unparse
   Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))
   Query$Where (unparse [query] (list* 'where (mapv unparse (.preds query))))
-  Query$With (unparse [query] (list* 'with (mapv unparse (.vars query))))
+  Query$With (unparse [query] (list* 'with (mapv unparse-var-spec (.vars query))))
   Query$WithCols (unparse [query] (list* 'with (mapv unparse-col-spec (.cols query))))
   Query$Without (unparse [query] (list* 'without (map keyword (.cols query))))
   Query$Return (unparse [query] (list* 'return (mapv unparse-col-spec (.cols query))))
@@ -476,7 +467,7 @@
     (list 'rel (symbol (.v (.param this))) (mapv unparse-out-spec (.bindings this))))
 
   Query$UnnestCol (unparse [this] (list 'unnest (unparse-col-spec (.col this))))
-  Query$UnnestVar (unparse [this] (list 'unnest (unparse (.var this)))))
+  Query$UnnestVar (unparse [this] (list 'unnest (unparse-var-spec (.var this)))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))

@@ -47,7 +47,6 @@ public class XtdbMapper {
             .addDeserializer(IJoin.class, new IJoinDeserializer())
             .addDeserializer(Aggregate.class, new AggregateDeserializer())
             .addDeserializer(Relation.class, new RelDeserializer())
-            .addDeserializer(VarSpec.class, new VarSpecDeserializer())
             .addDeserializer(Binding.class, new BindingDeserializer())
             .addDeserializer(TransactionKey.class, new TxKeyDeserializer())
             .addDeserializer(Basis.class, new BasisDeserializer())

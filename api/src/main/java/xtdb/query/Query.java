@@ -167,9 +167,9 @@ public interface Query {
     }
 
     final class With implements UnifyClause {
-        public final List<VarSpec> vars;
+        public final List<Binding> vars;
 
-        private With(List<VarSpec> vars) {
+        private With(List<Binding> vars) {
             this.vars = unmodifiableList(vars);
         }
 
@@ -192,7 +192,7 @@ public interface Query {
         }
     }
 
-    static With with(List<VarSpec> vars) {
+    static With with(List<Binding> vars) {
         return new With(vars);
     }
 
@@ -641,9 +641,9 @@ public interface Query {
     }
 
     final class UnnestVar implements UnifyClause {
-        public final VarSpec var;
+        public final Binding var;
 
-        private UnnestVar(VarSpec var) {
+        private UnnestVar(Binding var) {
             this.var = var;
         }
 
@@ -666,7 +666,7 @@ public interface Query {
         }
     }
 
-    static UnnestVar unnestVar(VarSpec var) {
+    static UnnestVar unnestVar(Binding var) {
         return new UnnestVar(var);
     }
 

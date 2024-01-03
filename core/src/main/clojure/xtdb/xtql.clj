@@ -20,7 +20,7 @@
                        Query$Pipeline Query$Return Query$Unify
                        Query$Where Query$With Query$WithCols Query$Without Query$DocsRelation Query$ParamRelation
                        Query$UnnestCol Query$UnnestVar
-                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
+                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -523,9 +523,9 @@
      :required-vars required-vars
      :logic-var? (instance? Expr$LogicVar spec-expr)}))
 
-(defn- plan-var-spec [^VarSpec spec]
-  (let [var (col-sym (.attr spec))
-        spec-expr (.expr spec)
+(defn- plan-var-spec [^Binding spec]
+  (let [var (col-sym (.getBinding spec))
+        spec-expr (.getExpr spec)
         {:keys [subqueries expr]} (plan-expr-with-subqueries spec-expr)]
     {:l var :r expr :required-vars (required-vars spec-expr)
      :subqueries subqueries :logic-var? (instance? Expr$LogicVar spec-expr)}))
