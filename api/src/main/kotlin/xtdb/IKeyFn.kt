@@ -1,12 +1,8 @@
 package xtdb
 
 import clojure.lang.Keyword
-import xtdb.IKeyFn
-import xtdb.util.NormalForm
-import java.util.*
-import kotlin.String
-import kotlin.collections.HashMap
-import kotlin.invoke
+import xtdb.util.normalForm
+import xtdb.util.snakeCase
 
 fun interface IKeyFn<V> {
     fun denormalize(key: String): V
@@ -39,10 +35,10 @@ fun interface IKeyFn<V> {
 
         // TODO the inner hyphen to underscore is not strictly necessary on the way out
         @JvmField
-        val SQL: IKeyFn<String> = IKeyFn { s -> NormalForm.normalForm(s) }
+        val SQL: IKeyFn<String> = IKeyFn { s -> normalForm(s) }
 
         // TODO the inner hyphen to underscore is not strictly necessary on the way out
         @JvmField
-        val SNAKE_CASE: IKeyFn<String> = IKeyFn { s -> NormalForm.snakeCase(s) }
+        val SNAKE_CASE: IKeyFn<String> = IKeyFn { s -> snakeCase(s) }
     }
 }
