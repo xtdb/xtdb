@@ -197,9 +197,9 @@ public interface Query {
     }
 
     final class WithCols implements QueryTail {
-        public final List<ColSpec> cols;
+        public final List<Binding> cols;
 
-        private WithCols(List<ColSpec> cols) {
+        private WithCols(List<Binding> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -222,7 +222,7 @@ public interface Query {
         }
     }
 
-    static WithCols withCols(List<ColSpec> cols) {
+    static WithCols withCols(List<Binding> cols) {
         return new WithCols(cols);
     }
 
@@ -257,9 +257,9 @@ public interface Query {
     }
 
     final class Return implements QueryTail {
-        public final List<ColSpec> cols;
+        public final List<Binding> cols;
 
-        private Return(List<ColSpec> cols) {
+        private Return(List<Binding> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -282,7 +282,7 @@ public interface Query {
         }
     }
 
-    static Return returning(List<ColSpec> cols) {
+    static Return returning(List<Binding> cols) {
         return new Return(cols);
     }
 
@@ -392,9 +392,9 @@ public interface Query {
     }
 
     final class Aggregate implements QueryTail {
-        public final List<ColSpec> cols;
+        public final List<Binding> cols;
 
-        private Aggregate(List<ColSpec> cols) {
+        private Aggregate(List<Binding> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -417,7 +417,7 @@ public interface Query {
         }
     }
 
-    static Aggregate aggregate(List<ColSpec> cols) {
+    static Aggregate aggregate(List<Binding> cols) {
         return new Aggregate(cols);
     }
 
@@ -671,9 +671,9 @@ public interface Query {
     }
 
     final class UnnestCol implements QueryTail {
-        public final ColSpec col;
+        public final Binding col;
 
-        private UnnestCol(ColSpec col) {
+        private UnnestCol(Binding col) {
             this.col = col;
         }
 
@@ -696,7 +696,7 @@ public interface Query {
         }
     }
 
-    static UnnestCol unnestCol(ColSpec col) {
+    static UnnestCol unnestCol(Binding col) {
         return new UnnestCol(col);
     }
 }

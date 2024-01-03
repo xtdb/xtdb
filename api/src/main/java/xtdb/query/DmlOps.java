@@ -31,12 +31,12 @@ public interface DmlOps {
 
     final class Update implements DmlOps {
         public final String table;
-        public final List<ColSpec> setSpecs;
+        public final List<Binding> setSpecs;
         public final TemporalExtents forValidTime;
         public final List<Binding> bindSpecs;
         public final List<? extends UnifyClause> unifyClauses;
 
-        private Update(String table, List<ColSpec> setSpecs, TemporalExtents forValidTime, List<Binding> bindSpecs,
+        private Update(String table, List<Binding> setSpecs, TemporalExtents forValidTime, List<Binding> bindSpecs,
                        List<? extends UnifyClause> unifyClauses) {
             this.table = table;
             this.setSpecs = setSpecs;
@@ -72,7 +72,7 @@ public interface DmlOps {
         }
     }
 
-    static Update update(String table, List<ColSpec> setSpecs) {
+    static Update update(String table, List<Binding> setSpecs) {
         return new Update(table, setSpecs, null, null, null);
     }
 

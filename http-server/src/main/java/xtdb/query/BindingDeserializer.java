@@ -14,26 +14,26 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
-public class ColSpecDeserializer extends StdDeserializer<ColSpec> {
+public class BindingDeserializer extends StdDeserializer<Binding> {
 
-    public ColSpecDeserializer() {
+    public BindingDeserializer() {
         super(Binding.class);
     }
 
     @Override
-    public ColSpec deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+    public Binding deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
         ObjectCodec codec = p.getCodec();
         JsonNode node = codec.readTree(p);
 
         if (node.isTextual()) {
             String var = node.asText();
-            return ColSpec.of(var, Expr.lVar(var));
+            return new Binding(var, Expr.lVar(var));
         } else if (node.isObject()) {
             Iterator<Map.Entry<String, JsonNode>> itr = node.fields();
             Map.Entry<String, JsonNode> entry = itr.next();
-            return ColSpec.of(entry.getKey(), codec.treeToValue(entry.getValue(), Expr.class));
+            return new Binding(entry.getKey(), codec.treeToValue(entry.getValue(), Expr.class));
         } else {
-            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-col-spec"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
+            throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-binding"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
     }
 }

@@ -30,6 +30,6 @@ public class WithColsDeserializer extends StdDeserializer<Query.WithCols> {
         if (!with.isArray()) {
             throw new IllegalArgumentException("With should be a list of bindings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
         }
-        return Query.withCols(SpecListDeserializer.<ColSpec>nodeToSpecs(codec, with, ColSpec::of));
+        return Query.withCols(SpecListDeserializer.<Binding>nodeToSpecs(codec, with, Binding::new));
     }
 }

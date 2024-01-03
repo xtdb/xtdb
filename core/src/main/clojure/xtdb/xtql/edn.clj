@@ -4,7 +4,7 @@
             [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.query ArgSpec Binding ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+           (xtdb.query ArgSpec Binding DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                        Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
                        Expr$ListExpr Expr$MapExpr
@@ -290,7 +290,7 @@
                       :xtql/malformed-col-spec
                       {:attr attr :expr expr ::err/message "Attribute in col spec must be keyword"})))
 
-            (ColSpec/of (str (symbol attr)) (parse-expr expr)))]
+            (Binding. (str (symbol attr)) (parse-expr expr)))]
 
     (cond
       (map? specs) (mapv parse-col-spec specs)
@@ -298,7 +298,7 @@
                                (into [] (mapcat (fn [spec]
                                                   (cond
                                                     (symbol? spec) (let [attr (str spec)]
-                                                                     [(ColSpec/of attr (Expr/lVar attr))])
+                                                                     [(Binding. attr (Expr/lVar attr))])
                                                     (map? spec) (map parse-col-spec spec)
 
                                                     :else
@@ -402,17 +402,28 @@
       {(nested-type attr) (unparse expr)})
     {(nested-type attr) (unparse expr)}))
 
+(defn unparse-binding [base-type nested-type, ^Binding binding]
+  (let [attr (.getBinding binding)
+        expr (.getExpr binding)]
+    (if base-type
+      (if (and (instance? Expr$LogicVar expr)
+               (= (.lv ^Expr$LogicVar expr) attr))
+        (base-type attr)
+        {(nested-type attr) (unparse expr)})
+      {(nested-type attr) (unparse expr)})))
+
+(def unparse-out-spec (partial unparse-binding symbol keyword))
+(def unparse-col-spec (partial unparse-binding symbol keyword))
+
 (extend-protocol Unparse
-  Binding (unparse [spec] (unparse-binding-spec (.getBinding spec) (.getExpr spec) symbol keyword))
   ArgSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
   VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) false symbol))
-  ColSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
 
   Query$From
   (unparse [from]
     (let [for-valid-time (.forValidTime from)
           for-sys-time (.forSystemTime from)
-          bind (mapv unparse (.bindings from))
+          bind (mapv unparse-out-spec (.bindings from))
           bind (if (.projectAllCols from) (vec (cons '* bind)) bind)]
       (list 'from (keyword (.table from))
             (if (or for-valid-time for-sys-time)
@@ -424,7 +435,7 @@
   Query$Join
   (unparse [join]
     (let [args (.args join)
-          bind (mapv unparse (.bindings join))]
+          bind (mapv unparse-col-spec (.bindings join))]
       (list 'join (unparse (.query join))
             (if args
               (cond-> {:bind bind}
@@ -434,7 +445,7 @@
   Query$LeftJoin
   (unparse [left-join]
     (let [args (.args left-join)
-          bind (mapv unparse (.bindings left-join))]
+          bind (mapv unparse-col-spec (.bindings left-join))]
       (list 'left-join (unparse (.query left-join))
             (if args
               (cond-> {:bind bind}
@@ -445,21 +456,26 @@
   Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))
   Query$Where (unparse [query] (list* 'where (mapv unparse (.preds query))))
   Query$With (unparse [query] (list* 'with (mapv unparse (.vars query))))
-  Query$WithCols (unparse [query] (list* 'with (mapv unparse (.cols query))))
+  Query$WithCols (unparse [query] (list* 'with (mapv unparse-col-spec (.cols query))))
   Query$Without (unparse [query] (list* 'without (map keyword (.cols query))))
-  Query$Return (unparse [query] (list* 'return (mapv unparse (.cols query))))
-  Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
+  Query$Return (unparse [query] (list* 'return (mapv unparse-col-spec (.cols query))))
+  Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse-col-spec (.cols query))))
   Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
   Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
   Query$Limit (unparse [this] (list 'limit (.length this)))
   Query$Offset (unparse [this] (list 'offset (.length this)))
-  Query$DocsRelation (unparse [this]
-                  (list 'rel
-                        (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) (.documents this))
-                        (mapv unparse (.bindings this))))
-  Query$ParamRelation (unparse [this]
-                   (list 'rel (symbol (.v (.param this))) (mapv unparse (.bindings this))))
-  Query$UnnestCol (unparse [this] (list 'unnest (unparse (.col this))))
+
+  Query$DocsRelation
+  (unparse [this]
+    (list 'rel
+          (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) (.documents this))
+          (mapv unparse-out-spec (.bindings this))))
+
+  Query$ParamRelation
+  (unparse [this]
+    (list 'rel (symbol (.v (.param this))) (mapv unparse-out-spec (.bindings this))))
+
+  Query$UnnestCol (unparse [this] (list 'unnest (unparse-col-spec (.col this))))
   Query$UnnestVar (unparse [this] (list 'unnest (unparse (.var this)))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
@@ -681,15 +697,15 @@
     (let [for-valid-time (.forValidTime query)
           bind (.bindSpecs query)]
       (list* 'update (keyword (.table query))
-             (cond-> {:set (mapv unparse (.setSpecs query))}
+             (cond-> {:set (mapv unparse-col-spec (.setSpecs query))}
                for-valid-time (assoc :for-valid-time (unparse for-valid-time))
-               (seq bind) (assoc :bind (mapv unparse bind)))
+               (seq bind) (assoc :bind (mapv unparse-out-spec bind)))
              (mapv unparse (.unifyClauses query)))))
 
   DmlOps$Delete
   (unparse [query]
     (let [for-valid-time (.forValidTime query)
-          bind (mapv unparse (.bindSpecs query))]
+          bind (mapv unparse-out-spec (.bindSpecs query))]
       (list* 'delete (keyword (.table query))
              (if for-valid-time
                (cond-> {:bind bind}
@@ -700,7 +716,7 @@
   DmlOps$Erase
   (unparse [query]
     (list* 'erase (keyword (.table query))
-           (mapv unparse (.bindSpecs query))
+           (mapv unparse-out-spec (.bindSpecs query))
            (mapv unparse (.unifyClauses query))))
 
   DmlOps$AssertExists

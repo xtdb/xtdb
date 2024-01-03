@@ -10,7 +10,7 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator IRaQuerySource)
-           (xtdb.query ArgSpec Binding ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
+           (xtdb.query ArgSpec Binding DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
                        DmlOps$Insert DmlOps$Update
                        Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param
                        Expr$Subquery Expr$Exists Expr$Pull Expr$PullMany Expr$Get
@@ -511,9 +511,9 @@
 (defn- wrap-project [plan projection]
   [:project projection plan])
 
-(defn- plan-col-spec [^ColSpec col-spec provided-vars]
-  (let [col (col-sym (.attr col-spec))
-        spec-expr (.expr col-spec)
+(defn- plan-col-spec [^Binding col-spec provided-vars]
+  (let [col (col-sym (.getBinding col-spec))
+        spec-expr (.getExpr col-spec)
         _ (required-vars-available? spec-expr provided-vars)
         required-vars (required-vars spec-expr)
         {:keys [subqueries expr agg-fns]} (plan-expr-with-subqueries spec-expr)]
@@ -569,9 +569,9 @@
     (let [projections
           (mapv
            (fn [col]
-             (let [expr (.expr ^ColSpec col)]
+             (let [expr (.getExpr ^Binding col)]
                (required-vars-available? expr provided-vars)
-               {(col-sym (.attr ^ColSpec col)) (plan-expr expr)}))
+               {(col-sym (.getBinding ^Binding col)) (plan-expr expr)}))
            (.cols this))]
       {:ra-plan [:project projections ra-plan]
        :provided-vars (set (map #(first (keys %)) projections))}))
@@ -904,7 +904,7 @@
    (Binding. "xt$valid_to" (Expr/lVar "xt$dml$valid_to"))])
 
 (defn- dml-colspecs [^TemporalFilter$TemporalExtents for-valid-time, {:keys [default-all-valid-time?]}]
-  [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))
+  [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))
 
    (let [vf-var (Expr/lVar "xt$dml$valid_from")
 
@@ -912,19 +912,19 @@
                            vf-var
                            (Expr/call "current-timestamp" []))]
 
-     (ColSpec/of "xt$valid_from"
-                 (Expr/call "cast-tstz"
-                            [(if-let [vf-expr (some-> for-valid-time .from)]
-                               (Expr/call "greatest" [vf-var (Expr/call "coalesce" [vf-expr default-vf-expr])])
-                               default-vf-expr)])))
-
-   (ColSpec/of "xt$valid_to"
+     (Binding. "xt$valid_from"
                (Expr/call "cast-tstz"
-                          [(Expr/call "least"
-                                      [(Expr/lVar "xt$dml$valid_to")
-                                       (if-let [vt-expr (some-> for-valid-time .to)]
-                                         (Expr/call "coalesce" [vt-expr (Expr/val 'xtdb/end-of-time)])
-                                         (Expr/val 'xtdb/end-of-time))])]))])
+                          [(if-let [vf-expr (some-> for-valid-time .from)]
+                             (Expr/call "greatest" [vf-var (Expr/call "coalesce" [vf-expr default-vf-expr])])
+                             default-vf-expr)])))
+
+   (Binding. "xt$valid_to"
+             (Expr/call "cast-tstz"
+                        [(Expr/call "least"
+                                    [(Expr/lVar "xt$dml$valid_to")
+                                     (if-let [vt-expr (some-> for-valid-time .to)]
+                                       (Expr/call "coalesce" [vt-expr (Expr/val 'xtdb/end-of-time)])
+                                       (Expr/val 'xtdb/end-of-time))])]))])
 
 (extend-protocol PlanDml
   DmlOps$Insert
@@ -960,7 +960,7 @@
                                                                                  [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))])))]
                                                           (.unifyClauses erase-query)))
 
-                                       [(Query/returning [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])])
+                                       [(Query/returning [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))])])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:erase {:table table-name}
@@ -972,8 +972,8 @@
           set-specs (.setSpecs update-query)
           known-columns (set (get-in tx-opts [:table-info (util/str->normal-form-str table-name)]))
           unspecified-columns (-> (set/difference known-columns
-                                                  (set (for [^ColSpec set-spec set-specs]
-                                                         (util/str->normal-form-str (.attr set-spec)))))
+                                                  (set (for [^Binding set-spec set-specs]
+                                                         (util/str->normal-form-str (.getBinding set-spec)))))
                                   (disj "xt$id"))
 
           target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
@@ -985,9 +985,9 @@
                                                           (.unifyClauses update-query)))
 
                                        [(Query/returning (concat (dml-colspecs (.forValidTime update-query) tx-opts)
-                                                                 [(ColSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                                 [(Binding. "xt$id" (Expr/lVar "xt$dml$id"))]
                                                                  (for [col unspecified-columns]
-                                                                   (ColSpec/of col (Expr/lVar (str "xt$update$" col))))
+                                                                   (Binding. col (Expr/lVar (str "xt$update$" col))))
                                                                  set-specs))])
 
           {target-plan :ra-plan} (plan-query target-query)]

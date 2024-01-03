@@ -25,6 +25,6 @@ public class AggregateDeserializer extends StdDeserializer<Query.Aggregate> {
         if (!node.isObject() || !node.has("aggregate")) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-aggregate"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
-        return Query.aggregate(SpecListDeserializer.<ColSpec>nodeToSpecs(mapper, node.get("aggregate"), ColSpec::of));
+        return Query.aggregate(SpecListDeserializer.<Binding>nodeToSpecs(mapper, node.get("aggregate"), Binding::new));
     }
 }

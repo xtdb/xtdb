@@ -9,7 +9,7 @@
            (xtdb.api TransactionKey)
            (xtdb.jackson XtdbMapper)
            (xtdb.query Query Query$OrderDirection Query$OrderNulls Query$QueryTail TemporalFilter
-                       ColSpec Binding VarSpec Expr Query$Unify QueryRequest QueryOpts Basis Expr ArgSpec)))
+                       Binding Binding VarSpec Expr Query$Unify QueryRequest QueryOpts Basis Expr ArgSpec)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -354,19 +354,19 @@
                             (roundtrip-query-tail {"orderBy" [{"val" {"lvar" "someField"}, "nulls" "invalid-nulls"}]}))))
 
   (t/testing "return"
-    (t/is (= (Query/returning [(ColSpec/of "a" (Expr/lVar "a"))
-                               (ColSpec/of "b" (Expr/lVar "b"))])
+    (t/is (= (Query/returning [(Binding. "a" (Expr/lVar "a"))
+                               (Binding. "b" (Expr/lVar "b"))])
              (roundtrip-query-tail {"return" ["a" "b"]})))
 
-    (t/is (= (Query/returning [(ColSpec/of "a" (Expr/lVar "a"))
-                               (ColSpec/of "b" (Expr/lVar "c"))])
+    (t/is (= (Query/returning [(Binding. "a" (Expr/lVar "a"))
+                               (Binding. "b" (Expr/lVar "c"))])
              (roundtrip-query-tail {"return" [{"a" {"xt:lvar" "a"} "b" {"xt:lvar" "c"}}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Return should be a list of values"
                             (roundtrip-query-tail {"return" "a"}))))
 
   (t/testing "unnest"
-    (t/is (= (Query/unnestCol (ColSpec/of "a" (Expr/lVar "b")))
+    (t/is (= (Query/unnestCol (Binding. "a" (Expr/lVar "b")))
              (roundtrip-query-tail {"unnest" {"a" {"xt:lvar" "b"}}})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Unnest should be an object with only a single binding"
@@ -374,12 +374,12 @@
           "should fail with >1 binding"))
 
   (t/testing "with"
-    (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "a"))
-                              (ColSpec/of "b" (Expr/lVar "b"))])
+    (t/is (= (Query/withCols [(Binding. "a" (Expr/lVar "a"))
+                              (Binding. "b" (Expr/lVar "b"))])
              (roundtrip-query-tail {"with" ["a" "b"]})))
 
-    (t/is (= (Query/withCols [(ColSpec/of "a" (Expr/lVar "b"))
-                              (ColSpec/of "c" (Expr/lVar "d"))])
+    (t/is (= (Query/withCols [(Binding. "a" (Expr/lVar "b"))
+                              (Binding. "c" (Expr/lVar "d"))])
              (roundtrip-query-tail {"with" [{"a" {"xt:lvar" "b"} "c" {"xt:lvar" "d"}}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"With should be a list of bindings"
@@ -395,8 +395,8 @@
           "should fail when not a list"))
 
   (t/testing "aggregate"
-    (t/is (= (Query/aggregate [(ColSpec/of "bar" (Expr/lVar "bar"))
-                               (ColSpec/of "baz" (Expr/call "sum" [(Expr/val 1)]))])
+    (t/is (= (Query/aggregate [(Binding. "bar" (Expr/lVar "bar"))
+                               (Binding. "baz" (Expr/call "sum" [(Expr/val 1)]))])
              (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"xt:call" {"f" "sum"
                                                                           "args" [1]}}}]})))
 
