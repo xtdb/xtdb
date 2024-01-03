@@ -1,3 +1,3 @@
 package xtdb.types
 
-data class ClojureForm(@get:JvmName("form") val form: Any)
+data class ClojureForm(@JvmField val form: Any)

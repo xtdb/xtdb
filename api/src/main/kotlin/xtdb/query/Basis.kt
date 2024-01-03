@@ -9,8 +9,8 @@ private val AT_TX_KEY: Keyword = Keyword.intern("at-tx")
 private val CURRENT_TIME_KEY: Keyword = Keyword.intern("current-time")
 
 data class Basis(
-    @get:JvmName("atTx") val atTx: TransactionKey?,
-    @get:JvmName("currentTime") val currentTime: Instant?
+    @JvmField val atTx: TransactionKey?,
+    @JvmField val currentTime: Instant?
 ) : ILookup, Seqable {
 
     override fun valAt(key: Any?): Any? {

@@ -3,30 +3,30 @@ package xtdb.query
 import xtdb.query.Query.UnifyClause
 import xtdb.query.TemporalFilter.TemporalExtents
 
-interface DmlOps {
+sealed interface DmlOps {
     data class Insert(
-        @get:JvmName("table") val table: String,
-        @get:JvmName("query") val query: Query
+        @JvmField val table: String,
+        @JvmField val query: Query
     ) : DmlOps
 
     data class Update(
-        @get:JvmName("table") val table: String,
-        @get:JvmName("setSpecs") val setSpecs: List<Binding>,
-        @get:JvmName("forValidTime") val forValidTime: TemporalExtents? = null,
-        @get:JvmName("bindSpecs") val bindSpecs: List<Binding>? = null,
-        @get:JvmName("unifyClauses") val unifyClauses: List<UnifyClause>? = null
+        @JvmField val table: String,
+        @JvmField val setSpecs: List<Binding>,
+        @JvmField val forValidTime: TemporalExtents? = null,
+        @JvmField val bindSpecs: List<Binding>? = null,
+        @JvmField val unifyClauses: List<UnifyClause>? = null
     ) : DmlOps {
 
         fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
         fun binding(bindSpecs: List<Binding>) = copy(bindSpecs = bindSpecs)
-        fun unify(unifyClauses: List<UnifyClause>) = copy(unifyClauses = QueryUtil.unmodifiableList(unifyClauses))
+        fun unify(unifyClauses: List<UnifyClause>) = copy(unifyClauses = unifyClauses)
     }
 
     data class Delete(
-        @get:JvmName("table") val table: String,
-        @get:JvmName("forValidTime") val forValidTime: TemporalExtents? = null,
-        @get:JvmName("bindSpecs") val bindSpecs: List<Binding>? = null,
-        @get:JvmName("unifyClauses") val unifyClauses: List<UnifyClause?>? = null
+        @JvmField val table: String,
+        @JvmField val forValidTime: TemporalExtents? = null,
+        @JvmField val bindSpecs: List<Binding>? = null,
+        @JvmField val unifyClauses: List<UnifyClause?>? = null
     ) : DmlOps {
 
         fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
@@ -35,22 +35,17 @@ interface DmlOps {
     }
 
     data class Erase(
-        @get:JvmName("table") val table: String,
-        @get:JvmName("bindSpecs") val bindSpecs: List<Binding>? = null,
-        @get:JvmName("unifyClauses") val unifyClauses: List<UnifyClause>? = null
+        @JvmField val table: String,
+        @JvmField val bindSpecs: List<Binding>? = null,
+        @JvmField val unifyClauses: List<UnifyClause>? = null
     ) : DmlOps {
 
         fun binding(bindSpecs: List<Binding>?) = copy(bindSpecs = bindSpecs)
         fun unify(unifyClauses: List<UnifyClause>?) = Erase(table, bindSpecs, unifyClauses)
     }
 
-    class AssertExists(
-        @get:JvmName("query") val query: Query
-    ) : DmlOps
-
-    class AssertNotExists(
-        @get:JvmName("query") val query: Query
-    ) : DmlOps
+    class AssertExists(@JvmField val query: Query) : DmlOps
+    class AssertNotExists(@JvmField val query: Query) : DmlOps
 
     companion object {
         @JvmStatic

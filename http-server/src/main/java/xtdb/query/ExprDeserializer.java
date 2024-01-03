@@ -5,6 +5,7 @@ import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
@@ -125,5 +126,10 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
             return Expr.map(mapExprs);
         }
         return Expr.val(mapper.treeToValue(node, Object.class));
+    }
+
+    @Override
+    public Expr getNullValue(DeserializationContext ctxt) {
+        return Expr.NULL;
     }
 }

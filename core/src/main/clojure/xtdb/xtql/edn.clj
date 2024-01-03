@@ -230,8 +230,8 @@
 
 (extend-protocol Unparse
   TemporalFilter$AllTime (unparse [_] :all-time)
-  TemporalFilter$At (unparse [at] (list 'at (unparse (.at at))))
-  TemporalFilter$In (unparse [in] (list 'in (some-> (.from in) unparse) (some-> (.to in) unparse))))
+  TemporalFilter$At (unparse [at] (list 'at (unparse (.getAt at))))
+  TemporalFilter$In (unparse [in] (list 'in (some-> (.getFrom in) unparse) (some-> (.getTo in) unparse))))
 
 ;;NOTE out-specs and arg-specs are currently indentical structurally, but one is an input binding,
 ;;the other an output binding.

@@ -5,8 +5,8 @@ import java.time.Period
 import java.util.*
 
 data class IntervalMonthDayNano(
-    @get:JvmName("period") val period: Period,
-    @get:JvmName("duration") val duration: Duration
+    @JvmField val period: Period,
+    @JvmField val duration: Duration
 ) {
     override fun toString(): String {
         return period.toString() + duration.toString().substring(1)

@@ -67,10 +67,10 @@ sealed class Ops {
 }
 
 data class Put internal constructor(
-    @get:JvmName("tableName") val tableName: Keyword,
-    @get:JvmName("doc") val doc: Map<*, *>,
-    @get:JvmName("validFrom") val validFrom: Instant? = null,
-    @get:JvmName("validTo") val validTo: Instant? = null
+    @JvmField val tableName: Keyword,
+    @JvmField val doc: Map<*, *>,
+    @JvmField val validFrom: Instant? = null,
+    @JvmField val validTo: Instant? = null
 ) : Ops(), HasValidTimeBounds<Put> {
 
     override fun startingFrom(validFrom: Instant?): Put = Put(tableName, doc, validFrom, validTo)
@@ -79,10 +79,10 @@ data class Put internal constructor(
 }
 
 data class Delete internal constructor(
-    @get:JvmName("tableName") val tableName: Keyword,
-    @get:JvmName("entityId") val entityId: Any,
-    @get:JvmName("validFrom") val validFrom: Instant? = null,
-    @get:JvmName("validTo") val validTo: Instant? = null
+    @JvmField val tableName: Keyword,
+    @JvmField val entityId: Any,
+    @JvmField val validFrom: Instant? = null,
+    @JvmField val validTo: Instant? = null
 ) : Ops(), HasValidTimeBounds<Delete> {
 
     override fun startingFrom(validFrom: Instant?): Delete = Delete(tableName, entityId, validFrom, validTo)
@@ -91,30 +91,30 @@ data class Delete internal constructor(
 }
 
 data class Erase(
-    @get:JvmName("tableName") val tableName: Keyword,
-    @get:JvmName("entityId") val entityId: Any
+    @JvmField val tableName: Keyword,
+    @JvmField val entityId: Any
 ) : Ops()
 
 data class Sql(
-    @get:JvmName("sql") val sql: String,
-    @get:JvmName("argRows") val argRows: List<List<*>>? = null,
-    @get:JvmName("argBytes") val argBytes: ByteBuffer? = null
+    @JvmField val sql: String,
+    @JvmField val argRows: List<List<*>>? = null,
+    @JvmField val argBytes: ByteBuffer? = null
 ) : Ops(), HasArgs<List<*>, Sql> {
 
     override fun withArgs(args: List<List<*>>?): Sql = Sql(sql, argRows = args)
 }
 
 data class Xtql internal constructor(
-    @get:JvmName("query") val query: Any,
-    @get:JvmName("args") val args: List<Map<*, *>>? = null
+    @JvmField val query: Any,
+    @JvmField val args: List<Map<*, *>>? = null
 ) : Ops(), HasArgs<Map<*, *>, Xtql> {
 
     override fun withArgs(args: List<Map<*, *>>?) = Xtql(query, args)
 }
 
 data class Call internal constructor(
-    @get:JvmName("fnId") val fnId: Any,
-    @get:JvmName("args") val args: List<*>
+    @JvmField val fnId: Any,
+    @JvmField val args: List<*>
 ) : Ops()
 
 data object Abort : Ops()

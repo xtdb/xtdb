@@ -3,7 +3,7 @@
             [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime Instant]
            (java.util Date List)
-           (xtdb.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery
+           (xtdb.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Null Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
                        Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
@@ -52,7 +52,7 @@
               (catch Exception e
                 (throw (err/illegal-arg :xtql/malformed-literal {:literal l, :error (.getMessage e)})))))]
     (cond
-      (nil? v) (Expr/val nil)
+      (nil? v) Expr/NULL
 
       (nil? t) (cond
                  (map? v) (Expr/val (into {} (map (juxt key (comp parse-expr val))) v))
@@ -82,7 +82,7 @@
   (letfn [(bad-expr [expr]
             (throw (err/illegal-arg :xtql/malformed-expr {:expr expr})))]
     (cond
-      (nil? expr) (Expr/val nil)
+      (nil? expr) Expr/NULL
       (int? expr) (Expr/val (long expr))
       (double? expr) (Expr/val (double expr))
       (boolean? expr) (if expr Expr/TRUE Expr/FALSE)
@@ -110,6 +110,7 @@
 
 (extend-protocol Unparse
   Expr$LogicVar (unparse [lv] (.lv lv))
+  Expr$Null (unparse [_] nil)
   Expr$Bool (unparse [b] (.bool b))
   Expr$Long (unparse [l] (.lng l))
   Expr$Double (unparse [d] (.dbl d))
@@ -175,8 +176,8 @@
 
 (extend-protocol Unparse
   TemporalFilter$AllTime (unparse [_] "allTime")
-  TemporalFilter$At (unparse [at] {"at" (unparse (.at at))})
-  TemporalFilter$In (unparse [in] {"in" [(unparse (.from in)) (unparse (.to in))]}))
+  TemporalFilter$At (unparse [at] {"at" (unparse (.getAt at))})
+  TemporalFilter$In (unparse [in] {"in" [(unparse (.getFrom in)) (unparse (.getTo in))]}))
 
 (defn- parse-binding-specs [spec-of binding-specs _query]
   (->> binding-specs
@@ -416,7 +417,7 @@
                                           {:nulls nulls, :order-spec order-spec, :query this})))]
       (Query/orderSpec (parse-expr val) dir nulls))
     ;:TODO short form can only reasonably be a var, as exprs use maps, would be ambiguous with long form
-    (Query/orderSpec (parse-expr order-spec) nil nil)))
+    (Query/orderSpec (parse-expr order-spec))))
 
 (defmethod parse-query-tail 'orderBy [{order-by "orderBy", :as query}]
   (if-not (vector? order-by)

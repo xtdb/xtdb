@@ -704,7 +704,7 @@ public class ValueVectorReader implements IVectorReader {
                     public PeriodDuration readObject() {
                         // return PeriodDuration as it's still required by the EE
                         IntervalDayTime idt = getObject0(pos.getPosition(), (k) -> k);
-                        return new PeriodDuration(idt.period(), idt.duration());
+                        return new PeriodDuration(idt.period, idt.duration);
                     }
                 };
             }

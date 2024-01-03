@@ -366,14 +366,14 @@
   (plan-temporal-filter [this]
     ;;TODO could be better to have its own error, to make it clear you can't
     ;;ref logic vars in temporal opts
-    (required-vars-available? (.at this) #{})
-    [:at (plan-expr (.at this))])
+    (required-vars-available? (.getAt this) #{})
+    [:at (plan-expr (.getAt this))])
 
   TemporalFilter$In
   (plan-temporal-filter [this]
-    (required-vars-available? (.from this) #{})
-    (required-vars-available? (.to this) #{})
-    [:in (plan-expr (.from this)) (plan-expr (.to this))])
+    (required-vars-available? (.getFrom this) #{})
+    (required-vars-available? (.getTo this) #{})
+    [:in (plan-expr (.getFrom this)) (plan-expr (.getTo this))])
 
   nil
   (plan-temporal-filter [_this]
@@ -914,7 +914,7 @@
 
      (Binding. "xt$valid_from"
                (Expr/call "cast-tstz"
-                          [(if-let [vf-expr (some-> for-valid-time .from)]
+                          [(if-let [vf-expr (some-> for-valid-time .getFrom)]
                              (Expr/call "greatest" [vf-var (Expr/call "coalesce" [vf-expr default-vf-expr])])
                              default-vf-expr)])))
 
@@ -922,7 +922,7 @@
              (Expr/call "cast-tstz"
                         [(Expr/call "least"
                                     [(Expr/lVar "xt$dml$valid_to")
-                                     (if-let [vt-expr (some-> for-valid-time .to)]
+                                     (if-let [vt-expr (some-> for-valid-time .getTo)]
                                        (Expr/call "coalesce" [vt-expr (Expr/val 'xtdb/end-of-time)])
                                        (Expr/val 'xtdb/end-of-time))])]))])
 
