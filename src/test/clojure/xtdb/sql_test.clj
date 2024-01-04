@@ -1,10 +1,14 @@
 (ns xtdb.sql-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
+            [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
-            [xtdb.sql :as sql])
+            [xtdb.sql :as sql]
+            [xtdb.test-util :as tu])
 
   (:import (java.time LocalDateTime)))
+
+(t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (defn plan-sql
   ([sql opts] (sql/compile-query sql (into {:default-all-valid-time? true} opts)))
@@ -1160,3 +1164,36 @@
     (t/is (=plan-file
            "array-agg-decorrelation-2"
            (plan-sql "SELECT (SELECT ARRAY_AGG(x.y) FROM (VALUES (1), (2), (3), (tab0.z)) AS x(y)) FROM tab0")))))
+
+(deftest test-order-by-3065
+  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :x 3})
+                           (xt/put :docs {:xt/id 2 :x 2})
+                           (xt/put :docs {:xt/id 3 :x 1})])
+
+  (t/is (= [{:x 1, :xt$id 3} {:x 2, :xt$id 2} {:x 3, :xt$id 1}]
+           (xt/q tu/*node* "SELECT * FROM docs ORDER BY docs.x")))
+
+  (t/is (= [{:x 1, :xt$id 3} {:x 2, :xt$id 2} {:x 3, :xt$id 1}]
+           (xt/q tu/*node* "SELECT * FROM docs ORDER BY docs.x + 1")))
+
+  (t/is (= #{{:x 1, :xt$id 3} {:x 2, :xt$id 2} {:x 3, :xt$id 1}}
+           (set (xt/q tu/*node* "SELECT * FROM docs ORDER BY 1 + 1"))))
+
+  (t/is (= [{:xt$id 3} {:xt$id 2} {:xt$id 1}]
+           (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY docs.x"))))
+
+(deftest test-order-by-unqualified-derived-column-refs
+  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :x 3})
+                           (xt/put :docs {:xt/id 2 :x 2})
+                           (xt/put :docs {:xt/id 3 :x 1})])
+
+  (t/is (= [{:b 2} {:b 3} {:b 4}]
+             (xt/q tu/*node* "SELECT (docs.x + 1) AS b FROM docs ORDER BY b")))
+  (t/is (= [{:b 1} {:b 2} {:b 3}]
+           (xt/q tu/*node* "SELECT docs.x AS b FROM docs ORDER BY b")))
+  (t/is (= [{:x 1} {:x 2} {:x 3}]
+           (xt/q tu/*node* "SELECT y.x FROM docs AS y ORDER BY x")))
+
+  ;; Postgres doesn't allow deliminated col refs in order-by exprs but mysql/sqlite do
+  #_(t/is (= [{:b 1} {:b 2} {:b 3}]
+           (xt/q tu/*node* "SELECT docs.x AS b FROM docs ORDER BY (b + 2)"))))
