@@ -112,7 +112,7 @@ data class Xtql internal constructor(
     override fun withArgs(args: List<Map<*, *>>?) = Xtql(query, args)
 }
 
-data class Call internal constructor(
+data class Call(
     @JvmField val fnId: Any,
     @JvmField val args: List<*>
 ) : Ops()

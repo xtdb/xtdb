@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 publishing {
@@ -34,6 +37,8 @@ dependencies {
 
     api("com.cognitect", "transit-clj", "1.0.329")
 
+    api(kotlin("stdlib-jdk8"))
+
     testImplementation(project(":"))
     testImplementation(project(":http-client-clj"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
@@ -43,3 +48,9 @@ dependencies {
 }
 
 tasks.javadoc.get().enabled = false
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
