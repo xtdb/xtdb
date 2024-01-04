@@ -838,9 +838,6 @@
                                     :within-group-varying :invalid-outer-within-group-varying
                                     :invalid-group-invariant :invalid-outer-group-invariant)
 
-                                  (order-by-index ag)
-                                  :resolved-in-sort-key
-
                                   (not (qualified? identifiers))
                                   :unqualified
 
@@ -988,12 +985,13 @@
             :else
             [])))
 
-      :resolved-in-sort-key
-      []
-
       :unqualified
-      [(format "XTDB requires fully-qualified columns: %s %s"
-               (->src-str ag) (->line-info-str ag))]
+      (if (order-by-index (:ref (meta column-reference)))
+        [] ;;references an unqualified derived column in the select list
+        ;; perhaps the below error should mention unqualifed cols are valid within
+        ;; order-by if referring to derived col from select list
+        [(format "XTDB requires fully-qualified columns: %s %s"
+                 (->src-str ag) (->line-info-str ag))])
 
       :invalid-group-invariant
       [(format "Column reference is not a grouping column: %s %s"
@@ -1249,7 +1247,10 @@
 
     ::r/inherit))
 
-(defn scope [ag]
+(defn scope
+  "Currently only used in tests to check ASTs are valid,
+  might be worth bringing is as part of getting CTEs fully working"
+  [ag]
   (r/zcase ag
     (:query_expression
      :query_specification)
