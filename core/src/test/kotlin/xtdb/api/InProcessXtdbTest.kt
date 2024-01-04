@@ -21,10 +21,10 @@ internal class InProcessXtdbTest {
             Assertions.assertEquals(
                 listOf(mapOf(Keyword.intern("id") to "jms")),
 
-                node.query(
+                node.openQuery(
                     Query.from("foo")
                         .binding(listOf(Binding("xt/id", Expr.lVar("id"))))
-                )
+                ).use { it.toList() }
             )
         }
     }

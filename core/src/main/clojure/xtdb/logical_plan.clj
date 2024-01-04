@@ -1,7 +1,6 @@
 (ns xtdb.logical-plan
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.walk :as walk]
             [clojure.string :as str]
             [clojure.walk :as w]
             [xtdb.error :as err]
@@ -9,8 +8,7 @@
             [xtdb.util :as util])
   (:import (clojure.lang Var)
            java.time.temporal.Temporal
-           java.util.Date
-           xtdb.IResultSet))
+           java.util.Date))
 
 ;; See also:
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
@@ -1412,10 +1410,3 @@
                              :plan plan
                              :explain-data (s/explain-data ::logical-plan plan)}))))
 
-(defn explain-result [plan]
-  (let [^Iterable res [{:plan plan}]
-        it (.iterator res)]
-    (reify IResultSet
-      (hasNext [_] (.hasNext it))
-      (next [_] (.next it))
-      (close [_]))))

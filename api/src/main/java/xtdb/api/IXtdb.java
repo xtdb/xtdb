@@ -5,12 +5,14 @@ import xtdb.query.QueryOpts;
 import xtdb.tx.Ops;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Stream;
 
 public interface IXtdb extends AutoCloseable {
 
-    CompletableFuture<List<?>> queryAsync(Query q, QueryOpts opts);
+    CompletableFuture<Stream<Map<String, ?>>> openQueryAsync(Query q, QueryOpts opts);
 
     private static <T> T await(CompletableFuture<T> fut) {
         try {
@@ -22,16 +24,16 @@ public interface IXtdb extends AutoCloseable {
         }
     }
 
-    default CompletableFuture<List<?>> queryAsync(Query q) {
-        return queryAsync(q, new QueryOpts());
+    default CompletableFuture<Stream<Map<String, ?>>> openQueryAsync(Query q) {
+        return openQueryAsync(q, new QueryOpts());
     }
 
-    default List<?> query(Query q) {
-        return await(queryAsync(q));
+    default Stream<Map<String, ?>> openQuery(Query q) {
+        return await(openQueryAsync(q));
     }
 
-    default List<?> query(Query q, QueryOpts opts) {
-        return await(queryAsync(q, opts));
+    default Stream<Map<String, ?>> openQuery(Query q, QueryOpts opts) {
+        return await(openQueryAsync(q, opts));
     }
 
     CompletableFuture<TransactionKey> submitTxAsync(List<Ops> ops, TxOptions txOpts);

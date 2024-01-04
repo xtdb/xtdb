@@ -26,8 +26,8 @@
            (java.util HashMap List Map)
            (java.util.concurrent CompletableFuture ConcurrentHashMap ExecutorService Executors TimeUnit)
            (java.util.function BiConsumer BiFunction)
+           [java.util.stream Stream]
            (org.apache.arrow.vector PeriodDuration)
-           (xtdb IResultSet)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 ;; references
@@ -1272,7 +1272,7 @@
   (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
 (defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
-                             {:keys [query, projection, ^IResultSet result-set]}]
+                             {:keys [query, projection, ^Stream result-set]}]
   (let [json-bytes (comp utf8 json/json-str json-clj)
         ;; TODO result format
         tuplefn (if (seq projection) (apply juxt (map (comp (partial comp json-bytes) keyword) projection)) (constantly []))
@@ -1280,7 +1280,8 @@
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-        closing? #(= :closing @conn-status)]
+        closing? #(= :closing @conn-status)
+        result-set (.iterator result-set)]
     (loop [n-rows-out 0]
       (cond
         (cancelled-by-client?)
@@ -1327,7 +1328,7 @@
           (when (= :simple (:protocol @conn-state))
             (cmd-send-ready conn)))))))
 
-(defn- close-result-set [{:keys [conn-state] :as conn} fut ^IResultSet rs]
+(defn- close-result-set [{:keys [conn-state] :as conn} fut ^Stream rs]
   (try
     (.close rs)
     ;; cleaned up, remove the fut from the :executing set

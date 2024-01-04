@@ -34,7 +34,7 @@ dependencies {
 }
 
 tasks.javadoc {
-    exclude("xtdb/IResultSet", "xtdb/util/*")
+    exclude("xtdb/util/*")
 }
 
 kotlin {

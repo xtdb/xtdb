@@ -17,8 +17,8 @@
            java.util.concurrent.ExecutionException
            java.util.function.Function
            java.util.List
+           [java.util.stream Stream]
            (xtdb.api IXtdb TransactionKey TxOptions)
-           xtdb.IResultSet
            (xtdb.tx Ops Ops$HasArgs Ops$HasValidTimeBounds)
            xtdb.types.ClojureForm))
 
@@ -102,8 +102,8 @@
          (.thenApply
           (reify Function
             (apply [_ res]
-              (with-open [^IResultSet res res]
-                (vec (iterator-seq res))))))))))
+              (with-open [^Stream res res]
+                (vec (.toList res))))))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn q

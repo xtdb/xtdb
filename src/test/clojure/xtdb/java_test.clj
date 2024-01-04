@@ -3,15 +3,15 @@
             [xtdb.api :as xt]
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu])
-  (:import (xtdb IResultSet)
+  (:import [java.util.stream Stream]
            (xtdb.api TxOptions)
            (xtdb.query Basis Binding Expr Query QueryOpts)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
-(defn- result-set->vec [res]
-  (with-open [^IResultSet res res]
-    (vec (iterator-seq res))))
+(defn- stream->vec [res]
+  (with-open [^Stream res res]
+    (vec (.toList res))))
 
 (deftest java-api-test
   (t/testing "transactions"
@@ -39,27 +39,27 @@
                (-> @(xtp/open-query& tu/*node* (-> (Query/from "docs2")
                                                    (.binding [(Binding. "foo" (Expr/lVar "my-foo"))]))
                                      (QueryOpts. nil (Basis. tx nil) nil nil nil false "clojure"))
-                   result-set->vec))
+                   stream->vec))
             "java ast queries")
 
       (t/is (= [{:my_foo "bar"}]
                (-> @(xtp/open-query& tu/*node* (-> (Query/from "docs2")
                                                    (.binding [(Binding. "foo" (Expr/lVar "my-foo"))]))
                                      (QueryOpts. nil (Basis. tx nil) nil nil nil false "snake_case"))
-                   result-set->vec))
+                   stream->vec))
             "key-fn")
 
       (t/is (= [{:foo "bar"}]
                (-> @(xtp/open-query& tu/*node* '(from :docs [{:xt/id $id} foo])
                                      (QueryOpts. {"id" 1} (Basis. tx nil) nil nil nil false "snake_case"))
-                   result-set->vec))
+                   stream->vec))
             "params")
 
       (t/is (= [{:current-time #time/date "2020-01-01"}]
                (-> @(xtp/open-query& tu/*node* '(-> (rel [{}] [])
                                                     (with {:current-time (current-date)}))
                                      (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil nil false "clojure"))
-                   result-set->vec))
+                   stream->vec))
             "current-time")
 
       (t/is (= [{:timestamp #time/zoned-date-time "2020-01-01T04:34:56-08:00[America/Los_Angeles]"}]
@@ -67,7 +67,7 @@
                                                     (with {:timestamp (current-timestamp 10)}))
                                      (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil
                                                  #time/zone "America/Los_Angeles" false "snake_case"))
-                   result-set->vec))
+                   stream->vec))
             "default tz")
 
       (t/is (= '[{:plan [:scan
@@ -75,5 +75,5 @@
                          [foo]]}]
                (-> @(xtp/open-query& tu/*node* '(from :docs [foo])
                                      (QueryOpts. nil nil nil nil nil true "snake_case"))
-                   result-set->vec))
+                   stream->vec))
             "default tz"))))

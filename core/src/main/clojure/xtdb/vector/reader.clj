@@ -90,8 +90,8 @@
                 (.rowCount rel))))
 
 (defn rel->rows
-  (^java.lang.Iterable [^RelationReader rel] (rel->rows rel (util/parse-key-fn :clojure)))
-  (^java.lang.Iterable [^RelationReader rel ^IKeyFn key-fn]
+  (^java.util.List [^RelationReader rel] (rel->rows rel (util/parse-key-fn :clojure)))
+  (^java.util.List [^RelationReader rel ^IKeyFn key-fn]
    (let [col-ks (for [^IVectorReader col rel]
                   [col (.denormalize key-fn (.getName col))])]
      (mapv (fn [idx]

@@ -13,14 +13,15 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.fasterxml.jackson.databind.node JsonNodeType)
-           (xtdb IResultSet)
            (java.lang Thread$State)
            (java.net SocketException)
            (java.sql Connection PreparedStatement)
            (java.time Clock Instant ZoneId ZoneOffset)
            (java.util.concurrent CompletableFuture CountDownLatch TimeUnit)
+           java.util.stream.StreamSupport
            #_org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
-           (org.postgresql.util PGobject PSQLException)))
+           (org.postgresql.util PGobject PSQLException)
+           xtdb.ICursor))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -760,10 +761,11 @@
           (with-redefs [clojure.tools.logging/logf (constantly nil)
                         xtp/open-query& (fn [& _]
                                           (CompletableFuture/completedFuture
-                                           (reify IResultSet
-                                             (hasNext [_] true)
-                                             (next [_] (throw (Throwable. "oops")))
-                                             (close [_]))))]
+                                           (StreamSupport/stream
+                                            (reify ICursor
+                                              (tryAdvance [_ _c]
+                                                (throw (Throwable. "oops"))))
+                                            false)))]
             (send "select a.a from (values (42)) a (a);\n")
             (is (str/includes? (read :err) "unexpected server error during query execution")))
 

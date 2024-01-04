@@ -28,9 +28,10 @@
             [xtdb.util :as util])
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
+           [java.util.function Consumer]
+           [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb.api TransactionKey TxOptions)
-           xtdb.IResultSet
            (xtdb.query Basis Query)
            (xtdb.tx Tx)))
 
@@ -100,12 +101,14 @@
     (encode-to-output-stream [_ res _]
       (fn [^OutputStream out]
         (if-not (ex-data res)
-          (with-open [^IResultSet res res
+          (with-open [^Stream res res
                       out out]
             (let [writer (transit/writer out :json opts)]
               (try
-                (doseq [el (iterator-seq res)]
-                  (transit/write writer el))
+                (.forEach res
+                          (reify Consumer
+                            (accept [_ el]
+                              (transit/write writer el))))
                 (catch xtdb.RuntimeException e
                   (transit/write writer e))
                 (catch Throwable t
@@ -124,12 +127,15 @@
     (encode-to-output-stream [_ res _]
       (fn [^OutputStream out]
         (if-not (ex-data res)
-          (with-open [seq-wtr (-> (.writer jackson/json-ld-mapper)
+          (with-open [^Stream res res
+                      seq-wtr (-> (.writer jackson/json-ld-mapper)
                                   (.writeValues out))]
             (try
-              (doseq [el (iterator-seq res)]
-                (.write seq-wtr el)
-                (.write out ^byte ascii-newline))
+              (.forEach res
+                        (reify Consumer
+                          (accept [_ el]
+                            (.write seq-wtr el)
+                            (.write out ^byte ascii-newline))))
               (catch Throwable t
                 (.write seq-wtr t)
                 (.write out ^byte ascii-newline))
@@ -247,7 +253,7 @@
                                                ::r.coercion/request-coercion handle-request-coercion-error
                                                :muuntaja/decode handle-muuntaja-decode-error
                                                ::ri.exception/wrap (fn [handler e req]
-                                                                     (log/warn e "response error")
+                                                                     (log/warn (str "response error: " (ex-message e)))
                                                                      (let [response-format (:raw-format (:muuntaja/response req))]
                                                                        (cond-> (handler e req)
                                                                          (#{"application/jsonl"} response-format)

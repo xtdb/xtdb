@@ -11,8 +11,8 @@
            java.lang.AutoCloseable
            java.util.concurrent.CompletableFuture
            java.util.function.Function
-           java.util.NoSuchElementException
-           xtdb.IResultSet
+           java.util.Spliterator
+           [java.util.stream StreamSupport]
            xtdb.api.IXtdb))
 
 (def transit-opts
@@ -45,40 +45,34 @@
                         opts)
                  identity handle-err)))
 
-(deftype TransitResultSet [^InputStream in, rdr
-                           ^:unsynchronized-mutable next-el]
-  IResultSet
-  (hasNext [this]
-    (or (some? next-el)
-        (try
-          (set! (.next-el this) (transit/read rdr))
-          true
-          (catch RuntimeException e
-            (if (instance? EOFException (.getCause e))
-              false
-              (throw e))))))
+(deftype TransitSpliterator [rdr]
+  Spliterator
+  (tryAdvance [_ c]
+    (try
+      (let [el (transit/read rdr)]
+        (if (instance? Throwable el)
+          (throw el)
+          (.accept c el)))
+      true
+      (catch RuntimeException e
+        (if (instance? EOFException (.getCause e))
+          false
+          (throw e)))))
 
-  (next [this]
-    (when-not (.hasNext this)
-      (throw (NoSuchElementException.)))
-    (let [el (.next-el this)]
-      (set! (.next-el this) nil)
-      (if (instance? Throwable el)
-        (throw el)
-        el)))
-
-  (close [_]
-    (.close in)))
+  (characteristics [_] Spliterator/IMMUTABLE)
+  (trySplit [_] nil)
+  (estimateSize [_] Long/MAX_VALUE))
 
 (defmethod hato.middleware/coerce-response-body ::transit+json->result-or-error [_req {:keys [^InputStream body status] :as resp}]
   (try
     (let [rdr (transit/reader body :json {:handlers serde/transit-read-handlers})]
-      (-> resp
-          (assoc :body (if (hato.middleware/unexceptional-status? status)
-                         (->TransitResultSet body rdr nil)
+      (if (hato.middleware/unexceptional-status? status)
+        (-> resp
+            (assoc :body (StreamSupport/stream (->TransitSpliterator rdr) false)))
 
-                         ;; This should be an error we know how to decode
-                         (transit/read rdr)))))
+        ;; This should be an error we know how to decode
+        (throw (transit/read rdr))))
+
     (catch Throwable t
       (.close body)
       (throw t))))

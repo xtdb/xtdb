@@ -28,11 +28,11 @@
             [xtdb.xtql.edn :as xtql.edn])
   (:import java.lang.AutoCloseable
            (java.time Clock Duration)
-           (java.util Iterator)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.function Consumer Function)
+           (java.util.function Function)
+           [java.util.stream Stream StreamSupport]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb ICursor IKeyFn IResultCursor IResultSet)
+           (xtdb ICursor IResultCursor)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
            xtdb.query.Query
@@ -175,33 +175,6 @@
 (defmethod ig/halt-key! ::ra-query-source [_ ^AutoCloseable ra-query-source]
   (.close ra-query-source))
 
-(deftype CursorResultSet [^IResultCursor cursor
-                          ^AutoCloseable params
-                          ^IKeyFn key-fn
-                          ^:unsynchronized-mutable ^Iterator next-values]
-  IResultSet
-  (hasNext [res]
-    (boolean
-     (or (and next-values (.hasNext next-values))
-         ;; need to call rel->rows eagerly - the rel may have been reused/closed after
-         ;; the tryAdvance returns.
-         (do
-           (while (and (.tryAdvance cursor
-                                    (reify Consumer
-                                      (accept [_ rel]
-                                        (set! (.-next-values res)
-                                              (.iterator (vr/rel->rows rel key-fn))))))
-                       (not (and next-values (.hasNext next-values)))))
-           (and next-values (.hasNext next-values))))))
-
-  (next [_] (.next next-values))
-  (close [_]
-    (.close cursor)
-    (.close params)))
-
-(defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params, ^IKeyFn key-fn]
-  (CursorResultSet. cursor params key-fn nil))
-
 (defn compile-query
   "returns a pair of [lang ra-plan]"
   [query query-opts table-info]
@@ -217,9 +190,10 @@
                                   {:query query
                                    :type (type query)}))))
 
-(defn open-query [allocator ^IRaQuerySource ra-src, wm-src
-                  lang plan query-opts]
-  (let [{:keys [args key-fn], :or {key-fn (case lang :sql :sql, :xtql :clojure)}} query-opts]
+(defn open-query ^java.util.stream.Stream [allocator ^IRaQuerySource ra-src, wm-src
+                                           lang plan query-opts]
+  (let [{:keys [args key-fn], :or {key-fn (case lang :sql :sql, :xtql :clojure)}} query-opts
+        key-fn (util/parse-key-fn key-fn)]
     (util/with-close-on-catch [args (case lang
                                       :sql (sql/open-args allocator args)
                                       :xtql (xtql/open-args allocator args))
@@ -227,4 +201,10 @@
                                           (.bind wm-src (-> query-opts
                                                             (assoc :params args, :key-fn key-fn)))
                                           (.openCursor))]
-      (cursor->result-set cursor args (util/parse-key-fn key-fn)))))
+      (-> (StreamSupport/stream cursor false)
+          ^Stream (.onClose (fn []
+                              (util/close cursor)
+                              (util/close args)))
+          (.flatMap (reify Function
+                      (apply [_ rel]
+                        (.stream (vr/rel->rows rel key-fn)))))))))

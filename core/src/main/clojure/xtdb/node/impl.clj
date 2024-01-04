@@ -2,7 +2,6 @@
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
             xtdb.indexer
-            [xtdb.logical-plan :as lp]
             [xtdb.operator.scan :as scan]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
@@ -14,11 +13,10 @@
            (java.lang AutoCloseable)
            (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
-           [java.util.function Function]
+           [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb)
            xtdb.indexer.IIndexer
-           xtdb.IResultSet
            (xtdb.query Basis IRaQuerySource)
            (xtdb.tx Sql)
            (xtdb.tx_producer ITxProducer)))
@@ -64,16 +62,10 @@
           (fn [tx]
             (swap! !latest-submitted-tx time/max-tx tx)))))
 
-  (queryAsync [this query opts]
-    (let [opts (-> (into {:default-all-valid-time? false} opts)
-                   (time/after-latest-submitted-tx this))]
-
-      (-> (xtp/open-query& this query opts)
-          (.thenApply
-           (reify Function
-             (apply [_ res]
-               (with-open [^IResultSet res res]
-                 (vec (iterator-seq res)))))))))
+  (openQueryAsync [this query opts]
+    (xtp/open-query& this query
+                     (-> (into {:default-all-valid-time? false} opts)
+                         (time/after-latest-submitted-tx this))))
 
   xtp/PNode
   (open-query& [_ query query-opts]
@@ -86,7 +78,8 @@
               (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
                     [lang plan] (q/compile-query query query-opts table-info)]
                 (if (:explain? query-opts)
-                  (lp/explain-result plan)
+                  (Stream/of {:plan plan})
+
                   (q/open-query allocator ra-src wm-src
                                 lang plan query-opts))))))))
 

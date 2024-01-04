@@ -7,8 +7,8 @@
             [xtdb.error :as err]
             xtdb.indexer.live-index
             [xtdb.metadata :as meta]
-            [xtdb.query :as q]
             [xtdb.operator.scan :as scan]
+            [xtdb.query :as q]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
@@ -35,12 +35,12 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb IBufferPool IResultSet)
+           (xtdb IBufferPool)
            xtdb.api.TransactionKey
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
-           (xtdb.query IRaQuerySource PreparedQuery)
            (xtdb.operator.scan IScanEmitter)
+           (xtdb.query IRaQuerySource PreparedQuery)
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
@@ -203,9 +203,9 @@
     ([query opts]
      (let [query-opts (into tx-opts opts)
            [lang plan] (q/compile-query query query-opts nil)]
-       (with-open [^IResultSet res (q/open-query allocator ra-src wm-src
-                                                 lang plan query-opts)]
-         (vec (iterator-seq res)))))))
+       (with-open [res (q/open-query allocator ra-src wm-src
+                                     lang plan query-opts)]
+         (vec (.toList res)))))))
 
 (def ^:private !last-tx-fn-error (atom nil))
 
