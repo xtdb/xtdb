@@ -194,34 +194,18 @@
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
 (defn- tx-fn-q [allocator ra-src wm-src tx-opts]
-  ;;TODO tx-fns don't appear collect table-info and so won't work correctly with from *
-  ;;this appears to be true already of the sql-tx fns, leaving this work out for now,
-  ;;can circle back on both.
+  ;; TODO tx-fns don't appear collect table-info and so won't work correctly with from *
+  ;; this appears to be true already of the sql-tx fns, leaving this work out for now,
+  ;; can circle back on both.
   (fn tx-fn-q*
     ([query] (tx-fn-q* query {}))
 
     ([query opts]
-     (with-open [^IResultSet res (if-not (seq? query)
-                                   (throw (err/runtime-err :unknown-query-type
-                                                           {:query query
-                                                            :type (type query)}))
-
-                                   (xtql/open-xtql-query allocator ra-src wm-src (xtql.edn/parse-query query) (into tx-opts opts)))]
-       (vec (iterator-seq res))))))
-
-(defn- tx-fn-sql
-  ([allocator, ^IRaQuerySource ra-src, wm-src tx-opts query]
-   (tx-fn-sql allocator ra-src wm-src tx-opts query {}))
-
-  ([allocator, ^IRaQuerySource ra-src, wm-src tx-opts query query-opts]
-   (try
-     (let [query-opts (into tx-opts query-opts)
-           pq (.prepareRaQuery ra-src (sql/compile-query query query-opts))]
-       (with-open [res (sql/open-sql-query allocator wm-src pq query-opts)]
-         (vec (iterator-seq res))))
-     (catch Throwable e
-       (log/error e)
-       (throw e)))))
+     (let [query-opts (into tx-opts opts)
+           [lang plan] (q/compile-query query query-opts nil)]
+       (with-open [^IResultSet res (q/open-query allocator ra-src wm-src
+                                                 lang plan query-opts)]
+         (vec (iterator-seq res)))))))
 
 (def ^:private !last-tx-fn-error (atom nil))
 
@@ -243,7 +227,6 @@
 
         ;; TODO confirm/expand API that we expose to tx-fns
         sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src tx-opts)
-                                      'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
                                       '*current-tx* (serde/tx-key-write-fn tx-key)}
                            :namespaces {'xt xt-sci-ns}})]

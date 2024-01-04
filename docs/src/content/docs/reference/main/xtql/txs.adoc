@@ -232,6 +232,5 @@ If they return false, or throw an exception, the transaction will be rolled back
 
 There are a few functions available in scope during the transaction function:
 
-* `(q <query> <opts>?)` runs an link:./queries[XTQL query]
-* `(sql-q <query> <opts>?)`: runs a SQL query.
+* `(q <query> <opts>?)` runs an link:./queries[XTQL]/SQL query
 * `+*current-tx*+`: the current transaction being indexed.

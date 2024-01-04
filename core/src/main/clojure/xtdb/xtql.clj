@@ -3,14 +3,13 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
-            [xtdb.query :as q]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.query Binding DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
-                       Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery IRaQuerySource
+                       Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery
                        Query Query$Aggregate Query$DocsRelation Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
                        Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec Query$ParamRelation Query$Pipeline
                        Query$Return Query$Unify Query$UnnestCol Query$UnnestVar Query$Where Query$With Query$WithCols Query$Without
@@ -1016,15 +1015,3 @@
                   (->> args
                        (into {} (map (fn [[k v]]
                                        (MapEntry/create (param-sym (str (symbol k))) v)))))))
-
-(defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src,
-                                        query {:keys [args key-fn table-info]
-                                               :or {key-fn :clojure}
-                                               :as query-opts}]
-
-  (let [plan (compile-query query table-info)]
-    (util/with-close-on-catch [params (open-args allocator args)
-                               cursor (-> (.prepareRaQuery ra-src plan)
-                                          (.bind wm-src (assoc query-opts :params params, :key-fn key-fn))
-                                          (.openCursor))]
-      (q/cursor->result-set cursor params (util/parse-key-fn key-fn)))))

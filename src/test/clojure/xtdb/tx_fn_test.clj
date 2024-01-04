@@ -90,7 +90,7 @@
 (t/deftest test-tx-fn-sql-q
   (xt/submit-tx tu/*node* [(xt/put-fn :doc-counter
                                       '(fn [id]
-                                         (let [[{doc-count :doc_count}] (sql-q "SELECT COUNT(*) doc_count FROM docs")]
+                                         (let [[{doc-count :doc_count}] (q "SELECT COUNT(*) doc_count FROM docs")]
                                            [(xt/put :docs {:xt/id id, :doc-count doc-count})])))
                            (xt/call :doc-counter :foo)
                            (xt/call :doc-counter :bar)])

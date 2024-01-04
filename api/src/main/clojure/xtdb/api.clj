@@ -295,9 +295,7 @@
   * `tx-fn`: transaction function body.
     * Transaction functions are run using the Small Clojure Interpreter (SCI).
     * Within transaction functions, the following built-ins are available:
-      * `q`: (function, `(q query opts)`): a function to run an XTQL query.
-         See `q` for options.
-      * `sql-q` (function, `(sql-q query opts)`): a function to run an SQL query.
+      * `q`: (function, `(q query opts)`): a function to run an XTQL/SQL query.
          See `q` for options.
       * `*current-tx*`: the current transaction key (`:tx-id`, `:sys-time`)
       * `xt/put`, `xt/delete`, etc: transaction operation builders from this namespace."

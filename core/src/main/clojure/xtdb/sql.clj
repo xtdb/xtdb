@@ -1,15 +1,11 @@
 (ns xtdb.sql
-  (:require [xtdb.query :as q]
-            [xtdb.rewrite :as r]
+  (:require [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
             [xtdb.sql.plan :as plan]
-            [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
-           java.util.HashMap
-           org.apache.arrow.memory.BufferAllocator
-           xtdb.query.PreparedQuery))
+           java.util.HashMap))
 
 (defn parse-query
   [query]
@@ -35,12 +31,3 @@
                   (->> args
                        (into {} (map-indexed (fn [idx v]
                                                (MapEntry/create (symbol (str "?_" idx)) v)))))))
-
-(defn open-sql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
-                                       {:keys [key-fn] :as query-opts
-                                        :or {key-fn :sql}}]
-  (util/with-close-on-catch [params (open-args allocator (:args query-opts))
-                             cursor (-> (.bind pq wm-src (-> query-opts
-                                                             (assoc :params params, :key-fn key-fn)))
-                                        (.openCursor))]
-    (q/cursor->result-set cursor params (util/parse-key-fn key-fn))))

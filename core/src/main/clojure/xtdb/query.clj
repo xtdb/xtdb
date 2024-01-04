@@ -21,8 +21,11 @@
             xtdb.operator.table
             xtdb.operator.top
             xtdb.operator.unnest
+            [xtdb.sql :as sql]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util Iterator)
@@ -32,6 +35,7 @@
            (xtdb ICursor IKeyFn IResultCursor IResultSet)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
+           xtdb.query.Query
            xtdb.util.RefCounter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -197,3 +201,30 @@
 
 (defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params, ^IKeyFn key-fn]
   (CursorResultSet. cursor params key-fn nil))
+
+(defn compile-query
+  "returns a pair of [lang ra-plan]"
+  [query query-opts table-info]
+
+  (cond
+    (string? query) [:sql (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
+
+    (seq? query) [:xtql (xtql/compile-query (xtql.edn/parse-query query) table-info)]
+
+    (instance? Query query) [:xtql (xtql/compile-query query table-info)]
+
+    :else (throw (err/illegal-arg :unknown-query-type
+                                  {:query query
+                                   :type (type query)}))))
+
+(defn open-query [allocator ^IRaQuerySource ra-src, wm-src
+                  lang plan query-opts]
+  (let [{:keys [args key-fn], :or {key-fn (case lang :sql :sql, :xtql :clojure)}} query-opts]
+    (util/with-close-on-catch [args (case lang
+                                      :sql (sql/open-args allocator args)
+                                      :xtql (xtql/open-args allocator args))
+                               cursor (-> (.prepareRaQuery ra-src plan)
+                                          (.bind wm-src (-> query-opts
+                                                            (assoc :params args, :key-fn key-fn)))
+                                          (.openCursor))]
+      (cursor->result-set cursor args (util/parse-key-fn key-fn)))))
