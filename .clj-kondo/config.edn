@@ -10,4 +10,5 @@
  :hooks {:analyze-call {xtdb.pgwire/def-msg hooks/pgwire-def-msg}}
  :linters {:not-empty? {:level :off}
            :unresolved-symbol {:level :error
-                               :exclude [(clojure.test/is [=plan-file])]}}}
+                               :exclude [(clojure.test/is [=plan-file])]}}
+ :config-paths ["../src/main/resources/clj-kondo.exports/com.xtdb/xtdb-api"]}
