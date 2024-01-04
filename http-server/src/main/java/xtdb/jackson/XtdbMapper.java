@@ -18,6 +18,7 @@ public class XtdbMapper {
             .addDeserializer(Delete.class, new DeleteDeserializer())
             .addDeserializer(Erase.class, new EraseDeserializer())
             .addDeserializer(Call.class, new CallDeserializer())
+            .addDeserializer(Sql.class, new SqlOpDeserializer())
             .addDeserializer(Tx.class, new TxDeserializer())
             .addDeserializer(TxOptions.class, new TxOptionsDeserializer());
 

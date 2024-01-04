@@ -15,10 +15,6 @@ sealed class Ops {
     @Suppress("unused")
     interface HasArgs<ArgType, O : HasArgs<ArgType, O>?> {
         fun withArgs(args: List<ArgType>?): O
-
-        fun withArgs(vararg args: ArgType): O {
-            return withArgs(listOf(*args))
-        }
     }
 
     interface HasValidTimeBounds<O : HasValidTimeBounds<O>?> {

@@ -33,6 +33,8 @@ public class OpsDeserializer extends StdDeserializer<Ops>  {
             return codec.treeToValue(node, Erase.class);
         } else if (node.has("call")) {
             return codec.treeToValue(node, Call.class);
+        } else if (node.has("sql")) {
+            return codec.treeToValue(node, Sql.class);
         } else {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-tx-op"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }

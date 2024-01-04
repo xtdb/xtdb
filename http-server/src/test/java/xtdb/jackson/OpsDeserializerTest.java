@@ -4,6 +4,7 @@ import clojure.lang.Keyword;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import xtdb.tx.Ops;
+import xtdb.tx.Sql;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -72,5 +73,20 @@ class OpsDeserializerTest {
 
         // then
         assertEquals( Ops.call("my-fn", List.of("arg1")), actual);
+    }
+
+    @Test
+    public void testSqlEquals() throws IOException {
+        // given
+        String sql = """
+                {"sql": "INSERT INTO docs (xt$id, foo) VALUES (?, ?)",
+                 "arg_rows": [[1, "foo"], [2, "bar"]]}
+                """;
+
+        // when
+        Object actual = objectMapper.readValue(sql, Ops.class);
+
+        // then
+        assertEquals(Ops.sqlBatch("INSERT INTO docs (xt$id, foo) VALUES (?, ?)", List.of(List.of(1L, "foo"), List.of(2L, "bar"))), actual);
     }
 }

@@ -9,7 +9,7 @@
            (xtdb.api TransactionKey TxOptions)
            (xtdb.jackson XtdbMapper)
            (xtdb.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOpts QueryRequest TemporalFilter)
-           (xtdb.tx Ops Tx)))
+           (xtdb.tx Ops Tx Sql)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -127,7 +127,20 @@
     (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-call"
                             (roundtrip-tx-op
                              {"call" "my-fn"
-                              "args" {"not" "a-list"}})))))
+                              "args" {"not" "a-list"}}))))
+
+  (t/testing "sql"
+    (t/is (= #xt.tx/sql {:sql "INSERT INTO docs (xt$id, foo) VALUES (1, \"bar\")"}
+             (roundtrip-tx-op {"sql" "INSERT INTO docs (xt$id, foo) VALUES (1, \"bar\")" })))
+
+    (t/is (= #xt.tx/sql {:sql "INSERT INTO docs (xt$id, foo) VALUES (?, ?)", :arg-rows [[1 "bar"] [2 "toto"]]}
+             (roundtrip-tx-op {"sql" "INSERT INTO docs (xt$id, foo) VALUES (?, ?)"
+                               "arg_rows" [[1 "bar"] [2 "toto"]]})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-sql-op"
+                            (roundtrip-tx-op
+                             {"sql" "INSERT INTO docs (xt$id, foo) VALUES (?, ?)"
+                              "arg_rows" [1 "bar"]})))))
 
 (defn roundtrip-tx [v]
   (.readValue XtdbMapper/TX_OP_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Tx))
