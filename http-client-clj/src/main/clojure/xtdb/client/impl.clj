@@ -71,19 +71,17 @@
     (.close in)))
 
 (defmethod hato.middleware/coerce-response-body ::transit+json->result-or-error [_req {:keys [^InputStream body status] :as resp}]
-  (letfn [(parse-body [rdr->body]
-            (try
-              (let [rdr (transit/reader body :json {:handlers serde/transit-read-handlers})]
-                (-> resp (assoc :body (rdr->body rdr))))
-              (catch Exception e
-                (.close body)
-                (throw e))))]
+  (try
+    (let [rdr (transit/reader body :json {:handlers serde/transit-read-handlers})]
+      (-> resp
+          (assoc :body (if (hato.middleware/unexceptional-status? status)
+                         (->TransitResultSet body rdr nil)
 
-    (if (hato.middleware/unexceptional-status? status)
-      (parse-body (fn [rdr] (->TransitResultSet body rdr nil)))
-
-      ;; This should be an error we know how to decode
-      (parse-body transit/read))))
+                         ;; This should be an error we know how to decode
+                         (transit/read rdr)))))
+    (catch Throwable t
+      (.close body)
+      (throw t))))
 
 (defn- validate-remote-key-fn [key-fn]
   (when-not (#{:clojure :sql :snake_case} key-fn)
