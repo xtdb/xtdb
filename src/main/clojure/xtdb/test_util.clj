@@ -7,10 +7,8 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
-            xtdb.object-store
-            [xtdb.operator :as op]
-            xtdb.operator.scan
             [xtdb.protocols :as xtp]
+            [xtdb.query :as q]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -34,7 +32,7 @@
            (xtdb.api TransactionKey)
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
-           (xtdb.operator IRaQuerySource PreparedQuery)
+           (xtdb.query IRaQuerySource PreparedQuery)
            (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
@@ -229,9 +227,9 @@
                               (vw/open-params *allocator* params)
                               vw/empty-params)]
        (let [^PreparedQuery pq (if node
-                                 (let [^IRaQuerySource ra-src (util/component node ::op/ra-query-source)]
+                                 (let [^IRaQuerySource ra-src (util/component node ::q/ra-query-source)]
                                    (.prepareRaQuery ra-src query))
-                                 (op/prepare-ra query))
+                                 (q/prepare-ra query))
              bq (.bind pq indexer
                        (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz :default-all-valid-time?])
                            (assoc :params params-rel)))]

@@ -1,4 +1,4 @@
-(ns xtdb.operator-test
+(ns xtdb.query-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.expression.metadata :as expr.meta]

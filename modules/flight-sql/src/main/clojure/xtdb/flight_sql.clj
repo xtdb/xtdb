@@ -3,7 +3,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             xtdb.indexer
-            [xtdb.operator :as op]
+            xtdb.query
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -23,7 +23,7 @@
            org.apache.arrow.vector.types.pojo.Schema
            xtdb.IKeyFn
            xtdb.indexer.IIndexer
-           (xtdb.operator BoundQuery IRaQuerySource PreparedQuery)
+           (xtdb.query BoundQuery IRaQuerySource PreparedQuery)
            [xtdb.tx Ops]
            (xtdb.vector IVectorReader)))
 
@@ -300,7 +300,7 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :node (ig/ref :xtdb/node)
           :indexer (ig/ref :xtdb/indexer)
-          :ra-src (ig/ref :xtdb.operator/ra-query-source)
+          :ra-src (ig/ref :xtdb.query/ra-query-source)
           :wm-src (ig/ref :xtdb/indexer)
           :host "127.0.0.1"
           :port 9832}

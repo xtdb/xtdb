@@ -2,24 +2,18 @@
   (:require [clojure.set :as set]
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
-            [xtdb.operator :as op]
             [xtdb.operator.group-by :as group-by]
+            [xtdb.query :as q]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql.edn :as xt.edn])
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.operator IRaQuerySource)
-           (xtdb.query Binding DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase
-                       DmlOps$Insert DmlOps$Update
-                       Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param
-                       Expr$Subquery Expr$Exists Expr$Pull Expr$PullMany Expr$Get
-                       Expr$ListExpr Expr$SetExpr Expr$MapExpr
-                       Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
-                       Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec
-                       Query$Pipeline Query$Return Query$Unify
-                       Query$Where Query$With Query$WithCols Query$Without Query$DocsRelation Query$ParamRelation
-                       Query$UnnestCol Query$UnnestVar
+           (xtdb.query Binding DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+                       Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
+                       Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery IRaQuerySource
+                       Query Query$Aggregate Query$DocsRelation Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
+                       Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec Query$ParamRelation Query$Pipeline
+                       Query$Return Query$Unify Query$UnnestCol Query$UnnestVar Query$Where Query$With Query$WithCols Query$Without
                        TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -1033,4 +1027,4 @@
                                cursor (-> (.prepareRaQuery ra-src plan)
                                           (.bind wm-src (assoc query-opts :params params, :key-fn key-fn))
                                           (.openCursor))]
-      (op/cursor->result-set cursor params (util/parse-key-fn key-fn)))))
+      (q/cursor->result-set cursor params (util/parse-key-fn key-fn)))))

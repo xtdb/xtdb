@@ -5,7 +5,7 @@
             [clojure.walk :as w]
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
-            [xtdb.operator]                                 ;; Adds impls logical plan spec
+            [xtdb.query]                                 ;; Adds impls logical plan spec
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.util :as util])

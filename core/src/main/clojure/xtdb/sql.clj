@@ -1,5 +1,5 @@
 (ns xtdb.sql
-  (:require [xtdb.operator :as op]
+  (:require [xtdb.query :as q]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
@@ -9,7 +9,7 @@
   (:import clojure.lang.MapEntry
            java.util.HashMap
            org.apache.arrow.memory.BufferAllocator
-           xtdb.operator.PreparedQuery))
+           xtdb.query.PreparedQuery))
 
 (defn parse-query
   [query]
@@ -43,4 +43,4 @@
                              cursor (-> (.bind pq wm-src (-> query-opts
                                                              (assoc :params params, :key-fn key-fn)))
                                         (.openCursor))]
-    (op/cursor->result-set cursor params (util/parse-key-fn key-fn))))
+    (q/cursor->result-set cursor params (util/parse-key-fn key-fn))))

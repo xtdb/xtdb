@@ -2,7 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
-            xtdb.operator
+            xtdb.query
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -12,7 +12,8 @@
   (:import (java.util.function IntPredicate)
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot
-           (xtdb.operator IRaQuerySource IRelationSelector)
+           xtdb.operator.IRelationSelector
+           (xtdb.query IRaQuerySource)
            xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -339,7 +340,7 @@
 
 (t/deftest test-scan-col-types
   (with-open [node (xtn/start-node {})]
-    (let [^IRaQuerySource ra-src (util/component node :xtdb.operator/ra-query-source)]
+    (let [^IRaQuerySource ra-src (util/component node :xtdb.query/ra-query-source)]
       (letfn [(->col-types [tx]
                 (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt$id]])
                     (.bind (util/component node :xtdb/indexer) {:node node, :basis {:at-tx tx}})

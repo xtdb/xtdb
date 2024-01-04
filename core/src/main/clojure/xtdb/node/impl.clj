@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             xtdb.indexer
             [xtdb.logical-plan :as lp]
-            [xtdb.operator :as op]
+            [xtdb.query :as q]
             [xtdb.operator.scan :as scan]
             [xtdb.protocols :as xtp]
             [xtdb.sql :as sql]
@@ -22,8 +22,7 @@
            (xtdb.api IXtdb)
            xtdb.indexer.IIndexer
            xtdb.IResultSet
-           xtdb.operator.IRaQuerySource
-           (xtdb.query Basis Query)
+           (xtdb.query Basis IRaQuerySource Query)
            (xtdb.tx Sql)
            (xtdb.tx_producer ITxProducer)))
 
@@ -109,7 +108,7 @@
                                                           (.bind wm-src (-> query-opts
                                                                             (assoc :params args, :key-fn key-fn)))
                                                           (.openCursor))]
-                      (op/cursor->result-set cursor args (util/parse-key-fn key-fn)))))))))))
+                      (q/cursor->result-set cursor args (util/parse-key-fn key-fn)))))))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 
@@ -132,7 +131,7 @@
           :wm-src (ig/ref :xtdb/indexer)
           :tx-producer (ig/ref ::txp/tx-producer)
           :default-tz (ig/ref :xtdb/default-tz)
-          :ra-src (ig/ref :xtdb.operator/ra-query-source)
+          :ra-src (ig/ref :xtdb.query/ra-query-source)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)}
          opts))
 
@@ -156,7 +155,7 @@
              :xtdb.log/watcher {}
              :xtdb.metadata/metadata-manager {}
              :xtdb.operator.scan/scan-emitter {}
-             :xtdb.operator/ra-query-source {}
+             :xtdb.query/ra-query-source {}
              ::txp/tx-producer {}
              :xtdb.stagnant-log-flusher/flusher {}
              :xtdb/compactor {}}

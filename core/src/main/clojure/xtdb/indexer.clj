@@ -7,7 +7,7 @@
             [xtdb.error :as err]
             xtdb.indexer.live-index
             [xtdb.metadata :as meta]
-            [xtdb.operator :as op]
+            [xtdb.query :as q]
             [xtdb.operator.scan :as scan]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde :as serde]
@@ -39,7 +39,7 @@
            xtdb.api.TransactionKey
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
-           xtdb.operator.IRaQuerySource
+           (xtdb.query IRaQuerySource PreparedQuery)
            (xtdb.operator.scan IScanEmitter)
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
@@ -162,7 +162,7 @@
 
 (defn- find-fn [allocator ^IRaQuerySource ra-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-id]
   (let [lp '[:scan {:table xt$tx_fns} [{xt$id (= xt$id ?id)} xt$fn]]
-        ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
+        ^xtdb.query.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?id [fn-id])
                                                        (vr/vec->reader))]
@@ -363,7 +363,7 @@
         (.addRows row-counter row-count)))))
 
 (defn- query-indexer [^IRaQuerySource ra-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?]} query-opts]
-  (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src query)]
+  (let [^PreparedQuery pq (.prepareRaQuery ra-src query)]
     (fn eval-query [^RelationReader params]
       (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
                                             :default-all-valid-time? default-all-valid-time?})
@@ -746,7 +746,7 @@
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :live-index (ig/ref :xtdb.indexer/live-index)
-          :ra-src (ig/ref ::op/ra-query-source)
+          :ra-src (ig/ref ::q/ra-query-source)
           :rows-per-chunk 102400}
          opts))
 
