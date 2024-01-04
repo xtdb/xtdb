@@ -206,7 +206,7 @@
                                                            {:query query
                                                             :type (type query)}))
 
-                                   (xtql/open-xtql-query allocator ra-src wm-src query (into tx-opts opts)))]
+                                   (xtql/open-xtql-query allocator ra-src wm-src (xtql.edn/parse-query query) (into tx-opts opts)))]
        (vec (iterator-seq res))))))
 
 (defn- tx-fn-sql

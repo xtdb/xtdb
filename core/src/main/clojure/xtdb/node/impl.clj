@@ -11,7 +11,8 @@
             [xtdb.time :as time]
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
-            [xtdb.xtql :as xtql])
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time ZoneId)
@@ -86,19 +87,29 @@
       (-> (.awaitTxAsync indexer (get query-opts :after-tx) (:tx-timeout query-opts))
           (util/then-apply
             (fn [_]
-              (let [query-opts (-> query-opts (assoc :table-info (scan/tables-with-cols query-opts wm-src scan-emitter)))]
-                (cond
-                  (string? query) (let [ra (sql/compile-query query query-opts)]
-                                    (if (:explain? query-opts)
-                                      (lp/explain-result ra)
-                                      (let [pq (.prepareRaQuery ra-src ra)]
-                                        (sql/open-sql-query allocator wm-src pq query-opts))))
+              (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
+                    [lang plan] (cond
+                                  (string? query) [:sql (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
 
-                  (or (seq? query) (instance? Query query)) (xtql/open-xtql-query allocator ra-src wm-src query query-opts)
+                                  (seq? query) [:xtql (xtql/compile-query (xtql.edn/parse-query query) table-info)]
 
-                  :else (throw (err/illegal-arg :unknown-query-type
-                                                {:query query
-                                                 :type (type query)})))))))))
+                                  (instance? Query query) [:xtql (xtql/compile-query query table-info)]
+
+                                  :else (throw (err/illegal-arg :unknown-query-type
+                                                                {:query query
+                                                                 :type (type query)})))]
+                (if (:explain? query-opts)
+                  (lp/explain-result plan)
+
+                  (let [{:keys [args key-fn], :or {key-fn (case lang :sql :sql, :xtql :clojure)}} query-opts]
+                    (util/with-close-on-catch [args (case lang
+                                                      :sql (sql/open-args allocator args)
+                                                      :xtql (xtql/open-args allocator args))
+                                               cursor (-> (.prepareRaQuery ra-src plan)
+                                                          (.bind wm-src (-> query-opts
+                                                                            (assoc :params args, :key-fn key-fn)))
+                                                          (.openCursor))]
+                      (op/cursor->result-set cursor args (util/parse-key-fn key-fn)))))))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 

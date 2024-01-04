@@ -30,13 +30,16 @@
            (vary-meta assoc :param-count (sem/param-count ast))
            #_(doto clojure.pprint/pprint))))))
 
+(defn open-args [allocator args]
+  (vw/open-params allocator
+                  (->> args
+                       (into {} (map-indexed (fn [idx v]
+                                               (MapEntry/create (symbol (str "?_" idx)) v)))))))
+
 (defn open-sql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
                                        {:keys [key-fn] :as query-opts
                                         :or {key-fn :sql}}]
-  (util/with-close-on-catch [params (vw/open-params allocator
-                                                    (->> (:args query-opts)
-                                                         (into {} (map-indexed (fn [idx v]
-                                                                                 (MapEntry/create (symbol (str "?_" idx)) v))))))
+  (util/with-close-on-catch [params (open-args allocator (:args query-opts))
                              cursor (-> (.bind pq wm-src (-> query-opts
                                                              (assoc :params params, :key-fn key-fn)))
                                         (.openCursor))]

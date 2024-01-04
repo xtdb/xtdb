@@ -1015,23 +1015,22 @@
          #_(doto clojure.pprint/pprint)
          (doto (lp/validate-plan)))]))
 
+(defn open-args [^BufferAllocator allocator, args]
+  ;; TODO better error if args is a vector of maps,
+  ;; as this is supported in other places which take args (join etc.)
+  (vw/open-params allocator
+                  (->> args
+                       (into {} (map (fn [[k v]]
+                                       (MapEntry/create (param-sym (str (symbol k))) v)))))))
+
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src,
-                                        query {:keys [args explain? key-fn table-info]
+                                        query {:keys [args key-fn table-info]
                                                :or {key-fn :clojure}
                                                :as query-opts}]
 
-  (let [plan (cond-> query
-               (seq? query) xt.edn/parse-query
-               true (#(compile-query % table-info)))]
-    (if explain?
-      (lp/explain-result plan)
-
-      ;;TODO better error if args is a vector of maps, as this is supported in other places which take args (join etc.)
-      (let [args (->> args
-                      (into {} (map (fn [[k v]]
-                                      (MapEntry/create (param-sym (str (symbol k))) v)))))]
-        (util/with-close-on-catch [params (vw/open-params allocator args)
-                                   cursor (-> (.prepareRaQuery ra-src plan)
-                                              (.bind wm-src (assoc query-opts :params params, :key-fn key-fn))
-                                              (.openCursor))]
-          (op/cursor->result-set cursor params (util/parse-key-fn key-fn)))))))
+  (let [plan (compile-query query table-info)]
+    (util/with-close-on-catch [params (open-args allocator args)
+                               cursor (-> (.prepareRaQuery ra-src plan)
+                                          (.bind wm-src (assoc query-opts :params params, :key-fn key-fn))
+                                          (.openCursor))]
+      (op/cursor->result-set cursor params (util/parse-key-fn key-fn)))))
