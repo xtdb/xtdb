@@ -1413,11 +1413,9 @@
                              :explain-data (s/explain-data ::logical-plan plan)}))))
 
 (defn explain-result [plan]
-  (let [fields '{plan (types/col-type->field :transit)}
-        ^Iterable res [{:plan plan}]
+  (let [^Iterable res [{:plan plan}]
         it (.iterator res)]
     (reify IResultSet
-      (columnFields [_] fields)
       (hasNext [_] (.hasNext it))
       (next [_] (.next it))
       (close [_]))))

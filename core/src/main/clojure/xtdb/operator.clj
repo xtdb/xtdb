@@ -176,8 +176,6 @@
                           ^IKeyFn key-fn
                           ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
-  (columnFields [_] (.columnFields cursor))
-
   (hasNext [res]
     (boolean
      (or (and next-values (.hasNext next-values))
