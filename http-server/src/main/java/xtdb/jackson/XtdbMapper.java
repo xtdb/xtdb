@@ -9,6 +9,7 @@ import xtdb.query.*;
 import xtdb.tx.*;
 import xtdb.tx.Call;
 
+import static com.fasterxml.jackson.databind.DeserializationFeature.USE_LONG_FOR_INTS;
 import static xtdb.query.Query.*;
 
 public class XtdbMapper {
@@ -25,7 +26,8 @@ public class XtdbMapper {
     public static final ObjectMapper TX_OP_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .registerModule(new JsonLdModule())
-            .registerModule(TX_DESERIALIZER_MODULE);
+            .registerModule(TX_DESERIALIZER_MODULE)
+            .configure(USE_LONG_FOR_INTS, true);
 
     public static final SimpleModule QUERY_REQUEST_DESERIALIZER = new SimpleModule("QueryRequestDeserializer")
             .addDeserializer(QueryRequest.class, new QueryRequestDeserializer())
@@ -58,5 +60,6 @@ public class XtdbMapper {
     public static final ObjectMapper QUERY_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .registerModule(new JsonLdModule())
-            .registerModule(QUERY_REQUEST_DESERIALIZER);
+            .registerModule(QUERY_REQUEST_DESERIALIZER)
+            .configure(USE_LONG_FOR_INTS, true);
 }
