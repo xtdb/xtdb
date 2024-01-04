@@ -44,3 +44,6 @@ replstate.xml
 ClojureProjectResolveSettings.xml
 misc.xml
 vcs.xml
+
+# Kotlin
+kotlinc.xml
