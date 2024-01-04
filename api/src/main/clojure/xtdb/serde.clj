@@ -57,7 +57,7 @@
 (defn- render-sql-op [^Sql op]
   {:sql (.sql op), :arg-rows (.argRows op)})
 
-(defn- sql-op-reader [{:keys [sql ^List arg-rows]}]
+(defn sql-op-reader [{:keys [sql ^List arg-rows]}]
   (-> (Ops/sql sql)
       (.withArgs arg-rows)))
 
@@ -76,7 +76,7 @@
 (defmethod print-method Xtql [op ^Writer w]
   (print-dup op w))
 
-(defn- xtql-op-reader [{:keys [xtql ^List args]}]
+(defn xtql-op-reader [{:keys [xtql ^List args]}]
   (-> (Ops/xtql xtql)
       (.withArgs args)))
 
@@ -90,7 +90,7 @@
 (defmethod print-method Put [op ^Writer w]
   (print-dup op w))
 
-(defn- put-op-reader [{:keys [table-name doc valid-from valid-to]}]
+(defn put-op-reader [{:keys [table-name doc valid-from valid-to]}]
   (-> (Ops/put table-name doc)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
@@ -104,7 +104,7 @@
 (defmethod print-method Delete [op ^Writer w]
   (print-dup op w))
 
-(defn- delete-op-reader [{:keys [table-name xt/id valid-from valid-to]}]
+(defn delete-op-reader [{:keys [table-name xt/id valid-from valid-to]}]
   (-> (Ops/delete table-name id)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
@@ -117,7 +117,7 @@
 (defmethod print-method Erase [op ^Writer w]
   (print-dup op w))
 
-(defn- erase-op-reader [{:keys [table-name xt/id]}]
+(defn erase-op-reader [{:keys [table-name xt/id]}]
   (Ops/erase table-name id))
 
 (defn- render-call-op [^Call op]
@@ -129,7 +129,7 @@
 (defmethod print-method Call [op ^Writer w]
   (print-dup op w))
 
-(defn- call-op-reader [{:keys [fn-id args]}]
+(defn call-op-reader [{:keys [fn-id args]}]
   (Ops/call fn-id args))
 
 (defmethod print-dup TransactionKey [^TransactionKey tx-key ^Writer w]
