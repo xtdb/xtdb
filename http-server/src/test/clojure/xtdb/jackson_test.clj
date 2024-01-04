@@ -2,7 +2,8 @@
   (:require [clojure.test :as t :refer [deftest]]
             [jsonista.core :as json]
             [xtdb.error :as err]
-            [xtdb.jackson :as jackson])
+            [xtdb.jackson :as jackson]
+            xtdb.serde)
   (:import (java.time Instant)
            (java.util List)
            (xtdb.api TransactionKey TxOptions)
