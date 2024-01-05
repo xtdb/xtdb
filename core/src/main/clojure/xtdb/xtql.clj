@@ -96,6 +96,10 @@
   (col-sym
    (str "xt$_" (*gensym* "sqp"))))
 
+(defn gen-col []
+  (col-sym
+   (str "xt$_" (*gensym* "gc"))))
+
 (declare plan-arg-spec)
 
 (def ^:dynamic *subqueries* nil)
@@ -571,13 +575,15 @@
 
   Query$UnnestCol
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [{:keys [l r subqueries logic-var?]} (plan-col-spec (.col this) provided-vars)]
-      (when (seq subqueries)
-        (throw (UnsupportedOperationException. "TODO: Add support for subqueries in unnest expr")))
-      (when-not logic-var?
-        (throw (UnsupportedOperationException. "TODO: Add support for expr in unnest")))
-      {:ra-plan [:unnest {l r} ra-plan]
-       :provided-vars (conj provided-vars l)})))
+    (let [{:keys [l r subqueries]} (plan-col-spec (.col this) provided-vars)
+          pre-col (gen-col)
+          return-vars (conj provided-vars l)]
+      {:ra-plan
+       [:project (vec return-vars)
+        [:unnest {l pre-col}
+         [:map [{pre-col r}]
+          (wrap-expr-subqueries ra-plan subqueries)]]]
+       :provided-vars return-vars})))
 
 (defn plan-join [join-type query args binding]
   (let [out-bindings (mapv plan-out-spec binding) ;;TODO refelection (interface here?)
@@ -628,14 +634,11 @@
 
   Query$UnnestVar
   (plan-unify-clause [this]
-    (let [{:keys [l r subqueries logic-var? required-vars]} (plan-var-spec (.var this))]
-      (when (seq subqueries)
-        (throw (UnsupportedOperationException. "TODO: Add support for subqueries in unnest expr")))
-      (when-not logic-var?
-        (throw (UnsupportedOperationException. "TODO: Add support for expr in unnest")))
+    (let [{:keys [l r subqueries required-vars]} (plan-var-spec (.var this))]
       [[:unnest {:expr r
                  :required-vars required-vars
-                 :provided-vars #{l}}]]))
+                 :provided-vars #{l}
+                 :subqueries subqueries}]]))
 
   Query$Join
   (plan-unify-clause [this]
@@ -672,18 +675,17 @@
                        (wrap-expr-subqueries (mapcat :subqueries renamed-withs)))]}
         (wrap-unify var->cols))))
 
-(defn wrap-unnest [acc-plan {:keys [provided-vars expr] :as _unnest}]
-  (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan])
-        ;;TODO is it safe to do unique-cols over a just the parent plan, it has no context of what var unnest
-        ;; is going to introduce, maybe it renames a col to one this unnest introduces.
-        ;; Behaviour should mirror with, could add a help fn.
-        [{acc-plan-with-unique-cols :ra-plan}] rels
+(defn wrap-unnest [acc-plan {:keys [provided-vars expr subqueries] :as _unnest}]
+  (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan]) ;;doesn't rename any cols, but creates var->cols
+        [{acc-plan :ra-plan}] rels
         original-unnested-col (first provided-vars)
+        pre-col (gen-col)
         unnested-col (col-sym (*gensym* original-unnested-col))]
     (wrap-unify
-     {:ra-plan [:unnest ;; confusingly the unnest operator takes it inverted
-                {unnested-col (first (get var->cols expr))}
-                acc-plan-with-unique-cols]}
+     {:ra-plan
+      [:unnest {unnested-col pre-col}
+       [:map [{pre-col expr}]
+        (wrap-expr-subqueries acc-plan subqueries)]]}
      (update var->cols original-unnested-col (fnil conj #{}) unnested-col))))
 
 (defn wrap-unnests [acc-plan unnests]
