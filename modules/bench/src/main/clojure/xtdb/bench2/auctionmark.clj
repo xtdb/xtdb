@@ -178,10 +178,8 @@
         (->> (xt/q (:sut worker)
                    '(unify (from :gag [{:xt/id gag-id} gag-name])
                            (from :gav [{:xt/id gav-id, :gav-gag-id gag-id} gav-name])
-                           ;; TODO exprs in unnest #3026
-                           (with {gag-ids $gag-ids, gav-ids $gav-ids})
-                           (unnest {gag-id gag-ids})
-                           (unnest {gav-id gav-ids}))
+                           (unnest {gag-id $gag-ids})
+                           (unnest {gav-id $gav-ids}))
                    {:args {:gag-ids gag-ids, :gav-ids gav-ids}, :key-fn :snake_case})
              (str/join " ")
              (str description " "))]

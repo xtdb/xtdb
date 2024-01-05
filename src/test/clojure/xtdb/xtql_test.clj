@@ -2368,13 +2368,11 @@
                                 (with {:friends
                                        (pull* (-> (unify
                                                    (from :users [{:xt/id id} friends])
-                                                   (with {outer-friends $friends})
-                                                   (unnest {id outer-friends}))
+                                                   (unnest {id $friends}))
                                                   (with {:friends (pull*
                                                                    (-> (unify
                                                                         (from :users [{:xt/id id} friends])
-                                                                        (with {outer-friends $friends})
-                                                                        (unnest {id outer-friends}))
+                                                                        (unnest {id $friends}))
                                                                        (return id friends))
                                                                    {:args [friends]})})
                                                   (return id friends))
