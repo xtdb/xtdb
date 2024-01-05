@@ -1,8 +1,8 @@
 package xtdb.tx
 
 import clojure.lang.Keyword
-import xtdb.tx.Ops.HasArgs
-import xtdb.tx.Ops.HasValidTimeBounds
+import xtdb.tx.TxOp.HasArgs
+import xtdb.tx.TxOp.HasValidTimeBounds
 import xtdb.types.ClojureForm
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -11,7 +11,7 @@ private val XT_TXS: Keyword = Keyword.intern("xt", "tx-fns")
 private val XT_ID: Keyword = Keyword.intern("xt", "id")
 private val XT_FN: Keyword = Keyword.intern("xt", "fn")
 
-sealed class Ops {
+sealed interface TxOp {
     @Suppress("unused")
     interface HasArgs<ArgType, O : HasArgs<ArgType, O>?> {
         fun withArgs(args: List<ArgType>?): O
@@ -67,7 +67,7 @@ data class Put internal constructor(
     @JvmField val doc: Map<*, *>,
     @JvmField val validFrom: Instant? = null,
     @JvmField val validTo: Instant? = null
-) : Ops(), HasValidTimeBounds<Put> {
+) : TxOp, HasValidTimeBounds<Put> {
 
     override fun startingFrom(validFrom: Instant?): Put = Put(tableName, doc, validFrom, validTo)
     override fun until(validTo: Instant?): Put = Put(tableName, doc, validFrom, validTo)
@@ -79,7 +79,7 @@ data class Delete internal constructor(
     @JvmField val entityId: Any,
     @JvmField val validFrom: Instant? = null,
     @JvmField val validTo: Instant? = null
-) : Ops(), HasValidTimeBounds<Delete> {
+) : TxOp, HasValidTimeBounds<Delete> {
 
     override fun startingFrom(validFrom: Instant?): Delete = Delete(tableName, entityId, validFrom, validTo)
     override fun until(validTo: Instant?): Delete = Delete(tableName, entityId, validFrom, validTo)
@@ -89,13 +89,13 @@ data class Delete internal constructor(
 data class Erase(
     @JvmField val tableName: Keyword,
     @JvmField val entityId: Any
-) : Ops()
+) : TxOp
 
 data class Sql(
     @JvmField val sql: String,
     @JvmField val argRows: List<List<*>>? = null,
     @JvmField val argBytes: ByteBuffer? = null
-) : Ops(), HasArgs<List<*>, Sql> {
+) : TxOp, HasArgs<List<*>, Sql> {
 
     override fun withArgs(args: List<List<*>>?): Sql = Sql(sql, argRows = args)
 }
@@ -103,7 +103,7 @@ data class Sql(
 data class Xtql internal constructor(
     @JvmField val query: Any,
     @JvmField val args: List<Map<*, *>>? = null
-) : Ops(), HasArgs<Map<*, *>, Xtql> {
+) : TxOp, HasArgs<Map<*, *>, Xtql> {
 
     override fun withArgs(args: List<Map<*, *>>?) = Xtql(query, args)
 }
@@ -111,6 +111,6 @@ data class Xtql internal constructor(
 data class Call(
     @JvmField val fnId: Any,
     @JvmField val args: List<*>
-) : Ops()
+) : TxOp
 
-data object Abort : Ops()
+data object Abort : TxOp

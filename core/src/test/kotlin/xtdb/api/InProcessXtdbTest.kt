@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 import xtdb.query.Binding
 import xtdb.query.Expr
 import xtdb.query.Query
-import xtdb.tx.Ops
+import xtdb.tx.TxOp
 
 internal class InProcessXtdbTest {
     @Test
@@ -14,7 +14,7 @@ internal class InProcessXtdbTest {
         InProcessXtdb.startNode().use { node ->
             node.submitTx(
                 listOf(
-                    Ops.put(Keyword.intern("foo"), mapOf("xt/id" to "jms"))
+                    TxOp.put(Keyword.intern("foo"), mapOf("xt/id" to "jms"))
                 )
             )
 

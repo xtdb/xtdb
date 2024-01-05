@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
-import xtdb.tx.Ops;
+import xtdb.tx.TxOp;
 import xtdb.tx.Tx;
 import xtdb.api.TxOptions;
 
@@ -36,7 +36,7 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-tx-ops"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
-        List<Ops> ops = mapper.treeToValue(node.get("tx_ops"), mapper.getTypeFactory().constructCollectionType(List.class, Ops.class));
+        List<TxOp> ops = mapper.treeToValue(node.get("tx_ops"), mapper.getTypeFactory().constructCollectionType(List.class, TxOp.class));
 
         TxOptions txOptions = !node.has("tx_options") ? new TxOptions() : mapper.treeToValue(node.get("tx_options"), TxOptions.class);
 

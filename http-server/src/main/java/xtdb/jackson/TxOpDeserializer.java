@@ -4,7 +4,6 @@ package xtdb.jackson;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
@@ -14,14 +13,14 @@ import xtdb.tx.*;
 
 import java.io.IOException;
 
-public class OpsDeserializer extends StdDeserializer<Ops>  {
+public class TxOpDeserializer extends StdDeserializer<TxOp>  {
 
-    public OpsDeserializer() {
-        super(Ops.class);
+    public TxOpDeserializer() {
+        super(TxOp.class);
     }
 
     @Override
-    public Ops deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+    public TxOp deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
         ObjectCodec codec = p.getCodec();
         ObjectNode node = codec.readTree(p);
 

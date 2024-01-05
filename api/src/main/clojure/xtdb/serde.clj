@@ -11,7 +11,7 @@
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey TxOptions)
-           (xtdb.tx Ops Call Delete Erase Put Sql Xtql)
+           (xtdb.tx TxOp Call Delete Erase Put Sql Xtql)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -58,7 +58,7 @@
   {:sql (.sql op), :arg-rows (.argRows op)})
 
 (defn sql-op-reader [{:keys [sql ^List arg-rows]}]
-  (-> (Ops/sql sql)
+  (-> (TxOp/sql sql)
       (.withArgs arg-rows)))
 
 (defmethod print-dup Sql [op ^Writer w]
@@ -77,7 +77,7 @@
   (print-dup op w))
 
 (defn xtql-op-reader [{:keys [xtql ^List args]}]
-  (-> (Ops/xtql xtql)
+  (-> (TxOp/xtql xtql)
       (.withArgs args)))
 
 (defn- render-put-op [^Put op]
@@ -91,7 +91,7 @@
   (print-dup op w))
 
 (defn put-op-reader [{:keys [table-name doc valid-from valid-to]}]
-  (-> (Ops/put table-name doc)
+  (-> (TxOp/put table-name doc)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
 (defn- render-delete-op [^Delete op]
@@ -105,7 +105,7 @@
   (print-dup op w))
 
 (defn delete-op-reader [{:keys [table-name xt/id valid-from valid-to]}]
-  (-> (Ops/delete table-name id)
+  (-> (TxOp/delete table-name id)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
 (defn- render-erase-op [^Erase op]
@@ -118,7 +118,7 @@
   (print-dup op w))
 
 (defn erase-op-reader [{:keys [table-name xt/id]}]
-  (Ops/erase table-name id))
+  (TxOp/erase table-name id))
 
 (defn- render-call-op [^Call op]
   {:fn-id (.fnId op), :args (.args op)})
@@ -130,7 +130,7 @@
   (print-dup op w))
 
 (defn call-op-reader [{:keys [fn-id args]}]
-  (Ops/call fn-id args))
+  (TxOp/call fn-id args))
 
 (defmethod print-dup TransactionKey [^TransactionKey tx-key ^Writer w]
   (.write w "#xt/tx-key ")

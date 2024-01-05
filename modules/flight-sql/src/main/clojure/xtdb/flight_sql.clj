@@ -24,7 +24,7 @@
            xtdb.IKeyFn
            xtdb.indexer.IIndexer
            (xtdb.query BoundQuery IRaQuerySource PreparedQuery)
-           [xtdb.tx Ops]
+           [xtdb.tx TxOp]
            (xtdb.vector IVectorReader)))
 
 ;;;; populate-root temporarily copied from test-util
@@ -174,7 +174,7 @@
         (fn []
           @(-> (let [{:keys [^String sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                                           (throw (UnsupportedOperationException. "invalid ps-id")))
-                     dml (Ops/sqlBatch sql (flight-stream->bytes flight-stream))]
+                     dml (TxOp/sqlBatch sql (flight-stream->bytes flight-stream))]
                  (exec-dml dml fsql-tx-id))
 
                (then-send-do-put-update-res ack-stream allocator))))

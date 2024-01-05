@@ -2,7 +2,7 @@ package xtdb.api;
 
 import xtdb.query.Query;
 import xtdb.query.QueryOpts;
-import xtdb.tx.Ops;
+import xtdb.tx.TxOp;
 
 import java.util.List;
 import java.util.Map;
@@ -36,17 +36,17 @@ public interface IXtdb extends AutoCloseable {
         return await(openQueryAsync(q, opts));
     }
 
-    CompletableFuture<TransactionKey> submitTxAsync(List<Ops> ops, TxOptions txOpts);
+    CompletableFuture<TransactionKey> submitTxAsync(List<TxOp> ops, TxOptions txOpts);
 
-    default CompletableFuture<TransactionKey> submitTxAsync(List<Ops> ops) {
+    default CompletableFuture<TransactionKey> submitTxAsync(List<TxOp> ops) {
         return submitTxAsync(ops, new TxOptions());
     }
 
-    default TransactionKey submitTx(List<Ops> ops, TxOptions txOpts) {
+    default TransactionKey submitTx(List<TxOp> ops, TxOptions txOpts) {
         return await(submitTxAsync(ops, txOpts));
     }
 
-    default TransactionKey submitTx(List<Ops> ops) {
+    default TransactionKey submitTx(List<TxOp> ops) {
         return await(submitTxAsync(ops));
     }
 

@@ -3,7 +3,7 @@ package xtdb.jackson;
 import clojure.lang.Keyword;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import xtdb.tx.Ops;
+import xtdb.tx.TxOp;
 import xtdb.tx.Tx;
 import xtdb.api.TxOptions;
 
@@ -33,8 +33,8 @@ class TxDeserializerTest {
         Object actual = objectMapper.readValue(json, Tx.class);
 
         // then
-        ArrayList<Ops> ops = new ArrayList<Ops>();
-        ops.add(Ops.put(Keyword.intern("docs"), Collections.emptyMap()));
+        ArrayList<TxOp> ops = new ArrayList<TxOp>();
+        ops.add(TxOp.put(Keyword.intern("docs"), Collections.emptyMap()));
         assertEquals(new Tx(ops, new TxOptions()), actual);
     }
 }

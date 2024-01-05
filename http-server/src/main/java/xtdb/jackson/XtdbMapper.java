@@ -14,7 +14,7 @@ import static xtdb.query.Query.*;
 
 public class XtdbMapper {
     public static final SimpleModule TX_DESERIALIZER_MODULE = new SimpleModule("TxDeserializerModule")
-            .addDeserializer(Ops.class, new OpsDeserializer())
+            .addDeserializer(TxOp.class, new TxOpDeserializer())
             .addDeserializer(Put.class, new PutDeserializer())
             .addDeserializer(Delete.class, new DeleteDeserializer())
             .addDeserializer(Erase.class, new EraseDeserializer())

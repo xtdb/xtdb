@@ -19,7 +19,7 @@
            java.util.List
            [java.util.stream Stream]
            (xtdb.api IXtdb TransactionKey TxOptions)
-           (xtdb.tx Ops Ops$HasArgs Ops$HasValidTimeBounds)
+           (xtdb.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds)
            xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]
@@ -277,7 +277,7 @@
   * `put` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
   * To insert documents using a query, use `insert-into`"
   [table doc]
-  (Ops/put (expect-table-name table) (expect-doc doc)))
+  (TxOp/put (expect-table-name table) (expect-doc doc)))
 
 (defn- expect-fn-id [fn-id]
   (if-not (eid? fn-id)
@@ -300,7 +300,7 @@
       * `*current-tx*`: the current transaction key (`:tx-id`, `:sys-time`)
       * `xt/put`, `xt/delete`, etc: transaction operation builders from this namespace."
   [fn-id tx-fn]
-  (Ops/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn)))
+  (TxOp/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn)))
 
 (defn delete
   "Returns a delete operation for passing to `submit-tx`.
@@ -311,13 +311,13 @@
   * `delete` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
   * To delete documents that match a query, use `delete-from`"
   [table id]
-  (Ops/delete table (expect-eid id)))
+  (TxOp/delete table (expect-eid id)))
 
 (defn during
   "Adapts the given transaction operation to take effect (in valid time) between `from` and `until`.
 
   `from`, `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^Ops$HasValidTimeBounds tx-op from until]
+  [^TxOp$HasValidTimeBounds tx-op from until]
 
   (.during tx-op (expect-instant from) (expect-instant until)))
 
@@ -325,7 +325,7 @@
   "Adapts the given transaction operation to take effect (in valid time) from `from` until the end of time.
 
   `from`, `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^Ops$HasValidTimeBounds tx-op from]
+  [^TxOp$HasValidTimeBounds tx-op from]
 
   (.startingFrom tx-op (expect-instant from)))
 
@@ -333,7 +333,7 @@
   "Adapts the given transaction operation to take effect (in valid time) from the time of the transaction until `until`.
 
   `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^Ops$HasValidTimeBounds tx-op until]
+  [^TxOp$HasValidTimeBounds tx-op until]
   (.until tx-op (expect-instant until)))
 
 (defn erase
@@ -344,14 +344,14 @@
 
   * To erase documents that match a query, use `erase-from`"
   [table id]
-  (Ops/erase (expect-table-name table) (expect-eid id)))
+  (TxOp/erase (expect-table-name table) (expect-eid id)))
 
 (defn call
   "Returns a transaction-function call operation for passing to `submit-tx`.
 
   See also: `put-fn`"
   [f & args]
-  (Ops/call (expect-fn-id f) (or args [])))
+  (TxOp/call (expect-fn-id f) (or args [])))
 
 (defn sql-op
   "Returns an SQL DML operation for passing to `submit-tx`
@@ -367,7 +367,7 @@
                             {::err/message "Expected SQL query",
                              :sql sql}))
 
-    (Ops/sql sql)))
+    (TxOp/sql sql)))
 
 (defn with-op-args
   "Adds the given (variadic) argument rows to the operation.
@@ -376,7 +376,7 @@
   (-> (xt/update-table :users {:bind [{:xt/id $uid} version], :set {:version (inc version)}})
       (xt/with-op-args {:uid \"james\"}
                        {:uid \"dave\"}))"
-  [^Ops$HasArgs op & args]
+  [^TxOp$HasArgs op & args]
   (.withArgs op ^List args))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -386,7 +386,7 @@
   e.g.
   (-> (xt/update-table :users {:bind [{:xt/id $uid} version], :set {:version (inc version)}})
       (xt/with-op-args [{:uid \"james\"}, {:uid \"dave\"}]))"
-  [^Ops$HasArgs op arg-rows]
+  [^TxOp$HasArgs op arg-rows]
   (.withArgs op ^List arg-rows))
 
 (defn insert-into
@@ -403,7 +403,7 @@
   * To put a single document into a table, use `put`."
 
  [table-name xtql-query]
-  (Ops/xtql (list 'insert table-name xtql-query)))
+  (TxOp/xtql (list 'insert table-name xtql-query)))
 
 (defn update-table
   "Returns an update operation for passing to `submit-tx`.
@@ -434,7 +434,7 @@
   #_{:clj-kondo/ignore [:unused-binding]}
   [table-name opts & unify-clauses]
 
-  (Ops/xtql (list* 'update table-name opts unify-clauses)))
+  (TxOp/xtql (list* 'update table-name opts unify-clauses)))
 
 (defn delete-from
   "Returns a delete operation for passing to `submit-tx`.
@@ -461,7 +461,7 @@
   {:arglists '([table-name bind-specs & unify-clauses]
                [table-name {:keys [bind]} & unify-clauses])}
   [table-name bind-or-opts & unify-clauses]
-  (Ops/xtql (list* 'delete table-name bind-or-opts unify-clauses)))
+  (TxOp/xtql (list* 'delete table-name bind-or-opts unify-clauses)))
 
 (defn erase-from
   "Returns an erase operation for passing to `submit-tx`.
@@ -479,21 +479,21 @@
 
   [table-name bind-or-opts & unify-clauses]
 
-  (Ops/xtql (list* 'erase table-name bind-or-opts unify-clauses)))
+  (TxOp/xtql (list* 'erase table-name bind-or-opts unify-clauses)))
 
 (defn assert-exists
   "Returns an assert-exists operation for passing to `submit-tx`.
 
   When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query doesn't return any rows."
   [xtql-query]
-  (Ops/xtql (list 'assert-exists xtql-query)))
+  (TxOp/xtql (list 'assert-exists xtql-query)))
 
 (defn assert-not-exists
   "Returns an assert-not-exists operation for passing to `submit-tx`.
 
   When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query returns any rows."
   [xtql-query]
-  (Ops/xtql (list 'assert-not-exists xtql-query)))
+  (TxOp/xtql (list 'assert-not-exists xtql-query)))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.

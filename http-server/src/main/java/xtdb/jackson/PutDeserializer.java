@@ -8,14 +8,13 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.BaseJsonNode;
 import xtdb.IllegalArgumentException;
-import xtdb.tx.Ops;
 import xtdb.tx.Put;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
 
-import static xtdb.tx.Ops.put;
+import static xtdb.tx.TxOp.put;
 
 public class PutDeserializer extends StdDeserializer<Put> {
 

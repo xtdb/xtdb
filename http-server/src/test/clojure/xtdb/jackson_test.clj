@@ -9,7 +9,7 @@
            (xtdb.api TransactionKey TxOptions)
            (xtdb.jackson XtdbMapper)
            (xtdb.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOpts QueryRequest TemporalFilter)
-           (xtdb.tx Ops Tx Sql)))
+           (xtdb.tx TxOp Tx Sql)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -39,7 +39,7 @@
                (ex-data roundtripped-ex))))))
 
 (defn roundtrip-tx-op [v]
-  (.readValue XtdbMapper/TX_OP_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Ops))
+  (.readValue XtdbMapper/TX_OP_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) TxOp))
 
 (deftest deserialize-tx-op-test
   (t/testing "put"
