@@ -2233,6 +2233,68 @@
                       (return y))))
         "unify unnested column"))
 
+(deftest test-unnest-col
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(-> (rel [{}] [])
+                      (unnest {:y $in}))
+                 {:args {:in [1 2 3]}}))
+        "param")
+
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(-> (rel [{}] [])
+                      (unnest {:y [1 2 3]}))))
+        "expr")
+
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(-> (rel [{}] [])
+                      (unnest {:y (q
+                                   (rel
+                                    [{:x [1 2 3]}]
+                                    [x]))}))))
+        "subquery")
+
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(-> (rel [{}] [])
+                      (unnest {:y [1
+                                   (q
+                                    (rel [{:x 2}] [x]))
+                                   3]}))))
+        "expr with subquery"))
+
+(deftest test-unnest-var
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(unify (unnest {y $in}))
+                 {:args {:in [1 2 3]}}))
+        "param")
+
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(unify (unnest {y [1 2 3]}))))
+        "expr")
+
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(unify
+                   (unnest {y (q
+                               (rel
+                                [{:x [1 2 3]}]
+                                [x]))}))))
+        "subquery")
+
+  (t/is (= [{:y 1} {:y 2} {:y 3}]
+           (xt/q tu/*node*
+                 '(unify
+                   (unnest {y [1
+                               (q
+                                (rel [{:x 2}] [x]))
+                               3]}))))
+        "expr with subquery"))
+
 (deftest unnest-rewrite-issue-2982
   (xt/submit-tx tu/*node* bond/tx-ops)
 
