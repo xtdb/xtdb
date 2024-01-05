@@ -1,4 +1,5 @@
 ((nil . ((cider-preferred-build-tool . gradle)
+         (cider-gradle-parameters . ":clojureRepl")
          (cider-ns-refresh-before-fn . "integrant.repl/suspend")
          (cider-ns-refresh-after-fn  . "integrant.repl/resume")
          (cider-clojure-cli-aliases . ":xtdb:dev")))
