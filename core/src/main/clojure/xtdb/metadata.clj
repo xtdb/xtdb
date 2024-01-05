@@ -195,6 +195,19 @@
             (writeContentMetadata [_]
               (.writeInt list-type-wtr data-meta-idx))))))))
 
+(defmethod type->metadata-writer :set [write-col-meta! ^IVectorWriter types-wtr col-type]
+  (let [types-wp (.writerPosition types-wtr)
+        set-type-wtr (.structKeyWriter types-wtr (types/col-type->field-name col-type)
+                                        (FieldType/nullable #xt.arrow/type :i32))]
+    (reify NestedMetadataWriter
+      (appendNestedMetadata [_ content-col]
+        (write-col-meta! (.listElementReader ^IVectorReader content-col))
+
+        (let [data-meta-idx (dec (.getPosition types-wp))]
+          (reify ContentMetadataWriter
+            (writeContentMetadata [_]
+              (.writeInt set-type-wtr data-meta-idx))))))))
+
 (defmethod type->metadata-writer :struct [write-col-meta! ^IVectorWriter types-wtr, col-type]
   (let [types-wp (.writerPosition types-wtr)
         struct-type-wtr (.structKeyWriter types-wtr
