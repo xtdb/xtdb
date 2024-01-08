@@ -4,7 +4,7 @@ import clojure.java.api.Clojure
 import clojure.lang.IFn
 import clojure.lang.Symbol
 
-object InProcessXtdb {
+object Xtdb {
     init {
         Clojure.`var`("clojure.core", "require").invoke(Symbol.intern("xtdb.node"))
     }
