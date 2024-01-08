@@ -4,7 +4,7 @@
             [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.query Binding DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+           (xtdb.query Binding
                        Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                        Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
                        Expr$ListExpr Expr$MapExpr
@@ -13,7 +13,8 @@
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        Query$DocsRelation Query$ParamRelation Query$OrderDirection Query$OrderNulls
                        Query$UnnestCol Query$UnnestVar
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
+           (xtdb.tx Xtql Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update)))
 
 ;; TODO inline once the type we support is fixed
 (defn- query-type? [q] (seq? q))
@@ -195,7 +196,7 @@
            (when-let [args (.args e)]
              [{:args (mapv unparse-arg-spec args)}]))))
 
-(defn- parse-temporal-filter [v k query]
+(defn parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
     (if (= :all-time v)
       TemporalFilter/ALL_TIME
@@ -239,7 +240,7 @@
 ;;that being said, its possible we don't want arbitrary exprs in the from of arg specs, only plain vars
 ;;
 ;;TODO binding-spec-errs
-(defn- parse-out-specs
+(defn parse-out-specs
   "[{:from to-var} from-col-to-var {:col (pred)}]"
   ^List [specs _query]
   (letfn [(parse-out-spec [[attr expr]]
@@ -615,7 +616,7 @@
   (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :insert this}))
 
-    (DmlOps/insert (str (symbol table)) (parse-query query))))
+    (Xtql/insert (str (symbol table)) (parse-query query))))
 
 (defmethod parse-dml 'update [[_ table opts & unify-clauses :as this]]
   (cond
@@ -632,7 +633,7 @@
             (when-not (or (nil? bind) (vector? bind))
               (throw (err/illegal-arg :xtql/malformed-bind {:bind bind, :update this})))
 
-            (cond-> (DmlOps/update (str (symbol table)) (parse-col-specs set-specs this))
+            (cond-> (Xtql/update (str (symbol table)) (parse-col-specs set-specs this))
               for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
               bind (.binding (parse-out-specs bind this))
               (seq unify-clauses) (.unify (mapv parse-unify-clause unify-clauses))))))
@@ -641,8 +642,8 @@
   (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :delete this}))
 
-    (let [delete (DmlOps/delete (str (symbol table)))
-          ^DmlOps$Delete delete (cond
+    (let [delete (Xtql/delete (str (symbol table)))
+          ^Xtql$Delete delete (cond
                                   (nil? opts) delete
                                   (vector? opts) (-> delete (.binding (parse-out-specs opts this)))
                                   (map? opts) (let [{:keys [for-valid-time bind]} opts]
@@ -659,8 +660,8 @@
   (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :erase this}))
 
-    (let [erase (DmlOps/erase (str (symbol table)))
-          ^DmlOps$Erase erase (cond
+    (let [erase (Xtql/erase (str (symbol table)))
+          ^Xtql$Erase erase (cond
                                 (nil? opts) erase
                                 (vector? opts) (-> erase (.binding (parse-out-specs opts this)))
                                 (map? opts) (let [{:keys [bind]} opts]
@@ -673,27 +674,27 @@
         (seq unify-clauses) (.unify (mapv parse-unify-clause unify-clauses))))))
 
 (defmethod parse-dml 'assert-exists [[_ query]]
-  (DmlOps/assertExists (parse-query query)))
+  (Xtql/assertExists (parse-query query)))
 
 (defmethod parse-dml 'assert-not-exists [[_ query]]
-  (DmlOps/assertNotExists (parse-query query)))
+  (Xtql/assertNotExists (parse-query query)))
 
 (extend-protocol Unparse
-  DmlOps$Insert
+  Xtql$Insert
   (unparse [query]
     (list 'insert (keyword (.table query)) (unparse (.query query))))
 
-  DmlOps$Update
+  Xtql$Update
   (unparse [query]
     (let [for-valid-time (.forValidTime query)
           bind (.bindSpecs query)]
       (list* 'update (keyword (.table query))
-             (cond-> {:set (mapv unparse-col-spec (.setSpecs query))}
+             (cond-> {:set (into {} (map unparse-col-spec) (.setSpecs query))}
                for-valid-time (assoc :for-valid-time (unparse for-valid-time))
                (seq bind) (assoc :bind (mapv unparse-out-spec bind)))
              (mapv unparse (.unifyClauses query)))))
 
-  DmlOps$Delete
+  Xtql$Delete
   (unparse [query]
     (let [for-valid-time (.forValidTime query)
           bind (mapv unparse-out-spec (.bindSpecs query))]
@@ -704,16 +705,16 @@
                bind)
              (mapv unparse (.unifyClauses query)))))
 
-  DmlOps$Erase
+  Xtql$Erase
   (unparse [query]
     (list* 'erase (keyword (.table query))
            (mapv unparse-out-spec (.bindSpecs query))
            (mapv unparse (.unifyClauses query))))
 
-  DmlOps$AssertExists
+  Xtql$AssertExists
   (unparse [query]
     (list 'assert-exists (unparse (.query query))))
 
-  DmlOps$AssertNotExists
+  Xtql$AssertNotExists
   (unparse [query]
     (list 'assert-not-exists (unparse (.query query)))))

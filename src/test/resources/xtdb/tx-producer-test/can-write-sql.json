@@ -28,7 +28,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "params",
+            "name" : "args",
             "nullable" : true,
             "type" : {
               "name" : "binary"
@@ -85,7 +85,7 @@
             "OFFSET" : [0,34,84,202,307],
             "DATA" : ["INSERT INTO foo (xt$id) VALUES (0)","INSERT INTO foo (xt$id, foo, bar) VALUES (?, ?, ?)","UPDATE foo FOR PORTION OF VALID_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt$id = ?","DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt$id = ?"]
           },{
-            "name" : "params",
+            "name" : "args",
             "count" : 4,
             "VALIDITY" : [0,1,1,1],
             "OFFSET" : [0,0,1152,1600,2048],

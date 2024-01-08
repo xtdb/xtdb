@@ -10,7 +10,7 @@
  xt/interval-mdn xtdb.serde/interval-mdn-reader
 
  xt.tx/sql xtdb.serde/sql-op-reader
- xt.tx/xtql xtdb.serde/xtql-op-reader
+ xt.tx/xtql xtdb.serde/xtql-reader
  xt.tx/put xtdb.serde/put-op-reader
  xt.tx/delete xtdb.serde/delete-op-reader
  xt.tx/erase xtdb.serde/erase-op-reader

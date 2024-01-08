@@ -7,13 +7,13 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.query Binding DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
-                       Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
+           (xtdb.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
                        Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery
                        Query Query$Aggregate Query$DocsRelation Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
                        Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec Query$ParamRelation Query$Pipeline
                        Query$Return Query$Unify Query$UnnestCol Query$UnnestVar Query$Where Query$With Query$WithCols Query$Without
-                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)))
+                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
+           (xtdb.tx Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -922,7 +922,7 @@
                                        (Expr/val 'xtdb/end-of-time))])]))])
 
 (extend-protocol PlanDml
-  DmlOps$Insert
+  Xtql$Insert
   (plan-dml [insert-query _tx-opts]
     (let [{:keys [ra-plan provided-vars]} (plan-query (.query insert-query))]
       [:insert {:table (.table insert-query)}
@@ -933,7 +933,7 @@
                                      col)})))
         ra-plan]]))
 
-  DmlOps$Delete
+  Xtql$Delete
   (plan-dml [delete-query tx-opts]
     (let [table-name (.table delete-query)
           target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
@@ -947,7 +947,7 @@
       [:delete {:table table-name}
        target-plan]))
 
-  DmlOps$Erase
+  Xtql$Erase
   (plan-dml [erase-query _tx-opts]
     (let [table-name (.table erase-query)
           target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
@@ -961,7 +961,7 @@
       [:erase {:table table-name}
        target-plan]))
 
-  DmlOps$Update
+  Xtql$Update
   (plan-dml [update-query tx-opts]
     (let [table-name (.table update-query)
           set-specs (.setSpecs update-query)
@@ -989,11 +989,11 @@
       [:update {:table table-name}
        target-plan]))
 
-  DmlOps$AssertNotExists
+  Xtql$AssertNotExists
   (plan-dml [query _tx-opts]
     [:assert-not-exists {} (:ra-plan (plan-query (.query query)))])
 
-  DmlOps$AssertExists
+  Xtql$AssertExists
   (plan-dml [query _tx-opts]
     [:assert-exists {} (:ra-plan (plan-query (.query query)))]))
 

@@ -5,13 +5,14 @@
             [time-literals.read-write :as time-literals]
             [xtdb.api :as xt]
             [xtdb.error :as err]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import java.io.Writer
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey TxOptions)
-           (xtdb.tx TxOp Call Delete Erase Put Sql Xtql)
+           (xtdb.tx TxOp Call Delete Erase Put Sql Xtql XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -68,7 +69,7 @@
   (print-dup op w))
 
 (defn- render-xtql-op [^Xtql op]
-  {:xtql (.query op), :args (.args op)})
+  (xtql.edn/unparse op))
 
 (defmethod print-dup Xtql [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql-op op)))))
@@ -76,9 +77,24 @@
 (defmethod print-method Xtql [op ^Writer w]
   (print-dup op w))
 
-(defn xtql-op-reader [{:keys [xtql ^List args]}]
-  (-> (TxOp/xtql xtql)
-      (.withArgs args)))
+(defn- render-xtql+args [^XtqlAndArgs op]
+  (into [(xtql.edn/unparse (.op op))] (.args op)))
+
+(defmethod print-dup XtqlAndArgs [op ^Writer w]
+  (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql+args op)))))
+
+(defmethod print-method XtqlAndArgs [op ^Writer w]
+  (print-dup op w))
+
+(defn xtql-op-reader [xtql]
+  (xtql.edn/parse-dml xtql))
+
+(defn xtql-reader [xtql]
+  (cond
+    (vector? xtql) (let [[op & args] xtql]
+                     (XtqlAndArgs. (xtql-op-reader op) (vec args)))
+    (or (list? xtql) (seq? xtql)) (xtql-op-reader xtql)
+    :else (throw (err/illegal-arg :xtdb/invalid-xtql {:xtql xtql, :type (type xtql)}))))
 
 (defn- render-put-op [^Put op]
   {:table-name (.tableName op), :doc (.doc op)
@@ -174,7 +190,7 @@
           "xtdb.interval/month-day-nano" interval-mdn-reader
           "xtdb/list" (transit/read-handler edn/read-string)
           "xtdb.tx/sql" (transit/read-handler sql-op-reader)
-          "xtdb.tx/xtql" (transit/read-handler xtql-op-reader)
+          "xtdb.tx/xtql" (transit/read-handler xtql-reader)
           "xtdb.tx/put" (transit/read-handler put-op-reader)
           "xtdb.tx/delete" (transit/read-handler delete-op-reader)
           "xtdb.tx/erase" (transit/read-handler erase-op-reader)
@@ -223,7 +239,10 @@
           clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))
 
           Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
+
+          XtqlAndArgs (transit/write-handler "xtdb.tx/xtql" render-xtql+args)
           Xtql (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
+
           Put (transit/write-handler "xtdb.tx/put" render-put-op)
           Delete (transit/write-handler "xtdb.tx/delete" render-delete-op)
           Erase (transit/write-handler "xtdb.tx/erase" render-erase-op)

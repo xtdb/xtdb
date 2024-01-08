@@ -241,7 +241,7 @@
            (roundtrip-dml '(insert :users (from :old-users [xt/id {:first-name given-name, :last-name surname}]))))))
 
 (t/deftest test-parse-update
-  (t/is (= '(update :foo {:set [{:version (inc v)}],
+  (t/is (= '(update :foo {:set {:version (inc v)},
                           :for-valid-time (in #inst "2020" nil),
                           :bind [{:xt/id $uid} {:version v}]})
 
@@ -249,7 +249,7 @@
                                          :bind [{:xt/id $uid, :version v}]
                                          :set {:version (inc v)}}))))
 
-  (t/is (= '(update :foo {:set [{:version (inc v)}],
+  (t/is (= '(update :foo {:set {:version (inc v)},
                           :bind [{:xt/id foo} {:version v}]}
                     (from :bar [{:xt/id $bar-id}, foo]))
 

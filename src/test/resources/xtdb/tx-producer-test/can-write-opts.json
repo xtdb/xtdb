@@ -28,7 +28,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "params",
+            "name" : "args",
             "nullable" : true,
             "type" : {
               "name" : "binary"
@@ -85,7 +85,7 @@
             "OFFSET" : [0,31],
             "DATA" : ["INSERT INTO foo (id) VALUES (0)"]
           },{
-            "name" : "params",
+            "name" : "args",
             "count" : 1,
             "VALIDITY" : [0],
             "OFFSET" : [0,0],

@@ -1,5 +1,6 @@
 package xtdb.api;
 
+import xtdb.query.Binding;
 import xtdb.query.Query;
 import xtdb.query.QueryOpts;
 import xtdb.tx.TxOp;

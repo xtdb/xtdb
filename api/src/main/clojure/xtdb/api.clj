@@ -12,7 +12,8 @@
             [xtdb.backtick :as backtick]
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io Writer)
            java.util.concurrent.ExecutionException
            java.util.function.Function
@@ -403,7 +404,7 @@
   * To put a single document into a table, use `put`."
 
  [table-name xtql-query]
-  (TxOp/xtql (list 'insert table-name xtql-query)))
+  (xtql.edn/parse-dml (list 'insert table-name xtql-query)))
 
 (defn update-table
   "Returns an update operation for passing to `submit-tx`.
@@ -434,7 +435,7 @@
   #_{:clj-kondo/ignore [:unused-binding]}
   [table-name opts & unify-clauses]
 
-  (TxOp/xtql (list* 'update table-name opts unify-clauses)))
+  (xtql.edn/parse-dml (list* 'update table-name opts unify-clauses)))
 
 (defn delete-from
   "Returns a delete operation for passing to `submit-tx`.
@@ -461,7 +462,7 @@
   {:arglists '([table-name bind-specs & unify-clauses]
                [table-name {:keys [bind]} & unify-clauses])}
   [table-name bind-or-opts & unify-clauses]
-  (TxOp/xtql (list* 'delete table-name bind-or-opts unify-clauses)))
+  (xtql.edn/parse-dml (list* 'delete table-name bind-or-opts unify-clauses)))
 
 (defn erase-from
   "Returns an erase operation for passing to `submit-tx`.
@@ -479,21 +480,21 @@
 
   [table-name bind-or-opts & unify-clauses]
 
-  (TxOp/xtql (list* 'erase table-name bind-or-opts unify-clauses)))
+  (xtql.edn/parse-dml (list* 'erase table-name bind-or-opts unify-clauses)))
 
 (defn assert-exists
   "Returns an assert-exists operation for passing to `submit-tx`.
 
   When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query doesn't return any rows."
   [xtql-query]
-  (TxOp/xtql (list 'assert-exists xtql-query)))
+  (xtql.edn/parse-dml (list 'assert-exists xtql-query)))
 
 (defn assert-not-exists
   "Returns an assert-not-exists operation for passing to `submit-tx`.
 
   When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query returns any rows."
   [xtql-query]
-  (TxOp/xtql (list 'assert-not-exists xtql-query)))
+  (xtql.edn/parse-dml (list 'assert-not-exists xtql-query)))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.

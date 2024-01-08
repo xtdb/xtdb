@@ -11,16 +11,13 @@
 (ctn/disable-reload!)
 (util/install-uncaught-exception-handler!)
 
-(apply ctn/set-refresh-dirs (for [^File dir (concat [(io/file ".")]
-                                                    (.listFiles (io/file "."))
-                                                    (.listFiles (io/file "modules")))
-                                  :when (and (.isDirectory dir)
-                                             (.exists (io/file dir "build.gradle.kts")))
-                                  sub-dir #{"src/main/clojure" "src/test/clojure"}
-                                  :let [refresh-dir (io/file dir sub-dir)]
-
-                                  :when (not= refresh-dir (io/file "modules/flight-sql/src/test/clojure"))]
-                              refresh-dir))
+(apply ctn/set-refresh-dirs (conj (for [^File dir (concat [(io/file ".")]
+                                                          (.listFiles (io/file "."))
+                                                          (.listFiles (io/file "modules")))
+                                        :when (and (.isDirectory dir)
+                                                   (.exists (io/file dir "build.gradle.kts")))]
+                                    (io/file dir "src/main/clojure"))
+                                  "src/test/clojure"))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn reset []

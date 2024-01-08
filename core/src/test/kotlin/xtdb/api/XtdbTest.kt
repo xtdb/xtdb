@@ -5,8 +5,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.query.Binding
 import xtdb.query.Expr
+import xtdb.query.Expr.Companion.lVar
 import xtdb.query.Query
-import xtdb.tx.TxOp
+import xtdb.query.Query.Companion.from
+import xtdb.tx.TxOp.Companion.put
+
+fun Query.From.binding(vararg bindings: Pair<String, Expr>) = binding(bindings.map { Binding(it.first, it.second) })
 
 internal class XtdbTest {
     @Test
@@ -14,7 +18,7 @@ internal class XtdbTest {
         Xtdb.startNode().use { node ->
             node.submitTx(
                 listOf(
-                    TxOp.put(Keyword.intern("foo"), mapOf("xt/id" to "jms"))
+                    put(Keyword.intern("foo"), mapOf("xt/id" to "jms"))
                 )
             )
 
@@ -22,8 +26,8 @@ internal class XtdbTest {
                 listOf(mapOf(Keyword.intern("id") to "jms")),
 
                 node.openQuery(
-                    Query.from("foo")
-                        .binding(listOf(Binding("xt/id", Expr.lVar("id"))))
+                    from("foo")
+                        .binding("xt/id" to lVar("id"))
                 ).use { it.toList() }
             )
         }

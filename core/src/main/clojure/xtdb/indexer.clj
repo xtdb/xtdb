@@ -20,8 +20,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.watermark :as wm]
-            [xtdb.xtql :as xtql]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql :as xtql])
   (:import clojure.lang.MapEntry
            (java.io ByteArrayInputStream Closeable)
            java.nio.ByteBuffer
@@ -41,6 +40,7 @@
            xtdb.metadata.IMetadataManager
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query IRaQuerySource PreparedQuery)
+           xtdb.tx.Xtql
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
@@ -347,8 +347,8 @@
 
 (defn- query-indexer [^IRaQuerySource ra-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?]} query-opts]
   (let [^PreparedQuery pq (.prepareRaQuery ra-src query)]
-    (fn eval-query [^RelationReader params]
-      (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
+    (fn eval-query [^RelationReader args]
+      (with-open [res (-> (.bind pq wm-src {:params args, :basis basis, :default-tz default-tz
                                             :default-all-valid-time? default-all-valid-time?})
                           (.openCursor))]
 
@@ -357,11 +357,11 @@
                              (accept [_ in-rel]
                                (.indexOp rel-idxer in-rel query-opts))))))))
 
-(defn- foreach-param-row [^BufferAllocator allocator, ^IVectorReader params-rdr, ^long tx-op-idx, eval-query]
-  (if (.isNull params-rdr tx-op-idx)
+(defn- foreach-arg-row [^BufferAllocator allocator, ^IVectorReader args-rdr, ^long tx-op-idx, eval-query]
+  (if (.isNull args-rdr tx-op-idx)
     (eval-query nil)
 
-    (with-open [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject params-rdr tx-op-idx))) ; could try to use getBytes
+    (with-open [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject args-rdr tx-op-idx))) ; could try to use getBytes
                 asr (ArrowStreamReader. is allocator)]
       (let [param-root (.getVectorSchemaRoot asr)]
         (while (.loadNextBatch asr)
@@ -371,10 +371,10 @@
               (aset selection 0 idx)
               (eval-query (-> param-rel (.select selection))))))))))
 
-(defn- wrap-sql-params [f]
-  (fn [^RelationReader params]
-    (f (when params
-         (vr/rel-reader (->> params
+(defn- wrap-sql-args [f]
+  (fn [^RelationReader args]
+    (f (when args
+         (vr/rel-reader (->> args
                              (map-indexed (fn [idx ^IVectorReader col]
                                             (.withName col (str "?_" idx))))))))))
 
@@ -383,7 +383,7 @@
                                               tx-opts]
   (let [sql-leg (.legReader tx-ops-rdr :sql)
         query-rdr (.structKeyReader sql-leg "query")
-        params-rdr (.structKeyReader sql-leg "params")
+        args-rdr (.structKeyReader sql-leg "args")
         upsert-idxer (->upsert-rel-indexer row-counter live-idx-tx tx-opts)
         delete-idxer (->delete-rel-indexer row-counter live-idx-tx)
         erase-idxer (->erase-rel-indexer row-counter live-idx-tx)]
@@ -394,24 +394,24 @@
           ;; TODO handle error
           (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
             [:insert query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
+            (foreach-arg-row allocator args-rdr tx-op-idx
                                (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-params)))
+                                   (wrap-sql-args)))
 
             [:update query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
+            (foreach-arg-row allocator args-rdr tx-op-idx
                                (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-params)))
+                                   (wrap-sql-args)))
 
             [:delete query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
+            (foreach-arg-row allocator args-rdr tx-op-idx
                                (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-params)))
+                                   (wrap-sql-args)))
 
             [:erase query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
+            (foreach-arg-row allocator args-rdr tx-op-idx
                                (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
-                                   (wrap-sql-params)))
+                                   (wrap-sql-args)))
 
             (throw (UnsupportedOperationException. "sql query"))))
 
@@ -431,18 +431,18 @@
                                     {::err/message (format "Precondition failed: %s" (name mode))
                                      :row-count row-count}))))))))
 
-(defn- wrap-xtql-params [f]
-  (fn [^RelationReader params]
-    (f (when params
-         (vr/rel-reader (for [^IVectorReader col params]
+(defn- wrap-xtql-args [f]
+  (fn [^RelationReader args]
+    (f (when args
+         (vr/rel-reader (for [^IVectorReader col args]
                           (.withName col (str "?" (.getName col)))))))))
 
 (defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^RowCounter row-counter, ^ILiveIndexTx live-idx-tx
                                                ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
                                                tx-opts]
   (let [xtql-leg (.legReader tx-ops-rdr :xtql)
-        query-rdr (.structKeyReader xtql-leg "query")
-        params-rdr (.structKeyReader xtql-leg "params")
+        op-rdr (.structKeyReader xtql-leg "op")
+        args-rdr (.structKeyReader xtql-leg "args")
         upsert-idxer (->upsert-rel-indexer row-counter live-idx-tx tx-opts)
         delete-idxer (->delete-rel-indexer row-counter live-idx-tx)
         erase-idxer (->erase-rel-indexer row-counter live-idx-tx)
@@ -450,45 +450,41 @@
         assert-not-exists-idxer (->assert-idxer :assert-not-exists)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [query (.form ^ClojureForm (.getObject query-rdr tx-op-idx))
+        (let [xtql-op (.form ^ClojureForm (.getObject op-rdr tx-op-idx))
               tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
-          ;; TODO handle error
-          (zmatch (xtql/compile-dml (cond
-                                      (map? query) (do
-                                                     #_(xtql.json/parse-dml query)
-                                                     (throw (UnsupportedOperationException. "JSON DML")))
-                                      (seq? query) (xtql.edn/parse-dml query))
-                                    (assoc tx-opts :table-info tables-with-cols))
+          (when-not (instance? Xtql xtql-op)
+            (throw (UnsupportedOperationException. "unknown XTQL DML op")))
 
+          (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info tables-with-cols))
             [:insert query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-params)))
+            (foreach-arg-row allocator args-rdr tx-op-idx
+                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                 (wrap-xtql-args)))
 
             [:update query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-params)))
+            (foreach-arg-row allocator args-rdr tx-op-idx
+                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                 (wrap-xtql-args)))
 
             [:delete query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-params)))
+            (foreach-arg-row allocator args-rdr tx-op-idx
+                             (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                 (wrap-xtql-args)))
 
             [:erase query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-params)))
+            (foreach-arg-row allocator args-rdr tx-op-idx
+                             (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts query-opts)
+                                 (wrap-xtql-args)))
 
             [:assert-not-exists query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src assert-not-exists-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-params)))
+            (foreach-arg-row allocator args-rdr tx-op-idx
+                             (-> (query-indexer ra-src wm-src assert-not-exists-idxer inner-query tx-opts query-opts)
+                                 (wrap-xtql-args)))
 
             [:assert-exists query-opts inner-query]
-            (foreach-param-row allocator params-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src assert-exists-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-params)))
+            (foreach-arg-row allocator args-rdr tx-op-idx
+                             (-> (query-indexer ra-src wm-src assert-exists-idxer inner-query tx-opts query-opts)
+                                 (wrap-xtql-args)))
 
             (throw (UnsupportedOperationException. "xtql query"))))
 

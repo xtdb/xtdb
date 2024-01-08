@@ -21,7 +21,7 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "query",
+            "name" : "op",
             "nullable" : false,
             "type" : {
               "name" : "TransitType"
@@ -35,7 +35,7 @@
               "key" : "ARROW:extension:metadata"
             }]
           },{
-            "name" : "params",
+            "name" : "args",
             "nullable" : true,
             "type" : {
               "name" : "binary"
@@ -86,13 +86,13 @@
           "count" : 2,
           "VALIDITY" : [1,1],
           "children" : [{
-            "name" : "query",
+            "name" : "op",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "OFFSET" : [0,113,180],
-            "DATA" : ["92af7e23787464622f636c6a2d666f726d92a67e236c69737493a87e24757064617465a77e3a757365727382a67e3a62696e6482a77e3a78742f6964a67e2424756964a97e3a76657273696f6ea37e2476a57e3a73657481a37e247692ab7e23787464622f6c697374a728696e63207629","92af7e23787464622f636c6a2d666f726d92a67e236c69737493a87e2464656c657465a77e3a757365727381a67e3a62696e6481a77e3a78742f6964a67e2424756964"]
+            "OFFSET" : [0,125,201],
+            "DATA" : ["92af7e23787464622f636c6a2d666f726d92ae7e23787464622e74782f7874716c92a67e236c69737493a87e24757064617465a77e3a757365727382a57e3a73657481a37e3a7692a25e3292a57e24696e63a37e2476a67e3a62696e649281a77e3a78742f6964a67e242475696481a97e3a76657273696f6ea37e2476","92af7e23787464622f636c6a2d666f726d92ae7e23787464622e74782f7874716c92a67e236c69737493a87e2464656c657465a77e3a75736572739181a77e3a78742f6964a67e2424756964"]
           },{
-            "name" : "params",
+            "name" : "args",
             "count" : 2,
             "VALIDITY" : [1,1],
             "OFFSET" : [0,592,1184],

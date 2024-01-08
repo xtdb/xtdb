@@ -4,7 +4,6 @@
             [xtdb.error :as err]
             xtdb.log
             [xtdb.sql :as sql]
-            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -16,9 +15,9 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
+           (xtdb.api.log Log)
            xtdb.api.TransactionKey
-           (xtdb.api.log Log LogRecord)
-           (xtdb.tx Abort Call Delete Erase Put Sql Xtql)
+           (xtdb.tx Abort Call Delete Erase Put Sql Xtql XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -37,42 +36,54 @@
             (types/col-type->field "default-tz" :utf8)
             (types/col-type->field "default-all-valid-time?" :bool)]))
 
-(defn- ->xtql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
+(defn- ->xtql+args-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
   (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
-        query-writer (.structKeyWriter xtql-writer "query" (FieldType/notNullable #xt.arrow/type :transit))
-        params-writer (.structKeyWriter xtql-writer "params" (FieldType/nullable #xt.arrow/type :varbinary))]
-    (fn write-xtql! [^Xtql op]
+        xtql-op-writer (.structKeyWriter xtql-writer "op" (FieldType/notNullable #xt.arrow/type :transit))
+        args-writer (.structKeyWriter xtql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
+    (fn write-xtql+args! [^XtqlAndArgs op+args]
       (.startStruct xtql-writer)
-      (vw/write-value! (ClojureForm. (.query op)) query-writer)
+      (vw/write-value! (ClojureForm. (.op op+args)) xtql-op-writer)
 
-      (when-let [arg-rows (.args op)]
-        (util/with-open [param-wtr (vw/->vec-writer allocator "params" (FieldType/notNullable #xt.arrow/type :struct))]
+      (when-let [arg-rows (.args op+args)]
+        (util/with-open [args-wtr (vw/->vec-writer allocator "args" (FieldType/notNullable #xt.arrow/type :struct))]
           (doseq [arg-row arg-rows]
-            (vw/write-value! arg-row param-wtr))
+            (vw/write-value! arg-row args-wtr))
 
-          (.syncValueCount param-wtr)
+          (.syncValueCount args-wtr)
 
-          (.writeBytes params-writer
-                       (util/build-arrow-ipc-byte-buffer (VectorSchemaRoot. ^Iterable (seq (.getVector param-wtr)))
+          (.writeBytes args-writer
+                       (util/build-arrow-ipc-byte-buffer (VectorSchemaRoot. ^Iterable (seq (.getVector args-wtr)))
                                                          :stream
                                                          (fn [write-batch!]
                                                            (write-batch!))))))
 
       (.endStruct xtql-writer))))
 
-(defn encode-sql-params [^BufferAllocator allocator, query, param-rows]
+(defn- ->xtql-writer [^IVectorWriter op-writer]
+  (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
+        xtql-op-writer (.structKeyWriter xtql-writer "op" (FieldType/notNullable #xt.arrow/type :transit))]
+
+    ;; create this even if it's not required here
+    (.structKeyWriter xtql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))
+
+    (fn write-xtql! [^Xtql op]
+      (.startStruct xtql-writer)
+      (vw/write-value! (ClojureForm. op) xtql-op-writer)
+      (.endStruct xtql-writer))))
+
+(defn encode-sql-args [^BufferAllocator allocator, query, arg-rows]
   (let [plan (sql/compile-query query)
         {:keys [^long param-count]} (meta plan)
 
         vecs (ArrayList. param-count)]
     (try
-      ;; TODO check param count in each row, handle error
+      ;; TODO check arg count in each row, handle error
       (dotimes [col-idx param-count]
         (.add vecs
               (vw/open-vec allocator (symbol (str "?_" col-idx))
-                           (mapv #(nth % col-idx) param-rows))))
+                           (mapv #(nth % col-idx) arg-rows))))
 
-      (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count param-rows)))]
+      (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count arg-rows)))]
         (util/build-arrow-ipc-byte-buffer root :stream
           (fn [write-batch!]
             (write-batch!))))
@@ -83,17 +94,17 @@
 (defn- ->sql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
   (let [sql-writer (.legWriter op-writer :sql (FieldType/notNullable #xt.arrow/type :struct))
         query-writer (.structKeyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
-        params-writer (.structKeyWriter sql-writer "params" (FieldType/nullable #xt.arrow/type :varbinary))]
+        args-writer (.structKeyWriter sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-sql! [^Sql op]
       (let [sql (.sql op)]
         (.startStruct sql-writer)
         (vw/write-value! sql query-writer)
 
         (when-let [arg-bytes (.argBytes op)]
-          (vw/write-value! arg-bytes params-writer))
+          (vw/write-value! arg-bytes args-writer))
 
         (when-let [arg-rows (.argRows op)]
-          (vw/write-value! (encode-sql-params allocator sql arg-rows) params-writer)))
+          (vw/write-value! (encode-sql-args allocator sql arg-rows) args-writer)))
 
       (.endStruct sql-writer))))
 
@@ -175,7 +186,8 @@
   (.createVector tx-ops-field allocator))
 
 (defn write-tx-ops! [^BufferAllocator allocator, ^IVectorWriter op-writer, tx-ops]
-  (let [!write-xtql! (delay (->xtql-writer op-writer allocator))
+  (let [!write-xtql+args! (delay (->xtql+args-writer op-writer allocator))
+        !write-xtql! (delay (->xtql-writer op-writer))
         !write-sql! (delay (->sql-writer op-writer allocator))
         !write-put! (delay (->put-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
@@ -185,6 +197,7 @@
 
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
+        XtqlAndArgs (@!write-xtql+args! tx-op)
         Xtql (@!write-xtql! tx-op)
         Sql (@!write-sql! tx-op)
         Put (@!write-put! tx-op)
