@@ -56,6 +56,10 @@ public class QueryOptsDeserializer extends StdDeserializer<QueryOpts> {
             builder.defaultTz((ZoneId) mapper.treeToValue(node.get("default_tz"), Object.class));
         }
 
+        if (node.has("default_all_valid_time")) {
+            builder.defaultAllValidTime(node.get("default_all_valid_time").asBoolean());
+        }
+
         if (node.has("explain")) {
             builder.explain(node.get("explain").asBoolean());
         }

@@ -473,6 +473,7 @@
                                 (.afterTx tx-key)
                                 (.txTimeout #time/duration "PT3H")
                                 (.defaultTz #time/zone "America/Los_Angeles")
+                                (.defaultAllValidTime true)
                                 (.explain true)
                                 (.keyFn "clojure")
                                 (.build)))
@@ -486,6 +487,7 @@
                                                  "after_tx" {"tx_id" 1
                                                              "system_time" #time/instant "2023-12-06T09:31:27.570827956Z"}
                                                  "tx_timeout" #time/duration "PT3H"
+                                                 "default_all_valid_time" true
                                                  "default_tz" #time/zone "America/Los_Angeles"
                                                  "explain" true
                                                  "key_fn" "clojure"}}))))
