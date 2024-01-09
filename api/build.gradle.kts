@@ -37,6 +37,11 @@ tasks.javadoc {
     exclude("xtdb/util/*")
 }
 
+tasks.compileJava {
+    sourceCompatibility = "11"
+    targetCompatibility = "11"
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_11)

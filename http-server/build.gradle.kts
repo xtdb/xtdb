@@ -41,16 +41,10 @@ dependencies {
 
     testImplementation(project(":"))
     testImplementation(project(":http-client-clj"))
-    testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
     testImplementation("pro.juxt.clojars-mirrors.hato", "hato", "0.8.2")
     // hato uses cheshire for application/json encoding
     testImplementation("cheshire", "cheshire", "5.12.0")
 }
 
 tasks.javadoc.get().enabled = false
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
-    }
-}

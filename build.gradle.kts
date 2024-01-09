@@ -39,11 +39,7 @@ allprojects {
 
     if (plugins.hasPlugin("java-library")) {
         java {
-            // I'd like to put this in the individual projects but this seems to take preference.
-            sourceCompatibility = when(project.name) {
-                "api", "http-client-clj" -> JavaVersion.VERSION_11
-                else -> JavaVersion.VERSION_17
-            }
+            toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
             withSourcesJar()
             withJavadocJar()
@@ -199,7 +195,7 @@ dependencies {
     testImplementation("org.clojure", "tools.cli", "1.0.206")
 
     devImplementation("integrant", "repl", "0.3.2")
-    devImplementation("com.azure","azure-identity","1.9.0")
+    devImplementation("com.azure", "azure-identity", "1.9.0")
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("org.postgresql", "postgresql", "42.5.0")
@@ -220,11 +216,11 @@ dependencies {
 
 if (hasProperty("fin")) {
     dependencies {
-        devImplementation("vvvvalvalval","scope-capture","0.3.3")
+        devImplementation("vvvvalvalval", "scope-capture", "0.3.3")
     }
 }
 
-fun addToArgsIfExistent(propertyName: String, args: MutableList<String>){
+fun addToArgsIfExistent(propertyName: String, args: MutableList<String>) {
     if (project.hasProperty(propertyName)) {
         project.property(propertyName)?.toString()?.let { property ->
             args.add("--" + propertyName)
@@ -242,7 +238,7 @@ tasks.create("run-auctionmark", JavaExec::class) {
     )
 
     addToArgsIfExistent("output-file", args)
-    addToArgsIfExistent("load-phase" , args)
+    addToArgsIfExistent("load-phase", args)
     addToArgsIfExistent("duration", args)
 
     this.args = args
@@ -336,17 +332,32 @@ createSltTask(
 )
 
 createSltTask(
-        "slt-test-dir",
-        maxFailures = if (project.hasProperty("testMaxFailures")) {
-            val testMaxFailures: String by project
-            if (testMaxFailures.isEmpty()) { 0 } else { testMaxFailures.toLong() }
-        } else { 0 },
-        maxErrors = if (project.hasProperty("testMaxErrors")) {
-            val testMaxErrors: String by project
-            if (testMaxErrors.isEmpty()) { 0 } else { testMaxErrors.toLong() }
-        } else { 0 },
-        testFiles = if (project.hasProperty("testDir")) {
-            val testDir: String by project
-            listOf(testDir)
-        } else { emptyList() },
-        extraArgs = listOf("--dirs"))
+    "slt-test-dir",
+    maxFailures = if (project.hasProperty("testMaxFailures")) {
+        val testMaxFailures: String by project
+        if (testMaxFailures.isEmpty()) {
+            0
+        } else {
+            testMaxFailures.toLong()
+        }
+    } else {
+        0
+    },
+    maxErrors = if (project.hasProperty("testMaxErrors")) {
+        val testMaxErrors: String by project
+        if (testMaxErrors.isEmpty()) {
+            0
+        } else {
+            testMaxErrors.toLong()
+        }
+    } else {
+        0
+    },
+    testFiles = if (project.hasProperty("testDir")) {
+        val testDir: String by project
+        listOf(testDir)
+    } else {
+        emptyList()
+    },
+    extraArgs = listOf("--dirs")
+)

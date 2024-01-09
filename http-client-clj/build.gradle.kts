@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 publishing {
@@ -19,4 +22,17 @@ dependencies {
 
     api("pro.juxt.clojars-mirrors.hato", "hato", "0.8.2")
     api("pro.juxt.clojars-mirrors.metosin", "reitit-core", "0.5.15")
+
+    api(kotlin("stdlib-jdk8"))
+}
+
+tasks.compileJava {
+    sourceCompatibility = "11"
+    targetCompatibility = "11"
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
+    }
 }
