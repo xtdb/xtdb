@@ -17,7 +17,7 @@ internal class XtdbTest {
     @Test
     fun startsInMemoryNode() {
         Xtdb.startNode().use { node ->
-            node.submitTx(put(Keyword.intern("foo"), mapOf("xt/id" to "jms")))
+            node.submitTx(put("foo", mapOf("xt/id" to "jms")))
 
             assertEquals(
                 listOf(mapOf(Keyword.intern("id") to "jms")),

@@ -33,9 +33,7 @@ class IXtdbJavaTest {
     @Test
     void javaApiTest() {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
-                // TODO shouldn't be keyword here
-                put(
-                        Keyword.intern("docs"),
+                put("docs",
                         Map.of("xt/id", 1, "foo", "bar")));
 
         try (Stream<Map<String, ?>> res = node.openQuery(from("docs")

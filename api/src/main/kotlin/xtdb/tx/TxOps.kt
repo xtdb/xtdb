@@ -1,6 +1,5 @@
 package xtdb.tx
 
-import clojure.lang.Keyword
 import xtdb.query.Binding
 import xtdb.query.Query
 import xtdb.query.Query.UnifyClause
@@ -11,9 +10,9 @@ import xtdb.types.ClojureForm
 import java.nio.ByteBuffer
 import java.time.Instant
 
-private val XT_TXS: Keyword = Keyword.intern("xt", "tx-fns")
-private val XT_ID: Keyword = Keyword.intern("xt", "id")
-private val XT_FN: Keyword = Keyword.intern("xt", "fn")
+private const val XT_TXS = "xt/tx_fns"
+private const val XT_ID = "xt/id"
+private const val XT_FN = "xt/fn"
 
 sealed interface TxOp {
     @Suppress("unused")
@@ -44,16 +43,16 @@ sealed interface TxOp {
         fun sqlBatch(sql: String, paramGroupBytes: ByteArray?): Sql = sqlBatch(sql, ByteBuffer.wrap(paramGroupBytes))
 
         @JvmStatic
-        fun put(tableName: Keyword, doc: Map<*, *>): Put = Put(tableName, doc)
+        fun put(tableName: String, doc: Map<String, *>): Put = Put(tableName, doc)
 
         @JvmStatic
         fun putFn(fnId: Any, fnForm: Any): Put = put(XT_TXS, mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm)))
 
         @JvmStatic
-        fun delete(tableName: Keyword, entityId: Any): Delete = Delete(tableName, entityId)
+        fun delete(tableName: String, entityId: Any): Delete = Delete(tableName, entityId)
 
         @JvmStatic
-        fun erase(tableName: Keyword, entityId: Any): Erase = Erase(tableName, entityId)
+        fun erase(tableName: String, entityId: Any): Erase = Erase(tableName, entityId)
 
         @JvmStatic
         fun call(fnId: Any, args: List<*>): Call = Call(fnId, args)
@@ -64,8 +63,8 @@ sealed interface TxOp {
 }
 
 data class Put(
-    @JvmField val tableName: Keyword,
-    @JvmField val doc: Map<*, *>,
+    @JvmField val tableName: String,
+    @JvmField val doc: Map<String, *>,
     @JvmField val validFrom: Instant? = null,
     @JvmField val validTo: Instant? = null
 ) : TxOp, HasValidTimeBounds<Put> {
@@ -76,7 +75,7 @@ data class Put(
 }
 
 data class Delete(
-    @JvmField val tableName: Keyword,
+    @JvmField val tableName: String,
     @JvmField val entityId: Any,
     @JvmField val validFrom: Instant? = null,
     @JvmField val validTo: Instant? = null
@@ -88,7 +87,7 @@ data class Delete(
 }
 
 data class Erase(
-    @JvmField val tableName: Keyword,
+    @JvmField val tableName: String,
     @JvmField val entityId: Any
 ) : TxOp
 

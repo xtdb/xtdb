@@ -34,7 +34,7 @@ class TxDeserializerTest {
 
         // then
         ArrayList<TxOp> ops = new ArrayList<TxOp>();
-        ops.add(TxOp.put(Keyword.intern("docs"), Collections.emptyMap()));
+        ops.add(TxOp.put("docs", Collections.emptyMap()));
         assertEquals(new Tx(ops, new TxOptions()), actual);
     }
 }

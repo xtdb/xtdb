@@ -253,7 +253,7 @@
     (throw (err/illegal-arg :xtdb.tx/invalid-table
                             {::err/message "expected table name" :table table-name})))
 
-  table-name)
+  (str (symbol table-name)))
 
 (defn- expect-eid [eid]
   (if-not (eid? eid)
@@ -267,7 +267,10 @@
                             {::err/message "expected doc map", :doc doc})))
   (expect-eid (or (:xt/id doc) (get doc "xt/id")))
 
-  doc)
+  (-> doc
+      (update-keys (fn [k]
+                     (cond-> k
+                       (keyword? k) (-> symbol str))))))
 
 (defn put
   "Returns a put operation for passing to `submit-tx`.
@@ -313,7 +316,7 @@
   * `delete` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
   * To delete documents that match a query, use `delete-from`"
   [table id]
-  (TxOp/delete table (expect-eid id)))
+  (TxOp/delete (expect-table-name table) (expect-eid id)))
 
 (defn during
   "Adapts the given transaction operation to take effect (in valid time) between `from` and `until`.

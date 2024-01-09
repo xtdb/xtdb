@@ -239,10 +239,10 @@
         table-doc-writers (HashMap.)]
     (fn write-put! [^Put op]
       (.startStruct put-writer)
-      (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/kw->normal-form-kw (.tableName op))
+      (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/str->normal-form-str (.tableName op))
                                                (util/->jfn
-                                                 (fn [^Keyword table]
-                                                   (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :struct)))))]
+                                                 (fn [table]
+                                                   (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :struct)))))]
         (vw/write-value! (->> (.doc op)
                               (into {} (map (juxt (comp util/str->normal-form-str str symbol key)
                                                   val))))
@@ -262,7 +262,7 @@
     (fn write-delete! [^Delete op]
       (.startStruct delete-writer)
 
-      (vw/write-value! (str (symbol (util/kw->normal-form-kw (.tableName op)))) table-writer)
+      (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
 
       (let [eid (.entityId op)]
         (vw/write-value! eid (.legWriter id-writer (vw/value->arrow-type eid))))
@@ -278,7 +278,7 @@
         id-writer (.structKeyWriter erase-writer "xt$id" (FieldType/notNullable #xt.arrow/type :union))]
     (fn [^Erase op]
       (.startStruct erase-writer)
-      (vw/write-value! (str (symbol (.tableName op))) table-writer)
+      (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
 
       (let [eid (.entityId op)]
         (vw/write-value! eid (.legWriter id-writer (vw/value->arrow-type eid))))

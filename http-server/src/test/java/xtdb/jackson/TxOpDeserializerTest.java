@@ -1,6 +1,5 @@
 package xtdb.jackson;
 
-import clojure.lang.Keyword;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import xtdb.tx.TxOp;
@@ -29,7 +28,7 @@ class TxOpDeserializerTest {
         Object actual = objectMapper.readValue(put, TxOp.class);
 
         // then
-        assertEquals( TxOp.put(Keyword.intern("docs"), Collections.emptyMap()), actual);
+        assertEquals( TxOp.put("docs", Collections.emptyMap()), actual);
     }
 
     @Test
@@ -43,7 +42,7 @@ class TxOpDeserializerTest {
         Object actual = objectMapper.readValue(delete, TxOp.class);
 
         // then
-        assertEquals( TxOp.delete(Keyword.intern("docs"), "my-id"), actual);
+        assertEquals( TxOp.delete("docs", "my-id"), actual);
     }
 
     @Test
@@ -57,7 +56,7 @@ class TxOpDeserializerTest {
         Object actual = objectMapper.readValue(erase, TxOp.class);
 
         // then
-        assertEquals( TxOp.erase(Keyword.intern("docs"), "my-id"), actual);
+        assertEquals( TxOp.erase("docs", "my-id"), actual);
     }
 
     @Test

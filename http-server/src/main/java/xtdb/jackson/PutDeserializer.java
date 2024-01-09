@@ -31,8 +31,7 @@ public class PutDeserializer extends StdDeserializer<Put> {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-put"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
-        // TODO remove keyword casting
-        Put op = put(Keyword.intern(node.get("put").asText()), codec.treeToValue(node.get("doc"), Map.class));
+        Put op = put(node.get("put").asText(), codec.treeToValue(node.get("doc"), Map.class));
         if (node.has("valid_from")) {
             var instant = codec.treeToValue(node.get("valid_from"), Object.class);
             if (!(instant instanceof Instant)) {
