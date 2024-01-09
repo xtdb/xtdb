@@ -29,7 +29,7 @@ public class DeleteDeserializer extends StdDeserializer<Delete> {
             throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-delete"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
-        Delete op = TxOp.delete(Keyword.intern(node.get("delete").asText()), codec.treeToValue(node.get("id"), Object.class));
+        Delete op = TxOp.delete(node.get("delete").asText(), codec.treeToValue(node.get("id"), Object.class));
         if (node.has("valid_from")) {
             var instant = codec.treeToValue(node.get("valid_from"), Object.class);
             if (!(instant instanceof Instant)) {

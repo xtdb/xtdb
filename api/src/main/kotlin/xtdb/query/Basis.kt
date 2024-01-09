@@ -9,8 +9,8 @@ private val AT_TX_KEY: Keyword = Keyword.intern("at-tx")
 private val CURRENT_TIME_KEY: Keyword = Keyword.intern("current-time")
 
 data class Basis(
-    @JvmField val atTx: TransactionKey?,
-    @JvmField val currentTime: Instant?
+    @JvmField val atTx: TransactionKey? = null,
+    @JvmField val currentTime: Instant? = null
 ) : ILookup, Seqable {
 
     override fun valAt(key: Any?): Any? {
@@ -24,7 +24,7 @@ data class Basis(
             else -> notFound
         }
 
-    override fun seq(): ISeq {
+    override fun seq(): ISeq? {
         val seqList: MutableList<Any?> = ArrayList()
         if (atTx != null) {
             seqList.add(MapEntry.create(AT_TX_KEY, atTx))

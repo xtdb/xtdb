@@ -8,17 +8,18 @@
             [xtdb.query :as q]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.xtql :as xtql])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb TransactionKey TxOptions)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
            (xtdb.api.log Log)
            xtdb.indexer.IIndexer
-           (xtdb.query Basis IRaQuerySource)
+           (xtdb.query Basis IRaQuerySource Query QueryOpts)
            (xtdb.tx Sql)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -65,9 +66,9 @@
                  !latest-submitted-tx
                  system, close-fn]
   IXtdb
-  (submitTxAsync [this tx-ops opts]
+  (submitTxAsync [this opts tx-ops]
     (let [system-time (.getSystemTime opts)]
-      (-> (submit-tx& this tx-ops opts)
+      (-> (submit-tx& this (vec tx-ops) opts)
           (util/then-apply
             (fn [^TransactionKey tx-key]
               (let [tx-key (cond-> tx-key
@@ -76,30 +77,48 @@
                 (swap! !latest-submitted-tx time/max-tx tx-key)
                 tx-key))))))
 
-  (openQueryAsync [this query opts]
-    (xtp/open-query& this query
-                     (-> (into {:default-all-valid-time? false} opts)
-                         (time/after-latest-submitted-tx this))))
-
-  xtp/PNode
-  (open-query& [_ query query-opts]
-    (let [query-opts (-> (into {:default-tz default-tz} query-opts)
+  (^CompletableFuture openQueryAsync [_ ^String query, ^QueryOpts query-opts]
+    (let [query-opts (-> (into {:default-tz default-tz,
+                                :after-tx @!latest-submitted-tx
+                                :key-fn :sql}
+                               query-opts)
                          (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
                          (with-after-tx-default))]
-      (-> (.awaitTxAsync indexer (get query-opts :after-tx) (:tx-timeout query-opts))
+      (-> (.awaitTxAsync indexer
+                         (-> (:after-tx query-opts)
+                             (time/max-tx (get-in query-opts [:basis :at-tx])))
+                         (:tx-timeout query-opts))
           (util/then-apply
             (fn [_]
               (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
-                    [lang plan] (q/compile-query query query-opts table-info)]
+                    plan (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
                 (if (:explain? query-opts)
                   (Stream/of {:plan plan})
 
-                  (q/open-query allocator ra-src wm-src
-                                lang plan query-opts))))))))
+                  (q/open-query allocator ra-src wm-src plan query-opts))))))))
 
-  (latest-submitted-tx [_] @!latest-submitted-tx)
+  (^CompletableFuture openQueryAsync [_ ^Query query, ^QueryOpts query-opts]
+    (let [query-opts (-> (into {:default-tz default-tz,
+                                :after-tx @!latest-submitted-tx
+                                :key-fn :snake_case}
+                               query-opts)
+                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+                         (with-after-tx-default))]
+      (-> (.awaitTxAsync indexer
+                         (-> (:after-tx query-opts)
+                             (time/max-tx (get-in query-opts [:basis :at-tx])))
+                         (:tx-timeout query-opts))
+          (util/then-apply
+            (fn [_]
+              (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
+                    plan (xtql/compile-query query table-info)]
+                (if (:explain? query-opts)
+                  (Stream/of {:plan plan})
+
+                  (q/open-query allocator ra-src wm-src plan query-opts))))))))
 
   xtp/PStatus
+  (latest-submitted-tx [_] @!latest-submitted-tx)
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx (xtp/latest-submitted-tx this)})
@@ -163,36 +182,36 @@
                             (ig/halt! system)
                             #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
 
-(defrecord SubmitNode [^BufferAllocator allocator, ^Log log, default-tz
-                       !system, close-fn]
-  IXtdb
-  (submitTxAsync [this tx-ops opts]
-    (submit-tx& this tx-ops opts))
+(defrecord SubmitClient [^BufferAllocator allocator, ^Log log, default-tz
+                         !system, close-fn]
+  IXtdbSubmitClient
+  (submitTxAsync [this opts tx-ops]
+    (submit-tx& this (vec tx-ops) opts))
 
   AutoCloseable
   (close [_]
     (when close-fn
       (close-fn))))
 
-(defmethod print-method SubmitNode [_node ^Writer w] (.write w "#<XtdbSubmitNode>"))
-(defmethod pp/simple-dispatch SubmitNode [it] (print-method it *out*))
+(defmethod print-method SubmitClient [_node ^Writer w] (.write w "#<XtdbSubmitClient>"))
+(defmethod pp/simple-dispatch SubmitClient [it] (print-method it *out*))
 
-(defmethod ig/prep-key ::submit-node [_ opts]
+(defmethod ig/prep-key ::submit-client [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
           :log (ig/ref :xtdb/log)
           :default-tz (ig/ref :xtdb/default-tz)}
          opts))
 
-(defmethod ig/init-key ::submit-node [_ deps]
-  (map->SubmitNode (-> deps (assoc :!system (atom nil)))))
+(defmethod ig/init-key ::submit-client [_ deps]
+  (map->SubmitClient (-> deps (assoc :!system (atom nil)))))
 
-(defmethod ig/halt-key! ::submit-node [_ ^SubmitNode node]
+(defmethod ig/halt-key! ::submit-client [_ ^SubmitClient node]
   (.close node))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn start-submit-node ^xtdb.node.impl.SubmitNode [opts]
+(defn start-submit-client ^xtdb.node.impl.SubmitClient [opts]
   (let [!closing (atom false)
-        system (-> (into {::submit-node {}
+        system (-> (into {::submit-client {}
                           :xtdb/allocator {}
                           :xtdb/default-tz nil}
                          opts)
@@ -202,7 +221,7 @@
                    ig/prep
                    ig/init)]
 
-    (-> (::submit-node system)
+    (-> (::submit-client system)
         (doto (-> :!system (reset! system)))
         (assoc :close-fn #(when-not (compare-and-set! !closing false true)
                             (ig/halt! system))))))

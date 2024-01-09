@@ -18,8 +18,10 @@
            java.util.concurrent.ExecutionException
            java.util.function.Function
            java.util.List
+           java.util.Map
            [java.util.stream Stream]
-           (xtdb.api IXtdb TransactionKey TxOptions)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
+           (xtdb.query Basis Query QueryOpts)
            (xtdb.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds)
            xtdb.types.ClojureForm))
 
@@ -159,19 +161,46 @@
        (rethrowing-cause))))
 
 (extend-protocol xtp/PSubmitNode
-  IXtdb
+  IXtdbSubmitClient
   (submit-tx& [this tx-ops]
     (xtp/submit-tx& this tx-ops nil))
 
   (submit-tx& [this tx-ops opts]
-    (.submitTxAsync this tx-ops
+    (.submitTxAsync this
                     (cond
                       (instance? TxOptions opts) opts
                       (nil? opts) (TxOptions.)
                       (map? opts) (let [{:keys [system-time default-tz default-all-valid-time?]} opts]
                                     (TxOptions. (some-> system-time expect-instant)
                                                 default-tz
-                                                (boolean default-all-valid-time?)))))))
+                                                (boolean default-all-valid-time?))))
+                    (into-array TxOp tx-ops))))
+
+(extend-protocol xtp/PNode
+  IXtdb
+  (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :clojure}}]
+    (let [query-opts (-> (QueryOpts/queryOpts)
+                         (cond-> (map? args) (.args ^Map args)
+                                 (vector? args) (.args ^List args)
+                                 after-tx (.afterTx after-tx)
+                                 basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
+                                 default-tz (.defaultTz default-tz)
+                                 tx-timeout (.txTimeout tx-timeout)
+                                 (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
+                                 (some? explain?) (.explain explain?))
+
+                         ;; TODO accept IKeyFn
+                         (.keyFn (str (symbol key-fn)))
+
+                         (.build))]
+      (if (string? query)
+        (.openQueryAsync this ^String query query-opts)
+
+        (let [^Query query (cond
+                             (instance? Query query) query
+                             (seq? query) (xtql.edn/parse-query query)
+                             :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+          (.openQueryAsync this query query-opts))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx&
@@ -252,7 +281,7 @@
     (throw (err/illegal-arg :xtdb.tx/invalid-table
                             {::err/message "expected table name" :table table-name})))
 
-  table-name)
+  (str (symbol table-name)))
 
 (defn- expect-eid [eid]
   (if-not (eid? eid)
@@ -266,7 +295,10 @@
                             {::err/message "expected doc map", :doc doc})))
   (expect-eid (or (:xt/id doc) (get doc "xt/id")))
 
-  doc)
+  (-> doc
+      (update-keys (fn [k]
+                     (cond-> k
+                       (keyword? k) (-> symbol str))))))
 
 (defn put
   "Returns a put operation for passing to `submit-tx`.
@@ -312,7 +344,7 @@
   * `delete` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
   * To delete documents that match a query, use `delete-from`"
   [table id]
-  (TxOp/delete table (expect-eid id)))
+  (TxOp/delete (expect-table-name table) (expect-eid id)))
 
 (defn during
   "Adapts the given transaction operation to take effect (in valid time) between `from` and `until`.

@@ -2,8 +2,7 @@
     xtdb.protocols)
 
 (defprotocol PNode
-  (^java.util.concurrent.CompletableFuture open-query& [node query opts])
-  (latest-submitted-tx [node]))
+  (^java.util.concurrent.CompletableFuture open-query& [node query opts]))
 
 (defprotocol PSubmitNode
   (^java.util.concurrent.CompletableFuture #_<TransactionKey> submit-tx&
@@ -11,6 +10,7 @@
    [node tx-ops opts]))
 
 (defprotocol PStatus
+  (latest-submitted-tx [node])
   (status [node]))
 
 (def http-routes

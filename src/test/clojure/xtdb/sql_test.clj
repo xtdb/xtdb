@@ -1170,16 +1170,16 @@
                            (xt/put :docs {:xt/id 2 :x 2})
                            (xt/put :docs {:xt/id 3 :x 1})])
 
-  (t/is (= [{:x 1, :xt$id 3} {:x 2, :xt$id 2} {:x 3, :xt$id 1}]
+  (t/is (= [{:x 1, :xt/id 3} {:x 2, :xt/id 2} {:x 3, :xt/id 1}]
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY docs.x")))
 
-  (t/is (= [{:x 1, :xt$id 3} {:x 2, :xt$id 2} {:x 3, :xt$id 1}]
+  (t/is (= [{:x 1, :xt/id 3} {:x 2, :xt/id 2} {:x 3, :xt/id 1}]
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY docs.x + 1")))
 
-  (t/is (= #{{:x 1, :xt$id 3} {:x 2, :xt$id 2} {:x 3, :xt$id 1}}
+  (t/is (= #{{:x 1, :xt/id 3} {:x 2, :xt/id 2} {:x 3, :xt/id 1}}
            (set (xt/q tu/*node* "SELECT * FROM docs ORDER BY 1 + 1"))))
 
-  (t/is (= [{:xt$id 3} {:xt$id 2} {:xt$id 1}]
+  (t/is (= [{:xt/id 3} {:xt/id 2} {:xt/id 1}]
            (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY docs.x"))))
 
 (deftest test-order-by-unqualified-derived-column-refs

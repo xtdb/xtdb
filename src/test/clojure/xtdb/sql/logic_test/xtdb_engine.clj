@@ -213,6 +213,7 @@
       (vec
        (for [row (xt/q node sql-statement
                        (-> opts
+                           (assoc :key-fn :sql)
                            (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
                            (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))]
 

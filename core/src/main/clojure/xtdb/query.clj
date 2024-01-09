@@ -24,9 +24,11 @@
             [xtdb.sql :as sql]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql]
             [xtdb.xtql.edn :as xtql.edn])
-  (:import java.lang.AutoCloseable
+  (:import clojure.lang.MapEntry
+           java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Function)
@@ -175,28 +177,31 @@
 (defmethod ig/halt-key! ::ra-query-source [_ ^AutoCloseable ra-query-source]
   (.close ra-query-source))
 
-(defn compile-query
-  "returns a pair of [lang ra-plan]"
-  [query query-opts table-info]
-
+(defn compile-query [query query-opts table-info]
   (cond
-    (string? query) [:sql (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
+    (string? query) (sql/compile-query query (-> query-opts (assoc :table-info table-info)))
 
-    (seq? query) [:xtql (xtql/compile-query (xtql.edn/parse-query query) table-info)]
+    (seq? query) (xtql/compile-query (xtql.edn/parse-query query) table-info)
 
-    (instance? Query query) [:xtql (xtql/compile-query query table-info)]
+    (instance? Query query) (xtql/compile-query query table-info)
 
-    :else (throw (err/illegal-arg :unknown-query-type
-                                  {:query query
-                                   :type (type query)}))))
+    :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)}))))
 
-(defn open-query ^java.util.stream.Stream [allocator ^IRaQuerySource ra-src, wm-src
-                                           lang plan query-opts]
-  (let [{:keys [args key-fn], :or {key-fn (case lang :sql :sql, :xtql :clojure)}} query-opts
+(defn- param-sym [v]
+  (-> (symbol (str "?" v))
+      util/symbol->normal-form-symbol
+      (with-meta {:param? true})))
+
+(defn open-args [^BufferAllocator allocator, args]
+  (vw/open-params allocator
+                  (->> args
+                       (into {} (map (fn [[k v]]
+                                       (MapEntry/create (param-sym (str (symbol k))) v)))))))
+
+(defn open-query ^java.util.stream.Stream [allocator ^IRaQuerySource ra-src, wm-src, plan, query-opts]
+  (let [{:keys [args key-fn]} query-opts
         key-fn (util/parse-key-fn key-fn)]
-    (util/with-close-on-catch [args (case lang
-                                      :sql (sql/open-args allocator args)
-                                      :xtql (xtql/open-args allocator args))
+    (util/with-close-on-catch [args (open-args allocator args)
                                cursor (-> (.prepareRaQuery ra-src plan)
                                           (.bind wm-src (-> query-opts
                                                             (assoc :params args, :key-fn key-fn)))

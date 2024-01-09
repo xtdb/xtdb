@@ -417,7 +417,7 @@
     (with-open [node-1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))
                 node-2 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))
                 node-3 (tu/->local-node (assoc node-opts :buffers-dir "objects-3"))
-                submit-node (tu/->local-submit-node {:node-dir node-dir})
+                submit-client (tu/->local-submit-client {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
@@ -430,7 +430,7 @@
 
         (let [last-tx-key (reduce
                            (fn [_ tx-ops]
-                             (xt/submit-tx submit-node tx-ops))
+                             (xt/submit-tx submit-client tx-ops))
                            nil
                            (partition-all 100 tx-ops))]
 
@@ -457,7 +457,7 @@
         node-opts {:node-dir node-dir, :rows-per-chunk 1000 :rows-per-block 100}]
     (util/delete-dir node-dir)
 
-    (with-open [submit-node (tu/->local-submit-node {:node-dir node-dir})
+    (with-open [submit-client (tu/->local-submit-client {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
@@ -472,7 +472,7 @@
 
         (let [^TransactionKey first-half-tx-key (reduce
                                                  (fn [_ tx-ops]
-                                                   (xt/submit-tx submit-node tx-ops))
+                                                   (xt/submit-tx submit-client tx-ops))
                                                  nil
                                                  (partition-all 100 first-half-tx-ops))]
 
@@ -505,7 +505,7 @@
 
               (let [^TransactionKey second-half-tx-key (reduce
                                                         (fn [_ tx-ops]
-                                                          (xt/submit-tx submit-node tx-ops))
+                                                          (xt/submit-tx submit-client tx-ops))
                                                         nil
                                                         (partition-all 100 second-half-tx-ops))]
 

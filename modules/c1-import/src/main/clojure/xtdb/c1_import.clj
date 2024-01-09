@@ -16,7 +16,7 @@
            xtdb.types.ClojureForm))
 
 (defmethod ig/prep-key :xtdb/c1-import [_ opts]
-  (into {:submit-node (ig/ref ::xtn/submit-node)}
+  (into {:submit-client (ig/ref ::xtn/submit-client)}
         (-> opts
             (update :export-log-path
                     (fn [path]
@@ -38,7 +38,7 @@
                                            (and (list? v) (= (first v) 'fn))
                                            (ClojureForm.)))))))))
 
-(defn- submit-file! [submit-node, ^Path log-file]
+(defn- submit-file! [submit-client, ^Path log-file]
   (with-open [is (Files/newInputStream log-file (into-array OpenOption #{StandardOpenOption/READ}))]
     (let [rdr (transit/reader is :json)]
       (loop []
@@ -48,7 +48,7 @@
           (when (Thread/interrupted)
             (throw (InterruptedException.)))
 
-          (xt/submit-tx submit-node
+          (xt/submit-tx submit-client
                         (case tx-status
                           :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
                                     ;; HACK: what to do if the user has a separate :xt/id  key?
@@ -62,7 +62,7 @@
                         {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))
 
-(defmethod ig/init-key :xtdb/c1-import [_ {:keys [^Path export-log-path submit-node]}]
+(defmethod ig/init-key :xtdb/c1-import [_ {:keys [^Path export-log-path submit-client]}]
   (let [watch-svc (.newWatchService (.getFileSystem export-log-path))
         watch-key (.register export-log-path watch-svc (into-array WatchEvent$Kind [StandardWatchEventKinds/ENTRY_CREATE]))
 
@@ -73,7 +73,7 @@
                                           (when-not (.contains seen-files file)
                                             (.add seen-files file)
                                             (log/infof "processing '%s'..." (str file))
-                                            (submit-file! submit-node file)
+                                            (submit-file! submit-client file)
                                             (log/infof "processed '%s'." (str file))))]
                                   (try
                                     (run! process-file!
@@ -130,7 +130,7 @@
 
       help (println help)
 
-      :else (with-open [_submit-node (xtn/start-submit-node sys-opts)]
+      :else (with-open [_submit-client (xtn/start-submit-client sys-opts)]
               (log/info "Importer started")
               @(shutdown-hook-promise)))
 

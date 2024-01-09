@@ -50,7 +50,7 @@
 
 (s/def ::tx-ops seqable?)
 
-(s/def ::key-fn keyword?)
+(s/def ::key-fn (s/nilable keyword?))
 (s/def ::tx-id int?)
 
 (s/def ::default-all-valid-time? boolean?)
@@ -151,8 +151,8 @@
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
-(s/def ::basis (s/or :class #(instance? Basis %)
-                     :map (s/keys :opt-un [::current-time ::at-tx])))
+(s/def ::basis (s/nilable (s/or :class #(instance? Basis %)
+                                :map (s/keys :opt-un [::current-time ::at-tx]))))
 
 (s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))
@@ -162,7 +162,7 @@
 
 (s/def ::args (s/nilable (s/coll-of any?)))
 
-(s/def ::key-fn (some-fn keyword? string?))
+(s/def ::key-fn (s/nilable (some-fn keyword? string?)))
 
 (s/def ::query-body
   (s/keys :req-un [::query],

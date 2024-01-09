@@ -52,7 +52,7 @@
 
 (def ^:dynamic *node-opts* {})
 #_{:clj-kondo/ignore [:uninitialized-var]}
-(def ^:dynamic *node*)
+(def ^:dynamic ^xtdb.api.IXtdb *node*)
 
 (defn with-opts
   ([opts] (partial with-opts opts))
@@ -264,9 +264,9 @@
                      :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit}
                                                    (into {} (filter val)))})))
 
-(defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
-  (xtn/start-submit-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                         :clock (->mock-clock)}}))
+(defn ->local-submit-client ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
+  (xtn/start-submit-client {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
+                                                           :clock (->mock-clock)}}))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

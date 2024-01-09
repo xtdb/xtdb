@@ -1485,7 +1485,8 @@
                     :tx-timeout (Duration/ofSeconds 1)
                     :default-tz (.getZone clock)
                     :args xt-params
-                    :default-all-valid-time? default-all-valid-time?}
+                    :default-all-valid-time? default-all-valid-time?
+                    :key-fn :sql}
 
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
         ^CompletableFuture
@@ -1535,8 +1536,8 @@
              (-> st
                  (assoc :transaction
                         {:basis {:current-time (.instant clock)
-                                 :tx (time/max-tx (:latest-completed-tx (xt/status (:node server)))
-                                                  latest-submitted-tx)}
+                                 :at-tx (time/max-tx (:latest-completed-tx (xt/status (:node server)))
+                                                     latest-submitted-tx)}
 
                          :access-mode (or access-mode
                                           (:access-mode (:next-transaction session))
