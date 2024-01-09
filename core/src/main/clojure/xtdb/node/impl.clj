@@ -15,7 +15,7 @@
            (java.util.concurrent CompletableFuture)
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb TransactionKey)
+           (xtdb.api IXtdb TransactionKey TxOptions)
            (xtdb.api.log Log)
            xtdb.indexer.IIndexer
            (xtdb.query Basis IRaQuerySource)
@@ -48,7 +48,7 @@
       (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
 
 (defn- submit-tx& ^java.util.concurrent.CompletableFuture
-  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops opts]
+  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops ^TxOptions opts]
 
   (or (validate-tx-ops tx-ops)
       (let [system-time (.getSystemTime opts)]
