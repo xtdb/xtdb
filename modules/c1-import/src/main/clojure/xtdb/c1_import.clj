@@ -6,7 +6,6 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.cli :as cli]
-            xtdb.log
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -17,7 +16,7 @@
            xtdb.types.ClojureForm))
 
 (defmethod ig/prep-key :xtdb/c1-import [_ opts]
-  (into {:tx-producer (ig/ref :xtdb.tx-producer/tx-producer)}
+  (into {:submit-node (ig/ref ::xtn/submit-node)}
         (-> opts
             (update :export-log-path
                     (fn [path]
@@ -39,7 +38,7 @@
                                            (and (list? v) (= (first v) 'fn))
                                            (ClojureForm.)))))))))
 
-(defn- submit-file! [^xtdb.tx_producer.TxProducer tx-producer, ^Path log-file]
+(defn- submit-file! [submit-node, ^Path log-file]
   (with-open [is (Files/newInputStream log-file (into-array OpenOption #{StandardOpenOption/READ}))]
     (let [rdr (transit/reader is :json)]
       (loop []
@@ -49,21 +48,21 @@
           (when (Thread/interrupted)
             (throw (InterruptedException.)))
 
-          (.submitTx tx-producer
-                     (case tx-status
-                       :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
-                                 ;; HACK: what to do if the user has a separate :xt/id  key?
-                                 (case tx-op
-                                   :put (-> (xt/put :xt_docs (xform-doc doc))
-                                            (xt/during start-valid-time end-valid-time))
-                                   :delete (-> (xt/delete :xt_docs eid)
+          (xt/submit-tx submit-node
+                        (case tx-status
+                          :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
+                                    ;; HACK: what to do if the user has a separate :xt/id  key?
+                                    (case tx-op
+                                      :put (-> (xt/put :xt_docs (xform-doc doc))
                                                (xt/during start-valid-time end-valid-time))
-                                   :evict (xt/erase :xt_docs eid)))
-                       :abort [TxOp/ABORT])
-                     {:system-time (:xtdb.api/tx-time tx)})
+                                      :delete (-> (xt/delete :xt_docs eid)
+                                                  (xt/during start-valid-time end-valid-time))
+                                      :evict (xt/erase :xt_docs eid)))
+                          :abort [TxOp/ABORT])
+                        {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))
 
-(defmethod ig/init-key :xtdb/c1-import [_ {:keys [^Path export-log-path tx-producer]}]
+(defmethod ig/init-key :xtdb/c1-import [_ {:keys [^Path export-log-path submit-node]}]
   (let [watch-svc (.newWatchService (.getFileSystem export-log-path))
         watch-key (.register export-log-path watch-svc (into-array WatchEvent$Kind [StandardWatchEventKinds/ENTRY_CREATE]))
 
@@ -74,7 +73,7 @@
                                           (when-not (.contains seen-files file)
                                             (.add seen-files file)
                                             (log/infof "processing '%s'..." (str file))
-                                            (submit-file! tx-producer file)
+                                            (submit-file! submit-node file)
                                             (log/infof "processed '%s'." (str file))))]
                                   (try
                                     (run! process-file!

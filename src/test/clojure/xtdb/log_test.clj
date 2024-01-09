@@ -1,12 +1,12 @@
-(ns xtdb.tx-producer-test
-  (:require [jsonista.core :as json]
-            [clojure.java.io :as io]
+(ns xtdb.log-test
+  (:require [clojure.java.io :as io]
             [clojure.test :as t]
+            [jsonista.core :as json]
             [xtdb.api :as xt]
+            [xtdb.log :as log]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
-            [xtdb.tx-producer :as txp]))
+            [xtdb.time :as time]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -15,7 +15,7 @@
   ([file tx-ops opts]
    (binding [*print-namespace-maps* false]
      (let [file (io/as-file file)
-           actual (tj/arrow-streaming->json (txp/serialize-tx-ops tu/*allocator* tx-ops opts))]
+           actual (tj/arrow-streaming->json (log/serialize-tx-ops tu/*allocator* tx-ops opts))]
 
        ;; uncomment this to reset the expected file (but don't commit it)
        #_(spit file actual) ;; <<no-commit>>
@@ -68,27 +68,27 @@
             :mem-used 2.79257668E8})])
 
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
-  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-tx.json") devices-docs))
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx.json") devices-docs))
 
 (t/deftest can-write-put-fns
-  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-put-fns.json")
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-put-fns.json")
                          [(xt/put-fn :foo '(fn [id] [(xt/put :foo {:xt/id id})]))
                           (-> (xt/put-fn :bar '(fn [id] [(xt/put :bar {:xt/id id})]))
                               (xt/starting-from #inst "2020"))]))
 
 (t/deftest can-write-tx-fn-calls
-  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-tx-fn-calls.json")
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx-fn-calls.json")
                          [(xt/call :foo 12 nil :bar)
                           (xt/call :foo2 "hello" "world")]))
 
 (t/deftest can-write-docs-with-different-keys
-  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/docs-with-different-keys.json")
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/docs-with-different-keys.json")
                          [(xt/put :foo {:xt/id :a, :a 1})
                           (xt/put :foo {:xt/id "b", :b 2})
                           (xt/put :bar {:xt/id 3, :c 3})]))
 
 (t/deftest can-write-sql-to-arrow-ipc-streaming-format
-  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-sql.json")
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-sql.json")
                          [(xt/sql-op "INSERT INTO foo (xt$id) VALUES (0)")
 
                           (-> (xt/sql-op "INSERT INTO foo (xt$id, foo, bar) VALUES (?, ?, ?)")
@@ -103,7 +103,7 @@
                               (xt/with-op-args [1]))]))
 
 (t/deftest can-write-xtql
-  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-xtdml.json")
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-xtdml.json")
                          [(-> (xt/update-table :users '{:bind [{:xt/id $uid, :version v}]
                                                         :set {:v (inc v)}})
                               (xt/with-op-args {:uid :jms}))
@@ -112,7 +112,7 @@
                               (xt/with-op-args {:uid :jms}))]))
 
 (t/deftest can-write-opts
-  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-opts.json")
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-opts.json")
                          [(xt/sql-op "INSERT INTO foo (id) VALUES (0)")]
 
                          {:system-time (time/->instant #inst "2021")

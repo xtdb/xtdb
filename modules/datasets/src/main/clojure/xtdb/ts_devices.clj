@@ -51,10 +51,10 @@
       (io/reader)))
 
 (defn submit-ts-devices
-  ([tx-producer]
-   (submit-ts-devices tx-producer {}))
+  ([node]
+   (submit-ts-devices node {}))
 
-  ([tx-producer {:keys [size batch-size device-info-file readings-file],
+  ([node {:keys [size batch-size device-info-file readings-file],
                  :or {size :small
                       batch-size 1000
                       device-info-file (local-ts-devices-file size :device-info)
@@ -73,7 +73,7 @@
                 time (xt/starting-from time)))
             (partition-all batch-size)
             (reduce (fn [_acc tx-ops]
-                      (xt/submit-tx tx-producer tx-ops))
+                      (xt/submit-tx node tx-ops))
                     nil))))))
 
 (def query-recent-battery-temperatures

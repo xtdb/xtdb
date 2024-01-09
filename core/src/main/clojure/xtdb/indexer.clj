@@ -6,6 +6,7 @@
             [xtdb.await :as await]
             [xtdb.error :as err]
             xtdb.indexer.live-index
+            [xtdb.log :as xt-log]
             [xtdb.metadata :as meta]
             [xtdb.operator.scan :as scan]
             [xtdb.query :as q]
@@ -14,7 +15,6 @@
             [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
-            [xtdb.tx-producer :as txp]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -255,8 +255,8 @@
 
             ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
             (when-not (or (nil? res) (true? res))
-              (util/with-close-on-catch [tx-ops-vec (txp/open-tx-ops-vec allocator)]
-                (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
+              (util/with-close-on-catch [tx-ops-vec (xt-log/open-tx-ops-vec allocator)]
+                (xt-log/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
                 (.setValueCount tx-ops-vec (count res))
                 tx-ops-vec)))
 

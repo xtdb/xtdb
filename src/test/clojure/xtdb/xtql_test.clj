@@ -2041,7 +2041,6 @@
 
 (t/deftest bug-temporal-queries-wrong-at-boundary-2531
   (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 10}
-                                    :xtdb.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}
                                     :xtdb.log/memory-log {:instant-src (tu/->mock-clock)}})]
     (doseq [i (range 10)]
       (xt/submit-tx node [(xt/put :ints {:xt/id 0 :n i})]))

@@ -61,14 +61,14 @@
         (-> (assoc doc :xt/id eid)
             (with-meta {:table table-name, :iid (->iid eid)}))))))
 
-(defn submit-docs! [tx-producer scale-factor]
+(defn submit-docs! [node scale-factor]
   (log/debug "Transacting TPC-H tables...")
   (->> (TpchTable/getTables)
        (reduce (fn [_last-tx ^TpchTable t]
                  (let [[!last-tx doc-count] (->> (tpch-table->docs t scale-factor)
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] batch]
-                                                           [(xt/submit-tx& tx-producer
+                                                           [(xt/submit-tx& node
                                                                            (vec (for [doc batch]
                                                                                   (xt/put (:table (meta doc)) doc))))
                                                             (+ last-doc-count (count batch))])
@@ -96,7 +96,7 @@
                  (str/join "___"))
             (vals doc)))))
 
-(defn submit-dml! [tx-producer scale-factor]
+(defn submit-dml! [node scale-factor]
   (log/debug "Transacting TPC-H tables...")
   (->> (TpchTable/getTables)
        (reduce (fn [_last-tx ^TpchTable table]
@@ -104,7 +104,7 @@
                        [!last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] param-batch]
-                                                           [(xt/submit-tx& tx-producer
+                                                           [(xt/submit-tx& node
                                                                            [(-> (xt/sql-op dml)
                                                                                 (xt/with-op-arg-rows param-batch))])
                                                             (+ last-doc-count (count param-batch))])

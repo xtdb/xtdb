@@ -4,7 +4,6 @@
 | transaction            | Referring to an atomic sequence of operations (put, delete etc...) to be performed on the db. Or alternatively a SQL transaction string.
 | entity (or 'record')   | Referring to a unique item in the database that may have different versions (in form of different documents) across time.
 | document (or 'row')    | A particular state of an entity. A document describes the state of an entity at a particular point in time.
-| tx-producer            | Puts the transactions onto some immutable append only log.
 | log                    | Holds all transactions monotonically across system time. In XTDB V2 this is not strictly needed forever as transactions also get indexed into a log (see log indexer) per chunk.
 | ingester               | Retrieves newly arrived transactions from the log and submits them to the indexer.
 | indexer                | Indexes new data or updates to existing data into the underlying storage.

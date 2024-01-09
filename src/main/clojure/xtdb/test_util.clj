@@ -258,7 +258,6 @@
   (let [instant-src (or instant-src (->mock-clock))]
     (xtn/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                     :instant-src instant-src}
-                     :xtdb.tx-producer/tx-producer {:instant-src instant-src}
                      :xtdb.buffer-pool/local {:data-dir (.resolve node-dir buffers-dir)}
                      :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
                                         (into {} (filter val)))
@@ -266,8 +265,7 @@
                                                    (into {} (filter val)))})))
 
 (defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
-  (xtn/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}
-                          :xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
+  (xtn/start-submit-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                          :clock (->mock-clock)}}))
 
 (defn with-tmp-dir* [prefix f]

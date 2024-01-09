@@ -185,7 +185,6 @@
 (defn node-dir->config [^File node-dir]
   (let [^Path path (.toPath node-dir)]
     {:xtdb.log/local-directory-log {:root-path (.resolve path "log")}
-     :xtdb.tx-producer/tx-producer {}
      :xtdb.buffer-pool/local {:path (.resolve path "objects")}}))
 
 (defn- ->worker [node]

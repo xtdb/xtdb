@@ -1,9 +1,7 @@
 (ns xtdb.stagnant-log-flusher
   (:require [clojure.tools.logging :as log]
             [xtdb.log :as xt-log]
-            [xtdb.indexer]
-            [xtdb.node :as xtn]
-            [xtdb.tx-producer]
+            xtdb.indexer
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
@@ -72,26 +70,3 @@
     (when-not (.awaitTermination executor timeout-secs TimeUnit/SECONDS)
       (log/warnf "flusher did not shutdown within %d seconds" timeout-secs))))
 
-(comment
-
-  ((requiring-resolve 'xtdb.test-util/set-log-level!)
-   'xtdb.indexer :debug)
-
-  (require 'xtdb.node)
-
-  (def sys
-    (-> (node/node-system {::flusher {:duration #time/duration "PT5S"}})
-        (ig/prep)
-        (ig/init [::flusher])))
-
-  (ig/halt! sys)
-
-  (::flusher sys)
-
-  (.latestCompletedTx (:xtdb/indexer sys))
-
-  (defn submit [tx] (.submitTx (:xtdb.tx-producer/tx-producer sys) tx {}))
-
-  @(submit [(xt/put :foo {:xt/id 42, :msg "Hello, world!"})])
-
-  )

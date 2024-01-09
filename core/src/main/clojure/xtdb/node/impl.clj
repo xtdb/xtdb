@@ -2,12 +2,12 @@
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
             xtdb.indexer
+            [xtdb.log :as log]
             [xtdb.operator.scan :as scan]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
-            [xtdb.tx-producer :as txp]
             [xtdb.util :as util])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
@@ -15,11 +15,11 @@
            (java.util.concurrent CompletableFuture)
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb)
+           (xtdb.api IXtdb TransactionKey)
+           (xtdb.api.log Log)
            xtdb.indexer.IIndexer
            (xtdb.query Basis IRaQuerySource)
-           (xtdb.tx Sql)
-           (xtdb.tx_producer ITxProducer)))
+           (xtdb.tx Sql)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -47,20 +47,34 @@
   (-> opts
       (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
 
+(defn- submit-tx& ^java.util.concurrent.CompletableFuture
+  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops opts]
+
+  (or (validate-tx-ops tx-ops)
+      (let [system-time (.getSystemTime opts)]
+        (.appendRecord log (log/serialize-tx-ops allocator tx-ops
+                                                 {:default-tz (or (.getDefaultTz opts) default-tz)
+                                                  :system-time system-time
+                                                  :default-all-valid-time? (.getDefaultAllValidTime opts)})))))
+
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
-                 ^ITxProducer tx-producer
+                 ^Log log
                  ^IRaQuerySource ra-src, wm-src, scan-emitter
                  default-tz
                  !latest-submitted-tx
                  system, close-fn]
   IXtdb
-  (submitTxAsync [_ tx-ops opts]
-    (-> (or (validate-tx-ops tx-ops)
-            (.submitTx tx-producer tx-ops opts))
-        (util/then-apply
-          (fn [tx]
-            (swap! !latest-submitted-tx time/max-tx tx)))))
+  (submitTxAsync [this tx-ops opts]
+    (let [system-time (.getSystemTime opts)]
+      (-> (submit-tx& this tx-ops opts)
+          (util/then-apply
+            (fn [^TransactionKey tx-key]
+              (let [tx-key (cond-> tx-key
+                             system-time (.withSystemTime system-time))]
+
+                (swap! !latest-submitted-tx time/max-tx tx-key)
+                tx-key))))))
 
   (openQueryAsync [this query opts]
     (xtp/open-query& this query
@@ -102,7 +116,7 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :indexer (ig/ref :xtdb/indexer)
           :wm-src (ig/ref :xtdb/indexer)
-          :tx-producer (ig/ref ::txp/tx-producer)
+          :log (ig/ref :xtdb/log)
           :default-tz (ig/ref :xtdb/default-tz)
           :ra-src (ig/ref :xtdb.query/ra-query-source)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)}
@@ -129,7 +143,6 @@
              :xtdb.metadata/metadata-manager {}
              :xtdb.operator.scan/scan-emitter {}
              :xtdb.query/ra-query-source {}
-             ::txp/tx-producer {}
              :xtdb.stagnant-log-flusher/flusher {}
              :xtdb/compactor {}}
             opts)
@@ -150,11 +163,11 @@
                             (ig/halt! system)
                             #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
 
-(defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
+(defrecord SubmitNode [^BufferAllocator allocator, ^Log log, default-tz
+                       !system, close-fn]
   IXtdb
-  (submitTxAsync [_ tx-ops opts]
-    (or (validate-tx-ops tx-ops)
-        (.submitTx tx-producer tx-ops opts)))
+  (submitTxAsync [this tx-ops opts]
+    (submit-tx& this tx-ops opts))
 
   AutoCloseable
   (close [_]
@@ -165,11 +178,13 @@
 (defmethod pp/simple-dispatch SubmitNode [it] (print-method it *out*))
 
 (defmethod ig/prep-key ::submit-node [_ opts]
-  (merge {:tx-producer (ig/ref :xtdb.tx-producer/tx-producer)}
+  (merge {:allocator (ig/ref :xtdb/allocator)
+          :log (ig/ref :xtdb/log)
+          :default-tz (ig/ref :xtdb/default-tz)}
          opts))
 
-(defmethod ig/init-key ::submit-node [_ {:keys [tx-producer]}]
-  (map->SubmitNode {:tx-producer tx-producer, :!system (atom nil)}))
+(defmethod ig/init-key ::submit-node [_ deps]
+  (map->SubmitNode (-> deps (assoc :!system (atom nil)))))
 
 (defmethod ig/halt-key! ::submit-node [_ ^SubmitNode node]
   (.close node))
@@ -178,7 +193,6 @@
 (defn start-submit-node ^xtdb.node.impl.SubmitNode [opts]
   (let [!closing (atom false)
         system (-> (into {::submit-node {}
-                          :xtdb.tx-producer/tx-producer {}
                           :xtdb/allocator {}
                           :xtdb/default-tz nil}
                          opts)
