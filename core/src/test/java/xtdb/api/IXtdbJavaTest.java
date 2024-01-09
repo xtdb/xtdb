@@ -33,17 +33,15 @@ class IXtdbJavaTest {
     @Test
     void javaApiTest() {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
-                put("docs",
-                        Map.of("xt/id", 1, "foo", "bar")));
+                put("docs", Map.of("xt/id", 1, "foo", "bar")));
 
-        // FIXME: should be snake_case here
-        try (Stream<Map<String, ?>> res = node.openQuery(from("docs")
-                .binding(List.of(bindVar("xt/id"), bindVar("xt/system-from"))))) {
+        try (var res = node.openQuery(from("docs")
+                .binding(List.of(bindVar("xt/id"), bindVar("xt/system_from"))))) {
             assertEquals(
                     List.of(Map.of(
                             // TODO shouldn't be keyword here
                             Keyword.intern("xt/id"), 1,
-                            Keyword.intern("xt/system-from"), ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
+                            Keyword.intern("xt/system_from"), ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
                     res.toList());
         }
     }

@@ -19,7 +19,7 @@
 ;; TODO inline once the type we support is fixed
 (defn- query-type? [q] (seq? q))
 
-(defmulti parse-query
+(defmulti ^xtdb.query.Query parse-query
   (fn [query]
     (when-not (query-type? query)
       (throw (err/illegal-arg :xtql/malformed-query {:query query})))

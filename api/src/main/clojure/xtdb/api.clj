@@ -18,8 +18,10 @@
            java.util.concurrent.ExecutionException
            java.util.function.Function
            java.util.List
+           java.util.Map
            [java.util.stream Stream]
-           (xtdb.api IXtdbSubmitClient TransactionKey TxOptions)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
+           (xtdb.query Basis Query QueryOpts)
            (xtdb.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds)
            xtdb.types.ClojureForm))
 
@@ -173,6 +175,32 @@
                                                 default-tz
                                                 (boolean default-all-valid-time?))))
                     (into-array TxOp tx-ops))))
+
+(extend-protocol xtp/PNode
+  IXtdb
+  (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :clojure}}]
+    (let [query-opts (-> (QueryOpts/queryOpts)
+                         (cond-> (map? args) (.args ^Map args)
+                                 (vector? args) (.args ^List args)
+                                 after-tx (.afterTx after-tx)
+                                 basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
+                                 default-tz (.defaultTz default-tz)
+                                 tx-timeout (.txTimeout tx-timeout)
+                                 (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
+                                 (some? explain?) (.explain explain?))
+
+                         ;; TODO accept IKeyFn
+                         (.keyFn (str (symbol key-fn)))
+
+                         (.build))]
+      (if (string? query)
+        (.openQueryAsync this ^String query query-opts)
+
+        (let [^Query query (cond
+                             (instance? Query query) query
+                             (seq? query) (xtql.edn/parse-query query)
+                             :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+          (.openQueryAsync this query query-opts))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx&

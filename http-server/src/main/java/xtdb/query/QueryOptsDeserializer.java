@@ -15,6 +15,7 @@ import xtdb.api.TransactionKey;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 
 import static xtdb.query.QueryOpts.queryOpts;
@@ -37,7 +38,16 @@ public class QueryOptsDeserializer extends StdDeserializer<QueryOpts> {
         var builder = queryOpts();
 
         if (node.has("args")) {
-            builder.args(mapper.treeToValue(node.get("args"), typeFactory.constructMapType(Map.class, String.class, Object.class)));
+            JsonNode argsNode = node.get("args");
+            if (argsNode.isArray()) {
+                List<?> args = mapper.treeToValue(argsNode, typeFactory.constructArrayType(Object.class));
+                builder.args(args);
+            } else if (argsNode.isObject()) {
+                Map<String, ?> args = mapper.treeToValue(argsNode, typeFactory.constructMapType(Map.class, String.class, Object.class));
+                builder.args(args);
+            } else {
+                throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-args"), PersistentHashMap.create(Keyword.intern("json"), argsNode.toPrettyString()));
+            }
         }
 
         if (node.has("basis")) {

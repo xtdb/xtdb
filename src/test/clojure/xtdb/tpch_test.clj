@@ -152,7 +152,7 @@
               (format "Q%02d" n))))))
 
 (defn test-sql-query
-  ([n res] (test-sql-query {:decorrelate? true} n res))
+  ([n res] (test-sql-query {:decorrelate? true, :key-fn :sql} n res))
   ([opts n res]
    (let [q (inc n)]
      (when (contains? *qs* q)

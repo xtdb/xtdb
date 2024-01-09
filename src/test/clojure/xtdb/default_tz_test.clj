@@ -1,8 +1,8 @@
 (ns xtdb.default-tz-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu]
-            [xtdb.time :as time]))
+            xtdb.serde
+            [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each
   (tu/with-opts {:xtdb/default-tz #time/zone "Europe/London"})
@@ -28,20 +28,20 @@
                            {:default-tz #time/zone "America/Los_Angeles"})
           q "SELECT foo.xt$id, foo.dt, CAST(foo.dt AS TIMESTAMP WITH TIME ZONE) cast_tstz, foo.tstz FROM foo"]
 
-      (t/is (= #{{:xt$id "foo", :dt #time/date "2020-08-01",
-                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
+      (t/is (= #{{:xt/id "foo", :dt #time/date "2020-08-01",
+                  :cast-tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
                   :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
-                 {:xt$id "bar", :dt #time/date "2020-08-01"
-                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
+                 {:xt/id "bar", :dt #time/date "2020-08-01"
+                  :cast-tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
                   :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
                (set (xt/q tu/*node* q {:basis {:at-tx tx}}))))
 
-      (t/is (= #{{:xt$id "foo", :dt #time/date "2020-08-01",
-                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
+      (t/is (= #{{:xt/id "foo", :dt #time/date "2020-08-01",
+                  :cast-tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
                   :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
-                 {:xt$id "bar", :dt #time/date "2020-08-01"
-                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
+                 {:xt/id "bar", :dt #time/date "2020-08-01"
+                  :cast-tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
                   :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
                (set (xt/q tu/*node* q

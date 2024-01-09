@@ -38,7 +38,7 @@
   (t/testing "queries"
     (let [tx (xt/submit-tx tu/*node* [(xt/put :docs2 {:xt/id 1 :foo "bar"})])]
 
-      (t/is (= [{:my-foo "bar"}]
+      (t/is (= [{:my_foo "bar"}]
                (-> (.openQuery tu/*node* (-> (Query/from "docs2")
                                              (.binding [(Binding/bindVar "foo" "my-foo")]))
                                (-> (QueryOpts/queryOpts)
@@ -47,7 +47,7 @@
                    stream->vec))
             "java ast queries")
 
-      (t/is (= [{:my-foo "bar"}]
+      (t/is (= [{:my_foo "bar"}]
                (-> (.openQuery tu/*node* (-> (Query/from "docs2")
                                              (.binding [(Binding/bindVar "foo" "my-foo")]))
                                (-> (QueryOpts/queryOpts)
@@ -67,7 +67,7 @@
                    stream->vec))
             "params")
 
-      (t/is (= [{:current-time #time/date "2020-01-01"}]
+      (t/is (= [{:current_time #time/date "2020-01-01"}]
                (-> (.openQuery tu/*node* (xtql.edn/parse-query '(-> (rel [{}] [])
                                                                     (with {:current-time (current-date)})))
                                (-> (QueryOpts/queryOpts)

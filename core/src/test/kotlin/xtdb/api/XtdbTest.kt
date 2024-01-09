@@ -27,6 +27,12 @@ internal class XtdbTest {
                         .binding(listOf("xt/id" toVar "id"))
                 ).use { it.toList() }
             )
+
+            assertEquals(
+                listOf(mapOf(Keyword.intern("foo_id") to "jms")),
+
+                node.openQuery("SELECT foo.xt\$id AS foo_id FROM foo").use { it.toList() }
+            )
         }
     }
 }

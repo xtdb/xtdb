@@ -24,7 +24,7 @@ data class Basis(
             else -> notFound
         }
 
-    override fun seq(): ISeq {
+    override fun seq(): ISeq? {
         val seqList: MutableList<Any?> = ArrayList()
         if (atTx != null) {
             seqList.add(MapEntry.create(AT_TX_KEY, atTx))

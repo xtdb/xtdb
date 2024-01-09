@@ -1009,11 +1009,3 @@
          (lp/rewrite-plan {})
          #_(doto clojure.pprint/pprint)
          (doto (lp/validate-plan)))]))
-
-(defn open-args [^BufferAllocator allocator, args]
-  ;; TODO better error if args is a vector of maps,
-  ;; as this is supported in other places which take args (join etc.)
-  (vw/open-params allocator
-                  (->> args
-                       (into {} (map (fn [[k v]]
-                                       (MapEntry/create (param-sym (str (symbol k))) v)))))))

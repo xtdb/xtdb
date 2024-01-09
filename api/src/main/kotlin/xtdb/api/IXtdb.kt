@@ -27,4 +27,10 @@ interface IXtdb : IXtdbSubmitClient, AutoCloseable {
 
     @JvmOverloads
     fun openQuery(q: Query, opts: QueryOpts = QueryOpts()) = await(openQueryAsync(q, opts))
+
+    @JvmOverloads
+    fun openQueryAsync(sql: String, opts: QueryOpts = QueryOpts()): CompletableFuture<Stream<Map<String, *>>>
+
+    @JvmOverloads
+    fun openQuery(sql: String, opts: QueryOpts = QueryOpts()) = await(openQueryAsync(sql, opts))
 }

@@ -60,9 +60,10 @@ data class QueryOpts(
             seqList.add(MapEntry.create(DEFAULT_TZ_KEY, defaultTz))
         }
 
+        keyFn?.let { seqList.add(MapEntry.create(KEY_FN_KEY, keyFn)) }
+
         seqList.add(MapEntry.create(DEFAULT_ALL_VALID_TIME_KEY, defaultAllValidTime))
         seqList.add(MapEntry.create(EXPLAIN_KEY, explain))
-        seqList.add(MapEntry.create(KEY_FN_KEY, keyFn))
 
         return PersistentList.create(seqList).seq()
     }
@@ -83,6 +84,7 @@ data class QueryOpts(
         private var keyFn: String? = null
 
         fun args(args: Map<String, *>?) = apply { this.args = args }
+        fun args(args: List<*>?) = apply { this.args = args?.mapIndexed { idx, arg -> "_$idx" to arg }?.toMap() }
         fun basis(basis: Basis?) = apply { this.basis = basis }
         fun afterTx(afterTx: TransactionKey?) = apply { this.afterTx = afterTx }
         fun txTimeout(txTimeout: Duration?) = apply { this.txTimeout = txTimeout }
