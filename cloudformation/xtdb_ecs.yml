@@ -233,6 +233,7 @@ Resources:
           done
 
           # Send signal to group to mark as successfully created to the scaling group
+          yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
 
   ECSAutoScalingGroup:
