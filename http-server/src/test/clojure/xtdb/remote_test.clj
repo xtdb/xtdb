@@ -16,13 +16,13 @@
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-http-client-node)
 
+#_ ; TODO accept arbitrary normalisation fns again
 (deftest normalisation-option
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Illegal argument: "
                           (xt/q *node* '(from :docs [first-name last-name])
                                 {:key-fn identity}))
         "remote can not serialize arbitrary fns"))
-
 
 (defn- http-url [endpoint] (str "http://localhost:" tu/*http-port* "/" endpoint))
 

@@ -151,8 +151,8 @@
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
-(s/def ::basis (s/or :class #(instance? Basis %)
-                     :map (s/keys :opt-un [::current-time ::at-tx])))
+(s/def ::basis (s/nilable (s/or :class #(instance? Basis %)
+                                :map (s/keys :opt-un [::current-time ::at-tx]))))
 
 (s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))

@@ -13,7 +13,8 @@
            java.util.function.Function
            java.util.Spliterator
            [java.util.stream StreamSupport]
-           xtdb.api.IXtdb))
+           xtdb.api.IXtdb
+           (xtdb.query Basis Query QueryOpts)))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}
@@ -29,10 +30,10 @@
              e)))
 
 (defn- request
-  ([client request-method endpoint]
+  (^java.util.concurrent.CompletableFuture [client request-method endpoint]
    (request client request-method endpoint {}))
 
-  ([client request-method endpoint opts]
+  (^java.util.concurrent.CompletableFuture [client request-method endpoint opts]
    (hato/request (merge {:accept :transit+json
                          :as :transit+json
                          :request-method request-method
@@ -78,37 +79,31 @@
       (throw t))))
 
 (defn- validate-remote-key-fn [key-fn]
-  (when-not (#{:clojure :sql :snake_case} key-fn)
+  (when-not (#{"clojure" "sql" "snake_case"} key-fn)
     (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))
 
 (defn validate-query-opts [{:keys [key-fn] :as _query-opts}]
   (some-> key-fn validate-remote-key-fn))
 
+(defn- open-query& [client query query-opts]
+  (-> (request client :post :query
+               {:content-type :transit+json
+                :form-params (-> (into {:query query} query-opts)
+                                 (doto validate-query-opts)
+                                 (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+                                 (time/after-latest-submitted-tx client))
+                :as ::transit+json->result-or-error})
+      (.thenApply (reify Function
+                    (apply [_ resp]
+                      (:body resp))))))
+
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   IXtdb
+  (^CompletableFuture openQueryAsync [client ^String query ^QueryOpts query-opts]
+   (open-query& client query (into {:key-fn "sql"} query-opts)))
 
-  xtp/PNode
-  (open-query& [client query {:keys [basis] :as query-opts}]
-    (validate-query-opts query-opts)
-    (let [{:keys [at-tx]} basis
-          ^CompletableFuture !at-tx (if (instance? CompletableFuture at-tx)
-                                      at-tx
-                                      (CompletableFuture/completedFuture at-tx))]
-      (-> !at-tx
-          (.thenCompose (reify Function
-                          (apply [_ at-tx]
-                            (request client :post :query
-                                     {:content-type :transit+json
-                                      :form-params (-> query-opts
-                                                       (assoc :query query)
-                                                       (assoc-in [:basis :at-tx] at-tx)
-                                                       (time/after-latest-submitted-tx client))
-                                      :as ::transit+json->result-or-error}))))
-          (.thenApply (reify Function
-                        (apply [_ resp]
-                          (:body resp)))))))
-
-  (latest-submitted-tx [_] @!latest-submitted-tx)
+  (^CompletableFuture openQueryAsync [client ^Query query ^QueryOpts query-opts]
+   (open-query& client query (into {:key-fn "snake_case"} query-opts)))
 
   (submitTxAsync [client opts tx-ops]
     (-> ^CompletableFuture
@@ -124,6 +119,8 @@
                           tx))))))
 
   xtp/PStatus
+  (latest-submitted-tx [_] @!latest-submitted-tx)
+
   (status [client]
     (-> @(request client :get :status)
         :body))

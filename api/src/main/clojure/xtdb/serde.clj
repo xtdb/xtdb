@@ -12,6 +12,7 @@
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey TxOptions)
+           (xtdb.query Query)
            (xtdb.tx TxOp Call Delete Erase Put Sql Xtql XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -54,6 +55,12 @@
 
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))
+
+(defn- render-query [^Query query]
+  (xtql.edn/unparse query))
+
+(defn- xtql-query-reader [q-edn]
+  (xtql.edn/parse-query q-edn))
 
 (defn- render-sql-op [^Sql op]
   {:sql (.sql op), :arg-rows (.argRows op)})
@@ -189,6 +196,7 @@
           "xtdb.interval/day-time" interval-dt-reader
           "xtdb.interval/month-day-nano" interval-mdn-reader
           "xtdb/list" (transit/read-handler edn/read-string)
+          "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
           "xtdb.tx/sql" (transit/read-handler sql-op-reader)
           "xtdb.tx/xtql" (transit/read-handler xtql-reader)
           "xtdb.tx/put" (transit/read-handler put-op-reader)
@@ -237,6 +245,8 @@
                                                       #(vector (str (.period ^IntervalMonthDayNano %))
                                                                (str (.duration ^IntervalMonthDayNano %))))
           clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))
+
+          Query (transit/write-handler "xtdb.query/xtql" render-query)
 
           Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
 
