@@ -15,11 +15,13 @@ interface IXtdb : AutoCloseable {
     @JvmOverloads
     fun openQuery(q: Query, opts: QueryOpts = QueryOpts()) = await(openQueryAsync(q, opts))
 
-    @JvmOverloads
-    fun submitTxAsync(ops: List<TxOp>, txOpts: TxOptions = TxOptions()): CompletableFuture<TransactionKey>
+    fun submitTxAsync(txOpts: TxOptions, vararg ops: TxOp): CompletableFuture<TransactionKey>
 
-    @JvmOverloads
-    fun submitTx(ops: List<TxOp>, txOpts: TxOptions = TxOptions()) = await(submitTxAsync(ops, txOpts))
+    fun submitTxAsync(vararg ops: TxOp) = submitTxAsync(TxOptions(), *ops)
+
+    fun submitTx(txOpts: TxOptions, vararg ops: TxOp) = await(submitTxAsync(txOpts, *ops))
+
+    fun submitTx(vararg ops: TxOp) = submitTx(TxOptions(), *ops)
 
     override fun close()
 

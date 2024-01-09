@@ -164,14 +164,15 @@
     (xtp/submit-tx& this tx-ops nil))
 
   (submit-tx& [this tx-ops opts]
-    (.submitTxAsync this tx-ops
+    (.submitTxAsync this
                     (cond
                       (instance? TxOptions opts) opts
                       (nil? opts) (TxOptions.)
                       (map? opts) (let [{:keys [system-time default-tz default-all-valid-time?]} opts]
                                     (TxOptions. (some-> system-time expect-instant)
                                                 default-tz
-                                                (boolean default-all-valid-time?)))))))
+                                                (boolean default-all-valid-time?))))
+                    (into-array TxOp tx-ops))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx&

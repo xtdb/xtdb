@@ -65,9 +65,9 @@
                  !latest-submitted-tx
                  system, close-fn]
   IXtdb
-  (submitTxAsync [this tx-ops opts]
+  (submitTxAsync [this opts tx-ops]
     (let [system-time (.getSystemTime opts)]
-      (-> (submit-tx& this tx-ops opts)
+      (-> (submit-tx& this (vec tx-ops) opts)
           (util/then-apply
             (fn [^TransactionKey tx-key]
               (let [tx-key (cond-> tx-key
@@ -76,10 +76,26 @@
                 (swap! !latest-submitted-tx time/max-tx tx-key)
                 tx-key))))))
 
-  (openQueryAsync [this query opts]
-    (xtp/open-query& this query
-                     (-> (into {:default-all-valid-time? false} opts)
-                         (time/after-latest-submitted-tx this))))
+  (openQueryAsync [_ query query-opts]
+    (let [query-opts (-> (into {:default-tz default-tz,
+                                :after-tx @!latest-submitted-tx
+                                :key-fn "snake_case"}
+                               query-opts)
+                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+                         (with-after-tx-default))]
+      (-> (.awaitTxAsync indexer
+                         (-> (:after-tx query-opts)
+                             (time/max-tx (get-in query-opts [:basis :at-tx])))
+                         (:tx-timeout query-opts))
+          (util/then-apply
+            (fn [_]
+              (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
+                    [lang plan] (q/compile-query query query-opts table-info)]
+                (if (:explain? query-opts)
+                  (Stream/of {:plan plan})
+
+                  (q/open-query allocator ra-src wm-src
+                                lang plan query-opts))))))))
 
   xtp/PNode
   (open-query& [_ query query-opts]
@@ -166,8 +182,8 @@
 (defrecord SubmitNode [^BufferAllocator allocator, ^Log log, default-tz
                        !system, close-fn]
   IXtdb
-  (submitTxAsync [this tx-ops opts]
-    (submit-tx& this tx-ops opts))
+  (submitTxAsync [this opts tx-ops]
+    (submit-tx& this (vec tx-ops) opts))
 
   AutoCloseable
   (close [_]

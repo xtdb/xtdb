@@ -2,10 +2,12 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.protocols :as xtp]
-            [xtdb.test-util :as tu])
+            [xtdb.test-util :as tu]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import [java.util.stream Stream]
            (xtdb.api TxOptions)
-           (xtdb.query Basis Binding Expr Query QueryOpts)))
+           (xtdb.query Basis Binding Expr Query QueryOpts)
+           (xtdb.tx TxOp)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -15,17 +17,18 @@
 
 (deftest java-api-test
   (t/testing "transactions"
-    (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {"xt/id" 1 "foo" "bar"})]
-                           (TxOptions. #time/instant "2020-01-01T12:34:56.000Z" nil false))]
+    (let [tx (.submitTx tu/*node*
+                        (TxOptions. #time/instant "2020-01-01T12:34:56.000Z" nil false)
+                        (into-array TxOp [(xt/put :docs {"xt/id" 1 "foo" "bar"})]))]
       (t/is (= [{:xt/id 1 :xt/system-from #time/zoned-date-time "2020-01-01T12:34:56Z[UTC]"}]
                (xt/q tu/*node*
                      '(from :docs [xt/id xt/system-from])
                      {:basis {:at-tx tx}}))))
 
-
     (let [sql-op "INSERT INTO docs (xt$id, tstz) VALUES (2, CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE))"
-          tx (xt/submit-tx tu/*node* [(xt/sql-op sql-op) ]
-                           (TxOptions. nil #time/zone "America/Los_Angeles" false))]
+          tx (.submitTx tu/*node*
+                        (TxOptions. nil #time/zone "America/Los_Angeles" false)
+                        (into-array TxOp [(xt/sql-op sql-op)]))]
       (t/is (= [{:tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
                (xt/q tu/*node*
                      '(from :docs [{:xt/id 2} tstz])
@@ -36,44 +39,47 @@
     (let [tx (xt/submit-tx tu/*node* [(xt/put :docs2 {:xt/id 1 :foo "bar"})])]
 
       (t/is (= [{:my-foo "bar"}]
-               (-> @(xtp/open-query& tu/*node* (-> (Query/from "docs2")
-                                                   (.binding [(Binding. "foo" (Expr/lVar "my-foo"))]))
-                                     (QueryOpts. nil (Basis. tx nil) nil nil nil false "clojure"))
+               (-> (.openQuery tu/*node* (-> (Query/from "docs2")
+                                             (.binding [(Binding/bindVar "foo" "my-foo")]))
+                               (QueryOpts. nil (Basis. tx nil) nil nil nil false "clojure"))
                    stream->vec))
             "java ast queries")
 
       (t/is (= [{:my_foo "bar"}]
-               (-> @(xtp/open-query& tu/*node* (-> (Query/from "docs2")
-                                                   (.binding [(Binding. "foo" (Expr/lVar "my-foo"))]))
-                                     (QueryOpts. nil (Basis. tx nil) nil nil nil false "snake_case"))
+               (-> (.openQuery tu/*node* (-> (Query/from "docs2")
+                                             (.binding [(Binding/bindVar "foo" "my-foo")]))
+                               (QueryOpts. nil (Basis. tx nil) nil nil nil false "snake_case"))
                    stream->vec))
             "key-fn")
 
       (t/is (= [{:foo "bar"}]
-               (-> @(xtp/open-query& tu/*node* '(from :docs [{:xt/id $id} foo])
-                                     (QueryOpts. {"id" 1} (Basis. tx nil) nil nil nil false "snake_case"))
+               (-> (.openQuery tu/*node* (-> (Query/from "docs")
+                                             (.binding [(Binding/bindParam "xt/id" "$id")
+                                                        (Binding/bindVar "foo")]))
+                               (QueryOpts. {"id" 1} (Basis. tx nil) nil nil nil false "snake_case"))
                    stream->vec))
             "params")
 
       (t/is (= [{:current-time #time/date "2020-01-01"}]
-               (-> @(xtp/open-query& tu/*node* '(-> (rel [{}] [])
-                                                    (with {:current-time (current-date)}))
-                                     (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil nil false "clojure"))
+               (-> (.openQuery tu/*node* (xtql.edn/parse-query '(-> (rel [{}] [])
+                                                                    (with {:current-time (current-date)})))
+                               (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil nil false "clojure"))
                    stream->vec))
             "current-time")
 
       (t/is (= [{:timestamp #time/zoned-date-time "2020-01-01T04:34:56-08:00[America/Los_Angeles]"}]
-               (-> @(xtp/open-query& tu/*node* '(-> (rel [{}] [])
-                                                    (with {:timestamp (current-timestamp 10)}))
-                                     (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil
-                                                 #time/zone "America/Los_Angeles" false "snake_case"))
+               (-> (.openQuery tu/*node* (xtql.edn/parse-query '(-> (rel [{}] [])
+                                                                    (with {:timestamp (current-timestamp 10)})))
+                               (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil
+                                           #time/zone "America/Los_Angeles" false "snake_case"))
                    stream->vec))
             "default tz")
 
       (t/is (= '[{:plan [:scan
                          {:table docs, :for-valid-time nil, :for-system-time nil}
                          [foo]]}]
-               (-> @(xtp/open-query& tu/*node* '(from :docs [foo])
-                                     (QueryOpts. nil nil nil nil nil true "snake_case"))
+               (-> (.openQuery tu/*node* (-> (Query/from "docs")
+                                             (.binding [(Binding/bindVar "foo")]))
+                               (QueryOpts. nil nil nil nil nil true "snake_case"))
                    stream->vec))
             "default tz"))))

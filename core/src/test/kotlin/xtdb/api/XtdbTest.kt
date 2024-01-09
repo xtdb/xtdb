@@ -8,26 +8,23 @@ import xtdb.query.Expr
 import xtdb.query.Expr.Companion.lVar
 import xtdb.query.Query
 import xtdb.query.Query.Companion.from
+import xtdb.tx.TxOp
 import xtdb.tx.TxOp.Companion.put
 
-fun Query.From.binding(vararg bindings: Pair<String, Expr>) = binding(bindings.map { Binding(it.first, it.second) })
+infix fun String.toVar(`var`: String) = Binding(this, lVar( `var`))
 
 internal class XtdbTest {
     @Test
     fun startsInMemoryNode() {
         Xtdb.startNode().use { node ->
-            node.submitTx(
-                listOf(
-                    put(Keyword.intern("foo"), mapOf("xt/id" to "jms"))
-                )
-            )
+            node.submitTx(put(Keyword.intern("foo"), mapOf("xt/id" to "jms")))
 
             assertEquals(
                 listOf(mapOf(Keyword.intern("id") to "jms")),
 
                 node.openQuery(
                     from("foo")
-                        .binding("xt/id" to lVar("id"))
+                        .binding(listOf("xt/id" toVar "id"))
                 ).use { it.toList() }
             )
         }

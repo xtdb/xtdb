@@ -110,11 +110,11 @@
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 
-  (submitTxAsync [client tx-ops opts]
+  (submitTxAsync [client opts tx-ops]
     (-> ^CompletableFuture
         (request client :post :tx
                  {:content-type :transit+json
-                  :form-params {:tx-ops tx-ops
+                  :form-params {:tx-ops (vec tx-ops)
                                 :opts opts}})
 
         (.thenApply (reify Function

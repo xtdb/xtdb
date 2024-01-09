@@ -77,7 +77,6 @@
 
 (declare parse-arg-specs)
 
-
 (defn parse-expr [expr]
   (cond
     (nil? expr) Expr/NULL
@@ -254,8 +253,7 @@
       (->> specs
            (into [] (mapcat (fn [spec]
                               (cond
-                                (symbol? spec) (let [attr (str spec)]
-                                                 [(Binding. attr (Expr/lVar attr))])
+                                (symbol? spec) [(Binding/bindVar (str spec))]
                                 (map? spec) (map parse-out-spec spec))))))
 
       (throw (UnsupportedOperationException.)))))
@@ -266,8 +264,7 @@
   (->> specs
        (into [] (mapcat (fn [spec]
                           (cond
-                            (symbol? spec) (let [attr (str spec)]
-                                             [(Binding. attr (Expr/lVar attr))])
+                            (symbol? spec) [(Binding/bindVar (str spec))]
                             (map? spec) (for [[attr expr] spec]
                                           (do
                                             (when-not (keyword? attr)
@@ -313,8 +310,7 @@
       (sequential? specs) (->> specs
                                (into [] (mapcat (fn [spec]
                                                   (cond
-                                                    (symbol? spec) (let [attr (str spec)]
-                                                                     [(Binding. attr (Expr/lVar attr))])
+                                                    (symbol? spec) [(Binding/bindVar (str spec))]
                                                     (map? spec) (map parse-col-spec spec)
 
                                                     :else

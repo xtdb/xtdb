@@ -52,7 +52,7 @@
 
 (def ^:dynamic *node-opts* {})
 #_{:clj-kondo/ignore [:uninitialized-var]}
-(def ^:dynamic *node*)
+(def ^:dynamic ^xtdb.api.IXtdb *node*)
 
 (defn with-opts
   ([opts] (partial with-opts opts))
