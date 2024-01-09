@@ -15,7 +15,7 @@
            (java.util.concurrent CompletableFuture)
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb TransactionKey TxOptions)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
            (xtdb.api.log Log)
            xtdb.indexer.IIndexer
            (xtdb.query Basis IRaQuerySource)
@@ -179,9 +179,9 @@
                             (ig/halt! system)
                             #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
 
-(defrecord SubmitNode [^BufferAllocator allocator, ^Log log, default-tz
-                       !system, close-fn]
-  IXtdb
+(defrecord SubmitClient [^BufferAllocator allocator, ^Log log, default-tz
+                         !system, close-fn]
+  IXtdbSubmitClient
   (submitTxAsync [this opts tx-ops]
     (submit-tx& this (vec tx-ops) opts))
 
@@ -190,25 +190,25 @@
     (when close-fn
       (close-fn))))
 
-(defmethod print-method SubmitNode [_node ^Writer w] (.write w "#<XtdbSubmitNode>"))
-(defmethod pp/simple-dispatch SubmitNode [it] (print-method it *out*))
+(defmethod print-method SubmitClient [_node ^Writer w] (.write w "#<XtdbSubmitClient>"))
+(defmethod pp/simple-dispatch SubmitClient [it] (print-method it *out*))
 
-(defmethod ig/prep-key ::submit-node [_ opts]
+(defmethod ig/prep-key ::submit-client [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
           :log (ig/ref :xtdb/log)
           :default-tz (ig/ref :xtdb/default-tz)}
          opts))
 
-(defmethod ig/init-key ::submit-node [_ deps]
-  (map->SubmitNode (-> deps (assoc :!system (atom nil)))))
+(defmethod ig/init-key ::submit-client [_ deps]
+  (map->SubmitClient (-> deps (assoc :!system (atom nil)))))
 
-(defmethod ig/halt-key! ::submit-node [_ ^SubmitNode node]
+(defmethod ig/halt-key! ::submit-client [_ ^SubmitClient node]
   (.close node))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn start-submit-node ^xtdb.node.impl.SubmitNode [opts]
+(defn start-submit-client ^xtdb.node.impl.SubmitClient [opts]
   (let [!closing (atom false)
-        system (-> (into {::submit-node {}
+        system (-> (into {::submit-client {}
                           :xtdb/allocator {}
                           :xtdb/default-tz nil}
                          opts)
@@ -218,7 +218,7 @@
                    ig/prep
                    ig/init)]
 
-    (-> (::submit-node system)
+    (-> (::submit-client system)
         (doto (-> :!system (reset! system)))
         (assoc :close-fn #(when-not (compare-and-set! !closing false true)
                             (ig/halt! system))))))

@@ -17,12 +17,11 @@
   (^java.lang.AutoCloseable [opts]
    (impl/start-node opts)))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn start-submit-node
-  "Starts a submit-only node with the given configuration.
+(defn start-submit-client
+  "Starts a submit-only client with the given configuration.
 
-  This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
+  This client *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
   For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
   ^java.lang.AutoCloseable [opts]
-  (impl/start-submit-node opts))
+  (impl/start-submit-client opts))

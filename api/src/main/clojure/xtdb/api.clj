@@ -19,7 +19,7 @@
            java.util.function.Function
            java.util.List
            [java.util.stream Stream]
-           (xtdb.api IXtdb TransactionKey TxOptions)
+           (xtdb.api IXtdbSubmitClient TransactionKey TxOptions)
            (xtdb.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds)
            xtdb.types.ClojureForm))
 
@@ -159,7 +159,7 @@
        (rethrowing-cause))))
 
 (extend-protocol xtp/PSubmitNode
-  IXtdb
+  IXtdbSubmitClient
   (submit-tx& [this tx-ops]
     (xtp/submit-tx& this tx-ops nil))
 
