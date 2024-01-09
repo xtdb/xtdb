@@ -208,6 +208,7 @@ Resources:
 
   LaunchConfig:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
+    DependsOn: ECSCluster
     Properties:
       ImageId: !Ref ImageId
       InstanceType: !Ref EC2InstanceType
