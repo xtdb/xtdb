@@ -1,18 +1,12 @@
 package xtdb.api
 
 import clojure.lang.Keyword
-import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.query.Binding
-import xtdb.query.Expr
-import xtdb.query.Query
 import xtdb.query.Query.Companion.from
-import xtdb.tx.TxOp
+import xtdb.query.toVar
 import xtdb.tx.TxOp.Companion.put
 import java.net.URL
-
-infix fun String.toVar(`var`: String) = Binding(this, Expr.lVar( `var`))
 
 internal class XtdbClientTest {
     @Test

@@ -14,3 +14,6 @@ data class Binding(val binding: String, val expr: Expr) {
         fun bindParam(binding: String, bindParam: String = binding) = Binding(binding, param(bindParam))
     }
 }
+
+infix fun String.toVar(`var`: String) = Binding(this, lVar(`var`))
+infix fun String.toParam(param: String) = Binding(this, param(param))
