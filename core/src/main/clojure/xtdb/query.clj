@@ -186,14 +186,13 @@
 
     (instance? Query query) [:xtql (xtql/compile-query query table-info)]
 
-    :else (throw (err/illegal-arg :unknown-query-type
-                                  {:query query
-                                   :type (type query)}))))
+    :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)}))))
 
 (defn open-query ^java.util.stream.Stream [allocator ^IRaQuerySource ra-src, wm-src
                                            lang plan query-opts]
-  (let [{:keys [args key-fn], :or {key-fn (case lang :sql :sql, :xtql :clojure)}} query-opts
-        key-fn (util/parse-key-fn key-fn)]
+  (let [{:keys [args key-fn]} query-opts
+        key-fn (util/parse-key-fn (or key-fn
+                                      (case lang :sql :sql, :xtql :clojure)))]
     (util/with-close-on-catch [args (case lang
                                       :sql (sql/open-args allocator args)
                                       :xtql (xtql/open-args allocator args))

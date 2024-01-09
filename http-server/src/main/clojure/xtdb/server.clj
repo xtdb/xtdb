@@ -50,7 +50,7 @@
 
 (s/def ::tx-ops seqable?)
 
-(s/def ::key-fn keyword?)
+(s/def ::key-fn (s/nilable keyword?))
 (s/def ::tx-id int?)
 
 (s/def ::default-all-valid-time? boolean?)
@@ -162,7 +162,7 @@
 
 (s/def ::args (s/nilable (s/coll-of any?)))
 
-(s/def ::key-fn (some-fn keyword? string?))
+(s/def ::key-fn (s/nilable (some-fn keyword? string?)))
 
 (s/def ::query-body
   (s/keys :req-un [::query],

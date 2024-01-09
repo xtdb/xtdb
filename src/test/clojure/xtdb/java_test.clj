@@ -41,14 +41,18 @@
       (t/is (= [{:my-foo "bar"}]
                (-> (.openQuery tu/*node* (-> (Query/from "docs2")
                                              (.binding [(Binding/bindVar "foo" "my-foo")]))
-                               (QueryOpts. nil (Basis. tx nil) nil nil nil false "clojure"))
+                               (-> (QueryOpts/queryOpts)
+                                   (.basis (Basis. tx nil))
+                                   (.build)))
                    stream->vec))
             "java ast queries")
 
-      (t/is (= [{:my_foo "bar"}]
+      (t/is (= [{:my-foo "bar"}]
                (-> (.openQuery tu/*node* (-> (Query/from "docs2")
                                              (.binding [(Binding/bindVar "foo" "my-foo")]))
-                               (QueryOpts. nil (Basis. tx nil) nil nil nil false "snake_case"))
+                               (-> (QueryOpts/queryOpts)
+                                   (.basis (Basis. tx nil))
+                                   (.build)))
                    stream->vec))
             "key-fn")
 
@@ -56,22 +60,30 @@
                (-> (.openQuery tu/*node* (-> (Query/from "docs")
                                              (.binding [(Binding/bindParam "xt/id" "$id")
                                                         (Binding/bindVar "foo")]))
-                               (QueryOpts. {"id" 1} (Basis. tx nil) nil nil nil false "snake_case"))
+                               (-> (QueryOpts/queryOpts)
+                                   (.args {"id" 1})
+                                   (.basis (Basis. tx nil))
+                                   (.build)))
                    stream->vec))
             "params")
 
       (t/is (= [{:current-time #time/date "2020-01-01"}]
                (-> (.openQuery tu/*node* (xtql.edn/parse-query '(-> (rel [{}] [])
                                                                     (with {:current-time (current-date)})))
-                               (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil nil false "clojure"))
+                               (-> (QueryOpts/queryOpts)
+                                   (.args {"id" 1})
+                                   (.basis (Basis. tx #time/instant "2020-01-01T12:34:56.000Z"))
+                                   (.build)))
                    stream->vec))
             "current-time")
 
       (t/is (= [{:timestamp #time/zoned-date-time "2020-01-01T04:34:56-08:00[America/Los_Angeles]"}]
                (-> (.openQuery tu/*node* (xtql.edn/parse-query '(-> (rel [{}] [])
                                                                     (with {:timestamp (current-timestamp 10)})))
-                               (QueryOpts. nil (Basis. tx #time/instant "2020-01-01T12:34:56.000Z") nil nil
-                                           #time/zone "America/Los_Angeles" false "snake_case"))
+                               (-> (QueryOpts/queryOpts)
+                                   (.basis (Basis. tx #time/instant "2020-01-01T12:34:56.000Z"))
+                                   (.defaultTz #time/zone "America/Los_Angeles")
+                                   (.build)))
                    stream->vec))
             "default tz")
 
@@ -80,6 +92,8 @@
                          [foo]]}]
                (-> (.openQuery tu/*node* (-> (Query/from "docs")
                                              (.binding [(Binding/bindVar "foo")]))
-                               (QueryOpts. nil nil nil nil nil true "snake_case"))
+                               (-> (QueryOpts/queryOpts)
+                                   (.explain true)
+                                   (.build)))
                    stream->vec))
             "default tz"))))

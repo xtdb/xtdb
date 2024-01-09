@@ -15,21 +15,14 @@ private val EXPLAIN_KEY: Keyword? = Keyword.intern("explain?")
 private val KEY_FN_KEY: Keyword = Keyword.intern("key-fn")
 
 data class QueryOpts(
-    val args: Map<String, Any>? = null,
-    val basis: Basis? = null,
-    val afterTx: TransactionKey? = null,
-    val txTimeout: Duration? = null,
-    val defaultTz: ZoneId? = null,
-    val explain: Boolean = false,
-    val keyFn: String? = "snake_case"
+    @JvmField val args: Map<String, *>? = null,
+    @JvmField val basis: Basis? = null,
+    @JvmField val afterTx: TransactionKey? = null,
+    @JvmField val txTimeout: Duration? = null,
+    @JvmField val defaultTz: ZoneId? = null,
+    @JvmField val explain: Boolean = false,
+    @JvmField val keyFn: String? = null
 ) : ILookup, Seqable {
-    fun args() = args
-    fun basis() = basis
-    fun afterTx() = afterTx
-    fun txTimeout() = txTimeout
-    fun defaultTz() = defaultTz
-    fun explain() = explain
-    fun keyFn() = keyFn
 
     override fun valAt(key: Any?): Any? {
         return valAt(key, null)
@@ -52,9 +45,8 @@ data class QueryOpts(
         val seqList: MutableList<Any?> = ArrayList()
         seqList.add(MapEntry.create(ARGS_KEY, args))
 
-        if (basis != null) {
-            seqList.add(MapEntry.create(BASIS_KEY, basis))
-        }
+        basis?.let { seqList.add(MapEntry.create(BASIS_KEY, it)) }
+
         if (afterTx != null) {
             seqList.add(MapEntry.create(AFTER_TX_KEY, afterTx))
         }
@@ -64,12 +56,35 @@ data class QueryOpts(
         if (defaultTz != null) {
             seqList.add(MapEntry.create(DEFAULT_TZ_KEY, defaultTz))
         }
-        if (EXPLAIN_KEY != null) {
-            seqList.add(MapEntry.create(EXPLAIN_KEY, explain))
-        }
 
+        seqList.add(MapEntry.create(EXPLAIN_KEY, explain))
         seqList.add(MapEntry.create(KEY_FN_KEY, keyFn))
 
         return PersistentList.create(seqList).seq()
+    }
+
+    companion object {
+        @JvmStatic
+        fun queryOpts() = Builder()
+    }
+
+    class Builder {
+        private var args: Map<String, *>? = null
+        private var basis: Basis? = null
+        private var afterTx: TransactionKey? = null
+        private var txTimeout: Duration? = null
+        private var defaultTz: ZoneId? = null
+        private var explain: Boolean = false
+        private var keyFn: String? = null
+
+        fun args(args: Map<String, *>?) = apply { this.args = args }
+        fun basis(basis: Basis?) = apply { this.basis = basis }
+        fun afterTx(afterTx: TransactionKey?) = apply { this.afterTx = afterTx }
+        fun txTimeout(txTimeout: Duration?) = apply { this.txTimeout = txTimeout }
+        fun defaultTz(defaultTz: ZoneId?) = apply { this.defaultTz = defaultTz }
+        fun explain(explain: Boolean) = apply { this.explain = explain }
+        fun keyFn(keyFn: String?) = apply { this.keyFn = keyFn }
+
+        fun build() = QueryOpts(args, basis, afterTx, txTimeout, defaultTz, explain, keyFn)
     }
 }

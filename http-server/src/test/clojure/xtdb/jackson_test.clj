@@ -467,15 +467,15 @@
   (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")]
     (t/is (= (QueryRequest. (-> (Query/from "docs")
                                 (.binding [(Binding. "xt/id" (Expr/lVar "xt/id"))]))
-                            (QueryOpts.
-
-                             {"id" :foo}
-                             (Basis. tx-key Instant/EPOCH)
-                             tx-key
-                             #time/duration "PT3H"
-                             #time/zone "America/Los_Angeles"
-                             true
-                             "clojure"))
+                            (-> (QueryOpts/queryOpts)
+                                (.args {"id" :foo})
+                                (.basis (Basis. tx-key Instant/EPOCH))
+                                (.afterTx tx-key)
+                                (.txTimeout #time/duration "PT3H")
+                                (.defaultTz #time/zone "America/Los_Angeles")
+                                (.explain true)
+                                (.keyFn "clojure")
+                                (.build)))
              (roundtrip-query-map {"query" {"from" "docs"
                                             "bind" ["xt/id"]}
                                    "query_opts" {
