@@ -14,7 +14,7 @@
            java.util.Spliterator
            [java.util.stream StreamSupport]
            xtdb.api.IXtdb
-           (xtdb.query Basis Query QueryOpts)))
+           (xtdb.query Basis Query QueryOptions)))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}
@@ -99,10 +99,10 @@
 
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   IXtdb
-  (^CompletableFuture openQueryAsync [client ^String query ^QueryOpts query-opts]
+  (^CompletableFuture openQueryAsync [client ^String query ^QueryOptions query-opts]
    (open-query& client query (into {:key-fn "sql"} query-opts)))
 
-  (^CompletableFuture openQueryAsync [client ^Query query ^QueryOpts query-opts]
+  (^CompletableFuture openQueryAsync [client ^Query query ^QueryOptions query-opts]
    (open-query& client query (into {:key-fn "snake_case"} query-opts)))
 
   (submitTxAsync [client opts tx-ops]

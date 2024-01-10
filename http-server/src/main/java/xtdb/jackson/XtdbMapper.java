@@ -32,7 +32,7 @@ public class XtdbMapper {
     public static final SimpleModule QUERY_REQUEST_DESERIALIZER = new SimpleModule("QueryRequestDeserializer")
             .addDeserializer(QueryRequest.class, new QueryRequestDeserializer())
             .addDeserializer(Query.class, new QueryDeserializer())
-            .addDeserializer(QueryOpts.class, new QueryOptsDeserializer())
+            .addDeserializer(QueryOptions.class, new QueryOptionsDeserializer())
             .addDeserializer(QueryTail.class, new QueryTailDeserializer())
             .addDeserializer(Unify.class, new UnifyDeserializer())
             .addDeserializer(UnifyClause.class, new UnifyClauseDeserializer())

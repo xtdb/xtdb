@@ -33,9 +33,9 @@ public class QueryRequestDeserializer extends StdDeserializer<QueryRequest> {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "missing-query"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
-        QueryOpts queryOpts = null;
+        QueryOptions queryOpts = null;
         if (node.has("query_opts")) {
-            queryOpts = codec.treeToValue(node.get("query_opts"), QueryOpts.class);
+            queryOpts = codec.treeToValue(node.get("query_opts"), QueryOptions.class);
         }
 
         return new QueryRequest(query, queryOpts);

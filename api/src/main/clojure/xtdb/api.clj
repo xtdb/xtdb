@@ -21,7 +21,7 @@
            java.util.Map
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
-           (xtdb.query Basis Query QueryOpts)
+           (xtdb.query Basis Query QueryOptions)
            (xtdb.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds)
            xtdb.types.ClojureForm))
 
@@ -179,7 +179,7 @@
 (extend-protocol xtp/PNode
   IXtdb
   (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :clojure}}]
-    (let [query-opts (-> (QueryOpts/queryOpts)
+    (let [query-opts (-> (QueryOptions/queryOpts)
                          (cond-> (map? args) (.args ^Map args)
                                  (vector? args) (.args ^List args)
                                  after-tx (.afterTx after-tx)

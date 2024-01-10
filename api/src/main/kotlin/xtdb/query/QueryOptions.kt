@@ -15,7 +15,7 @@ private val DEFAULT_ALL_VALID_TIME_KEY: Keyword = Keyword.intern("default-all-va
 private val EXPLAIN_KEY: Keyword? = Keyword.intern("explain?")
 private val KEY_FN_KEY: Keyword = Keyword.intern("key-fn")
 
-data class QueryOpts(
+data class QueryOptions(
     @JvmField val args: Map<String, *>? = null,
     @JvmField val basis: Basis? = null,
     @JvmField val afterTx: TransactionKey? = null,
@@ -93,6 +93,6 @@ data class QueryOpts(
         fun explain(explain: Boolean) = apply { this.explain = explain }
         fun keyFn(keyFn: String?) = apply { this.keyFn = keyFn }
 
-        fun build() = QueryOpts(args, basis, afterTx, txTimeout, defaultTz, defaultAllValidTime, explain, keyFn)
+        fun build() = QueryOptions(args, basis, afterTx, txTimeout, defaultTz, defaultAllValidTime, explain, keyFn)
     }
 }

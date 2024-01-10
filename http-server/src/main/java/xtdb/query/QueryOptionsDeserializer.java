@@ -3,7 +3,6 @@ package xtdb.query;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentHashMap;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,15 +17,15 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
-import static xtdb.query.QueryOpts.queryOpts;
+import static xtdb.query.QueryOptions.queryOpts;
 
-public class QueryOptsDeserializer extends StdDeserializer<QueryOpts> {
+public class QueryOptionsDeserializer extends StdDeserializer<QueryOptions> {
 
-    public QueryOptsDeserializer() {
-        super(QueryOpts.class);
+    public QueryOptionsDeserializer() {
+        super(QueryOptions.class);
     }
 
-    public QueryOpts deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+    public QueryOptions deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
         TypeFactory typeFactory = mapper.getTypeFactory();
         JsonNode node = mapper.readTree(p);

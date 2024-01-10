@@ -8,7 +8,7 @@
            (java.util List)
            (xtdb.api TransactionKey TxOptions)
            (xtdb.jackson XtdbMapper)
-           (xtdb.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOpts QueryRequest TemporalFilter)
+           (xtdb.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOptions QueryRequest TemporalFilter)
            (xtdb.tx TxOp Tx Sql)))
 
 (defn- roundtrip-json-ld [v]
@@ -467,7 +467,7 @@
   (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")]
     (t/is (= (QueryRequest. (-> (Query/from "docs")
                                 (.binding [(Binding. "xt/id" (Expr/lVar "xt/id"))]))
-                            (-> (QueryOpts/queryOpts)
+                            (-> (QueryOptions/queryOpts)
                                 (.args {"id" :foo})
                                 (.basis (Basis. tx-key Instant/EPOCH))
                                 (.afterTx tx-key)

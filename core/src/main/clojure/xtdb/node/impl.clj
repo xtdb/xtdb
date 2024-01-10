@@ -19,7 +19,7 @@
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
            (xtdb.api.log Log)
            xtdb.indexer.IIndexer
-           (xtdb.query Basis IRaQuerySource Query QueryOpts)
+           (xtdb.query Basis IRaQuerySource Query QueryOptions)
            (xtdb.tx Sql)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -77,7 +77,7 @@
                 (swap! !latest-submitted-tx time/max-tx tx-key)
                 tx-key))))))
 
-  (^CompletableFuture openQueryAsync [_ ^String query, ^QueryOpts query-opts]
+  (^CompletableFuture openQueryAsync [_ ^String query, ^QueryOptions query-opts]
     (let [query-opts (-> (into {:default-tz default-tz,
                                 :after-tx @!latest-submitted-tx
                                 :key-fn :sql}
@@ -97,7 +97,7 @@
 
                   (q/open-query allocator ra-src wm-src plan query-opts))))))))
 
-  (^CompletableFuture openQueryAsync [_ ^Query query, ^QueryOpts query-opts]
+  (^CompletableFuture openQueryAsync [_ ^Query query, ^QueryOptions query-opts]
     (let [query-opts (-> (into {:default-tz default-tz,
                                 :after-tx @!latest-submitted-tx
                                 :key-fn :snake_case}

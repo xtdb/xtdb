@@ -9,13 +9,10 @@ import org.junit.jupiter.api.Test
 import xtdb.query.*
 import xtdb.query.Binding.Companion.bindVar
 import xtdb.query.Expr.Companion.call
-import xtdb.query.Expr.Companion.lVar
 import xtdb.query.Query.Companion.from
 import xtdb.query.Query.Companion.pipeline
 import xtdb.query.Query.Companion.relation
-import xtdb.query.Query.Companion.with
 import xtdb.query.Query.Companion.withCols
-import xtdb.tx.TxOp
 import xtdb.tx.TxOp.Companion.put
 import java.time.Instant
 import java.time.LocalDate
@@ -81,7 +78,7 @@ internal class XtdbTest {
                 from("docs2")
                     .binding(listOf("foo" toVar "my_foo")),
 
-                QueryOpts(keyFn = "clojure")
+                QueryOptions(keyFn = "clojure")
             ).doall(),
 
             "key-fn"
@@ -92,7 +89,7 @@ internal class XtdbTest {
             node.openQuery(
                 from("docs2")
                     .binding(listOf("xt/id" toParam "\$id", bindVar("foo"))),
-                QueryOpts(args = mapOf("id" to 1))
+                QueryOptions(args = mapOf("id" to 1))
             ).doall(),
 
             "args"
@@ -107,7 +104,7 @@ internal class XtdbTest {
                     listOf(withCols(listOf(Binding("current-time", call("current-date", emptyList())))))
                 ),
 
-                QueryOpts(basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")))
+                QueryOptions(basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")))
             ).doall(),
 
             "current-time"
@@ -122,7 +119,7 @@ internal class XtdbTest {
                     listOf(withCols(listOf(Binding("timestamp", call("current-timestamp", emptyList())))))
                 ),
 
-                QueryOpts(
+                QueryOptions(
                     basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")),
                     defaultTz = ZoneId.of("America/Los_Angeles")
                 )
@@ -144,7 +141,7 @@ internal class XtdbTest {
             node.openQuery(
                 from("docs")
                     .binding(listOf(bindVar("foo"))),
-                QueryOpts(explain = true)
+                QueryOptions(explain = true)
             ).doall(),
 
             "explain"
