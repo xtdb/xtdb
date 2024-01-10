@@ -5,7 +5,7 @@ evaluationDependsOnChildren()
 
 plugins {
     `java-library`
-    id("dev.clojurephant.clojure") version "0.7.0"
+    id("dev.clojurephant.clojure") version "0.8.0-beta.7"
     id("io.freefair.aggregate-javadoc") version "6.6"
 }
 
@@ -24,6 +24,8 @@ val sixGBJvmArgs = listOf(
     "-XX:MaxMetaspaceSize=1g"
 )
 
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+
 allprojects {
     val proj = this
 
@@ -39,8 +41,6 @@ allprojects {
 
     if (plugins.hasPlugin("java-library")) {
         java {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-
             withSourcesJar()
             withJavadocJar()
         }

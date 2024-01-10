@@ -17,6 +17,8 @@ publishing {
     }
 }
 
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+
 dependencies {
     api(project(":api"))
     api(project(":core"))

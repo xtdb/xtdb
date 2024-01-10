@@ -9,6 +9,8 @@ ext {
     set("labs", true)
 }
 
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {

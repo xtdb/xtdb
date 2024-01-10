@@ -43,4 +43,6 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
 }
 
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+
 tasks.javadoc.get().enabled = false
