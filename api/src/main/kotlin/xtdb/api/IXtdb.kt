@@ -1,7 +1,7 @@
 package xtdb.api
 
-import xtdb.query.Query
-import xtdb.query.QueryOptions
+import xtdb.api.query.Query
+import xtdb.api.query.QueryOptions
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.stream.Stream

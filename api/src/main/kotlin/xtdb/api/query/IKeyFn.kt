@@ -1,4 +1,4 @@
-package xtdb
+package xtdb.api.query
 
 import clojure.lang.Keyword
 import xtdb.util.normalForm

@@ -1,4 +1,4 @@
-package xtdb.query
+package xtdb.api.query
 
 data class QueryRequest(
     @JvmField val query: Query,

@@ -9,13 +9,13 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import com.fasterxml.jackson.databind.node.BaseJsonNode
 import xtdb.IllegalArgumentException
-import xtdb.tx.Sql
+import xtdb.api.tx.Sql
 import java.io.IOException
 
 
 class SqlOpDeserializer : StdDeserializer<Sql>(Sql::class.java) {
     @Throws(IllegalArgumentException::class, IOException::class)
-    override fun deserialize(p: JsonParser, ctxt: DeserializationContext): Sql{
+    override fun deserialize(p: JsonParser, ctxt: DeserializationContext): Sql {
         val mapper = p.codec as ObjectMapper
         val node = mapper.readTree<BaseJsonNode>(p)
 

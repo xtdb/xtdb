@@ -28,8 +28,9 @@
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
-           (xtdb ICursor IKeyFn)
+           (xtdb ICursor)
            (xtdb.api TransactionKey)
+           xtdb.api.query.IKeyFn
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            (xtdb.query IRaQuerySource PreparedQuery)

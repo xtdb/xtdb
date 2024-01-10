@@ -27,7 +27,7 @@
            (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
-           xtdb.IKeyFn
+           xtdb.api.query.IKeyFn
            xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)

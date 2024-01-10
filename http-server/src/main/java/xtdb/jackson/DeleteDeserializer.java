@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.BaseJsonNode;
 import xtdb.IllegalArgumentException;
-import xtdb.tx.Delete;
-import xtdb.tx.TxOp;
+import xtdb.api.tx.Delete;
+import xtdb.api.tx.TxOp;
 
 import java.io.IOException;
 import java.time.Instant;

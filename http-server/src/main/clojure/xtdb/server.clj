@@ -31,9 +31,9 @@
            [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
-           (xtdb.api TransactionKey TxOptions)
-           (xtdb.query Basis Query)
-           (xtdb.tx Tx)))
+           (xtdb.api TransactionKey)
+           (xtdb.api.query Basis Query)
+           (xtdb.api.tx TxOptions TxRequest)))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
@@ -51,7 +51,6 @@
 (s/def ::tx-ops seqable?)
 
 (s/def ::key-fn (s/nilable keyword?))
-(s/def ::tx-id int?)
 
 (s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
@@ -68,7 +67,7 @@
     mf/Decode
     (decode [_ data _]
       (with-open [rdr (io/reader data)]
-        (let [^Tx tx (jackson/read-tx rdr)]
+        (let [^TxRequest tx (jackson/read-tx-req rdr)]
           {:tx-ops (.getTxOps tx) :opts (.getOpts tx)})))))
 
 (defmethod route-handler :tx [_]
@@ -173,7 +172,7 @@
     mf/Decode
     (decode [_ data _]
       (with-open [rdr (io/reader data)]
-        (let [query-request (jackson/read-query-request rdr)]
+        (let [query-request (jackson/read-query-req rdr)]
           (-> (into {} (.queryOpts query-request))
               (assoc :query (.query query-request))))))))
 

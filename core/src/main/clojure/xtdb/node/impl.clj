@@ -16,11 +16,12 @@
            (java.util.concurrent CompletableFuture)
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
            (xtdb.api.log Log)
+           (xtdb.api.query Basis Query QueryOptions)
+           (xtdb.api.tx Sql TxOptions)
            xtdb.indexer.IIndexer
-           (xtdb.query Basis IRaQuerySource Query QueryOptions)
-           (xtdb.tx Sql)))
+           (xtdb.query IRaQuerySource)))
 
 (set! *unchecked-math* :warn-on-boxed)
 

@@ -3,13 +3,13 @@
             [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime Instant]
            (java.util Date List)
-           (xtdb.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Null Expr$Obj Expr$Subquery
-                       Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
-                       Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
-                       Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
-                       Query$WithCols Query$DocsRelation Query$ParamRelation
-                       Query$UnnestVar Query$UnnestCol
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
+           (xtdb.api.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Null Expr$Obj Expr$Subquery
+                           Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Limit
+                           Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$OrderNulls
+                           Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+                           Query$WithCols Query$DocsRelation Query$ParamRelation
+                           Query$UnnestVar Query$UnnestCol
+                           TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defn- query-type [query]
   (cond

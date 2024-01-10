@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.BaseJsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import xtdb.IllegalArgumentException;
-import xtdb.tx.Erase;
+import xtdb.api.tx.Erase;
 
 import java.io.IOException;
 

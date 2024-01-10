@@ -36,11 +36,11 @@
            (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb IBufferPool)
            xtdb.api.TransactionKey
+           xtdb.api.tx.Xtql
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query IRaQuerySource PreparedQuery)
-           xtdb.tx.Xtql
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)

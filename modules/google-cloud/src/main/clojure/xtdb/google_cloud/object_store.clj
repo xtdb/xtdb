@@ -2,16 +2,16 @@
   (:require [xtdb.file-list :as file-list]
             [xtdb.object-store :as os]
             [xtdb.util :as util])
-  (:import [com.google.cloud.storage BlobId BlobInfo Storage Blob$BlobSourceOption
-            Storage$BlobSourceOption Storage$BlobWriteOption StorageException]
-           [java.io Closeable]
-           [java.lang AutoCloseable]
-           [java.nio ByteBuffer]
-           [java.nio.file Path]
-           [java.util NavigableSet]
-           [java.util.concurrent CompletableFuture]
-           [java.util.function Supplier]
-           [xtdb IObjectStore]))
+  (:import (com.google.cloud.storage BlobId BlobInfo Storage Blob$BlobSourceOption
+                                     Storage$BlobSourceOption Storage$BlobWriteOption StorageException)
+           (java.io Closeable)
+           (java.lang AutoCloseable)
+           (java.nio ByteBuffer)
+           (java.nio.file Path)
+           (java.util NavigableSet)
+           (java.util.concurrent CompletableFuture)
+           (java.util.function Supplier)
+           xtdb.api.ObjectStore))
 
 (def blob-source-opts (into-array Blob$BlobSourceOption []))
 
@@ -67,7 +67,7 @@
     (.delete storage-service blob-id)))
 
 (defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
-  IObjectStore
+  ObjectStore
   (getObject [this k]
     (CompletableFuture/completedFuture
      (get-blob this k)))

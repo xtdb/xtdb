@@ -10,7 +10,7 @@
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.IKeyFn))
+           xtdb.api.query.IKeyFn))
 
 (def ^:private ^:dynamic *port*)
 (def ^:private ^:dynamic ^FlightSqlClient *client*)

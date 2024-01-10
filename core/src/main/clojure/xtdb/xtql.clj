@@ -3,17 +3,15 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           (org.apache.arrow.memory BufferAllocator)
-           (xtdb.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
-                       Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery
-                       Query Query$Aggregate Query$DocsRelation Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
-                       Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec Query$ParamRelation Query$Pipeline
-                       Query$Return Query$Unify Query$UnnestCol Query$UnnestVar Query$Where Query$With Query$WithCols Query$Without
-                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
-           (xtdb.tx Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update)))
+           (xtdb.api.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
+                           Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery
+                           Query Query$Aggregate Query$DocsRelation Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset
+                           Query$OrderBy Query$OrderDirection Query$OrderNulls Query$OrderSpec Query$ParamRelation Query$Pipeline
+                           Query$Return Query$Unify Query$UnnestCol Query$UnnestVar Query$Where Query$With Query$WithCols Query$Without
+                           TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
+           (xtdb.api.tx Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.

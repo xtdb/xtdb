@@ -2,7 +2,7 @@ package xtdb.jackson;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import xtdb.tx.TxOp;
+import xtdb.api.tx.TxOp;
 
 import java.io.IOException;
 import java.util.Collections;

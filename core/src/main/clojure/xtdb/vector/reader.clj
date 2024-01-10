@@ -6,7 +6,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           xtdb.IKeyFn
+           xtdb.api.query.IKeyFn
            (xtdb.vector IVectorReader RelationReader ValueVectorReader)
            (xtdb.vector.extensions AbsentVector KeywordVector SetVector TransitVector UriVector UuidVector)))
 

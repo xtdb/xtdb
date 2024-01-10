@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.databind.node.BaseJsonNode
 import xtdb.IllegalArgumentException
-import xtdb.tx.Call
+import xtdb.api.tx.Call
 import java.io.IOException
 
 class CallDeserializer : StdDeserializer<Call>(Call::class.java) {

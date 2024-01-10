@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import xtdb.IllegalArgumentException;
 import xtdb.api.TransactionKey;
+import xtdb.api.query.Basis;
+import xtdb.api.query.QueryOptions;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -17,7 +19,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
-import static xtdb.query.QueryOptions.queryOpts;
+import static xtdb.api.query.QueryOptions.queryOpts;
 
 public class QueryOptionsDeserializer extends StdDeserializer<QueryOptions> {
 

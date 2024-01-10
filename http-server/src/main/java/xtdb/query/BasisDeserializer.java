@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
 import xtdb.api.TransactionKey;
+import xtdb.api.query.Basis;
 
 import java.io.IOException;
 import java.time.Instant;

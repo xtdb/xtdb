@@ -20,9 +20,9 @@
            java.util.List
            java.util.Map
            [java.util.stream Stream]
-           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey TxOptions)
-           (xtdb.query Basis Query QueryOptions)
-           (xtdb.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
+           (xtdb.api.query Basis Query QueryOptions)
+           (xtdb.api.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds TxOptions)
            xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]

@@ -1,7 +1,7 @@
-package xtdb.query
+package xtdb.api.query
 
-import xtdb.query.Expr.Companion.lVar
-import xtdb.query.Expr.Companion.param
+import xtdb.api.query.Expr.Companion.lVar
+import xtdb.api.query.Expr.Companion.param
 
 data class Binding(val binding: String, val expr: Expr) {
     companion object {

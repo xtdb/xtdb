@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.databind.JsonNode;
 import xtdb.IllegalArgumentException;
+import xtdb.api.query.Expr;
 
 import java.util.ArrayList;
 import java.util.Iterator;

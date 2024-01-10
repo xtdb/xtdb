@@ -1,4 +1,4 @@
-package xtdb.query
+package xtdb.api.query
 
 import clojure.lang.*
 import xtdb.api.TransactionKey

@@ -12,7 +12,7 @@ import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
-import xtdb.IKeyFn;
+import xtdb.api.query.IKeyFn;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;

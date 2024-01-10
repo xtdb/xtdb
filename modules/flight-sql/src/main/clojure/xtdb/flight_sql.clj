@@ -21,10 +21,10 @@
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.IKeyFn
+           xtdb.api.query.IKeyFn
+           [xtdb.api.tx TxOp]
            xtdb.indexer.IIndexer
            (xtdb.query BoundQuery IRaQuerySource PreparedQuery)
-           [xtdb.tx TxOp]
            (xtdb.vector IVectorReader)))
 
 ;;;; populate-root temporarily copied from test-util

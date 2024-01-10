@@ -8,21 +8,21 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
-import xtdb.tx.TxOp;
-import xtdb.tx.Tx;
-import xtdb.api.TxOptions;
+import xtdb.api.tx.TxOp;
+import xtdb.api.tx.TxRequest;
+import xtdb.api.tx.TxOptions;
 
 import java.io.IOException;
 import java.util.List;
 
-public class TxDeserializer extends StdDeserializer<Tx>  {
+public class TxRequestDeserializer extends StdDeserializer<TxRequest>  {
 
-    public TxDeserializer() {
-        super(Tx.class);
+    public TxRequestDeserializer() {
+        super(TxRequest.class);
     }
 
     @Override
-    public Tx deserialize(com.fasterxml.jackson.core.JsonParser jp, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public TxRequest deserialize(com.fasterxml.jackson.core.JsonParser jp, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) jp.getCodec();
         JsonNode node = mapper.readTree(jp);
 
@@ -40,6 +40,6 @@ public class TxDeserializer extends StdDeserializer<Tx>  {
 
         TxOptions txOptions = !node.has("tx_options") ? new TxOptions() : mapper.treeToValue(node.get("tx_options"), TxOptions.class);
 
-        return new Tx(ops, txOptions);
+        return new TxRequest(ops, txOptions);
     }
 }

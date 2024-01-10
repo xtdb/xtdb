@@ -1,6 +1,7 @@
 package xtdb.api
 
-import xtdb.tx.TxOp
+import xtdb.api.tx.TxOp
+import xtdb.api.tx.TxOptions
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 

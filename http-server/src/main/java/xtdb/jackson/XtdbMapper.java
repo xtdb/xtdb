@@ -4,13 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import xtdb.api.TransactionKey;
-import xtdb.api.TxOptions;
+import xtdb.api.query.*;
+import xtdb.api.tx.Call;
+import xtdb.api.tx.*;
 import xtdb.query.*;
-import xtdb.tx.*;
-import xtdb.tx.Call;
 
 import static com.fasterxml.jackson.databind.DeserializationFeature.USE_LONG_FOR_INTS;
-import static xtdb.query.Query.*;
+import static xtdb.api.query.Query.*;
 
 public class XtdbMapper {
     public static final SimpleModule TX_DESERIALIZER_MODULE = new SimpleModule("TxDeserializerModule")
@@ -20,7 +20,7 @@ public class XtdbMapper {
             .addDeserializer(Erase.class, new EraseDeserializer())
             .addDeserializer(Call.class, new CallDeserializer())
             .addDeserializer(Sql.class, new SqlOpDeserializer())
-            .addDeserializer(Tx.class, new TxDeserializer())
+            .addDeserializer(TxRequest.class, new TxRequestDeserializer())
             .addDeserializer(TxOptions.class, new TxOptionsDeserializer());
 
     public static final ObjectMapper TX_OP_MAPPER = new ObjectMapper()

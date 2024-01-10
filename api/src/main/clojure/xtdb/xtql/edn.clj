@@ -4,22 +4,22 @@
             [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.query Binding
-                       Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
-                       Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
-                       Expr$ListExpr Expr$MapExpr
-                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
-                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
-                       Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
-                       Query$DocsRelation Query$ParamRelation Query$OrderDirection Query$OrderNulls
-                       Query$UnnestCol Query$UnnestVar
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
-           (xtdb.tx Xtql Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update)))
+           (xtdb.api.query Binding
+                           Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
+                           Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
+                           Expr$ListExpr Expr$MapExpr
+                           Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
+                           Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
+                           Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
+                           Query$DocsRelation Query$ParamRelation Query$OrderDirection Query$OrderNulls
+                           Query$UnnestCol Query$UnnestVar
+                           TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
+           (xtdb.api.tx Xtql Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update)))
 
 ;; TODO inline once the type we support is fixed
 (defn- query-type? [q] (seq? q))
 
-(defmulti ^xtdb.query.Query parse-query
+(defmulti ^xtdb.api.query.Query parse-query
   (fn [query]
     (when-not (query-type? query)
       (throw (err/illegal-arg :xtql/malformed-query {:query query})))

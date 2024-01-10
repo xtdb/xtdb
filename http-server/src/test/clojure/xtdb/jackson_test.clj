@@ -6,10 +6,10 @@
             xtdb.serde)
   (:import (java.time Instant)
            (java.util List)
-           (xtdb.api TransactionKey TxOptions)
-           (xtdb.jackson XtdbMapper)
-           (xtdb.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOptions QueryRequest TemporalFilter)
-           (xtdb.tx TxOp Tx Sql)))
+           (xtdb.api TransactionKey)
+           (xtdb.api.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOptions QueryRequest TemporalFilter)
+           (xtdb.api.tx TxOp TxOptions TxRequest)
+           (xtdb.jackson XtdbMapper)))
 
 (defn- roundtrip-json-ld [v]
   (-> (json/write-value-as-string v jackson/json-ld-mapper)
@@ -143,24 +143,24 @@
                               "arg_rows" [1 "bar"]})))))
 
 (defn roundtrip-tx [v]
-  (.readValue XtdbMapper/TX_OP_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Tx))
+  (.readValue XtdbMapper/TX_OP_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) TxRequest))
 
 (deftest deserialize-tx-test
-  (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
-                             :doc {"xt/id" "my-id"},
-                             :valid-from nil,
-                             :valid-to nil}],
-                (TxOptions.))
+  (t/is (= (TxRequest. [#xt.tx/put {:table-name :docs,
+                                    :doc {"xt/id" "my-id"},
+                                    :valid-from nil,
+                                    :valid-to nil}],
+                       (TxOptions.))
            (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]})))
 
-  (t/is (= (Tx. [#xt.tx/put {:table-name :docs,
-                             :doc {"xt/id" "my-id"},
-                             :valid-from nil,
-                             :valid-to nil}],
-                (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
-                            #time/zone "America/Los_Angeles"
-                            false))
+  (t/is (= (TxRequest. [#xt.tx/put {:table-name :docs,
+                                    :doc {"xt/id" "my-id"},
+                                    :valid-from nil,
+                                    :valid-to nil}],
+                       (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
+                                   #time/zone "America/Los_Angeles"
+                                   false))
            (roundtrip-tx {"tx_ops" [{"put" "docs"
                                      "doc" {"xt/id" "my-id"}}]
                           "tx_options" {"system_time" #time/instant "2020-01-01T12:34:56.789Z"

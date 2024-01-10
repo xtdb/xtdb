@@ -9,6 +9,9 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import xtdb.IllegalArgumentException;
+import xtdb.api.query.Binding;
+import xtdb.api.query.Query;
+import xtdb.api.query.TemporalFilter;
 
 import java.io.IOException;
 

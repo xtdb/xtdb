@@ -1,4 +1,4 @@
-package xtdb.query
+package xtdb.api.query
 
 sealed interface TemporalFilter {
     sealed interface TemporalExtents : TemporalFilter {

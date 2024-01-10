@@ -6,7 +6,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
-import xtdb.IKeyFn;
+import xtdb.api.query.IKeyFn;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;

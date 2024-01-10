@@ -1,11 +1,10 @@
 package xtdb.jackson;
 
-import clojure.lang.Keyword;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import xtdb.tx.TxOp;
-import xtdb.tx.Tx;
-import xtdb.api.TxOptions;
+import xtdb.api.tx.TxOp;
+import xtdb.api.tx.TxRequest;
+import xtdb.api.tx.TxOptions;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -13,11 +12,11 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class TxDeserializerTest {
+class TxRequestDeserializerTest {
 
     private final ObjectMapper objectMapper;
 
-    public TxDeserializerTest() {
+    public TxRequestDeserializerTest() {
         this.objectMapper = XtdbMapper.TX_OP_MAPPER;
     }
 
@@ -30,11 +29,11 @@ class TxDeserializerTest {
                 """;
 
         // when
-        Object actual = objectMapper.readValue(json, Tx.class);
+        Object actual = objectMapper.readValue(json, TxRequest.class);
 
         // then
         ArrayList<TxOp> ops = new ArrayList<TxOp>();
         ops.add(TxOp.put("docs", Collections.emptyMap()));
-        assertEquals(new Tx(ops, new TxOptions()), actual);
+        assertEquals(new TxRequest(ops, new TxOptions()), actual);
     }
 }

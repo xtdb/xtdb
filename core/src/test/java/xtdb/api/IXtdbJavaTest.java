@@ -9,13 +9,12 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static xtdb.api.TxOptions.txOpts;
-import static xtdb.query.Binding.bindVar;
-import static xtdb.query.Query.from;
-import static xtdb.tx.TxOp.put;
+import static xtdb.api.tx.TxOptions.txOpts;
+import static xtdb.api.query.Binding.bindVar;
+import static xtdb.api.query.Query.from;
+import static xtdb.api.tx.TxOp.put;
 
 class IXtdbJavaTest {
     private IXtdb node;

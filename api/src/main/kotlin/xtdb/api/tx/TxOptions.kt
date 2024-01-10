@@ -1,4 +1,4 @@
-package xtdb.api
+package xtdb.api.tx
 
 import java.time.Instant
 import java.time.ZoneId

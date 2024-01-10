@@ -16,7 +16,8 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector IntVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
-           (xtdb IBufferPool IObjectStore)
+           xtdb.IBufferPool
+           xtdb.api.ObjectStore
            (xtdb.multipart IMultipartUpload SupportsMultipart)
            (xtdb.util ArrowBufLRU)))
 
@@ -46,7 +47,7 @@
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))
     (t/is (= 0N @bp/io-wait-nanos-counter))
 
-    @(.putObject ^IObjectStore os (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
+    @(.putObject ^ObjectStore os (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
 
     (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
 
@@ -145,7 +146,7 @@
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
 
 (defrecord SimulatedObjectStore [calls buffers]
-  IObjectStore
+  ObjectStore
   (getObject [_ k] (CompletableFuture/completedFuture (get @buffers k)))
 
   (getObject [_ k path]

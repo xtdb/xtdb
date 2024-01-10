@@ -1,46 +1,45 @@
-package xtdb;
+package xtdb.api
 
-import java.nio.ByteBuffer;
-import java.nio.file.Path;
-import java.util.concurrent.CompletableFuture;
+import java.nio.ByteBuffer
+import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
 
-public interface IObjectStore {
+interface ObjectStore {
     /**
      * Asynchronously returns the given object in a ByteBuffer. If the object doesn't exist,
      * the CompletableFuture completes with an IllegalStateException.
      */
-    CompletableFuture<ByteBuffer> getObject(Path k);
+    fun getObject(k: Path?): CompletableFuture<ByteBuffer?>?
 
     /**
      * Asynchronously returns a specified range of bytes from the object in a ByteBuffer.
      * If the object doesn't exist, the CompletableFuture completes with an IllegalStateException.
      */
-    CompletableFuture<ByteBuffer> getObjectRange(Path k, long start, long len);
+    fun getObjectRange(k: Path?, start: Long, len: Long): CompletableFuture<ByteBuffer?>?
 
     /**
      * Asynchronously writes the object to the given path. If the object doesn't exist,
      * the CompletableFuture completes with an IllegalStateException.
      */
-    CompletableFuture<Path> getObject(Path k, Path outPath);
+    fun getObject(k: Path?, outPath: Path?): CompletableFuture<Path?>?
 
     /**
      * Stores an object in the object store.
      */
-    CompletableFuture<?> putObject(Path k, ByteBuffer buf);
+    fun putObject(k: Path?, buf: ByteBuffer?): CompletableFuture<*>?
 
     /**
      * Lists all objects in the object store.
      */
-    Iterable<Path> listObjects();
+    fun listObjects(): Iterable<Path?>?
 
     /**
      * Lists objects within a specified directory in the object store.
      */
-    Iterable<Path> listObjects(Path dir);
+    fun listObjects(dir: Path?): Iterable<Path?>?
 
     /**
      * Deletes the object with the given path from the object store.
      */
-    CompletableFuture<?> deleteObject(Path k);
-
+    fun deleteObject(k: Path?): CompletableFuture<*>?
 }

@@ -14,7 +14,7 @@
            java.util.Spliterator
            [java.util.stream StreamSupport]
            xtdb.api.IXtdb
-           (xtdb.query Basis Query QueryOptions)))
+           (xtdb.api.query Basis Query QueryOptions)))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}

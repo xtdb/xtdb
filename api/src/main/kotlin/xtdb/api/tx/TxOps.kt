@@ -1,11 +1,11 @@
-package xtdb.tx
+package xtdb.api.tx
 
-import xtdb.query.Binding
-import xtdb.query.Query
-import xtdb.query.Query.UnifyClause
-import xtdb.query.TemporalFilter.TemporalExtents
-import xtdb.tx.TxOp.HasArgs
-import xtdb.tx.TxOp.HasValidTimeBounds
+import xtdb.api.query.Binding
+import xtdb.api.query.Query
+import xtdb.api.query.Query.UnifyClause
+import xtdb.api.query.TemporalFilter.TemporalExtents
+import xtdb.api.tx.TxOp.HasArgs
+import xtdb.api.tx.TxOp.HasValidTimeBounds
 import xtdb.types.ClojureForm
 import java.nio.ByteBuffer
 import java.time.Instant

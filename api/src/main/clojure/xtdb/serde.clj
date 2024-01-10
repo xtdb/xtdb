@@ -11,9 +11,9 @@
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
-           (xtdb.api TransactionKey TxOptions)
-           (xtdb.query Query)
-           (xtdb.tx TxOp Call Delete Erase Put Sql Xtql XtqlAndArgs)
+           (xtdb.api TransactionKey)
+           (xtdb.api.query Query)
+           (xtdb.api.tx Call Delete Erase Put Sql TxOp TxOptions Xtql XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)

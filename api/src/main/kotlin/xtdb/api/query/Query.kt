@@ -1,9 +1,9 @@
-package xtdb.query
+package xtdb.api.query
 
-import xtdb.query.Expr.Param
-import xtdb.query.Query.OrderDirection.ASC
-import xtdb.query.Query.OrderNulls.FIRST
-import xtdb.query.Query.OrderNulls.LAST
+import xtdb.api.query.Expr.Param
+import xtdb.api.query.Query.OrderDirection.ASC
+import xtdb.api.query.Query.OrderNulls.FIRST
+import xtdb.api.query.Query.OrderNulls.LAST
 
 sealed interface Query {
     sealed interface QueryTail

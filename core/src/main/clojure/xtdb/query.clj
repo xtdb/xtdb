@@ -37,7 +37,7 @@
            (xtdb ICursor IResultCursor)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
-           xtdb.query.Query
+           xtdb.api.query.Query
            xtdb.util.RefCounter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}

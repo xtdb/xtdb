@@ -9,6 +9,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import xtdb.api.query.Binding;
+import xtdb.api.query.Expr;
+import xtdb.api.query.Query;
 
 import java.io.IOException;
 import java.util.ArrayList;

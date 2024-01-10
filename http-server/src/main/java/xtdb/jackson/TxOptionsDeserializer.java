@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import xtdb.IllegalArgumentException;
-import xtdb.api.TxOptions;
+import xtdb.api.tx.TxOptions;
 
 import java.io.IOException;
 import java.time.Instant;

@@ -19,7 +19,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.log Log LogRecord LogSubscriber)
-           (xtdb.tx Abort Call Delete Erase Put Sql Xtql XtqlAndArgs)
+           (xtdb.api.tx Abort Call Delete Erase Put Sql Xtql XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 

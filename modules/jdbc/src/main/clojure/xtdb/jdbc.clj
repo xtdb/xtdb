@@ -14,7 +14,7 @@
            java.util.concurrent.CompletableFuture
            (java.util.function Function)
            java.util.function.Supplier
-           xtdb.IObjectStore))
+           xtdb.api.ObjectStore))
 
 (defprotocol Dialect
   (db-type [dialect])
@@ -56,7 +56,7 @@
       (throw (os/obj-missing-exception k))))
 
 (defrecord JDBCObjectStore [pool dialect]
-  IObjectStore
+  ObjectStore
   (getObject [_ k]
     (CompletableFuture/supplyAsync
      (reify Supplier

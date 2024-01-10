@@ -3,9 +3,9 @@ package xtdb.api
 import clojure.lang.Keyword
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.query.Query.Companion.from
-import xtdb.query.toVar
-import xtdb.tx.TxOp.Companion.put
+import xtdb.api.query.Query.Companion.from
+import xtdb.api.query.toVar
+import xtdb.api.tx.TxOp.Companion.put
 import java.net.URL
 
 internal class XtdbClientTest {
