@@ -1,10 +1,14 @@
+@file:UseContextualSerialization(Any::class)
+
 package xtdb.api.query
 
 import clojure.lang.*
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseContextualSerialization
 import xtdb.api.TransactionKey
 import java.time.Duration
 import java.time.ZoneId
-import java.util.ArrayList
 
 private val ARGS_KEY: Keyword = Keyword.intern("args")
 private val BASIS_KEY: Keyword = Keyword.intern("basis")
@@ -15,15 +19,16 @@ private val DEFAULT_ALL_VALID_TIME_KEY: Keyword = Keyword.intern("default-all-va
 private val EXPLAIN_KEY: Keyword? = Keyword.intern("explain?")
 private val KEY_FN_KEY: Keyword = Keyword.intern("key-fn")
 
+@Serializable
 data class QueryOptions(
-    @JvmField val args: Map<String, *>? = null,
+    @JvmField val args: Map<String, @Contextual Any>? = null,
     @JvmField val basis: Basis? = null,
     @JvmField val afterTx: TransactionKey? = null,
-    @JvmField val txTimeout: Duration? = null,
-    @JvmField val defaultTz: ZoneId? = null,
+    @JvmField @Contextual val txTimeout: Duration? = null,
+    @JvmField @Contextual val defaultTz: ZoneId? = null,
     @JvmField val defaultAllValidTime: Boolean = false,
     @JvmField val explain: Boolean = false,
-    @JvmField val keyFn: IKeyFn<*>? = null
+    @JvmField val keyFn: IKeyFn<Any>? = null
 ) : ILookup, Seqable {
 
     override fun valAt(key: Any?): Any? {
@@ -74,24 +79,24 @@ data class QueryOptions(
     }
 
     class Builder {
-        private var args: Map<String, *>? = null
+        private var args: Map<String, Any>? = null
         private var basis: Basis? = null
         private var afterTx: TransactionKey? = null
         private var txTimeout: Duration? = null
         private var defaultTz: ZoneId? = null
         private var defaultAllValidTime: Boolean = false
         private var explain: Boolean = false
-        private var keyFn: IKeyFn<*>? = null
+        private var keyFn: IKeyFn<Any>? = null
 
-        fun args(args: Map<String, *>?) = apply { this.args = args }
-        fun args(args: List<*>?) = apply { this.args = args?.mapIndexed { idx, arg -> "_$idx" to arg }?.toMap() }
+        fun args(args: Map<String, Any>?) = apply { this.args = args }
+        fun args(args: List<Any>?) = apply { this.args = args?.mapIndexed { idx, arg -> "_$idx" to arg }?.toMap() }
         fun basis(basis: Basis?) = apply { this.basis = basis }
         fun afterTx(afterTx: TransactionKey?) = apply { this.afterTx = afterTx }
         fun txTimeout(txTimeout: Duration?) = apply { this.txTimeout = txTimeout }
         fun defaultAllValidTime(defaultAllValidTime: Boolean) = apply { this.defaultAllValidTime = defaultAllValidTime }
         fun defaultTz(defaultTz: ZoneId?) = apply { this.defaultTz = defaultTz }
         fun explain(explain: Boolean) = apply { this.explain = explain }
-        fun keyFn(keyFn: IKeyFn<*>?) = apply { this.keyFn = keyFn }
+        fun keyFn(keyFn: IKeyFn<Any>?) = apply { this.keyFn = keyFn }
 
         fun build() = QueryOptions(args, basis, afterTx, txTimeout, defaultTz, defaultAllValidTime, explain, keyFn)
     }

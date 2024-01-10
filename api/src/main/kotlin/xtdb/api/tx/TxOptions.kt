@@ -1,11 +1,14 @@
 package xtdb.api.tx
 
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.ZoneId
 
+@Serializable
 data class TxOptions(
-    val systemTime: Instant? = null,
-    val defaultTz: ZoneId? = null,
+    @Contextual val systemTime: Instant? = null,
+    @Contextual val defaultTz: ZoneId? = null,
     val defaultAllValidTime: Boolean = false
 ) {
     companion object {

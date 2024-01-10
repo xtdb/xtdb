@@ -6,6 +6,7 @@ plugins {
     `maven-publish`
     signing
     kotlin("jvm")
+    kotlin("plugin.serialization")
 }
 
 publishing {
@@ -31,6 +32,7 @@ dependencies {
     api("org.apache.arrow", "arrow-vector", "14.0.0")
     api("org.apache.arrow", "arrow-memory-netty", "14.0.0")
     api(kotlin("stdlib-jdk8"))
+    api("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.0")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
@@ -40,6 +42,11 @@ tasks.javadoc {
 }
 
 tasks.compileJava {
+    sourceCompatibility = "11"
+    targetCompatibility = "11"
+}
+
+tasks.compileTestJava {
     sourceCompatibility = "11"
     targetCompatibility = "11"
 }

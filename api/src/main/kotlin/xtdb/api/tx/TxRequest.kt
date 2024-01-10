@@ -1,3 +1,6 @@
 package xtdb.api.tx
 
-data class TxRequest(val txOps: List<TxOp>, val opts: TxOptions)
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class TxRequest(val txOps: List<TxOp>, val opts: TxOptions? = null)

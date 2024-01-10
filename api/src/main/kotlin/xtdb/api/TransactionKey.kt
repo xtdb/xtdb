@@ -1,12 +1,15 @@
 package xtdb.api
 
 import clojure.lang.*
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.Serializable
 import java.time.Instant
 
 private val TX_ID_KEY: Keyword = Keyword.intern("tx-id")
 private val SYSTEM_TIME_KEY: Keyword = Keyword.intern("system-time")
 
-data class TransactionKey(val txId: Long, val systemTime: Instant) : Comparable<TransactionKey>, ILookup, Seqable {
+@Serializable
+data class TransactionKey(val txId: Long, @Contextual val systemTime: Instant) : Comparable<TransactionKey>, ILookup, Seqable {
     override fun compareTo(other: TransactionKey) = txId.compareTo(other.txId)
 
     fun withSystemTime(systemTime: Instant) = TransactionKey(this.txId, systemTime)
