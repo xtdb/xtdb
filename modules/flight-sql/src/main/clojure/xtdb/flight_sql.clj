@@ -172,9 +172,9 @@
         ;; NOTE atm the PSs are either created within a tx and then assumed to be within that tx
         ;; my mental model would be that you could create a PS outside a tx and then use it inside, but this doesn't seem possible in FSQL.
         (fn []
-          @(-> (let [{:keys [^String sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
-                                                          (throw (UnsupportedOperationException. "invalid ps-id")))
-                     dml (TxOp/sqlBatch sql (flight-stream->bytes flight-stream))]
+          @(-> (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
+                                                  (throw (UnsupportedOperationException. "invalid ps-id")))
+                     dml (TxOp/sql sql (flight-stream->bytes flight-stream))]
                  (exec-dml dml fsql-tx-id))
 
                (then-send-do-put-update-res ack-stream allocator))))

@@ -7,8 +7,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import clojure.lang.Keyword
-           java.lang.AutoCloseable
+  (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
            java.time.Duration
@@ -19,7 +18,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.log Log LogRecord LogSubscriber)
-           (xtdb.api.tx Abort Call Delete Erase Put Sql Xtql XtqlAndArgs)
+           (xtdb.api.tx Abort Call Delete Erase Put Sql SqlByteArgs Xtql XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -223,11 +222,22 @@
         (.startStruct sql-writer)
         (vw/write-value! sql query-writer)
 
-        (when-let [arg-bytes (.argBytes op)]
-          (vw/write-value! arg-bytes args-writer))
-
         (when-let [arg-rows (.argRows op)]
           (vw/write-value! (encode-sql-args allocator sql arg-rows) args-writer)))
+
+      (.endStruct sql-writer))))
+
+(defn- ->sql-byte-args-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
+  (let [sql-writer (.legWriter op-writer :sql (FieldType/notNullable #xt.arrow/type :struct))
+        query-writer (.structKeyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
+        args-writer (.structKeyWriter sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
+    (fn write-sql! [^SqlByteArgs op]
+      (let [sql (.sql op)]
+        (.startStruct sql-writer)
+        (vw/write-value! sql query-writer)
+
+        (when-let [arg-bytes (.argBytes op)]
+          (vw/write-value! arg-bytes args-writer)))
 
       (.endStruct sql-writer))))
 
@@ -312,6 +322,7 @@
   (let [!write-xtql+args! (delay (->xtql+args-writer op-writer allocator))
         !write-xtql! (delay (->xtql-writer op-writer))
         !write-sql! (delay (->sql-writer op-writer allocator))
+        !write-sql-byte-args! (delay (->sql-byte-args-writer op-writer allocator))
         !write-put! (delay (->put-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
         !write-erase! (delay (->erase-writer op-writer))
@@ -323,6 +334,7 @@
         XtqlAndArgs (@!write-xtql+args! tx-op)
         Xtql (@!write-xtql! tx-op)
         Sql (@!write-sql! tx-op)
+        SqlByteArgs (@!write-sql-byte-args! tx-op)
         Put (@!write-put! tx-op)
         Delete (@!write-delete! tx-op)
         Erase (@!write-erase! tx-op)

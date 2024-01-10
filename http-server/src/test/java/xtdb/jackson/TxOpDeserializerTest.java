@@ -85,6 +85,6 @@ class TxOpDeserializerTest {
         Object actual = objectMapper.readValue(sql, TxOp.class);
 
         // then
-        assertEquals(TxOp.sqlBatch("INSERT INTO docs (xt$id, foo) VALUES (?, ?)", List.of(List.of(1L, "foo"), List.of(2L, "bar"))), actual);
+        assertEquals(TxOp.sql("INSERT INTO docs (xt$id, foo) VALUES (?, ?)").withArgs(List.of(List.of(1L, "foo"), List.of(2L, "bar"))), actual);
     }
 }

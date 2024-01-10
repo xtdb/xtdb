@@ -28,34 +28,25 @@ sealed interface TxOp {
 
     companion object {
         @JvmStatic
-        fun sql(sql: String): Sql = Sql(sql)
+        fun sql(sql: String) = Sql(sql)
 
         @JvmStatic
-        fun sql(sql: String, paramRow: List<*>): Sql = Sql(sql, listOf(paramRow))
+        fun sql(sql: String, argBytes: ByteBuffer) = SqlByteArgs(sql, argBytes)
 
         @JvmStatic
-        fun sqlBatch(sql: String, paramGroupRows: List<List<*>>?): Sql = Sql(sql, argRows = paramGroupRows)
+        fun put(tableName: String, doc: Map<String, *>) = Put(tableName, doc)
 
         @JvmStatic
-        fun sqlBatch(sql: String, paramGroupBytes: ByteBuffer?): Sql = Sql(sql, argBytes = paramGroupBytes)
+        fun putFn(fnId: Any, fnForm: Any) = put(XT_TXS, mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm)))
 
         @JvmStatic
-        fun sqlBatch(sql: String, paramGroupBytes: ByteArray?): Sql = sqlBatch(sql, ByteBuffer.wrap(paramGroupBytes))
+        fun delete(tableName: String, entityId: Any) = Delete(tableName, entityId)
 
         @JvmStatic
-        fun put(tableName: String, doc: Map<String, *>): Put = Put(tableName, doc)
+        fun erase(tableName: String, entityId: Any) = Erase(tableName, entityId)
 
         @JvmStatic
-        fun putFn(fnId: Any, fnForm: Any): Put = put(XT_TXS, mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm)))
-
-        @JvmStatic
-        fun delete(tableName: String, entityId: Any): Delete = Delete(tableName, entityId)
-
-        @JvmStatic
-        fun erase(tableName: String, entityId: Any): Erase = Erase(tableName, entityId)
-
-        @JvmStatic
-        fun call(fnId: Any, args: List<*>): Call = Call(fnId, args)
+        fun call(fnId: Any, args: List<*>) = Call(fnId, args)
 
         @JvmField
         val ABORT = Abort
@@ -94,11 +85,15 @@ data class Erase(
 data class Sql(
     @JvmField val sql: String,
     @JvmField val argRows: List<List<*>>? = null,
-    @JvmField val argBytes: ByteBuffer? = null
 ) : TxOp, HasArgs<List<*>, Sql> {
 
     override fun withArgs(args: List<List<*>>?): Sql = Sql(sql, argRows = args)
 }
+
+data class SqlByteArgs(
+    @JvmField val sql: String,
+    @JvmField val argBytes: ByteBuffer? = null,
+) : TxOp
 
 data class XtqlAndArgs(
     @JvmField val op: Xtql,
