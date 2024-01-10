@@ -36,7 +36,7 @@ The two languages are able to interoperate with 100% parity, meaning application
 
 * Supports the full spectrum between normalized relational modeling and dynamic document-like storage without compromising data type fidelity (i.e. unlike JSONB).
 
-* The combination of a native SQL implementation alongside XTQL offers a more productive application development experience with sacrificing rich data analysis (and without ETL to another system).
+* The combination of a native SQL implementation alongside XTQL offers a more productive application development experience without sacrificing rich data analysis (and without ETL to another system).
 
 * Strong data consistency built around linearized, single-writer transaction processing.
 

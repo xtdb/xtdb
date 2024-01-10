@@ -634,7 +634,7 @@ PullManyExpr :: (pull* Query
 
 * Subquery expressions must return a single row containing a single column - otherwise, a runtime exception will be thrown.
 * 'Exists' expressions will return false if the subquery returns no rows; true otherwise.
-* 'Pull' expressions must return a single row - otherwise, a runtime exception will be throws.
+* 'Pull' expressions must return a single row - otherwise, a runtime exception will be thrown.
 The columns in the returned row will be nested into a map in the outer expression.
 * 'Pull many' expressions may return any number of rows.
   The rows will be nested into an array of maps in the outer expression.
