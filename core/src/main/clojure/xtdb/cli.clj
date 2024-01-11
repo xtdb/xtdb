@@ -41,9 +41,7 @@
                                                  (io/resource "xtdb.edn")
                                                  (io/resource "xtdb.json"))
                                  config-from-file (some-> config-file config/file->config-opts)]
-                             ;; TODO: Do we really want to merge config like this? Ie, if file provided/xtdb.edn exists, we merge in config map from --edn?
-                             ;; Seems like somewhat confusing behaviour. Kept from previous code here but worth a think.
-                             (apply merge-with merge [config-from-file json edn]))}))))
+                             (or config-from-file json edn))}))))
 
 (defn- shutdown-hook-promise []
   (let [main-thread (Thread/currentThread)
