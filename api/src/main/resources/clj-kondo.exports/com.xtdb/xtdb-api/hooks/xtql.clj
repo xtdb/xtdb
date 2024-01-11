@@ -161,14 +161,14 @@
                 :bind (if (node-vector? v)
                         (->> v :children (run! lint-bind))
                         (api/reg-finding!
-                          (assoc (meta opts)
+                          (assoc (meta v)
                                  :message "expected :bind value to be a vector"
                                  :type :xtql/type-mismatch)))
                 :args (if (node-vector? v)
                         ;; TODO: Make args specific
                         (->> v :children (run! lint-bind))
                         (api/reg-finding!
-                          (assoc (meta opts)
+                          (assoc (meta v)
                                  :message "expected :args value to be a vector"
                                  :type :xtql/type-mismatch)))
                 ; else

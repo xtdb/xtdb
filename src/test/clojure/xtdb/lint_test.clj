@@ -350,6 +350,9 @@
   (t/testing "unify clause"
     (t/testing "number of args"
       (t/is (= (finding-types '(unify (from :docs [xt/id])
+                                      (with {a xt/id})))
+               #{}))
+      (t/is (= (finding-types '(unify (from :docs [xt/id])
                                       (with {a xt/id} {b xt/id})))
                #{}))
       (t/is (contains? (finding-types '(unify (from :docs [xt/id])
