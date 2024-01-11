@@ -246,6 +246,9 @@
     (when-not (path-exists parents)
       (mkdirs parents))))
 
+(defn file-extension [^File f]
+  (second (re-find #"\.(.+?)$" (.getName f))))
+
 (defn ->temp-file ^Path [^String prefix ^String suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (delete-file)))

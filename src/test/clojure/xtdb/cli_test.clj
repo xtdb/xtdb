@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.cli :as cli]))
+            [xtdb.cli :as cli]
+            [xtdb.config :as config]))
 
 (def xtdb-cli-edn
   (io/resource "xtdb/cli-test.edn"))
@@ -63,8 +64,8 @@
                    (->system []))))))))
 
 (t/deftest test-env-loading
-  (with-redefs [cli/read-env-var (fn [env-name]
-                                   (when (= (str env-name) "TEST_ENV") "hello world"))]
+  (with-redefs [config/read-env-var (fn [env-name]
+                                      (when (= (str env-name) "TEST_ENV") "hello world"))]
     (letfn [(->system [cli-args]
               (-> (::cli/node-opts (cli/parse-args cli-args))
                   (->> (into {}))))]
