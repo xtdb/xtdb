@@ -32,7 +32,7 @@ public class OrderByDeserializer extends StdDeserializer<Query.OrderBy> {
             case "desc":
                 return Query.OrderDirection.DESC;
             default:
-                throw new IllegalArgumentException("Invalid orderBy direction, must be one of ['asc', 'desc']", PersistentHashMap.create(Keyword.intern("dir"), dir), null);
+                throw IllegalArgumentException.createNoKey("Invalid orderBy direction, must be one of ['asc', 'desc']", PersistentHashMap.create(Keyword.intern("dir"), dir));
         }
     }
 
@@ -46,7 +46,7 @@ public class OrderByDeserializer extends StdDeserializer<Query.OrderBy> {
             case "last":
                 return Query.OrderNulls.LAST;
             default:
-                throw new IllegalArgumentException("Invalid orderBy nulls, must be one of ['first', 'last']", PersistentHashMap.create(Keyword.intern("nulls"), nulls), null);
+                throw IllegalArgumentException.createNoKey("Invalid orderBy nulls, must be one of ['first', 'last']", PersistentHashMap.create(Keyword.intern("nulls"), nulls));
         }
     }
 

@@ -30,7 +30,7 @@ public class UnnestVarDeserializer extends StdDeserializer<Query.UnnestVar> {
 
         JsonNode unnest = node.get("unnest");
         if (!unnest.isObject() || !(unnest.size() == 1)) {
-            throw new IllegalArgumentException("Unnest should be an object with only a single binding", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+            throw IllegalArgumentException.createNoKey("Unnest should be an object with only a single binding", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
         }
         return Query.unnestVar(mapper.treeToValue(unnest, Binding.class));
     }

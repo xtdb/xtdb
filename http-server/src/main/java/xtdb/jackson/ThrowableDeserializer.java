@@ -13,6 +13,8 @@ import xtdb.IllegalArgumentException;
 import xtdb.RuntimeException;
 
 import java.io.IOException;
+import java.security.Key;
+import java.util.Collections;
 import java.util.Map;
 
 class ThrowableDeserializer extends JsonDeserializer<Throwable> {
@@ -27,15 +29,15 @@ class ThrowableDeserializer extends JsonDeserializer<Throwable> {
         String message = messageNode != null ? codec.treeToValue(messageNode, String.class) : null;
 
         var dataNode = tree.get("xtdb.error/data");
-        var data = dataNode != null ? PersistentHashMap.create(codec.treeToValue(dataNode, Map.class)) : PersistentHashMap.EMPTY;
+        var data = dataNode != null ? codec.treeToValue(dataNode, Map.class) : Collections.emptyMap();
 
-        var errorKeyNode = dataNode != null ? dataNode.get("xtdb.error/error-key") : null;
-        var errorKey = errorKeyNode != null ? ((Keyword) codec.treeToValue(errorKeyNode, Object.class)) : null;
+        var errorKeyNode = tree.get("xtdb.error/error-key");
+        var errorKey = errorKeyNode != null ? codec.treeToValue(errorKeyNode, Keyword.class) : null;
 
         return switch (codec.treeToValue(tree.get("xtdb.error/class"), String.class)) {
-            case "xtdb.IllegalArgumentException" -> IllegalArgumentException.create(errorKey, message, data);
-            case "xtdb.RuntimeException" -> RuntimeException.create(errorKey, message, data);
-            default -> new ExceptionInfo(message, data);
+            case "xtdb.IllegalArgumentException" -> new IllegalArgumentException(errorKey, message, data, null);
+            case "xtdb.RuntimeException" -> new RuntimeException(errorKey, message, data, null);
+            default -> new ExceptionInfo(message, PersistentHashMap.create(data));
         };
 
     }

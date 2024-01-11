@@ -252,7 +252,7 @@
                                                ::r.coercion/request-coercion handle-request-coercion-error
                                                :muuntaja/decode handle-muuntaja-decode-error
                                                ::ri.exception/wrap (fn [handler e req]
-                                                                     (log/warn (str "response error: " (ex-message e)))
+                                                                     #_(log/warn (format "response error (%s): '%s'" (class e) (ex-message e)))
                                                                      (let [response-format (:raw-format (:muuntaja/response req))]
                                                                        (cond-> (handler e req)
                                                                          (#{"application/jsonl"} response-format)

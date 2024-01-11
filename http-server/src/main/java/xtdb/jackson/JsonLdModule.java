@@ -6,6 +6,8 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import xtdb.IllegalArgumentException;
+import xtdb.RuntimeException;
 
 import java.io.IOException;
 import java.time.*;
@@ -92,6 +94,20 @@ public class JsonLdModule extends SimpleModule {
             if (v instanceof IExceptionInfo ei) {
                 gen.writeFieldName("xtdb.error/data");
                 gen.writeObject(ei.getData());
+            }
+            if (v instanceof IllegalArgumentException iae) {
+                var k = iae.getKey();
+                if (k != null) {
+                    gen.writeFieldName("xtdb.error/error-key");
+                    gen.writeObject(k.sym.toString());
+                }
+            }
+            if (v instanceof RuntimeException runEx) {
+                var k = runEx.getKey();
+                if (k != null) {
+                    gen.writeFieldName("xtdb.error/error-key");
+                    gen.writeObject(k.sym.toString());
+                }
             }
             gen.writeEndObject();
         });

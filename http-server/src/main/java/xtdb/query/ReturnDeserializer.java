@@ -32,7 +32,7 @@ public class ReturnDeserializer extends StdDeserializer<Query.Return> {
         if (returnNode.isArray()) {
             return Query.returning(SpecListDeserializer.nodeToSpecs(codec, returnNode, Binding::new));
         } else {
-            throw new IllegalArgumentException("Return should be a list of values", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+            throw IllegalArgumentException.createNoKey("Return should be a list of values", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
         }
     }
 }

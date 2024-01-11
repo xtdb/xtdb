@@ -28,7 +28,7 @@ public class LimitDeserializer extends StdDeserializer<Query.Limit> {
 
         JsonNode limitNode = node.get("limit");
         if (!(limitNode.isLong() || limitNode.isInt())) {
-            throw new IllegalArgumentException("Limit should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+            throw IllegalArgumentException.createNoKey("Limit should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
         long limit = limitNode.asLong(); // Parse as long
         return Query.limit(limit);

@@ -20,21 +20,35 @@ class SqlOpDeserializer : StdDeserializer<Sql>(Sql::class.java) {
         val node = mapper.readTree<BaseJsonNode>(p)
 
         if (!node.isObject || !node["sql"].isTextual) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-sql-op"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()))
+            throw IllegalArgumentException(
+                Keyword.intern("xtdb", "malformed-sql-op"),
+                data = mapOf("json" to node.toPrettyString())
+            )
         }
 
         var sql = Sql(node["sql"].asText())
         if (node.has("arg_rows")) {
-            if (!node["arg_rows"].isArray){
-                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-sql-op"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()))
+            if (!node["arg_rows"].isArray) {
+                throw IllegalArgumentException(
+                    Keyword.intern("xtdb", "malformed-sql-op"),
+                    data = PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString())
+                )
             }
             try {
-                sql.withArgs(mapper.treeToValue(node["arg_rows"], mapper.typeFactory.constructCollectionType(List::class.java, List::class.java)) as List<List<*>>).also { sql = it }
-            } catch (e : MismatchedInputException) {
-                throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-sql-op"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()))
+                sql.withArgs(
+                    mapper.treeToValue(
+                        node["arg_rows"],
+                        mapper.typeFactory.constructCollectionType(List::class.java, List::class.java)
+                    ) as List<List<*>>
+                ).also { sql = it }
+            } catch (e: MismatchedInputException) {
+                throw IllegalArgumentException(
+                    Keyword.intern("xtdb", "malformed-sql-op"),
+                    data = PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString())
+                )
             }
         }
 
-        return sql;
+        return sql
     }
 }

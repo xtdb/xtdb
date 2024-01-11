@@ -1,7 +1,6 @@
 package xtdb.jackson
 
 import clojure.lang.Keyword
-import clojure.lang.PersistentHashMap
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer
@@ -17,7 +16,11 @@ class CallDeserializer : StdDeserializer<Call>(Call::class.java) {
         val node = codec.readTree<BaseJsonNode>(p)
 
         if (!node.isObject || !node["args"].isArray) {
-            throw IllegalArgumentException.create(Keyword.intern("xtdb", "malformed-call"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()))
+            throw IllegalArgumentException(
+                Keyword.intern("xtdb", "malformed-call"),
+                data = mapOf("json" to node.toPrettyString())
+            )
+
         }
 
         return Call(codec.treeToValue(node["call"], Any::class.java), codec.treeToValue(node["args"], List::class.java))

@@ -129,21 +129,21 @@
     (t/is (= #{{:tx-id 0,
                 :tx-time #time/zoned-date-time "2012-01-01T00:00Z[UTC]",
                 :committed? true,
-                :err nil}
+                :err [nil nil]}
                {:tx-id 1,
                 :tx-time #time/zoned-date-time "2011-01-01T00:00Z[UTC]",
                 :committed? false,
-                :err {::err/error-type :illegal-argument, ::err/error-key :invalid-system-time
-                      ::err/message "specified system-time older than current tx"
-                      :tx-key #xt/tx-key {:tx-id 1, :system-time #time/instant "2011-01-01T00:00:00Z"},
-                      :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2012-01-01T00:00:00Z"}}}
+                :err ["specified system-time older than current tx"
+                      {::err/error-key :invalid-system-time
+                       :tx-key #xt/tx-key {:tx-id 1, :system-time #time/instant "2011-01-01T00:00:00Z"},
+                       :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2012-01-01T00:00:00Z"}}]}
                {:tx-id 2,
                 :tx-time #time/zoned-date-time "2020-01-03T00:00Z[UTC]",
                 :committed? true,
-                :err nil}}
+                :err [nil nil]}}
              (->> (xt/q *node*
                         '(from :xt/txs [{:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?, :xt/error err}]))
-                  (into #{} (map #(update % :err ex-data))))))))
+                  (into #{} (map #(update % :err (juxt ex-message ex-data)))))))))
 
 (def ^:private devs
   [(xt/put :users {:xt/id :jms, :name "James"})
@@ -588,14 +588,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
              (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
 
     (t/is (= [{:xt/id 2,
-               :xt/error {::err/error-type :runtime-error,
-                          ::err/error-key :xtdb/assert-failed,
-                          ::err/message "Precondition failed: assert-not-exists",
-                          :row-count 1}}]
+               :xt/error ["Precondition failed: assert-not-exists"
+                          {::err/error-key :xtdb/assert-failed,
+                           :row-count 1}]}]
 
              (->> (xt/q tu/*node* '(from :xt/txs [{:xt/committed? false} xt/id xt/error]))
                   (map (fn [row]
-                         (update row :xt/error ex-data)))))))
+                         (update row :xt/error (juxt ex-message ex-data))))))))
 
   (t/testing "assert-exists"
     (xt/submit-tx tu/*node* [(-> (xt/assert-exists '(from :users [{:first-name $name}]))
@@ -612,15 +611,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
              (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
 
     (t/is (= [{:xt/id 3,
-               :xt/error {::err/error-type :runtime-error,
-                          ::err/error-key :xtdb/assert-failed,
-                          ::err/message "Precondition failed: assert-exists",
-                          :row-count 0}}]
+               :xt/error ["Precondition failed: assert-exists"
+                          {::err/error-key :xtdb/assert-failed,
+                           :row-count 0}]}]
 
              (->> (xt/q tu/*node* '(-> (from :xt/txs [{:xt/committed? false} xt/id xt/error])
                                        (where (> xt/id 2))))
                   (map (fn [row]
-                         (update row :xt/error ex-data))))))))
+                         (update row :xt/error (juxt ex-message ex-data)))))))))
 
 (t/deftest test-xtql-with-param-2933
   (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :petr :name "Petr"})])
@@ -636,7 +634,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 
 (t/deftest test-query-with-errors
   (t/is (thrown-with-msg? xtdb.IllegalArgumentException
-                          #"Illegal argument: ':xtql/malformed-table'"
+                          #"Illegal argument: 'xtql/malformed-table'"
                           (xt/q tu/*node* '(from docs [name]))))
 
   (t/is (thrown-with-msg? xtdb.RuntimeException

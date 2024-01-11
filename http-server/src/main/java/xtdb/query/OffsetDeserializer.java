@@ -28,7 +28,7 @@ public class OffsetDeserializer extends StdDeserializer<Query.Offset> {
 
         JsonNode offsetNode = node.get("offset");
         if (!(offsetNode.isLong() || offsetNode.isInt())) {
-            throw new IllegalArgumentException("Offset should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+            throw IllegalArgumentException.createNoKey("Offset should be a valid number", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
         }
         long offset = offsetNode.asLong(); // Parse as long
         return Query.offset(offset);

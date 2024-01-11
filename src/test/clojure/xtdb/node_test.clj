@@ -373,7 +373,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
 
     (t/is (thrown-with-msg?
            RuntimeException
-           #":xtdb\.call/error-evaluating-tx-fn"
+           #"xtdb\.call/error-evaluating-tx-fn"
 
            (throw (-> (xt/q tu/*node*
                             '(from :xt/txs [{:xt/id $tx-id, :xt/error err}])
@@ -550,7 +550,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))")]
 (t/deftest throw-on-unknown-query-type
   (t/is (thrown-with-msg?
          xtdb.IllegalArgumentException
-         #"Illegal argument: ':unknown-query-type'"
+         #"Illegal argument: 'unknown-query-type'"
          (xt/q tu/*node* (Object.)))))
 
 

@@ -1,8 +1,8 @@
 {xt/tx-key xtdb.serde/tx-key-read-fn
  xt/tx-opts xtdb.serde/tx-opts-read-fn
  xt/clj-form xtdb.api/->ClojureForm
- xt/illegal-arg xtdb.error/-iae-reader
- xt/runtime-err xtdb.error/-runtime-err-reader
+ xt/illegal-arg xtdb.serde/iae-reader
+ xt/runtime-err xtdb.serde/runex-reader
 
  xt/period-duration xtdb.serde/period-duration-reader
  xt/interval-ym xtdb.serde/interval-ym-reader

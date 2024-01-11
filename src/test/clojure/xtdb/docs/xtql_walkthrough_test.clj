@@ -648,16 +648,15 @@
         ,]
     (t/is (= ;; tag::DML-Assert-query-result[]
              [{:xt/committed? false
-               :xt/error {::err/error-type :runtime-error
-                          ::err/error-key :xtdb/assert-failed
-                          ::err/message "Precondition failed: assert-not-exists"
-                          :row-count 1}}]
+               :xt/error (err/runtime-err :xtdb/assert-failed
+                                          {::err/message "Precondition failed: assert-not-exists"
+                                           :row-count 1})}]
              ;; end::DML-Assert-query-result[]
              (-> ;; tag::DML-Assert-query[]
                  (xt/q node '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
                       {:args {:tx-id my-tx-id}})
                  ;; end::DML-Assert-query[]
-                 (update-in [0 :xt/error] ex-data)))))
+                 ))))
 
   ;; TODO: Once implemented
   #_
@@ -667,3 +666,4 @@
     (t/is (= [{:xt/committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed?])
                    {:args {:tx-id tx-id}})))))
+

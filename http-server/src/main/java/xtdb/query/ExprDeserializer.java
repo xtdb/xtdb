@@ -31,7 +31,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
         if (node.isObject() && node.has("query") && node.has("bind")) {
             return createSubquery.apply(mapper.treeToValue(node.get("query"), Query.class), SpecListDeserializer.nodeToSpecs(mapper, node.get("bind"), Binding::new));
         } else {
-            throw new IllegalArgumentException("Subquery expects object node with 'q' and 'bind' keys.", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+            throw IllegalArgumentException.createNoKey("Subquery expects object node with 'q' and 'bind' keys.", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
         }
     }
 
@@ -80,7 +80,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
                     List<Expr> args = new ArrayList<>();
                     if (callNode.has("args")) {
                         if (!callNode.get("args").isArray()) {
-                            throw new IllegalArgumentException("Call args need to be a list.", PersistentHashMap.create(Keyword.intern("json"), callNode.toPrettyString()), null);
+                            throw IllegalArgumentException.createNoKey("Call args need to be a list.", PersistentHashMap.create(Keyword.intern("json"), callNode.toPrettyString()), null);
                         }
                         for (JsonNode argSpecNode : callNode.get("args")) {
                             args.add(mapper.treeToValue(argSpecNode, Expr.class));
@@ -88,7 +88,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
                     }
                     return Expr.call(callNode.get("f").asText(), args);
                 } else {
-                    throw new IllegalArgumentException("Call expects object node with 'f' key and optional 'args' key.", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+                    throw IllegalArgumentException.createNoKey("Call expects object node with 'f' key and optional 'args' key.", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
                 }
             }
             if (node.has("xt:lvar")) {

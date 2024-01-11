@@ -31,13 +31,13 @@ public class WithoutDeserializer extends StdDeserializer<Query.Without> {
 
         JsonNode without = node.get("without");
         if (!without.isArray()) {
-            throw new IllegalArgumentException("Without should be a list of strings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+            throw IllegalArgumentException.createNoKey("Without should be a list of strings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
 
         List<String> cols = new ArrayList<>();
         for (JsonNode colNode : without) {
             if (!colNode.isTextual()) {
-                throw new IllegalArgumentException("All items in Without clause must be strings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+                throw IllegalArgumentException.createNoKey("All items in Without clause must be strings", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
             }
             cols.add(colNode.asText());
         }

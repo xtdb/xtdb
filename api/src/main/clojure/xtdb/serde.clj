@@ -178,6 +178,30 @@
   (.write w "#xt/tx-opts ")
   (print-method (tx-opts-write-fn tx-opts) w))
 
+(defn- render-iae [^xtdb.IllegalArgumentException e]
+  [(.getKey e) (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
+
+(defmethod print-dup xtdb.IllegalArgumentException [e, ^Writer w]
+  (.write w (str "#xt/illegal-arg " (render-iae e))))
+
+(defmethod print-method xtdb.IllegalArgumentException [e, ^Writer w]
+  (print-dup e w))
+
+(defn iae-reader [[k message data]]
+  (xtdb.IllegalArgumentException. k message data nil))
+
+(defn- render-runex [^xtdb.RuntimeException e]
+  [(.getKey e) (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
+
+(defmethod print-dup xtdb.RuntimeException [e, ^Writer w]
+  (.write w (str "#xt/runtime-err " (render-runex e))))
+
+(defmethod print-method xtdb.RuntimeException [e, ^Writer w]
+  (print-dup e w))
+
+(defn runex-reader [[k message data]]
+  (xtdb.RuntimeException. k message data nil))
+
 (defmethod print-method TxOptions [tx-opts w]
   (print-dup tx-opts w))
 
@@ -188,8 +212,8 @@
              (update-vals transit/read-handler))
          {"xtdb/clj-form" (transit/read-handler xt/->ClojureForm)
           "xtdb/tx-key" (transit/read-handler tx-key-read-fn)
-          "xtdb/illegal-arg" (transit/read-handler err/-iae-reader)
-          "xtdb/runtime-err" (transit/read-handler err/-runtime-err-reader)
+          "xtdb/illegal-arg" (transit/read-handler iae-reader)
+          "xtdb/runtime-err" (transit/read-handler runex-reader)
           "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
           "xtdb/period-duration" period-duration-reader
           "xtdb.interval/year-month" interval-ym-reader
@@ -229,9 +253,9 @@
              (update-vals #(transit/write-handler % str)))
          {TransactionKey (transit/write-handler "xtdb/tx-key" tx-key-write-fn)
           TxOptions (transit/write-handler "xtdb/tx-opts" tx-opts-write-fn)
-          xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" ex-data)
-          xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" ex-data)
-          clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" #(vector (ex-message %) (ex-data %)))
+          xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
+          xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" render-runex)
+          clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" (juxt ex-message ex-data))
 
           ClojureForm (transit/write-handler "xtdb/clj-form" #(.form ^ClojureForm %))
 

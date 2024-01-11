@@ -34,7 +34,7 @@ public class WhereDeserializer extends StdDeserializer<Query.Where> {
 
         JsonNode where = node.get("where");
         if (!where.isArray()) {
-            throw new IllegalArgumentException("Where should be a list of expressions", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()), null);
+            throw IllegalArgumentException.createNoKey("Where should be a list of expressions", PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
         List<Expr> predicates = new ArrayList<>();
         for (JsonNode predicateNode : where) {

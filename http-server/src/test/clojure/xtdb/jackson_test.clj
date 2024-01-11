@@ -59,7 +59,7 @@
                                "valid_from" #inst "2020"
                                "valid_to" #inst "2021"})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-put'"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-put'"
                             (roundtrip-tx-op
                              {"put" "docs"
                               "doc" "blob"
@@ -90,7 +90,7 @@
                                "valid_from" #inst "2020"
                                "valid_to" #inst "2021"})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-delete'"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-delete'"
                             (roundtrip-tx-op
                              {"delete" "docs"
                               "id" "my-id"
@@ -107,7 +107,7 @@
                                "id" :keyword-id})))
 
     ;; TODO: Add some unsupported type in here
-    ;; (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-erase"
+    ;; (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-erase"
     ;;                         (roundtrip-tx-op
     ;;                          {"erase" "docs"
     ;;                           "id" "my-id"})))
@@ -124,7 +124,7 @@
              (roundtrip-tx-op {"call" "my-fn"
                                "args" ["args"]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-call"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-call"
                             (roundtrip-tx-op
                              {"call" "my-fn"
                               "args" {"not" "a-list"}}))))
@@ -137,7 +137,7 @@
              (roundtrip-tx-op {"sql" "INSERT INTO docs (xt$id, foo) VALUES (?, ?)"
                                "arg_rows" [[1 "bar"] [2 "toto"]]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-sql-op"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-sql-op"
                             (roundtrip-tx-op
                              {"sql" "INSERT INTO docs (xt$id, foo) VALUES (?, ?)"
                               "arg_rows" [1 "bar"]})))))
@@ -167,7 +167,7 @@
                                         "default_tz" #time/zone "America/Los_Angeles"}}))
         "transaction options")
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-tx-ops'"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-tx-ops'"
                           (roundtrip-tx {"tx_ops" {"put" "docs"
                                                    "doc" {"xt/id" "my-id"}}}))
         "put not wrapped throws"))
@@ -255,7 +255,7 @@
 (deftest deserialize-temporal-filter-test
   (t/is (= TemporalFilter/ALL_TIME (roundtrip-temporal-filter "all_time"))
         "all-time")
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-temporal-filter'"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtql/malformed-temporal-filter'"
                           (roundtrip-temporal-filter "all_times"))
         "all-time (wrong format)")
 
@@ -295,7 +295,7 @@
                              "for_system_time" "all_time"}))
         "from with temporal bounds")
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-spec'"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-spec'"
                           (roundtrip-query {"from" "docs"
                                             "bind" "xt/id"}))
         "bind not an array")
@@ -414,7 +414,7 @@
              (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"xt:call" {"f" "sum"
                                                                           "args" [1]}}}]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtdb/malformed-spec'"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtdb/malformed-spec'"
                             (roundtrip-query-tail {"aggregate" "a"}))
           "should fail when not a list")))
 
@@ -456,7 +456,7 @@
                                         {"rel" {"xt:param" "bar"}
                                          "bind" ["foo"]}]}))))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/malformed-unify"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtql/malformed-unify"
                           (roundtrip-unify {"unify" "foo"}))
         "unify value not an array"))
 
@@ -492,6 +492,6 @@
                                                  "explain" true
                                                  "key_fn" "clojure"}}))))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: ':xtql/missing-query"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtql/missing-query"
                           (roundtrip-query-map {"explain" true}))
         "query map without query"))

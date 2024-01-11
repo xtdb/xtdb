@@ -165,10 +165,8 @@
           body (decode-json body)]
       (t/is (= 400 status))
       (t/is (instance? xtdb.IllegalArgumentException body))
-      (t/is (= "Illegal argument: ':xtql/malformed-table'" (ex-message body)))
-      (t/is (= {:xtdb.error/error-type :illegal-argument,
-                :xtdb.error/error-key :xtql/malformed-table,
-                :xtdb.error/message "Illegal argument: ':xtql/malformed-table'",
+      (t/is (= "Illegal argument: 'xtql/malformed-table'" (ex-message body)))
+      (t/is (= {:xtdb.error/error-key :xtql/malformed-table,
                 :table "docs",
                 :from ["from" "docs" ["name"]]} (ex-data body)))))
 
@@ -185,9 +183,7 @@
       (t/is (= 200 status))
       (t/is (instance? xtdb.RuntimeException body))
       (t/is (= "data exception — division by zero" (ex-message body)))
-      (t/is (= {:xtdb.error/error-type :runtime-error,
-                :xtdb.error/error-key :xtdb.expression/division-by-zero,
-                :xtdb.error/message "data exception — division by zero"}
+      (t/is (= {:xtdb.error/error-key :xtdb.expression/division-by-zero}
                (ex-data body)))))
 
   (t/testing "unknown runtime error"
@@ -296,11 +292,9 @@
                            :throw-exceptions? false})
             body (decode-transit body)]
         (t/is (= 400 status))
-        (t/is (= "Illegal argument: ':xtql/malformed-tx-op'" (ex-message body)))
-        (t/is (= {:xtdb.error/error-type :illegal-argument
-                  :xtdb.error/error-key :xtql/malformed-tx-op
-                  :xtdb.error/message "Illegal argument: ':xtql/malformed-tx-op'"}
-                 (-> (ex-data body) (select-keys [::err/error-type ::err/error-key ::err/message]))))))
+        (t/is (= "Illegal argument: 'xtql/malformed-tx-op'" (ex-message body)))
+        (t/is (= {::err/error-key :xtql/malformed-tx-op}
+                 (-> (ex-data body) (select-keys [::err/error-key]))))))
 
     (t/testing "malformed query request (see xt:instat)"
       (let [{:keys [status body] :as _resp}
@@ -316,11 +310,9 @@
                            :throw-exceptions? false})
             body (decode-transit body)]
         (t/is (= 400 status))
-        (t/is (= "Illegal argument: ':xtql/malformed-tx-key'" (ex-message body)))
-        (t/is (= {:xtdb.error/error-type :illegal-argument
-                  :xtdb.error/error-key :xtql/malformed-tx-key
-                  :xtdb.error/message "Illegal argument: ':xtql/malformed-tx-key'"}
-                 (-> (ex-data body) (select-keys [::err/error-type ::err/error-key ::err/message]))))))))
+        (t/is (= "Illegal argument: 'xtql/malformed-tx-key'" (ex-message body)))
+        (t/is (= {:xtdb.error/error-key :xtql/malformed-tx-key}
+                 (-> (ex-data body) (select-keys [::err/error-key]))))))))
 
 (deftest json-both-ways-test
   (t/is (= [{:foo_bar 1} {:foo_bar 2}]

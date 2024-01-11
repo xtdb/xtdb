@@ -134,7 +134,7 @@
 
       (t/is (= 0 (foo-version)))
       (t/is (thrown-with-msg? RuntimeException
-                              #":xtdb.call/no-such-tx-fn"
+                              #"xtdb.call/no-such-tx-fn"
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "invalid results"
@@ -154,7 +154,7 @@
       (t/is (= 0 (foo-version)))
 
       (t/is (thrown-with-msg? RuntimeException
-                              #":xtdb.call/invalid-tx-fn"
+                              #"xtdb.call/invalid-tx-fn"
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "not a fn"
@@ -164,7 +164,7 @@
       (t/is (= 0 (foo-version)))
 
       (t/is (thrown-with-msg? RuntimeException
-                              #":xtdb.call/invalid-tx-fn"
+                              #"xtdb.call/invalid-tx-fn"
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "compilation errors"
@@ -173,7 +173,7 @@
                                (xt/call :assoc-version :fail)])
 
       (t/is (= 0 (foo-version)))
-      (t/is (thrown-with-msg? RuntimeException #":xtdb.call/error-compiling-tx-fn"
+      (t/is (thrown-with-msg? RuntimeException #"xtdb.call/error-compiling-tx-fn"
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "exception thrown"
@@ -187,7 +187,7 @@
         (xt/submit-tx tu/*node* [(xt/call :exception-fn)
                                  (xt/call :assoc-version :fail)])
         (t/is (= 0 (foo-version)))
-        (t/is (thrown-with-msg? RuntimeException #":xtdb.call/error-evaluating-tx-fn"
+        (t/is (thrown-with-msg? RuntimeException #"xtdb.call/error-evaluating-tx-fn"
                                 (some-> (idx/reset-tx-fn-error!) throw)))))
 
     (t/testing "still working after all these errors"
@@ -265,9 +265,8 @@
   (xt/submit-tx tu/*node* [(xt/put-fn :my-fn '(fn [] (q "SELECT t1.foo FROM foo")))
                            (xt/call :my-fn)])
 
-  (t/is (= "Runtime error: ':xtdb.call/error-evaluating-tx-fn'"
+  (t/is (= "Runtime error: 'xtdb.call/error-evaluating-tx-fn'"
            (-> (xt/q tu/*node* '(from :xt/txs [{:xt/error error}]))
                first
                :error
-               ex-data
-               ::err/message))))
+               ex-message))))

@@ -25,7 +25,7 @@
 
 (defn- handle-err [e]
   (throw (or (when-let [body (:body (ex-data e))]
-               (when (::err/error-type (ex-data body))
+               (when (ex-data body)
                  body))
              e)))
 

@@ -536,8 +536,9 @@
                             (.endList this-wtr)))
                         pos))))
                 :else
-                (throw (err/illegal-arg (format "Can not copy from vector of %s to ListVector"
-                                                (pr-str (.getFieldType (.getField src-vec))))))))
+                (throw (err/illegal-arg ::invalid-copy-src-vector
+                                        {::err/message (format "Can not copy from vector of %s to ListVector"
+                                                               (pr-str (.getFieldType (.getField src-vec))))}))))
 
             (writerPosition [_] wp)
             (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -641,8 +642,9 @@
                           (.endStruct this-wtr)))
                       pos))))
               :else
-              (throw (err/illegal-arg (format "Can not copy from vector of %s to StructVector"
-                                              (pr-str (.getFieldType (.getField src-vec))))))))
+              (throw (err/illegal-arg ::invalid-copy-src-vector
+                                      {::err/message (format "Can not copy from vector of %s to StructVector"
+                                                             (pr-str (.getFieldType (.getField src-vec))))}))))
 
           (writerPosition [_] wp)
 

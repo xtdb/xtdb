@@ -74,7 +74,8 @@ class JsonLdModuleTest {
                   "@value": {
                     "xtdb.error/message": "sort your request out!",
                     "xtdb.error/class": "xtdb.IllegalArgumentException",
-                    "xtdb.error/data": { "xtdb.error/error-key": {"@value": "xtdb/malformed-req", "@type": "xt:keyword"}, "a": 1 }}
+                    "xtdb.error/error-key": "xtdb/malformed-req",
+                    "xtdb.error/data": { "a": 1 }}
                   }
                 }
                 """;
@@ -82,10 +83,11 @@ class JsonLdModuleTest {
         System.out.println(objectMapper.readValue(json, Object.class));
 
         assertEquals(
-                IllegalArgumentException.create(
+                new IllegalArgumentException(
                         Keyword.intern("xtdb", "malformed-req"),
                         "sort your request out!",
-                        PersistentHashMap.create(Keyword.intern("a"), 1)),
+                        PersistentHashMap.create(Keyword.intern("a"), 1),
+                        null),
                 objectMapper.readValue(json, Object.class));
     }
 
@@ -97,16 +99,18 @@ class JsonLdModuleTest {
                   "@value": {
                     "xtdb.error/message": "ruh roh.",
                     "xtdb.error/class": "xtdb.RuntimeException",
-                    "xtdb.error/data": { "xtdb.error/error-key": {"@value": "xtdb/boom", "@type": "xt:keyword"}, "a": 1 }}
+                    "xtdb.error/error-key": "xtdb/boom",
+                    "xtdb.error/data": { "a": 1 }}
                   }
                 }
                 """;
 
         assertEquals(
-                RuntimeException.create(
+                new RuntimeException(
                         Keyword.intern("xtdb", "boom"),
                         "ruh roh.",
-                        PersistentHashMap.create(Keyword.intern("a"), 1)),
+                        PersistentHashMap.create(Keyword.intern("a"), 1),
+                        null),
                 objectMapper.readValue(json, Object.class));
     }
 }

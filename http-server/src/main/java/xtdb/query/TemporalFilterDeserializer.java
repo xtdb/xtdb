@@ -49,7 +49,7 @@ public class TemporalFilterDeserializer extends StdDeserializer<TemporalFilter> 
             if (node.has("in")) {
                 var inNode = node.get("in");
                 if (!inNode.isArray() || inNode.size() != 2) {
-                    throw new IllegalArgumentException("In TemporalFilter expects array of 2 timestamps", PersistentHashMap.create(Keyword.intern("json"), node.get("in").toPrettyString()), null);
+                    throw IllegalArgumentException.createNoKey("In TemporalFilter expects array of 2 timestamps", PersistentHashMap.create(Keyword.intern("json"), node.get("in").toPrettyString()), null);
                 }
                 List<Expr> exprs = mapper.treeToValue(inNode, mapper.getTypeFactory().constructCollectionType(List.class, Expr.class));
                 return TemporalFilter.in(exprs.get(0), exprs.get(1));

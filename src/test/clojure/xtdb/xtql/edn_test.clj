@@ -258,7 +258,7 @@
                                    (from :bar [{:xt/id $bar-id, :foo foo}])))))
 
   (t/is (thrown-with-msg?
-          xtdb.IllegalArgumentException #"Illegal argument: ':xtql/malformed-bind'"
+          xtdb.IllegalArgumentException #"Illegal argument: 'xtql/malformed-bind'"
           (roundtrip-dml '(update :foo {:bind {:not-a vector}
                                         :set {:version (inc v)}})))))
 
