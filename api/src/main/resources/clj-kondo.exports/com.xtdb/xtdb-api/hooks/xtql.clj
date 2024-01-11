@@ -83,15 +83,18 @@
                  :message "unrecognized source operation"
                  :type :xtql/unrecognized-operation))))))
 
+(defn lint-not-arg-symbol [node]
+  (when (= \$ (-> node node-symbol str first))
+    (api/reg-finding!
+      (assoc (meta node)
+             :message "unexpected parameter in binding"
+             :type :xtql/unrecognized-parameter))))
+
 (defn lint-bind [node]
   (cond
     (node-symbol? node)
-    (when (= \$ (-> node node-symbol str first))
-      (api/reg-finding!
-        ;; TODO: Make own type, should really be a warning
-        (assoc (meta node)
-               :message "unexpected parameter in binding"
-               :type :xtql/unrecognized-parameter)))
+    ;; TODO: Make own type, should really be a warning
+    (lint-not-arg-symbol node)
 
     (node-map? node)
     (doseq [[k _v] (map-children node)]
@@ -199,6 +202,78 @@
           (assoc (some-> node :children first meta)
                  :message "unrecognized tail operation"
                  :type :xtql/unrecognized-operation))))))
+
+(defmethod lint-tail-op 'order-by [node]
+  (doseq [opts (-> node :children rest)]
+    (cond
+      ;; TODO: Detect symbols starting w/ $
+      (node-symbol? opts)
+      (lint-not-arg-symbol opts)
+      ;; TODO
+      (node-map? opts)
+      (let [kvs (map-children opts)
+            ks (->> kvs
+                    (map first)
+                    (map api/sexpr)
+                    (filter keyword?)
+                    (into #{}))]
+        (when-not (contains? ks :val)
+          (api/reg-finding!
+            (assoc (meta opts)
+                   :message "Missing :val parameter"
+                   :type :xtql/missing-parameter)))
+        (doseq [[k v] kvs]
+          (when-not (node-keyword? k)
+            (api/reg-finding!
+              (assoc (meta k)
+                     :message "All keys in 'opts' must be keywords"
+                     :type :xtql/type-mismatch)))
+          (case (node-keyword k)
+            :val
+            (cond
+              (node-symbol? v)
+              (lint-not-arg-symbol v)
+              (node-keyword? v)
+              (api/reg-finding!
+                (assoc (meta v)
+                       :message "expected :val value to be a symbol or an expression"
+                       :type :xtql/type-mismatch)))
+              ; else do nothing
+            ;; TODO
+            :dir
+            (if-let [dir (node-keyword v)]
+              (when-not (contains? #{:asc :desc} dir)
+                (api/reg-finding!
+                  (assoc (meta v)
+                         :message "expected :dir value to be :asc or :desc"
+                         :type :xtql/type-mismatch)))
+              (api/reg-finding!
+                (assoc (meta v)
+                       :message "expected :dir value be a keyword"
+                       :type :xtql/type-mismatch)))
+            ;; TODO
+            :nulls 
+            (if-let [dir (node-keyword v)]
+              (when-not (contains? #{:first :last} dir)
+                (api/reg-finding!
+                  (assoc (meta v)
+                         :message "expected :nulls value to be :first or :last"
+                         :type :xtql/type-mismatch)))
+              (api/reg-finding!
+                (assoc (meta v)
+                       :message "expected :nulls value be a keyword"
+                       :type :xtql/type-mismatch)))
+            ; else
+            (api/reg-finding!
+              (assoc (meta k)
+                     :message "unrecognized parameter"
+                     :type :xtql/unrecognized-parameter)))))
+
+      :else
+      (api/reg-finding!
+        (assoc opts
+               :message "opts must be a symbol or map"
+               :type :xtql/type-mismatch)))))
 
 (defn lint-pipeline [node]
   (let [ops (some-> node :children rest)]

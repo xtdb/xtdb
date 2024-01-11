@@ -26,6 +26,8 @@
        (map :type)
        (into #{})))
 
+;; TODO: Run queries through the xt parser as well
+
 (t/deftest redundant-pipeline
   (t/is (contains? (finding-types '(-> (from :docs [xt/id])))
                    :xtql/redundant-pipeline)))
@@ -111,6 +113,39 @@
       (t/is (contains? (finding-types '(from :docs {:bind xt/id}))
                        :xtql/type-mismatch))))
 
+  (t/testing "order-by"
+    (t/testing "opts must be a symbol or map"
+      (t/is (= #{} (finding-types '(-> (from :docs [xt/id name])
+                                       (order-by {:val xt/id
+                                                  :dir :asc
+                                                  :nulls :first}
+                                                 name)))))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id name])
+                                           (order-by :xt/id name)))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (order-by [xt/id name])))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (order-by {:val :xt/id})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (order-by {:val xt/id
+                                                      :dir x})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (order-by {:val xt/id
+                                                      :dir :x})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (order-by {:val xt/id
+                                                      :nulls x})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (order-by {:val xt/id
+                                                      :nulls :x})))
+                       :xtql/type-mismatch))))
+
   (t/testing "binding"
     (t/testing "bindings must be a symbol or map"
       (t/is (contains? (finding-types '(from :docs [:test]))
@@ -130,6 +165,11 @@
     (t/is (contains? (finding-types '(from :docs {:test 1}))
                      :xtql/unrecognized-parameter))
     (t/is (contains? (finding-types '(from :docs [$xt/id]))
+                     :xtql/unrecognized-parameter)))
+
+  (t/testing "order-by"
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (order-by {:something xt/id})))
                      :xtql/unrecognized-parameter))))
 
 (t/deftest missing-parameter
