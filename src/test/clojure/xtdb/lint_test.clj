@@ -411,3 +411,23 @@
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                            (return {1 xt/id})))
                        :xtql/type-mismatch)))))
+
+(t/deftest without
+  (t/testing "expected at least one argument"
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (without)))
+                     :xtql/invalid-arity)))
+
+  (t/testing "columns are keywords"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (without :a :b)))
+             #{}))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (without a b)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (without {:a xt/id})))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (without [:a :b])))
+                     :xtql/type-mismatch))))

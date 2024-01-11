@@ -387,6 +387,21 @@
                :message "opts must be a symbol or map"
                :type :xtql/type-mismatch)))))
 
+(defmethod lint-tail-op 'without [node]
+  (let [columns (-> node :children rest)]
+    (when-not (> (count columns) 1)
+      ;; TODO: Should be a warning really
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected at least one column"
+               :type :xtql/invalid-arity)))
+    (doseq [column columns]
+      (when-not (node-keyword? column)
+        (api/reg-finding!
+          (assoc (meta column)
+                 :message "expected column to be a keyword"
+                 :type :xtql/type-mismatch))))))
+
 (defn lint-pipeline [node]
   (let [[_ & ops] (some-> node :children)]
     (doseq [bad-op (remove node-list? ops)]
