@@ -3,7 +3,8 @@
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.cli :as cli]
-            [xtdb.config :as config]))
+            [xtdb.config :as config]
+            [clojure.data.json :as json]))
 
 (def xtdb-cli-edn
   (io/resource "xtdb/cli-test.edn"))
@@ -97,3 +98,23 @@
       (t/testing "JSON config - edn object fetched from env"
         (t/is (= {::foo "hello world"}
                  (->system ["--json" "{\"xtdb.cli-test/foo\": {\"@env\": \"TEST_ENV\"}}"])))))))
+(defmethod ig/init-key ::bar [_ opts] opts)
+
+(t/deftest test-ref-handling
+  (letfn [(->system [cli-args]
+            (-> (::cli/node-opts (cli/parse-args cli-args))
+                ig/prep
+                ig/init
+                (->> (into {}))))]
+    
+    (t/testing "EDN config - #ig/ref reader tag correctly includes ref"
+      (t/is (= {::foo {:baz 1}
+                ::bar {:foo {:baz 1}}}
+               (->system ["--edn" "{:xtdb.cli-test/foo {:baz 1}
+                                    :xtdb.cli-test/bar {:foo #ig/ref :xtdb.cli-test/foo}}"]))))
+    
+    (t/testing "JSON config - ref object correctly includes ref"
+      (t/is (= {::foo {:baz 1}
+                ::bar {:foo {:baz 1}}}
+               (->system ["--json" "{\"xtdb.cli-test/foo\": {\"baz\": 1},
+                                     \"xtdb.cli-test/bar\": {\"foo\": {\"@ref\": \"xtdb.cli-test/foo\"}}}"]))))))
