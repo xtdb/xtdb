@@ -9,6 +9,9 @@
 (defn read-env-var [env-var]
   (System/getenv (str env-var)))
 
+(defn read-ig-ref [ref]
+  (ig/ref (keyword ref)))
+
 (defn edn-read-string [edn-string]
   (ig/read-string {:readers {'env read-env-var}}
                   edn-string))
@@ -16,12 +19,13 @@
 (defn json-read-string [json-string]
   (walk/postwalk
    (fn [item]
-     (let [env-key (keyword "@env")]
+     (let [env-key (keyword "@env")
+           ref-key (keyword "@ref")]
        (cond
          (env-key item) (read-env-var (env-key item))
+         (ref-key item) (read-ig-ref (ref-key item))
          :else item)))
    (json/read-str json-string :key-fn keyword)))
-
 
 (defn- read-opts-from-file [^File f]
   (let [file-extension (util/file-extension f)]
