@@ -72,6 +72,9 @@
 (defmethod lint-unify-clause 'from [node]
   (lint-source-op node))
 
+(defmethod lint-unify-clause 'rel [node]
+  (lint-source-op node))
+
 (defmethod lint-unify-clause 'with [node]
   (let [opts (-> node :children rest)]
     (when-not (> (count opts) 1)
