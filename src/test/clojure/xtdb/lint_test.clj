@@ -310,6 +310,9 @@
   (t/testing "tail operator"
     (t/testing "number of args"
       (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                   (with a)))
+               #{}))
+      (t/is (= (finding-types '(-> (from :docs [xt/id])
                                    (with a b)))
                #{}))
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
@@ -377,12 +380,16 @@
                          :xtql/type-mismatch))))))
 
 (t/deftest return
-  (t/is (= (finding-types '(-> (from :docs [xt/id])
-                               (return a b)))
-           #{}))
-  (t/is (contains? (finding-types '(-> (from :docs [xt/id])
-                                       (return)))
-                   :xtql/invalid-arity))
+  (t/testing "number of args"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (return a)))
+             #{}))
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (return a b)))
+             #{}))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (return)))
+                     :xtql/invalid-arity)))
 
   (t/testing "opts must be either symbols or maps"
     (t/is (= (finding-types '(-> (from :docs [xt/id])
@@ -414,6 +421,12 @@
 
 (t/deftest without
   (t/testing "expected at least one argument"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (without :a)))
+             #{}))
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (without :a :b)))
+             #{}))
     (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                          (without)))
                      :xtql/invalid-arity)))
@@ -434,6 +447,12 @@
 
 (t/deftest aggregate
   (t/testing "expected at least one argument"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (aggregate a)))
+             #{}))
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (aggregate a b)))
+             #{}))
     (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                          (aggregate)))
                      :xtql/invalid-arity)))

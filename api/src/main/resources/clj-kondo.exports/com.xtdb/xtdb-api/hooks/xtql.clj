@@ -106,7 +106,7 @@
 
 (defmethod lint-unify-clause 'with [node]
   (let [opts (-> node :children rest)]
-    (when-not (> (count opts) 1)
+    (when-not (>= (count opts) 1)
       (api/reg-finding!
         (assoc (meta node)
                :message "expected at least one argument"
@@ -366,7 +366,7 @@
 
 (defmethod lint-tail-op 'with [node]
   (let [opts (-> node :children rest)]
-    (when-not (> (count opts) 1)
+    (when-not (>= (count opts) 1)
       (api/reg-finding!
         (assoc (meta node)
                :message "expected at least one argument"
@@ -393,7 +393,7 @@
 
 (defmethod lint-tail-op 'return [node]
   (let [opts (-> node :children rest)]
-    (when-not (> (count opts) 1)
+    (when-not (>= (count opts) 1)
       (api/reg-finding!
         (assoc (meta node)
                :message "expected at least one argument"
@@ -475,7 +475,7 @@
 
 (defmethod lint-tail-op 'without [node]
   (let [columns (-> node :children rest)]
-    (when-not (> (count columns) 1)
+    (when-not (>= (count columns) 1)
       ;; TODO: Should be a warning really
       (api/reg-finding!
         (assoc (meta node)
@@ -490,7 +490,7 @@
 
 (defmethod lint-tail-op 'aggregate [node]
   (let [opts (-> node :children rest)]
-    (when-not (> (count opts) 1)
+    (when-not (>= (count opts) 1)
       (api/reg-finding!
         (assoc (meta node)
                :message "expected at least one argument"
