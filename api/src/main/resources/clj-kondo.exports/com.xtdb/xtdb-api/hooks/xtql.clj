@@ -174,17 +174,12 @@
                  (assoc (meta unify-node)
                         :message "redundant unify"
                         :type :xtql/redundant-unify))
-          rel (do
-                (api/reg-finding!
-                  (assoc (meta unify-node)
-                         :message "redundant unify"
-                         :type :xtql/redundant-unify)))
+          rel (api/reg-finding!
+                (assoc (meta unify-node)
+                       :message "redundant unify"
+                       :type :xtql/redundant-unify))
           ;; TODO: Cover other operators
-          ;; Already covered in lint-unify-cluse
           nil)))
-      ;; What cases?
-      ;; Single source op, in which case warn
-      ;; Single unify clause that isn't source op
     (->> clauses
          (filter node-list?)
          (run! lint-unify-clause))))
@@ -206,10 +201,9 @@
 (defmethod lint-tail-op 'order-by [node]
   (doseq [opts (-> node :children rest)]
     (cond
-      ;; TODO: Detect symbols starting w/ $
       (node-symbol? opts)
       (lint-not-arg-symbol opts)
-      ;; TODO
+
       (node-map? opts)
       (let [kvs (map-children opts)
             ks (->> kvs
@@ -239,7 +233,6 @@
                        :message "expected :val value to be a symbol or an expression"
                        :type :xtql/type-mismatch)))
               ; else do nothing
-            ;; TODO
             :dir
             (if-let [dir (node-keyword v)]
               (when-not (contains? #{:asc :desc} dir)
@@ -251,7 +244,6 @@
                 (assoc (meta v)
                        :message "expected :dir value be a keyword"
                        :type :xtql/type-mismatch)))
-            ;; TODO
             :nulls 
             (if-let [dir (node-keyword v)]
               (when-not (contains? #{:first :last} dir)
@@ -290,9 +282,10 @@
     (let [first-op (first ops)]
       (when (node-list? first-op)
         (lint-source-op (first ops))))
-    (run! lint-tail-op (->> ops
-                            (drop 1)
-                            (filter node-list?)))))
+    (->> ops
+         (drop 1)
+         (filter node-list?)
+         (run! lint-tail-op))))
 
 (defn lint-query [node]
   (let [quoted-query (api/sexpr node)]

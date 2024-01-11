@@ -26,27 +26,70 @@
        (map :type)
        (into #{})))
 
-;; TODO: Run queries through the xt parser as well
+;; TODO: Also run queries through the xt parser to test it's valid
 
-(t/deftest redundant-pipeline
-  (t/is (contains? (finding-types '(-> (from :docs [xt/id])))
-                   :xtql/redundant-pipeline)))
+(t/deftest top-level-query
+  (t/testing "top level must be pipeline or valid source op"
+    (t/testing "invalid source op"
+      (t/is (contains? (finding-types '(my-op 1))
+                       :xtql/unrecognized-operation)))
+    (t/testing "tail op in wrong position"
+      (t/is (contains? (finding-types '(limit 1))
+                       :xtql/unrecognized-operation)))))
 
-(t/deftest redundant-unify
-  (t/is (contains? (finding-types '(unify (from :docs [xt/id])))
-                   :xtql/redundant-unify))
-  (t/is (contains? (finding-types '(unify (rel [{:a 1} {:a 2}] [a])))
-                   :xtql/redundant-unify)))
+(t/deftest pipeline
+  (t/testing "all operations must be lists"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (limit 1)))
+             #{}))
+    (t/is (contains? (finding-types '(-> :test))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         :test))
+                     :xtql/type-mismatch)))
 
-(t/deftest unrecognized-operation
-  (t/testing "non existing operations"
-    (t/is (contains? (finding-types '(my-op 1))
-                     :xtql/unrecognized-operation))
+  (t/testing "redundant pipeline"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (limit 10)))
+             #{}))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])))
+                     :xtql/redundant-pipeline)))
+
+  (t/testing "non existant operations"
     (t/is (contains? (finding-types '(-> (my-op 1)))
                      :xtql/unrecognized-operation))
     (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                          (my-op 1)))
+                     :xtql/unrecognized-operation)))
+
+  (t/testing "ops in wrong positions"
+    (t/is (contains? (finding-types '(-> (limit 1)))
                      :xtql/unrecognized-operation))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (from :other [xt/id])))
+                     :xtql/unrecognized-operation))))
+
+(t/deftest unify
+  (t/testing "all operations must be lists"
+    (t/is (= (finding-types '(unify (from :t1 [xt/id])
+                                    (from :t2 [xt/id])))
+             #{}))
+    (t/is (contains? (finding-types '(unify :test))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(unify (from :docs [xt/id])
+                                            :test))
+                     :xtql/type-mismatch)))
+
+  (t/testing "redundant unify"
+    (t/is (= (finding-types '(unify (join (from :docs [xt/id])
+                                          [xt/id])))
+             #{}))
+    (t/is (contains? (finding-types '(unify (from :docs [xt/id])))
+                     :xtql/redundant-unify))
+    (t/is (contains? (finding-types '(unify (rel [{:a 1} {:a 2}] [a])))
+                     :xtql/redundant-unify)))
+
+  (t/testing "non existing operations"
     (t/is (contains? (finding-types '(unify (my-op 1)))
                      :xtql/unrecognized-operation))
     (t/is (contains? (finding-types '(unify (from :docs [xt/id])
@@ -54,18 +97,11 @@
                      :xtql/unrecognized-operation)))
 
   (t/testing "ops in wrong positions"
-    (t/is (contains? (finding-types '(limit 1))
-                     :xtql/unrecognized-operation))
-    (t/is (contains? (finding-types '(-> (limit 1)))
-                     :xtql/unrecognized-operation))
-    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
-                                         (from :other [xt/id])))
-                     :xtql/unrecognized-operation)))
-
-  (t/testing "unify clauses"
     (t/is (= (finding-types '(unify (from :t1 [xt/id])
                                     (from :t2 [xt/id])))
              #{}))
+    (t/is (contains? (finding-types '(unify (foo)))
+                     :xtql/unrecognized-operation))
     (t/is (contains? (finding-types '(unify (limit 1)))
                      :xtql/unrecognized-operation))
     (t/is (contains? (finding-types '(unify (from :docs [xt/id])
@@ -75,60 +111,104 @@
                                          (limit 1)))
                      :xtql/unrecognized-operation))))
 
-(t/deftest type-mismatch
-  (t/testing "pipeline"
-    (t/testing "all operations must be lists"
-      (t/is (= (finding-types '(-> (from :docs [xt/id])
-                                   (limit 1)))
-               #{}))
-      (t/is (contains? (finding-types '(-> :test))
-                       :xtql/type-mismatch))
-      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
-                                           :test))
-                       :xtql/type-mismatch))))
+(t/deftest from
+  (t/testing "table must be a keyword"
+    (t/is (= (finding-types '(from :docs [xt/id]))
+             #{}))
+    (t/is (contains? (finding-types '(from docs [xt/id]))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(from 1 [xt/id]))
+                     :xtql/type-mismatch)))
 
-  (t/testing "unify"
-    (t/testing "all operations must be lists"
-      (t/is (= (finding-types '(unify (from :t1 [xt/id])
-                                      (from :t2 [xt/id])))
-               #{}))
-      (t/is (contains? (finding-types '(unify :test))
-                       :xtql/type-mismatch))
-      (t/is (contains? (finding-types '(unify (from :docs [xt/id])
-                                              :test))
-                       :xtql/type-mismatch))))
+  (t/testing "opts must be a vector or map"
+    (t/is (= #{} (finding-types '(from :docs [xt/id]))))
+    (t/is (= #{} (finding-types '(from :docs {:bind [xt/id]}))))
+    (t/is (contains? (finding-types '(from :docs xt/id))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(from :docs {:bind xt/id}))
+                     :xtql/type-mismatch)))
 
-  (t/testing "from"
-    (t/testing "table must be a keyword"
-      (t/is (contains? (finding-types '(from docs [xt/id]))
+  (t/testing "bindings"
+    (t/testing "must be a symbol or map"
+      (t/is (= (finding-types '(from :docs [test]))
+               #{}))
+      (t/is (= (finding-types '(from :docs [{:test 1}]))
+               #{}))
+      (t/is (= (finding-types '(from :docs {:bind [test]}))
+               #{}))
+      (t/is (= (finding-types '(from :docs {:bind [{:test 1}]}))
+               #{}))
+      (t/is (contains? (finding-types '(from :docs [:test]))
                        :xtql/type-mismatch))
-      (t/is (contains? (finding-types '(from 1 [xt/id]))
+      (t/is (contains? (finding-types '(from :docs {:bind [:test]}))
                        :xtql/type-mismatch)))
 
-    (t/testing "opts must be a vector or map"
-      (t/is (= #{} (finding-types '(from :docs [xt/id]))))
-      (t/is (= #{} (finding-types '(from :docs {:bind [xt/id]}))))
-      (t/is (contains? (finding-types '(from :docs xt/id))
-                       :xtql/type-mismatch))
-      (t/is (contains? (finding-types '(from :docs {:bind xt/id}))
+    (t/testing "symbols should not be argument variables"
+      (t/is (contains? (finding-types '(from :docs [$xt/id]))
+                       :xtql/unrecognized-parameter)))
+
+    (t/testing "map bindings must contain only keywords"
+      (t/is (= (finding-types '(from :docs [{:name "jim"}]))
+               #{}))
+      (t/testing "qualified keywords work"
+        (t/is (= (finding-types '(from :docs [{:xt/id 1}]))
+                 #{})))
+      (t/is (contains? (finding-types '(from :docs [{not-kw 1}]))
                        :xtql/type-mismatch))))
 
-  (t/testing "order-by"
-    (t/testing "opts must be a symbol or map"
-      (t/is (= #{} (finding-types '(-> (from :docs [xt/id name])
-                                       (order-by {:val xt/id
-                                                  :dir :asc
-                                                  :nulls :first}
-                                                 name)))))
-      (t/is (contains? (finding-types '(-> (from :docs [xt/id name])
-                                           (order-by :xt/id name)))
-                       :xtql/type-mismatch))
+  (t/testing "map opts"
+    (t/testing "missing :bind"
+      (t/is (contains? (finding-types '(from :docs {}))
+                       :xtql/missing-parameter)))
+
+    (t/testing "must contain only keywords"
+      (t/is (contains? (finding-types '(from :docs {:bind [name]
+                                                    not-kw 1}))
+                       :xtql/type-mismatch)))
+
+    (t/testing "unrecognized parameter"
+      (t/is (= (finding-types '(from :docs {:bind [test]
+                                            :for-valid-time (at #"2020")
+                                            :for-system-time (at #"2020")}))
+               #{}))
+      (t/is (contains? (finding-types '(from :docs {:not-valid 1}))
+                       :xtql/unrecognized-parameter)))))
+
+(t/deftest order-by
+  (t/testing "opts must be a symbol or map"
+    (t/is (= #{} (finding-types '(-> (from :docs [xt/id name])
+                                     (order-by {:val xt/id
+                                                :dir :asc
+                                                :nulls :first}
+                                               name)))))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id name])
+                                         (order-by :xt/id name)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (order-by [xt/id name])))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (order-by {:val :xt/id})))
+                     :xtql/type-mismatch)))
+
+  (t/testing "symbols should not be argument variables"
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (order-by $something)))
+                     :xtql/unrecognized-parameter)))
+
+  (t/testing "map opts"
+    (t/testing "missing :val"
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
-                                           (order-by [xt/id name])))
-                       :xtql/type-mismatch))
+                                           (order-by {:dir :desc})))
+                       :xtql/missing-parameter)))
+
+    (t/testing "must contain only keywords"
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
-                                           (order-by {:val :xt/id})))
-                       :xtql/type-mismatch))
+                                           (order-by {:val xt/id
+                                                      not-kw 1})))
+                       :xtql/type-mismatch)))
+
+    (t/testing ":dir & :nulls have correct types"
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                            (order-by {:val xt/id
                                                       :dir x})))
@@ -144,35 +224,9 @@
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                            (order-by {:val xt/id
                                                       :nulls :x})))
-                       :xtql/type-mismatch))))
-
-  (t/testing "binding"
-    (t/testing "bindings must be a symbol or map"
-      (t/is (contains? (finding-types '(from :docs [:test]))
-                       :xtql/type-mismatch))
-      (t/is (contains? (finding-types '(from :docs [:test]))
                        :xtql/type-mismatch)))
 
-    (t/testing "map bindings must contain only keywords"
-      (t/testing "qualified keywords work"
-        (t/is (= (finding-types '(from :docs [{:xt/id 1}]))
-                 #{})))
-      (t/is (contains? (finding-types '(from :docs [{not-kw 1}]))
-                       :xtql/type-mismatch)))))
-
-(t/deftest unrecognized-parameter
-  (t/testing "from"
-    (t/is (contains? (finding-types '(from :docs {:test 1}))
-                     :xtql/unrecognized-parameter))
-    (t/is (contains? (finding-types '(from :docs [$xt/id]))
-                     :xtql/unrecognized-parameter)))
-
-  (t/testing "order-by"
-    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
-                                         (order-by {:something xt/id})))
-                     :xtql/unrecognized-parameter))))
-
-(t/deftest missing-parameter
-  (t/testing "from"
-    (t/is (contains? (finding-types '(from :docs {}))
-                     :xtql/missing-parameter))))
+    (t/testing "unrecognized parameter"
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (order-by {:something xt/id})))
+                       :xtql/unrecognized-parameter)))))
