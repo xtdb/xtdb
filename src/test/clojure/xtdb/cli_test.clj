@@ -121,3 +121,37 @@
                 ::bar {:foo {:baz 1}}}
                (->system ["--json" "{\"xtdb.cli-test/foo\": {\"baz\": 1},
                                      \"xtdb.cli-test/bar\": {\"foo\": {\"@ref\": \"xtdb.cli-test/foo\"}}}"]))))))
+
+(t/deftest test-config-yaml
+  (letfn [(->system [cli-args]
+            (-> (::cli/node-opts (cli/parse-args cli-args))
+                ig/prep
+                ig/init
+                (->> (into {}))))]
+
+    (t/testing "CLI supplied YAML file outputs proper config"
+      (t/is (= {::foo {:baz 1}}
+               (->system ["-f" (str (io/as-file (io/resource "xtdb/cli-test.yaml")))]))))
+
+    (t/testing "uses xtdb.yaml if present"
+      (with-file-override {"xtdb.yaml" (io/as-file (io/resource "xtdb/cli-test.yaml"))}
+        (fn []
+          (t/is (= {::foo {:baz 1}}
+                   (->system []))))))
+    
+    (t/testing "also looks for xtdb.yaml on the classpath"
+      (with-resource-override {"xtdb.yaml" (io/as-file (io/resource "xtdb/cli-test.yaml"))}
+        (fn []
+          (t/is (= {::foo {:baz 1}}
+                   (->system []))))))    
+
+    (t/testing "YAML config fetches env with !Env tag"
+      (with-redefs [config/read-env-var (fn [env-name]
+                                          (when (= (str env-name) "TEST_ENV") "hello world"))]
+        (t/is (= {::foo "hello world"}
+                 (->system ["-f" (str (io/as-file (io/resource "xtdb/cli-test-env.yaml")))])))))
+    
+    (t/testing "YAML config handles integrant refs with !Ref tag"
+      (t/is (= {::foo {:baz 1}
+                ::bar {:foo {:baz 1}}}
+               (->system ["-f" (str (io/as-file (io/resource "xtdb/cli-test-ref.yaml")))]))))))
