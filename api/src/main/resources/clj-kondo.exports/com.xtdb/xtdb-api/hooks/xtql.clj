@@ -54,9 +54,6 @@
 (defn node-quote? [node]
   (= :quote (:tag node)))
 
-(defn node-keyword [node]
-  (:k node))
-
 (defn node-op [node]
   (-> node :children first))
 
