@@ -174,6 +174,35 @@
       (t/is (contains? (finding-types '(from :docs {:not-valid 1}))
                        :xtql/unrecognized-parameter)))))
 
+(t/deftest rel
+  (t/testing "bindings"
+    (t/testing "must be a vector"
+      (t/is (= (finding-types '(rel $t [a b c]))
+               #{}))
+      (t/is (contains? (finding-types '(rel $t {:a b}))
+                       :xtql/type-mismatch)))
+
+    (t/testing "must be a symbol or map"
+      (t/is (= (finding-types '(rel $t [test]))
+               #{}))
+      (t/is (= (finding-types '(rel $t [{:test 1}]))
+               #{}))
+      (t/is (contains? (finding-types '(rel $t [:test]))
+                       :xtql/type-mismatch)))
+
+    (t/testing "symbols should not be argument variables"
+      (t/is (contains? (finding-types '(rel $t [$xt/id]))
+                       :xtql/unrecognized-parameter)))
+
+    (t/testing "map bindings must contain only keywords"
+      (t/is (= (finding-types '(rel $t [{:name "jim"}]))
+               #{}))
+      (t/testing "qualified keywords work"
+        (t/is (= (finding-types '(rel $t [{:xt/id 1}]))
+                 #{})))
+      (t/is (contains? (finding-types '(rel $t [{not-kw 1}]))
+                       :xtql/type-mismatch)))))
+
 (t/deftest order-by
   (t/testing "opts must be a symbol or map"
     (t/is (= #{} (finding-types '(-> (from :docs [xt/id name])

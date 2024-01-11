@@ -51,6 +51,12 @@
 (defn node-keyword [node]
   (:k node))
 
+(defn node-quote? [node]
+  (= :quote (:tag node)))
+
+(defn node-keyword [node]
+  (:k node))
+
 (defn node-op [node]
   (-> node :children first))
 
@@ -69,7 +75,6 @@
 (defmethod lint-unify-clause 'from [node]
   (lint-source-op node))
 
-;; TODO: Lint more source ops
 (defmethod lint-source-op :default [node]
   (let [op (-> node node-op node-symbol)]
     (if (tail-op? op)
@@ -123,8 +128,8 @@
       (let [kvs (map-children opts)
             ks (->> kvs
                     (map first)
-                    (map api/sexpr)
-                    (filter keyword?)
+                    (map node-keyword)
+                    (remove nil?)
                     (into #{}))]
         (when-not (contains? ks :bind)
           (api/reg-finding!
@@ -159,7 +164,7 @@
                :type :xtql/type-mismatch)))))
 
 (defmethod lint-source-op 'unify [node]
-  (let [clauses (some-> node :children rest)]
+  (let [[_ & clauses] (some-> node :children)]
     (doseq [bad-op (remove node-list? clauses)]
       (api/reg-finding!
         (assoc (meta bad-op)
@@ -184,6 +189,15 @@
          (filter node-list?)
          (run! lint-unify-clause))))
 
+(defmethod lint-source-op 'rel [node]
+  (let [[_ _expr binds] (some-> node :children)]
+    (if (node-vector? binds)
+      (->> binds :children (run! lint-bind))
+      (api/reg-finding!
+        (assoc (meta binds)
+               :message "expected rel binding to be a vector"
+               :type :xtql/type-mismatch)))))
+
 ;; TODO: Lint more tail ops
 (defmethod lint-tail-op :default [node]
   (let [op (-> node node-op node-symbol)]
@@ -198,22 +212,39 @@
                  :message "unrecognized tail operation"
                  :type :xtql/unrecognized-operation))))))
 
-(defmethod lint-tail-op 'order-by [node]
-  (doseq [opts (-> node :children rest)]
-    (cond
-      (node-symbol? opts)
-      (lint-not-arg-symbol opts)
+(defn lint-keyword [node name]
+  (when-not (node-keyword? node)
+    (api/reg-finding!
+      (assoc (meta node)
+             :message (str "expected '" name "' to be a keyword")
+             :type :xtql/type-mismatch))))
 
-      (node-map? opts)
-      (let [kvs (map-children opts)
+(defn lint-enum [node name values]
+  ;; TODO: Expand to more than just keywords?
+  ;;       Maybe a `node-value` function?
+  (when-not (contains? values (node-keyword node))
+    (api/reg-finding!
+      (assoc (meta node)
+             :message (str "expected '" name "' to be one of " values)
+             ;; TODO: change to different type?
+             :type :xtql/type-mismatch))))
+
+(defmethod lint-tail-op 'order-by [node]
+  (doseq [opt (-> node :children rest)]
+    (cond
+      (node-symbol? opt)
+      (lint-not-arg-symbol opt)
+
+      (node-map? opt)
+      (let [kvs (map-children opt)
             ks (->> kvs
                     (map first)
-                    (map api/sexpr)
-                    (filter keyword?)
+                    (map node-keyword)
+                    (remove nil?)
                     (into #{}))]
         (when-not (contains? ks :val)
           (api/reg-finding!
-            (assoc (meta opts)
+            (assoc (meta opt)
                    :message "Missing :val parameter"
                    :type :xtql/missing-parameter)))
         (doseq [[k v] kvs]
@@ -234,27 +265,13 @@
                        :type :xtql/type-mismatch)))
               ; else do nothing
             :dir
-            (if-let [dir (node-keyword v)]
-              (when-not (contains? #{:asc :desc} dir)
-                (api/reg-finding!
-                  (assoc (meta v)
-                         :message "expected :dir value to be :asc or :desc"
-                         :type :xtql/type-mismatch)))
-              (api/reg-finding!
-                (assoc (meta v)
-                       :message "expected :dir value be a keyword"
-                       :type :xtql/type-mismatch)))
+            (if (node-keyword? v)
+              (lint-enum v :dir #{:asc :desc})
+              (lint-keyword v ":dir value"))
             :nulls 
-            (if-let [dir (node-keyword v)]
-              (when-not (contains? #{:first :last} dir)
-                (api/reg-finding!
-                  (assoc (meta v)
-                         :message "expected :nulls value to be :first or :last"
-                         :type :xtql/type-mismatch)))
-              (api/reg-finding!
-                (assoc (meta v)
-                       :message "expected :nulls value be a keyword"
-                       :type :xtql/type-mismatch)))
+            (if (node-keyword? v)
+              (lint-enum v :nulls #{:first :last})
+              (lint-keyword v ":nulls value"))
             ; else
             (api/reg-finding!
               (assoc (meta k)
@@ -263,12 +280,12 @@
 
       :else
       (api/reg-finding!
-        (assoc opts
+        (assoc (meta opt)
                :message "opts must be a symbol or map"
                :type :xtql/type-mismatch)))))
 
 (defn lint-pipeline [node]
-  (let [ops (some-> node :children rest)]
+  (let [[_ & ops] (some-> node :children)]
     (doseq [bad-op (remove node-list? ops)]
       (api/reg-finding!
         (assoc (meta bad-op)
@@ -288,13 +305,11 @@
          (run! lint-tail-op))))
 
 (defn lint-query [node]
-  (let [quoted-query (api/sexpr node)]
-    (when (= 'quote (first quoted-query))
-      (let [query (second quoted-query)
-            query-node (some-> node :children first)]
-        (if (= '-> (first query))
-          (lint-pipeline query-node)
-          (lint-source-op query-node))))))
+  (when (node-quote? node)
+    (let [query-node (some-> node :children first)]
+      (if (= '-> (node-symbol (-> query-node :children first)))
+        (lint-pipeline query-node)
+        (lint-source-op query-node)))))
 
 ;; TODO: Lint other functions that take queries
 
