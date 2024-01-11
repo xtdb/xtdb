@@ -35,6 +35,7 @@ dependencies {
     api("org.roaringbitmap", "RoaringBitmap", "0.9.32")
 
     api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
+    api("clj-commons", "clj-yaml", "1.0.27")
 
     api("org.babashka", "sci", "0.6.37")
     api("commons-codec", "commons-codec", "1.15")

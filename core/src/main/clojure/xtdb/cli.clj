@@ -15,7 +15,7 @@
   [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, JSON"
     :parse-fn io/file
     :validate [if-it-exists "Config file doesn't exist"
-               #(contains? #{"edn" "json"} (util/file-extension %)) "Config file must be .edn or .json"]]
+               #(contains? #{"edn" "json" "yaml"} (util/file-extension %)) "Config file must be .edn, .json or .yaml"]]
 
    ["-e" "--edn EDN" "Options as EDN."
     :default nil
@@ -38,8 +38,10 @@
               {::node-opts (let [config-file (or file
                                                  (some-> (io/file "xtdb.edn") if-it-exists)
                                                  (some-> (io/file "xtdb.json") if-it-exists)
+                                                 (some-> (io/file "xtdb.yaml") if-it-exists) 
                                                  (io/resource "xtdb.edn")
-                                                 (io/resource "xtdb.json"))
+                                                 (io/resource "xtdb.json")
+                                                 (io/resource "xtdb.yaml"))
                                  config-from-file (some-> config-file config/file->config-opts)]
                              (or config-from-file json edn))}))))
 

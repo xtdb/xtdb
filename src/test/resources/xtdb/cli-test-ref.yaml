@@ -1,0 +1,5 @@
+xtdb.cli-test/foo:
+  baz: 1
+
+xtdb.cli-test/bar:
+  foo: !Ref xtdb.cli-test/foo
