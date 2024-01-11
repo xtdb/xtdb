@@ -23,7 +23,7 @@
 
 (defmethod ig/init-key ::foo [_ opts] opts)
 
-(t/deftest test-config-merging
+(t/deftest test-config
   (letfn [(->system [cli-args]
             (-> (::cli/node-opts (cli/parse-args cli-args))
                 ig/prep
@@ -61,7 +61,27 @@
       (with-resource-override {"xtdb.json" (io/as-file xtdb-cli-json)}
         (fn []
           (t/is (= {::foo {:baz {}}}
-                   (->system []))))))))
+                   (->system []))))))
+    
+    (t/testing "uses config passed in via --edn"
+      (t/is (= {::foo 1}
+               (->system ["--edn" "{:xtdb.cli-test/foo 1}"]))))
+    
+    (t/testing "uses config passed in via --json"
+      (t/is (= {::foo 1}
+               (->system ["--json" "{\"xtdb.cli-test/foo\": 1}"]))))
+
+    (t/testing "if file config passed in, prefers to edn"
+      (fn []
+        (= {::foo {:baz {}}}
+           (->system ["-f" (str (io/as-file xtdb-cli-edn))
+                      "--edn" "{:xtdb.cli-test/foo 1}"]))))
+    
+    (t/testing "if xtdb.edn present, uses this in place to --edn"
+      (with-file-override {"xtdb.edn" (io/as-file xtdb-cli-edn)}
+        (fn []
+          (= {::foo {:baz {}}}
+             (->system ["--edn" "{:xtdb.cli-test/foo 1}"])))))))
 
 (t/deftest test-env-loading
   (with-redefs [config/read-env-var (fn [env-name]
