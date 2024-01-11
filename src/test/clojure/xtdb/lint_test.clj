@@ -305,3 +305,73 @@
     (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                          (offset "1.1")))
                      :xtql/type-mismatch))))
+
+(t/deftest with
+  (t/testing "tail operator"
+    (t/testing "number of args"
+      (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                   (with a b)))
+               #{}))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (with)))
+                       :xtql/invalid-arity)))
+
+    (t/testing "opts must be either symbols or maps"
+      (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                   (with a {:b xt/id})))
+               #{}))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (with :test)))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (with [a {:b xt/id}])))
+                       :xtql/type-mismatch)))
+
+    (t/testing "symbols must not be argument variables"
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (with $something)))
+                       :xtql/unrecognized-parameter)))
+
+    (t/testing "map opts"
+      (t/testing "all keys must be keywords"
+        (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                     (with {:a xt/id} {:b xt/id})))
+                 #{}))
+        (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                             (with {not-kw xt/id})))
+                         :xtql/type-mismatch))
+        (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                             (with {1 xt/id})))
+                         :xtql/type-mismatch)))))
+
+  (t/testing "unify clause"
+    (t/testing "number of args"
+      (t/is (= (finding-types '(unify (from :docs [xt/id])
+                                      (with {a xt/id} {b xt/id})))
+               #{}))
+      (t/is (contains? (finding-types '(unify (from :docs [xt/id])
+                                              (with)))
+                       :xtql/invalid-arity)))
+
+    (t/testing "opts must be maps"
+      (t/is (contains? (finding-types '(unify (from :docs [xt/id])
+                                              (with test)))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(unify (from :docs [xt/id])
+                                              (with :test)))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(unify (from :docs [xt/id])
+                                              (with [a {:b xt/id}])))
+                       :xtql/type-mismatch)))
+
+    (t/testing "map opts"
+      (t/testing "all keys must be symbols"
+        (t/is (= (finding-types '(unify (from :docs [xt/id])
+                                        (with {a xt/id} {b xt/id})))
+                 #{}))
+        (t/is (contains? (finding-types '(unify (from :docs [xt/id])
+                                                (with {:kw xt/id})))
+                         :xtql/type-mismatch))
+        (t/is (contains? (finding-types '(unify (from :docs [xt/id])
+                                                (with {1 xt/id})))
+                         :xtql/type-mismatch))))))
