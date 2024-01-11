@@ -57,9 +57,38 @@
 (defn node-op [node]
   (-> node :children first))
 
+(declare lint-query)
+
 (defmulti lint-unify-clause #(-> % node-op node-symbol))
 (defmulti lint-source-op #(-> % node-op node-symbol))
 (defmulti lint-tail-op #(-> % node-op node-symbol))
+
+(defn lint-not-arg-symbol [node]
+  (when (= \$ (-> node node-symbol str first))
+    (api/reg-finding!
+      (assoc (meta node)
+             :message "unexpected parameter in binding"
+             :type :xtql/unrecognized-parameter))))
+
+(defn lint-bind [node]
+  (cond
+    (node-symbol? node)
+    ;; TODO: Make own type, should really be a warning
+    (lint-not-arg-symbol node)
+
+    (node-map? node)
+    (doseq [[k _v] (map-children node)]
+      (when-not (node-keyword? k)
+        (api/reg-finding!
+          (assoc (meta k)
+                 :message "all keys in binding maps must be keywords"
+                 :type :xtql/type-mismatch))))
+
+    :else
+    (api/reg-finding!
+      (assoc (meta node)
+             :message "expected a symbol or map"
+             :type :xtql/type-mismatch))))
 
 ;; TODO: Lint more unify clauses
 (defmethod lint-unify-clause :default [node]
@@ -98,6 +127,67 @@
                  :message "opts must be a map"
                  :type :xtql/type-mismatch))))))
 
+(defn lint-join-clause [node]
+  (let [args (-> node :children rest)]
+    (if-not (= (count args) 2)
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected at exactly two arguments"
+               :type :xtql/invalid-arity))
+      (let [[query opts] args]
+        (lint-query query)
+        (cond
+          (node-vector? opts)
+          (->> opts :children (run! lint-bind))
+          (node-map? opts)
+          (let [kvs (map-children opts)
+                ks (->> kvs
+                        (map first)
+                        (map node-keyword)
+                        (remove nil?)
+                        (into #{}))]
+            (when-not (contains? ks :bind)
+              (api/reg-finding!
+                (assoc (meta opts)
+                       :message "Missing :bind parameter"
+                       :type :xtql/missing-parameter)))
+            (doseq [[k v] kvs]
+              (when-not (node-keyword? k)
+                (api/reg-finding!
+                  (assoc (meta k)
+                         :message "All keys in 'opts' must be keywords"
+                         :type :xtql/type-mismatch)))
+              (case (node-keyword k)
+                :bind (if (node-vector? v)
+                        (->> v :children (run! lint-bind))
+                        (api/reg-finding!
+                          (assoc (meta opts)
+                                 :message "expected :bind value to be a vector"
+                                 :type :xtql/type-mismatch)))
+                :args (if (node-vector? v)
+                        ;; TODO: Make args specific
+                        (->> v :children (run! lint-bind))
+                        (api/reg-finding!
+                          (assoc (meta opts)
+                                 :message "expected :args value to be a vector"
+                                 :type :xtql/type-mismatch)))
+                ; else
+                (api/reg-finding!
+                  (assoc (meta k)
+                         :message "unrecognized parameter"
+                         :type :xtql/unrecognized-parameter)))))
+          :else
+          (api/reg-finding!
+            (assoc (meta node)
+                   :message "opts must be a map or vector"
+                   :type :xtql/type-mismatch)))))))
+
+(defmethod lint-unify-clause 'join [node]
+  (lint-join-clause node))
+
+(defmethod lint-unify-clause 'inner-join [node]
+  (lint-join-clause node))
+
 (defmethod lint-unify-clause 'unnest [node]
   (let [opts (-> node :children rest)]
     (when-not (= 1 (count opts))
@@ -131,33 +221,6 @@
           (assoc (some-> node :children first meta)
                  :message "unrecognized source operation"
                  :type :xtql/unrecognized-operation))))))
-
-(defn lint-not-arg-symbol [node]
-  (when (= \$ (-> node node-symbol str first))
-    (api/reg-finding!
-      (assoc (meta node)
-             :message "unexpected parameter in binding"
-             :type :xtql/unrecognized-parameter))))
-
-(defn lint-bind [node]
-  (cond
-    (node-symbol? node)
-    ;; TODO: Make own type, should really be a warning
-    (lint-not-arg-symbol node)
-
-    (node-map? node)
-    (doseq [[k _v] (map-children node)]
-      (when-not (node-keyword? k)
-        (api/reg-finding!
-          (assoc (meta k)
-                 :message "all keys in binding maps must be keywords"
-                 :type :xtql/type-mismatch))))
-
-    :else
-    (api/reg-finding!
-      (assoc (meta node)
-             :message "expected a symbol or map"
-             :type :xtql/type-mismatch))))
 
 (defmethod lint-source-op 'from [node]
   (let [[_ table opts] (some-> node :children)]
@@ -491,16 +554,15 @@
          (run! lint-tail-op))))
 
 (defn lint-query [node]
-  (when (node-quote? node)
-    (let [query-node (some-> node :children first)]
-      (if (= '-> (node-symbol (-> query-node :children first)))
-        (lint-pipeline query-node)
-        (lint-source-op query-node)))))
+  (if (= '-> (node-symbol (-> node :children first)))
+    (lint-pipeline node)
+    (lint-source-op node)))
 
 ;; TODO: Lint other functions that take queries
 
 (defn q [{:keys [node]}]
   ;; TODO: Lint other params
-  (let [query (some-> node :children (nth 2))]
-    (when (= (:tag query) :quote)
-      (lint-query query))))
+  (let [quoted-query (some-> node :children (nth 2))]
+    (when (node-quote? quoted-query)
+      (let [query (-> quoted-query :children first)]
+        (lint-query query)))))

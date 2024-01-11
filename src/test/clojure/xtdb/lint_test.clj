@@ -513,3 +513,65 @@
       (t/is (contains? (finding-types '(unify (from :docs [tags])
                                               (unnest {1 tags})))
                        :xtql/type-mismatch)))))
+
+(t/deftest join
+  (t/testing "expects exactly two arguments"
+    (t/is (= (finding-types '(unify (join (from :docs [xt/id])
+                                          [xt/id])))
+             #{}))
+    (t/is (contains? (finding-types '(unify (join (from :docs [xt/id]))))
+                     :xtql/invalid-arity))
+    (t/is (contains? (finding-types '(unify (join)))
+                     :xtql/invalid-arity)))
+
+  (t/testing "can lint inside a subquery"
+    (t/is (contains? (finding-types '(unify (join (-> (from :docs [xt/id]))
+                                                  [xt/id])))
+                     :xtql/redundant-pipeline)))
+
+  (t/testing "opts must be either a map or a vector"
+    (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                  xt/id)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                  :xt/id)))
+                     :xtql/type-mismatch)))
+
+  (t/testing "map opts"
+    (t/testing "missing :bind"
+      (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                    {:hello [xt/id]})))
+                       :xtql/missing-parameter)))
+
+    (t/testing "must contain only keywords"
+      (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                    {hello [xt/id]})))
+                       :xtql/type-mismatch)))
+
+    (t/testing "unrecognized parameter"
+      (t/is (= (finding-types '(unify (join (from :docs [xt/id])
+                                            {:bind [xt/id]
+                                             :args [a]})))
+               #{}))
+      (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                    {:bind [xt/id]
+                                                     :something [a]})))
+                       :xtql/unrecognized-parameter)))
+
+    (t/testing ":bind must be a vector"
+      (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                    {:bind xt/id})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                    {:bind {:a xt/id}})))
+                       :xtql/type-mismatch)))
+
+    (t/testing ":args must be a vector"
+      (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                    {:bind [xt/id]
+                                                     :args xt/id})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(unify (join (from :docs [xt/id])
+                                                    {:bind [xt/id]
+                                                     :args {:a xt/id}})))
+                       :xtql/type-mismatch)))))
