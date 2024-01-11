@@ -402,6 +402,31 @@
                  :message "expected column to be a keyword"
                  :type :xtql/type-mismatch))))))
 
+(defmethod lint-tail-op 'aggregate [node]
+  (let [opts (-> node :children rest)]
+    (when-not (> (count opts) 1)
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected at least one argument"
+               :type :xtql/invalid-arity)))
+    (doseq [opt opts]
+      (cond
+        (node-symbol? opt)
+        (lint-not-arg-symbol opt)
+        (node-map? opt)
+        (doseq [[k _v] (map-children opt)]
+          (when-not (node-keyword? k)
+            (api/reg-finding!
+              (assoc (meta k)
+                     :message "expected all keys to be keywords"
+                     :type :xtql/type-mismatch))))
+
+        :else
+        (api/reg-finding!
+          (assoc (meta opt)
+                 :message "expected opts to be a symbol or map"
+                 :type :xtql/type-mismatch))))))
+
 (defn lint-pipeline [node]
   (let [[_ & ops] (some-> node :children)]
     (doseq [bad-op (remove node-list? ops)]

@@ -431,3 +431,34 @@
     (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                          (without [:a :b])))
                      :xtql/type-mismatch))))
+
+(t/deftest aggregate
+  (t/testing "expected at least one argument"
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (aggregate)))
+                     :xtql/invalid-arity)))
+
+  (t/testing "group opts"
+    (t/testing "must be either a symbol or a map"
+      (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                   (aggregate a {:b (row-count)})))
+               #{}))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (aggregate :test)))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (aggregate [:a {:b (row-count)}])))
+                       :xtql/type-mismatch)))
+
+    (t/testing "symbols must not be argument variables"
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (aggregate $something)))
+                       :xtql/unrecognized-parameter)))
+
+    (t/testing "map opts must have keywords as keys"
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (aggregate {a xt/id})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (aggregate {1 (row-count)})))
+                       :xtql/type-mismatch)))))
