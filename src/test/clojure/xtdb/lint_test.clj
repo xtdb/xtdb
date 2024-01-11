@@ -375,3 +375,39 @@
         (t/is (contains? (finding-types '(unify (from :docs [xt/id])
                                                 (with {1 xt/id})))
                          :xtql/type-mismatch))))))
+
+(t/deftest return
+  (t/is (= (finding-types '(-> (from :docs [xt/id])
+                               (return a b)))
+           #{}))
+  (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                       (return)))
+                   :xtql/invalid-arity))
+
+  (t/testing "opts must be either symbols or maps"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (return a {:b xt/id})))
+             #{}))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (return :test)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (return [a {:b xt/id}])))
+                     :xtql/type-mismatch)))
+
+  (t/testing "symbols must not be argument variables"
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (return $something)))
+                     :xtql/unrecognized-parameter)))
+
+  (t/testing "map opts"
+    (t/testing "all keys must be keywords"
+      (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                   (return {:a xt/id} {:b xt/id})))
+               #{}))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (return {not-kw xt/id})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                           (return {1 xt/id})))
+                       :xtql/type-mismatch)))))

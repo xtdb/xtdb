@@ -305,6 +305,33 @@
                  :message "opts must be a symbol or map"
                  :type :xtql/type-mismatch))))))
 
+(defmethod lint-tail-op 'return [node]
+  (let [opts (-> node :children rest)]
+    (when-not (> (count opts) 1)
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected at least one argument"
+               :type :xtql/invalid-arity)))
+    (doseq [opt opts]
+      (cond
+        (node-symbol? opt)
+        (lint-not-arg-symbol opt)
+        (node-map? opt)
+        (let [ks (->> opt
+                      map-children
+                      (map first)
+                      (remove node-keyword?))]
+          (doseq [k ks]
+            (api/reg-finding!
+              (assoc (meta k)
+                     :message "expected all keys to be keywords"
+                     :type :xtql/type-mismatch))))
+        :else
+        (api/reg-finding!
+          (assoc (meta opt)
+                 :message "opts must be a symbol or map"
+                 :type :xtql/type-mismatch))))))
+
 (defmethod lint-tail-op 'order-by [node]
   (doseq [opt (-> node :children rest)]
     (cond
