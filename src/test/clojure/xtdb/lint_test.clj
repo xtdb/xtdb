@@ -259,3 +259,49 @@
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                            (order-by {:something xt/id})))
                        :xtql/unrecognized-parameter)))))
+
+(t/deftest limit
+  (t/testing "number of args"
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (limit)))
+                     :xtql/invalid-arity))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (limit 1 1)))
+                     :xtql/invalid-arity)))
+
+  (t/testing "opt must be an integer"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (limit 10)))
+             #{}))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (limit 1.1)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (limit :test)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (limit "1.1")))
+                     :xtql/type-mismatch))))
+
+(t/deftest offset
+  (t/testing "number of args"
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (offset)))
+                     :xtql/invalid-arity))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (offset 1 1)))
+                     :xtql/invalid-arity)))
+
+  (t/testing "opt must be an integer"
+    (t/is (= (finding-types '(-> (from :docs [xt/id])
+                                 (offset 10)))
+             #{}))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (offset 1.1)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (offset :test)))
+                     :xtql/type-mismatch))
+    (t/is (contains? (finding-types '(-> (from :docs [xt/id])
+                                         (offset "1.1")))
+                     :xtql/type-mismatch))))

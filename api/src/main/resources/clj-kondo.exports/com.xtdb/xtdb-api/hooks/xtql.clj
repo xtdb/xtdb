@@ -229,6 +229,34 @@
              ;; TODO: change to different type?
              :type :xtql/type-mismatch))))
 
+(defmethod lint-tail-op 'limit [node]
+  (let [opts (-> node :children rest)]
+    (when-not (= 1 (count opts))
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected exactly one argument"
+               :type :xtql/invalid-arity)))
+    (when-let [opt (first opts)]
+      (when-not (some-> opt :value int?)
+        (api/reg-finding!
+          (assoc (meta opt)
+                 :message "expected limit to be an integer"
+                 :type :xtql/type-mismatch))))))
+
+(defmethod lint-tail-op 'offset [node]
+  (let [opts (-> node :children rest)]
+    (when-not (= 1 (count opts))
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected exactly one argument"
+               :type :xtql/invalid-arity)))
+    (when-let [opt (first opts)]
+      (when-not (some-> opt :value int?)
+        (api/reg-finding!
+          (assoc (meta opt)
+                 :message "expected offset to be an integer"
+                 :type :xtql/type-mismatch))))))
+
 (defmethod lint-tail-op 'order-by [node]
   (doseq [opt (-> node :children rest)]
     (cond
