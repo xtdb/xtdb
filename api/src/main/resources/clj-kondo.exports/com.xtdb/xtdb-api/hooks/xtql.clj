@@ -561,8 +561,7 @@
 ;; TODO: Lint other functions that take queries
 
 (defn q [{:keys [node]}]
-  ;; TODO: Lint other params
-  (let [quoted-query (some-> node :children (nth 2))]
+  (let [[_ _node quoted-query] (some-> node :children)]
     (when (node-quote? quoted-query)
       (let [query (-> quoted-query :children first)]
         (lint-query query)))))
