@@ -462,3 +462,54 @@
       (t/is (contains? (finding-types '(-> (from :docs [xt/id])
                                            (aggregate {1 (row-count)})))
                        :xtql/type-mismatch)))))
+
+(t/deftest unnest
+  (t/testing "tail operator"
+    (t/testing "expected at exactly one argument"
+      (t/is (= (finding-types '(-> (from :docs [tags])
+                                   (unnest {:tag tags})))
+               #{}))
+      (t/is (contains? (finding-types '(-> (from :docs [things tags])
+                                           (unnest {:other things} {:tag tags})))
+                       :xtql/invalid-arity)))
+
+    (t/testing "must be a map"
+      (t/is (= (finding-types '(-> (from :docs [tags])
+                                   (unnest {:tag tags})))
+               #{}))
+      (t/is (contains? (finding-types '(-> (from :docs [tags])
+                                           (unnest tags)))
+                       :xtql/type-mismatch)))
+
+    (t/testing "all columns must be keywords"
+      (t/is (contains? (finding-types '(-> (from :docs [tags])
+                                           (unnest {tag tags})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(-> (from :docs [tags])
+                                           (unnest {1 tags})))
+                       :xtql/type-mismatch))))
+
+  (t/testing "unify clause"
+    (t/testing "expected at exactly one argument"
+      (t/is (= (finding-types '(unify (from :docs [tags])
+                                      (unnest {tag tags})))
+               #{}))
+      (t/is (contains? (finding-types '(unify (from :docs [things tags])
+                                              (unnest {other things} {tag tags})))
+                       :xtql/invalid-arity)))
+
+    (t/testing "must be a map"
+      (t/is (= (finding-types '(unify (from :docs [tags])
+                                      (unnest {tag tags})))
+               #{}))
+      (t/is (contains? (finding-types '(unify (from :docs [tags])
+                                              (unnest tags)))
+                       :xtql/type-mismatch)))
+
+    (t/testing "all columns must be symbols"
+      (t/is (contains? (finding-types '(unify (from :docs [tags])
+                                              (unnest {:tag tags})))
+                       :xtql/type-mismatch))
+      (t/is (contains? (finding-types '(unify (from :docs [tags])
+                                              (unnest {1 tags})))
+                       :xtql/type-mismatch)))))

@@ -95,6 +95,26 @@
                  :message "opts must be a map"
                  :type :xtql/type-mismatch))))))
 
+(defmethod lint-unify-clause 'unnest [node]
+  (let [opts (-> node :children rest)]
+    (when-not (= 1 (count opts))
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected at exactly one argument"
+               :type :xtql/invalid-arity)))
+    (let [opt (first opts)]
+      (if (node-map? opt)
+        (doseq [[k _v] (map-children opt)]
+          (when-not (node-symbol? k)
+            (api/reg-finding!
+              (assoc (meta k)
+                     :message "expected all columns to be symbols"
+                     :type :xtql/type-mismatch))))
+        (api/reg-finding!
+          (assoc (meta opt)
+                 :message "expected opt to be a map"
+                 :type :xtql/type-mismatch))))))
+
 
 (defmethod lint-source-op :default [node]
   (let [op (-> node node-op node-symbol)]
@@ -425,6 +445,26 @@
         (api/reg-finding!
           (assoc (meta opt)
                  :message "expected opts to be a symbol or map"
+                 :type :xtql/type-mismatch))))))
+
+(defmethod lint-tail-op 'unnest [node]
+  (let [opts (-> node :children rest)]
+    (when-not (= 1 (count opts))
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected at exactly one argument"
+               :type :xtql/invalid-arity)))
+    (let [opt (first opts)]
+      (if (node-map? opt)
+        (doseq [[k _v] (map-children opt)]
+          (when-not (node-keyword? k)
+            (api/reg-finding!
+              (assoc (meta k)
+                     :message "expected all columns to be keywords"
+                     :type :xtql/type-mismatch))))
+        (api/reg-finding!
+          (assoc (meta opt)
+                 :message "expected opt to be a map"
                  :type :xtql/type-mismatch))))))
 
 (defn lint-pipeline [node]
