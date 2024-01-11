@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.type.TypeFactory;
 import xtdb.IllegalArgumentException;
 import xtdb.api.TransactionKey;
 import xtdb.api.query.Basis;
+import xtdb.api.query.IKeyFn;
 import xtdb.api.query.QueryOptions;
 
 import java.io.IOException;
@@ -76,7 +77,7 @@ public class QueryOptionsDeserializer extends StdDeserializer<QueryOptions> {
         }
 
         if (node.has("key_fn")) {
-            builder.keyFn(node.get("key_fn").asText());
+            builder.keyFn(IKeyFn.KeyFn.valueOf(node.get("key_fn").asText()));
         }
 
         return builder.build();

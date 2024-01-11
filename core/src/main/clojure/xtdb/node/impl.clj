@@ -18,7 +18,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
            (xtdb.api.log Log)
-           (xtdb.api.query Basis Query QueryOptions)
+           (xtdb.api.query Basis IKeyFn Query QueryOptions)
            (xtdb.api.tx Sql TxOptions)
            xtdb.indexer.IIndexer
            (xtdb.query IRaQuerySource)))
@@ -79,44 +79,44 @@
                 tx-key))))))
 
   (^CompletableFuture openQueryAsync [_ ^String query, ^QueryOptions query-opts]
-    (let [query-opts (-> (into {:default-tz default-tz,
-                                :after-tx @!latest-submitted-tx
-                                :key-fn :sql}
-                               query-opts)
-                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
-                         (with-after-tx-default))]
-      (-> (.awaitTxAsync indexer
-                         (-> (:after-tx query-opts)
-                             (time/max-tx (get-in query-opts [:basis :at-tx])))
-                         (:tx-timeout query-opts))
-          (util/then-apply
-            (fn [_]
-              (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
-                    plan (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
-                (if (:explain? query-opts)
-                  (Stream/of {:plan plan})
+   (let [query-opts (-> (into {:default-tz default-tz,
+                               :after-tx @!latest-submitted-tx
+                               :key-fn #xt/key-fn :sql-str}
+                              query-opts)
+                        (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+                        (with-after-tx-default))]
+     (-> (.awaitTxAsync indexer
+                        (-> (:after-tx query-opts)
+                            (time/max-tx (get-in query-opts [:basis :at-tx])))
+                        (:tx-timeout query-opts))
+         (util/then-apply
+           (fn [_]
+             (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
+                   plan (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
+               (if (:explain? query-opts)
+                 (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
 
-                  (q/open-query allocator ra-src wm-src plan query-opts))))))))
+                 (q/open-query allocator ra-src wm-src plan query-opts))))))))
 
   (^CompletableFuture openQueryAsync [_ ^Query query, ^QueryOptions query-opts]
-    (let [query-opts (-> (into {:default-tz default-tz,
-                                :after-tx @!latest-submitted-tx
-                                :key-fn :snake_case}
-                               query-opts)
-                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
-                         (with-after-tx-default))]
-      (-> (.awaitTxAsync indexer
-                         (-> (:after-tx query-opts)
-                             (time/max-tx (get-in query-opts [:basis :at-tx])))
-                         (:tx-timeout query-opts))
-          (util/then-apply
-            (fn [_]
-              (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
-                    plan (xtql/compile-query query table-info)]
-                (if (:explain? query-opts)
-                  (Stream/of {:plan plan})
+   (let [query-opts (-> (into {:default-tz default-tz,
+                               :after-tx @!latest-submitted-tx
+                               :key-fn #xt/key-fn :snake-case-str}
+                              query-opts)
+                        (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+                        (with-after-tx-default))]
+     (-> (.awaitTxAsync indexer
+                        (-> (:after-tx query-opts)
+                            (time/max-tx (get-in query-opts [:basis :at-tx])))
+                        (:tx-timeout query-opts))
+         (util/then-apply
+           (fn [_]
+             (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
+                   plan (xtql/compile-query query table-info)]
+               (if (:explain? query-opts)
+                 (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
 
-                  (q/open-query allocator ra-src wm-src plan query-opts))))))))
+                 (q/open-query allocator ra-src wm-src plan query-opts))))))))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)

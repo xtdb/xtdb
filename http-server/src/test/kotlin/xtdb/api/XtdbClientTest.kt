@@ -16,7 +16,7 @@ internal class XtdbClientTest {
                 node.submitTx(put("foo", mapOf("xt/id" to "jms")))
 
                 assertEquals(
-                    listOf(mapOf(Keyword.intern("id") to "jms")),
+                    listOf(mapOf("id" to "jms")),
 
                     node.openQuery(
                         from("foo")
@@ -25,7 +25,7 @@ internal class XtdbClientTest {
                 )
 
                 assertEquals(
-                    listOf(mapOf(Keyword.intern("foo_id") to "jms")),
+                    listOf(mapOf("foo_id" to "jms")),
 
                     node.openQuery("SELECT foo.xt\$id AS foo_id FROM foo").use { it.toList() }
                 )

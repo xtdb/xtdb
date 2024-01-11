@@ -321,7 +321,7 @@ WHERE foo.xt$id = 1")])]
 
   (t/is (= [{:$column_1$ [{:foo 5} {:foo 5}]}]
            (xt/q tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1"
-                 {:key-fn :sql}))))
+                 {:key-fn :sql-kw}))))
 
 (t/deftest test-differing-length-lists-441
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO t1(xt$id, data) VALUES (1, [2, 3])")

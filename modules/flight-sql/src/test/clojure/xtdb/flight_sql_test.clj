@@ -1,20 +1,18 @@
 (ns xtdb.flight-sql-test
   (:require [clojure.test :as t]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
-            [xtdb.vector.reader :as vr]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            #_[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.prepare :as jdbc-prep])
+            [xtdb.vector.reader :as vr])
   (:import (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.pojo.Schema
-           xtdb.api.query.IKeyFn))
+           org.apache.arrow.vector.types.pojo.Schema))
 
-(def ^:private ^:dynamic *port*)
-(def ^:private ^:dynamic ^FlightSqlClient *client*)
-(def ^:private ^:dynamic *conn*)
+(def ^:private ^:dynamic *port* nil)
+(def ^:private ^:dynamic ^FlightSqlClient *client* nil)
+(def ^:private ^:dynamic *conn* nil)
 
 (t/use-fixtures :each
   tu/with-allocator
@@ -47,7 +45,7 @@
         (while (.next stream)
           ;; if this were a real client chances are they wouldn't just
           ;; eagerly turn the roots into Clojure maps...
-          (swap! !res into (vr/rel->rows (vr/<-root root) (IKeyFn/keyword IKeyFn/SQL))))
+          (swap! !res into (vr/rel->rows (vr/<-root root) #xt/key-fn :sql-kw)))
 
         @!res))))
 

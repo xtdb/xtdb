@@ -3,6 +3,7 @@
  xt/clj-form xtdb.api/->ClojureForm
  xt/illegal-arg xtdb.serde/iae-reader
  xt/runtime-err xtdb.serde/runex-reader
+ xt/key-fn xtdb.serde/read-key-fn
 
  xt/period-duration xtdb.serde/period-duration-reader
  xt/interval-ym xtdb.serde/interval-ym-reader

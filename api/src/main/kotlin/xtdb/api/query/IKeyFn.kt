@@ -4,41 +4,48 @@ import clojure.lang.Keyword
 import xtdb.util.normalForm
 import xtdb.util.snakeCase
 
-fun interface IKeyFn<V> {
-    fun denormalize(key: String): V
+fun interface IKeyFn<out V> {
 
-    companion object {
-        private fun clojureFormString(s: String) =
-            s.replace('_', '-')
-                .replace('$', '.')
+    enum class KeyFn : IKeyFn<Any> {
+        CLOJURE_STR {
+            private fun clojureFormString(s: String) =
+                s.replace('_', '-')
+                    .replace('$', '.')
 
-        @JvmStatic
-        @JvmName("keyword")
-        fun keyword(f: IKeyFn<String>) = IKeyFn { k -> Keyword.intern(f.denormalize(k)) }
-
-        @JvmStatic
-        @JvmName("cached")
-        fun <V : Any> cached(f: IKeyFn<V>): IKeyFn<V> {
-            val cache = HashMap<String, V>()
-            return IKeyFn { k: String -> cache.computeIfAbsent(k) { key -> f.denormalize(key) } }
-        }
-
-        @JvmField
-        val CLOJURE: IKeyFn<String> = IKeyFn { s ->
-            val i = s.lastIndexOf('$')
-            if (i < 0) {
-                clojureFormString(s)
-            } else {
-                String.format("%s/%s", clojureFormString(s.substring(0, i)), clojureFormString(s.substring(i + 1)))
+            override fun denormalize(key: String): String {
+                val i = key.lastIndexOf('$')
+                return if (i < 0) {
+                    clojureFormString(key)
+                } else {
+                    String.format(
+                        "%s/%s",
+                        clojureFormString(key.substring(0, i)),
+                        clojureFormString(key.substring(i + 1))
+                    )
+                }
             }
-        }
+        },
 
-        // TODO the inner hyphen to underscore is not strictly necessary on the way out
-        @JvmField
-        val SQL: IKeyFn<String> = IKeyFn { s -> normalForm(s) }
+        CLOJURE_KW {
+            override fun denormalize(key: String): Keyword = Keyword.intern(CLOJURE_STR.denormalize(key) as String)
+        },
 
-        // TODO the inner hyphen to underscore is not strictly necessary on the way out
-        @JvmField
-        val SNAKE_CASE: IKeyFn<String> = IKeyFn { s -> snakeCase(s) }
+        SQL_STR {
+            override fun denormalize(key: String) = normalForm(key)
+        },
+
+        SQL_KW {
+            override fun denormalize(key: String): Keyword = Keyword.intern(SQL_STR.denormalize(key) as String)
+        },
+
+        SNAKE_CASE_STR {
+            override fun denormalize(key: String) = snakeCase(key)
+        },
+
+        SNAKE_CASE_KW {
+            override fun denormalize(key: String): Keyword = Keyword.intern(SNAKE_CASE_STR.denormalize(key) as String)
+        },
     }
+
+    fun denormalize(key: String): V
 }

@@ -1486,7 +1486,7 @@
                     :default-tz (.getZone clock)
                     :args xt-params
                     :default-all-valid-time? default-all-valid-time?
-                    :key-fn :sql}
+                    :key-fn :sql-kw}
 
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
         ^CompletableFuture

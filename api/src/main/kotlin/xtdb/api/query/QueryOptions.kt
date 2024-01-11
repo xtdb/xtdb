@@ -23,7 +23,7 @@ data class QueryOptions(
     @JvmField val defaultTz: ZoneId? = null,
     @JvmField val defaultAllValidTime: Boolean = false,
     @JvmField val explain: Boolean = false,
-    @JvmField val keyFn: String? = null
+    @JvmField val keyFn: IKeyFn<*>? = null
 ) : ILookup, Seqable {
 
     override fun valAt(key: Any?): Any? {
@@ -81,7 +81,7 @@ data class QueryOptions(
         private var defaultTz: ZoneId? = null
         private var defaultAllValidTime: Boolean = false
         private var explain: Boolean = false
-        private var keyFn: String? = null
+        private var keyFn: IKeyFn<*>? = null
 
         fun args(args: Map<String, *>?) = apply { this.args = args }
         fun args(args: List<*>?) = apply { this.args = args?.mapIndexed { idx, arg -> "_$idx" to arg }?.toMap() }
@@ -91,7 +91,7 @@ data class QueryOptions(
         fun defaultAllValidTime(defaultAllValidTime: Boolean) = apply { this.defaultAllValidTime = defaultAllValidTime }
         fun defaultTz(defaultTz: ZoneId?) = apply { this.defaultTz = defaultTz }
         fun explain(explain: Boolean) = apply { this.explain = explain }
-        fun keyFn(keyFn: String?) = apply { this.keyFn = keyFn }
+        fun keyFn(keyFn: IKeyFn<*>?) = apply { this.keyFn = keyFn }
 
         fun build() = QueryOptions(args, basis, afterTx, txTimeout, defaultTz, defaultAllValidTime, explain, keyFn)
     }

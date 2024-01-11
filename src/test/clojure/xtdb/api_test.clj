@@ -658,18 +658,18 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
   (t/is (= [{:xt/id :petr :first-name "Petr", :last-name "Petrov"}
             {:xt/id :ivan :first-name "Ivan", :last-name "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :clojure}))
+                 {:key-fn :clojure-kw}))
         "clojure key-fn")
 
   (t/is (= [{:xt$id :petr :first_name "Petr", :last_name "Petrov"}
             {:xt$id :ivan :first_name "Ivan", :last_name "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :sql})))
+                 {:key-fn :sql-kw})))
 
   (t/is (= [{:xt/id :petr :first_name "Petr", :last_name "Petrov"}
             {:xt/id :ivan :first_name "Ivan", :last_name "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :snake_case})))
+                 {:key-fn :snake-case-kw})))
 
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Illegal argument: "

@@ -32,12 +32,13 @@
            (java.time Clock Duration)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Function)
+           java.util.HashMap
            [java.util.stream Stream StreamSupport]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb ICursor IResultCursor)
+           (xtdb.api.query IKeyFn Query)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
-           xtdb.api.query.Query
            xtdb.util.RefCounter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -198,9 +199,18 @@
                        (into {} (map (fn [[k v]]
                                        (MapEntry/create (param-sym (str (symbol k))) v)))))))
 
+(defn- cache-key-fn [^IKeyFn key-fn]
+  (let [cache (HashMap.)]
+    (reify IKeyFn
+      (denormalize [_ k]
+        (.computeIfAbsent cache k
+                          (reify Function
+                            (apply [_ k]
+                              (.denormalize key-fn k))))))))
+
 (defn open-query ^java.util.stream.Stream [allocator ^IRaQuerySource ra-src, wm-src, plan, query-opts]
   (let [{:keys [args key-fn]} query-opts
-        key-fn (util/parse-key-fn key-fn)]
+        key-fn (cache-key-fn key-fn)]
     (util/with-close-on-catch [args (open-args allocator args)
                                cursor (-> (.prepareRaQuery ra-src plan)
                                           (.bind wm-src (-> query-opts

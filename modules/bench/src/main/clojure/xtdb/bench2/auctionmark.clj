@@ -103,17 +103,17 @@
        (cond-> []
          ;; increment number of bids on item
          i
-         (conj (xt/put :item (assoc (first (q '~item-query {:args {:i i}, :key-fn :snake_case}))
+         (conj (xt/put :item (assoc (first (q '~item-query {:args {:i i}, :key-fn :snake-case-kw}))
                                     :i_num_bids (inc nbids))))
 
          ;; if new bid exceeds old, bump it
          upd_curr_bid
-         (conj (xt/put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake_case}))
+         (conj (xt/put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-kw}))
                                             :imb_bid bid)))
 
          ;; we exceed the old max, win the bid.
          (and curr_bid new_bid_win)
-         (conj (xt/put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake_case}))
+         (conj (xt/put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-kw}))
                                             :imb_ib_id new_bid_id
                                             :imb_ib_u_id u_id
                                             :imb_updated now)))
@@ -180,7 +180,7 @@
                            (from :gav [{:xt/id gav-id, :gav-gag-id gag-id} gav-name])
                            (unnest {gag-id $gag-ids})
                            (unnest {gav-id $gav-ids}))
-                   {:args {:gag-ids gag-ids, :gav-ids gav-ids}, :key-fn :snake_case})
+                   {:args {:gag-ids gag-ids, :gav-ids gav-ids}, :key-fn :snake-case-kw})
              (str/join " ")
              (str description " "))]
 
@@ -219,7 +219,7 @@
 
 (defn item-status-groups [node]
   (let [items (xt/q node '(from :item [{:xt/id i} i_id i_u_id i_status i_end_date i_num_bids])
-                    {:key-fn :snake_case})
+                    {:key-fn :snake-case-kw})
         all (ArrayList.)
         open (ArrayList.)
         ending-soon (ArrayList.)
@@ -334,7 +334,7 @@
     (xt/q sut '(-> (from :item [{:xt/id i_id, :i_status :open}
                                 i_u_id i_initial_price i_current_price])
                    (where (= $iid i_id)))
-          {:args {:iid i_id}, :key-fn :snake_case})))
+          {:args {:iid i_id}, :key-fn :snake-case-kw})))
 
 (defn read-category-tsv []
   (let [cat-tsv-rows

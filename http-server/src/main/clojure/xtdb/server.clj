@@ -32,7 +32,7 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb.api TransactionKey)
-           (xtdb.api.query Basis Query)
+           (xtdb.api.query Basis IKeyFn Query)
            (xtdb.api.tx TxOptions TxRequest)))
 
 (def ^:private muuntaja-opts
@@ -50,7 +50,7 @@
 
 (s/def ::tx-ops seqable?)
 
-(s/def ::key-fn (s/nilable keyword?))
+(s/def ::key-fn (s/nilable #(instance? IKeyFn %)))
 
 (s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
@@ -161,8 +161,6 @@
 
 (s/def ::args (s/nilable (s/coll-of any?)))
 
-(s/def ::key-fn (s/nilable (some-fn keyword? string?)))
-
 (s/def ::query-body
   (s/keys :req-un [::query],
           :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn ::explain?]))
@@ -209,7 +207,7 @@
   {:status 400
    :body (err/illegal-arg :malformed-request
                           (merge (r.coercion/encode-error (ex-data ex))
-                                 {::err/message "Malformed request."}))})
+                                 {::err/message (str "Malformed request: " (ex-message ex))}))})
 
 (defn- unroll-xt-iae [ex]
   (if (instance? xtdb.IllegalArgumentException ex)
@@ -223,7 +221,8 @@
      :body xt-iae}
     {:status 400
      :body (err/illegal-arg :malformed-request
-                            {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})}))
+                            (merge {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")}
+                                   #_(ex-data ex)))}))
 
 (defn- default-handler
   [^Exception e _]
@@ -252,7 +251,7 @@
                                                ::r.coercion/request-coercion handle-request-coercion-error
                                                :muuntaja/decode handle-muuntaja-decode-error
                                                ::ri.exception/wrap (fn [handler e req]
-                                                                     #_(log/warn (format "response error (%s): '%s'" (class e) (ex-message e)))
+                                                                     (log/debug (format "response error (%s): '%s'" (class e) (ex-message e)))
                                                                      (let [response-format (:raw-format (:muuntaja/response req))]
                                                                        (cond-> (handler e req)
                                                                          (#{"application/jsonl"} response-format)

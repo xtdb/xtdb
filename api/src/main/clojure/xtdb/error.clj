@@ -1,5 +1,4 @@
-(ns xtdb.error
-  (:import java.io.Writer))
+(ns xtdb.error)
 
 (defn illegal-arg
   ([k] (illegal-arg k {}))

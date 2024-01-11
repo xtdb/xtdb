@@ -13,7 +13,8 @@
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
             [xtdb.time :as time]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql.edn :as xtql.edn]
+            [xtdb.serde :as serde])
   (:import (java.io Writer)
            java.util.concurrent.ExecutionException
            java.util.function.Function
@@ -21,7 +22,7 @@
            java.util.Map
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
-           (xtdb.api.query Basis Query QueryOptions)
+           (xtdb.api.query Basis IKeyFn Query QueryOptions)
            (xtdb.api.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds TxOptions)
            xtdb.types.ClojureForm))
 
@@ -178,7 +179,7 @@
 
 (extend-protocol xtp/PNode
   IXtdb
-  (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :clojure}}]
+  (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :clojure-kw}}]
     (let [query-opts (-> (QueryOptions/queryOpts)
                          (cond-> (map? args) (.args ^Map args)
                                  (vector? args) (.args ^List args)
@@ -189,8 +190,7 @@
                                  (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
                                  (some? explain?) (.explain explain?))
 
-                         ;; TODO accept IKeyFn
-                         (.keyFn (str (symbol key-fn)))
+                         (.keyFn (serde/read-key-fn key-fn))
 
                          (.build))]
       (if (string? query)

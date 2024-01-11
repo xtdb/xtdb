@@ -38,9 +38,8 @@ class IXtdbJavaTest {
                 .binding(List.of(bindVar("xt/id"), bindVar("xt/system_from"))))) {
             assertEquals(
                     List.of(Map.of(
-                            // TODO shouldn't be keyword here
-                            Keyword.intern("xt/id"), 1,
-                            Keyword.intern("xt/system_from"), ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
+                            "xt/id", 1,
+                            "xt/system_from", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
                     res.toList());
         }
     }

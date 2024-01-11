@@ -540,21 +540,6 @@
 (defn str->normal-form-str ^String [^String s]
   (NormalForm/normalForm s))
 
-(defn parse-key-fn [key-fn]
-  (IKeyFn/cached (case key-fn
-                   :clojure (IKeyFn/keyword IKeyFn/CLOJURE)
-                   :sql (IKeyFn/keyword IKeyFn/SQL)
-                   :snake_case (IKeyFn/keyword IKeyFn/SNAKE_CASE)
-
-                   (cond
-                     (string? key-fn) (parse-key-fn (keyword key-fn))
-                     (keyword? key-fn) (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))
-                     (instance? IKeyFn key-fn) key-fn
-                     (ifn? key-fn) (reify IKeyFn
-                                     (denormalize [_ s]
-                                       (key-fn s)))
-                     :else (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))))
-
 (defn ->child-allocator [^BufferAllocator allocator name]
   (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))
 

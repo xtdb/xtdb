@@ -28,7 +28,7 @@
 
       (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
         {:vs (vec (for [idx (range (count vs))]
-                    (.getObject duv-rdr idx (util/parse-key-fn :clojure))))
+                    (.getObject duv-rdr idx #xt/key-fn :clojure-kw)))
          :vec-types (vec (for [idx (range (count vs))]
                            (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
 

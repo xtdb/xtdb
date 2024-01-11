@@ -78,18 +78,10 @@
       (.close body)
       (throw t))))
 
-(defn- validate-remote-key-fn [key-fn]
-  (when-not (#{"clojure" "sql" "snake_case"} key-fn)
-    (throw (err/illegal-arg :unknown-deserialization-opt {:key-fn key-fn}))))
-
-(defn validate-query-opts [{:keys [key-fn] :as _query-opts}]
-  (some-> key-fn validate-remote-key-fn))
-
 (defn- open-query& [client query query-opts]
   (-> (request client :post :query
                {:content-type :transit+json
                 :form-params (-> (into {:query query} query-opts)
-                                 (doto validate-query-opts)
                                  (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
                                  (time/after-latest-submitted-tx client))
                 :as ::transit+json->result-or-error})
@@ -100,10 +92,10 @@
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   IXtdb
   (^CompletableFuture openQueryAsync [client ^String query ^QueryOptions query-opts]
-   (open-query& client query (into {:key-fn "sql"} query-opts)))
+   (open-query& client query (into {:key-fn #xt/key-fn :sql-str} query-opts)))
 
   (^CompletableFuture openQueryAsync [client ^Query query ^QueryOptions query-opts]
-   (open-query& client query (into {:key-fn "snake_case"} query-opts)))
+   (open-query& client query (into {:key-fn #xt/key-fn :snake-case-str} query-opts)))
 
   (submitTxAsync [client opts tx-ops]
     (-> ^CompletableFuture

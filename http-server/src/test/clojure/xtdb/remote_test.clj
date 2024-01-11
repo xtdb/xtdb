@@ -263,8 +263,7 @@
                                               :query_opts {:basis {:at_tx (tx-key->json-tx-key tx2)}}}
                                 :url (http-url "query")})
                  :body
-                 decode-transit*
-                 ))
+                 decode-transit*))
           "testing query")
 
     (t/is (= [{:xt$id 2}]
@@ -274,11 +273,10 @@
                                 :content-type :json
                                 :form-params {:query {"from" "docs", "bind" ["xt/id"]}
                                               :query_opts {:basis {:at_tx (tx-key->json-tx-key tx2)}
-                                                           :key_fn "sql"}}
+                                                           :key_fn "SQL_KW"}}
                                 :url (http-url "query")})
                  :body
-                 decode-transit*
-                 ))
+                 decode-transit*))
           "testing query opts")
 
     (t/testing "malformed tx request "
@@ -321,7 +319,7 @@
                               :request-method :post
                               :content-type :json
                               :form-params {:query {"rel" [{"foo-bar" 1} {"foo-bar" 2}] "bind" ["foo-bar"]}
-                                            :query_opts {:key_fn "sql"}}
+                                            :query_opts {:key_fn "SQL_STR"}}
                               :url (http-url "query")})
                :body
                decode-json*))))

@@ -1,18 +1,18 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
     xtdb.serde
   (:require [clojure.edn :as edn]
+            [clojure.string :as str]
             [cognitect.transit :as transit]
             [time-literals.read-write :as time-literals]
-            [xtdb.api :as xt]
-            [xtdb.error :as err]
             [xtdb.time :as time]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql.edn :as xtql.edn]
+            [xtdb.error :as err])
   (:import java.io.Writer
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey)
-           (xtdb.api.query Query)
+           (xtdb.api.query IKeyFn IKeyFn$KeyFn Query)
            (xtdb.api.tx Call Delete Erase Put Sql TxOp TxOptions Xtql XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -155,6 +155,28 @@
 (defn call-op-reader [{:keys [fn-id args]}]
   (TxOp/call fn-id args))
 
+(defn write-key-fn [^IKeyFn$KeyFn key-fn]
+  (-> (.name key-fn)
+      (str/lower-case)
+      (str/replace #"_" "-")
+      keyword))
+
+(def ^:private key-fns
+  (->> (IKeyFn$KeyFn/values)
+       (into {} (map (juxt write-key-fn identity)))))
+
+(defn read-key-fn [k]
+  (if (instance? IKeyFn k)
+    k
+    (or (get key-fns k)
+        (throw (err/illegal-arg :xtdb/invalid-key-fn {:key k})))))
+
+(defmethod print-dup IKeyFn$KeyFn [key-fn ^Writer w]
+  (.write w (str "#xt/key-fn " (write-key-fn key-fn))))
+
+(defmethod print-method IKeyFn$KeyFn [e, ^Writer w]
+  (print-dup e w))
+
 (defmethod print-dup TransactionKey [^TransactionKey tx-key ^Writer w]
   (.write w "#xt/tx-key ")
   (print-method {:tx-id (.getTxId tx-key) :system-time (.getSystemTime tx-key)} w))
@@ -210,8 +232,9 @@
          (-> time-literals/tags
              (update-keys str)
              (update-vals transit/read-handler))
-         {"xtdb/clj-form" (transit/read-handler xt/->ClojureForm)
+         {"xtdb/clj-form" (transit/read-handler #(ClojureForm. %))
           "xtdb/tx-key" (transit/read-handler tx-key-read-fn)
+          "xtdb/key-fn" (transit/read-handler read-key-fn)
           "xtdb/illegal-arg" (transit/read-handler iae-reader)
           "xtdb/runtime-err" (transit/read-handler runex-reader)
           "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
@@ -256,6 +279,7 @@
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" render-runex)
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" (juxt ex-message ex-data))
+          IKeyFn$KeyFn (transit/write-handler "xtdb/key-fn" write-key-fn)
 
           ClojureForm (transit/write-handler "xtdb/clj-form" #(.form ^ClojureForm %))
 

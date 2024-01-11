@@ -125,16 +125,16 @@
         ;; (t/is (= nil (am/generate-new-bid-params worker)))
         (t/is (= {:i_num_bids 1}
                  (first (xt/q *node* '(from :item [i_num_bids])
-                              {:key-fn :snake_case}))))
+                              {:key-fn :snake-case-kw}))))
         ;; there exists a bid
         (t/is (= {:ib_i_id "i_0", :ib_id "ib_0"}
                  (first (xt/q *node* '(from :item-bid [ib_id ib_i_id])
-                              {:key-fn :snake_case}))))
+                              {:key-fn :snake-case-kw}))))
         ;; new max bid
         (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                  (first (xt/q *node*
                               '(from :item-max-bid [{:xt/id imb}, imb_i_id])
-                              {:key-fn :snake_case})))))
+                              {:key-fn :snake-case-kw})))))
 
       (t/testing "new bid but does not exceed max"
         (with-redefs [am/random-price (constantly Double/MIN_VALUE)]
@@ -143,12 +143,12 @@
 
           ;; new bid
           (t/is (= 2 (-> (xt/q *node* '(from :item [i_num_bids])
-                               {:key-fn :snake_case})
+                               {:key-fn :snake-case-kw})
                          first :i_num_bids)))
           ;; winning bid remains the same
           (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                    (first (xt/q *node* '(from :item-max-bid [{:xt/id imb} imb_i_id])
-                                {:key-fn :snake_case})))))))))
+                                {:key-fn :snake-case-kw})))))))))
 
 (t/deftest proc-new-item-test
   (with-redefs [am/sample-status (constantly :open)]
@@ -164,10 +164,10 @@
 
         ;; new item
         (let [{:keys [i_id i_u_id]} (first (xt/q *node* '(from :item [i_id i_u_id])
-                                                 {:key-fn :snake_case}))]
+                                                 {:key-fn :snake-case-kw}))]
           (t/is (= "i_0" i_id))
           (t/is (= "u_0" i_u_id)))
         (t/is (< (- (:u_balance (first (xt/q *node* '(from :user [u_balance])
-                                             {:key-fn :snake_case})))
+                                             {:key-fn :snake-case-kw})))
                     (double -1.0))
                  0.0001))))))

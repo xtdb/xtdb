@@ -475,7 +475,7 @@
                                 (.defaultTz #time/zone "America/Los_Angeles")
                                 (.defaultAllValidTime true)
                                 (.explain true)
-                                (.keyFn "clojure")
+                                (.keyFn #xt/key-fn :clojure-kw)
                                 (.build)))
              (roundtrip-query-map {"query" {"from" "docs"
                                             "bind" ["xt/id"]}
@@ -490,7 +490,7 @@
                                                  "default_all_valid_time" true
                                                  "default_tz" #time/zone "America/Los_Angeles"
                                                  "explain" true
-                                                 "key_fn" "clojure"}}))))
+                                                 "key_fn" "CLOJURE_KW"}}))))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtql/missing-query"
                           (roundtrip-query-map {"explain" true}))

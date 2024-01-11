@@ -236,7 +236,7 @@
   (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :first-name "Allan" :last-name "Turing"})
                            (xt/put-fn :my-fn '(fn []
                                                 (let [ks (->> (q '(from :docs [first-name last-name])
-                                                                 {:key-fn :sql})
+                                                                 {:key-fn :sql-kw})
                                                               (mapcat keys)
                                                               (into []))]
                                                   [(xt/put :the-keys {:xt/id 1 :keys ks})])))

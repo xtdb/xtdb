@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test
 import xtdb.api.query.*
 import xtdb.api.query.Binding.Companion.bindVar
 import xtdb.api.query.Expr.Companion.call
+import xtdb.api.query.IKeyFn.KeyFn.CLOJURE_KW
+import xtdb.api.query.IKeyFn.KeyFn.CLOJURE_STR
 import xtdb.api.query.Query.Companion.from
 import xtdb.api.query.Query.Companion.pipeline
 import xtdb.api.query.Query.Companion.relation
@@ -40,7 +42,7 @@ internal class XtdbTest {
         node.submitTx(put("foo", mapOf("xt/id" to "jms")))
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("id") to "jms")),
+            listOf(mapOf("id" to "jms")),
 
             node.openQuery(
                 from("foo")
@@ -49,7 +51,7 @@ internal class XtdbTest {
         )
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("foo_id") to "jms")),
+            listOf(mapOf("foo_id" to "jms")),
 
             node.openQuery("SELECT foo.xt\$id AS foo_id FROM foo").doall()
         )
@@ -62,7 +64,7 @@ internal class XtdbTest {
         node.submitTx(put("docs2", mapOf("xt/id" to 1, "foo" to "bar")))
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("my_foo") to "bar")),
+            listOf(mapOf("my_foo" to "bar")),
             node.openQuery(
                 from("docs2")
                     .binding(listOf("foo" toVar "my_foo"))
@@ -73,19 +75,19 @@ internal class XtdbTest {
 
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("my-foo") to "bar")),
+            listOf(mapOf("my-foo" to "bar")),
             node.openQuery(
                 from("docs2")
                     .binding(listOf("foo" toVar "my_foo")),
 
-                QueryOptions(keyFn = "clojure")
+                QueryOptions(keyFn = CLOJURE_STR)
             ).doall(),
 
             "key-fn"
         )
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("foo") to "bar")),
+            listOf(mapOf("foo" to "bar")),
             node.openQuery(
                 from("docs2")
                     .binding(listOf("xt/id" toParam "\$id", bindVar("foo"))),
@@ -96,7 +98,7 @@ internal class XtdbTest {
         )
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("current_time") to LocalDate.parse("2020-01-01"))),
+            listOf(mapOf("current_time" to LocalDate.parse("2020-01-01"))),
 
             node.openQuery(
                 pipeline(
@@ -111,7 +113,7 @@ internal class XtdbTest {
         )
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("timestamp") to ZonedDateTime.parse("2020-01-01T04:34:56-08:00[America/Los_Angeles]"))),
+            listOf(mapOf("timestamp" to ZonedDateTime.parse("2020-01-01T04:34:56-08:00[America/Los_Angeles]"))),
 
             node.openQuery(
                 pipeline(
@@ -136,7 +138,7 @@ internal class XtdbTest {
         )
 
         assertEquals(
-            listOf(mapOf(Keyword.intern("plan") to plan)),
+            listOf(mapOf("plan" to plan)),
 
             node.openQuery(
                 from("docs")
