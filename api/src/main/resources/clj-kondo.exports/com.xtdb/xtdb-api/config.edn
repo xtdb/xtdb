@@ -1,0 +1,8 @@
+{:linters {:xtql/redundant-pipeline {:level :warning}
+           :xtql/redundant-unify {:level :warning}
+           :xtql/unrecognized-operation {:level :error}
+           :xtql/unrecognized-parameter {:level :warning}
+           :xtql/missing-parameter {:level :error}
+           :xtql/type-mismatch {:level :error}
+           :xtql/invalid-arity {:level :error}}
+ :hooks {:analyze-call {xtdb.api/q hooks.xtql/q}}}
