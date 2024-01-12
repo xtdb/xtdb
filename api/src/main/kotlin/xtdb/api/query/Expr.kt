@@ -52,6 +52,9 @@ sealed interface Expr {
         fun call(f: String, args: List<Expr>) = Call(f, args)
 
         @JvmStatic
+        fun call(f: String, vararg args: Expr) = call(f, args.toList())
+
+        @JvmStatic
         fun get(expr: Expr, field: String) = Get(expr, field)
 
         @JvmStatic
@@ -70,9 +73,17 @@ sealed interface Expr {
         fun list(elements: List<Expr>) = ListExpr(elements)
 
         @JvmStatic
+        fun list(vararg elements: Expr) = list(elements.toList())
+
+        @JvmStatic
         fun set(elements: List<Expr>) = SetExpr(elements)
 
         @JvmStatic
+        fun set(vararg elements: Expr) = set(elements.toList())
+
+        @JvmStatic
         fun map(elements: Map<String, Expr>) = MapExpr(elements)
+
+        fun map(vararg elements: Pair<String, Expr>) = map(elements.toMap())
     }
 }

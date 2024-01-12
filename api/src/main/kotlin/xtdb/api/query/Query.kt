@@ -92,28 +92,55 @@ sealed interface Query {
         fun pipeline(query: Query, tails: List<QueryTail>) = Pipeline(query, tails)
 
         @JvmStatic
+        fun pipeline(query: Query, vararg tails: QueryTail) = pipeline(query, tails.toList())
+
+        @JvmStatic
         fun unify(clauses: List<UnifyClause>) = Unify(clauses)
+
+        @JvmStatic
+        fun unify(vararg clauses: UnifyClause) = unify(clauses.toList())
 
         @JvmStatic
         fun from(table: String, bindings: List<Binding>) = From(table, bindings)
 
         @JvmStatic
+        fun from(table: String, vararg bindings: Binding) = from(table, bindings.toList())
+
+        @JvmStatic
         fun where(preds: List<Expr>) = Where(preds)
+
+        @JvmStatic
+        fun where(vararg preds: Expr) = where(preds.toList())
 
         @JvmStatic
         fun with(vars: List<Binding>) = With(vars)
 
         @JvmStatic
+        fun with(vararg vars: Binding) = With(vars.toList())
+
+        @JvmStatic
         fun withCols(cols: List<Binding>) = WithCols(cols)
+
+        @JvmStatic
+        fun withCols(vararg cols: Binding) = withCols(cols.toList())
 
         @JvmStatic
         fun without(cols: List<String>) = Without(cols)
 
         @JvmStatic
+        fun without(vararg cols: String) = without(cols.toList())
+
+        @JvmStatic
         fun returning(cols: List<Binding>) = Return(cols)
 
         @JvmStatic
+        fun returning(vararg cols: Binding) = returning(cols.toList())
+
+        @JvmStatic
         fun call(ruleName: String, args: List<Expr>) = Call(ruleName, args)
+
+        @JvmStatic
+        fun call(ruleName: String, vararg args: Expr) = Call(ruleName, args.toList())
 
         @JvmStatic
         fun join(query: Query, args: List<Binding>?) = Join(query, args)
@@ -125,6 +152,9 @@ sealed interface Query {
         fun aggregate(cols: List<Binding>) = Aggregate(cols)
 
         @JvmStatic
+        fun aggregate(vararg cols: Binding) = aggregate(cols.toList())
+
+        @JvmStatic
         fun orderSpec(expr: Expr) = OrderSpec(expr)
 
         @JvmStatic
@@ -134,7 +164,13 @@ sealed interface Query {
         fun orderBy(orderSpecs: List<OrderSpec>) = OrderBy(orderSpecs)
 
         @JvmStatic
+        fun orderBy(vararg orderSpecs: OrderSpec) = orderBy(orderSpecs.toList())
+
+        @JvmStatic
         fun unionAll(queries: List<Query>) = UnionAll(queries)
+
+        @JvmStatic
+        fun unionAll(vararg queries: Query) = unionAll(queries.toList())
 
         @JvmStatic
         fun limit(length: Long) = Limit(length)
@@ -146,7 +182,13 @@ sealed interface Query {
         fun relation(documents: List<Map<String, Expr>>, bindings: List<Binding>) = DocsRelation(documents, bindings)
 
         @JvmStatic
+        fun relation(documents: List<Map<String, Expr>>, vararg bindings: Binding) = relation(documents, bindings.toList())
+
+        @JvmStatic
         fun relation(param: Param, bindings: List<Binding>) = ParamRelation(param, bindings)
+
+        @JvmStatic
+        fun relation(param: Param, vararg bindings: Binding) = relation(param, bindings.toList())
 
         @JvmStatic
         fun unnestVar(`var`: Binding) = UnnestVar(`var`)

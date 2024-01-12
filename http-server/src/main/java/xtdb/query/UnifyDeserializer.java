@@ -20,6 +20,7 @@ public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
         super(Query.Unify.class);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public Query.Unify deserialize (JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -28,6 +29,6 @@ public class UnifyDeserializer extends StdDeserializer<Query.Unify> {
         if (!node.isObject() || !node.has("unify") || !node.get("unify").isArray()) {
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-unify"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
-        return Query.unify(mapper.treeToValue(node.get("unify"), mapper.getTypeFactory().constructCollectionType(List.class, Query.UnifyClause.class)));
+        return Query.unify((List<? extends Query.UnifyClause>) mapper.treeToValue(node.get("unify"), mapper.getTypeFactory().constructCollectionType(List.class, Query.UnifyClause.class)));
     }
 }

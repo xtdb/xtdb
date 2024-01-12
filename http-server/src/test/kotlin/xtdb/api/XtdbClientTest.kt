@@ -19,7 +19,7 @@ internal class XtdbClientTest {
                     listOf(mapOf("id" to "jms")),
 
                     node.openQuery(
-                        from("foo", listOf("xt/id" toVar "id"))
+                        from("foo", "xt/id" toVar "id")
                     ).use { it.toList() }
                 )
 

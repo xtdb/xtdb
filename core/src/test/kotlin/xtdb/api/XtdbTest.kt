@@ -45,7 +45,7 @@ internal class XtdbTest {
             listOf(mapOf("id" to "jms")),
 
             node.openQuery(
-                from("foo", listOf("xt/id" toVar "id"))
+                from("foo", "xt/id" toVar "id")
             ).doall()
         )
 
@@ -65,7 +65,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("my_foo" to "bar")),
             node.openQuery(
-                from("docs2", listOf("foo" toVar "my_foo"))
+                from("docs2", "foo" toVar "my_foo")
             ).doall(),
 
             "Java AST queries"
@@ -75,7 +75,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("my-foo" to "bar")),
             node.openQuery(
-                from("docs2", listOf("foo" toVar "my_foo")),
+                from("docs2", "foo" toVar "my_foo"),
 
                 QueryOptions(keyFn = CLOJURE_STR)
             ).doall(),
@@ -86,7 +86,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("foo" to "bar")),
             node.openQuery(
-                from("docs2", listOf("xt/id" toParam "\$id", bindVar("foo"))),
+                from("docs2", "xt/id" toParam "\$id", bindVar("foo")),
                 QueryOptions(args = mapOf("id" to 1))
             ).doall(),
 
@@ -99,7 +99,7 @@ internal class XtdbTest {
             node.openQuery(
                 pipeline(
                     emptyRel,
-                    listOf(withCols(listOf(Binding("current-time", call("current-date", emptyList())))))
+                    withCols(Binding("current-time", call("current-date", emptyList())))
                 ),
 
                 QueryOptions(basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")))
@@ -114,7 +114,7 @@ internal class XtdbTest {
             node.openQuery(
                 pipeline(
                     emptyRel,
-                    listOf(withCols(listOf(Binding("timestamp", call("current-timestamp", emptyList())))))
+                    withCols(Binding("timestamp", call("current-timestamp", emptyList())))
                 ),
 
                 QueryOptions(
@@ -137,7 +137,7 @@ internal class XtdbTest {
             listOf(mapOf("plan" to plan)),
 
             node.openQuery(
-                from("docs", listOf(bindVar("foo"))),
+                from("docs", bindVar("foo")),
                 QueryOptions(explain = true)
             ).doall(),
 

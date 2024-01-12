@@ -36,7 +36,8 @@ class IXtdbJavaTest {
 
         try (var res = node.openQuery(
                 from("docs",
-                        List.of(bindVar("xt/id"), bindVar("xt/system_from"))))) {
+                        bindVar("xt/id"),
+                        bindVar("xt/system_from")))) {
             assertEquals(
                     List.of(Map.of(
                             "xt/id", 1,

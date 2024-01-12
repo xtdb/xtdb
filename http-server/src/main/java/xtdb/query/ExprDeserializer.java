@@ -35,6 +35,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
         }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public Expr deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();
@@ -57,7 +58,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
             return Expr.val(node.asDouble());
         }
         if (node.isArray()) {
-            return Expr.list(mapper.treeToValue(node, typeFactory.constructCollectionType(List.class, Expr.class)));
+            return Expr.list((List<? extends Expr>) mapper.treeToValue(node, typeFactory.constructCollectionType(List.class, Expr.class)));
         }
 
         if (node.isObject()) {
@@ -114,7 +115,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
                 }
                 // composite types need to be treated specially
                 if (xtSetType.equals(typeNode.asText())) {
-                    return Expr.set(mapper.treeToValue(node.get("@value"), typeFactory.constructCollectionType(List.class, Expr.class)));
+                    return Expr.set((List<? extends Expr>) mapper.treeToValue(node.get("@value"), typeFactory.constructCollectionType(List.class, Expr.class)));
                 } else {
                     return Expr.val(mapper.treeToValue(node, Object.class));
                 }
