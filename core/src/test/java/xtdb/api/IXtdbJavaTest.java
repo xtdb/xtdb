@@ -34,8 +34,9 @@ class IXtdbJavaTest {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
                 put("docs", Map.of("xt/id", 1, "foo", "bar")));
 
-        try (var res = node.openQuery(from("docs")
-                .binding(List.of(bindVar("xt/id"), bindVar("xt/system_from"))))) {
+        try (var res = node.openQuery(
+                from("docs",
+                        List.of(bindVar("xt/id"), bindVar("xt/system_from"))))) {
             assertEquals(
                     List.of(Map.of(
                             "xt/id", 1,

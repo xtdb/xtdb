@@ -267,6 +267,7 @@
                             (symbol? spec) [(Binding/bindVar (str spec))]
                             (map? spec) (for [[attr expr] spec]
                                           (do
+                                            #_{:clj-kondo/ignore [:missing-body-in-when]}
                                             (when-not (keyword? attr)
                                               ;; TODO error
                                               )
@@ -344,36 +345,33 @@
   (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :from this}))
 
-    (let [q (Query/from (str (symbol table)))]
-      (cond
-        (or (nil? opts) (map? opts))
+    (cond
+      (or (nil? opts) (map? opts))
 
-        (do
-          (check-opt-keys from-opt-keys opts)
+      (do
+        (check-opt-keys from-opt-keys opts)
 
-          (let [{:keys [for-valid-time for-system-time bind]} opts]
-            (cond
-              (nil? bind)
-              (throw (err/illegal-arg :xtql/missing-bind {:opts opts, :from this}))
+        (let [{:keys [for-valid-time for-system-time bind]} opts]
+          (cond
+            (nil? bind)
+            (throw (err/illegal-arg :xtql/missing-bind {:opts opts, :from this}))
 
-              (not (vector? bind))
-              (throw (err/illegal-arg :xtql/malformed-bind {:opts opts, :from this}))
+            (not (vector? bind))
+            (throw (err/illegal-arg :xtql/malformed-bind {:opts opts, :from this}))
 
-              :else
-              (let [{:keys [bind project-all-cols]} (find-star-projection '* bind)]
-                (-> q
-                    (cond-> for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
-                            for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
-                            project-all-cols (.projectAllCols true))
-                    (.binding (parse-out-specs bind this)))))))
+            :else
+            (let [{:keys [bind project-all-cols]} (find-star-projection '* bind)]
+              (cond-> (Query/from (str (symbol table)) (parse-out-specs bind this))
+                for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
+                for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
+                project-all-cols (.projectAllCols true))))))
 
-        (vector? opts)
-        (let [{:keys [bind project-all-cols]} (find-star-projection '* opts)]
-          (-> q
-              (cond-> project-all-cols (.projectAllCols true))
-              (.binding (parse-out-specs bind this))))
+      (vector? opts)
+      (let [{:keys [bind project-all-cols]} (find-star-projection '* opts)]
+        (cond-> (Query/from (str (symbol table)) (parse-out-specs bind this))
+          project-all-cols (.projectAllCols true)))
 
-        :else (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this}))))))
+      :else (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this})))))
 
 (defmethod parse-query 'from [this] (parse-from this))
 (defmethod parse-unify-clause 'from [this] (parse-from this))

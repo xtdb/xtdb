@@ -28,8 +28,8 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
         if (!node.isObject() || !node.has("from") || !node.has("bind")){
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-from"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
-        var query = Query.from(node.get("from").asText());
-        query = query.binding(SpecListDeserializer.<Binding>nodeToSpecs(codec, node.get("bind"), Binding::new));
+        var query = Query.from(node.get("from").asText(),
+                SpecListDeserializer.nodeToSpecs(codec, node.get("bind"), Binding::new));
         if (node.has("for_valid_time")) {
             query = query.forValidTime(codec.treeToValue(node.get("for_valid_time"), TemporalFilter.class));
         }

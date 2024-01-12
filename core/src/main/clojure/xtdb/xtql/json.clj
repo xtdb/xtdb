@@ -218,11 +218,10 @@
 
         :else
         (let [{:keys [bind project-all-cols]} (xtql.edn/find-star-projection "*" bind)]
-          (cond-> (Query/from from)
+          (cond-> (Query/from from (parse-binding-specs bind this))
             forValidTime (.forValidTime (parse-temporal-filter forValidTime :forValidTime this))
             forSystemTime (.forSystemTime (parse-temporal-filter forSystemTime :forSystemTime this))
-            project-all-cols (.projectAllCols true)
-            bind (.binding (parse-binding-specs bind this))))))))
+            project-all-cols (.projectAllCols true)))))))
 
 (defmethod parse-query 'from [from] (parse-from from))
 (defmethod parse-unify-clause 'from [from] (parse-from from))

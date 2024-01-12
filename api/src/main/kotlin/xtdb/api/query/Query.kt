@@ -1,9 +1,6 @@
 package xtdb.api.query
 
 import xtdb.api.query.Expr.Param
-import xtdb.api.query.Query.OrderDirection.ASC
-import xtdb.api.query.Query.OrderNulls.FIRST
-import xtdb.api.query.Query.OrderNulls.LAST
 
 sealed interface Query {
     sealed interface QueryTail
@@ -15,17 +12,15 @@ sealed interface Query {
 
     data class From(
         @JvmField val table: String,
+        @JvmField val bindings: List<Binding>,
         @JvmField val forValidTime: TemporalFilter? = null,
         @JvmField val forSystemTime: TemporalFilter? = null,
-        @JvmField val bindings: List<Binding>? = null,
         @JvmField val projectAllCols: Boolean = false
     ) : Query, UnifyClause {
 
         fun forValidTime(forValidTime: TemporalFilter) = copy(forValidTime = forValidTime)
         fun forSystemTime(forSystemTime: TemporalFilter) = copy(forSystemTime = forSystemTime)
         fun projectAllCols(projectAllCols: Boolean) = copy(projectAllCols = projectAllCols)
-
-        fun binding(bindings: List<Binding>?) = copy(bindings = bindings)
     }
 
     data class Where(@JvmField val preds: List<Expr>) : QueryTail, UnifyClause
@@ -100,7 +95,7 @@ sealed interface Query {
         fun unify(clauses: List<UnifyClause>) = Unify(clauses)
 
         @JvmStatic
-        fun from(table: String) = From(table)
+        fun from(table: String, bindings: List<Binding>) = From(table, bindings)
 
         @JvmStatic
         fun where(preds: List<Expr>) = Where(preds)

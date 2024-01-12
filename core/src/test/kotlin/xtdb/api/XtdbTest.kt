@@ -45,8 +45,7 @@ internal class XtdbTest {
             listOf(mapOf("id" to "jms")),
 
             node.openQuery(
-                from("foo")
-                    .binding(listOf("xt/id" toVar "id"))
+                from("foo", listOf("xt/id" toVar "id"))
             ).doall()
         )
 
@@ -66,8 +65,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("my_foo" to "bar")),
             node.openQuery(
-                from("docs2")
-                    .binding(listOf("foo" toVar "my_foo"))
+                from("docs2", listOf("foo" toVar "my_foo"))
             ).doall(),
 
             "Java AST queries"
@@ -77,8 +75,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("my-foo" to "bar")),
             node.openQuery(
-                from("docs2")
-                    .binding(listOf("foo" toVar "my_foo")),
+                from("docs2", listOf("foo" toVar "my_foo")),
 
                 QueryOptions(keyFn = CLOJURE_STR)
             ).doall(),
@@ -89,8 +86,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("foo" to "bar")),
             node.openQuery(
-                from("docs2")
-                    .binding(listOf("xt/id" toParam "\$id", bindVar("foo"))),
+                from("docs2", listOf("xt/id" toParam "\$id", bindVar("foo"))),
                 QueryOptions(args = mapOf("id" to 1))
             ).doall(),
 
@@ -141,8 +137,7 @@ internal class XtdbTest {
             listOf(mapOf("plan" to plan)),
 
             node.openQuery(
-                from("docs")
-                    .binding(listOf(bindVar("foo"))),
+                from("docs", listOf(bindVar("foo"))),
                 QueryOptions(explain = true)
             ).doall(),
 
