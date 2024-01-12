@@ -114,7 +114,7 @@ public class ExprDeserializer extends StdDeserializer<Expr> {
                 }
                 // composite types need to be treated specially
                 if (xtSetType.equals(typeNode.asText())) {
-                    return Expr.set(new HashSet<Expr>(mapper.treeToValue(node.get("@value"), typeFactory.constructCollectionType(List.class, Expr.class))));
+                    return Expr.set(mapper.treeToValue(node.get("@value"), typeFactory.constructCollectionType(List.class, Expr.class)));
                 } else {
                     return Expr.val(mapper.treeToValue(node, Object.class));
                 }

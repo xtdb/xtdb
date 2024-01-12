@@ -245,7 +245,7 @@
            (roundtrip-expr {"foo" 1}))
         "maps")
 
-  (t/is (= (Expr/set #{(Expr/val 1) (Expr/val :foo)})
+  (t/is (= (Expr/set [(Expr/val 1) (Expr/val :foo)])
            (roundtrip-expr #{1 :foo}))
         "sets"))
 

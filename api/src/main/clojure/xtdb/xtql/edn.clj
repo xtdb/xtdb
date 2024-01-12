@@ -90,7 +90,7 @@
                        (Expr/lVar str-expr)))
     (keyword? expr) (Expr/val expr)
     (vector? expr) (Expr/list (mapv parse-expr expr))
-    (set? expr) (Expr/set (into #{} (map parse-expr) expr))
+    (set? expr) (Expr/set (mapv parse-expr expr))
     (map? expr) (Expr/map (into {} (map (juxt (comp #(subs % 1) str key) (comp parse-expr val))) expr))
 
     (seq? expr) (do

@@ -20,7 +20,7 @@ sealed interface Expr {
     data class PullMany(@JvmField val query: Query, @JvmField val args: List<Binding>? = null) : Expr
 
     data class ListExpr(@JvmField val elements: List<Expr>) : Expr
-    data class SetExpr(@JvmField val elements: Set<Expr>) : Expr
+    data class SetExpr(@JvmField val elements: List<Expr>) : Expr
     data class MapExpr(@JvmField val elements: Map<String, Expr>) : Expr
 
     companion object {
@@ -70,7 +70,7 @@ sealed interface Expr {
         fun list(elements: List<Expr>) = ListExpr(elements)
 
         @JvmStatic
-        fun set(elements: Set<Expr>) = SetExpr(elements)
+        fun set(elements: List<Expr>) = SetExpr(elements)
 
         @JvmStatic
         fun map(elements: Map<String, Expr>) = MapExpr(elements)
