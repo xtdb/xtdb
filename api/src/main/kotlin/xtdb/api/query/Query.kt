@@ -1,6 +1,11 @@
 package xtdb.api.query
 
+import xtdb.api.query.Expr.Companion.lVar
 import xtdb.api.query.Expr.Param
+import xtdb.api.query.Query.OrderDirection.ASC
+import xtdb.api.query.Query.OrderDirection.DESC
+import xtdb.api.query.Query.OrderNulls.FIRST
+import xtdb.api.query.Query.OrderNulls.LAST
 
 sealed interface Query {
     sealed interface QueryTail
@@ -98,7 +103,12 @@ sealed interface Query {
         @JvmField val expr: Expr,
         @JvmField val direction: OrderDirection? = null,
         @JvmField val nulls: OrderNulls? = null,
-    )
+    ) {
+        fun asc() = copy(direction = ASC)
+        fun desc() = copy(direction = DESC)
+        fun nullsFirst() = copy(nulls = FIRST)
+        fun nullsLast() = copy(nulls = LAST)
+    }
 
     data class OrderBy(@JvmField val orderSpecs: List<OrderSpec?>) : QueryTail
 
@@ -197,6 +207,9 @@ sealed interface Query {
 
         @JvmSynthetic
         fun aggregate(b: Aggregate.Builder.() -> Unit) = aggregate().also { it.b() }.build()
+
+        @JvmStatic
+        fun orderSpec(col: String) = orderSpec(lVar(col))
 
         @JvmStatic
         fun orderSpec(expr: Expr) = OrderSpec(expr)
