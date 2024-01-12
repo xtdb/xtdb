@@ -14,6 +14,7 @@ import xtdb.api.query.Query;
 import xtdb.api.query.TemporalFilter;
 
 import java.io.IOException;
+import java.util.List;
 
 public class FromDeserializer extends StdDeserializer<Query.From> {
     public FromDeserializer() {
@@ -28,14 +29,19 @@ public class FromDeserializer extends StdDeserializer<Query.From> {
         if (!node.isObject() || !node.has("from") || !node.has("bind")){
             throw IllegalArgumentException.create(Keyword.intern("xtql", "malformed-from"), PersistentHashMap.create(Keyword.intern("json"), node.toPrettyString()));
         }
-        var query = Query.from(node.get("from").asText(),
-                SpecListDeserializer.nodeToSpecs(codec, node.get("bind"), Binding::new));
+
+        var from = Query.from(node.get("from").asText());
+
+        from.setBindings(SpecListDeserializer.nodeToSpecs(codec, node.get("bind"), Binding::new));
+
         if (node.has("for_valid_time")) {
-            query = query.forValidTime(codec.treeToValue(node.get("for_valid_time"), TemporalFilter.class));
+            from.forValidTime(codec.treeToValue(node.get("for_valid_time"), TemporalFilter.class));
         }
+
         if (node.has("for_system_time")) {
-            query = query.forSystemTime(codec.treeToValue(node.get("for_system_time"), TemporalFilter.class));
+            from.forSystemTime(codec.treeToValue(node.get("for_system_time"), TemporalFilter.class));
         }
-        return query;
+
+        return from.build();
     }
 }

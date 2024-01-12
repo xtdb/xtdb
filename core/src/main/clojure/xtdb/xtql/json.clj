@@ -78,7 +78,7 @@
                   "xt:instant" (Expr/val (try-parse v #(Instant/parse %)))
                   (throw (err/illegal-arg :xtql/unknown-type {:value v, :type t}))))))))
 
-(defn parse-expr [expr]
+(defn parse-expr ^xtdb.api.query.Expr [expr]
   (letfn [(bad-expr [expr]
             (throw (err/illegal-arg :xtql/malformed-expr {:expr expr})))]
     (cond
@@ -104,7 +104,7 @@
                           :else (let [[f args] (first expr)]
                                   (if-not (vector? args)
                                     (bad-expr expr)
-                                    (Expr/call f (mapv parse-expr args))))))))
+                                    (Expr$Call. f (mapv parse-expr args))))))))
 
       :else (bad-expr expr))))
 
@@ -183,8 +183,8 @@
   (->> binding-specs
        (into [] (mapcat (fn [binding-spec]
                           (cond
-                            (string? binding-spec) [(Binding/bindVar binding-spec)]
-                            (map? binding-spec) (for [[attr expr] binding-spec]
+                            (string? binding-spec) [(Binding. binding-spec)]
+                            (map? binding-spec) (for [[^String attr expr] binding-spec]
                                                   (do
                                                     #_{:clj-kondo/ignore [:missing-body-in-when]}
                                                     (when-not (string? attr)
@@ -218,10 +218,12 @@
 
         :else
         (let [{:keys [bind project-all-cols]} (xtql.edn/find-star-projection "*" bind)]
-          (cond-> (Query/from from (parse-binding-specs bind this))
-            forValidTime (.forValidTime (parse-temporal-filter forValidTime :forValidTime this))
-            forSystemTime (.forSystemTime (parse-temporal-filter forSystemTime :forSystemTime this))
-            project-all-cols (.projectAllCols true)))))))
+          (-> (cond-> (doto (Query/from from)
+                        (.setBindings (parse-binding-specs bind this)))
+                forValidTime (doto (.forValidTime (parse-temporal-filter forValidTime :forValidTime this)))
+                forSystemTime (doto (.forSystemTime (parse-temporal-filter forSystemTime :forSystemTime this)))
+                project-all-cols (doto (.projectAllCols)))
+              (.build)))))))
 
 (defmethod parse-query 'from [from] (parse-from from))
 (defmethod parse-unify-clause 'from [from] (parse-from from))
@@ -282,19 +284,19 @@
     (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline query}))
 
     (let [[head & tails] query]
-      (Query/pipeline (parse-query head) (mapv parse-query-tail tails)))))
+      (Query$Pipeline. (parse-query head) (mapv parse-query-tail tails)))))
 
 (defmethod parse-query 'unify [{:strs [unify] :as query}]
   (if-not (vector? unify)
     (throw (err/illegal-arg :xtql/malformed-unify {:unify query}))
 
-    (Query/unify (mapv parse-unify-clause unify))))
+    (Query$Unify. (mapv parse-unify-clause unify))))
 
 (defn- parse-where [{:strs [where]}]
   (if-not (vector? where)
     (throw (err/illegal-arg :xtql/malformed-where {:where where}))
 
-    (Query/where (mapv parse-expr where))))
+    (Query$Where. (mapv parse-expr where))))
 
 (defmethod parse-query-tail 'where [where] (parse-where where))
 (defmethod parse-unify-clause 'where [where] (parse-where where))
@@ -309,7 +311,7 @@
   (if-not (vector? with)
     (throw (err/illegal-arg :xtql/malformed-with {:with with}))
 
-    (Query/with (parse-var-specs with query))))
+    (Query$With. (parse-var-specs with query))))
 
 (defn check-unnest [unnest]
   (when-not (and (vector? unnest)
@@ -330,7 +332,7 @@
   (if-not (and (vector? without) (every? string? without))
     (throw (err/illegal-arg :xtql/malformed-without {:without query}))
 
-    (Query/without without)))
+    (Query$Without. without)))
 
 (defmethod parse-query-tail 'return [{:strs [return] :as query}]
   (if-not (vector? return)
@@ -353,7 +355,7 @@
   (if-not (vector? union-all)
     (throw (err/illegal-arg :xtql/malformed-union-all {:union-all query}))
 
-    (Query/unionAll (mapv parse-query union-all))))
+    (Query$UnionAll. (mapv parse-query union-all))))
 
 (defn parse-rel [this]
   (if-not (map? this)
@@ -419,7 +421,7 @@
   (if-not (vector? order-by)
     (throw (err/illegal-arg :xtql/malformed-order-by {:order-by query}))
 
-    (Query/orderBy (mapv #(parse-order-spec % query) order-by))))
+    (Query$OrderBy. (mapv #(parse-order-spec % query) order-by))))
 
 (extend-protocol Unparse
   Query$OrderSpec

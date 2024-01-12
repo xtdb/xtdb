@@ -1,10 +1,8 @@
 package xtdb.api
 
-import clojure.lang.Keyword
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.query.Query.Companion.from
-import xtdb.api.query.toVar
 import xtdb.api.tx.TxOp.Companion.put
 import java.net.URL
 
@@ -19,7 +17,7 @@ internal class XtdbClientTest {
                     listOf(mapOf("id" to "jms")),
 
                     node.openQuery(
-                        from("foo", "xt/id" toVar "id")
+                        from("foo") { "xt/id" boundTo "id" }
                     ).use { it.toList() }
                 )
 

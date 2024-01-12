@@ -15,22 +15,50 @@ sealed interface Query {
         @JvmField val bindings: List<Binding>,
         @JvmField val forValidTime: TemporalFilter? = null,
         @JvmField val forSystemTime: TemporalFilter? = null,
-        @JvmField val projectAllCols: Boolean = false
+        @JvmField val projectAllCols: Boolean = false,
     ) : Query, UnifyClause {
 
-        fun forValidTime(forValidTime: TemporalFilter) = copy(forValidTime = forValidTime)
-        fun forSystemTime(forSystemTime: TemporalFilter) = copy(forSystemTime = forSystemTime)
-        fun projectAllCols(projectAllCols: Boolean) = copy(projectAllCols = projectAllCols)
+        constructor(table: String, bindings: List<Binding>) : this(table, bindings, null, null, false)
+
+        class Builder(private val table: String) : Binding.ABuilder<Builder, From>() {
+            private var forValidTime: TemporalFilter? = null
+            private var forSystemTime: TemporalFilter? = null
+            private var projectAllCols: Boolean = false
+
+            fun forValidTime(validTime: TemporalFilter?) = this.apply { this.forValidTime = validTime }
+            fun forSystemTime(systemTime: TemporalFilter?) = this.apply { this.forSystemTime = systemTime }
+
+            @JvmOverloads
+            fun projectAllCols(projectAllCols: Boolean = true) = this.apply { this.projectAllCols = projectAllCols }
+
+            override fun build() = From(table, buildBindings(), forValidTime, forSystemTime, projectAllCols)
+        }
     }
 
     data class Where(@JvmField val preds: List<Expr>) : QueryTail, UnifyClause
-    data class With(@JvmField val vars: List<Binding>) : UnifyClause
-    data class WithCols(@JvmField val cols: List<Binding>) : QueryTail
+
+    data class With(@JvmField val vars: List<Binding>) : UnifyClause {
+        class Builder : Binding.ABuilder<Builder, With>() {
+            override fun build() = With(buildBindings())
+        }
+    }
+
+    data class WithCols(@JvmField val cols: List<Binding>) : QueryTail {
+        class Builder : Binding.ABuilder<Builder, WithCols>() {
+            override fun build() = WithCols(buildBindings())
+        }
+    }
+
     data class Without(@JvmField val cols: List<String>) : QueryTail
-    data class Return(@JvmField val cols: List<Binding>) : QueryTail
+
+    data class Return(@JvmField val cols: List<Binding>) : QueryTail {
+        class Builder : Binding.ABuilder<Builder, Return>() {
+            override fun build() = Return(buildBindings())
+        }
+    }
 
     data class Call(
-        @JvmField val ruleName: String, @JvmField val args: List<Expr>, @JvmField val bindings: List<Binding>? = null
+        @JvmField val ruleName: String, @JvmField val args: List<Expr>, @JvmField val bindings: List<Binding>? = null,
     ) : UnifyClause {
 
         fun binding(bindings: List<Binding>) = copy(bindings = bindings)
@@ -43,7 +71,7 @@ sealed interface Query {
     data class Join(
         @JvmField val query: Query,
         @JvmField val args: List<Binding>? = null,
-        @JvmField val bindings: List<Binding>? = null
+        @JvmField val bindings: List<Binding>? = null,
     ) : IJoin {
         override fun binding(bindings: List<Binding>) = copy(bindings = bindings)
     }
@@ -51,13 +79,17 @@ sealed interface Query {
     data class LeftJoin(
         @JvmField val query: Query,
         @JvmField val args: List<Binding>? = null,
-        @JvmField val bindings: List<Binding>? = null
+        @JvmField val bindings: List<Binding>? = null,
     ) : IJoin {
 
         override fun binding(bindings: List<Binding>) = copy(bindings = bindings)
     }
 
-    data class Aggregate(@JvmField val cols: List<Binding>) : QueryTail
+    data class Aggregate(@JvmField val cols: List<Binding>) : QueryTail {
+        class Builder : Binding.ABuilder<Builder, Aggregate>() {
+            override fun build() = Aggregate(buildBindings())
+        }
+    }
 
     enum class OrderDirection { ASC, DESC }
     enum class OrderNulls { FIRST, LAST }
@@ -65,7 +97,7 @@ sealed interface Query {
     data class OrderSpec(
         @JvmField val expr: Expr,
         @JvmField val direction: OrderDirection? = null,
-        @JvmField val nulls: OrderNulls? = null
+        @JvmField val nulls: OrderNulls? = null,
     )
 
     data class OrderBy(@JvmField val orderSpecs: List<OrderSpec?>) : QueryTail
@@ -101,10 +133,10 @@ sealed interface Query {
         fun unify(vararg clauses: UnifyClause) = unify(clauses.toList())
 
         @JvmStatic
-        fun from(table: String, bindings: List<Binding>) = From(table, bindings)
+        fun from(table: String) = From.Builder(table)
 
-        @JvmStatic
-        fun from(table: String, vararg bindings: Binding) = from(table, bindings.toList())
+        @JvmSynthetic
+        fun from(table: String, b: From.Builder.() -> Unit) = from(table).also { it.b() }.build()
 
         @JvmStatic
         fun where(preds: List<Expr>) = Where(preds)
@@ -116,13 +148,19 @@ sealed interface Query {
         fun with(vars: List<Binding>) = With(vars)
 
         @JvmStatic
-        fun with(vararg vars: Binding) = With(vars.toList())
+        fun with() = With.Builder()
+
+        @JvmSynthetic
+        fun with(b: With.Builder.() -> Unit) = with().also { it.b() }.build()
 
         @JvmStatic
         fun withCols(cols: List<Binding>) = WithCols(cols)
 
         @JvmStatic
-        fun withCols(vararg cols: Binding) = withCols(cols.toList())
+        fun withCols() = WithCols.Builder()
+
+        @JvmSynthetic
+        fun withCols(b: WithCols.Builder.() -> Unit) = withCols().also { it.b() }.build()
 
         @JvmStatic
         fun without(cols: List<String>) = Without(cols)
@@ -134,7 +172,10 @@ sealed interface Query {
         fun returning(cols: List<Binding>) = Return(cols)
 
         @JvmStatic
-        fun returning(vararg cols: Binding) = returning(cols.toList())
+        fun returning() = Return.Builder()
+
+        @JvmSynthetic
+        fun returning(b: Return.Builder.() -> Unit) = returning().also { it.b() }.build()
 
         @JvmStatic
         fun call(ruleName: String, args: List<Expr>) = Call(ruleName, args)
@@ -152,7 +193,10 @@ sealed interface Query {
         fun aggregate(cols: List<Binding>) = Aggregate(cols)
 
         @JvmStatic
-        fun aggregate(vararg cols: Binding) = aggregate(cols.toList())
+        fun aggregate() = Aggregate.Builder()
+
+        @JvmSynthetic
+        fun aggregate(b: Aggregate.Builder.() -> Unit) = aggregate().also { it.b() }.build()
 
         @JvmStatic
         fun orderSpec(expr: Expr) = OrderSpec(expr)
@@ -182,7 +226,8 @@ sealed interface Query {
         fun relation(documents: List<Map<String, Expr>>, bindings: List<Binding>) = DocsRelation(documents, bindings)
 
         @JvmStatic
-        fun relation(documents: List<Map<String, Expr>>, vararg bindings: Binding) = relation(documents, bindings.toList())
+        fun relation(documents: List<Map<String, Expr>>, vararg bindings: Binding) =
+            relation(documents, bindings.toList())
 
         @JvmStatic
         fun relation(param: Param, bindings: List<Binding>) = ParamRelation(param, bindings)

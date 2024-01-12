@@ -903,21 +903,21 @@
 
          default-vf-expr (if default-all-valid-time?
                            vf-var
-                           (Expr/call "current-timestamp" []))]
+                           (Expr$Call. "current-timestamp" []))]
 
      (Binding. "xt$valid_from"
-               (Expr/call "cast-tstz"
+               (Expr$Call. "cast-tstz"
                           [(if-let [vf-expr (some-> for-valid-time .getFrom)]
-                             (Expr/call "greatest" [vf-var (Expr/call "coalesce" [vf-expr default-vf-expr])])
+                             (Expr$Call. "greatest" [vf-var (Expr$Call. "coalesce" [vf-expr default-vf-expr])])
                              default-vf-expr)])))
 
    (Binding. "xt$valid_to"
-             (Expr/call "cast-tstz"
-                        [(Expr/call "least"
-                                    [(Expr/lVar "xt$dml$valid_to")
-                                     (if-let [vt-expr (some-> for-valid-time .getTo)]
-                                       (Expr/call "coalesce" [vt-expr (Expr/val 'xtdb/end-of-time)])
-                                       (Expr/val 'xtdb/end-of-time))])]))])
+             (Expr$Call. "cast-tstz"
+                         [(Expr$Call. "least"
+                                      [(Expr/lVar "xt$dml$valid_to")
+                                       (if-let [vt-expr (some-> for-valid-time .getTo)]
+                                         (Expr$Call. "coalesce" [vt-expr (Expr/val 'xtdb/end-of-time)])
+                                         (Expr/val 'xtdb/end-of-time))])]))])
 
 (extend-protocol PlanDml
   Xtql$Insert
@@ -934,12 +934,13 @@
   Xtql$Delete
   (plan-dml [delete-query tx-opts]
     (let [table-name (.table delete-query)
-          target-query (Query/pipeline (Query/unify (into [(Query/from table-name
-                                                                       (concat (.bindSpecs delete-query)
-                                                                               extra-dml-bind-specs))]
-                                                          (.unifyClauses delete-query)))
+          target-query (Query$Pipeline. (Query$Unify. (into [(-> (Query/from table-name)
+                                                                 (doto (.setBindings (concat (.bindSpecs delete-query)
+                                                                                             extra-dml-bind-specs)))
+                                                                 (.build))]
+                                                            (.unifyClauses delete-query)))
 
-                                       [(Query/returning (dml-colspecs (.forValidTime delete-query) tx-opts))])
+                                        [(Query$Return. (dml-colspecs (.forValidTime delete-query) tx-opts))])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:delete {:table table-name}
@@ -948,12 +949,13 @@
   Xtql$Erase
   (plan-dml [erase-query _tx-opts]
     (let [table-name (.table erase-query)
-          target-query (Query/pipeline (Query/unify (into [(Query/from table-name
-                                                                       (concat (.bindSpecs erase-query)
-                                                                               [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))]))]
-                                                          (.unifyClauses erase-query)))
+          target-query (Query$Pipeline. (Query$Unify. (into [(-> (Query/from table-name)
+                                                                 (doto (.setBindings (concat (.bindSpecs erase-query)
+                                                                                             [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))])))
+                                                                 (.build))]
+                                                            (.unifyClauses erase-query)))
 
-                                       [(Query/returning [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))])])
+                                       [(Query$Return. [(Binding. "xt$iid" (Expr/lVar "xt$dml$iid"))])])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:erase {:table table-name}
@@ -969,19 +971,21 @@
                                                          (util/str->normal-form-str (.getBinding set-spec)))))
                                   (disj "xt$id"))
 
-          target-query (Query/pipeline (Query/unify (into [(Query/from table-name
-                                                                       (concat (.bindSpecs update-query)
-                                                                               [(Binding. "xt$id" (Expr/lVar "xt$dml$id"))]
-                                                                               (for [col unspecified-columns]
-                                                                                 (Binding. col (Expr/lVar (str "xt$update$" col))))
-                                                                               extra-dml-bind-specs))]
-                                                          (.unifyClauses update-query)))
+          target-query (Query$Pipeline. (Query$Unify. (into [(-> (Query/from table-name)
+                                                                 (doto (.setBindings
+                                                                        (concat (.bindSpecs update-query)
+                                                                                [(Binding. "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                                                (for [^String col unspecified-columns]
+                                                                                  (Binding. col (Expr/lVar (str "xt$update$" col))))
+                                                                                extra-dml-bind-specs)))
+                                                                 (.build))]
+                                                           (.unifyClauses update-query)))
 
-                                       [(Query/returning (concat (dml-colspecs (.forValidTime update-query) tx-opts)
-                                                                 [(Binding. "xt$id" (Expr/lVar "xt$dml$id"))]
-                                                                 (for [col unspecified-columns]
-                                                                   (Binding. col (Expr/lVar (str "xt$update$" col))))
-                                                                 set-specs))])
+                                       [(Query$Return. (concat (dml-colspecs (.forValidTime update-query) tx-opts)
+                                                               [(Binding. "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                               (for [^String col unspecified-columns]
+                                                                 (Binding. col (Expr/lVar (str "xt$update$" col))))
+                                                               set-specs))])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:update {:table table-name}

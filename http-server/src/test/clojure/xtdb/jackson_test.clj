@@ -7,7 +7,7 @@
   (:import (java.time Instant)
            (java.util List)
            (xtdb.api TransactionKey)
-           (xtdb.api.query Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$QueryTail Query$Unify QueryOptions QueryRequest TemporalFilter)
+           (xtdb.api.query Query$From Query$ParamRelation Query$OrderBy Expr$SetExpr Query$Join Query$LeftJoin Query$Without Query$WithCols Query$Aggregate Basis Binding Expr Expr Query Query$OrderDirection Query$OrderNulls Query$Pipeline Query$QueryTail Query$Unify Query$Return Expr$Call Query$Where Query$With Query$UnnestVar Query$UnnestCol QueryOptions QueryRequest TemporalFilter)
            (xtdb.api.tx TxOp TxOptions TxRequest)
            (xtdb.jackson XtdbMapper)))
 
@@ -195,45 +195,45 @@
   (t/is (= (Expr/val (double 1.2))
            (roundtrip-expr 1.2)))
 
-  (t/is (= (Expr/exists (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (t/is (= (Expr/exists (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
                         [])
            (roundtrip-expr {"xt:exists" {"query" {"from" "docs"
                                                   "bind" ["xt/id"]}
                                          "bind" []}}))
         "exists")
 
-  (t/is (= (Expr/q (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (t/is (= (Expr/q (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
                    [])
            (roundtrip-expr {"xt:q" {"query" {"from" "docs"
                                              "bind" ["xt/id"]}
                                     "bind" []}}))
         "subquery")
 
-  (t/is (= (Expr/pull (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (t/is (= (Expr/pull (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
                       [])
            (roundtrip-expr {"xt:pull" {"query" {"from" "docs"
                                                 "bind" ["xt/id"]}
                                        "bind" []}}))
         "pull")
 
-  (t/is (= (Expr/pullMany (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (t/is (= (Expr/pullMany (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
                           [])
            (roundtrip-expr {"xt:pull_many" {"query" {"from" "docs"
                                                      "bind" ["xt/id"]}
                                             "bind" []}}))
         "pull")
 
-  (t/is (= (Expr/call "+" [(Expr/val "foo") (Expr/val "bar")])
+  (t/is (= (Expr$Call. "+" [(Expr/val "foo") (Expr/val "bar")])
            (roundtrip-expr {"xt:call" {"f" "+"
                                        "args" ["foo" "bar"]}}))
         "call")
 
-  (t/is (= (Expr/call "+" [(Expr/val "foo") (Expr/val "bar")])
+  (t/is (= (Expr$Call. "+" [(Expr/val "foo") (Expr/val "bar")])
            (roundtrip-expr {"xt:call" {"f" "+"
                                        "args" ["foo" "bar"]}}))
         "call")
 
-  (t/is (= (Expr/list (list (Expr/val 1) (Expr/val 2)))
+  (t/is (= (Expr/list ^List (list (Expr/val 1) (Expr/val 2)))
            (roundtrip-expr [1 2]))
         "list")
 
@@ -241,7 +241,7 @@
            (roundtrip-expr {"foo" 1}))
         "maps")
 
-  (t/is (= (Expr/set [(Expr/val 1) (Expr/val :foo)])
+  (t/is (= (Expr$SetExpr. [(Expr/val 1) (Expr/val :foo)])
            (roundtrip-expr #{1 :foo}))
         "sets"))
 
@@ -275,14 +275,16 @@
   (.readValue XtdbMapper/QUERY_MAPPER (json/write-value-as-string v jackson/json-ld-mapper) Query))
 
 (deftest deserialize-query-test
-  (t/is (= (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))
+  (t/is (= (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))
                                (Binding. "a" (Expr/lVar "b"))])
            (roundtrip-query {"from" "docs"
                              "bind" ["xt/id" {"a" {"xt:lvar" "b"}}]})))
 
-  (t/is (= (-> (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-               (.forValidTime (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z")))
-               (.forSystemTime TemporalFilter/ALL_TIME))
+  (t/is (= (-> (doto (Query/from "docs")
+                 (.setBindings [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+                 (.forValidTime (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z")))
+                 (.forSystemTime TemporalFilter/ALL_TIME))
+               (.build))
            (roundtrip-query {"from" "docs"
                              "bind" ["xt/id"]
                              "for_valid_time" {"at" #inst "2020"}
@@ -294,15 +296,15 @@
                                             "bind" "xt/id"}))
         "bind not an array")
 
-  (t/is (= (Query/pipeline (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-                           [(Query/limit 10)])
+  (t/is (= (Query$Pipeline. (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+                            [(Query/limit 10)])
            (roundtrip-query [{"from" "docs"
                               "bind" ["xt/id"]}
                              {"limit" 10}]))
         "pipeline")
 
-  (t/is (= (Query/unify [(Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-                         (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])])
+  (t/is (= (Query$Unify. [(Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+                         (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])])
            (roundtrip-query {"unify" [{"from" "docs"
                                        "bind" ["xt/id"]}
                                       {"from" "docs"
@@ -322,8 +324,8 @@
 
 (deftest deserialize-query-tail-test
   (t/testing "where"
-    (t/is (= (Query/where [(Expr/call ">=" [(Expr/val 1) (Expr/val 2)])
-                           (Expr/call "<" [(Expr/val 1) (Expr/val 2)])])
+    (t/is (= (Query$Where. [(Expr$Call. ">=" [(Expr/val 1) (Expr/val 2)])
+                            (Expr$Call. "<" [(Expr/val 1) (Expr/val 2)])])
              (roundtrip-query-tail {"where" [{"xt:call" {"f" ">="
                                                          "args" [1 2]}}
                                              {"xt:call" {"f" "<"
@@ -348,10 +350,10 @@
                             (roundtrip-query-tail {"offset" "not-an-offset"}))))
 
   (t/testing "orderBy"
-    (t/is (= (Query/orderBy [(Query/orderSpec (Expr/lVar "someField") nil nil)])
+    (t/is (= (Query$OrderBy. [(Query/orderSpec (Expr/lVar "someField") nil nil)])
              (roundtrip-query-tail {"orderBy" ["someField"]})))
 
-    (t/is (= (Query/orderBy [(Query/orderSpec (Expr/lVar "someField") Query$OrderDirection/ASC Query$OrderNulls/FIRST)])
+    (t/is (= (Query$OrderBy. [(Query/orderSpec (Expr/lVar "someField") Query$OrderDirection/ASC Query$OrderNulls/FIRST)])
              (roundtrip-query-tail {"orderBy" [{"val" {"xt:lvar" "someField"}, "dir" "asc", "nulls" "first"}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Invalid orderBy direction"
@@ -361,12 +363,12 @@
                             (roundtrip-query-tail {"orderBy" [{"val" {"lvar" "someField"}, "nulls" "invalid-nulls"}]}))))
 
   (t/testing "return"
-    (t/is (= (Query/returning [(Binding. "a" (Expr/lVar "a"))
-                               (Binding. "b" (Expr/lVar "b"))])
+    (t/is (= (Query$Return. [(Binding. "a" (Expr/lVar "a"))
+                             (Binding. "b" (Expr/lVar "b"))])
              (roundtrip-query-tail {"return" ["a" "b"]})))
 
-    (t/is (= (Query/returning [(Binding. "a" (Expr/lVar "a"))
-                               (Binding. "b" (Expr/lVar "c"))])
+    (t/is (= (Query$Return. [(Binding. "a" (Expr/lVar "a"))
+                             (Binding. "b" (Expr/lVar "c"))])
              (roundtrip-query-tail {"return" [{"a" {"xt:lvar" "a"} "b" {"xt:lvar" "c"}}]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Return should be a list of values"
@@ -381,11 +383,11 @@
           "should fail with >1 binding"))
 
   (t/testing "with"
-    (t/is (= (Query/withCols [(Binding. "a" (Expr/lVar "a"))
-                              (Binding. "b" (Expr/lVar "b"))])
+    (t/is (= (Query$WithCols. [(Binding. "a" (Expr/lVar "a"))
+                               (Binding. "b" (Expr/lVar "b"))])
              (roundtrip-query-tail {"with" ["a" "b"]})))
 
-    (t/is (= (Query/withCols [(Binding. "a" (Expr/lVar "b"))
+    (t/is (= (Query$WithCols. [(Binding. "a" (Expr/lVar "b"))
                               (Binding. "c" (Expr/lVar "d"))])
              (roundtrip-query-tail {"with" [{"a" {"xt:lvar" "b"} "c" {"xt:lvar" "d"}}]})))
 
@@ -394,7 +396,7 @@
           "should fail when not a list"))
 
   (t/testing "without"
-    (t/is (= (Query/without ["a" "b"])
+    (t/is (= (Query$Without. ["a" "b"])
              (roundtrip-query-tail {"without" ["a" "b"]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Without should be a list of strings"
@@ -402,8 +404,8 @@
           "should fail when not a list"))
 
   (t/testing "aggregate"
-    (t/is (= (Query/aggregate [(Binding. "bar" (Expr/lVar "bar"))
-                               (Binding. "baz" (Expr/call "sum" [(Expr/val 1)]))])
+    (t/is (= (Query$Aggregate. [(Binding. "bar" (Expr/lVar "bar"))
+                                (Binding. "baz" (Expr$Call. "sum" [(Expr/val 1)]))])
              (roundtrip-query-tail {"aggregate" ["bar" {"baz" {"xt:call" {"f" "sum"
                                                                           "args" [1]}}}]})))
 
@@ -416,21 +418,23 @@
 
 
 (deftest deserialize-unify-test
-  (let [parsed-q (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])]
-    (t/is (= (Query/unify [parsed-q])
+  (let [parsed-q (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])]
+    (t/is (= (Query$Unify. [parsed-q])
              (roundtrip-unify {"unify" [{"from" "docs"
                                          "bind" ["xt/id"]}]})))
 
-    (t/is (= (Query/unify [parsed-q
-                           (Query/where [(Expr/call ">=" [(Expr/val 1) (Expr/val 2)])])
-                           (Query/unnestVar (Binding. "a" (Expr/lVar "b")))
-                           (Query/with [(Binding. "a" (Expr/lVar "a"))
-                                        (Binding. "b" (Expr/lVar "b"))])
-                           (-> (Query/join parsed-q [(Binding. "id" (Expr/lVar "id"))])
-                               (.binding ^List (list (Binding. "id" (Expr/lVar "id")))))
-                           (-> (Query/leftJoin parsed-q [(Binding. "id" (Expr/lVar "id"))])
-                               (.binding ^List (list (Binding. "id" (Expr/lVar "id")))))
-                           (Query/relation (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))])
+    (t/is (= (Query$Unify. [parsed-q
+                            (Query$Where. [(Expr$Call. ">=" [(Expr/val 1) (Expr/val 2)])])
+                            (Query$UnnestVar. (Binding. "a" (Expr/lVar "b")))
+                            (Query$With. [(Binding. "a" (Expr/lVar "a"))
+                                          (Binding. "b" (Expr/lVar "b"))])
+                            (Query$Join. parsed-q
+                                         [(Binding. "id" (Expr/lVar "id"))]
+                                         [(Binding. "id" (Expr/lVar "id"))])
+                            (Query$LeftJoin. parsed-q
+                                             [(Binding. "id" (Expr/lVar "id"))]
+                                             [(Binding. "id" (Expr/lVar "id"))])
+                            (Query$ParamRelation. (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))])
              (roundtrip-unify {"unify" [{"from" "docs"
                                          "bind" ["xt/id"]}
                                         {"where" [{"xt:call" {"f" ">="
@@ -457,7 +461,7 @@
 
 (deftest deserialize-query-map-test
   (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")]
-    (t/is (= (QueryRequest. (Query/from "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+    (t/is (= (QueryRequest. (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
                             (-> (QueryOptions/queryOpts)
                                 (.args {"id" :foo})
                                 (.basis (Basis. tx-key Instant/EPOCH))

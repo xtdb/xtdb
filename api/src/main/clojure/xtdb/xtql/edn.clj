@@ -253,7 +253,7 @@
       (->> specs
            (into [] (mapcat (fn [spec]
                               (cond
-                                (symbol? spec) [(Binding/bindVar (str spec))]
+                                (symbol? spec) [(Binding. (str spec))]
                                 (map? spec) (map parse-out-spec spec))))))
 
       (throw (UnsupportedOperationException.)))))
@@ -264,7 +264,7 @@
   (->> specs
        (into [] (mapcat (fn [spec]
                           (cond
-                            (symbol? spec) [(Binding/bindVar (str spec))]
+                            (symbol? spec) [(Binding. (str spec))]
                             (map? spec) (for [[attr expr] spec]
                                           (do
                                             #_{:clj-kondo/ignore [:missing-body-in-when]}
@@ -311,7 +311,7 @@
       (sequential? specs) (->> specs
                                (into [] (mapcat (fn [spec]
                                                   (cond
-                                                    (symbol? spec) [(Binding/bindVar (str spec))]
+                                                    (symbol? spec) [(Binding. (str spec))]
                                                     (map? spec) (map parse-col-spec spec)
 
                                                     :else
@@ -345,33 +345,36 @@
   (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :from this}))
 
-    (cond
-      (or (nil? opts) (map? opts))
+    (let [q (Query/from (str (symbol table)))]
+      (cond
+        (or (nil? opts) (map? opts))
 
-      (do
-        (check-opt-keys from-opt-keys opts)
+        (do
+          (check-opt-keys from-opt-keys opts)
 
-        (let [{:keys [for-valid-time for-system-time bind]} opts]
-          (cond
-            (nil? bind)
-            (throw (err/illegal-arg :xtql/missing-bind {:opts opts, :from this}))
+          (let [{:keys [for-valid-time for-system-time bind]} opts]
+            (cond
+              (nil? bind)
+              (throw (err/illegal-arg :xtql/missing-bind {:opts opts, :from this}))
 
-            (not (vector? bind))
-            (throw (err/illegal-arg :xtql/malformed-bind {:opts opts, :from this}))
+              (not (vector? bind))
+              (throw (err/illegal-arg :xtql/malformed-bind {:opts opts, :from this}))
 
-            :else
-            (let [{:keys [bind project-all-cols]} (find-star-projection '* bind)]
-              (cond-> (Query/from (str (symbol table)) (parse-out-specs bind this))
-                for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
-                for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
-                project-all-cols (.projectAllCols true))))))
+              :else
+              (let [{:keys [bind project-all-cols]} (find-star-projection '* bind)]
+                (-> (cond-> (doto q (.setBindings (parse-out-specs bind this)))
+                      for-valid-time (doto (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this)))
+                      for-system-time (doto (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this)))
+                      project-all-cols (doto (.projectAllCols true)))
+                    (.build))))))
 
-      (vector? opts)
-      (let [{:keys [bind project-all-cols]} (find-star-projection '* opts)]
-        (cond-> (Query/from (str (symbol table)) (parse-out-specs bind this))
-          project-all-cols (.projectAllCols true)))
+        (vector? opts)
+        (let [{:keys [bind project-all-cols]} (find-star-projection '* opts)]
+          (-> (cond-> (doto q (.setBindings (parse-out-specs bind this)))
+                project-all-cols (doto (.projectAllCols)))
+              (.build)))
 
-      :else (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this})))))
+        :else (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this}))))))
 
 (defmethod parse-query 'from [this] (parse-from this))
 (defmethod parse-unify-clause 'from [this] (parse-from this))
