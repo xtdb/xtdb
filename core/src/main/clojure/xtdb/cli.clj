@@ -12,7 +12,7 @@
     f))
 
 (def cli-options
-  [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, JSON"
+  [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, JSON, YAML"
     :parse-fn io/file
     :validate [if-it-exists "Config file doesn't exist"
                #(contains? #{"edn" "json" "yaml"} (util/file-extension %)) "Config file must be .edn, .json or .yaml"]]
