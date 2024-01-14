@@ -64,7 +64,7 @@
                                   (mapv #(vec (.getObject iid-vec %)) (.data leaf))))))))))
 
     (t/testing "finish chunk"
-      (.finishChunk live-index 0 12000)
+      (li/finish-chunk! live-index)
 
       (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow"))
                   ^ArrowBuf leaf-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-rf00-nr32ee0.arrow"))

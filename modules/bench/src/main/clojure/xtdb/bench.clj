@@ -1,7 +1,7 @@
 (ns xtdb.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [xtdb.indexer :as idx]
+            [xtdb.indexer.live-index :as li]
             [xtdb.kafka :as k]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -37,7 +37,7 @@
                       (/ (- (System/nanoTime) start-ns#) 1e6)))))))
 
 (defn finish-chunk! [node]
-  (idx/finish-chunk! (util/component node :xtdb/indexer)))
+  (li/finish-chunk! (util/component node :xtdb/indexer)))
 
 (defn start-node
   (^java.lang.AutoCloseable [] (start-node {}))

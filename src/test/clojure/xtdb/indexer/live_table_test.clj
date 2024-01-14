@@ -3,6 +3,7 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.indexer.live-index :as live-index]
+            [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -16,7 +17,7 @@
            (xtdb.api TransactionKey)
            (xtdb.indexer.live_index ILiveIndex TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
-           (xtdb.util RefCounter)
+           (xtdb.util RefCounter RowCounter)
            xtdb.vector.IVectorPosition
            xtdb.watermark.ILiveTableWatermark))
 
@@ -39,7 +40,7 @@
         (with-open [node (tu/->local-node {:node-dir path})
                     ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                     allocator (RootAllocator.)
-                    live-table (live-index/->live-table allocator bp "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
+                    live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
 
           (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
             (let [wp (IVectorPosition/build)]
@@ -77,7 +78,7 @@
         (with-open [node (tu/->local-node {:node-dir path})
                     ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                     allocator (RootAllocator.)
-                    live-table (live-index/->live-table allocator bp "foo")]
+                    live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
           (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
 
             (let [wp (IVectorPosition/build)]
@@ -129,7 +130,7 @@
     (with-open [node (xtn/start-node {})
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
-                live-table (live-index/->live-table allocator bp "foo")]
+                live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
       (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
 
         (let [wp (IVectorPosition/build)]
@@ -158,10 +159,16 @@
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
     (with-open [node (xtn/start-node {})
-                ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)]
-      (let [live-index-allocator (util/->child-allocator allocator "live-index")]
-        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp nil nil (HashMap.) nil (StampedLock.) (RefCounter.) 64 1024)]
+      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+            mm (tu/component node ::meta/metadata-manager)
+            live-index-allocator (util/->child-allocator allocator "live-index")]
+        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm
+                                                                   nil nil (HashMap.)
+                                                                   nil (StampedLock.)
+                                                                   (RefCounter.)
+                                                                   (RowCounter. 0) 102400
+                                                                   64 1024)]
           (let [tx-key (TransactionKey. 0 (.toInstant #inst "2000"))
                 live-index-tx (.startTx live-index tx-key)
                 live-table-tx (.liveTable live-index-tx table-name)]
@@ -178,7 +185,7 @@
               (let [live-index-wm (.liveIndex wm)
                     live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
 
-                (.finishChunk live-index 0 10)
+                (live-index/finish-chunk! live-index)
 
                 (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table-name))]
 

@@ -3,7 +3,7 @@
             [xtdb.bench :as bench]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch.ra]
-            [xtdb.indexer :as idx]
+            [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -46,7 +46,7 @@
                                     :secondary3 secondary-node3}]
                     (test-node k node))
 
-                  (idx/finish-chunk! (util/component primary-node :xtdb/indexer))
+                  (li/finish-chunk! (util/component primary-node :xtdb/indexer))
 
                   (log/info "Starting post finish-chunk node")
                   (with-open [^java.lang.AutoCloseable secondary-node4 (start-node)]

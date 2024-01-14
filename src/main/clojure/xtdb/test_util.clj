@@ -35,6 +35,7 @@
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            (xtdb.query IRaQuerySource PreparedQuery)
+           xtdb.util.RowCounter
            (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
@@ -141,7 +142,7 @@
 
 (defn finish-chunk! [node]
   (then-await-tx node)
-  (idx/finish-chunk! (component node :xtdb/indexer)))
+  (li/finish-chunk! (component node :xtdb.indexer/live-index)))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
@@ -261,9 +262,8 @@
     (xtn/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                     :instant-src instant-src}
                      :xtdb.buffer-pool/local {:data-dir (.resolve node-dir buffers-dir)}
-                     :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
-                                        (into {} (filter val)))
-                     :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit}
+                     :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit
+                                                    :rows-per-chunk rows-per-chunk}
                                                    (into {} (filter val)))})))
 
 (defn ->local-submit-client ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
@@ -362,7 +362,7 @@
     meta-root))
 
 (defn open-live-table [table-name]
-  (li/->live-table *allocator* nil table-name))
+  (li/->live-table *allocator* nil (RowCounter. 0) table-name))
 
 (defn index-tx! [^ILiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)

@@ -49,7 +49,7 @@
                           {:node node})))))
 
 (t/deftest test-chunk-boundary
-  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 20}})]
     (->> (for [i (range 110)]
            (xt/put :xt_docs {:xt/id i}))
          (partition-all 10)
@@ -70,7 +70,7 @@
                                {:node node}))))))
 
 (t/deftest test-metadata
-  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 20}})]
     (->> (for [i (range 100)]
            (xt/put :xt_docs {:xt/id i}))
          (partition-all 20)
@@ -82,7 +82,7 @@
                                {:node node})))
           "testing only getting some trie matches"))
 
-  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 20}})]
     (xt/submit-tx node (for [i (range 20)] (xt/put :xt_docs {:xt/id i})))
     (xt/submit-tx node (for [i (range 20)] (xt/delete :xt_docs i)))
 
@@ -508,7 +508,7 @@
         after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
         uuids [before-uuid search-uuid after-uuid]
         !search-uuid-versions (atom [])]
-    (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 20 :page-limit 16}})]
+    (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 20 :page-limit 16}})]
       (->> (for [i (range 110)]
              (let [uuid (rand-nth uuids)]
                (when (= uuid search-uuid)
