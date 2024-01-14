@@ -19,7 +19,6 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.watermark :as wm]
             [xtdb.xtql :as xtql])
   (:import clojure.lang.MapEntry
            (java.io ByteArrayInputStream Closeable)
@@ -43,7 +42,7 @@
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
-           (xtdb.watermark IWatermark IWatermarkSource)))
+           (xtdb.watermark Watermark IWatermarkSource)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -534,7 +533,7 @@
                   ^RowCounter row-counter
                   ^long rows-per-chunk
 
-                  ^:volatile-mutable ^IWatermark shared-wm
+                  ^:volatile-mutable ^Watermark shared-wm
                   ^StampedLock wm-lock]
 
   IIndexer
@@ -563,7 +562,7 @@
 
                   wm-src (reify IWatermarkSource
                            (openWatermark [_ _tx]
-                             (wm/->wm nil (.openWatermark live-idx-tx))))
+                             (Watermark. nil (.openWatermark live-idx-tx))))
 
                   tx-opts {:basis {:at-tx tx-key, :current-time system-time}
                            :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
@@ -648,7 +647,7 @@
   IWatermarkSource
   (openWatermark [this tx-key]
     (letfn [(maybe-existing-wm []
-              (when-let [^IWatermark wm (.shared-wm this)]
+              (when-let [^Watermark wm (.shared-wm this)]
                 (let [wm-tx-key (.txBasis wm)]
                   (when (or (nil? tx-key)
                             (and wm-tx-key
@@ -663,9 +662,9 @@
           (let [wm-lock-stamp (.writeLock wm-lock)]
             (try
               (or (maybe-existing-wm)
-                  (let [^IWatermark old-wm (.shared-wm this)]
+                  (let [^Watermark old-wm (.shared-wm this)]
                     (try
-                      (let [^IWatermark shared-wm (wm/->wm latest-completed-tx (.openWatermark live-idx))]
+                      (let [^Watermark shared-wm (Watermark. latest-completed-tx (.openWatermark live-idx))]
                         (set! (.shared-wm this) shared-wm)
                         (doto shared-wm .retain))
                       (finally
@@ -703,7 +702,7 @@
       (let [wm-lock-stamp (.writeLock wm-lock)]
         (try
           (.nextChunk live-idx)
-          (when-let [^IWatermark shared-wm (.shared-wm this)]
+          (when-let [^Watermark shared-wm (.shared-wm this)]
             (set! (.shared-wm this) nil)
             (.close shared-wm))
 

@@ -16,8 +16,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            xtdb.watermark)
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (java.io Closeable)
            java.nio.ByteBuffer
@@ -39,7 +38,7 @@
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie LiveHashTrie$Leaf)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
-           (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
+           (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
 
@@ -54,9 +53,9 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IScanEmitter
-  (tableColNames [^xtdb.watermark.IWatermark wm, ^String table-name])
-  (allTableColNames [^xtdb.watermark.IWatermark wm])
-  (scanFields [^xtdb.watermark.IWatermark wm, scan-cols])
+  (tableColNames [^xtdb.watermark.Watermark wm, ^String table-name])
+  (allTableColNames [^xtdb.watermark.Watermark wm])
+  (scanFields [^xtdb.watermark.Watermark wm, scan-cols])
   (emitScan [scan-expr scan-fields param-fields]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -449,7 +448,7 @@
 
         {:fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
+         :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, params default-all-valid-time?]}]
                      (let [iid-bb (selects->iid-byte-buffer selects params)
                            col-preds (cond-> col-preds
                                        iid-bb (assoc "xt$iid" (iid-selector iid-bb)))

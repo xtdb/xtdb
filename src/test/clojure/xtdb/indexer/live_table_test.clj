@@ -7,8 +7,7 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            xtdb.watermark)
+            [xtdb.vector.reader :as vr])
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (org.apache.arrow.memory RootAllocator)

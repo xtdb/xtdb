@@ -12,8 +12,7 @@
             [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            xtdb.watermark)
+            [xtdb.util :as util])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            java.time.Duration

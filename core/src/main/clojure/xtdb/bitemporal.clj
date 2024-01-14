@@ -2,8 +2,7 @@
   (:require xtdb.indexer.live-index
             xtdb.object-store
             [xtdb.trie :as trie]
-            [xtdb.util :as util]
-            xtdb.watermark)
+            [xtdb.util :as util])
   (:import [org.apache.arrow.memory.util ArrowBufPointer]
            (xtdb.bitemporal Ceiling Polygon)
            (xtdb.trie EventRowPointer)
