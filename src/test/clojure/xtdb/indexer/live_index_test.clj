@@ -3,6 +3,7 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.indexer.live-index :as li]
+            [xtdb.metadata :as meta]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
@@ -22,7 +23,8 @@
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
                            :xtdb.indexer/live-index {}
-                           :xtdb.buffer-pool/in-memory {}}))
+                           :xtdb.buffer-pool/in-memory {}
+                           ::meta/metadata-manager {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
 

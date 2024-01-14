@@ -50,8 +50,10 @@
 (definterface IIndexer
   (^xtdb.api.TransactionKey indexTx [^xtdb.api.TransactionKey tx
                                      ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
+
   (^xtdb.api.TransactionKey latestCompletedTx [])
   (^xtdb.api.TransactionKey latestCompletedChunkTx [])
+
   (^java.util.concurrent.CompletableFuture #_<TransactionKey> awaitTxAsync [^xtdb.api.TransactionKey tx, ^java.time.Duration timeout])
   (^void forceFlush [^xtdb.api.TransactionKey txKey ^long expected-last-chunk-tx-id])
   (^Throwable indexerError []))
@@ -526,8 +528,6 @@
 
                   ^:volatile-mutable indexer-error
 
-                  ^:volatile-mutable ^TransactionKey latest-completed-tx
-                  ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
                   ^PriorityBlockingQueue awaiters
 
                   ^RowCounter row-counter
@@ -540,20 +540,20 @@
   (indexTx [this tx-key tx-root]
     (let [system-time (some-> tx-key (.getSystemTime))]
       (try
-        (if (and (not (nil? latest-completed-tx))
+        (if (and (not (nil? (.latestCompletedTx this)))
                  (neg? (compare system-time
-                                (.getSystemTime latest-completed-tx))))
+                                (.getSystemTime (.latestCompletedTx this)))))
           (do
             (log/warnf "specified system-time '%s' older than current tx '%s'"
                        (pr-str tx-key)
-                       (pr-str latest-completed-tx))
+                       (pr-str (.latestCompletedTx this)))
 
             (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
               (add-tx-row! row-counter live-idx-tx tx-key
                            (err/illegal-arg :invalid-system-time
                                             {::err/message "specified system-time older than current tx"
                                              :tx-key tx-key
-                                             :latest-completed-tx latest-completed-tx}))
+                                             :latest-completed-tx (.latestCompletedTx this)}))
               (.commit live-idx-tx)))
 
           (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
@@ -620,8 +620,6 @@
 
                         (.commit live-idx-tx)))
 
-                    (set! (.-latest-completed-tx this) tx-key)
-
                     (finally
                       (.unlock wm-lock wm-lock-stamp)))))
 
@@ -638,11 +636,11 @@
           (throw t)))))
 
   (forceFlush [this tx-key expected-last-chunk-tx-id]
-    (let [latest-chunk-tx-id (some-> latest-completed-chunk-tx (.getTxId))]
+    (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx this) (.getTxId))]
       (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
         (finish-chunk! this)))
 
-    (set! (.-latest_completed_tx this) tx-key))
+    (.setLatestCompletedTx live-idx tx-key))
 
   IWatermarkSource
   (openWatermark [this tx-key]
@@ -664,7 +662,7 @@
               (or (maybe-existing-wm)
                   (let [^Watermark old-wm (.shared-wm this)]
                     (try
-                      (let [^Watermark shared-wm (Watermark. latest-completed-tx (.openWatermark live-idx))]
+                      (let [^Watermark shared-wm (Watermark. (.latestCompletedTx this) (.openWatermark live-idx))]
                         (set! (.shared-wm this) shared-wm)
                         (doto shared-wm .retain))
                       (finally
@@ -673,16 +671,16 @@
               (finally
                 (.unlock wm-lock wm-lock-stamp)))))))
 
-  (latestCompletedTx [_] latest-completed-tx)
-  (latestCompletedChunkTx [_] latest-completed-chunk-tx)
+  (latestCompletedTx [_] (.latestCompletedTx live-idx))
+  (latestCompletedChunkTx [_] (.latestCompletedChunkTx live-idx))
 
   (awaitTxAsync [this tx timeout]
     (-> (if tx
           (await/await-tx-async tx
                                 #(or (some-> (.indexer-error this) throw)
-                                     (.-latest-completed-tx this))
+                                     (.latestCompletedTx this))
                                 awaiters)
-          (CompletableFuture/completedFuture latest-completed-tx))
+          (CompletableFuture/completedFuture (.latestCompletedTx this)))
         (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
   Finish
@@ -692,12 +690,11 @@
           table-metadata (.finishChunk live-idx chunk-idx next-chunk-idx)]
 
       (.finishChunk metadata-mgr chunk-idx
-                    {:latest-completed-tx latest-completed-tx
+                    {:latest-completed-tx (.latestCompletedTx this)
                      :next-chunk-idx next-chunk-idx
                      :tables table-metadata})
 
       (.nextChunk row-counter)
-      (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
 
       (let [wm-lock-stamp (.writeLock wm-lock)]
         (try
@@ -734,8 +731,6 @@
 
                  nil ;; indexer-error
 
-                 latest-completed-tx
-                 latest-completed-tx
                  (PriorityBlockingQueue.)
 
                  (RowCounter. next-chunk-idx)

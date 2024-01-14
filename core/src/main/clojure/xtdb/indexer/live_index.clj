@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
+            [xtdb.metadata :as meta]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
@@ -15,6 +16,7 @@
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
+           xtdb.api.TransactionKey
            xtdb.IBufferPool
            (xtdb.trie LiveHashTrie)
            (xtdb.util RefCounter)
@@ -48,11 +50,20 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndex
+  (^xtdb.api.TransactionKey latestCompletedTx [])
+  (^void setLatestCompletedTx [^xtdb.api.TransactionKey txKey]
+   "HACK just while we're migrating indexer functionality into here")
+
+  (^xtdb.api.TransactionKey latestCompletedChunkTx [])
+
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
   (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.TransactionKey txKey])
+
   (^xtdb.watermark.ILiveIndexWatermark openWatermark [])
+
   (^java.util.Map finishChunk [^long chunkIdx, ^long nextChunkIdx])
   (^void nextChunk [])
+
   (^void close []))
 
 (defprotocol TestLiveTable
@@ -235,19 +246,25 @@
         (.setPageLimit page-limit))
       (.build)))
 
-(defrecord LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                      ^Map tables, ^RefCounter wm-cnt, ^long log-limit, ^long page-limit]
+(deftype LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+                    ^:volatile-mutable ^TransactionKey latest-completed-tx
+                    ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
+                    ^Map tables, ^RefCounter wm-cnt, ^long log-limit, ^long page-limit]
   ILiveIndex
+  (latestCompletedTx [_] latest-completed-tx)
+  (setLatestCompletedTx [this tx-key] (set! (.-latest_completed_tx this) tx-key))
+  (latestCompletedChunkTx [_] latest-completed-chunk-tx)
+
   (liveTable [_ table-name] (.get tables table-name))
 
-  (startTx [this-table tx-key]
+  (startTx [this-idx tx-key]
     (let [table-txs (HashMap.)]
       (reify ILiveIndexTx
         (liveTable [_ table-name]
           (.computeIfAbsent table-txs table-name
                             (reify Function
                               (apply [_ table-name]
-                                (let [live-table (.liveTable this-table table-name)
+                                (let [live-table (.liveTable this-idx table-name)
                                       new-live-table? (nil? live-table)
                                       ^ILiveTable live-table (or live-table
                                                                  (->live-table allocator buffer-pool table-name
@@ -257,11 +274,15 @@
 
         (commit [_]
           (doseq [[table-name ^ILiveTableTx live-table-tx] table-txs]
-            (.put tables table-name (.commit live-table-tx))))
+            (.put tables table-name (.commit live-table-tx)))
+
+          (set! (.-latest-completed-tx this-idx) tx-key))
 
         (abort [_]
           (doseq [^ILiveTableTx live-table-tx (.values table-txs)]
-            (.abort live-table-tx)))
+            (.abort live-table-tx))
+
+          (set! (.-latest-completed-tx this-idx) tx-key))
 
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
@@ -316,7 +337,8 @@
       (-> (into {} (keep deref) futs)
           (util/rethrowing-cause))))
 
-  (nextChunk [_]
+  (nextChunk [this]
+    (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
     (util/close tables)
     (.clear tables))
 
@@ -329,13 +351,17 @@
 
 (defmethod ig/prep-key :xtdb.indexer/live-index [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)}
+          :buffer-pool (ig/ref :xtdb/buffer-pool)
+          :metadata-mgr (ig/ref ::meta/metadata-manager)}
          opts))
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool log-limit page-limit]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log-limit page-limit]
                                                     :or {log-limit 64 page-limit 1024}}]
-  (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
-    (->LiveIndex allocator buffer-pool (HashMap.) (RefCounter.) log-limit page-limit)))
+  (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
+    (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
+      (->LiveIndex allocator buffer-pool
+                   latest-completed-tx latest-completed-tx
+                   (HashMap.) (RefCounter.) log-limit page-limit))))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))

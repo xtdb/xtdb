@@ -160,7 +160,7 @@
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)]
       (let [live-index-allocator (util/->child-allocator allocator "live-index")]
-        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp (HashMap.) (RefCounter.) 64 1024)]
+        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp nil nil (HashMap.) (RefCounter.) 64 1024)]
           (let [live-index-tx (.startTx live-index (TransactionKey. 0 (.toInstant #inst "2000")))
                 live-table-tx (.liveTable live-index-tx table-name)]
 
