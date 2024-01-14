@@ -680,7 +680,7 @@
   (awaitTxAsync [this tx timeout]
     (-> (if tx
           (await/await-tx-async tx
-                                #(or (some-> indexer-error throw)
+                                #(or (some-> (.indexer-error this) throw)
                                      (.-latest-completed-tx this))
                                 awaiters)
           (CompletableFuture/completedFuture latest-completed-tx))
