@@ -6,8 +6,7 @@
             [xtdb.log :as xt-log]
             xtdb.operator.scan
             [xtdb.time :as time]
-            [xtdb.util :as util]
-            xtdb.watermark)
+            [xtdb.util :as util])
   (:import java.lang.AutoCloseable
            (java.nio ByteBuffer)
            org.apache.arrow.memory.BufferAllocator

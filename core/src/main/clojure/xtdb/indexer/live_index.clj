@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
+            [xtdb.metadata :as meta]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
@@ -12,14 +13,17 @@
            (java.time Duration)
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture)
+           (java.util.concurrent.locks StampedLock)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
+           xtdb.api.TransactionKey
            xtdb.IBufferPool
+           xtdb.metadata.IMetadataManager
            (xtdb.trie LiveHashTrie)
-           (xtdb.util RefCounter)
+           (xtdb.util RefCounter RowCounter)
            (xtdb.vector IRelationWriter IVectorWriter)
-           (xtdb.watermark ILiveIndexWatermark ILiveTableWatermark)))
+           (xtdb.watermark ILiveIndexWatermark ILiveTableWatermark Watermark)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableTx
@@ -48,12 +52,19 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndex
+  (^xtdb.api.TransactionKey latestCompletedTx [])
+  (^xtdb.api.TransactionKey latestCompletedChunkTx [])
+
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
   (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.TransactionKey txKey])
-  (^xtdb.watermark.ILiveIndexWatermark openWatermark [])
-  (^java.util.Map finishChunk [^long chunkIdx, ^long nextChunkIdx])
-  (^void nextChunk [])
+
+  (^xtdb.watermark.Watermark openWatermark [^xtdb.api.TransactionKey txKey])
+
   (^void close []))
+
+(defprotocol FinishChunk
+  (^void finish-chunk! [_])
+  (^void force-flush! [_ tx-key expected-last-chunk-tx-id]))
 
 (defprotocol TestLiveTable
   (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
@@ -80,7 +91,7 @@
         (when retain? (util/close out-cols))
         (throw t)))))
 
-(deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^String table-name
+(deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr
                     ^IVectorWriter valid-times-wtr, ^IVectorWriter valid-time-wtr
@@ -114,7 +125,8 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
+          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
+          (.addRows row-counter 1))
 
         (logDelete [_ iid valid-from valid-to]
           (.writeBytes iid-wtr iid)
@@ -133,7 +145,8 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
+          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
+          (.addRows row-counter 1))
 
         (logErase [_ iid]
           (.writeBytes iid-wtr iid)
@@ -152,7 +165,8 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
+          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
+          (.addRows row-counter 1))
 
         (openWatermark [_]
           (let [fields (live-rel->fields live-rel)
@@ -211,9 +225,10 @@
     (util/close live-rel)))
 
 (defn ->live-table
-  (^xtdb.indexer.live_index.ILiveTable [allocator buffer-pool table-name] (->live-table allocator buffer-pool table-name {}))
+  (^xtdb.indexer.live_index.ILiveTable [allocator buffer-pool row-counter table-name]
+   (->live-table allocator buffer-pool row-counter table-name {}))
 
-  (^xtdb.indexer.live_index.ILiveTable [allocator buffer-pool table-name
+  (^xtdb.indexer.live_index.ILiveTable [allocator buffer-pool row-counter table-name
                                         {:keys [->live-trie]
                                          :or {->live-trie (fn [iid-rdr]
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
@@ -222,7 +237,7 @@
            op-wtr (.colWriter rel "op")
            vts-wtr (.colWriter rel "xt$valid_times")
            stcs-wtr (.colWriter rel "xt$system_time_ceilings")]
-       (->LiveTable allocator buffer-pool table-name rel
+       (->LiveTable allocator buffer-pool row-counter table-name rel
                     (->live-trie (vw/vec-wtr->rdr iid-wtr))
                     iid-wtr (.colWriter rel "xt$system_from")
                     vts-wtr (.listElementWriter vts-wtr)
@@ -235,33 +250,60 @@
         (.setPageLimit page-limit))
       (.build)))
 
-(defrecord LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                      ^Map tables, ^RefCounter wm-cnt, ^long log-limit, ^long page-limit]
+(deftype LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
+                    ^:volatile-mutable ^TransactionKey latest-completed-tx
+                    ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
+                    ^Map tables,
+
+                    ^:volatile-mutable ^Watermark shared-wm
+                    ^StampedLock wm-lock
+                    ^RefCounter wm-cnt,
+
+                    ^RowCounter row-counter, ^long rows-per-chunk
+
+                    ^long log-limit, ^long page-limit]
   ILiveIndex
+  (latestCompletedTx [_] latest-completed-tx)
+  (latestCompletedChunkTx [_] latest-completed-chunk-tx)
+
   (liveTable [_ table-name] (.get tables table-name))
 
-  (startTx [this-table tx-key]
+  (startTx [this-idx tx-key]
     (let [table-txs (HashMap.)]
       (reify ILiveIndexTx
         (liveTable [_ table-name]
           (.computeIfAbsent table-txs table-name
                             (reify Function
                               (apply [_ table-name]
-                                (let [live-table (.liveTable this-table table-name)
+                                (let [live-table (.liveTable this-idx table-name)
                                       new-live-table? (nil? live-table)
                                       ^ILiveTable live-table (or live-table
-                                                                 (->live-table allocator buffer-pool table-name
+                                                                 (->live-table allocator buffer-pool row-counter table-name
                                                                                {:->live-trie (partial ->live-trie log-limit page-limit)}))]
 
                                   (.startTx live-table tx-key new-live-table?))))))
 
         (commit [_]
-          (doseq [[table-name ^ILiveTableTx live-table-tx] table-txs]
-            (.put tables table-name (.commit live-table-tx))))
+          (let [wm-lock-stamp (.writeLock wm-lock)]
+            (try
+              (doseq [[table-name ^ILiveTableTx live-table-tx] table-txs]
+                (.put tables table-name (.commit live-table-tx)))
+
+              (set! (.-latest-completed-tx this-idx) tx-key)
+              (finally
+                (.unlock wm-lock wm-lock-stamp))))
+
+          (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
+            (finish-chunk! this-idx)))
 
         (abort [_]
           (doseq [^ILiveTableTx live-table-tx (.values table-txs)]
-            (.abort live-table-tx)))
+            (.abort live-table-tx))
+
+          (set! (.-latest-completed-tx this-idx) tx-key)
+
+          (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
+            (finish-chunk! this-idx)))
 
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
@@ -283,28 +325,60 @@
         AutoCloseable
         (close [_]))))
 
-  (openWatermark [_]
-    (.acquire wm-cnt)
-    (try
-      (util/with-close-on-catch [wms (HashMap.)]
+  (openWatermark [this tx-key]
+    (letfn [(maybe-existing-wm []
+              (when-let [^Watermark wm (.shared-wm this)]
+                (let [wm-tx-key (.txBasis wm)]
+                  (when (or (nil? tx-key)
+                            (and wm-tx-key
+                                 (<= (.getTxId tx-key) (.getTxId wm-tx-key))))
+                    (doto wm .retain)))))
+            (open-live-idx-wm []
+              (.acquire wm-cnt)
+              (try
+                (util/with-close-on-catch [wms (HashMap.)]
 
-        (doseq [[table-name ^ILiveTable live-table] tables]
-          (.put wms table-name (.openWatermark live-table true)))
+                  (doseq [[table-name ^ILiveTable live-table] tables]
+                    (.put wms table-name (.openWatermark live-table true)))
 
-        (reify ILiveIndexWatermark
-          (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
+                  (reify ILiveIndexWatermark
+                    (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
 
-          (liveTable [_ table-name] (.get wms table-name))
+                    (liveTable [_ table-name] (.get wms table-name))
 
-          AutoCloseable
-          (close [_]
-            (util/close wms)
-            (.release wm-cnt))))
-      (catch Throwable _t
-        (.release wm-cnt))))
+                    AutoCloseable
+                    (close [_]
+                      (util/close wms)
+                      (.release wm-cnt))))
+                (catch Throwable _t
+                  (.release wm-cnt))))]
 
-  (finishChunk [_ chunk-idx next-chunk-idx]
-    (let [trie-key (trie/->log-trie-key 0 chunk-idx next-chunk-idx)
+      (or (let [wm-lock-stamp (.readLock wm-lock)]
+            (try
+              (maybe-existing-wm)
+              (finally
+                (.unlock wm-lock wm-lock-stamp))))
+
+          (let [wm-lock-stamp (.writeLock wm-lock)]
+            (try
+              (or (maybe-existing-wm)
+                  (let [^Watermark old-wm (.shared-wm this)]
+                    (try
+                      (let [^Watermark shared-wm (Watermark. (.latestCompletedTx this) (open-live-idx-wm))]
+                        (set! (.shared-wm this) shared-wm)
+                        (doto shared-wm .retain))
+                      (finally
+                        (some-> old-wm .close)))))
+
+              (finally
+                (.unlock wm-lock wm-lock-stamp)))))))
+
+  FinishChunk
+  (finish-chunk! [this]
+    (let [chunk-idx (.getChunkIdx row-counter)
+          next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))
+
+          trie-key (trie/->log-trie-key 0 chunk-idx next-chunk-idx)
           futs (->> (for [^ILiveTable table (.values tables)]
                       (.finishChunk table trie-key))
 
@@ -313,29 +387,67 @@
 
       @(CompletableFuture/allOf futs)
 
-      (-> (into {} (keep deref) futs)
-          (util/rethrowing-cause))))
+      (let [table-metadata (-> (into {} (keep deref) futs)
+                               (util/rethrowing-cause))]
+        (.finishChunk metadata-mgr chunk-idx
+                      {:latest-completed-tx latest-completed-tx
+                       :next-chunk-idx next-chunk-idx
+                       :tables table-metadata}))
 
-  (nextChunk [_]
-    (util/close tables)
-    (.clear tables))
+      (.nextChunk row-counter)
+
+      (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
+
+      (let [wm-lock-stamp (.writeLock wm-lock)]
+        (try
+          (when-let [^Watermark shared-wm (.shared-wm this)]
+            (set! (.shared-wm this) nil)
+            (.close shared-wm))
+
+          (finally
+            (.unlock wm-lock wm-lock-stamp))))
+
+      (util/close tables)
+      (.clear tables)
+
+      (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
+
+  (force-flush! [this tx-key expected-last-chunk-tx-id]
+    (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx this) (.getTxId))]
+      (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
+        (finish-chunk! this)))
+
+    (set! (.latest-completed-tx this) tx-key))
 
   AutoCloseable
   (close [_]
     (util/close tables)
+    (some-> shared-wm .close)
     (if-not (.tryClose wm-cnt (Duration/ofMinutes 1))
       (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
       (util/close allocator))))
 
 (defmethod ig/prep-key :xtdb.indexer/live-index [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)}
+          :buffer-pool (ig/ref :xtdb/buffer-pool)
+          :metadata-mgr (ig/ref ::meta/metadata-manager)
+          :log-limit 64, :page-limit 1024, :rows-per-chunk 102400}
          opts))
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool log-limit page-limit]
-                                                    :or {log-limit 64 page-limit 1024}}]
-  (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
-    (->LiveIndex allocator buffer-pool (HashMap.) (RefCounter.) log-limit page-limit)))
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log-limit page-limit rows-per-chunk]}]
+  (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
+    (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
+      (->LiveIndex allocator buffer-pool metadata-mgr
+                   latest-completed-tx latest-completed-tx
+                   (HashMap.)
+
+                   nil ;; watermark
+                   (StampedLock.)
+                   (RefCounter.)
+
+                   (RowCounter. next-chunk-idx) rows-per-chunk
+
+                   log-limit page-limit))))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))

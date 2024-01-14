@@ -3,6 +3,7 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.indexer.live-index :as li]
+            [xtdb.metadata :as meta]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
@@ -22,7 +23,8 @@
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
                            :xtdb.indexer/live-index {}
-                           :xtdb.buffer-pool/in-memory {}}))
+                           :xtdb.buffer-pool/in-memory {}
+                           ::meta/metadata-manager {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
 
@@ -62,7 +64,7 @@
                                   (mapv #(vec (.getObject iid-vec %)) (.data leaf))))))))))
 
     (t/testing "finish chunk"
-      (.finishChunk live-index 0 12000)
+      (li/finish-chunk! live-index)
 
       (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow"))
                   ^ArrowBuf leaf-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-rf00-nr32ee0.arrow"))

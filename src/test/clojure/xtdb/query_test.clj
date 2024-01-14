@@ -20,7 +20,7 @@
       (f (.tableMetadata metadata-mgr meta-rdr meta-file-path)))))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 10}})]
     (-> (xt/submit-tx node [(xt/put :xt_docs {:name "Håkan", :xt/id :hak})])
         (tu/then-await-tx node))
 
@@ -73,7 +73,7 @@
                              tx2)))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 10}})]
     (-> (xt/submit-tx node [(xt/put :xt_docs {:name "Håkan", :xt/id :hak})
                             (xt/put :xt_docs {:name "James", :xt/id :jms})
                             (xt/put :xt_docs {:name "Ivan", :xt/id :iva})])

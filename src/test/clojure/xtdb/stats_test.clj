@@ -10,7 +10,7 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (deftest test-scan
-  (with-open [node (xtn/start-node {:xtdb/indexer {:rows-per-chunk 2}})]
+  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 2}})]
     (let [scan-emitter (util/component node :xtdb.operator.scan/scan-emitter)]
       (xt/submit-tx node [(xt/put :foo {:xt/id "foo1"})
                           (xt/put :bar {:xt/id "bar1"})])
