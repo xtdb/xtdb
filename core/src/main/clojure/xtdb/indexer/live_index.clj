@@ -53,9 +53,6 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndex
   (^xtdb.api.TransactionKey latestCompletedTx [])
-  (^void setLatestCompletedTx [^xtdb.api.TransactionKey txKey]
-   "HACK just while we're migrating indexer functionality into here")
-
   (^xtdb.api.TransactionKey latestCompletedChunkTx [])
 
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
@@ -66,7 +63,8 @@
   (^void close []))
 
 (defprotocol FinishChunk
-  (^void finish-chunk! [_]))
+  (^void finish-chunk! [_])
+  (^void force-flush! [_ tx-key expected-last-chunk-tx-id]))
 
 (defprotocol TestLiveTable
   (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
@@ -266,7 +264,6 @@
                     ^long log-limit, ^long page-limit]
   ILiveIndex
   (latestCompletedTx [_] latest-completed-tx)
-  (setLatestCompletedTx [this tx-key] (set! (.-latest_completed_tx this) tx-key))
   (latestCompletedChunkTx [_] latest-completed-chunk-tx)
 
   (liveTable [_ table-name] (.get tables table-name))
@@ -414,6 +411,13 @@
       (.clear tables)
 
       (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
+
+  (force-flush! [this tx-key expected-last-chunk-tx-id]
+    (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx this) (.getTxId))]
+      (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
+        (finish-chunk! this)))
+
+    (set! (.latest-completed-tx this) tx-key))
 
   AutoCloseable
   (close [_]

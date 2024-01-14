@@ -69,7 +69,7 @@
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"\* is not a valid in from when inside a unify context"
                           (xt/q tu/*node*
-                                '(unify (from :docs [*]))))))
+                                 '(unify (from :docs [*]))))))
 
 (deftest test-from-unification
   (xt/submit-tx tu/*node*

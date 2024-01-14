@@ -600,12 +600,8 @@
           (await/notify-ex t awaiters)
           (throw t)))))
 
-  (forceFlush [this tx-key expected-last-chunk-tx-id]
-    (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx this) (.getTxId))]
-      (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
-        (li/finish-chunk! live-idx)))
-
-    (.setLatestCompletedTx live-idx tx-key))
+  (forceFlush [_ tx-key expected-last-chunk-tx-id]
+    (li/force-flush! live-idx tx-key expected-last-chunk-tx-id))
 
   IWatermarkSource
   (openWatermark [_ tx-key] (.openWatermark live-idx tx-key))
