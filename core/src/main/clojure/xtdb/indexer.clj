@@ -34,7 +34,6 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb IBufferPool)
            xtdb.api.TransactionKey
            xtdb.api.tx.Xtql
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
@@ -521,7 +520,6 @@
     (.addRows row-counter 1)))
 
 (deftype Indexer [^BufferAllocator allocator
-                  ^IBufferPool buffer-pool
                   ^IMetadataManager metadata-mgr
                   ^IScanEmitter scan-emitter
                   ^IRaQuerySource ra-src
@@ -721,7 +719,6 @@
 
 (defmethod ig/prep-key :xtdb/indexer [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :live-index (ig/ref :xtdb.indexer/live-index)
@@ -730,11 +727,11 @@
          opts))
 
 (defmethod ig/init-key :xtdb/indexer
-  [_ {:keys [allocator buffer-pool metadata-mgr scan-emitter, ra-src, live-index, rows-per-chunk]}]
+  [_ {:keys [allocator metadata-mgr scan-emitter, ra-src, live-index, rows-per-chunk]}]
 
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
-      (->Indexer allocator buffer-pool metadata-mgr scan-emitter ra-src live-index
+      (->Indexer allocator metadata-mgr scan-emitter ra-src live-index
 
                  nil ;; indexer-error
 
