@@ -26,7 +26,6 @@
            (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
            (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
-           (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer IntPredicate)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BitVector)
@@ -42,7 +41,7 @@
            xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
-           (xtdb.watermark Watermark IWatermarkSource)))
+           (xtdb.watermark IWatermarkSource Watermark)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -531,10 +530,7 @@
                   ^PriorityBlockingQueue awaiters
 
                   ^RowCounter row-counter
-                  ^long rows-per-chunk
-
-                  ^:volatile-mutable ^Watermark shared-wm
-                  ^StampedLock wm-lock]
+                  ^long rows-per-chunk]
 
   IIndexer
   (indexTx [this tx-key tx-root]
@@ -602,26 +598,21 @@
                             (throw e))
                           (catch Throwable t
                             (log/error t "error in indexer")
-                            (throw t)))
-                      wm-lock-stamp (.writeLock wm-lock)]
-                  (try
-                    (if e
-                      (do
-                        (when (not= e abort-exn)
-                          (log/debug e "aborted tx")
-                          (.abort live-idx-tx))
+                            (throw t)))]
+                  (if e
+                    (do
+                      (when (not= e abort-exn)
+                        (log/debug e "aborted tx")
+                        (.abort live-idx-tx))
 
-                        (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
-                          (add-tx-row! row-counter live-idx-tx tx-key e)
-                          (.commit live-idx-tx)))
-
-                      (do
-                        (add-tx-row! row-counter live-idx-tx tx-key nil)
-
+                      (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+                        (add-tx-row! row-counter live-idx-tx tx-key e)
                         (.commit live-idx-tx)))
 
-                    (finally
-                      (.unlock wm-lock wm-lock-stamp)))))
+                    (do
+                      (add-tx-row! row-counter live-idx-tx tx-key nil)
+
+                      (.commit live-idx-tx)))))
 
               (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
                 (finish-chunk! this))
@@ -643,33 +634,7 @@
     (.setLatestCompletedTx live-idx tx-key))
 
   IWatermarkSource
-  (openWatermark [this tx-key]
-    (letfn [(maybe-existing-wm []
-              (when-let [^Watermark wm (.shared-wm this)]
-                (let [wm-tx-key (.txBasis wm)]
-                  (when (or (nil? tx-key)
-                            (and wm-tx-key
-                                 (<= (.getTxId tx-key) (.getTxId wm-tx-key))))
-                    (doto wm .retain)))))]
-      (or (let [wm-lock-stamp (.readLock wm-lock)]
-            (try
-              (maybe-existing-wm)
-              (finally
-                (.unlock wm-lock wm-lock-stamp))))
-
-          (let [wm-lock-stamp (.writeLock wm-lock)]
-            (try
-              (or (maybe-existing-wm)
-                  (let [^Watermark old-wm (.shared-wm this)]
-                    (try
-                      (let [^Watermark shared-wm (Watermark. (.latestCompletedTx this) (.openWatermark live-idx))]
-                        (set! (.shared-wm this) shared-wm)
-                        (doto shared-wm .retain))
-                      (finally
-                        (some-> old-wm .close)))))
-
-              (finally
-                (.unlock wm-lock wm-lock-stamp)))))))
+  (openWatermark [_ tx-key] (.openWatermark live-idx tx-key))
 
   (latestCompletedTx [_] (.latestCompletedTx live-idx))
   (latestCompletedChunkTx [_] (.latestCompletedChunkTx live-idx))
@@ -695,23 +660,13 @@
                      :tables table-metadata})
 
       (.nextChunk row-counter)
-
-      (let [wm-lock-stamp (.writeLock wm-lock)]
-        (try
-          (.nextChunk live-idx)
-          (when-let [^Watermark shared-wm (.shared-wm this)]
-            (set! (.shared-wm this) nil)
-            (.close shared-wm))
-
-          (finally
-            (.unlock wm-lock wm-lock-stamp))))
+      (.nextChunk live-idx)
 
       (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
 
   Closeable
   (close [_]
-    (util/close allocator)
-    (some-> shared-wm .close)))
+    (util/close allocator)))
 
 (defmethod ig/prep-key :xtdb/indexer [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
@@ -734,10 +689,7 @@
                  (PriorityBlockingQueue.)
 
                  (RowCounter. next-chunk-idx)
-                 rows-per-chunk
-
-                 nil ;; watermark
-                 (StampedLock.)))))
+                 rows-per-chunk))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))

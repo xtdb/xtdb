@@ -10,6 +10,7 @@
             [xtdb.vector.reader :as vr])
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
+           (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            xtdb.IBufferPool
            (xtdb.api TransactionKey)
@@ -160,8 +161,9 @@
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)]
       (let [live-index-allocator (util/->child-allocator allocator "live-index")]
-        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp nil nil (HashMap.) (RefCounter.) 64 1024)]
-          (let [live-index-tx (.startTx live-index (TransactionKey. 0 (.toInstant #inst "2000")))
+        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp nil nil (HashMap.) nil (StampedLock.) (RefCounter.) 64 1024)]
+          (let [tx-key (TransactionKey. 0 (.toInstant #inst "2000"))
+                live-index-tx (.startTx live-index tx-key)
                 live-table-tx (.liveTable live-index-tx table-name)]
 
             (let [wp (IVectorPosition/build)]
@@ -172,8 +174,9 @@
 
             (.commit live-index-tx)
 
-            (with-open [live-index-wm (.openWatermark live-index)]
-              (let [live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
+            (with-open [wm (.openWatermark live-index tx-key)]
+              (let [live-index-wm (.liveIndex wm)
+                    live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
 
                 (.finishChunk live-index 0 10)
 
