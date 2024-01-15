@@ -5,7 +5,8 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.types :as types]))
+            [xtdb.types :as types])
+  (:import [xtdb.api Xtdb Xtdb$Config]))
 
 (t/use-fixtures :each tu/with-allocator)
 

@@ -17,7 +17,7 @@
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
-           xtdb.api.TransactionKey
+           (xtdb.api TransactionKey Xtdb$IndexerConfig)
            xtdb.IBufferPool
            xtdb.metadata.IMetadataManager
            (xtdb.trie LiveHashTrie)
@@ -427,14 +427,13 @@
       (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
       (util/close allocator))))
 
-(defmethod ig/prep-key :xtdb.indexer/live-index [_ opts]
-  (merge {:allocator (ig/ref :xtdb/allocator)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)
-          :metadata-mgr (ig/ref ::meta/metadata-manager)
-          :log-limit 64, :page-limit 1024, :rows-per-chunk 102400}
-         opts))
+(defmethod ig/prep-key :xtdb.indexer/live-index [_ config]
+  {:allocator (ig/ref :xtdb/allocator)
+   :buffer-pool (ig/ref :xtdb/buffer-pool)
+   :metadata-mgr (ig/ref ::meta/metadata-manager)
+   :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log-limit page-limit rows-per-chunk]}]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr ^Xtdb$IndexerConfig config]}]
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (->LiveIndex allocator buffer-pool metadata-mgr
@@ -445,9 +444,9 @@
                    (StampedLock.)
                    (RefCounter.)
 
-                   (RowCounter. next-chunk-idx) rows-per-chunk
+                   (RowCounter. next-chunk-idx) (.getRowsPerChunk config)
 
-                   log-limit page-limit))))
+                   (.getLogLimit config) (.getPageLimit config)))))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))

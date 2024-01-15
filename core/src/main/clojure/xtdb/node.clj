@@ -2,7 +2,33 @@
   "This namespace is for starting an in-process XTDB node.
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
-  (:require [xtdb.node.impl :as impl]))
+  (:require [xtdb.node.impl :as impl])
+  (:import [xtdb.api Xtdb Xtdb$Config]))
+
+(defmulti apply-config!
+  #_{:clj-kondo/ignore [:unused-binding]}
+  (fn [config k v]
+    (when-let [ns (namespace k)]
+      (doseq [k [(symbol ns)
+                 (symbol (str ns "." (name k)))]]
+
+        (try
+          (require k)
+          (catch Throwable _))))
+
+    k)
+
+  :default ::default)
+
+
+(defmethod apply-config! :xtdb.indexer/live-index [^Xtdb$Config config _
+                                                   {:keys [rows-per-chunk page-limit log-limit]}]
+  (cond-> (.indexer config)
+    rows-per-chunk (.rowsPerChunk rows-per-chunk)
+    page-limit (.pageLimit page-limit)
+    log-limit (.logLimit log-limit)))
+
+(defmethod apply-config! ::default [_ _ _])
 
 (defn start-node
   "Starts an in-process node with the given configuration.
@@ -12,10 +38,20 @@
   This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
   For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
-  (^java.lang.AutoCloseable [] (start-node {}))
+  (^xtdb.api.IXtdb [] (start-node {}))
 
-  (^java.lang.AutoCloseable [opts]
-   (impl/start-node opts)))
+  (^xtdb.api.IXtdb [opts]
+   (Xtdb/openNode (-> (Xtdb$Config.)
+                      (as-> config (reduce-kv (fn [config k v]
+                                                (doto config
+                                                  (apply-config! k v)))
+                                              config
+                                              opts))
+
+                      (.extraConfig (dissoc opts
+                                            :xtdb.log/memory-log
+                                            :xtdb.log/local-directory-log
+                                            :xtdb.indexer/live-index))))))
 
 (defn start-submit-client
   "Starts a submit-only client with the given configuration.

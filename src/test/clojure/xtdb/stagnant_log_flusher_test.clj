@@ -82,7 +82,7 @@
      -1)))
 
 (defn node-log [node]
-  (let [log (tu/component node ::xt-log/memory-log)
+  (let [log (tu/component node :xtdb/log)
         alloc (tu/component node :xtdb/allocator)]
     (log-seq log alloc)))
 

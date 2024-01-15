@@ -6,19 +6,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.query.Basis
-import xtdb.api.query.Binding
 import xtdb.api.query.Expr.Companion.call
-import xtdb.api.query.Expr.Companion.lVar
 import xtdb.api.query.Expr.Companion.param
-import xtdb.api.query.Expr.Companion.`val`
 import xtdb.api.query.IKeyFn.KeyFn.CLOJURE_STR
-import xtdb.api.query.Query.Companion.aggregate
 import xtdb.api.query.Query.Companion.from
-import xtdb.api.query.Query.Companion.orderBy
-import xtdb.api.query.Query.Companion.orderSpec
 import xtdb.api.query.Query.Companion.pipeline
 import xtdb.api.query.Query.Companion.relation
-import xtdb.api.query.Query.Companion.where
 import xtdb.api.query.Query.Companion.withCols
 import xtdb.api.query.QueryOptions
 import xtdb.api.tx.TxOp.Companion.put
@@ -33,7 +26,7 @@ internal class XtdbTest {
 
     @BeforeEach
     fun setUp() {
-        node = Xtdb.startNode()
+        node = Xtdb.openNode()
     }
 
     @AfterEach

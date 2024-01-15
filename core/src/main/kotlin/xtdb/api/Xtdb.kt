@@ -1,18 +1,34 @@
 package xtdb.api
 
-import clojure.java.api.Clojure
 import clojure.lang.IFn
-import clojure.lang.Symbol
+import xtdb.api.log.LogFactory
+import xtdb.util.requiringResolve
 
 object Xtdb {
-    init {
-        Clojure.`var`("clojure.core", "require").invoke(Symbol.intern("xtdb.node"))
+    private val OPEN_NODE: IFn = requiringResolve("xtdb.node.impl", "open-node")
+
+    class IndexerConfig(var logLimit: Long = 64L, var pageLimit: Long = 1024L, var rowsPerChunk: Long = 102400L) {
+        fun logLimit(logLimit: Long) = apply { this.logLimit = logLimit }
+        fun pageLimit(pageLimit: Long) = apply { this.pageLimit = pageLimit }
+        fun rowsPerChunk(rowsPerChunk: Long) = apply { this.rowsPerChunk = rowsPerChunk }
     }
 
-    private val START_NODE: IFn = Clojure.`var`("xtdb.node", "start-node")
+    class Config(
+        @JvmField val indexer: IndexerConfig = IndexerConfig(),
+        var txLog: LogFactory = LogFactory.DEFAULT,
+        var extraConfig: Map<*, *> = emptyMap<Any, Any>(),
+    ) {
+        fun txLog(txLog: LogFactory) = apply { this.txLog = txLog }
+        fun extraConfig(extraConfig: Map<*, *>) = apply { this.extraConfig = extraConfig }
+    }
 
     @JvmStatic
-    fun startNode(): IXtdb {
-        return START_NODE.invoke() as IXtdb
+    @JvmOverloads
+    fun openNode(config: Config = Config()): IXtdb {
+        return OPEN_NODE(config) as IXtdb
+    }
+
+    fun openNode(build: Config.() -> Unit): IXtdb {
+        return openNode(Config().also(build))
     }
 }
