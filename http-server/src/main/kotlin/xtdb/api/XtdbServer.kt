@@ -3,6 +3,7 @@ package xtdb.api
 import clojure.java.api.Clojure
 import clojure.lang.IFn
 import clojure.lang.Keyword
+import clojure.lang.PersistentHashMap
 import clojure.lang.Symbol
 
 private val String.kw: Keyword get() = Keyword.intern(this)
@@ -16,6 +17,6 @@ object XtdbServer {
 
     @JvmStatic
     fun startServer(port: Int = 9832): IXtdb {
-        return START_NODE.invoke(mapOf("xtdb/server".kw to mapOf("port".kw to port))) as IXtdb
+        return START_NODE.invoke(PersistentHashMap.create(mapOf("xtdb/server".kw to mapOf("port".kw to port)))) as IXtdb
     }
 }

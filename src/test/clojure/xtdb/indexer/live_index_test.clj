@@ -16,13 +16,13 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
-           (xtdb.api TransactionKey)
+           (xtdb.api TransactionKey Xtdb$IndexerConfig)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
 
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
-                           :xtdb.indexer/live-index {}
+                           :xtdb.indexer/live-index (Xtdb$IndexerConfig.)
                            :xtdb.buffer-pool/in-memory {}
                            ::meta/metadata-manager {}}))
 

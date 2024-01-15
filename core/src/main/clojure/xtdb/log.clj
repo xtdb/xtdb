@@ -6,7 +6,8 @@
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
@@ -17,7 +18,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api.log Log LogRecord LogSubscriber)
+           (xtdb.api.log Log LogFactory LogRecord LogSubscriber)
            (xtdb.api.tx Abort Call Delete Erase Put Sql SqlByteArgs Xtql XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
@@ -365,3 +366,6 @@
       (.syncSchema root)
 
       (util/root->arrow-ipc-byte-buffer root :stream))))
+
+(defmethod ig/init-key :xtdb/log [_ ^LogFactory factory]
+  (.openLog factory))

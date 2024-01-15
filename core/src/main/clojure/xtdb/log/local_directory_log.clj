@@ -3,6 +3,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.log :as xt.log]
+            [xtdb.node :as xtn]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -14,8 +15,8 @@
            java.time.temporal.ChronoUnit
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
-           (xtdb.api TransactionKey)
-           (xtdb.api.log Log LogRecord)))
+           (xtdb.api TransactionKey Xtdb$Config)
+           (xtdb.api.log LocalLogFactory Log LogRecord)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
 (def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))
@@ -161,3 +162,20 @@
 
 (defmethod ig/halt-key! :xtdb.log/local-directory-log [_ log]
   (util/try-close log))
+
+(defmethod xtn/apply-config! :xtdb.log/local-directory-log [^Xtdb$Config config _ {:keys [root-path instant-src]}]
+  (doto config
+    (.setTxLog (cond-> (LocalLogFactory. (util/->path root-path))
+                 instant-src (.instantSource instant-src)))))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-log [^LocalLogFactory factory]
+  (let [root-path (.getRootPath factory)
+        buffer-size (.getBufferSize factory)]
+    (util/mkdirs root-path)
+
+    (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
+          queue (ArrayBlockingQueue. buffer-size)
+          append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue (.getInstantSource factory) buffer-size))]
+
+      (->LocalDirectoryLog root-path (.getPollSleepDuration factory) pool queue append-loop-future nil))))

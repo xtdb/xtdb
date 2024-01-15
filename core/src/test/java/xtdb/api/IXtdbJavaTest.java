@@ -3,16 +3,13 @@ package xtdb.api;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import xtdb.api.query.Expr;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static xtdb.api.query.Expr.lVar;
 import static xtdb.api.query.Query.*;
 import static xtdb.api.tx.TxOp.put;
 import static xtdb.api.tx.TxOptions.txOpts;
@@ -22,7 +19,7 @@ class IXtdbJavaTest {
 
     @BeforeEach
     void setUp() {
-        node = Xtdb.startNode();
+        node = Xtdb.openNode();
     }
 
     @AfterEach
