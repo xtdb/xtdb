@@ -3,14 +3,13 @@
             [integrant.core :as i]
             [integrant.repl :as ir]
             [xtdb.api :as xt]
-            [xtdb.azure :as azure]
             [xtdb.node :as xtdb]
             [xtdb.util :as util]))
 
 (def dev-node-dir
   (io/file "dev/azure-node"))
 
-(def node)
+(def node nil)
 (def storage-account "xtdb")
 (def container "xtdb-azure-test")
 (def fully-qualified-namespace "xtdbeventhublogtest.servicebus.windows.net")
@@ -25,16 +24,15 @@
   (alter-var-root #'node (constantly nil)))
 
 (def azure-object-store
-  {::xtdb {:node-opts {:xtdb.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
-                       :xtdb/buffer-pool {:cache-path (io/file dev-node-dir "objects")}
-                       ::azure/blob-object-store {:storage-account storage-account
-                                                  :container container}}}})
+  {::xtdb {:node-opts {:log [:local {:path (io/file dev-node-dir "log")}]
+                       :storage [:remote {:object-store [:azure {:storage-account storage-account
+                                                                 :container container}]
+                                          :local-disk-cache (io/file dev-node-dir "objects")}]}}})
 
 (def azure-log
-  {::xtdb {:node-opts {:xtdb/buffer-pool {:cache-path (io/file dev-node-dir "objects")}
-                       ::azure/event-hub-log {:fully-qualified-namespace fully-qualified-namespace
-                                              :event-hub-name eventhub
-                                              :max-wait-time "PT1S"}}}})
+  {::xtdb {:node-opts {:log [:azure-event-hub {:fully-qualified-namespace fully-qualified-namespace
+                                               :event-hub-name eventhub
+                                               :max-wait-time "PT1S"}]}}})
 
 (ir/set-prep! (fn [] azure-log))
 

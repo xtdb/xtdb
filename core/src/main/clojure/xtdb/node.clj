@@ -2,6 +2,8 @@
   "This namespace is for starting an in-process XTDB node.
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
+  (:require [clojure.tools.logging :as log]
+            [xtdb.time :as time])
   (:import [java.time ZoneId]
            [xtdb.api Xtdb Xtdb$Config XtdbSubmitClient XtdbSubmitClient$Config]))
 
@@ -20,18 +22,21 @@
 
   :default ::default)
 
-(defmethod apply-config! :xtdb/default-tz [^Xtdb$Config config _ default-tz]
+(defmethod apply-config! :default-tz [^Xtdb$Config config _ default-tz]
   (when default-tz
     (.defaultTz config (cond
                          (instance? ZoneId default-tz) default-tz
                          (string? default-tz) (ZoneId/of default-tz)))))
 
-(defmethod apply-config! :xtdb.indexer/live-index [^Xtdb$Config config _
-                                                   {:keys [rows-per-chunk page-limit log-limit]}]
+(defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-chunk page-limit log-limit flush-duration]}]
   (cond-> (.indexer config)
     rows-per-chunk (.rowsPerChunk rows-per-chunk)
     page-limit (.pageLimit page-limit)
-    log-limit (.logLimit log-limit)))
+    log-limit (.logLimit log-limit)
+    flush-duration (.flushDuration (time/->duration flush-duration))))
+
+(defmethod apply-config! :http-server [config _ opts]
+  (apply-config! config :xtdb/server opts))
 
 (defmethod apply-config! ::default [_ _ _])
 
@@ -54,15 +59,11 @@
                                                 opts)))
 
                       (.extraConfig (dissoc opts
-                                            :xtdb.buffer-pool/in-memory
-                                            :xtdb.buffer-pool/local
-                                            :xtdb.buffer-pool/remote
-                                            :xtdb.log/memory-log
-                                            :xtdb.log/local-directory-log
-                                            :xtdb.indexer/live-index
-                                            :xtdb/server
-                                            :xtdb/default-tz
-                                            :xtdb.stagnant-log-flusher/flusher))))))
+                                            :log
+                                            :storage
+                                            :indexer
+                                            :default-tz
+                                            :http-server))))))
 
 (defn start-submit-client
   "Starts a submit-only client with the given configuration.

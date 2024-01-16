@@ -5,7 +5,7 @@
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each
-  (tu/with-opts {:xtdb/default-tz #time/zone "Europe/London"})
+  (tu/with-opts {:default-tz #time/zone "Europe/London"})
   (tu/with-each-api-implementation
     (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node]),
          :remote (t/join-fixtures [tu/with-mock-clock tu/with-http-client-node])}

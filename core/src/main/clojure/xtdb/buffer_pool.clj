@@ -213,10 +213,10 @@
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^LocalStorageFactory factory]
   (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                      (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
-                     (.getDataDirectory factory)))
+                     (.getPath factory)))
 
-(defmethod xtn/apply-config! :xtdb.buffer-pool/local [^Xtdb$Config config _ {:keys [data-dir max-cache-bytes max-cache-entries]}]
-  (.storage config (cond-> (Storage/local data-dir)
+(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
+  (.storage config (cond-> (Storage/local path)
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 
@@ -284,7 +284,7 @@
 
 (defrecord RemoteBufferPool [allocator
                              ^ArrowBufLRU memory-store
-                             ^Path disk-store
+                             ^Path local-disk-cache
                              ^ObjectStore remote-store]
   IBufferPool
   (getBuffer [_ k]
@@ -298,7 +298,7 @@
             (CompletableFuture/completedFuture cached-buffer))
 
         :else
-        (let [buffer-cache-path (.resolve disk-store (str k))
+        (let [buffer-cache-path (.resolve local-disk-cache (str k))
               start-ns (System/nanoTime)]
           (-> (if (util/path-exists buffer-cache-path)
                 ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
@@ -319,7 +319,7 @@
   (listObjects [_ dir] (.listObjects remote-store dir))
 
   (openArrowWriter [_ k vsr]
-    (let [tmp-path (create-tmp-path disk-store)
+    (let [tmp-path (create-tmp-path local-disk-cache)
           file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
           aw (ArrowFileWriter. vsr nil file-ch)]
 
@@ -334,7 +334,7 @@
 
           (upload-arrow-file allocator remote-store k tmp-path)
 
-          (let [file-path (.resolve disk-store k)]
+          (let [file-path (.resolve local-disk-cache k)]
             (util/create-parents file-path)
             ;; see #2847
             (util/atomic-move tmp-path file-path)))
@@ -360,11 +360,11 @@
                (upload-multipart-buffers remote-store k buffers)))
 
             (.thenRun (fn []
-                        (let [tmp-path (create-tmp-path disk-store)]
+                        (let [tmp-path (create-tmp-path local-disk-cache)]
                           (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
                             (.write file-ch buffer))
 
-                          (let [file-path (.resolve disk-store k)]
+                          (let [file-path (.resolve local-disk-cache k)]
                             (util/create-parents file-path)
                             ;; see #2847
                             (util/atomic-move tmp-path file-path)))))))))
@@ -381,7 +381,7 @@
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                         (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
-                        (.getDiskStore factory)
+                        (.getLocalDiskCache factory)
                         object-store)))
 
 (defmulti ->object-store-factory
@@ -397,10 +397,15 @@
 
     tag))
 
-(defmethod xtn/apply-config! :xtdb.buffer-pool/remote [^Xtdb$Config config _ {:keys [object-store disk-store max-cache-bytes max-cache-entries]}]
+(defmethod ->object-store-factory :in-memory [_ opts] (->object-store-factory :xtdb.object-store-test/memory-object-store opts))
+(defmethod ->object-store-factory :s3 [_ opts] (->object-store-factory :xtdb.s3/object-store opts))
+(defmethod ->object-store-factory :google-cloud [_ opts] (->object-store-factory :xtdb.google-cloud/object-store opts))
+(defmethod ->object-store-factory :azure [_ opts] (->object-store-factory :xtdb.azure/object-store opts))
+
+(defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store local-disk-cache max-cache-bytes max-cache-entries]}]
   (.storage config (cond-> (Storage/remote (let [[tag opts] object-store]
                                              (->object-store-factory tag opts))
-                                           disk-store)
+                                           local-disk-cache)
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 
@@ -421,6 +426,14 @@
   (let [footer (get-footer bp path)
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
+
+(defmethod xtn/apply-config! :storage [config _ [tag opts]]
+  (xtn/apply-config! config
+                     (case tag
+                       :in-memory ::in-memory
+                       :local ::local
+                       :remote ::remote)
+                     opts))
 
 (defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
   {:allocator (ig/ref :xtdb/allocator)

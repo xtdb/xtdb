@@ -130,13 +130,13 @@
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 
 (t/deftest ^:s3 node-level-test
-  (util/with-tmp-dirs #{disk-store} 
+  (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node
-                           {:xtdb.buffer-pool/remote
-                            {:object-store [::s3/object-store {:bucket bucket
-                                                               :prefix (util/->path (str (random-uuid)))
-                                                               :sns-topic-arn sns-topic-arn}]
-                             :disk-store disk-store}})]
+                           {:storage [:remote
+                                      {:object-store [:s3 {:bucket bucket
+                                                           :prefix (util/->path (str (random-uuid)))
+                                                           :sns-topic-arn sns-topic-arn}]
+                                       :local-disk-cache local-disk-cache}]})]
       
       ;; Submit some documents to the node
       (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
@@ -157,13 +157,13 @@
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (t/deftest ^:s3 tpch-test-node
-  (util/with-tmp-dirs #{disk-store}
+  (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node
-                           {:xtdb.buffer-pool/remote
-                            {:object-store [::s3/object-store {:bucket bucket
-                                                               :prefix (util/->path (str (random-uuid)))
-                                                               :sns-topic-arn sns-topic-arn}]
-                             :disk-store disk-store}})]
+                           {:storage [:remote
+                                      {:object-store [:s3 {:bucket bucket
+                                                           :prefix (util/->path (str (random-uuid)))
+                                                           :sns-topic-arn sns-topic-arn}]
+                                       :local-disk-cache local-disk-cache}]})]
       ;; Submit tpch docs
       (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))

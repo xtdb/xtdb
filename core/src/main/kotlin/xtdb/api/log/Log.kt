@@ -44,7 +44,7 @@ class InMemoryLogFactory(var instantSource: InstantSource = InstantSource.system
 }
 
 class LocalLogFactory @JvmOverloads constructor(
-    val rootPath: Path,
+    val path: Path,
     var instantSource: InstantSource = InstantSource.system(),
     var bufferSize: Long = 4096,
     var pollSleepDuration: Duration = Duration.ofMillis(100),

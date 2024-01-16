@@ -57,8 +57,8 @@
 
 (comment
   (let [node-dir (Files/createTempDirectory "multinode-0.1" (make-array FileAttribute 0))
-        node-opts {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")}
-                   :xtdb.buffer-pool/local {:path (.resolve node-dir "objects")}}]
+        node-opts {:log [:local {:path (.resolve node-dir "log")}]
+                   :storage [:local {:path (.resolve node-dir "objects")}]}]
     (run-multinode {:scale-factor 0.1, :sleep-ms 60000}
                    (fn []
                      (xtn/start-node node-opts)))))

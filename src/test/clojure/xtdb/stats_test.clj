@@ -4,14 +4,13 @@
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.types :as types])
-  (:import [xtdb.api Xtdb Xtdb$Config]))
+            [xtdb.types :as types]
+            [xtdb.util :as util]))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (deftest test-scan
-  (with-open [node (xtn/start-node {:xtdb.indexer/live-index {:rows-per-chunk 2}})]
+  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 2}})]
     (let [scan-emitter (util/component node :xtdb.operator.scan/scan-emitter)]
       (xt/submit-tx node [(xt/put :foo {:xt/id "foo1"})
                           (xt/put :bar {:xt/id "bar1"})])

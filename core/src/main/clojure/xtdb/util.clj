@@ -5,8 +5,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.error :as err]
-            [xtdb.protocols])
+            [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
            (java.io ByteArrayOutputStream File)
            java.lang.AutoCloseable
@@ -27,7 +26,6 @@
            (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
-           xtdb.api.query.IKeyFn
            xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)

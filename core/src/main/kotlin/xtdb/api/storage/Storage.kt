@@ -22,7 +22,7 @@ data object InMemoryStorageFactory : StorageFactory {
 }
 
 class LocalStorageFactory(
-    val dataDirectory: Path,
+    val path: Path,
     var maxCacheEntries: Long = 1024,
     var maxCacheBytes: Long = 536870912,
 ) : StorageFactory {
@@ -36,10 +36,10 @@ class LocalStorageFactory(
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator, this) as IBufferPool
 }
 
-fun local(dataDirectory: Path) = LocalStorageFactory(dataDirectory)
+fun local(path: Path) = LocalStorageFactory(path)
 
 @JvmSynthetic
-fun local(dataDirectory: Path, build: LocalStorageFactory.() -> Unit) = LocalStorageFactory(dataDirectory).also(build)
+fun local(path: Path, build: LocalStorageFactory.() -> Unit) = LocalStorageFactory(path).also(build)
 
 interface ObjectStoreFactory {
     fun openObjectStore(): ObjectStore
@@ -47,7 +47,7 @@ interface ObjectStoreFactory {
 
 class RemoteStorageFactory(
     val objectStore: ObjectStoreFactory,
-    val diskStore: Path,
+    val localDiskCache: Path,
     var maxCacheEntries: Long = 1024,
     var maxCacheBytes: Long = 536870912,
 ) : StorageFactory {
@@ -61,9 +61,10 @@ class RemoteStorageFactory(
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator, this) as IBufferPool
 }
 
-fun remote(objectStore: ObjectStoreFactory, diskStore: Path) = RemoteStorageFactory(objectStore, diskStore)
+fun remote(objectStore: ObjectStoreFactory, localDiskCachePath: Path) =
+    RemoteStorageFactory(objectStore, localDiskCachePath)
 
 @JvmSynthetic
-fun remote(objectStore: ObjectStoreFactory, diskStore: Path, build: RemoteStorageFactory.() -> Unit) =
-    RemoteStorageFactory(objectStore, diskStore).also(build)
+fun remote(objectStore: ObjectStoreFactory, localDiskCachePath: Path, build: RemoteStorageFactory.() -> Unit) =
+    RemoteStorageFactory(objectStore, localDiskCachePath).also(build)
 

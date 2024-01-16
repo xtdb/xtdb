@@ -188,8 +188,8 @@
                     .toString)]
 
     ;; put data in to the tmp host dir to test the data mount
-    (with-open [node (->> {:xtdb.log/local-directory-log {:root-path (io/file hostdir "log")}
-                           :xtdb.buffer-pool/local {:path (io/file hostdir "objects")}}
+    (with-open [node (->> {:log [:local {:path (io/file hostdir "log")}]
+                           :storage [:local {:path (io/file hostdir "objects")}]}
                           (xtn/start-node))]
       (-> (node/snapshot-async node (xt/submit-tx node [(xt/put {:xt/id 42, :greeting "Hello, world!"})]))
           (.orTimeout 5 TimeUnit/SECONDS)

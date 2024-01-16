@@ -102,15 +102,15 @@
       (t/is (= (mapv util/->path ["alan" "alice"])
                (.listObjects ^ObjectStore os-2))))))
 
-(t/deftest ^:azure node-level-test
-  (util/with-tmp-dirs #{disk-store}
+(t/deftest ^:google-cloud node-level-test
+  (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node
-                           {:xtdb.buffer-pool/remote
-                            {:object-store [::google-cloud/object-store {:project-id project-id
-                                                                         :bucket test-bucket
-                                                                         :pubsub-topic pubsub-topic
-                                                                         :prefix (str "xtdb.google-cloud-test." (random-uuid))}]
-                             :disk-store disk-store}})]
+                           {:storage [:remote
+                                      {:object-store [:google-cloud {:project-id project-id
+                                                                     :bucket test-bucket
+                                                                     :pubsub-topic pubsub-topic
+                                                                     :prefix (str "xtdb.google-cloud-test." (random-uuid))}]
+                                       :local-disk-cache local-disk-cache}]})]
       ;; Submit some documents to the node
       (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
                                 (xt/put :bar {:xt/id "bar2"})
@@ -129,15 +129,15 @@
         (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-(t/deftest ^:azure tpch-test-node
-  (util/with-tmp-dirs #{disk-store}
+(t/deftest ^:google-cloud tpch-test-node
+  (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node
-                           {:xtdb.buffer-pool/remote
-                            {:object-store [::google-cloud/object-store {:project-id project-id
-                                                                         :bucket test-bucket
-                                                                         :pubsub-topic pubsub-topic
-                                                                         :prefix (str "xtdb.google-cloud-test." (random-uuid))}]
-                             :disk-store disk-store}})]
+                           {:storage [:remote
+                                      {:object-store [:google-cloud {:project-id project-id
+                                                                     :bucket test-bucket
+                                                                     :pubsub-topic pubsub-topic
+                                                                     :prefix (str "xtdb.google-cloud-test." (random-uuid))}]
+                                       :local-disk-cache local-disk-cache}]})]
       ;; Submit tpch docs
       (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))
