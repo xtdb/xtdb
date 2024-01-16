@@ -3,7 +3,7 @@
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
   (:import [java.time ZoneId]
-           [xtdb.api Xtdb Xtdb$Config]))
+           [xtdb.api Xtdb Xtdb$Config XtdbSubmitClient XtdbSubmitClient$Config]))
 
 (defmulti ^:no-doc apply-config!
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -70,5 +70,10 @@
   This client *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
   For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
-  ^java.lang.AutoCloseable [opts]
-  ((requiring-resolve 'xtdb.node.impl/start-submit-client) opts))
+  ^xtdb.api.IXtdbSubmitClient [opts]
+  (XtdbSubmitClient/openSubmitClient (doto (XtdbSubmitClient$Config.)
+                                       (as-> config (reduce-kv (fn [config k v]
+                                                                 (doto config
+                                                                   (apply-config! k v)))
+                                                               config
+                                                               opts)))))

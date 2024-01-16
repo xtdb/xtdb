@@ -6,7 +6,7 @@
   (:import java.time.InstantSource
            java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture
-           (xtdb.api TransactionKey Xtdb$Config)
+           (xtdb.api TransactionKey XtdbSubmitClient$Config)
            (xtdb.api.log InMemoryLogFactory Log LogRecord)
            xtdb.log.INotifyingSubscriberHandler))
 
@@ -32,7 +32,7 @@
   (subscribe [this after-tx-id subscriber]
     (.subscribe subscriber-handler this after-tx-id subscriber)))
 
-(defmethod xtn/apply-config! :xtdb.log/memory-log [^Xtdb$Config config _ {:keys [instant-src]}]
+(defmethod xtn/apply-config! :xtdb.log/memory-log [^XtdbSubmitClient$Config config _ {:keys [instant-src]}]
   (doto config
     (.setTxLog (cond-> (InMemoryLogFactory.)
                  instant-src (.instantSource instant-src)))))

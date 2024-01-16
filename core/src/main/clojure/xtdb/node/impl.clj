@@ -16,7 +16,7 @@
            java.util.HashMap
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config Xtdb$ModuleFactory)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config Xtdb$ModuleFactory XtdbSubmitClient$Config)
            (xtdb.api.log Log)
            (xtdb.api.query Basis IKeyFn Query QueryOptions)
            (xtdb.api.tx Sql TxOptions)
@@ -143,10 +143,6 @@
 (defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))
 
-(defn- with-default-impl [opts parent-k impl-k]
-  (cond-> opts
-    (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
-
 (defmethod ig/prep-key :xtdb/modules [_ modules]
   {:node (ig/ref :xtdb/node)
    :modules (vec modules)})
@@ -222,15 +218,15 @@
   (.close node))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn start-submit-client ^xtdb.node.impl.SubmitClient [opts]
+(defn open-submit-client ^xtdb.api.IXtdbSubmitClient [^XtdbSubmitClient$Config config]
   (let [!closing (atom false)
-        system (-> (into {::submit-client {}
-                          :xtdb/allocator {}
-                          :xtdb/default-tz time/utc}
-                         opts)
+        system (-> {::submit-client {}
+                    :xtdb/allocator {}
+                    :xtdb/log (.getTxLog config)
+                    :xtdb/default-tz (.getDefaultTz config)}
+
                    (doto ig/load-namespaces)
-                   (with-default-impl :xtdb/log :xtdb.log/memory-log)
-                   (doto ig/load-namespaces)
+
                    ig/prep
                    ig/init)]
 
