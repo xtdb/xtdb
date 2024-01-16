@@ -24,30 +24,27 @@ object Xtdb {
     }
 
     class Config(
-        var txLog: LogFactory = LogFactory.DEFAULT,
+        txLog: LogFactory = LogFactory.DEFAULT,
         var storage: StorageFactory = StorageFactory.DEFAULT,
-        var defaultTz: ZoneId = ZoneOffset.UTC,
+        defaultTz: ZoneId = ZoneOffset.UTC,
         @JvmField val indexer: IndexerConfig = IndexerConfig(),
         var extraConfig: Map<*, *> = emptyMap<Any, Any>(),
-    ) {
+    ) : XtdbSubmitClient.Config(txLog, defaultTz) {
         private val modules: MutableList<ModuleFactory> = mutableListOf()
 
-        fun txLog(txLog: LogFactory) = apply { this.txLog = txLog }
         fun storage(storage: StorageFactory) = apply { this.storage = storage }
-
-        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
         fun getModules(): List<ModuleFactory> = modules
         fun module(module: ModuleFactory) = apply { this.modules += module }
         fun modules(vararg modules: ModuleFactory) = apply { this.modules += modules }
         fun modules(modules: List<ModuleFactory>) = apply { this.modules += modules }
 
-        fun extraConfig(extraConfig: Map<*, *>) = apply { this.extraConfig = extraConfig }
-
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
 
-        fun open() = OPEN_NODE(this) as IXtdb
+        fun extraConfig(extraConfig: Map<*, *>) = apply { this.extraConfig = extraConfig }
+
+        override fun open() = OPEN_NODE.invoke(this) as IXtdb
     }
 
     interface Module : AutoCloseable
@@ -63,12 +60,8 @@ object Xtdb {
 
     @JvmStatic
     @JvmOverloads
-    fun openNode(config: Config = Config()): IXtdb {
-        return OPEN_NODE(config) as IXtdb
-    }
+    fun openNode(config: Config = Config()) = config.open()
 
     @JvmSynthetic
-    fun openNode(build: Config.() -> Unit): IXtdb {
-        return openNode(Config().also(build))
-    }
+    fun openNode(build: Config.() -> Unit) = openNode(Config().also(build))
 }

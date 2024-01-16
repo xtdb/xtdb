@@ -15,7 +15,7 @@
            java.time.temporal.ChronoUnit
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
-           (xtdb.api TransactionKey Xtdb$Config)
+           (xtdb.api TransactionKey XtdbSubmitClient$Config)
            (xtdb.api.log LocalLogFactory Log LogRecord)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
@@ -163,7 +163,7 @@
 (defmethod ig/halt-key! :xtdb.log/local-directory-log [_ log]
   (util/try-close log))
 
-(defmethod xtn/apply-config! :xtdb.log/local-directory-log [^Xtdb$Config config _ {:keys [root-path instant-src]}]
+(defmethod xtn/apply-config! :xtdb.log/local-directory-log [^XtdbSubmitClient$Config config _ {:keys [root-path instant-src]}]
   (doto config
     (.setTxLog (cond-> (LocalLogFactory. (util/->path root-path))
                  instant-src (.instantSource instant-src)))))
