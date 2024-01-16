@@ -42,31 +42,6 @@
     {:submit-tx-timer (timer "node.submit-tx")
      :query-timer (timer "node.query")}))
 
-(defmacro reify-protocols-accepting-non-methods
-  "On older versions of XT node methods may be missing."
-  [& reify-def]
-  `(reify ~@(loop [proto nil
-                   forms reify-def
-                   acc []]
-              (if-some [form (first forms)]
-                (cond
-                  (symbol? form)
-                  (if (class? (resolve form))
-                    (recur nil (rest forms) (conj acc form))
-                    (recur form (rest forms) (conj acc form)))
-
-                  (nil? proto)
-                  (recur nil (rest forms) (conj acc form))
-
-                  (list? form)
-                  (if-some [{:keys [arglists]} (get (:sigs @(resolve proto)) (keyword (name (first form))))]
-                    ;; arity-match
-                    (if (some #(= (count %) (count (second form))) arglists)
-                      (recur proto (rest forms) (conj acc form))
-                      (recur proto (rest forms) acc))
-                    (recur proto (rest forms) acc)))
-                acc))))
-
 (defn bench-proxy ^Closeable [node ^MeterRegistry meter-reg]
   (let [last-submitted (atom nil)
         last-completed (atom nil)
@@ -147,27 +122,22 @@
 
 (defn wrap-task [task f]
   (let [{:keys [stage]} task]
-    (bm/wrap-task
-     task
-     (if stage
-       (fn instrumented-stage [worker]
-         (if bm/*stage-reg*
-           (with-open [node-proxy (bench-proxy (:sut worker) bm/*stage-reg*)]
-             (f (assoc worker :sut node-proxy)))
-           (f worker)))
-       f))))
+    (-> task
+        (bm/wrap-task (if stage
+                        (fn instrumented-stage [worker]
+                          (if bm/*stage-reg*
+                            (with-open [node-proxy (bench-proxy (:sut worker) bm/*stage-reg*)]
+                              (f (assoc worker :sut node-proxy)))
+                            (f worker)))
+                        f)))))
 
-(defn run-benchmark
-  [{:keys [node-opts
-           benchmark-type
-           benchmark-opts]}]
-  (let [benchmark
-        (case benchmark-type
-          :auctionmark
-          ((requiring-resolve 'xtdb.bench2.auctionmark/benchmark) benchmark-opts)
-          #_#_:tpch
-          ((requiring-resolve 'xtdb.bench2.tpch/benchmark) benchmark-opts)
-          #_#_:trace (trace benchmark-opts))
+(defn run-benchmark [{:keys [node-opts benchmark-type benchmark-opts]}]
+  (let [benchmark (case benchmark-type
+                    :auctionmark
+                    ((requiring-resolve 'xtdb.bench2.auctionmark/benchmark) benchmark-opts)
+                    #_#_:tpch
+                    ((requiring-resolve 'xtdb.bench2.tpch/benchmark) benchmark-opts)
+                    #_#_:trace (trace benchmark-opts))
         benchmark-fn (b/compile-benchmark
                       benchmark
                       ;; @(requiring-resolve `xtdb.bench.measurement/wrap-task)
@@ -186,15 +156,6 @@
   (let [^Path path (.toPath node-dir)]
     {:xtdb.log/local-directory-log {:root-path (.resolve path "log")}
      :xtdb.buffer-pool/local {:path (.resolve path "objects")}}))
-
-(defn- ->worker [node]
-  (let [clock (Clock/systemUTC)
-        domain-state (ConcurrentHashMap.)
-        custom-state (ConcurrentHashMap.)
-        root-random (Random. 112)
-        reports (atom [])
-        worker (b/->Worker node root-random domain-state custom-state clock reports)]
-    worker))
 
 (defn- only-oltp-stage [report]
   (let [stage-filter #(filter (comp #{:oltp} :stage) %)]
