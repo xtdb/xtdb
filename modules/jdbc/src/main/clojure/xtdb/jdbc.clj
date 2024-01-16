@@ -14,7 +14,7 @@
            java.util.concurrent.CompletableFuture
            (java.util.function Function)
            java.util.function.Supplier
-           xtdb.api.ObjectStore))
+           xtdb.api.storage.ObjectStore))
 
 (defprotocol Dialect
   (db-type [dialect])

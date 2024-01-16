@@ -2,6 +2,7 @@ package xtdb.api
 
 import clojure.lang.IFn
 import xtdb.api.log.LogFactory
+import xtdb.api.storage.StorageFactory
 import xtdb.util.requiringResolve
 
 object Xtdb {
@@ -16,9 +17,11 @@ object Xtdb {
     class Config(
         @JvmField val indexer: IndexerConfig = IndexerConfig(),
         var txLog: LogFactory = LogFactory.DEFAULT,
+        var storage: StorageFactory = StorageFactory.DEFAULT,
         var extraConfig: Map<*, *> = emptyMap<Any, Any>(),
     ) {
         fun txLog(txLog: LogFactory) = apply { this.txLog = txLog }
+        fun storage(storage: StorageFactory) = apply { this.storage = storage }
         fun extraConfig(extraConfig: Map<*, *>) = apply { this.extraConfig = extraConfig }
     }
 
@@ -28,6 +31,7 @@ object Xtdb {
         return OPEN_NODE(config) as IXtdb
     }
 
+    @JvmSynthetic
     fun openNode(build: Config.() -> Unit): IXtdb {
         return openNode(Config().also(build))
     }

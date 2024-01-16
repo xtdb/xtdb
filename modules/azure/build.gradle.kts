@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 ext {
@@ -31,4 +34,5 @@ dependencies {
     api("com.azure", "azure-core-management", "1.11.1")
     api("com.azure.resourcemanager", "azure-resourcemanager-eventhubs", "2.26.0")
 
+    api(kotlin("stdlib-jdk8"))
 }

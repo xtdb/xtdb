@@ -165,14 +165,12 @@
              :xtdb.stagnant-log-flusher/flusher {}
              :xtdb/compactor {}
 
+             :xtdb/buffer-pool (.getStorage opts)
              :xtdb.indexer/live-index (.indexer opts)
              :xtdb/log (.getTxLog opts)}
 
             (.getExtraConfig opts))
 
-      (doto ig/load-namespaces)
-      (with-default-impl :xtdb/log :xtdb.log/memory-log)
-      (with-default-impl :xtdb/buffer-pool :xtdb.buffer-pool/in-memory)
       (doto ig/load-namespaces)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

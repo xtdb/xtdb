@@ -2,11 +2,13 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            xtdb.node.impl
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory ArrowBuf)
            (java.time InstantSource)
-           xtdb.IBufferPool))
+           xtdb.IBufferPool
+           xtdb.api.storage.Storage))
 
 (defn- random-maps [n]
   (let [nb-ks 5
@@ -15,6 +17,7 @@
          (map-indexed #(assoc %2 :xt/id %1)))))
 
 (def ^java.io.File node-dir (io/file "dev/concurrent-node-test"))
+
 (def node-opts {:node-dir (.toPath node-dir)
                 :instant-src (InstantSource/system)})
 
@@ -36,9 +39,9 @@
 (deftest ^:integration concurrent-buffer-pool-test
   (populate-node node-opts)
   (tu/with-system {:xtdb/allocator {}
-                   :xtdb.buffer-pool/local {:data-dir (.resolve (.toPath node-dir) "objects")}}
+                   :xtdb/buffer-pool (Storage/local (.resolve (.toPath node-dir) "objects"))}
     (fn []
-      (let [^IBufferPool buffer-pool (:xtdb.buffer-pool/local tu/*sys*)
+      (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
             objs (.listObjects buffer-pool)
             get-item #(with-open [^ArrowBuf _buf (deref (.getBuffer buffer-pool (rand-nth objs)))]
                         (Thread/sleep 10))

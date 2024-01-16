@@ -17,20 +17,21 @@
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
            (xtdb.api TransactionKey Xtdb$IndexerConfig)
+           xtdb.api.storage.InMemoryStorageFactory
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
 
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
                            :xtdb.indexer/live-index (Xtdb$IndexerConfig.)
-                           :xtdb.buffer-pool/in-memory {}
+                           :xtdb/buffer-pool InMemoryStorageFactory/INSTANCE
                            ::meta/metadata-manager {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
 
 (t/deftest test-chunk
   (let [{^BufferAllocator allocator :xtdb/allocator
-         ^IBufferPool buffer-pool :xtdb.buffer-pool/in-memory
+         ^IBufferPool buffer-pool :xtdb/buffer-pool
          ^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*
 
         iids (let [rnd (Random. 0)]

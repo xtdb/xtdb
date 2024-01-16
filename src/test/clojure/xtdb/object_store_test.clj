@@ -2,18 +2,18 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.test :as t]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.buffer-pool :as bp]
             [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import [java.io Closeable]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
-           [java.nio.file.attribute FileAttribute]
            [java.nio.file Files Path]
+           [java.nio.file.attribute FileAttribute]
+           [java.util NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            [java.util.function Supplier]
-           [java.util NavigableMap]
-           [xtdb.api ObjectStore]))
+           [xtdb.api.storage ObjectStore ObjectStoreFactory]))
 
 (defn- get-edn [^ObjectStore obj-store, ^Path k]
   (-> (let [^ByteBuffer buf @(.getObject obj-store k)]
@@ -92,13 +92,10 @@
   (close [_]
     (.clear os)))
 
-(defmethod ig/init-key ::memory-object-store [_ _]
-  (->InMemoryObjectStore (ConcurrentSkipListMap.)))
-
-(defmethod ig/halt-key! ::memory-object-store [_ ^InMemoryObjectStore os]
-  (.close os))
-
-(derive ::memory-object-store :xtdb/object-store)
+(defmethod bp/->object-store-factory ::memory-object-store [_ _]
+  (reify ObjectStoreFactory
+    (openObjectStore [_]
+      (->InMemoryObjectStore (ConcurrentSkipListMap.)))))
 
 (defn test-put-delete [^ObjectStore obj-store]
   (let [alice {:xt/id :alice, :name "Alice"}

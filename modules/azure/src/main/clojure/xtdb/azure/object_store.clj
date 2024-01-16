@@ -13,7 +13,7 @@
            [java.util NavigableSet ArrayList List Base64 Base64$Encoder]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
-           xtdb.api.ObjectStore
+           xtdb.api.storage.ObjectStore
            [xtdb.multipart SupportsMultipart IMultipartUpload]))
 
 (defn- get-blob [^BlobContainerClient blob-container-client blob-name]

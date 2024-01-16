@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 publishing {
@@ -23,4 +26,5 @@ dependencies {
     api("software.amazon.awssdk", "s3", "2.16.76")
     api("software.amazon.awssdk", "sqs", "2.16.76")
     api("software.amazon.awssdk", "sns", "2.16.76")
+    api(kotlin("stdlib-jdk8"))
 }

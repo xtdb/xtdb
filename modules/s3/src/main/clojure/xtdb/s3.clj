@@ -1,6 +1,5 @@
 (ns xtdb.s3
-  (:require [clojure.spec.alpha :as s]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [xtdb.buffer-pool :as bp]
             [xtdb.file-list :as file-list]
             [xtdb.object-store :as os]
             [xtdb.s3.file-list :as s3-file-watch]
@@ -16,9 +15,10 @@
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedPart CompletedMultipartUpload CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest UploadPartRequest UploadPartResponse]
-           xtdb.api.ObjectStore
+           xtdb.api.storage.ObjectStore
            [xtdb.multipart SupportsMultipart IMultipartUpload]
-           [xtdb.s3 S3Configurator]))
+           [xtdb.s3 S3Configurator]
+           [xtdb.api S3ObjectStoreFactory]))
 
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket ^Path prefix]} ^Path k]
@@ -195,29 +195,27 @@
     (.clear file-name-cache)
     (.close client)))
 
-(s/def ::configurator #(instance? S3Configurator %))
-(s/def ::bucket string?)
-(s/def ::prefix ::util/path)
-(s/def ::sns-topic-arn string?)
-
-(defmethod ig/prep-key ::object-store [_ opts]
-  (-> (merge {:configurator (reify S3Configurator)}
-             opts)
-      (util/maybe-update :prefix util/->path)))
-
-(defmethod ig/pre-init-spec ::object-store [_]
-  (s/keys :req-un [::configurator ::bucket ::sns-topic-arn]
-          :opt-un [::prefix]))
+(defmethod bp/->object-store-factory ::object-store [_ {:keys [bucket sns-topic-arn ^S3Configurator configurator prefix]}]
+  (cond-> (S3ObjectStoreFactory. bucket sns-topic-arn)
+    configurator (.s3Configurator configurator)
+    prefix (.prefix (util/->path prefix))))
 
 (def minimum-part-size (* 5 1024 1024))
 
-(defmethod ig/init-key ::object-store [_ {:keys [bucket ^Path prefix ^S3Configurator configurator] :as opts}]
-  (let [s3-client (.makeClient configurator)
+(defn open-object-store ^ObjectStore [^S3ObjectStoreFactory factory]
+  (let [bucket (.getBucket factory)
+        sns-topic-arn (.getSnsTopicArn factory)
+        configurator (.getS3Configurator factory)
+        s3-client (.makeClient configurator)
+        prefix (.getPrefix factory)
         file-name-cache (ConcurrentSkipListSet.)
         ;; Watch s3 bucket for changes
-        file-list-watcher (s3-file-watch/open-file-list-watcher (assoc opts :s3-client s3-client)
+        file-list-watcher (s3-file-watch/open-file-list-watcher {:bucket bucket
+                                                                 :sns-topic-arn sns-topic-arn
+                                                                 :prefix prefix
+                                                                 :s3-client s3-client}
                                                                 file-name-cache)]
-
+  
     (->S3ObjectStore configurator
                      s3-client
                      bucket
@@ -225,8 +223,3 @@
                      minimum-part-size
                      file-name-cache
                      file-list-watcher)))
-
-(defmethod ig/halt-key! ::object-store [_ os]
-  (util/try-close os))
-
-(derive ::object-store :xtdb/object-store)
