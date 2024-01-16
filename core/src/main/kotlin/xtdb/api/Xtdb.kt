@@ -20,10 +20,34 @@ object Xtdb {
         var storage: StorageFactory = StorageFactory.DEFAULT,
         var extraConfig: Map<*, *> = emptyMap<Any, Any>(),
     ) {
+        private val modules: MutableList<ModuleFactory> = mutableListOf()
+
         fun txLog(txLog: LogFactory) = apply { this.txLog = txLog }
         fun storage(storage: StorageFactory) = apply { this.storage = storage }
+
+        fun getModules(): List<ModuleFactory> = modules
+        fun module(module: ModuleFactory) = apply { this.modules += module }
+        fun modules(vararg modules: ModuleFactory) = apply { this.modules += modules }
+        fun modules(modules: List<ModuleFactory>) = apply { this.modules += modules }
+
         fun extraConfig(extraConfig: Map<*, *>) = apply { this.extraConfig = extraConfig }
+
+        @JvmSynthetic
+        fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
+
+        fun open() = OPEN_NODE(this) as IXtdb
     }
+
+    interface Module : AutoCloseable
+
+    interface ModuleFactory {
+        val moduleKey: String
+
+        fun openModule(xtdb: IXtdb): Module
+    }
+
+    @JvmStatic
+    fun configure() = Config()
 
     @JvmStatic
     @JvmOverloads

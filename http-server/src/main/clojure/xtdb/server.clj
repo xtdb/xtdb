@@ -3,7 +3,6 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
             [reitit.coercion :as r.coercion]
@@ -25,13 +24,14 @@
             [xtdb.jackson :as jackson]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.node :as xtn])
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
-           (xtdb.api TransactionKey)
+           (xtdb.api HttpServerModule TransactionKey Xtdb$Config Xtdb$Module)
            (xtdb.api.query Basis IKeyFn Query)
            (xtdb.api.tx TxOptions TxRequest)))
 
@@ -264,24 +264,24 @@
   {:enter (fn [ctx]
             (update ctx :request merge opts))})
 
-(defmethod ig/prep-key :xtdb/server [_ opts]
-  (merge {:node (ig/ref :xtdb/node)
-          :read-only? true
-          :port 3000}
-         opts))
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-server [node ^HttpServerModule module]
+  (let [port (.getPort module)
+        ^Server server (j/run-jetty (http/ring-handler router
+                                                       (r.ring/create-default-handler)
+                                                       {:executor r.sieppari/executor
+                                                        :interceptors [[with-opts {:node node, :read-only? (.getReadOnly module)}]]})
 
-(defmethod ig/init-key :xtdb/server [_ {:keys [port jetty-opts] :as opts}]
-  (let [server (j/run-jetty (http/ring-handler router
-                                               (r.ring/create-default-handler)
-                                               {:executor r.sieppari/executor
-                                                :interceptors [[with-opts (select-keys opts [:node :read-only?])]]})
-
-                            (merge {:port port, :h2c? true, :h2? true}
-                                   jetty-opts
-                                   {:async? true, :join? false}))]
+                                    (merge {:port port, :h2c? true, :h2? true}
+                                           #_jetty-opts
+                                           {:async? true, :join? false}))]
     (log/info "HTTP server started on port: " port)
-    server))
+    (reify Xtdb$Module
+      (close [_]
+        (.stop server)
+        (log/info "HTTP server stopped.")))))
 
-(defmethod ig/halt-key! :xtdb/server [_ ^Server server]
-  (.stop server)
-  (log/info "HTTP server stopped."))
+(defmethod xtn/apply-config! :xtdb/server [^Xtdb$Config config, _ {:keys [port read-only?]}]
+  (.module config (cond-> (HttpServerModule.)
+                    (some? port) (.port port)
+                    (some? read-only?) (.readOnly read-only?))))
