@@ -14,21 +14,19 @@
 
 ;; see https://github.com/xtdb/xtdb/issues/2548
 
+;; callback hook used to control timing in tests
+;; receives a map of the :last-flush, :last-seen tx-keys
+(def ^:dynamic *on-heartbeat*
+  (constantly nil))
+
 (defmethod ig/prep-key ::flusher
   [_ opts]
   (into {:indexer (ig/ref :xtdb/indexer)
          :log (ig/ref :xtdb/log)
-         :duration #time/duration "PT4H"
-         :on-heartbeat (constantly nil)}
+         :duration #time/duration "PT4H"}
         opts))
 
-(defmethod ig/init-key ::flusher
-  [_ {:keys [^IIndexer indexer
-             ^Log log
-             duration
-             ;; callback hook used to control timing in tests
-             ;; receives a map of the :last-flush, :last-seen tx-keys
-             on-heartbeat]}]
+(defmethod ig/init-key ::flusher [_ {:keys [^IIndexer indexer, ^Log log, duration]}]
   (let [exr-tf (util/->prefix-thread-factory "xtdb.stagnant-log-flush")
         exr (Executors/newSingleThreadScheduledExecutor exr-tf)
 
@@ -39,7 +37,7 @@
 
         ^Runnable f
         (bound-fn heartbeat []
-          (on-heartbeat {:last-flush @!last-flush-tx-id, :last-seen @previously-seen-chunk-tx-id})
+          (*on-heartbeat* {:last-flush @!last-flush-tx-id, :last-seen @previously-seen-chunk-tx-id})
           (when-some [latest-tx-id (some-> (.latestCompletedTx indexer) (.getTxId))]
             (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx indexer) (.getTxId))]
               (try

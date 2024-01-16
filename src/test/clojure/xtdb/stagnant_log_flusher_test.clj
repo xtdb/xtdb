@@ -3,18 +3,17 @@
             [xtdb.api :as xt]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
+            [xtdb.stagnant-log-flusher :as slf]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.reader :as ivr])
   (:import (java.io Closeable)
-           (java.nio ByteBuffer)
            (java.util.concurrent Semaphore)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
+           (xtdb.api.log Log LogRecord)
            xtdb.IBufferPool
-           (xtdb.indexer IIndexer)
-           (xtdb.api TransactionKey)
-           (xtdb.api.log Log LogRecord)))
+           (xtdb.indexer IIndexer)))
 
 (defonce log-level :error)
 
@@ -91,8 +90,8 @@
   (let [^IIndexer indexer (tu/component node :xtdb/indexer)]
     (= (:tx (last (node-log node))) (.latestCompletedTx indexer))))
 
-(defn start-node ^java.lang.AutoCloseable [flusher-duration & flusher-opts]
-  (xtn/start-node {:xtdb.stagnant-log-flusher/flusher (apply hash-map :duration flusher-duration flusher-opts)}))
+(defn start-node ^java.lang.AutoCloseable [flusher-duration]
+  (xtn/start-node {:xtdb.stagnant-log-flusher/flusher {:duration flusher-duration}}))
 
 (t/deftest if-log-does-not-get-a-new-msg-in-xx-time-we-submit-a-flush-test
   (with-open [node (start-node #time/duration "PT0.001S")]
@@ -123,44 +122,44 @@
   (t/testing "logs receiving messages will stop flushes"
     (let [control (Semaphore. 0)
           control-close (reify Closeable (close [_] (.release control (- Integer/MAX_VALUE 1000))))
-          on-heartbeat (fn [_] (.acquire control))
           heartbeat (fn [] (.release control))]
-      (with-open [node (start-node #time/duration "PT0.001S" :on-heartbeat on-heartbeat)
-                  _ control-close]
-        (let [send-msg (fn [] (xt/submit-tx node [(xt/put :foo {:xt/id 42})]))
-              check-sync (fn [] (spin (log-indexed? node)))
-              check-count (fn [n] (spin (= n (count (node-log node)))))
-              check-count-remains (fn [n] (spin-ensure 10 (= n (count (node-log node)))))]
-          (t/testing "the first heartbeat does flush"
-            (send-msg)
-            (t/is (check-count 1))
-            (t/is (check-sync))
-            (heartbeat)
-            (t/is (check-sync))
-            (t/is (check-count 2))
-            (t/is (check-count-remains 2)))
+      (binding [slf/*on-heartbeat* (fn [_] (.acquire control))]
+        (with-open [node (start-node #time/duration "PT0.001S")
+                    _ control-close]
+          (let [send-msg (fn [] (xt/submit-tx node [(xt/put :foo {:xt/id 42})]))
+                check-sync (fn [] (spin (log-indexed? node)))
+                check-count (fn [n] (spin (= n (count (node-log node)))))
+                check-count-remains (fn [n] (spin-ensure 10 (= n (count (node-log node)))))]
+            (t/testing "the first heartbeat does flush"
+              (send-msg)
+              (t/is (check-count 1))
+              (t/is (check-sync))
+              (heartbeat)
+              (t/is (check-sync))
+              (t/is (check-count 2))
+              (t/is (check-count-remains 2)))
 
-          (t/testing "the second heartbeat will not flush, as no new messages"
-            (check-sync)
-            (heartbeat)
-            (t/is (check-count-remains 2)))
-
-          ;; note, right now if another node submits a flush message - that will trigger a new flush msg, which will herd/cascade.
-          ;; however the conditional flush in the indexer **should** stop this being a problem
-          (t/testing "the next heartbeat(s) will not flush, as we have just flushed that tx-id"
-            (dotimes [_ 100]
+            (t/testing "the second heartbeat will not flush, as no new messages"
               (check-sync)
-              (heartbeat))
-            (.drainPermits control)
-            (t/is (check-count 2))
-            (t/is (check-count-remains 2)))
+              (heartbeat)
+              (t/is (check-count-remains 2)))
 
-          (t/testing "sending a second message, will flush"
-            (send-msg)
-            (t/is (check-sync))
-            (heartbeat)
-            (t/is (check-count 4))
-            (t/is (check-count-remains 4))))))))
+            ;; note, right now if another node submits a flush message - that will trigger a new flush msg, which will herd/cascade.
+            ;; however the conditional flush in the indexer **should** stop this being a problem
+            (t/testing "the next heartbeat(s) will not flush, as we have just flushed that tx-id"
+              (dotimes [_ 100]
+                (check-sync)
+                (heartbeat))
+              (.drainPermits control)
+              (t/is (check-count 2))
+              (t/is (check-count-remains 2)))
+
+            (t/testing "sending a second message, will flush"
+              (send-msg)
+              (t/is (check-sync))
+              (heartbeat)
+              (t/is (check-count 4))
+              (t/is (check-count-remains 4)))))))))
 
 (defn chunk-path-seq [node]
   (let [pool (tu/component node :xtdb/buffer-pool)]
