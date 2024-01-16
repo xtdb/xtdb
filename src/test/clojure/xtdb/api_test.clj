@@ -18,7 +18,6 @@
         #_(select-keys [:remote]))))
 
 (t/deftest test-status
-  (t/is (map? (xt/status *node*)))
   (t/is (map? (xt/status *node*))))
 
 (t/deftest test-simple-query

@@ -52,7 +52,8 @@
                                             :xtdb.buffer-pool/remote
                                             :xtdb.log/memory-log
                                             :xtdb.log/local-directory-log
-                                            :xtdb.indexer/live-index))))))
+                                            :xtdb.indexer/live-index
+                                            :xtdb/server))))))
 
 (defn start-submit-client
   "Starts a submit-only client with the given configuration.

@@ -14,9 +14,10 @@
            (java.lang AutoCloseable)
            (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
+           java.util.HashMap
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config Xtdb$ModuleFactory)
            (xtdb.api.log Log)
            (xtdb.api.query Basis IKeyFn Query QueryOptions)
            (xtdb.api.tx Sql TxOptions)
@@ -153,6 +154,20 @@
   (cond-> opts
     (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
 
+(defmethod ig/prep-key :xtdb/modules [_ modules]
+  {:node (ig/ref :xtdb/node)
+   :modules (vec modules)})
+
+(defmethod ig/init-key :xtdb/modules [_ {:keys [node modules]}]
+  (util/with-close-on-catch [!started-modules (HashMap. (count modules))]
+    (doseq [^Xtdb$ModuleFactory module modules]
+      (.put !started-modules (.getModuleKey module) (.openModule module node)))
+
+    (into {} !started-modules)))
+
+(defmethod ig/halt-key! :xtdb/modules [_ modules]
+  (util/close modules))
+
 (defn node-system [^Xtdb$Config opts]
   (-> (into {:xtdb/node {}
              :xtdb/allocator {}
@@ -167,7 +182,8 @@
 
              :xtdb/buffer-pool (.getStorage opts)
              :xtdb.indexer/live-index (.indexer opts)
-             :xtdb/log (.getTxLog opts)}
+             :xtdb/log (.getTxLog opts)
+             :xtdb/modules (.getModules opts)}
 
             (.getExtraConfig opts))
 
