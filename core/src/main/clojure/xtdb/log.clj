@@ -7,7 +7,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.node :as xtn])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
@@ -37,7 +38,7 @@
 
     (.getTxId (.getTxKey record))))
 
-(defn handle-polling-subscription [^Log log after-tx-id {:keys [^Duration poll-sleep-duration]} ^LogSubscriber subscriber]
+(defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^LogSubscriber subscriber]
   (doto (.newThread subscription-thread-factory
                     (fn []
                       (let [thread (Thread/currentThread)]
@@ -366,6 +367,16 @@
       (.syncSchema root)
 
       (util/root->arrow-ipc-byte-buffer root :stream))))
+
+(defmethod xtn/apply-config! :log [config _ foo]
+  (let [[tag opts] foo]
+    (xtn/apply-config! config
+                       (case tag
+                         :in-memory :xtdb.log/memory-log
+                         :local :xtdb.log/local-directory-log
+                         :kafka :xtdb.kafka/log
+                         :azure-event-hub :xtdb.azure/event-hub-log)
+                       opts)))
 
 (defmethod ig/init-key :xtdb/log [_ ^LogFactory factory]
   (.openLog factory))

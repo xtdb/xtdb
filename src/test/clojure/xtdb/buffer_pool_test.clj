@@ -42,8 +42,8 @@
 
 (t/deftest test-remote-buffer-pool-setup
   (util/with-tmp-dirs #{path}
-    (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store [:xtdb.object-store-test/memory-object-store {}]
-                                                                     :disk-store path}})]
+    (util/with-open [node (xtn/start-node {:storage [:remote {:object-store [:in-memory {}]
+                                                              :local-disk-cache path}]})]
       (xt/submit-tx node [(xt/put :foo {:xt/id :foo})])
 
       (t/is (= [{:xt/id :foo}]
@@ -58,7 +58,7 @@
 
 (t/deftest cache-counter-test
   (util/with-open [bp (bp/open-remote-storage tu/*allocator*
-                                              (Storage/remote (bp/->object-store-factory :xtdb.object-store-test/memory-object-store {})
+                                              (Storage/remote (bp/->object-store-factory :in-memory {})
                                                               (create-tmp-dir)))]
     (let [{^ObjectStore os :remote-store} bp]
       (bp/clear-cache-counters)

@@ -3,18 +3,16 @@
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.protocols :as xtp]
             [xtdb.bench2 :as b]
             [xtdb.bench2.measurement :as bm]
             [xtdb.node :as xtn]
+            [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (io.micrometer.core.instrument MeterRegistry Timer)
            (java.io Closeable File)
            (java.nio.file Path)
-           (java.time Clock Duration InstantSource)
-           (java.util Random)
-           (java.util.concurrent ConcurrentHashMap)
+           (java.time Duration InstantSource)
            (java.util.concurrent.atomic AtomicLong)
            (xtdb.api TransactionKey)))
 
@@ -154,8 +152,8 @@
 
 (defn node-dir->config [^File node-dir]
   (let [^Path path (.toPath node-dir)]
-    {:xtdb.log/local-directory-log {:root-path (.resolve path "log")}
-     :xtdb.buffer-pool/local {:path (.resolve path "objects")}}))
+    {:log [:local {:path (.resolve path "log")}]
+     :storage [:local {:path (.resolve path "objects")}]}))
 
 (defn- only-oltp-stage [report]
   (let [stage-filter #(filter (comp #{:oltp} :stage) %)]

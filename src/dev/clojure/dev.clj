@@ -28,9 +28,9 @@
   (alter-var-root #'node (constantly nil)))
 
 (def standalone-config
-  {::xtdb {:node-opts {:xtdb.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
-                       :xtdb.buffer-pool/local {:data-dir (io/file dev-node-dir "objects")}
-                       :xtdb/server {}
+  {::xtdb {:node-opts {:log [:local {:path (io/file dev-node-dir "log")}]
+                       :storage [:local {:path (io/file dev-node-dir "objects")}]
+                       :http-server {}
                        :xtdb/pgwire {:port 5433}
                        :xtdb.flight-sql/server {:port 52358}}}})
 

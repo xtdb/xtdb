@@ -1,6 +1,5 @@
 (ns xtdb.log.memory-log
-  (:require [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api :as xt]
+  (:require [xtdb.api :as xt]
             [xtdb.log :as log]
             [xtdb.node :as xtn])
   (:import java.time.InstantSource
@@ -40,11 +39,3 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-log [^InMemoryLogFactory factory]
   (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) (.getInstantSource factory)))
-
-(derive :xtdb.log/memory-log :xtdb/log)
-
-(defmethod ig/prep-key :xtdb.log/memory-log [_ opts]
-  (merge {:instant-src (InstantSource/system)} opts))
-
-(defmethod ig/init-key :xtdb.log/memory-log [_ {:keys [instant-src]}]
-  (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) instant-src))

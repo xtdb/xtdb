@@ -1,18 +1,16 @@
 (ns xtdb.stagnant-log-flusher
   (:require [clojure.tools.logging :as log]
-            [xtdb.log :as xt-log]
-            xtdb.indexer
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.util :as util]
-            [xtdb.node :as xtn]
-            [xtdb.time :as time])
+            xtdb.indexer
+            [xtdb.log :as xt-log]
+            [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.nio.channels ClosedByInterruptException)
            (java.time Duration)
            (java.util.concurrent ExecutorService Executors TimeUnit)
-           (xtdb.indexer IIndexer)
-           (xtdb.api TransactionKey Xtdb$Config Xtdb$IndexerConfig)
-           (xtdb.api.log Log)))
+           (xtdb.api TransactionKey Xtdb$IndexerConfig)
+           (xtdb.api.log Log)
+           (xtdb.indexer IIndexer)))
 
 ;; see https://github.com/xtdb/xtdb/issues/2548
 
@@ -20,10 +18,6 @@
 ;; receives a map of the :last-flush, :last-seen tx-keys
 (def ^:dynamic *on-heartbeat*
   (constantly nil))
-
-(defmethod xtn/apply-config! ::flusher [^Xtdb$Config config _ {:keys [duration]}]
-  (doto (.indexer config)
-    (.flushDuration (time/->duration duration))))
 
 (defmethod ig/prep-key ::flusher [_ indexer-config]
   {:indexer (ig/ref :xtdb/indexer)

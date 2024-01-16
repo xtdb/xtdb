@@ -610,7 +610,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir
-                                       :clock (tu/->mock-clock)})]
+                                       :instant-src (tu/->mock-clock)})]
       (let [mm (tu/component node ::meta/metadata-manager)]
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 

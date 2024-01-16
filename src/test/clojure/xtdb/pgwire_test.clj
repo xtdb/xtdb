@@ -32,7 +32,7 @@
 
 (defn require-node []
   (when-not *node*
-    (set! *node* (xtn/start-node {:xtdb.log/memory-log {:instant-src (tu/->mock-clock)}}))))
+    (set! *node* (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]}))))
 
 (defn require-server
   ([] (require-server {}))
