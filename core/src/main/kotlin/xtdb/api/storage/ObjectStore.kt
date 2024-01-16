@@ -1,10 +1,10 @@
-package xtdb.api
+package xtdb.api.storage
 
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
-interface ObjectStore {
+interface ObjectStore : AutoCloseable {
     /**
      * Asynchronously returns the given object in a ByteBuffer. If the object doesn't exist,
      * the CompletableFuture completes with an IllegalStateException.
@@ -42,4 +42,7 @@ interface ObjectStore {
      * Deletes the object with the given path from the object store.
      */
     fun deleteObject(k: Path?): CompletableFuture<*>?
+
+    override fun close() {
+    }
 }

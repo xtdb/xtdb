@@ -17,7 +17,8 @@
            [java.nio ByteBuffer]
            [java.nio.file Path]
            [java.time Duration]
-           xtdb.api.ObjectStore
+           [xtdb.api.storage ObjectStore]
+           [xtdb.api AzureObjectStoreFactory]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 (def resource-group-name "azure-modules-test")
@@ -58,12 +59,9 @@
 (t/use-fixtures :each wait-between-tests)
 
 (defn object-store ^Closeable [prefix]
-  (->> (ig/prep-key ::azure/blob-object-store {:storage-account storage-account
-                                               :container container
-                                               :servicebus-namespace servicebus-namespace
-                                               :servicebus-topic-name servicebus-topic-name
-                                               :prefix (util/->path (str "xtdb.azure-test." prefix))})
-       (ig/init-key ::azure/blob-object-store)))
+  (let [factory (-> (AzureObjectStoreFactory. storage-account container servicebus-namespace servicebus-topic-name)
+                    (.prefix (util/->path (str prefix))))]
+    (azure/open-object-store factory)))
 
 (t/deftest ^:azure put-delete-test 
   (with-open [os (object-store (random-uuid))]
@@ -186,46 +184,50 @@
 
 (t/deftest ^:azure node-level-test
   (util/with-tmp-dirs #{disk-store}
-                      (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::azure/blob-object-store)
-                                                                     :disk-store disk-store}
-                                           ::azure/blob-object-store {:storage-account storage-account
-                                                                      :container container
-                                                                      :servicebus-namespace servicebus-namespace
-                                                                      :servicebus-topic-name servicebus-topic-name
-                                                                      :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}})]
-                                      ;; Submit some documents to the node
-                                      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
+    (util/with-open [node (xtn/start-node
+                           {:xtdb.buffer-pool/remote
+                            {:object-store [::azure/object-store {:storage-account storage-account
+                                                                  :container container
+                                                                  :servicebus-namespace servicebus-namespace
+                                                                  :servicebus-topic-name servicebus-topic-name
+                                                                  :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}]
+                             :disk-store disk-store}})]
+      ;; Submit some documents to the node
+      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
                                 (xt/put :bar {:xt/id "bar2"})
                                 (xt/put :bar {:xt/id "bar3"})]))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      ;; Ensure can query back out results
-                                      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
                (xtdb.api/q node '(from :bar [{:xt/id e}]))))
 
-                                      (let [object-store (get-in node [:system ::azure/blob-object-store])]
-                                        ;; Ensure some files are written
-                                        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (t/deftest ^:azure tpch-test-node
   (util/with-tmp-dirs #{disk-store}
-                      (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::azure/blob-object-store)
-                                                                     :disk-store disk-store}
-                                           ::azure/blob-object-store {:storage-account storage-account
-                                                                      :container container
-                                                                      :servicebus-namespace servicebus-namespace
-                                                                      :servicebus-topic-name servicebus-topic-name
-                                                                      :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}})]
-                                      ;; Submit tpch docs
-                                      (-> (tpch/submit-docs! node 0.05)
+    (util/with-open [node (xtn/start-node
+                           {:xtdb.buffer-pool/remote
+                            {:object-store [::azure/object-store {:storage-account storage-account
+                                                                  :container container
+                                                                  :servicebus-namespace servicebus-namespace
+                                                                  :servicebus-topic-name servicebus-topic-name
+                                                                  :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}]
+                             :disk-store disk-store}})]
+      ;; Submit tpch docs
+      (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      (let [object-store (get-in node [:system ::azure/blob-object-store])]
-                                        ;; Ensure files have been written
-                                        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure files have been written
+        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))

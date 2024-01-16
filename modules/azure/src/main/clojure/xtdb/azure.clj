@@ -5,6 +5,7 @@
             [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.azure.log :as tx-log]
             [xtdb.azure.object-store :as os]
+            [xtdb.buffer-pool :as bp]
             [xtdb.log :as xtdb-log]
             [xtdb.time :as time]
             [xtdb.util :as util])
@@ -15,31 +16,25 @@
            [com.azure.messaging.eventhubs EventHubClientBuilder]
            [com.azure.resourcemanager.eventhubs EventHubsManager]
            [com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs]
-           [com.azure.storage.blob BlobServiceClientBuilder]
-           [java.nio.file Path]
-           [java.util.concurrent ConcurrentSkipListSet]))
+           [com.azure.storage.blob BlobServiceClientBuilder] 
+           [java.util.concurrent ConcurrentSkipListSet]
+           [xtdb.api.storage ObjectStore]
+           [xtdb.api AzureObjectStoreFactory]))
 
-(derive ::blob-object-store :xtdb/object-store)
-
-(s/def ::storage-account string?)
-(s/def ::container string?)
-(s/def ::prefix ::util/path)
-(s/def ::servicebus-namespace string?)
-(s/def ::servicebus-topic-name string?)
-
-(defmethod ig/prep-key ::blob-object-store [_ opts]
-  (-> opts
-      (util/maybe-update :prefix util/->path)))
-
-(defmethod ig/pre-init-spec ::blob-object-store [_]
-  (s/keys :req-un [::storage-account ::container ::servicebus-namespace ::servicebus-topic-name]
-          :opt-un [::prefix]))
+(defmethod bp/->object-store-factory ::object-store [_ {:keys [storage-account container servicebus-namespace servicebus-topic-name prefix]}]
+  (cond-> (AzureObjectStoreFactory. storage-account container servicebus-namespace servicebus-topic-name) 
+    prefix (.prefix (util/->path prefix))))
 
 ;; No minimum block size in azure
 (def minimum-part-size 0)
 
-(defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container ^Path prefix] :as opts}]
+(defn open-object-store ^ObjectStore [^AzureObjectStoreFactory factory]
   (let [credential (.build (DefaultAzureCredentialBuilder.))
+        storage-account (.getStorageAccount factory)
+        container (.getContainer factory)
+        servicebus-namespace (.getServicebusNamespace factory)
+        servicebus-topic-name (.getServicebusTopicName factory)
+        prefix (.getPrefix factory)
         blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
                                         (.endpoint (str "https://" storage-account ".blob.core.windows.net"))
                                         (.credential credential)
@@ -47,9 +42,13 @@
         blob-client (.getBlobContainerClient blob-service-client container)
         file-name-cache (ConcurrentSkipListSet.)
         ;; Watch azure container for changes
-        file-list-watcher (azure-file-watch/open-file-list-watcher (assoc opts
-                                                                          :blob-container-client blob-client
-                                                                          :azure-credential credential)
+        file-list-watcher (azure-file-watch/open-file-list-watcher {:storage-account storage-account
+                                                                    :container container
+                                                                    :servicebus-namespace servicebus-namespace
+                                                                    :servicebus-topic-name servicebus-topic-name
+                                                                    :prefix prefix
+                                                                    :blob-container-client blob-client
+                                                                    :azure-credential credential}
                                                                    file-name-cache)]
     (os/->AzureBlobObjectStore blob-client
                                prefix
@@ -64,7 +63,6 @@
 (s/def ::retention-period-in-days number?)
 (s/def ::max-wait-time ::time/duration)
 (s/def ::poll-sleep-duration ::time/duration)
-
 
 (derive ::event-hub-log :xtdb/log)
 

@@ -16,10 +16,13 @@ interface LogSubscriber {
     fun acceptRecord(record: LogRecord)
 }
 
-interface Log {
+interface Log : AutoCloseable {
     fun appendRecord(record: ByteBuffer): CompletableFuture<TransactionKey>
     fun readRecords(afterTxId: Long?, limit: Int): List<LogRecord>
     fun subscribe(afterTxId: Long?, subscriber: LogSubscriber)
+
+    override fun close() {
+    }
 }
 
 interface LogFactory {

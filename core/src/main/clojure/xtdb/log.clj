@@ -369,3 +369,6 @@
 
 (defmethod ig/init-key :xtdb/log [_ ^LogFactory factory]
   (.openLog factory))
+
+(defmethod ig/halt-key! :xtdb/log [_ ^Log log]
+  (util/close log))
