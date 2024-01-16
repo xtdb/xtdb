@@ -12,7 +12,6 @@
             [xtdb.xtql :as xtql])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
-           (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
            java.util.HashMap
            [java.util.stream Stream]
@@ -29,12 +28,6 @@
 (defmethod ig/init-key :xtdb/allocator [_ _] (RootAllocator.))
 (defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
   (util/close a))
-
-(defmethod ig/prep-key :xtdb/default-tz [_ default-tz]
-  (cond
-    (instance? ZoneId default-tz) default-tz
-    (string? default-tz) (ZoneId/of default-tz)
-    :else time/utc))
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
@@ -171,19 +164,19 @@
 (defn node-system [^Xtdb$Config opts]
   (-> (into {:xtdb/node {}
              :xtdb/allocator {}
-             :xtdb/default-tz nil
              :xtdb/indexer {}
              :xtdb.log/watcher {}
              :xtdb.metadata/metadata-manager {}
              :xtdb.operator.scan/scan-emitter {}
              :xtdb.query/ra-query-source {}
-             :xtdb.stagnant-log-flusher/flusher {}
              :xtdb/compactor {}
 
              :xtdb/buffer-pool (.getStorage opts)
              :xtdb.indexer/live-index (.indexer opts)
              :xtdb/log (.getTxLog opts)
-             :xtdb/modules (.getModules opts)}
+             :xtdb/modules (.getModules opts)
+             :xtdb/default-tz (.getDefaultTz opts)
+             :xtdb.stagnant-log-flusher/flusher (.indexer opts)}
 
             (.getExtraConfig opts))
 
@@ -233,7 +226,7 @@
   (let [!closing (atom false)
         system (-> (into {::submit-client {}
                           :xtdb/allocator {}
-                          :xtdb/default-tz nil}
+                          :xtdb/default-tz time/utc}
                          opts)
                    (doto ig/load-namespaces)
                    (with-default-impl :xtdb/log :xtdb.log/memory-log)

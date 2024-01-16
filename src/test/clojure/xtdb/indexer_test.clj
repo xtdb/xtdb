@@ -435,7 +435,7 @@
 
           (Thread/sleep 250) ; wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-          (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
+          (doseq [node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
                         ^IMetadataManager mm (util/component node ::meta/metadata-manager)]]
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))

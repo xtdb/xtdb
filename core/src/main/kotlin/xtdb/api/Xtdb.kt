@@ -4,26 +4,38 @@ import clojure.lang.IFn
 import xtdb.api.log.LogFactory
 import xtdb.api.storage.StorageFactory
 import xtdb.util.requiringResolve
+import java.time.Duration
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 object Xtdb {
     private val OPEN_NODE: IFn = requiringResolve("xtdb.node.impl", "open-node")
 
-    class IndexerConfig(var logLimit: Long = 64L, var pageLimit: Long = 1024L, var rowsPerChunk: Long = 102400L) {
+    class IndexerConfig(
+        var logLimit: Long = 64L,
+        var pageLimit: Long = 1024L,
+        var rowsPerChunk: Long = 102400L,
+        var flushDuration: Duration = Duration.ofHours(4),
+    ) {
         fun logLimit(logLimit: Long) = apply { this.logLimit = logLimit }
         fun pageLimit(pageLimit: Long) = apply { this.pageLimit = pageLimit }
         fun rowsPerChunk(rowsPerChunk: Long) = apply { this.rowsPerChunk = rowsPerChunk }
+        fun flushDuration(flushDuration: Duration) = apply { this.flushDuration = flushDuration }
     }
 
     class Config(
-        @JvmField val indexer: IndexerConfig = IndexerConfig(),
         var txLog: LogFactory = LogFactory.DEFAULT,
         var storage: StorageFactory = StorageFactory.DEFAULT,
+        var defaultTz: ZoneId = ZoneOffset.UTC,
+        @JvmField val indexer: IndexerConfig = IndexerConfig(),
         var extraConfig: Map<*, *> = emptyMap<Any, Any>(),
     ) {
         private val modules: MutableList<ModuleFactory> = mutableListOf()
 
         fun txLog(txLog: LogFactory) = apply { this.txLog = txLog }
         fun storage(storage: StorageFactory) = apply { this.storage = storage }
+
+        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
         fun getModules(): List<ModuleFactory> = modules
         fun module(module: ModuleFactory) = apply { this.modules += module }

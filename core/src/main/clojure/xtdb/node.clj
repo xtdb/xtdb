@@ -2,7 +2,8 @@
   "This namespace is for starting an in-process XTDB node.
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
-  (:import [xtdb.api Xtdb Xtdb$Config]))
+  (:import [java.time ZoneId]
+           [xtdb.api Xtdb Xtdb$Config]))
 
 (defmulti ^:no-doc apply-config!
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -18,6 +19,12 @@
     k)
 
   :default ::default)
+
+(defmethod apply-config! :xtdb/default-tz [^Xtdb$Config config _ default-tz]
+  (when default-tz
+    (.defaultTz config (cond
+                         (instance? ZoneId default-tz) default-tz
+                         (string? default-tz) (ZoneId/of default-tz)))))
 
 (defmethod apply-config! :xtdb.indexer/live-index [^Xtdb$Config config _
                                                    {:keys [rows-per-chunk page-limit log-limit]}]
@@ -53,7 +60,9 @@
                                             :xtdb.log/memory-log
                                             :xtdb.log/local-directory-log
                                             :xtdb.indexer/live-index
-                                            :xtdb/server))))))
+                                            :xtdb/server
+                                            :xtdb/default-tz
+                                            :xtdb.stagnant-log-flusher/flusher))))))
 
 (defn start-submit-client
   "Starts a submit-only client with the given configuration.
