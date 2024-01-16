@@ -22,6 +22,8 @@ data class Binding(val binding: String, val expr: Expr) {
         @Suppress("UNCHECKED_CAST")
         fun bind(binding: String, expr: Expr): B = this.apply { bind(Binding(binding, expr)) } as B
 
+        fun bind(binding: String, varName: String): B = bind(binding, lVar(varName))
+
         @Suppress("UNCHECKED_CAST")
         fun bind(binding: Binding): B = this.apply { bindings += binding } as B
 
