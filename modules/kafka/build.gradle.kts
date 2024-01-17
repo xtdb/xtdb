@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 publishing {
@@ -21,4 +24,6 @@ dependencies {
     api(project(":core"))
 
     api("org.apache.kafka", "kafka-clients", "3.1.0")
+
+    api(kotlin("stdlib-jdk8"))
 }
