@@ -1,6 +1,5 @@
 (ns xtdb.s3-test
-  (:require [clojure.test :as t]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [clojure.test :as t] 
             [xtdb.api :as xt]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
@@ -14,7 +13,8 @@
            [java.time Duration]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
-           xtdb.api.ObjectStore
+           xtdb.api.storage.ObjectStore
+           [xtdb.api S3ObjectStoreFactory]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
@@ -29,10 +29,9 @@
       "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-iam-test-bucket-events"))
 
 (defn object-store ^Closeable [prefix]
-  (->> (ig/prep-key ::s3/object-store {:bucket bucket,
-                                       :prefix (util/->path (str prefix))
-                                       :sns-topic-arn sns-topic-arn})
-       (ig/init-key ::s3/object-store)))
+  (let [factory (-> (S3ObjectStoreFactory. bucket sns-topic-arn)
+                    (.prefix (util/->path (str prefix))))]
+    (s3/open-object-store factory)))
 
 (t/deftest ^:s3 put-delete-test
   (with-open [os (object-store (random-uuid))]
@@ -131,43 +130,48 @@
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 
 (t/deftest ^:s3 node-level-test
-  (util/with-tmp-dirs #{disk-store}
-                      (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::s3/object-store)
-                                                                     :disk-store disk-store}
-                                           ::s3/object-store {:bucket bucket
-                                                              :prefix (util/->path (str (random-uuid)))
-                                                              :sns-topic-arn sns-topic-arn}})]
-                                      ;; Submit some documents to the node
-                                      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
+  (util/with-tmp-dirs #{local-disk-cache}
+    (util/with-open [node (xtn/start-node
+                           {:storage [:remote
+                                      {:object-store [:s3 {:bucket bucket
+                                                           :prefix (util/->path (str (random-uuid)))
+                                                           :sns-topic-arn sns-topic-arn}]
+                                       :local-disk-cache local-disk-cache}]})]
+      
+      ;; Submit some documents to the node
+      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
                                 (xt/put :bar {:xt/id "bar2"})
                                 (xt/put :bar {:xt/id "bar3"})]))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      ;; Ensure can query back out results
-                                      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
                (xtdb.api/q node '(from :bar [{:xt/id e}]))))
-
-                                      (let [object-store (get-in node [:system ::s3/object-store])]
-                                        ;; Ensure some files are written
-                                        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+      
+      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (t/deftest ^:s3 tpch-test-node
-  (util/with-tmp-dirs #{disk-store}
-                      (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::s3/object-store)
-                                                                     :disk-store disk-store}
-                                           ::s3/object-store {:bucket bucket
-                                                              :prefix (util/->path (str (random-uuid)))
-                                                              :sns-topic-arn sns-topic-arn}})]
-                                      ;; Submit tpch docs
-                                      (-> (tpch/submit-docs! node 0.05)
+  (util/with-tmp-dirs #{local-disk-cache}
+    (util/with-open [node (xtn/start-node
+                           {:storage [:remote
+                                      {:object-store [:s3 {:bucket bucket
+                                                           :prefix (util/->path (str (random-uuid)))
+                                                           :sns-topic-arn sns-topic-arn}]
+                                       :local-disk-cache local-disk-cache}]})]
+      ;; Submit tpch docs
+      (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
-
-                                      (let [object-store (get-in node [:system ::s3/object-store])]
-                                        ;; Ensure files have been written
-                                        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node))) 
+      
+      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure files have been written
+        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))

@@ -32,7 +32,7 @@
 
 (defn require-node []
   (when-not *node*
-    (set! *node* (xtn/start-node {:xtdb.log/memory-log {:instant-src (tu/->mock-clock)}}))))
+    (set! *node* (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]}))))
 
 (defn require-server
   ([] (require-server {}))
@@ -865,11 +865,11 @@
       (is (= [{:a {"b" 42}}] rs)))))
 
 (deftest start-stop-as-module-test
-  (tu/with-log-level 'xtdb.pgwire :off
+  (tu/with-log-level 'xtdb.pgwire :info
     (let [port (tu/free-port)]
-      (with-open [_node (xtn/start-node {:xtdb/pgwire {:port port
-                                                       :num-threads 3}})]
-        (let [srv (get @#'pgwire/servers port)]
+      (with-open [_node (xtn/start-node {:pgwire-server {:port port
+                                                         :num-threads 3}})] 
+        (let [srv (get @#'pgwire/servers (int port))]
           (is (some? srv)))
 
         (with-open [conn (jdbc-conn)]

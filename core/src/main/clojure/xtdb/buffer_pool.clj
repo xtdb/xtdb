@@ -1,7 +1,8 @@
 (ns xtdb.buffer-pool
   (:require [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store :as os]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.node :as xtn])
   (:import (clojure.lang PersistentQueue)
            [java.io ByteArrayOutputStream Closeable]
            (java.nio ByteBuffer)
@@ -17,7 +18,8 @@
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            (xtdb IArrowWriter IBufferPool)
-           xtdb.api.ObjectStore
+           xtdb.api.Xtdb$Config
+           (xtdb.api.storage Storage LocalStorageFactory ObjectStore RemoteStorageFactory StorageFactory)
            (xtdb.multipart IMultipartUpload SupportsMultipart)
            xtdb.util.ArrowBufLRU))
 
@@ -124,17 +126,10 @@
     (free-memory memory-store)
     (util/close allocator)))
 
-(defn ->in-memory [{:keys [^BufferAllocator allocator]}]
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-in-memory-storage [^BufferAllocator allocator]
   (->MemoryBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                       (TreeMap.)))
-
-(defmethod ig/prep-key ::in-memory [_ opts] (merge {:allocator (ig/ref :xtdb/allocator)} opts))
-
-(defmethod ig/init-key ::in-memory [_ opts] (->in-memory opts))
-
-(defmethod ig/halt-key! ::in-memory [_ bp] (util/close bp))
-
-(derive ::in-memory :xtdb/buffer-pool)
 
 (defn- create-tmp-path ^Path [^Path disk-store]
   (Files/createTempFile (doto (.resolve disk-store ".tmp") util/mkdirs)
@@ -214,25 +209,16 @@
     (free-memory memory-store)
     (util/close allocator)))
 
-(defn ->local ^xtdb.IBufferPool [{:keys [^BufferAllocator allocator,
-                                         ^Path data-dir
-                                         max-cache-bytes
-                                         max-cache-entries]
-                                  :or {max-cache-entries 1024
-                                       max-cache-bytes 536870912}}]
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^LocalStorageFactory factory]
   (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
-                     (ArrowBufLRU. 16 max-cache-entries max-cache-bytes)
-                     data-dir))
+                     (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
+                     (.getPath factory)))
 
-(defmethod ig/prep-key ::local [_ opts]
-  (-> (merge {:allocator (ig/ref :xtdb/allocator)} opts)
-      (util/maybe-update :data-dir util/->path)))
-
-(defmethod ig/init-key ::local [_ opts] (->local opts))
-
-(defmethod ig/halt-key! ::local [_ bp] (util/close bp))
-
-(derive ::local :xtdb/buffer-pool)
+(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
+  (.storage config (cond-> (Storage/local path)
+                     max-cache-bytes (.maxCacheBytes max-cache-bytes)
+                     max-cache-entries (.maxCacheEntries max-cache-entries))))
 
 (defn- upload-multipart-buffers [object-store k nio-buffers]
   (let [^IMultipartUpload upload @(.startMultipart ^SupportsMultipart object-store k)]
@@ -298,7 +284,7 @@
 
 (defrecord RemoteBufferPool [allocator
                              ^ArrowBufLRU memory-store
-                             ^Path disk-store
+                             ^Path local-disk-cache
                              ^ObjectStore remote-store]
   IBufferPool
   (getBuffer [_ k]
@@ -312,7 +298,7 @@
             (CompletableFuture/completedFuture cached-buffer))
 
         :else
-        (let [buffer-cache-path (.resolve disk-store (str k))
+        (let [buffer-cache-path (.resolve local-disk-cache (str k))
               start-ns (System/nanoTime)]
           (-> (if (util/path-exists buffer-cache-path)
                 ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
@@ -333,7 +319,7 @@
   (listObjects [_ dir] (.listObjects remote-store dir))
 
   (openArrowWriter [_ k vsr]
-    (let [tmp-path (create-tmp-path disk-store)
+    (let [tmp-path (create-tmp-path local-disk-cache)
           file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
           aw (ArrowFileWriter. vsr nil file-ch)]
 
@@ -348,7 +334,7 @@
 
           (upload-arrow-file allocator remote-store k tmp-path)
 
-          (let [file-path (.resolve disk-store k)]
+          (let [file-path (.resolve local-disk-cache k)]
             (util/create-parents file-path)
             ;; see #2847
             (util/atomic-move tmp-path file-path)))
@@ -374,11 +360,11 @@
                (upload-multipart-buffers remote-store k buffers)))
 
             (.thenRun (fn []
-                        (let [tmp-path (create-tmp-path disk-store)]
+                        (let [tmp-path (create-tmp-path local-disk-cache)]
                           (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
                             (.write file-ch buffer))
 
-                          (let [file-path (.resolve disk-store k)]
+                          (let [file-path (.resolve local-disk-cache k)]
                             (util/create-parents file-path)
                             ;; see #2847
                             (util/atomic-move tmp-path file-path)))))))))
@@ -386,33 +372,42 @@
   Closeable
   (close [_]
     (free-memory memory-store)
+    (util/close remote-store)
     (util/close allocator)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn ->remote ^xtdb.IBufferPool [{:keys [^BufferAllocator allocator
-                                          object-store
-                                          disk-store
-                                          max-cache-bytes
-                                          max-cache-entries]
-                                   :or {max-cache-entries 1024
-                                        max-cache-bytes 536870912}}]
-  (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
-                      (ArrowBufLRU. 16 max-cache-entries max-cache-bytes)
-                      disk-store
-                      object-store))
+(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^RemoteStorageFactory factory]
+  (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
+    (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
+                        (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
+                        (.getLocalDiskCache factory)
+                        object-store)))
 
-(defmethod ig/prep-key ::remote [_ opts]
-  (-> (merge {:allocator (ig/ref :xtdb/allocator)
-              :object-store (ig/ref :xtdb/object-store)}
-             opts)
-      (util/maybe-update :disk-store util/->path)))
+(defmulti ->object-store-factory
+  #_{:clj-kondo/ignore [:unused-binding]}
+  (fn [tag opts]
+    (when-let [ns (namespace tag)]
+      (doseq [k [(symbol ns)
+                 (symbol (str ns "." (name tag)))]]
 
-(defmethod ig/init-key ::remote [_ opts] (->remote opts))
+        (try
+          (require k)
+          (catch Throwable _))))
 
-(defmethod ig/halt-key! ::remote [_ bp] (util/close bp))
+    tag))
 
-(derive ::remote :xtdb/buffer-pool)
+(defmethod ->object-store-factory :in-memory [_ opts] (->object-store-factory :xtdb.object-store-test/memory-object-store opts))
+(defmethod ->object-store-factory :s3 [_ opts] (->object-store-factory :xtdb.s3/object-store opts))
+(defmethod ->object-store-factory :google-cloud [_ opts] (->object-store-factory :xtdb.google-cloud/object-store opts))
+(defmethod ->object-store-factory :azure [_ opts] (->object-store-factory :xtdb.azure/object-store opts))
+
+(defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store local-disk-cache max-cache-bytes max-cache-entries]}]
+  (.storage config (cond-> (Storage/remote (let [[tag opts] object-store]
+                                             (->object-store-factory tag opts))
+                                           local-disk-cache)
+                     max-cache-bytes (.maxCacheBytes max-cache-bytes)
+                     max-cache-entries (.maxCacheEntries max-cache-entries))))
 
 (defn get-footer ^ArrowFooter [^IBufferPool bp ^Path path]
   (with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
@@ -431,3 +426,21 @@
   (let [footer (get-footer bp path)
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
+
+(defmethod xtn/apply-config! :storage [config _ [tag opts]]
+  (xtn/apply-config! config
+                     (case tag
+                       :in-memory ::in-memory
+                       :local ::local
+                       :remote ::remote)
+                     opts))
+
+(defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
+  {:allocator (ig/ref :xtdb/allocator)
+   :factory factory})
+
+(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^StorageFactory factory]}]
+  (.openStorage factory allocator))
+
+(defmethod ig/halt-key! :xtdb/buffer-pool [_ ^IBufferPool buffer-pool]
+  (util/close buffer-pool))

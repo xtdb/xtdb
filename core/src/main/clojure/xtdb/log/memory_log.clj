@@ -1,12 +1,12 @@
 (ns xtdb.log.memory-log
-  (:require [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api :as xt]
-            [xtdb.log :as log])
+  (:require [xtdb.api :as xt]
+            [xtdb.log :as log]
+            [xtdb.node :as xtn])
   (:import java.time.InstantSource
            java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture
-           (xtdb.api TransactionKey)
-           (xtdb.api.log Log LogRecord)
+           (xtdb.api TransactionKey XtdbSubmitClient$Config)
+           (xtdb.api.log InMemoryLogFactory Log LogRecord)
            xtdb.log.INotifyingSubscriberHandler))
 
 (deftype InMemoryLog [!records, ^INotifyingSubscriberHandler subscriber-handler, ^InstantSource instant-src]
@@ -31,10 +31,11 @@
   (subscribe [this after-tx-id subscriber]
     (.subscribe subscriber-handler this after-tx-id subscriber)))
 
-(derive :xtdb.log/memory-log :xtdb/log)
+(defmethod xtn/apply-config! :xtdb.log/memory-log [^XtdbSubmitClient$Config config _ {:keys [instant-src]}]
+  (doto config
+    (.setTxLog (cond-> (InMemoryLogFactory.)
+                 instant-src (.instantSource instant-src)))))
 
-(defmethod ig/prep-key :xtdb.log/memory-log [_ opts]
-  (merge {:instant-src (InstantSource/system)} opts))
-
-(defmethod ig/init-key :xtdb.log/memory-log [_ {:keys [instant-src]}]
-  (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) instant-src))
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-log [^InMemoryLogFactory factory]
+  (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) (.getInstantSource factory)))

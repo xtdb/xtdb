@@ -91,7 +91,7 @@
 (defn with-http-client-node [f]
   (binding [*http-port* (free-port)]
     (util/with-open [_ (xtn/start-node (-> *node-opts*
-                                           (assoc-in [:xtdb/server :port] *http-port*)))]
+                                           (assoc-in [:http-server :port] *http-port*)))]
       (binding [*node* (xtc/start-client (str "http://localhost:" *http-port*))]
         (f)))))
 
@@ -138,7 +138,7 @@
          (.next it))))))
 
 (defn with-mock-clock [f]
-  (with-opts {:xtdb.log/memory-log {:instant-src (->mock-clock)}} f))
+  (with-opts {:log [:in-memory {:instant-src (->mock-clock)}]} f))
 
 (defn finish-chunk! [node]
   (then-await-tx node)
@@ -259,16 +259,14 @@
                                                      rows-per-chunk log-limit page-limit instant-src]
                                               :or {buffers-dir "objects"}}]
   (let [instant-src (or instant-src (->mock-clock))]
-    (xtn/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                    :instant-src instant-src}
-                     :xtdb.buffer-pool/local {:data-dir (.resolve node-dir buffers-dir)}
-                     :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit
-                                                    :rows-per-chunk rows-per-chunk}
-                                                   (into {} (filter val)))})))
+    (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
+                     :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
+                                   (into {} (filter val)))})))
 
 (defn ->local-submit-client ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
-  (xtn/start-submit-client {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                           :clock (->mock-clock)}}))
+  (xtn/start-submit-client {:log [:local {:path (.resolve node-dir "log")
+                                          :instant-src (->mock-clock)}]}))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

@@ -10,10 +10,10 @@ object XtdbClient {
         Clojure.`var`("clojure.core", "require").invoke(Symbol.intern("xtdb.client"))
     }
 
-    private val START_CLIENT: IFn = Clojure.`var`("xtdb.client", "start-client")
+    private val OPEN_CLIENT: IFn = Clojure.`var`("xtdb.client", "start-client")
 
     @JvmStatic
-    fun startClient(url: URL): IXtdb {
-        return START_CLIENT.invoke(url.toString()) as IXtdb
+    fun openClient(url: URL): IXtdb {
+        return OPEN_CLIENT.invoke(url.toString()) as IXtdb
     }
 }

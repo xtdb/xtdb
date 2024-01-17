@@ -1,8 +1,8 @@
 (ns xtdb.log.local-directory-log
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.log :as xt.log]
+            [xtdb.node :as xtn]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -14,8 +14,8 @@
            java.time.temporal.ChronoUnit
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
-           (xtdb.api TransactionKey)
-           (xtdb.api.log Log LogRecord)))
+           (xtdb.api TransactionKey XtdbSubmitClient$Config)
+           (xtdb.api.log LocalLogFactory Log LogRecord)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
 (def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))
@@ -141,23 +141,19 @@
           (finally
             (.clear elements)))))))
 
-(derive :xtdb.log/local-directory-log :xtdb/log)
+(defmethod xtn/apply-config! :xtdb.log/local-directory-log [^XtdbSubmitClient$Config config _ {:keys [path instant-src]}]
+  (doto config
+    (.setTxLog (cond-> (LocalLogFactory. (util/->path path))
+                 instant-src (.instantSource instant-src)))))
 
-(defmethod ig/prep-key :xtdb.log/local-directory-log [_ opts]
-  (-> (merge {:buffer-size 4096
-              :instant-src (InstantSource/system)
-              :poll-sleep-duration #time/duration "PT0.1S"}
-             opts)
-      (util/maybe-update :root-path util/->path)
-      (util/maybe-update :poll-sleep-duration time/->duration)))
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-log [^LocalLogFactory factory]
+  (let [root-path (.getPath factory)
+        buffer-size (.getBufferSize factory)]
+    (util/mkdirs root-path)
 
-(defmethod ig/init-key :xtdb.log/local-directory-log [_ {:keys [root-path poll-sleep-duration buffer-size instant-src]}]
-  (util/mkdirs root-path)
+    (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
+          queue (ArrayBlockingQueue. buffer-size)
+          append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue (.getInstantSource factory) buffer-size))]
 
-  (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
-        queue (ArrayBlockingQueue. buffer-size)
-        append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue instant-src buffer-size))]
-    (->LocalDirectoryLog root-path poll-sleep-duration pool queue append-loop-future nil)))
-
-(defmethod ig/halt-key! :xtdb.log/local-directory-log [_ log]
-  (util/try-close log))
+      (->LocalDirectoryLog root-path (.getPollSleepDuration factory) pool queue append-loop-future nil))))

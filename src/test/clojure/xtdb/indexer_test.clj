@@ -435,7 +435,7 @@
 
           (Thread/sleep 250) ; wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-          (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
+          (doseq [node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
                         ^IMetadataManager mm (util/component node ::meta/metadata-manager)]]
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
@@ -610,7 +610,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir
-                                       :clock (tu/->mock-clock)})]
+                                       :instant-src (tu/->mock-clock)})]
       (let [mm (tu/component node ::meta/metadata-manager)]
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 

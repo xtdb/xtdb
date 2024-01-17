@@ -11,7 +11,7 @@
            (java.util NavigableSet)
            (java.util.concurrent CompletableFuture)
            (java.util.function Supplier)
-           xtdb.api.ObjectStore))
+           xtdb.api.storage.ObjectStore))
 
 (def blob-source-opts (into-array Blob$BlobSourceOption []))
 

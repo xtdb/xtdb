@@ -1,8 +1,10 @@
 (ns xtdb.buffer-pool-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
-            xtdb.node
+            [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
@@ -16,8 +18,9 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector IntVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
+           (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
            xtdb.IBufferPool
-           xtdb.api.ObjectStore
+           xtdb.buffer_pool.RemoteBufferPool
            (xtdb.multipart IMultipartUpload SupportsMultipart)
            (xtdb.util ArrowBufLRU)))
 
@@ -37,34 +40,50 @@
 (t/use-fixtures :each #'each-fixture)
 (t/use-fixtures :once #'once-fixture)
 
+(t/deftest test-remote-buffer-pool-setup
+  (util/with-tmp-dirs #{path}
+    (util/with-open [node (xtn/start-node {:storage [:remote {:object-store [:in-memory {}]
+                                                              :local-disk-cache path}]})]
+      (xt/submit-tx node [(xt/put :foo {:xt/id :foo})])
+
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node '(from :foo [xt/id]))))
+
+      (tu/finish-chunk! node)
+
+      (let [{:keys [^ObjectStore remote-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
+        (t/is (instance? RemoteBufferPool buffer-pool))
+
+        (t/is (seq (.listObjects remote-store)))))))
+
 (t/deftest cache-counter-test
-  (util/with-open [os (os-test/->InMemoryObjectStore (TreeMap.))
-                   bp (bp/->remote {:allocator tu/*allocator*
-                                    :object-store os
-                                    :disk-store (create-tmp-dir)})]
-    (bp/clear-cache-counters)
-    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-    (t/is (= 0 (.get bp/cache-miss-byte-counter)))
-    (t/is (= 0N @bp/io-wait-nanos-counter))
+  (util/with-open [bp (bp/open-remote-storage tu/*allocator*
+                                              (Storage/remote (bp/->object-store-factory :in-memory {})
+                                                              (create-tmp-dir)))]
+    (let [{^ObjectStore os :remote-store} bp]
+      (bp/clear-cache-counters)
+      (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+      (t/is (= 0 (.get bp/cache-miss-byte-counter)))
+      (t/is (= 0N @bp/io-wait-nanos-counter))
 
-    @(.putObject ^ObjectStore os (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
+      @(.putObject ^ObjectStore os (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
 
-    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
+      (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
 
-    (t/is (pos? (.get bp/cache-miss-byte-counter)))
-    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-    (t/is (pos? @bp/io-wait-nanos-counter))
+      (t/is (pos? (.get bp/cache-miss-byte-counter)))
+      (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+      (t/is (pos? @bp/io-wait-nanos-counter))
 
-    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
+      (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
 
-    (t/is (pos? (.get bp/cache-hit-byte-counter)))
-    (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
+      (t/is (pos? (.get bp/cache-hit-byte-counter)))
+      (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
 
-    (bp/clear-cache-counters)
+      (bp/clear-cache-counters)
 
-    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-    (t/is (= 0 (.get bp/cache-miss-byte-counter)))
-    (t/is (= 0N @bp/io-wait-nanos-counter))))
+      (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+      (t/is (= 0 (.get bp/cache-miss-byte-counter)))
+      (t/is (= 0N @bp/io-wait-nanos-counter)))))
 
 (t/deftest arrow-buf-lru-test
   (t/testing "max size restriction"
@@ -181,10 +200,14 @@
             (swap! calls conj :abort)
             (CompletableFuture/completedFuture nil)))))))
 
+(def simulated-obj-store-factory
+  (reify ObjectStoreFactory
+    (openObjectStore [_]
+      (->SimulatedObjectStore (atom []) (atom {})))))
+
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
-  (bp/->remote {:allocator tu/*allocator*
-                :object-store (->SimulatedObjectStore (atom []) (atom {}))
-                :disk-store (create-tmp-dir)}))
+  (bp/open-remote-storage tu/*allocator*
+                          (Storage/remote simulated-obj-store-factory (create-tmp-dir))))
 
 (defn get-remote-calls [test-bp]
   @(:calls (:remote-store test-bp)))

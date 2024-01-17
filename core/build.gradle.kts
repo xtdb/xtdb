@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
@@ -47,3 +49,13 @@ dependencies {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 tasks.javadoc.get().enabled = false
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+
+        java {
+            freeCompilerArgs.add("-Xjvm-default=all")
+        }
+    }
+}

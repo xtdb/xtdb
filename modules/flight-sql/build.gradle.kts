@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 ext {
@@ -26,6 +29,8 @@ dependencies {
 
     api("org.apache.arrow", "arrow-vector", "14.0.0")
     api("org.apache.arrow", "flight-sql", "14.0.0")
+
+    api(kotlin("stdlib-jdk8"))
 
     testImplementation(project(":"))
     testImplementation(project(":http-client-clj"))

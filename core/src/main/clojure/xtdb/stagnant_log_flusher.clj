@@ -1,16 +1,16 @@
 (ns xtdb.stagnant-log-flusher
   (:require [clojure.tools.logging :as log]
-            [xtdb.log :as xt-log]
-            xtdb.indexer
             [juxt.clojars-mirrors.integrant.core :as ig]
+            xtdb.indexer
+            [xtdb.log :as xt-log]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.nio.channels ClosedByInterruptException)
            (java.time Duration)
            (java.util.concurrent ExecutorService Executors TimeUnit)
-           (xtdb.indexer IIndexer)
-           xtdb.api.TransactionKey
-           (xtdb.api.log Log)))
+           (xtdb.api TransactionKey Xtdb$IndexerConfig)
+           (xtdb.api.log Log)
+           (xtdb.indexer IIndexer)))
 
 ;; see https://github.com/xtdb/xtdb/issues/2548
 
@@ -19,15 +19,14 @@
 (def ^:dynamic *on-heartbeat*
   (constantly nil))
 
-(defmethod ig/prep-key ::flusher
-  [_ opts]
-  (into {:indexer (ig/ref :xtdb/indexer)
-         :log (ig/ref :xtdb/log)
-         :duration #time/duration "PT4H"}
-        opts))
+(defmethod ig/prep-key ::flusher [_ indexer-config]
+  {:indexer (ig/ref :xtdb/indexer)
+   :log (ig/ref :xtdb/log)
+   :indexer-config indexer-config})
 
-(defmethod ig/init-key ::flusher [_ {:keys [^IIndexer indexer, ^Log log, duration]}]
-  (let [exr-tf (util/->prefix-thread-factory "xtdb.stagnant-log-flush")
+(defmethod ig/init-key ::flusher [_ {:keys [^IIndexer indexer, ^Log log, ^Xtdb$IndexerConfig indexer-config]}]
+  (let [duration (.getFlushDuration indexer-config)
+        exr-tf (util/->prefix-thread-factory "xtdb.stagnant-log-flush")
         exr (Executors/newSingleThreadScheduledExecutor exr-tf)
 
         ;; the tx-key of the last seen chunk tx

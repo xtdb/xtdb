@@ -12,11 +12,11 @@
             [xtdb.xtql :as xtql])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
-           (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
+           java.util.HashMap
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config Xtdb$ModuleFactory XtdbSubmitClient$Config)
            (xtdb.api.log Log)
            (xtdb.api.query Basis IKeyFn Query QueryOptions)
            (xtdb.api.tx Sql TxOptions)
@@ -28,12 +28,6 @@
 (defmethod ig/init-key :xtdb/allocator [_ _] (RootAllocator.))
 (defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
   (util/close a))
-
-(defmethod ig/prep-key :xtdb/default-tz [_ default-tz]
-  (cond
-    (instance? ZoneId default-tz) default-tz
-    (string? default-tz) (ZoneId/of default-tz)
-    :else time/utc))
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
@@ -149,29 +143,40 @@
 (defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))
 
-(defn- with-default-impl [opts parent-k impl-k]
-  (cond-> opts
-    (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
+(defmethod ig/prep-key :xtdb/modules [_ modules]
+  {:node (ig/ref :xtdb/node)
+   :modules (vec modules)})
 
-(defn node-system [opts]
-  (-> (into {:xtdb/node {}
-             :xtdb/allocator {}
-             :xtdb/default-tz nil
-             :xtdb/indexer {}
-             :xtdb.indexer/live-index {}
-             :xtdb.log/watcher {}
-             :xtdb.metadata/metadata-manager {}
-             :xtdb.operator.scan/scan-emitter {}
-             :xtdb.query/ra-query-source {}
-             :xtdb.stagnant-log-flusher/flusher {}
-             :xtdb/compactor {}}
-            opts)
-      (doto ig/load-namespaces)
-      (with-default-impl :xtdb/log :xtdb.log/memory-log)
-      (with-default-impl :xtdb/buffer-pool :xtdb.buffer-pool/in-memory)
+(defmethod ig/init-key :xtdb/modules [_ {:keys [node modules]}]
+  (util/with-close-on-catch [!started-modules (HashMap. (count modules))]
+    (doseq [^Xtdb$ModuleFactory module modules]
+      (.put !started-modules (.getModuleKey module) (.openModule module node)))
+
+    (into {} !started-modules)))
+
+(defmethod ig/halt-key! :xtdb/modules [_ modules]
+  (util/close modules))
+
+(defn node-system [^Xtdb$Config opts]
+  (-> {:xtdb/node {}
+       :xtdb/allocator {}
+       :xtdb/indexer {}
+       :xtdb.log/watcher {}
+       :xtdb.metadata/metadata-manager {}
+       :xtdb.operator.scan/scan-emitter {}
+       :xtdb.query/ra-query-source {}
+       :xtdb/compactor {}
+      
+       :xtdb/buffer-pool (.getStorage opts)
+       :xtdb.indexer/live-index (.indexer opts)
+       :xtdb/log (.getTxLog opts)
+       :xtdb/modules (.getModules opts)
+       :xtdb/default-tz (.getDefaultTz opts)
+       :xtdb.stagnant-log-flusher/flusher (.indexer opts)}
       (doto ig/load-namespaces)))
 
-(defn start-node ^java.lang.AutoCloseable [opts]
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-node ^xtdb.api.IXtdb [opts]
   (let [!closing (atom false)
         system (-> (node-system opts)
                    ig/prep
@@ -210,15 +215,15 @@
   (.close node))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn start-submit-client ^xtdb.node.impl.SubmitClient [opts]
+(defn open-submit-client ^xtdb.api.IXtdbSubmitClient [^XtdbSubmitClient$Config config]
   (let [!closing (atom false)
-        system (-> (into {::submit-client {}
-                          :xtdb/allocator {}
-                          :xtdb/default-tz nil}
-                         opts)
+        system (-> {::submit-client {}
+                    :xtdb/allocator {}
+                    :xtdb/log (.getTxLog config)
+                    :xtdb/default-tz (.getDefaultTz config)}
+
                    (doto ig/load-namespaces)
-                   (with-default-impl :xtdb/log :xtdb.log/memory-log)
-                   (doto ig/load-namespaces)
+
                    ig/prep
                    ig/init)]
 

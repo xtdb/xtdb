@@ -1,9 +1,8 @@
 (ns xtdb.kafka
-  (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [clojure.java.io :as io] 
             [xtdb.api :as xt]
             [xtdb.log :as log]
+            [xtdb.node :as xtn]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import java.io.Closeable
@@ -17,8 +16,8 @@
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
            [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
            org.apache.kafka.common.TopicPartition
-           [xtdb.api TransactionKey]
-           [xtdb.api.log Log LogRecord LogSubscriber]))
+           [xtdb.api TransactionKey XtdbSubmitClient$Config]
+           [xtdb.api.log Log LogRecord LogSubscriber KafkaLogFactory]))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -145,35 +144,30 @@
 
         (throw (IllegalStateException. (format "Topic '%s' does not exist", topic-name))))))
 
-(s/def ::bootstrap-servers string?)
-(s/def ::properties-file ::util/path)
-(s/def ::properties-map ::util/string-map)
-(s/def ::topic-name string?)
-(s/def ::replication-factor pos-int?)
-(s/def ::create-topic? boolean?)
-(s/def ::topic-config ::util/string-map)
+(defmethod xtn/apply-config! ::log 
+  [^XtdbSubmitClient$Config config _ {:keys [topic-name bootstrap-servers create-topic? replication-factor  
+                                             poll-duration topic-config properties-map properties-file]}] 
+  (doto config
+      (.setTxLog (cond-> (KafkaLogFactory. bootstrap-servers topic-name)
+                   create-topic? (.autoCreateTopic create-topic?)
+                   replication-factor (.replicationFactor (int replication-factor))
+                   poll-duration (.pollDuration (time/->duration poll-duration)) 
+                   topic-config (.topicConfig topic-config)
+                   properties-map (.propertiesMap properties-map)
+                   properties-file (.propertiesFile (util/->path properties-file))))))
 
-(s/def ::poll-duration ::time/duration)
-
-(derive ::log :xtdb/log)
-
-(defmethod ig/prep-key ::log [_ opts]
-  (-> (merge {:bootstrap-servers "localhost:9092"
-              :replication-factor 1
-              :create-topic? true
-              :poll-duration "PT1S"}
-             opts)
-      (update :topic-config (fn [config]
-                              (into {"message.timestamp.type" "LogAppendTime"} config)))
-      (util/maybe-update :properties-file util/->path)
-      (util/maybe-update :poll-duration time/->duration)))
-
-(defmethod ig/pre-init-spec ::log [_]
-  (s/keys :req-un [::bootstrap-servers ::topic-name ::create-topic? ::replication-factor ::poll-duration]
-          :opt-un [::properties-file ::properties-map ::topic-config]))
-
-(defmethod ig/init-key ::log [_ {:keys [topic-name poll-duration] :as kafka-opts}]
-  (let [kafka-config (->kafka-config kafka-opts)
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-log [^KafkaLogFactory factory] 
+  (let [topic-name (.getTopicName factory)
+        poll-duration (.getPollDuration factory)
+        kafka-config (->kafka-config {:bootstrap-servers (.getBootstrapServers factory)
+                                      :properties-file (.getPropertiesFile factory)
+                                      :properties-map (.getPropertiesMap factory)})
+        kafka-opts {:topic-name topic-name
+                    :replication-factor (.getReplicationFactor factory)
+                    :create-topic? (.getAutoCreateTopic factory)
+                      ;; LogAppendTime required - convert topicconfig into clojure map and ensure it's present
+                    :topic-config (into {"message.timestamp.type" "LogAppendTime"} (.getTopicConfig factory))}
         tp (TopicPartition. topic-name 0)]
     (ensure-topic-exists kafka-config kafka-opts)
     (KafkaLog. kafka-config
@@ -182,6 +176,3 @@
                  (.assign #{tp}))
                tp
                poll-duration)))
-
-(defmethod ig/halt-key! ::log [_ log]
-  (util/try-close log))

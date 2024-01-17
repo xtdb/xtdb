@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
 }
 
 ext {
@@ -31,4 +34,6 @@ dependencies {
         exclude("com.google.guava","listenablefuture")
     }
     api("com.google.guava","guava","32.1.1-jre")
+
+    api(kotlin("stdlib-jdk8"))
 }

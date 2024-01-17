@@ -1,4 +1,4 @@
-{:xtdb.log/local-directory-log {:root-path "/var/lib/xtdb/log"}
- :xtdb.buffer-pool/local {:data-dir "/var/lib/xtdb/buffers"}
+{:log [:local {:path "/var/lib/xtdb/log"}]
+ :storage [:local {:path "/var/lib/xtdb/buffers"}]
  ;; Keeping it simple for now - HTTP server only:
- :xtdb/server {:port 3000}}
+ :http-server {:port 3000}}

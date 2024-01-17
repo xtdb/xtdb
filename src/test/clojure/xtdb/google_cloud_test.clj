@@ -1,8 +1,7 @@
 (ns xtdb.google-cloud-test
   (:require [clojure.java.shell :as sh]
             [clojure.tools.logging :as log]
-            [clojure.test :as t]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [clojure.test :as t] 
             [xtdb.api :as xt]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
@@ -12,7 +11,8 @@
             [xtdb.util :as util])
   (:import [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]
            [java.io Closeable]
-           [xtdb.api ObjectStore]
+           [xtdb.api.storage ObjectStore]
+           [xtdb.api GoogleCloudObjectStoreFactory]
            [java.time Duration]))
 
 ;; Ensure you are authenticated with google cloud before running these tests - there are two options to do this:
@@ -53,11 +53,9 @@
 (t/use-fixtures :once run-if-auth-available)
 
 (defn object-store ^Closeable [prefix]
-  (->> (ig/prep-key ::google-cloud/blob-object-store {:project-id project-id
-                                                      :bucket test-bucket
-                                                      :pubsub-topic pubsub-topic
-                                                      :prefix (str "xtdb.google-cloud-test." prefix)})
-       (ig/init-key ::google-cloud/blob-object-store)))
+  (let [factory (-> (GoogleCloudObjectStoreFactory. project-id test-bucket pubsub-topic)
+                    (.prefix (util/->path (str prefix))))]
+    (google-cloud/open-object-store factory)))
 
 (t/deftest ^:google-cloud put-delete-test
   (let [os (object-store (random-uuid))]
@@ -104,46 +102,50 @@
       (t/is (= (mapv util/->path ["alan" "alice"])
                (.listObjects ^ObjectStore os-2))))))
 
-(t/deftest ^:azure node-level-test
-  (util/with-tmp-dirs #{disk-store}
-                      (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::google-cloud/blob-object-store)
-                                                                     :disk-store disk-store}
-                                           ::google-cloud/blob-object-store {:project-id project-id
-                                                                             :bucket test-bucket
-                                                                             :pubsub-topic pubsub-topic
-                                                                             :prefix (str "xtdb.google-cloud-test." (random-uuid))}})]
-                                      ;; Submit some documents to the node
-                                      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
+(t/deftest ^:google-cloud node-level-test
+  (util/with-tmp-dirs #{local-disk-cache}
+    (util/with-open [node (xtn/start-node
+                           {:storage [:remote
+                                      {:object-store [:google-cloud {:project-id project-id
+                                                                     :bucket test-bucket
+                                                                     :pubsub-topic pubsub-topic
+                                                                     :prefix (str "xtdb.google-cloud-test." (random-uuid))}]
+                                       :local-disk-cache local-disk-cache}]})]
+      ;; Submit some documents to the node
+      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
                                 (xt/put :bar {:xt/id "bar2"})
                                 (xt/put :bar {:xt/id "bar3"})]))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      ;; Ensure can query back out results
-                                      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
                (xtdb.api/q node '(from :bar [{:xt/id e}]))))
 
-                                      (let [object-store (get-in node [:system ::google-cloud/blob-object-store])]
-                                        ;; Ensure some files are written
-                                        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-(t/deftest ^:azure tpch-test-node
-  (util/with-tmp-dirs #{disk-store}
-                      (util/with-open [node (xtn/start-node {:xtdb.buffer-pool/remote {:object-store (ig/ref ::google-cloud/blob-object-store)
-                                                                     :disk-store disk-store}
-                                           ::google-cloud/blob-object-store {:project-id project-id
-                                                                             :bucket test-bucket
-                                                                             :pubsub-topic pubsub-topic
-                                                                             :prefix (str "xtdb.google-cloud-test." (random-uuid))}})]
-                                      ;; Submit tpch docs
-                                      (-> (tpch/submit-docs! node 0.05)
+(t/deftest ^:google-cloud tpch-test-node
+  (util/with-tmp-dirs #{local-disk-cache}
+    (util/with-open [node (xtn/start-node
+                           {:storage [:remote
+                                      {:object-store [:google-cloud {:project-id project-id
+                                                                     :bucket test-bucket
+                                                                     :pubsub-topic pubsub-topic
+                                                                     :prefix (str "xtdb.google-cloud-test." (random-uuid))}]
+                                       :local-disk-cache local-disk-cache}]})]
+      ;; Submit tpch docs
+      (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      (let [object-store (get-in node [:system ::google-cloud/blob-object-store])]
-                                        ;; Ensure files have been written
-                                        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
