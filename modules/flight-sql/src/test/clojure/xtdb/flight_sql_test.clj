@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.flight-sql]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr])
@@ -18,7 +19,7 @@
   tu/with-allocator
   (fn [f]
     (binding [*port* (tu/free-port)]
-      (tu/with-opts {:xtdb.flight-sql/server {:port *port*}}
+      (tu/with-opts {:flight-sql-server {:port *port*}}
         f)))
 
   tu/with-node
