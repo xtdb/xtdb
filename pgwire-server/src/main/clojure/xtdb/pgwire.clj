@@ -6,29 +6,30 @@
   (:require [clojure.data.json :as json]
             [clojure.set :as set]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [clojure.tools.logging :as log] 
             [xtdb.api :as xt]
             [xtdb.protocols :as xtp]
+            [xtdb.node :as xtn]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import (clojure.lang PersistentQueue)
-           (java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream)
-           (java.lang Thread$State)
-           (java.net ServerSocket Socket SocketException)
-           (java.nio ByteBuffer)
-           (java.nio.charset StandardCharsets)
-           (java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.util HashMap List Map)
-           (java.util.concurrent CompletableFuture ConcurrentHashMap ExecutorService Executors TimeUnit)
-           (java.util.function BiConsumer BiFunction)
+  (:import [clojure.lang PersistentQueue]
+           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
+           [java.lang Thread$State]
+           [java.net ServerSocket Socket SocketException]
+           [java.nio ByteBuffer]
+           [java.nio.charset StandardCharsets]
+           [java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime]
+           [java.util HashMap List Map]
+           [java.util.concurrent CompletableFuture ConcurrentHashMap ExecutorService Executors TimeUnit]
+           [java.util.function BiConsumer BiFunction]
            [java.util.stream Stream]
-           (org.apache.arrow.vector PeriodDuration)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
+           [org.apache.arrow.vector PeriodDuration]
+           [xtdb.api PgwireServerModule Xtdb$Config Xtdb$Module]
+           [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -2054,24 +2055,22 @@
   []
   (run! stop-server (vec (.values servers))))
 
-;; integrant hooks to make pgwire an xtdb module
-; e.g (xtn/start-node {:xtdb/pgwire {:port 5432}})
-; will provide a pgwire server as part of node start.
+(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads]}]
+  (.module config (cond-> (PgwireServerModule.) 
+                    (some? port) (.port port)
+                    (some? num-threads) (.numThreads num-threads))))
 
-(defmethod ig/prep-key :xtdb/pgwire [_ opts]
-  (merge {:node (ig/ref :xtdb/node)
-          :port 5432
-          :num-threads 42}
-         opts))
-
-(defmethod ig/init-key :xtdb/pgwire [_ {:keys [node, port, num-threads]}]
-  (let [srv (serve node {:port port, :num-threads num-threads})]
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-server [node ^PgwireServerModule module]
+  (let [port (.getPort module)
+        num-threads (.getNumThreads module)
+        srv (serve node {:port port, :num-threads num-threads})]
     (log/info "PGWire server started on port:" port)
-    srv))
-
-(defmethod ig/halt-key! :xtdb/pgwire [_ pgwire]
-  (.close ^Closeable pgwire)
-  (log/info "PGWire server stopped"))
+    (reify Xtdb$Module
+      (close
+       [_]
+       (util/try-close ^Closeable srv)
+       (log/info "PGWire server stopped")))))
 
 (comment
 

@@ -865,11 +865,11 @@
       (is (= [{:a {"b" 42}}] rs)))))
 
 (deftest start-stop-as-module-test
-  (tu/with-log-level 'xtdb.pgwire :off
+  (tu/with-log-level 'xtdb.pgwire :info
     (let [port (tu/free-port)]
-      (with-open [_node (xtn/start-node {:xtdb/pgwire {:port port
-                                                       :num-threads 3}})]
-        (let [srv (get @#'pgwire/servers port)]
+      (with-open [_node (xtn/start-node {:pgwire-server {:port port
+                                                         :num-threads 3}})] 
+        (let [srv (get @#'pgwire/servers (int port))]
           (is (some? srv)))
 
         (with-open [conn (jdbc-conn)]

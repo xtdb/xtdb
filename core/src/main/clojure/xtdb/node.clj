@@ -41,6 +41,9 @@
 (defmethod apply-config! :flight-sql-server [config _ opts]
   (apply-config! config :xtdb.flight-sql/server opts))
 
+(defmethod apply-config! :pgwire-server [config _ opts]
+  (apply-config! config :xtdb.pgwire/server opts))
+
 (defmethod apply-config! ::default [_ _ _])
 
 (defn start-node
@@ -67,7 +70,8 @@
                                             :indexer
                                             :default-tz
                                             :http-server
-                                            :flight-sql-server))))))
+                                            :flight-sql-server
+                                            :pgwire-server))))))
 
 (defn start-submit-client
   "Starts a submit-only client with the given configuration.
