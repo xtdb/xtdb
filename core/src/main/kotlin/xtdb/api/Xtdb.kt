@@ -27,8 +27,7 @@ object Xtdb {
         txLog: LogFactory = LogFactory.DEFAULT,
         var storage: StorageFactory = StorageFactory.DEFAULT,
         defaultTz: ZoneId = ZoneOffset.UTC,
-        @JvmField val indexer: IndexerConfig = IndexerConfig(),
-        var extraConfig: Map<*, *> = emptyMap<Any, Any>(),
+        @JvmField val indexer: IndexerConfig = IndexerConfig()
     ) : XtdbSubmitClient.Config(txLog, defaultTz) {
         private val modules: MutableList<ModuleFactory> = mutableListOf()
 
@@ -41,8 +40,6 @@ object Xtdb {
 
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
-
-        fun extraConfig(extraConfig: Map<*, *>) = apply { this.extraConfig = extraConfig }
 
         override fun open() = OPEN_NODE.invoke(this) as IXtdb
     }
