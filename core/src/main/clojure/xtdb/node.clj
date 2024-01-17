@@ -57,21 +57,12 @@
   (^xtdb.api.IXtdb [] (start-node {}))
 
   (^xtdb.api.IXtdb [opts]
-   (Xtdb/openNode (-> (doto (Xtdb$Config.)
-                        (as-> config (reduce-kv (fn [config k v]
-                                                  (doto config
-                                                    (apply-config! k v)))
-                                                config
-                                                opts)))
-
-                      (.extraConfig (dissoc opts
-                                            :log
-                                            :storage
-                                            :indexer
-                                            :default-tz
-                                            :http-server
-                                            :flight-sql-server
-                                            :pgwire-server))))))
+   (Xtdb/openNode (doto (Xtdb$Config.)
+                    (as-> config (reduce-kv (fn [config k v]
+                                              (doto config
+                                                (apply-config! k v)))
+                                            config
+                                            opts))))))
 
 (defn start-submit-client
   "Starts a submit-only client with the given configuration.
