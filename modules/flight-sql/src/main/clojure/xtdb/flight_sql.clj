@@ -1,30 +1,30 @@
 (ns xtdb.flight-sql
-  (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [clojure.tools.logging :as log] 
             [xtdb.api :as xt]
-            xtdb.indexer
-            xtdb.query
+            [xtdb.indexer]
+            [xtdb.node :as xtn]
+            [xtdb.query]
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (com.google.protobuf Any ByteString)
-           java.lang.AutoCloseable
-           (java.nio ByteBuffer)
-           (java.util ArrayList HashMap Map)
-           (java.util.concurrent CompletableFuture ConcurrentHashMap)
-           (java.util.function BiConsumer BiFunction Consumer)
-           (org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key FlightStream Location PutResult Result Ticket)
-           (org.apache.arrow.flight.sql FlightSqlProducer)
-           (org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery)
-           org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
-           org.apache.arrow.vector.types.pojo.Schema
+  (:import [com.google.protobuf Any ByteString] 
+           [java.nio ByteBuffer]
+           [java.util ArrayList HashMap Map]
+           [java.util.concurrent CompletableFuture ConcurrentHashMap]
+           [java.util.function BiConsumer BiFunction Consumer]
+           [org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key FlightStream Location PutResult Result Ticket]
+           [org.apache.arrow.flight.sql FlightSqlProducer]
+           [org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery]
+           [org.apache.arrow.memory BufferAllocator]
+           [org.apache.arrow.vector FieldVector VectorSchemaRoot]
+           [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api.tx TxOp]
-           xtdb.indexer.IIndexer
-           (xtdb.query BoundQuery IRaQuerySource PreparedQuery)
-           (xtdb.vector IVectorReader)))
+           [xtdb.api FlightSqlServerModule Xtdb$Config Xtdb$Module]
+           [xtdb.indexer IIndexer]
+           [xtdb.query BoundQuery IRaQuerySource PreparedQuery]
+           [xtdb.vector IVectorReader]))
 
 ;;;; populate-root temporarily copied from test-util
 
@@ -84,7 +84,6 @@
 (def ^:private dml?
   (comp #{:insert :delete :erase :merge} first))
 
-
 (defn- flight-stream->rows [^FlightStream flight-stream]
   (let [root (.getRoot flight-stream)
         rows (ArrayList.)
@@ -97,9 +96,9 @@
 
 (defn- flight-stream->bytes ^ByteBuffer [^FlightStream flight-stream]
   (util/build-arrow-ipc-byte-buffer (.getRoot flight-stream) :stream
-    (fn [write-batch!]
-      (while (.next flight-stream)
-        (write-batch!)))))
+                                    (fn [write-batch!]
+                                      (while (.next flight-stream)
+                                        (write-batch!)))))
 
 (defn- ->fsql-producer [{:keys [allocator node, ^IIndexer idxer, ^IRaQuerySource ra-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
   (letfn [(fields->schema ^org.apache.arrow.vector.types.pojo.Schema [fields]
@@ -295,18 +294,17 @@
                      (onCallErrored [_ e]
                        (log/error e "FSQL server error")))))))
 
-(defmethod ig/prep-key ::server [_ opts]
-  (merge {:allocator (ig/ref :xtdb/allocator)
-          :node (ig/ref :xtdb/node)
-          :indexer (ig/ref :xtdb/indexer)
-          :ra-src (ig/ref :xtdb.query/ra-query-source)
-          :wm-src (ig/ref :xtdb/indexer)
-          :host "127.0.0.1"
-          :port 9832}
-         opts))
+(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [host port]}]
+  (.module config (cond-> (FlightSqlServerModule.)
+                    (some? host) (.host host)
+                    (some? port) (.port port))))
 
-(defmethod ig/init-key ::server [_ {:keys [allocator node indexer ra-src wm-src host ^long port]}]
-  (let [fsql-txs (ConcurrentHashMap.)
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-server [{:keys [allocator indexer ra-src wm-src] :as node}
+                   ^FlightSqlServerModule module]
+  (let [host (.getHost module)
+        port (.getPort module)
+        fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)
         tickets (ConcurrentHashMap.)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "flight-sql")
@@ -320,12 +318,10 @@
                                         (.start))]
 
       (log/infof "Flight SQL server started, port %d" port)
-      (reify AutoCloseable
+      (reify Xtdb$Module
         (close [_]
           (util/try-close server)
           (run! util/try-close (vals stmts))
           (util/close allocator)
           (log/info "Flight SQL server stopped"))))))
 
-(defmethod ig/halt-key! ::server [_ server]
-  (util/try-close server))
