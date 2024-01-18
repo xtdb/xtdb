@@ -1,6 +1,5 @@
 (ns xtdb.server
-  (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [muuntaja.core :as m]
@@ -21,30 +20,54 @@
             [spec-tools.core :as st]
             xtdb.api
             [xtdb.error :as err]
-            [xtdb.jackson :as jackson]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.util :as util]
             [xtdb.node :as xtn])
-  (:import java.io.OutputStream
+  (:import (java.io InputStream OutputStream)
            (java.time Duration ZoneId)
            [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
+           (xtdb JsonSerde)
            (xtdb.api HttpServerModule TransactionKey Xtdb$Config Xtdb$Module)
-           (xtdb.api.query Basis IKeyFn Query)
+           (xtdb.api.query Basis IKeyFn Query QueryRequest)
            (xtdb.api.tx TxOptions TxRequest)))
+
+(defn decoder [_options]
+  (reify
+    mf/Decode
+    (decode [_ data _charset] ; TODO charset
+      (if (string? data)
+        (JsonSerde/decode ^String data)
+        (JsonSerde/decode ^InputStream data)))))
+
+(defn encoder [_options]
+  (reify
+    mf/EncodeToBytes
+    (encode-to-bytes [_ data charset]
+      (.getBytes ^String (JsonSerde/encode data) ^String charset))
+    mf/EncodeToOutputStream
+    (encode-to-output-stream [_ data _charset] ; TODO charset
+      (fn [^OutputStream output-stream]
+        (JsonSerde/encode data output-stream)))))
+
+(def json-format
+  (mf/map->Format
+   {:name "application/json"
+    :decoder [decoder]
+    :encoder [encoder]}))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
-      (m/select-formats #{"application/json" "application/transit+json"})
-      (assoc-in [:formats "application/json" :encoder-opts :mapper] jackson/json-ld-mapper)
-      (assoc-in [:formats "application/json" :decoder-opts :mapper] jackson/json-ld-mapper)
+      (m/select-formats #{"application/transit+json"})
+      (assoc-in [:formats "application/json"] json-format)
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                 serde/transit-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
                 serde/transit-write-handlers)
       (assoc-in [:http :encode-response-body?] (constantly true))))
+
 
 (defmulti ^:private route-handler :name, :default ::default)
 
@@ -58,20 +81,43 @@
 
 (s/def ::opts (s/nilable #(instance? TxOptions %)))
 
+(defn- json-status-encoder []
+  (reify
+    mf/EncodeToBytes
+    (encode-to-bytes [_ data charset]
+      (if-not (ex-data data)
+        (.getBytes ^String (JsonSerde/encodeStatus (update-keys data name)) ^String charset)
+        (.getBytes (JsonSerde/encode data) ^String charset)))
+    mf/EncodeToOutputStream))
+
 (defmethod route-handler :status [_]
-  {:get (fn [{:keys [node] :as _req}]
+  {:muuntaja (m/create (-> muuntaja-opts
+                           (assoc-in [:formats "application/json" :encoder] (json-status-encoder))))
+
+   :get (fn [{:keys [node] :as _req}]
           {:status 200, :body (xtp/status node)})})
+
+
+(defn- json-tx-encoder []
+  (reify
+    mf/EncodeToBytes
+    (encode-to-bytes [_ data charset]
+      (if-not (ex-data data)
+        (.getBytes ^String (JsonSerde/encode data TransactionKey) ^String charset)
+        (.getBytes (JsonSerde/encode data) ^String charset)))
+    mf/EncodeToOutputStream))
 
 (defn json-tx-decoder []
   (reify
     mf/Decode
     (decode [_ data _]
-      (with-open [rdr (io/reader data)]
-        (let [^TxRequest tx (jackson/read-tx-req rdr)]
+      (with-open [^InputStream data data]
+        (let [^TxRequest tx (JsonSerde/decode data TxRequest)]
           {:tx-ops (.getTxOps tx) :opts (.getOpts tx)})))))
 
 (defmethod route-handler :tx [_]
   {:muuntaja (m/create (-> muuntaja-opts
+                           (assoc-in [:formats "application/json" :encoder] (json-tx-encoder))
                            (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
 
    :post {:handler (fn [{:keys [node] :as req}]
@@ -126,24 +172,22 @@
     (encode-to-output-stream [_ res _]
       (fn [^OutputStream out]
         (if-not (ex-data res)
-          (with-open [^Stream res res
-                      seq-wtr (-> (.writer jackson/json-ld-mapper)
-                                  (.writeValues out))]
+          (with-open [^Stream res res]
             (try
               (.forEach res
                         (reify Consumer
                           (accept [_ el]
-                            (.write seq-wtr el)
+                            (JsonSerde/encode el out)
                             (.write out ^byte ascii-newline))))
               (catch Throwable t
-                (.write seq-wtr t)
+                (JsonSerde/encode t out)
                 (.write out ^byte ascii-newline))
               (finally
                 (util/close res)
                 (util/close out))))
 
           (try
-            (.writeValue jackson/json-ld-mapper out res)
+            (JsonSerde/encode res out)
             (finally
               (util/close out))))))))
 
@@ -169,8 +213,8 @@
   (reify
     mf/Decode
     (decode [_ data _]
-      (with-open [rdr (io/reader data)]
-        (let [query-request (jackson/read-query-req rdr)]
+      (with-open [^InputStream data data]
+        (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)]
           (-> (into {} (.queryOpts query-request))
               (assoc :query (.query query-request))))))))
 

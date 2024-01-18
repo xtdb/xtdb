@@ -53,3 +53,8 @@ fun normalForm(sym: Symbol): Symbol =
 
 @Suppress("unused") // Clojure
 fun normalForm(k: Keyword): Keyword = Keyword.intern(normalForm(k.sym))
+
+fun String.kebabToCamelCase(): String {
+    val pattern = "-[a-z]".toRegex()
+    return replace(pattern) { it.value.last().uppercase() }
+}
