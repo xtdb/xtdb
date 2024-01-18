@@ -63,6 +63,7 @@ sealed interface Query {
             override fun selectDeserializer(element: JsonElement): DeserializationStrategy<UnifyClause> =
                 when (element) {
                     is JsonObject -> when {
+                        "call" in element -> Call.serializer()
                         "from" in element -> From.serializer()
                         "join" in element -> Join.serializer()
                         "leftJoin" in element -> LeftJoin.serializer()

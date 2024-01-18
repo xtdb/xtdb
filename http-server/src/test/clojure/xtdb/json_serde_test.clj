@@ -11,7 +11,7 @@
                            Query$Without Query$WithCols Query$Aggregate Basis Binding Expr Expr Query
                            Query$OrderDirection Query$OrderNulls Query$Pipeline Query$QueryTail Query$Unify
                            Query$Return Expr$Call Query$Where Query$With Query$UnnestVar Query$UnnestCol
-                           QueryOptions QueryRequest TemporalFilter)
+                           QueryOptions QueryRequest TemporalFilter Query$Call)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn- encode [v]
@@ -445,7 +445,8 @@
                                      (Query$LeftJoin. parsed-q
                                                       [(Binding. "id" (Expr/lVar "id"))]
                                                       [(Binding. "id" (Expr/lVar "id"))])
-                                     (Query$ParamRelation. (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))])]
+                                     (Query$ParamRelation. (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))
+                                     (Query$Call. "my-fn" [(Expr/val 1)] nil)])]
 
     (t/is (= simply-unify (roundtrip-unify simply-unify)))
 
