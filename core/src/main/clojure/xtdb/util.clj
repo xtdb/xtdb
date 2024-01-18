@@ -24,6 +24,7 @@
            (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
            (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
            (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.vector.complex ListVector)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
            xtdb.util.NormalForm))
@@ -317,9 +318,12 @@
   ([^ValueVector v, ^long start-idx] (slice-vec v start-idx (.getValueCount v)))
 
   ([^ValueVector v, ^long start-idx, ^long len]
-   (-> (.getTransferPair v (.getAllocator v))
-       (doto (.splitAndTransfer start-idx len))
-       (.getTo))))
+   ;; TODO see #3088
+   (if (and (instance? ListVector v) (= 0 start-idx len))
+     (ListVector/empty (.getName v) (.getAllocator v))
+     (-> (.getTransferPair v (.getAllocator v))
+         (doto (.splitAndTransfer start-idx len))
+         (.getTo)))))
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]

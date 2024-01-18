@@ -350,8 +350,9 @@
                     (close [_]
                       (util/close wms)
                       (.release wm-cnt))))
-                (catch Throwable _t
-                  (.release wm-cnt))))]
+                (catch Throwable t
+                  (.release wm-cnt)
+                  (throw t))))]
 
       (or (let [wm-lock-stamp (.readLock wm-lock)]
             (try
