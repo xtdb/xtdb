@@ -170,18 +170,8 @@ val JSON_SERDE = Json {
         }
 }
 
-@Suppress("UNCHECKED_CAST")
 @JvmField
-val JSON_SERDE_PRETTY_PRINT = Json {
-    prettyPrint = true
-    serializersModule =
-        SerializersModule {
-            contextual(AnySerde as KSerializer<Any>)
-            contextual(InstantSerde)
-            contextual(DurationSerde)
-            contextual(ZoneIdSerde)
-        }
-}
+val JSON_SERDE_PRETTY_PRINT = Json(JSON_SERDE) { prettyPrint = true }
 
 fun jsonIAE(errorType: String, element: JsonElement): IllegalArgumentException {
     return IllegalArgumentException(
