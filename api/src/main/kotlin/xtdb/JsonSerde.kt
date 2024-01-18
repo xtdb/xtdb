@@ -37,7 +37,7 @@ object ZoneIdSerde : KSerializer<ZoneId> {
     override fun deserialize(decoder: Decoder): ZoneId = ZoneId.of(decoder.decodeString())
 }
 
-object AnySerde : KSerializer<Any?> {
+object AnySerde : KSerializer<Any> {
     @OptIn(ExperimentalSerializationApi::class)
     override val descriptor = SerialDescriptor("xtdb.any", JsonElement.serializer().descriptor)
 
@@ -64,8 +64,7 @@ object AnySerde : KSerializer<Any?> {
         }
     }
 
-    private fun JsonElement.toValue(): Any? = when (this) {
-        is JsonNull -> null
+    private fun JsonElement.toValue(): Any = when (this) {
         is JsonArray -> map { it.toValue() }
         is JsonObject -> {
             val type = (this["@type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
@@ -154,16 +153,15 @@ object AnySerde : KSerializer<Any?> {
     override fun deserialize(decoder: Decoder) =
         decoder.decodeSerializableValue(JsonElement.serializer()).toValue()
 
-    override fun serialize(encoder: Encoder, value: Any?) =
+    override fun serialize(encoder: Encoder, value: Any) =
         encoder.encodeSerializableValue(JsonElement.serializer(), value.toJsonElement())
 }
 
-@Suppress("UNCHECKED_CAST")
 @JvmField
 val JSON_SERDE = Json {
     serializersModule =
         SerializersModule {
-            contextual(AnySerde as KSerializer<Any>)
+            contextual(AnySerde)
             contextual(InstantSerde)
             contextual(DurationSerde)
             contextual(ZoneIdSerde)
