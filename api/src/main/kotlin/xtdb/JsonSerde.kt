@@ -16,26 +16,10 @@ import xtdb.api.TransactionKey
 import xtdb.util.kebabToCamelCase
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.time.*
 import java.util.*
-
-object InstantSerde : KSerializer<Instant> {
-    override val descriptor = PrimitiveSerialDescriptor("xtdb.instant", PrimitiveKind.STRING)
-    override fun serialize(encoder: Encoder, value: Instant) = encoder.encodeString(value.toString())
-    override fun deserialize(decoder: Decoder): Instant = Instant.parse(decoder.decodeString())
-}
-
-object DurationSerde : KSerializer<Duration> {
-    override val descriptor = PrimitiveSerialDescriptor("xtdb.duration", PrimitiveKind.STRING)
-    override fun serialize(encoder: Encoder, value: Duration) = encoder.encodeString(value.toString())
-    override fun deserialize(decoder: Decoder): Duration = Duration.parse(decoder.decodeString())
-}
-
-object ZoneIdSerde : KSerializer<ZoneId> {
-    override val descriptor = PrimitiveSerialDescriptor("xtdb.timezone", PrimitiveKind.STRING)
-    override fun serialize(encoder: Encoder, value: ZoneId) = encoder.encodeString(value.toString())
-    override fun deserialize(decoder: Decoder): ZoneId = ZoneId.of(decoder.decodeString())
-}
 
 object AnySerde : KSerializer<Any> {
     @OptIn(ExperimentalSerializationApi::class)
