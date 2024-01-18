@@ -1,6 +1,6 @@
 = S3 Module
 
-Within our XTDB node, we can make use of **AWS S3** as the XTDB Object Store.
+Within our XTDB node, we can make use of **AWS S3** as one of the XTDB Object Stores used by the remote storage module.
 
 == Project Dependency
 
@@ -68,16 +68,13 @@ See the IAM policy set on the XTDBIamRole in the link:cloudformation/s3-stack.ym
 
 == S3 Object Store config
 
-We can swap out the implementation of the object store with one based on S3. To do so, we add the `xtdb.s3/object-store` key within the integrant config for our node, alongside any config:
+We can swap out the implementation of the object store with one based on S3. To do so, we can add the `:s3` object store and it's configuration map, within the remote storage module config for our node:
 
 [source,clojure]
 ----
-{
-  ...
-  {:xtdb.s3/object-store {:bucket "xtdb-object-store",
-                          :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"}}
-  ...
-}
+{:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store",
+                                        :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"}]
+                    :local-disk-cache "local-disk-cache"}]}
 ----
 
 === Parameters
@@ -119,9 +116,8 @@ By default, we get credentials through the usual AWS credentials provider.
 
 [source,clojure]
 ----
-{:xtdb.s3/object-store {:bucket "xtdb-object-store",
-                        :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"}
-                        :configurator (fn [_]
-                                       (reify S3Configurator
-                                         ...))}
+{:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store",
+                                        :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"
+                                        :configurator (fn [_] (reify S3Configurator...))}]
+                    :local-disk-cache "local-disk-cache"}]}
 ----

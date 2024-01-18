@@ -2,8 +2,8 @@
 
 Within our XTDB node, we can make use of Azure Services for certain purposes. Currently, we can:
 
-* Use *Azure Blob Storage* as the XTDB Object Store.
-* Use *Azure Eventhubs* as the Log.
+* Use *Azure Blob Storage* as one of the XTDB Object Stores used by the remote storage module.
+* Use *Azure Eventhubs* as the XTDB Log.
 
 == Project Dependency 
 
@@ -32,16 +32,13 @@ See the custom role definition in the link:azure-resource-manager/azure-stack.js
 
 == Azure Blob Storage Object Store
 
-We can swap out the implementation of the object store with one based on Azure Blob Storage. To do so, we add the `xtdb.azure/blob-object-store` key within the integrant config for our node, alongside any config:
+We can swap out the implementation of the object store with one based on Azure Blob Storage. To do so, we can add the `:azure` object store and it's configuration map, within the remote storage module config for our node:
 ```clojure
-{
-  ...
-  {:xtdb.azure/blob-object-store {:storage-account "xtdbstorageaccount"
-                                  :container "xtdb-object-store"
-                                  :servicebus-namespace "xtdb-storage-account-eventbus"
-                                  :servicebus-topic-name "xtdb-storage-bus-topic"}}
-  ...
-}
+{:storage [:remote {:object-store [:azure {:storage-account "xtdbstorageaccount"
+                                           :container "xtdb-object-store"
+                                           :servicebus-namespace "xtdb-storage-account-eventbus"
+                                           :servicebus-topic-name "xtdb-storage-bus-topic"}]
+                    :local-disk-cache "local-disk-cache"}]}
 ```
 
 Alongside the storage account container, we require an eventgrid topic and service bus topic to pass around file changes to the container, such that we can keep a local copy of files on Azure, saving on expensive/lengthy operations to list objects. Below follows the various parameters used by the module, and some notes around the provided <<resource-manager, Azure Resource Manager template>> which sets up all of the necessary extra infrastructure. Even if this isn't used, we will require a similar setup to track file changes on whichever storage account/container you are using, and relevant permissions to use all of the services. 
@@ -123,17 +120,13 @@ The Azure Resource Manager stack will create the following resources within the 
 
 == Azure EventHub Log
 
-We can swap out the implementation of the log with one based on Azure Eventhubs. To do so, we add the `xtdb.azure/event-hub-log` key within the integrant config for our node, alongside any config:
+We can swap out the implementation of the log with one based on Azure Eventhubs. To do so, we can add `:azure-event-hub` and it's configuration map, within the `:log` config for our node:
 ```clojure
-{
-  ...
-  {::azure/event-hub-log {:namespace "eventhub-namespace"
-                          :resource-group-name "resource-group-name"
-                          :event-hub-name "example-event-hub"
-                          :create-event-hub? true
-                          :retention-period-in-days 60}}
-  ...
-}
+{:log [:azure-event-hub {:namespace "eventhub-namespace"
+                         :resource-group-name "resource-group-name"
+                         :event-hub-name "example-event-hub"
+                         :create-event-hub? true
+                         :retention-period-in-days 7}]}
 ```
 
 === Parameters

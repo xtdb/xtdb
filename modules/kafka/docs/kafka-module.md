@@ -9,7 +9,7 @@ For an overview of the operation and requirements of the XTDB Kafka module, see 
 To configure it, add the following to your node options map:
 
 ```clojure
-{:xtdb.kafka/log <opts>}
+{:log [:kafka <opts>]}
 ```
 
 Connection options:
