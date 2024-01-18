@@ -28,10 +28,11 @@ sealed interface Expr {
             is JsonPrimitive -> when {
                 element.booleanOrNull != null -> Bool.serializer()
                 element.longOrNull != null -> Long.serializer()
-                element.doubleOrNull  != null -> Double.serializer()
+                element.doubleOrNull != null -> Double.serializer()
                 element.isString -> Obj.serializer()
                 else -> TODO("unknown primitive")
             }
+
             is JsonObject -> when {
                 "xt:lvar" in element -> LogicVar.serializer()
                 "xt:param" in element -> Param.serializer()
@@ -40,7 +41,7 @@ sealed interface Expr {
                 "xt:q" in element -> Subquery.serializer()
                 "xt:exists" in element -> Exists.serializer()
                 "xt:pull" in element -> Pull.serializer()
-                "xt:pull_many" in element -> PullMany.serializer()
+                "xt:pullMany" in element -> PullMany.serializer()
                 // TODO check against non string type Element
                 "@type" in element -> {
                     val type = (element["@type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
@@ -49,13 +50,14 @@ sealed interface Expr {
                         else -> Obj.serializer()
                     }
                 }
+
                 else -> MapExpr.serializer()
             }
+
             is JsonArray -> ListExpr.serializer()
             else -> Obj.serializer()
         }
     }
-
 
     @Serializable(Null.Serde::class)
     data object Null : Expr {
@@ -68,6 +70,7 @@ sealed interface Expr {
                 require(encoder is JsonEncoder)
                 encoder.encodeJsonElement(JsonNull)
             }
+
             override fun deserialize(decoder: Decoder): Null = NULL
         }
     }
@@ -155,7 +158,7 @@ sealed interface Expr {
 
     @Serializable
     data class PullMany(
-        @JvmField @SerialName("xt:pull_many") val query: Query,
+        @JvmField @SerialName("xt:pullMany") val query: Query,
         @JvmField val args: List<Binding>? = null,
     ) : Expr
 
