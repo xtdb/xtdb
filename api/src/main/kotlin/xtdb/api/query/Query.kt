@@ -40,15 +40,15 @@ sealed interface Query {
         object Serde : JsonContentPolymorphicSerializer<QueryTail>(QueryTail::class) {
             override fun selectDeserializer(element: JsonElement): DeserializationStrategy<QueryTail> = when (element) {
                 is JsonObject -> when {
-                    "where" in element -> Where.serializer()
+                    "aggregate" in element -> Aggregate.serializer()
                     "limit" in element -> Limit.serializer()
                     "offset" in element -> Offset.serializer()
                     "orderBy" in element -> OrderBy.serializer()
                     "return" in element -> Return.serializer()
                     "unnest" in element -> UnnestCol.serializer()
+                    "where" in element -> Where.serializer()
                     "with" in element -> WithCols.serializer()
                     "without" in element -> Without.serializer()
-                    "aggregate" in element -> Aggregate.serializer()
                     else -> throw jsonIAE("xtql/malformed-query-tail", element)
                 }
 
@@ -64,12 +64,12 @@ sealed interface Query {
                 when (element) {
                     is JsonObject -> when {
                         "from" in element -> From.serializer()
-                        "where" in element -> Where.serializer()
-                        "unnest" in element -> UnnestVar.serializer()
-                        "with" in element -> With.serializer()
                         "join" in element -> Join.serializer()
                         "leftJoin" in element -> LeftJoin.serializer()
                         "rel" in element -> Relation.serializer()
+                        "unnest" in element -> UnnestVar.serializer()
+                        "where" in element -> Where.serializer()
+                        "with" in element -> With.serializer()
                         else -> throw jsonIAE("xtql/malformed-unify-clause", element)
                     }
 
