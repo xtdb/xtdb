@@ -3,14 +3,10 @@
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.cli :as cli]
-            [xtdb.config :as config]
-            [clojure.data.json :as json]))
+            [xtdb.config :as config]))
 
 (def xtdb-cli-edn
   (io/resource "xtdb/cli-test.edn"))
-
-(def xtdb-cli-json
-  (io/resource "xtdb/cli-test.json"))
 
 (defn with-file-override [files f]
   (with-redefs [io/file (some-fn files io/file)]
@@ -40,37 +36,10 @@
           (t/is (= {::foo {:bar {}}}
                    (->system []))))))
 
-    (t/testing "uses CLI supplied JSON file"
-      (t/testing "uses CLI supplied EDN file"
-        (t/is (= {::foo {:baz {}}}
-                 (->system ["-f" (str (io/as-file xtdb-cli-json))])))))
-
-    (t/testing "uses xtdb.json if present"
-      (with-file-override {"xtdb.json" (io/as-file xtdb-cli-json)}
-        (fn []
-          (t/is (= {::foo {:baz {}}}
-                   (->system []))))))
-
-    (t/testing "looks for xtdb.edn on classpath, prefers to xtdb.json"
-      (with-resource-override {"xtdb.json" (io/as-file xtdb-cli-json)
-                               "xtdb.edn" (io/as-file xtdb-cli-edn)}
-        (fn []
-          (t/is (= {::foo {:bar {}}}
-                   (->system []))))))
-
-    (t/testing "does also look for xtdb.json on the classpath"
-      (with-resource-override {"xtdb.json" (io/as-file xtdb-cli-json)}
-        (fn []
-          (t/is (= {::foo {:baz {}}}
-                   (->system []))))))
-    
     (t/testing "uses config passed in via --edn"
       (t/is (= {::foo 1}
                (->system ["--edn" "{:xtdb.cli-test/foo 1}"]))))
     
-    (t/testing "uses config passed in via --json"
-      (t/is (= {::foo 1}
-               (->system ["--json" "{\"xtdb.cli-test/foo\": 1}"]))))
 
     (t/testing "if file config passed in, prefers to edn"
       (fn []
@@ -95,11 +64,7 @@
 
       (t/testing "EDN config - #env reader tag fetches from env"
         (t/is (= {::foo "hello world"}
-                 (->system ["--edn" "{:xtdb.cli-test/foo #env TEST_ENV}"]))))
-
-      (t/testing "JSON config - env object fetched from env"
-        (t/is (= {::foo "hello world"}
-                 (->system ["--json" "{\"xtdb.cli-test/foo\": {\"@env\": \"TEST_ENV\"}}"])))))))
+                 (->system ["--edn" "{:xtdb.cli-test/foo #env TEST_ENV}"])))))))
 
 (defmethod ig/init-key ::bar [_ opts] opts)
 
@@ -114,13 +79,7 @@
       (t/is (= {::foo {:baz 1}
                 ::bar {:foo {:baz 1}}}
                (->system ["--edn" "{:xtdb.cli-test/foo {:baz 1}
-                                    :xtdb.cli-test/bar {:foo #ig/ref :xtdb.cli-test/foo}}"]))))
-    
-    (t/testing "JSON config - ref object correctly includes ref"
-      (t/is (= {::foo {:baz 1}
-                ::bar {:foo {:baz 1}}}
-               (->system ["--json" "{\"xtdb.cli-test/foo\": {\"baz\": 1},
-                                     \"xtdb.cli-test/bar\": {\"foo\": {\"@ref\": \"xtdb.cli-test/foo\"}}}"]))))))
+                                    :xtdb.cli-test/bar {:foo #ig/ref :xtdb.cli-test/foo}}"]))))))
 
 (t/deftest test-config-yaml
   (letfn [(->system [cli-args]

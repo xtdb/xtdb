@@ -12,18 +12,14 @@
     f))
 
 (def cli-options
-  [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, JSON, YAML"
+  [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, YAML"
     :parse-fn io/file
     :validate [if-it-exists "Config file doesn't exist"
-               #(contains? #{"edn" "json" "yaml"} (util/file-extension %)) "Config file must be .edn, .json or .yaml"]]
+               #(contains? #{"edn" "yaml"} (util/file-extension %)) "Config file must be .edn or .yaml"]]
 
    ["-e" "--edn EDN" "Options as EDN."
     :default nil
-    :parse-fn config/edn-read-string]
-
-   ["-j" "--json JSON" "Options as JSON."
-    :default nil
-    :parse-fn config/json-read-string]
+    :parse-fn config/edn-read-string] 
 
    ["-h" "--help"]])
 
@@ -34,16 +30,14 @@
 
       (:help options) {::help summary}
 
-      :else (let [{:keys [file edn json]} options]
+      :else (let [{:keys [file edn]} options]
               {::node-opts (let [config-file (or file
-                                                 (some-> (io/file "xtdb.edn") if-it-exists)
-                                                 (some-> (io/file "xtdb.json") if-it-exists)
-                                                 (some-> (io/file "xtdb.yaml") if-it-exists) 
-                                                 (io/resource "xtdb.edn")
-                                                 (io/resource "xtdb.json")
+                                                 (some-> (io/file "xtdb.edn") if-it-exists) 
+                                                 (some-> (io/file "xtdb.yaml") if-it-exists)
+                                                 (io/resource "xtdb.edn") 
                                                  (io/resource "xtdb.yaml"))
                                  config-from-file (some-> config-file config/file->config-opts)]
-                             (or config-from-file json edn))}))))
+                             (or config-from-file edn))}))))
 
 (defn- shutdown-hook-promise []
   (let [main-thread (Thread/currentThread)
