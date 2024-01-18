@@ -31,8 +31,8 @@
   {::xtdb {:node-opts {:log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
                        :http-server {}
-                       :xtdb/pgwire {:port 5433}
-                       :xtdb.flight-sql/server {:port 52358}}}})
+                       :pgwire-server {:port 5433}
+                       :flight-sql-server {:port 52358}}}})
 
 (ir/set-prep! (fn [] standalone-config))
 
