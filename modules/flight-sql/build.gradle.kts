@@ -40,4 +40,6 @@ dependencies {
     testImplementation("org.apache.arrow", "flight-sql-jdbc-driver", "14.0.0")
 
     testImplementation("pro.juxt.clojars-mirrors.com.github.seancorfield", "next.jdbc", "1.2.674")
+
+    devImplementation(sourceSets.main.get().output)
 }
