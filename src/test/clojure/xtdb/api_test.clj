@@ -634,6 +634,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')")])
 (t/deftest test-query-with-errors
   (t/is (thrown-with-msg? xtdb.IllegalArgumentException
                           #"Illegal argument: 'xtql/malformed-table'"
+                          #_{:clj-kondo/ignore [:xtql/type-mismatch]}
                           (xt/q tu/*node* '(from docs [name]))))
 
   (t/is (thrown-with-msg? xtdb.RuntimeException

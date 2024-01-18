@@ -154,8 +154,6 @@
 (s/def ::url
   (s/and (s/conformer ->url) #(instance? URL %)))
 
-(s/def ::string-map (s/map-of string? string?))
-
 (defn component [node k]
   (some-> (:system node) (ig/find-derived k) first val))
 
@@ -206,11 +204,13 @@
 (defn ->mmap-path
   (^java.nio.MappedByteBuffer [^Path path]
    (->mmap-path path FileChannel$MapMode/READ_ONLY))
+
   (^java.nio.MappedByteBuffer [^Path path ^FileChannel$MapMode map-mode]
    (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
                                          #{:read}
                                          #{:read :write}))]
      (.map in map-mode 0 (.size in))))
+
   (^java.nio.MappedByteBuffer [^Path path ^FileChannel$MapMode map-mode ^long start ^long len]
    (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
                                          #{:read}

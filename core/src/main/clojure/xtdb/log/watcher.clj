@@ -16,11 +16,10 @@
            xtdb.indexer.IIndexer))
 
 (defmethod ig/prep-key :xtdb.log/watcher [_ opts]
-  (-> (merge {:allocator (ig/ref :xtdb/allocator)
-              :log (ig/ref :xtdb/log)
-              :indexer (ig/ref :xtdb/indexer)}
-             opts)
-      (util/maybe-update :poll-sleep-duration time/->duration)))
+  (into {:allocator (ig/ref :xtdb/allocator)
+         :log (ig/ref :xtdb/log)
+         :indexer (ig/ref :xtdb/indexer)}
+        opts))
 
 (defn- get-bb-long [^ByteBuffer buf ^long pos default]
   (if (< (+ pos 8) (.limit buf))

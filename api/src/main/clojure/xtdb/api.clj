@@ -12,9 +12,9 @@
             [xtdb.backtick :as backtick]
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.xtql.edn :as xtql.edn]
-            [xtdb.serde :as serde])
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io Writer)
            java.util.concurrent.ExecutionException
            java.util.function.Function
@@ -22,7 +22,7 @@
            java.util.Map
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
-           (xtdb.api.query Basis IKeyFn Query QueryOptions)
+           (xtdb.api.query Basis Query QueryOptions)
            (xtdb.api.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds TxOptions)
            xtdb.types.ClojureForm))
 
