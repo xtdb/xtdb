@@ -1,11 +1,14 @@
-@file:UseContextualSerialization(Any::class)
+@file:UseSerializers(AnySerde::class, InstantSerde::class, DurationSerde::class, ZoneIdSerde::class)
 
 package xtdb.api.query
 
 import clojure.lang.*
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.UseContextualSerialization
+import kotlinx.serialization.UseSerializers
+import xtdb.AnySerde
+import xtdb.DurationSerde
+import xtdb.InstantSerde
+import xtdb.ZoneIdSerde
 import xtdb.api.TransactionKey
 import java.time.Duration
 import java.time.ZoneId
@@ -21,14 +24,14 @@ private val KEY_FN_KEY: Keyword = Keyword.intern("key-fn")
 
 @Serializable
 data class QueryOptions(
-    @JvmField val args: Map<String, @Contextual Any>? = null,
+    @JvmField val args: Map<String, *>? = null,
     @JvmField val basis: Basis? = null,
     @JvmField val afterTx: TransactionKey? = null,
-    @JvmField @Contextual val txTimeout: Duration? = null,
-    @JvmField @Contextual val defaultTz: ZoneId? = null,
+    @JvmField val txTimeout: Duration? = null,
+    @JvmField val defaultTz: ZoneId? = null,
     @JvmField val defaultAllValidTime: Boolean = false,
     @JvmField val explain: Boolean = false,
-    @JvmField val keyFn: IKeyFn<Any>? = null
+    @JvmField val keyFn: IKeyFn<*>? = null
 ) : ILookup, Seqable {
 
     override fun valAt(key: Any?): Any? {

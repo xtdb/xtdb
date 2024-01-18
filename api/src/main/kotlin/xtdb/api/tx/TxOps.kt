@@ -1,12 +1,12 @@
+@file:UseSerializers(AnySerde::class, InstantSerde::class)
 package xtdb.api.tx
 
-import kotlinx.serialization.Contextual
-import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import kotlinx.serialization.*
 import kotlinx.serialization.json.JsonContentPolymorphicSerializer
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
+import xtdb.AnySerde
+import xtdb.InstantSerde
 import xtdb.api.query.Binding
 import xtdb.api.query.Query
 import xtdb.api.query.Query.UnifyClause
@@ -84,9 +84,9 @@ sealed interface TxOp {
 @Serializable
 data class Put(
     @JvmField @SerialName("put") val tableName: String,
-    @JvmField val doc: Map<String, @Contextual Any>,
-    @JvmField @Contextual val validFrom: Instant? = null,
-    @JvmField @Contextual val validTo: Instant? = null
+    @JvmField val doc: Map<String, Any>,
+    @JvmField val validFrom: Instant? = null,
+    @JvmField val validTo: Instant? = null
 ) : TxOp, HasValidTimeBounds<Put> {
 
     override fun startingFrom(validFrom: Instant?): Put = Put(tableName, doc, validFrom, validTo)
@@ -97,9 +97,9 @@ data class Put(
 @Serializable
 data class Delete(
     @JvmField @SerialName("delete") val tableName: String,
-    @JvmField @SerialName("id") val entityId: @Contextual Any,
-    @JvmField @Contextual val validFrom: Instant? = null,
-    @JvmField @Contextual val validTo: Instant? = null
+    @JvmField @SerialName("id") val entityId: Any,
+    @JvmField val validFrom: Instant? = null,
+    @JvmField val validTo: Instant? = null
 ) : TxOp, HasValidTimeBounds<Delete> {
 
     override fun startingFrom(validFrom: Instant?): Delete = Delete(tableName, entityId, validFrom, validTo)
@@ -110,16 +110,16 @@ data class Delete(
 @Serializable
 data class Erase(
     @JvmField @SerialName("erase") val tableName: String,
-    @JvmField @SerialName("id") val entityId: @Contextual Any
+    @JvmField @SerialName("id") val entityId: Any
 ) : TxOp
 
 @Serializable
 data class Sql(
     @JvmField @SerialName("sql") val sql: String,
-    @JvmField val argRows: List<List<@Contextual Any>>? = null,
-) : TxOp, HasArgs<List<Any>, Sql> {
+    @JvmField val argRows: List<List<*>>? = null,
+) : TxOp, HasArgs<List<*>, Sql> {
 
-    override fun withArgs(args: List<List<Any>>?): Sql = Sql(sql, argRows = args)
+    override fun withArgs(args: List<List<*>>?): Sql = Sql(sql, argRows = args)
 }
 
 data class SqlByteArgs(
@@ -130,14 +130,14 @@ data class SqlByteArgs(
 @Serializable
 data class XtqlAndArgs(
     @JvmField val op: Xtql,
-    @JvmField val args: List<Map<String, @Contextual Any>>? = null
-) : TxOp, HasArgs<Map<String, Any>, XtqlAndArgs> {
+    @JvmField val args: List<Map<String, *>>? = null
+) : TxOp, HasArgs<Map<String, *>, XtqlAndArgs> {
 
-    override fun withArgs(args: List<Map<String, Any>>?) = XtqlAndArgs(op, args)
+    override fun withArgs(args: List<Map<String, *>>?) = XtqlAndArgs(op, args)
 }
 
 @Serializable(Xtql.Serde::class)
-sealed interface Xtql: HasArgs<Map<String, Any>, XtqlAndArgs> {
+sealed interface Xtql: HasArgs<Map<String, *>, XtqlAndArgs> {
 
     object Serde : JsonContentPolymorphicSerializer<Xtql>(Xtql::class) {
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Xtql> = when {
@@ -151,7 +151,7 @@ sealed interface Xtql: HasArgs<Map<String, Any>, XtqlAndArgs> {
         }
     }
 
-    override fun withArgs(args: List<Map<String, Any>>?) = XtqlAndArgs(this, args)
+    override fun withArgs(args: List<Map<String, *>>?) = XtqlAndArgs(this, args)
 
     @Serializable
     data class Insert(
@@ -225,8 +225,8 @@ sealed interface Xtql: HasArgs<Map<String, Any>, XtqlAndArgs> {
 
 @Serializable
 data class Call(
-    @JvmField @SerialName("call") val fnId: @Contextual Any,
-    @JvmField val args: List<@Contextual Any>
+    @JvmField @SerialName("call") val fnId: Any,
+    @JvmField val args: List<Any>
 ) : TxOp
 
 data object Abort : TxOp

@@ -1,4 +1,4 @@
-@file:UseContextualSerialization(Any::class)
+@file:UseSerializers(AnySerde::class)
 
 package xtdb.api.query
 
@@ -9,6 +9,7 @@ import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
+import xtdb.AnySerde
 import xtdb.jsonIAE
 
 private fun JsonElement.requireObject(errorType: String) = this as? JsonObject ?: throw jsonIAE(errorType, this)

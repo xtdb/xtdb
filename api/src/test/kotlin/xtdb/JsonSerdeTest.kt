@@ -148,8 +148,6 @@ class JsonSerdeTest {
         )
     }
 
-
-
     private fun TxOp.assertRoundTripTxOp(expectedJson: String) {
         val actualJson = JSON_SERDE.encodeToString(this)
         assertEquals(expectedJson, actualJson)
@@ -277,7 +275,6 @@ class JsonSerdeTest {
         assertEquals(outJson, actualJson)
         assertEquals(this, JSON_SERDE.decodeFromString<T>(inJson))
     }
-
 
     @Test
     fun shouldDeserializeQuery() {

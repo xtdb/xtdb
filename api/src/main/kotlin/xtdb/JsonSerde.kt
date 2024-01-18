@@ -162,9 +162,6 @@ val JSON_SERDE = Json {
     serializersModule =
         SerializersModule {
             contextual(AnySerde)
-            contextual(InstantSerde)
-            contextual(DurationSerde)
-            contextual(ZoneIdSerde)
         }
 }
 

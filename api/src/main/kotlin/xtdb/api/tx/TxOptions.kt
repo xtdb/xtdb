@@ -1,14 +1,17 @@
+@file:UseSerializers(InstantSerde::class, ZoneIdSerde::class)
 package xtdb.api.tx
 
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import xtdb.InstantSerde
+import xtdb.ZoneIdSerde
 import java.time.Instant
 import java.time.ZoneId
 
 @Serializable
 data class TxOptions(
-    @Contextual val systemTime: Instant? = null,
-    @Contextual val defaultTz: ZoneId? = null,
+    val systemTime: Instant? = null,
+    val defaultTz: ZoneId? = null,
     val defaultAllValidTime: Boolean = false
 ) {
     companion object {
