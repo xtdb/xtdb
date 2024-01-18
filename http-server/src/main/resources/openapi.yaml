@@ -5,56 +5,160 @@ servers:
   - url: /
 components:
   schemas:
-    Timeout:
-      description: timeout in milliseconds
+    Any:
+      oneOf:
+        - type: string
+        - type: integer
+        - type: object
+    Duration:
+      description: duration in milliseconds
       type: integer
     DefaultTz:
       type: string
       example: "America/Los_Angeles"
-    SystemTime:
+    UUID:
+      type: string
+      format: uuid
+    Instant:
       type: string
       example: "2024-01-01T00:00Z"
       format: date-time
     TransactionKey:
       type: object
       properties:
-        tx-id:
+        txId:
           type: integer
-        system-time:
-          example: "2024-01-01T00:00Z"
-          type: string
+        systemTime:
+          $ref: '#/components/schemas/Instant'
     Status:
       type: object
       properties:
-        latest-completed-tx:
+        latestCompletedTx:
           $ref: '#/components/schemas/TransactionKey'
-        latest-submitted-tx:
+        latestSubmittedTx:
           $ref: '#/components/schemas/TransactionKey'
-    TransactionOp:
+    TabelName:
+      type: string
+      example: "docs"
+      description: table name
+    Document:
+      title: document
+      description: a document to be added to the db
       type: object
-    TransactionOps:
+      additionalProperties:
+        schema:
+          $ref: '#/components/schemas/Any'
+    Id:
+      title: entity id
+      description: A XTDB endity id
+      oneOf:
+        - type: string
+        - type: integer
+        - schema:
+            $ref: '#/components/schemas/UUID'
+    Args:
+      type: array
+      items:
+        schema:
+          $ref: '#/components/schemas/Any'
+    ArgRows:
+      title: rows to be passed to a prepared SQL statement
+      type: array
+      items:
+        type: array
+        items:
+          schema:
+            $ref: '#/components/schemas/Any'
+    Put:
+      title: put operation
+      type: object
+      properties:
+        put:
+          $ref: '#/components/schemas/TabelName'
+        doc:
+          $ref: '#/components/schemas/Document'
+        validFrom:
+          $ref: '#/components/schemas/Instant'
+        validTo:
+          $ref: '#/components/schemas/Instant'
+    Delete:
+      title: delete operation
+      type: object
+      properties:
+        delete:
+          schema:
+            $ref: '#/components/schemas/TabelName'
+        id:
+          schema:
+            $ref: '#/components/schemas/Id'
+        validFrom:
+          schema:
+            $ref: '#/components/schemas/Instant'
+        validTo:
+          schema:
+            $ref: '#/components/schemas/Instant'
+    Erase:
+      title: erase operation
+      type: object
+      properties:
+        erase:
+          schema:
+            $ref: '#/components/schemas/TabelName'
+        id:
+          schema:
+            $ref: '#/components/schemas/Id'
+    SQL:
+      title: sql operation
+      type: object
+      properties:
+        sql:
+          type: string
+          description: A SQL operation
+          example: "INSERT INTO docs(xt$id, name) VALUES (1, 'Turing')"
+        argRows:
+          schema:
+            $ref: '#/components/schemas/ArgRows'
+    Call:
+      title: call operation
+      description: a transaction function call
+      type: object
+      properties:
+        fnId:
+          schema:
+            $ref: '#/components/schemas/Id'
+        args:
+          schema:
+            $ref: '#/components/schemas/Args'
+    TxOp:
+      titel: transaction operation
+      oneOf:
+        - $ref: '#/components/schemas/Put'
+        - $ref: '#/components/schemas/Delete'
+        - $ref: '#/components/schemas/Erase'
+        - $ref: '#/components/schemas/SQL'
+        - $ref: '#/components/schemas/Call'
+    TxOptions:
+      title: transaction options
+      properties:
+        systemTime:
+          schema:
+            $ref: '#/components/schemas/Instant'
+        defaultTz:
+          schema:
+            $ref: '#/components/schemas/DefaultTz'
+        default-all-valid-time?:
+          type: boolean
+    TxRequest:
       type: object
       required:
-        - tx-ops
+        - txOps
       properties:
-        tx-ops:
+        txOps:
           type: array
           items:
-            $ref: '#/components/schemas/TransactionOp'
+            $ref: '#/components/schemas/TxOp'
         opts:
-          title: transaction opts
-          type: object
-          properties:
-            system-time:
-              schema:
-                $ref: '#/components/schemas/SystemTime'
-            default-tz:
-              schema:
-                $ref: '#/components/schemas/DefaultTz'
-            default-all-valid-time?:
-              type: boolean
-    Row:
-      type: object
+          $ref: '#/components/schemas/TxOptions'
     Error:
       type: object
       properties:
@@ -69,49 +173,347 @@ components:
           example: "Illegal argument: ':xtql/malformed-table'"
     Basis:
       type: object
+      nullable: true
       properties:
-        description: wall clock time for functions that require it (i.e. `(current-time)`)
-        current-time:
-          type: string
-          example: "2024-01-01T00:00Z"
-          format: date-time
-        tx:
-          description: specifies the latest transaction that’ll be visible to the query
-          schema:
-            $ref: '#/components/schemas/TransactionKey'
-        after-tx:
+        currentTime:
+          description: wall clock time for functions that require it (i.e. `(current-time)`)
+          $ref: '#/components/schemas/Instant'
+        afterTx:
           description: requires that the node has indexed at least the specified transaction
           schema:
             $ref: '#/components/schemas/TransactionKey'
-    Query:
+    TemporalFilter:
+      oneOf:
+        - type: string
+          enum: [allTime]
+        - type: object
+          properties:
+            at:
+              $ref: '#/components/schemas/Instant'
+        - type: object
+          properties:
+            from:
+              nullable: true
+              $ref: '#/components/schemas/Instant'
+            to:
+              nullable: true
+              $ref: '#/components/schemas/Instant'
+    LogicVar:
       type: object
-    QueryBody:
-      title: xtdb.server/query-body
+      properties:
+        '@type':
+          type: string
+          enum: [xt:lvar]
+        '@value':
+          type: string
+    Param:
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:param]
+        '@value':
+          type: string
+    ExprCall:
+      type: object
+      properties:
+        'xt:call':
+          type: string
+        args:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expr'
+    ExprGet:
+      type: object
+      properties:
+        'xt:get':
+          $ref: '#/components/schemas/Expr'
+        fields:
+          type: string
+    ExprQuery:
+      type: object
+      properties:
+        q:
+          $ref: '#/components/schemas/Query'
+        args:
+          $ref: '#/components/schemas/Bindings'
+    ExprExists:
+      type: object
+      properties:
+        'xt:exist':
+          $ref: '#/components/schemas/Query'
+        args:
+          $ref: '#/components/schemas/Bindings'
+    ExprPull:
+      type: object
+      properties:
+        'xt:pull':
+          $ref: '#/components/schemas/Query'
+        args:
+          $ref: '#/components/schemas/Bindings'
+    ExprPullMany:
+      type: object
+      properties:
+        'xt:pullMany':
+          $ref: '#/components/schemas/Query'
+        args:
+          $ref: '#/components/schemas/Bindings'
+    ExprSet:
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:set]
+        '@value':
+          type: array
+          items:
+            $ref: '#/components/schemas/Expr'
+    Expr:
+      oneOf:
+        - type: boolean
+        - type: string
+        - type: number
+        - type: object
+        - type: array
+          items:
+            $ref: '#/components/schemas/Expr'
+        - $ref: '#/components/schemas/ExprCall'
+        - $ref: '#/components/schemas/ExprGet'
+        - $ref: '#/components/schemas/ExprQuery'
+        - $ref: '#/components/schemas/ExprExists'
+        - $ref: '#/components/schemas/ExprPull'
+        - $ref: '#/components/schemas/ExprPullMany'
+        - $ref: '#/components/schemas/LogicVar'
+        - $ref: '#/components/schemas/Param'
+        - $ref: '#/components/schemas/ExprSet'
+    ExprList:
+      type: array
+      items:
+        $ref: '#/components/schemas/Expr'
+    Binding:
+      oneOf:
+        - type: string
+        - type: object
+          properties:
+            binding:
+              - type: string
+            expr:
+              $ref: '#/components/schemas/Expr'
+    Bindings:
+      type: array
+      items:
+        $ref: '#/components/schemas/Binding'
+    Where:
+      type: object
+      properties:
+        where:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expr'
+    With:
+      type: object
+      properties:
+        with:
+          $ref: '#/components/schemas/Bindings'
+    Without:
+      type: object
+      properties:
+        with:
+          type: array
+          items:
+            type: string
+    Limit:
+      type: object
+      properties:
+        limit:
+          type: integer
+    Offset:
+      type: object
+      properties:
+        limit:
+          type: integer
+    Return:
+      type: object
+      properties:
+        return:
+          $ref: '#/components/schemas/Bindings'
+    Call:
+      type: object
+      properties:
+        call:
+          type: string
+        args:
+          $ref: '#/components/schemas/ExprList'
+        bindings:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+    Join:
+      type: object
+      properties:
+        join:
+          $ref: '#/components/schemas/Query'
+        args:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+        bindings:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+    LeftJoin:
+      type: object
+      properties:
+        join:
+          $ref: '#/components/schemas/Query'
+        args:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+        bindings:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+    Aggregate:
+      type: object
+      properties:
+        aggregate:
+          $ref: '#/components/schemas/Bindings'
+    OrderDirection:
+      type: string
+      enum: [asc, desc]
+    OrderNulls:
+      type: string
+      enum: [first, last]
+    OrderSpec:
+      type: object
+      properties:
+        expr:
+          $ref: '#/components/schemas/Bindings'
+        direction:
+          $ref: '#/components/schemas/OrderDirection'
+        nulls:
+          $ref: '#/components/schemas/OrderNulls'
+    OrderBy:
+      type: object
+      properties:
+        orderBy:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSpec'
+    Unnest:
+      type: object
+      properties:
+        var:
+          $ref: '#/components/schemas/Binding'
+    UnionAll:
+      type: object
+      properties:
+        unionAll:
+          type: array
+          items:
+            $ref: '#/components/schemas/Query'
+    From:
+      type: object
+      properties:
+        from:
+          $ref: '#/components/schemas/TabelName'
+        bind:
+          $ref: '#/components/schemas/Bindings'
+        forValidTime:
+          $ref: '#/components/schemas/TemporalFilter'
+        forSystemTime:
+          $ref: '#/components/schemas/TemporalFilter'
+        projectAllColumns:
+          type: boolean
+    QueryTail:
+      oneOf:
+        - $ref: '#/components/schemas/Aggregate'
+        - $ref: '#/components/schemas/Limit'
+        - $ref: '#/components/schemas/Offset'
+        - $ref: '#/components/schemas/OrderBy'
+        - $ref: '#/components/schemas/Return'
+        - $ref: '#/components/schemas/Unnest'
+        - $ref: '#/components/schemas/Where'
+        - $ref: '#/components/schemas/With'
+        - $ref: '#/components/schemas/Without'
+    Pipeline:
+      type: array
+      items:
+        # TODO positional array types
+        oneOf:
+          - $ref: '#/components/schemas/Query'
+          - $ref: '#/components/schemas/QueryTail'
+    Relation:
+      type: object
+      properties:
+        rel:
+          oneOf:
+            - $ref: '#/components/schemas/Param'
+            - type: array
+              items:
+                $ref: '#/components/schemas/Document'
+        bind:
+          - $ref: '#/components/schemas/Bindings'
+    UnifyClause:
+      oneOf:
+        - $ref: '#/components/schemas/Call'
+        - $ref: '#/components/schemas/From'
+        - $ref: '#/components/schemas/Join'
+        - $ref: '#/components/schemas/LeftJoin'
+        - $ref: '#/components/schemas/Relation'
+        - $ref: '#/components/schemas/Unnest'
+        - $ref: '#/components/schemas/Where'
+        - $ref: '#/components/schemas/With'
+    Unify:
+      type: object
+      properties:
+        unify:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnifyClause'
+    Query:
+      description: A XTQL query
+      oneOf:
+        - $ref: '#/components/schemas/From'
+        - $ref: '#/components/schemas/Pipeline'
+        - $ref: '#/components/schemas/Relation'
+        - $ref: '#/components/schemas/Unify'
+        - $ref: '#/components/schemas/UnionAll'
+    QueryOpts:
+      description: |
+        Options for a XTQL or SQL query
+        
+        Please also see [XTQL options](https://docs.xtdb.com/reference/main/xtql/queries.html#_query_options)
+      type: object
+      properties:
+        args:
+          description: a map of arguments to pass to the query.
+          $ref: '#/components/schemas/Args'
+        basis:
+          $ref: '#/components/schemas/Basis'
+        afterTx:
+          description: requires that the node has indexed at least the specified transaction.
+          $ref: '#/components/schemas/TransactionKey'
+          nullable: true
+        defaultTz:
+          description: the default timezone to use in functions that require it.
+          $ref: '#/components/schemas/DefaultTz'
+        explain:
+          description: rather than returning results, setting this flag to true returns the query plan for the query
+          type: boolean
+        keyFn:
+          description: specifies how keys are returned in query results.
+          example: "SQL_STR"
+          type: string
+        txTimeout:
+          description: duration to wait for the requested transactions (atTx, afterTx) to be indexed before timing out (default unlimited).
+          $ref: '#/components/schemas/Duration'
+    QueryRequest:
+      title: query request
       required:
         - query
       type: object
       properties:
         query:
-          schema:
-            $ref: '#/components/schemas/Query'
-        basis:
-          schema:
-            $ref: '#/components/schemas/Basis'
-        basis-timeout:
-          description:  Timeout to wait for the basis
-          schema:
-            $ref: '#'#/components/schemas/Timeout'
-          nullable: true
-        args:
-          type: array
-          nullable: true
-          items:
-            type: object
-        default-all-valid-time?:
-          type: boolean
-        default-tz:
-          schema:
-            $ref: '#/components/schemas/DefaultTz'
+          $ref: '#/components/schemas/Query'
+        queryOpts:
+          $ref: '#/components/schemas/QueryOpts'
 paths:
   /status:
     get:
@@ -121,10 +523,10 @@ paths:
         '200':
           description: Ok
           content:
-            application/transit+json:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Status'
-            application/json:
+            application/transit+json:
               schema:
                 $ref: '#/components/schemas/Status'
   /tx:
@@ -138,9 +540,12 @@ paths:
         See [SQL Transactions](https://docs.xtdb.com/reference/main/sql/txs) for details about different SQL transaction operations.
       requestBody:
         content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TxRequest'
           application/transit+json:
             schema:
-              $ref: '#/components/schemas/TransactionOps'
+              $ref: '#/components/schemas/TxRequest'
         required: true
       responses:
         200:
@@ -182,35 +587,38 @@ paths:
         See [SQL queries](https://docs.xtdb.com/reference/main/sql/queries) for details about SQL queries.
       requestBody:
         content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
           application/transit+json:
             schema:
-              $ref: '#/components/schemas/QueryBody'
+              $ref: '#/components/schemas/QueryRequest'
         required: true
       responses:
         200:
           description: Ok
           content:
-            application/transit+json:
-              schema:
-                $ref: '#/components/schemas/Row'
             application/jsonl:
               schema:
-                $ref: '#/components/schemas/Row'
+                $ref: '#/components/schemas/Document'
+            application/transit+json:
+              schema:
+                $ref: '#/components/schemas/Document'
         400:
           description: A validation error, parsing error or runtime error occurred.
           content:
-            application/transit+json:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-            application/json:
+            application/transit+json:
               schema:
                 $ref: '#/components/schemas/Error'
         500:
           description: Server error. An unknown error occurred server side.
           content:
-            application/transit+json:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-            application/json:
+            application/transit+json:
               schema:
                 $ref: '#/components/schemas/Error'
