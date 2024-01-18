@@ -1,12 +1,18 @@
 @file:JvmName("Storage")
+@file:UseSerializers(PathSerde::class)
 
 package xtdb.api.storage
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.IBufferPool
+import xtdb.PathSerde
 import xtdb.util.requiringResolve
 import java.nio.file.Path
 
+@Serializable
 sealed interface StorageFactory {
     companion object {
         val DEFAULT = InMemoryStorageFactory
@@ -15,12 +21,16 @@ sealed interface StorageFactory {
     fun openStorage(allocator: BufferAllocator): IBufferPool
 }
 
+@Serializable
+@SerialName("!InMemory")
 data object InMemoryStorageFactory : StorageFactory {
     private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-in-memory-storage")
 
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator) as IBufferPool
 }
 
+@Serializable
+@SerialName("!Local")
 data class LocalStorageFactory(
     val path: Path,
     var maxCacheEntries: Long = 1024,
@@ -45,6 +55,9 @@ interface ObjectStoreFactory {
     fun openObjectStore(): ObjectStore
 }
 
+
+@Serializable
+@SerialName("!Remote")
 data class RemoteStorageFactory(
     val objectStore: ObjectStoreFactory,
     val localDiskCache: Path,

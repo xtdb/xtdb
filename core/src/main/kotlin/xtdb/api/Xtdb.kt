@@ -1,6 +1,12 @@
+@file:UseSerializers(DurationSerde::class, ZoneIdSerde::class)
 package xtdb.api
 
 import clojure.lang.IFn
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.modules.SerializersModule
+import xtdb.DurationSerde
+import xtdb.ZoneIdSerde
 import xtdb.api.log.LogFactory
 import xtdb.api.storage.StorageFactory
 import xtdb.util.requiringResolve
@@ -11,6 +17,7 @@ import java.time.ZoneOffset
 object Xtdb {
     private val OPEN_NODE: IFn = requiringResolve("xtdb.node.impl", "open-node")
 
+    @Serializable
     data class IndexerConfig(
         var logLimit: Long = 64L,
         var pageLimit: Long = 1024L,
@@ -23,6 +30,7 @@ object Xtdb {
         fun flushDuration(flushDuration: Duration) = apply { this.flushDuration = flushDuration }
     }
 
+    @Serializable
     data class Config(
         override var txLog: LogFactory = LogFactory.DEFAULT,
         var storage: StorageFactory = StorageFactory.DEFAULT,

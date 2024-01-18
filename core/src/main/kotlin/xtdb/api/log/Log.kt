@@ -1,6 +1,13 @@
+@file:UseSerializers(DurationSerde::class, PathSerde::class)
 package xtdb.api.log
 
 import clojure.lang.IFn
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import kotlinx.serialization.UseSerializers
+import xtdb.DurationSerde
+import xtdb.PathSerde
 import xtdb.api.TransactionKey
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
@@ -33,7 +40,9 @@ interface LogFactory {
     }
 }
 
-class InMemoryLogFactory(var instantSource: InstantSource = InstantSource.system()) : LogFactory {
+@SerialName("!InMemory")
+@Serializable
+data class InMemoryLogFactory(@Transient var instantSource: InstantSource = InstantSource.system()) : LogFactory {
     companion object {
         private val OPEN_LOG: IFn = requiringResolve("xtdb.log.memory-log", "open-log")
     }
@@ -43,9 +52,11 @@ class InMemoryLogFactory(var instantSource: InstantSource = InstantSource.system
     override fun openLog() = OPEN_LOG(this) as Log
 }
 
-class LocalLogFactory @JvmOverloads constructor(
+@SerialName("!Local")
+@Serializable
+data class LocalLogFactory @JvmOverloads constructor(
     val path: Path,
-    var instantSource: InstantSource = InstantSource.system(),
+    @Transient var instantSource: InstantSource = InstantSource.system(),
     var bufferSize: Long = 4096,
     var pollSleepDuration: Duration = Duration.ofMillis(100),
 ) : LogFactory {

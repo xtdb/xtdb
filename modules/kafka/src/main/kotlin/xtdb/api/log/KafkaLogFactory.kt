@@ -1,6 +1,13 @@
+@file:UseSerializers(DurationSerde::class)
 package xtdb.api.log
 
 import clojure.lang.IFn
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import xtdb.DurationSerde
+import xtdb.api.ModuleRegistration
+import xtdb.api.ModuleRegistry
 import xtdb.api.TransactionKey
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
@@ -9,6 +16,8 @@ import java.time.Duration
 import java.time.InstantSource
 import java.util.concurrent.CompletableFuture
 
+@Serializable
+@SerialName("!Kafka")
 data class KafkaLogFactory @JvmOverloads constructor(
     val bootstrapServers: String,
     val topicName: String,
@@ -32,4 +41,10 @@ data class KafkaLogFactory @JvmOverloads constructor(
     fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
 
     override fun openLog() = OPEN_LOG(this) as Log
+
+    class Registration: ModuleRegistration {
+        override fun register(registry: ModuleRegistry) {
+            registry.registerLogFactory(KafkaLogFactory::class)
+        }
+    }
 }

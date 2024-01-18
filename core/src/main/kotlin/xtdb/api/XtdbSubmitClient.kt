@@ -1,6 +1,11 @@
+@file:UseSerializers(ZoneIdSerde::class)
+
 package xtdb.api
 
 import clojure.lang.IFn
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import xtdb.ZoneIdSerde
 import xtdb.api.log.LogFactory
 import xtdb.util.requiringResolve
 import java.time.ZoneId
@@ -10,6 +15,7 @@ object XtdbSubmitClient {
 
     private val OPEN_CLIENT: IFn = requiringResolve("xtdb.node.impl", "open-submit-client")
 
+    @Serializable
     data class Config(
         override var txLog: LogFactory = LogFactory.DEFAULT,
         override var defaultTz: ZoneId = ZoneOffset.UTC,
