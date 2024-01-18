@@ -24,7 +24,7 @@
                              blocks-expr]
                             {:preserve-blocks? true
                              :with-col-types? true
-                             :key-fn :snake-case-kw}))))
+                             :key-fn :snake-case-keyword}))))
 
     (t/testing "prefix only"
       (t/is (= {:col-types '{r_a :i64, r_b :i64}
@@ -34,4 +34,4 @@
                              blocks-expr]
                             {:preserve-blocks? true
                              :with-col-types? true
-                             :key-fn :snake-case-kw}))))))
+                             :key-fn :snake-case-keyword}))))))

@@ -30,15 +30,15 @@ class IXtdbJavaTest {
     @Test
     void javaApiTest() {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
-            put("docs", Map.of("xt/id", 1, "foo", "bar")));
+            put("docs", Map.of("xt$id", 1, "foo", "bar")));
 
         try (var res = node.openQuery(
-            from("docs").bindCols("xt/id", "xt/system_from").build())) {
+            from("docs").bindCols("xt$id", "xt$system_from").build())) {
 
             assertEquals(
                 List.of(Map.of(
-                    "xt/id", 1,
-                    "xt/system_from", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
+                    "xt$id", 1,
+                    "xt$systemFrom", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
                 res.toList());
         }
     }

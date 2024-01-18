@@ -3,13 +3,26 @@ package xtdb.api.query
 import clojure.lang.Keyword
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.descriptors.PrimitiveKind
-import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
-import xtdb.util.normalForm
-import xtdb.util.snakeCase
+
+private fun String.denormaliseToKeyword(transform: String.() -> String = { this }): Keyword {
+    val split = split('$')
+
+    return if (split.size > 1) {
+        Keyword.intern(
+            split.dropLast(1).joinToString(".", transform = transform),
+            split.last().transform()
+        )
+    } else {
+        Keyword.intern(transform())
+    }
+}
+
+private fun String.kebabCase() = replace('_', '-')
+
+private fun String.camelCase() = replace(Regex("_.")) { match -> match.value.drop(1).uppercase() }
 
 @Serializable(IKeyFn.Serde::class)
 fun interface IKeyFn<out V> {
@@ -28,43 +41,28 @@ fun interface IKeyFn<out V> {
 
     @Serializable
     enum class KeyFn : IKeyFn<Any> {
-        CLOJURE_STR {
-            private fun clojureFormString(s: String) =
-                s.replace('_', '-')
-                    .replace('$', '.')
-
-            override fun denormalize(key: String): String {
-                val i = key.lastIndexOf('$')
-                return if (i < 0) {
-                    clojureFormString(key)
-                } else {
-                    String.format(
-                        "%s/%s",
-                        clojureFormString(key.substring(0, i)),
-                        clojureFormString(key.substring(i + 1))
-                    )
-                }
-            }
+        KEBAB_CASE_STRING {
+            override fun denormalize(key: String) = key.kebabCase()
         },
 
-        CLOJURE_KW {
-            override fun denormalize(key: String): Keyword = Keyword.intern(CLOJURE_STR.denormalize(key) as String)
+        KEBAB_CASE_KEYWORD {
+            override fun denormalize(key: String) = key.denormaliseToKeyword(String::kebabCase)
         },
 
-        SQL_STR {
-            override fun denormalize(key: String) = normalForm(key)
+        SNAKE_CASE_STRING {
+            override fun denormalize(key: String) = key
         },
 
-        SQL_KW {
-            override fun denormalize(key: String): Keyword = Keyword.intern(SQL_STR.denormalize(key) as String)
+        SNAKE_CASE_KEYWORD {
+           override fun denormalize(key: String) = key.denormaliseToKeyword()
         },
 
-        SNAKE_CASE_STR {
-            override fun denormalize(key: String) = snakeCase(key)
+        CAMEL_CASE_STRING {
+            override fun denormalize(key: String) = key.camelCase()
         },
 
-        SNAKE_CASE_KW {
-            override fun denormalize(key: String): Keyword = Keyword.intern(SNAKE_CASE_STR.denormalize(key) as String)
+        CAMEL_CASE_KEYWORD {
+            override fun denormalize(key: String) = key.denormaliseToKeyword(String::camelCase)
         }
     }
 

@@ -33,8 +33,9 @@
 
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
-    (doseq [^FieldVector field-vec field-vecs]
-      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
+    (doseq [^FieldVector field-vec field-vecs
+            :let [field-name (.getName (.getField field-vec))]]
+      (vw/write-vec! field-vec (map (fn [row] (get row field-name)) rows)))
 
     (.setRowCount root row-count)
     root))
@@ -130,7 +131,7 @@
                                      ;; HACK getting results in a Clojure data structure, putting them back in to a VSR
                                      ;; because we can get DUVs in the in-rel but the output just expects mono vecs.
 
-                                     (populate-root vsr (vr/rel->rows in-rel #xt/key-fn :sql-kw))
+                                     (populate-root vsr (vr/rel->rows in-rel #xt/key-fn :snake-case-string))
                                      (.putNext listener))))
 
               (.completed listener)))]

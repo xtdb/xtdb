@@ -23,20 +23,20 @@
                           {:preserve-blocks? true
                            :with-col-types? true})))
 
-    (t/is (= {:col-types '{a :i64, b [:list :i64], b* :i64, $ordinal :i32}
-              :res [[{:a 1, :b [1 2], :b* 1, :$ordinal 1}
-                     {:a 1, :b [1 2], :b* 2, :$ordinal 2}
-                     {:a 2, :b [3 4 5], :b* 3, :$ordinal 1}
-                     {:a 2, :b [3 4 5], :b* 4, :$ordinal 2}
-                     {:a 2, :b [3 4 5], :b* 5, :$ordinal 3}]
-                    [{:a 4, :b [6 7 8], :b* 6, :$ordinal 1}
-                     {:a 4, :b [6 7 8], :b* 7, :$ordinal 2}
-                     {:a 4, :b [6 7 8], :b* 8, :$ordinal 3}]]}
-             (tu/query-ra [:unnest '{b* b} '{:ordinality-column $ordinal}
+    (t/is (= {:col-types '{a :i64, b [:list :i64], b* :i64, ordinal :i32}
+              :res [[{:a 1, :b [1 2], :b* 1, :ordinal 1}
+                     {:a 1, :b [1 2], :b* 2, :ordinal 2}
+                     {:a 2, :b [3 4 5], :b* 3, :ordinal 1}
+                     {:a 2, :b [3 4 5], :b* 4, :ordinal 2}
+                     {:a 2, :b [3 4 5], :b* 5, :ordinal 3}]
+                    [{:a 4, :b [6 7 8], :b* 6, :ordinal 1}
+                     {:a 4, :b [6 7 8], :b* 7, :ordinal 2}
+                     {:a 4, :b [6 7 8], :b* 8, :ordinal 3}]]}
+             (tu/query-ra [:unnest '{b* b} '{:ordinality-column ordinal}
                            [::tu/blocks '{a :i64, b [:list :i64]} in-vals]]
                           {:preserve-blocks? true
                            :with-col-types? true
-                           :key-fn :sql-kw})))))
+                           :key-fn :snake-case-keyword})))))
 
 (t/deftest test-unnest-operator
   (t/is (= [{:a 1, :b [1 2], :b* 1}
@@ -87,14 +87,14 @@
                                         {:a 3, :b #{2 "bar"}}]}})))
         "handles mixed lists + sets + other things")
 
-  (t/is (= [{:a 1, :b* 1, :$ordinal 1}
-            {:a 1, :b* 2, :$ordinal 2}
-            {:a 2, :b* 3, :$ordinal 1}
-            {:a 2, :b* 4, :$ordinal 2}
-            {:a 2, :b* 5, :$ordinal 3}]
-           (tu/query-ra '[:project [a b* $ordinal]
-                          [:unnest {b* b} {:ordinality-column $ordinal}
+  (t/is (= [{:a 1, :b* 1, :ordinal 1}
+            {:a 1, :b* 2, :ordinal 2}
+            {:a 2, :b* 3, :ordinal 1}
+            {:a 2, :b* 4, :ordinal 2}
+            {:a 2, :b* 5, :ordinal 3}]
+           (tu/query-ra '[:project [a b* ordinal]
+                          [:unnest {b* b} {:ordinality-column ordinal}
                            [:table ?x]]]
                         {:params '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}
-                         :key-fn :sql-kw}))
+                         :key-fn :snake-case-keyword}))
         "with ordinality"))

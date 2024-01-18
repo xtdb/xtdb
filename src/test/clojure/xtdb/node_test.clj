@@ -319,9 +319,8 @@ WHERE foo.xt$id = 1")])]
 (t/deftest test-mutable-data-buffer-bug
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO t1(xt$id) VALUES(1)")])
 
-  (t/is (= [{:$column_1$ [{:foo 5} {:foo 5}]}]
-           (xt/q tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1"
-                 {:key-fn :sql-kw}))))
+  (t/is (= [{:col [{:foo 5} {:foo 5}]}]
+           (xt/q tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] AS col FROM t1"))))
 
 (t/deftest test-differing-length-lists-441
   (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO t1(xt$id, data) VALUES (1, [2, 3])")

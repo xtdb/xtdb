@@ -46,15 +46,15 @@
         (while (.next stream)
           ;; if this were a real client chances are they wouldn't just
           ;; eagerly turn the roots into Clojure maps...
-          (swap! !res into (vr/rel->rows (vr/<-root root) #xt/key-fn :sql-kw)))
+          (swap! !res into (vr/rel->rows (vr/<-root root) #xt/key-fn :snake-case-keyword)))
 
         @!res))))
 
 (t/deftest test-client
   (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (xt$id, name) VALUES ('jms', 'James'), ('hak', 'Håkan')" empty-call-opts)))
 
-  (t/is (= #{{:xt$id "jms", :name "James"}
-             {:xt$id "hak", :name "Håkan"}}
+  (t/is (= #{{:xt/id "jms", :name "James"}
+             {:xt/id "hak", :name "Håkan"}}
            (set (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
                     (flight-info->rows))))))
 
@@ -99,8 +99,8 @@
                  (flight-info->rows))))
     (.commit *client* fsql-tx empty-call-opts)
 
-    (t/is (= #{{:xt$id "jms", :name "James"}
-               {:xt$id "hak", :name "Håkan"}}
+    (t/is (= #{{:xt/id "jms", :name "James"}
+               {:xt/id "hak", :name "Håkan"}}
              (set (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
                       (flight-info->rows)))))))
 

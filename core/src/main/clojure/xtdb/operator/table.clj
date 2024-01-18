@@ -70,7 +70,7 @@
         field-sets (HashMap.)
         row-count (count rows)
         out-rows (ArrayList. row-count)
-        key-fn #xt/key-fn :clojure-kw
+        key-fn #xt/key-fn :kebab-case-keyword
         rows (map #(update-keys % keyword) rows)
         columns (->> (mapcat keys rows)
                      (into #{}))]

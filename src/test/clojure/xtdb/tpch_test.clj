@@ -71,7 +71,7 @@
       (tu/with-allocator
         (fn []
           (t/is (is-equal? res (tu/query-ra q {:node *node*, :params params, :table-args table-args
-                                               :key-fn :snake-case-kw}))
+                                               :key-fn :snake-case-keyword}))
                 (format "Q%02d" (inc n))))))))
 
 (t/deftest test-001-ra
@@ -111,7 +111,7 @@
     (when (contains? *xtql-qs* q)
       (let [query @(nth tpch-xtql/queries n)
             {::tpch-xtql/keys [args]} (meta query)]
-        (t/is (is-equal? expected-res (xt/q *node* query {:args args, :key-fn :snake-case-kw}))
+        (t/is (is-equal? expected-res (xt/q *node* query {:args args, :key-fn :snake-case-keyword}))
               (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-xtql
@@ -152,7 +152,7 @@
               (format "Q%02d" n))))))
 
 (defn test-sql-query
-  ([n res] (test-sql-query {:decorrelate? true, :key-fn :snake-case-kw} n res))
+  ([n res] (test-sql-query {:decorrelate? true, :key-fn :snake-case-keyword} n res))
   ([opts n res]
    (let [q (inc n)]
      (when (contains? *qs* q)

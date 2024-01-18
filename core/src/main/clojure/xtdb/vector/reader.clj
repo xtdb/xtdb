@@ -90,7 +90,7 @@
                 (.rowCount rel))))
 
 (defn rel->rows
-  (^java.util.List [^RelationReader rel] (rel->rows rel #xt/key-fn :clojure-kw))
+  (^java.util.List [^RelationReader rel] (rel->rows rel #xt/key-fn :kebab-case-keyword))
   (^java.util.List [^RelationReader rel ^IKeyFn key-fn]
    (let [col-ks (for [^IVectorReader col rel]
                   [col (.denormalize key-fn (.getName col))])]

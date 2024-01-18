@@ -8,12 +8,12 @@ INSERT INTO t1(xt$id) VALUES(1)
 query T rowsort
 SELECT OBJECT('id': 1) FROM t1
 ----
-{:id 1}
+{"id" 1}
 
 query T rowsort
 SELECT OBJECT ('foo': 2, 'bar': OBJECT('baz': 'biff')) FROM t1
 ----
-{:foo 2, :bar {:baz "biff"}}
+{"bar" {"baz" "biff"}, "foo" 2}
 
 query T rowsort
 SELECT OBJECT ('foo': OBJECT('bibble': true),
@@ -21,7 +21,7 @@ SELECT OBJECT ('foo': OBJECT('bibble': true),
 							 'flib': OBJECT('true': false)))
 FROM t1
 ----
-{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
+{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
 
 query T rowsort
 SELECT ARRAY ['foo', 'bar'] FROM t1
@@ -41,12 +41,12 @@ SELECT ARRAY [true, FALSE, true, TRUE, false] FROM t1
 query T rowsort
 SELECT OBJECT ('foo': 5, 'bar': OBJECT('baz': ARRAY [-45, 1, 24])) FROM t1
 ----
-{:foo 5, :bar {:baz [-45 1 24]}}
+{"bar" {"baz" [-45 1 24]}, "foo" 5}
 
 query T rowsort
 SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1
 ----
-[{:foo 5} {:foo 5}]
+[{"foo" 5} {"foo" 5}]
 
 statement ok
 INSERT INTO t1(xt$id) VALUES(2)
@@ -59,8 +59,8 @@ SELECT OBJECT ('foo': OBJECT('bibble': true),
 							 'flib': OBJECT('true': false)))
 FROM t1
 ----
-{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
-{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
+{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
+{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
 
 # testing field refs
 
@@ -96,15 +96,15 @@ VALUES(2, {'foo': {'bibble': true},
 query T rowsort
 SELECT t2.data FROM t2
 ----
-{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
-{:foo {:bibble true}, :bar {:baz 1001}}
+{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
+{"bar" {"baz" 1001}, "foo" {"bibble" true}}
 
 # SEE 440
 #query T rowsort
 #SELECT t2.data.foo FROM t2
 #----
-#{:bibble true}
-#{:bibble true}
+#{"bibble" true}
+#{"bibble" true}
 
 #query T nosort
 #SELECT t2.data.foo.bibble FROM t2

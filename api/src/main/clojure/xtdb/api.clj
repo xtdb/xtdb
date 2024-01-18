@@ -179,7 +179,7 @@
 
 (extend-protocol xtp/PNode
   IXtdb
-  (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :clojure-kw}}]
+  (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
     (let [query-opts (-> (QueryOptions/queryOpts)
                          (cond-> (map? args) (.args ^Map args)
                                  (vector? args) (.args ^List args)

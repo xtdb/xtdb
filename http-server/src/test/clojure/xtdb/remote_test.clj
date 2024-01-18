@@ -267,14 +267,14 @@
                  decode-transit*))
           "testing query")
 
-    (t/is (= [{:xt$id 2}]
+    (t/is (= [{:xt/id 2}]
              (-> (http/request {:accept :transit+json
                                 :as :string
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:query {"from" "docs", "bind" ["xt/id"]}
                                               :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
-                                                          :keyFn "SQL_KW"}}
+                                                          :keyFn "SNAKE_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body
                  decode-transit*))
@@ -429,7 +429,7 @@
                               :request-method :post
                               :content-type :json
                               :form-params {:query {"rel" [{"foo-bar" 1} {"foo-bar" 2}] "bind" ["foo-bar"]}
-                                            :queryOpts {:keyFn "SQL_STR"}}
+                                            :queryOpts {:keyFn "SNAKE_CASE_STRING"}}
                               :url (http-url "query")})
                :body
                decode-json*))))

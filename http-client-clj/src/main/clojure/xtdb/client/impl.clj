@@ -91,10 +91,10 @@
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   IXtdb
   (^CompletableFuture openQueryAsync [client ^String query ^QueryOptions query-opts]
-   (open-query& client query (into {:key-fn #xt/key-fn :sql-str} query-opts)))
+   (open-query& client query (into {:key-fn #xt/key-fn :snake-case-string} query-opts)))
 
   (^CompletableFuture openQueryAsync [client ^XtqlQuery query ^QueryOptions query-opts]
-   (open-query& client query (into {:key-fn #xt/key-fn :snake-case-str} query-opts)))
+   (open-query& client query (into {:key-fn #xt/key-fn :camel-case-string} query-opts)))
 
   (submitTxAsync [client opts tx-ops]
     (-> ^CompletableFuture
