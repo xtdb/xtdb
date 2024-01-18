@@ -216,7 +216,7 @@
                      (.getPath factory)))
 
 (defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
-  (.storage config (cond-> (Storage/local path)
+  (.storage config (cond-> (Storage/local (util/->path path))
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 
@@ -405,7 +405,7 @@
 (defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store local-disk-cache max-cache-bytes max-cache-entries]}]
   (.storage config (cond-> (Storage/remote (let [[tag opts] object-store]
                                              (->object-store-factory tag opts))
-                                           local-disk-cache)
+                                           (util/->path local-disk-cache))
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 
