@@ -6,12 +6,12 @@
 (ns xtdb.xtql-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.xtql :as xtql]
-            [xtdb.xtql.edn :as edn]
             [xtdb.james-bond :as bond]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]))
+            [xtdb.time :as time]
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.edn :as edn]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -1990,14 +1990,14 @@
              (q '{:find [x]
                   :where [($ :x {:xt/* x} {:for-valid-time [:at #time/instant "2023-01-17T00:00:00Z"]})]})))))
 
-
 (t/deftest test-normalisation
-  (xt/submit-tx tu/*node* [(xt/put :xt-docs {:xt/id "doc" :Foo/Bar 1 :Bar.Foo/hELLo-wORLd 2})])
+  (xt/submit-tx tu/*node* [(xt/put :xt-docs {:xt/id "doc" :Foo/Bar 1 :Bar.Foo/helloWorld 2})])
+
   (t/is (= [{:foo/bar 1, :bar.foo/hello-world 2}]
-           (xt/q tu/*node* '(from :xt-docs [Foo/Bar Bar.Foo/Hello-World]))))
+           (xt/q tu/*node* '(from :xt-docs [Foo/Bar Bar.Foo/hello-world]))))
+
   (t/is (= [{:bar 1, :foo 2}]
            (xt/q tu/*node* '(from :xt-docs [{:foo/bar bar :bar.foo/hello-world foo}])))))
-
 
 (t/deftest test-table-normalisation
   (let [doc {:xt/id "doc" :foo "bar"}]

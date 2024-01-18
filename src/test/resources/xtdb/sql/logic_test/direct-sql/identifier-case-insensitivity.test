@@ -4,10 +4,10 @@ statement ok
 INSERT INTO T1(xt$id, col1, col2) VALUES(1,'fish',1000)
 
 statement ok
-INSERT INTO t1(xt$id, coL1, COL2) VALUES(2,'dog',2000)
+INSERT INTO t1(xt$id, COL1, COL2) VALUES(2,'dog',2000)
 
 query ITI rowsort
-SELECT t1.XT$ID, T1.col1, t1.cOl2 FROM T1
+SELECT t1.XT$ID, T1.col1, t1.COL2 FROM T1
 ----
 1
 fish
@@ -17,7 +17,7 @@ dog
 2000
 
 query ITI rowsort
-SELECT "t1".xt$id, T1."col1", t1.cOl2 FROM "t1"
+SELECT "t1".xt$id, T1."col1", t1.COL2 FROM "t1"
 ----
 1
 fish
@@ -27,7 +27,7 @@ dog
 2000
 
 query ITI rowsort
-SELECT "T1".xt$id, "T1".col1, "T1".cOl2 FROM "T1"
+SELECT "T1".xt$id, "T1".col1, "T1".COL2 FROM "T1"
 ----
 1
 fish
@@ -37,10 +37,10 @@ dog
 2000
 
 statement ok
-INSERT INTO "T1"(xt$id, "COl1", "col2") VALUES(3,'cat',3000)
+INSERT INTO "T1"(xt$id, "COL1", "col2") VALUES(3,'cat',3000)
 
 query ITI rowsort
-SELECT "T1".xt$id, "T1"."COl1", "T1".cOl2 FROM "T1"
+SELECT "T1".xt$id, "T1"."Col1", "T1".COL2 FROM "T1"
 ----
 1
 fish
@@ -53,7 +53,7 @@ cat
 3000
 
 statement ok
-UPDATE T1 SET cOl1 = 30 WHERE t1.col2 IN (313, 2000)
+UPDATE T1 SET Col1 = 30 WHERE t1.COL2 IN (313, 2000)
 
 query ITI rowsort
 SELECT t1.xt$id, T1.col1, "t1".col2 FROM t1
@@ -86,21 +86,21 @@ fish
 cat
 
 query I
-SELECT teeone.col2 FROM t1 AS TEEoNE WHERE TEEone.col1 = ( SELECT t1.col1 FROM T1 WHERE t1.col1 = teeONe.cOL1 ) ORDER BY teeone."CoL2"
+SELECT teeone.col2 FROM t1 AS TEEONE WHERE TEEONE.col1 = ( SELECT t1.col1 FROM T1 WHERE t1.col1 = TEEONE.COL1 ) ORDER BY Teeone."COL2"
 ----
 1000
 2000
 3000
 
 query I
-SELECT "TeeoNE".col2 FROM "T1" AS "TeeoNE" WHERE "TeeoNE"."COl1" IN ( SELECT "T1"."COl1" FROM "T1" WHERE "T1"."COl1" = "TeeoNE"."COl1" ) ORDER BY "TeeoNE".col2
+SELECT "TEEONE".col2 FROM "T1" AS "teeone" WHERE "TEEONE"."COl1" IN ( SELECT "T1"."COl1" FROM "T1" WHERE "T1"."COL1" = "TEEONE"."COl1" ) ORDER BY "TEeone".col2
 ----
 1000
 2000
 3000
 
 statement ok
-DELETE FROM T1 WHERE t1.cOl1 = 'fish'
+DELETE FROM T1 WHERE t1.Col1 = 'fish'
 
 query ITI rowsort
 SELECT t1.XT$ID FROM T1
@@ -109,7 +109,7 @@ SELECT t1.XT$ID FROM T1
 3
 
 statement ok
-DELETE FROM "T1" WHERE "T1"."cOL2" IN (2000, 3000)
+DELETE FROM "T1" WHERE "T1"."COL2" IN (2000, 3000)
 
 query I rowsort
 SELECT "T1".xt$id FROM "T1"

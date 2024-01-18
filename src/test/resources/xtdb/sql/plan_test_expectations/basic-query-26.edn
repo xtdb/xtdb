@@ -1,5 +1,5 @@
 [:rename
- {x1 movietitle}
+ {x1 movie_title}
  [:project
   [x1]
   [:order-by
@@ -10,5 +10,5 @@
     [:map
      [{x4 (= x2 "foo")}]
      [:rename
-      {movietitle x1, year x2}
-      [:scan {:table starsin} [movietitle year]]]]]]]]
+      {movie_title x1, year x2}
+      [:scan {:table stars_in} [movie_title year]]]]]]]]

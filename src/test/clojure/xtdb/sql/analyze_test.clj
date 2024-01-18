@@ -394,11 +394,11 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? [#"Please use a qualified reference to valid_time"]
     "SELECT foo.name, bar.also_name
     FROM foo, bar
-    WHERE foo.random_col OVERLAPS bar.VALID_TiME")
+    WHERE foo.random_col OVERLAPS bar.VALID_TIME")
   (invalid? [#"Please use a qualified reference to valid_time"]
     "SELECT foo.name, bar.also_name
     FROM foo, bar
-    WHERE foo.SYSTEM_TImE OVERLAPS bar.fooble"))
+    WHERE foo.systemTime OVERLAPS bar.fooble"))
 
 (t/deftest test-invalid-table-names
   (invalid? [#"Unexpected:\nVALID_TIME"]

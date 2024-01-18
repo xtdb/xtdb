@@ -22,33 +22,31 @@ fun snakeCase(s: String): String {
     }
 }
 
-private fun normalise(s: String) =
-    s.lowercase()
-        .replace('.', '$')
-        .replace('-', '_')
+/**
+ * upper case letter preceded by a character that isn't upper-case nor an underscore
+ */
+private val UPPER_REGEX = Regex("(?<=[^\\p{Lu}_])\\p{Lu}")
 
-@Suppress("unused")
-fun normalForm(s: String): String {
-    val i = s.lastIndexOf('/')
-    return if (i < 0) {
-        normalise(s)
-    } else {
-        String.format("%s$%s", normalise(s.substring(0, i)), normalise(s.substring(i + 1)))
+fun normalForm(s: String): String = s
+    .replace('-', '_')
+    .split('.', '/', '$')
+    .joinToString(separator = "$") {
+        it
+            .replace(UPPER_REGEX) { ch -> "_${ch.value}" }
+            .lowercase()
     }
-}
 
-@Suppress("MemberVisibilityCanBePrivate") // Clojure
 fun normalForm(sym: Symbol): Symbol =
     if (sym.namespace != null) {
         Symbol.intern(
             String.format(
                 "%s$%s",
-                normalise(sym.namespace),
-                normalise(sym.name)
+                normalForm(sym.namespace),
+                normalForm(sym.name)
             )
         )
     } else {
-        Symbol.intern(normalise(sym.name))
+        Symbol.intern(normalForm(sym.name))
     }
 
 @Suppress("unused") // Clojure
