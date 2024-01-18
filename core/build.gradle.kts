@@ -6,6 +6,7 @@ plugins {
     `maven-publish`
     signing
     kotlin("jvm")
+    kotlin("plugin.serialization")
 }
 
 publishing {
@@ -44,6 +45,15 @@ dependencies {
     api("com.carrotsearch", "hppc", "0.9.1")
 
     api(kotlin("stdlib-jdk8"))
+    api("com.charleskorn.kaml","kaml","0.56.0")
+
+    testImplementation(project(":http-server"))
+    testImplementation(project(":pgwire-server"))
+    testImplementation(project(":modules:kafka"))
+    testImplementation(project(":modules:s3"))
+    testImplementation(project(":modules:google-cloud"))
+    testImplementation(project(":modules:azure"))
+    testImplementation(project(":modules:flight-sql"))
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
