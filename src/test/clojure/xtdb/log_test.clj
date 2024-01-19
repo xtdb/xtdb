@@ -7,7 +7,7 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.xtql.edn :as xtql.edn]))
+            [xtdb.tx-ops :as tx-ops]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -112,7 +112,7 @@
 
                                [:delete '{:from :users, :bind [{:xt/id $uid}]}
                                 {:uid :jms}]]
-                              (mapv xtql.edn/parse-dml))))
+                              (mapv tx-ops/parse-tx-op))))
 
 (t/deftest can-write-opts
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-opts.json")

@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.error :as err]
             xtdb.serde
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql.edn :as xtql.edn])
   (:import (java.time Instant)
            (java.util List)
@@ -48,10 +49,10 @@
 
 (defn roundtrip-edn-tx-op [v]
   (-> v
-      xtql.edn/parse-dml
+      tx-ops/parse-tx-op
       (JsonSerde/encode TxOp)
       (JsonSerde/decode TxOp)
-      xtql.edn/unparse))
+      tx-ops/unparse-tx-op))
 
 (defn decode-tx-op [^String s]
   (JsonSerde/decode s TxOp))

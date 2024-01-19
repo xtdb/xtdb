@@ -4,9 +4,10 @@
             [clojure.string :as str]
             [cognitect.transit :as transit]
             [time-literals.read-write :as time-literals]
+            [xtdb.error :as err]
             [xtdb.time :as time]
-            [xtdb.xtql.edn :as xtql.edn]
-            [xtdb.error :as err])
+            [xtdb.tx-ops :as tx-ops]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import java.io.Writer
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
@@ -76,7 +77,7 @@
   (print-dup op w))
 
 (defn- render-xtql-op [^Xtql op]
-  (xtql.edn/unparse op))
+  (tx-ops/unparse-tx-op op))
 
 (defmethod print-dup Xtql [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql-op op)))))
@@ -85,7 +86,7 @@
   (print-dup op w))
 
 (defn- render-xtql+args [^XtqlAndArgs op]
-  (into (xtql.edn/unparse (.op op)) (.args op)))
+  (into (tx-ops/unparse-tx-op (.op op)) (.args op)))
 
 (defmethod print-dup XtqlAndArgs [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql+args op)))))
@@ -94,7 +95,7 @@
   (print-dup op w))
 
 (defn xtql-reader [xtql]
-  (xtql.edn/parse-dml xtql))
+  (tx-ops/parse-tx-op xtql))
 
 (defn- render-put-op [^Put op]
   {:table-name (keyword (.tableName op)), :docs (.docs op)

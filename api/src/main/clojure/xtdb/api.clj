@@ -14,6 +14,7 @@
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io Writer)
            java.util.concurrent.ExecutionException
@@ -22,7 +23,7 @@
            java.util.Map
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
-           (xtdb.api.query Basis XtqlQuery QueryOptions)
+           (xtdb.api.query Basis QueryOptions XtqlQuery)
            (xtdb.api.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds TxOptions)
            xtdb.types.ClojureForm))
 
@@ -177,7 +178,7 @@
                                                 (boolean default-all-valid-time?))))
                     (->> (for [tx-op tx-ops]
                            (cond-> tx-op
-                             (not (instance? TxOp tx-op)) xtql.edn/parse-dml))
+                             (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
                          (into-array TxOp)))))
 
 (extend-protocol xtp/PNode
