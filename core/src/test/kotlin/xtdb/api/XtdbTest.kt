@@ -8,12 +8,12 @@ import org.junit.jupiter.api.Test
 import xtdb.api.query.Basis
 import xtdb.api.query.Expr.Companion.call
 import xtdb.api.query.Expr.Companion.param
-import xtdb.api.query.IKeyFn.KeyFn.CLOJURE_STR
+import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_STRING
+import xtdb.api.query.QueryOptions
 import xtdb.api.query.XtqlQuery.Companion.from
 import xtdb.api.query.XtqlQuery.Companion.pipeline
 import xtdb.api.query.XtqlQuery.Companion.relation
 import xtdb.api.query.XtqlQuery.Companion.withCols
-import xtdb.api.query.QueryOptions
 import xtdb.api.tx.TxOp.Companion.put
 import java.time.Instant
 import java.time.LocalDate
@@ -38,13 +38,13 @@ internal class XtdbTest {
 
     @Test
     fun startsInMemoryNode() {
-        node.submitTx(put("foo", mapOf("xt/id" to "jms")))
+        node.submitTx(put("foo", mapOf("xt\$id" to "jms")))
 
         assertEquals(
             listOf(mapOf("id" to "jms")),
 
             node.openQuery(
-                from("foo") { "xt/id" boundTo "id" }
+                from("foo") { "xt\$id" boundTo "id" }
             ).doall()
         )
 
@@ -59,12 +59,12 @@ internal class XtdbTest {
 
     @Test
     fun `test query opts`() {
-        node.submitTx(put("docs2", mapOf("xt/id" to 1, "foo" to "bar")))
+        node.submitTx(put("docs2", mapOf("xt\$id" to 1, "foo" to "bar")))
 
         assertEquals(
-            listOf(mapOf("my_foo" to "bar")),
+            listOf(mapOf("myFoo" to "bar")),
             node.openQuery(
-                from("docs2") { "foo" boundTo "my_foo" }
+                from("docs2") { "foo" boundTo "myFoo" }
             ).doall(),
 
             "Java AST queries"
@@ -76,7 +76,7 @@ internal class XtdbTest {
             node.openQuery(
                 from("docs2") { "foo" boundTo "my_foo" },
 
-                QueryOptions(keyFn = CLOJURE_STR)
+                QueryOptions(keyFn = KEBAB_CASE_STRING)
             ).doall(),
 
             "key-fn"
@@ -85,7 +85,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("foo" to "bar")),
             node.openQuery(
-                from("docs2") { "xt/id" boundTo param("\$id"); +"foo" },
+                from("docs2") { "xt\$id" boundTo param("\$id"); +"foo" },
                 QueryOptions(args = mapOf("id" to 1))
             ).doall(),
 
@@ -93,12 +93,12 @@ internal class XtdbTest {
         )
 
         assertEquals(
-            listOf(mapOf("current_time" to LocalDate.parse("2020-01-01"))),
+            listOf(mapOf("currentTime" to LocalDate.parse("2020-01-01"))),
 
             node.openQuery(
                 pipeline(
                     emptyRel,
-                    withCols { "current-time" boundTo call("current-date") }
+                    withCols { "currentTime" boundTo call("current-date") }
                 ),
 
                 QueryOptions(basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")))

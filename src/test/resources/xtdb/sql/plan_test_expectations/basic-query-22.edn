@@ -1,5 +1,5 @@
 [:rename
- {x1 movietitle}
+ {x1 movie_title}
  [:top
   {:skip 5, :limit 10}
-  [:rename {movietitle x1} [:scan {:table starsin} [movietitle]]]]]
+  [:rename {movie_title x1} [:scan {:table stars_in} [movie_title]]]]]

@@ -1275,8 +1275,6 @@
 (defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
                              {:keys [query, projection, ^Stream result-set]}]
   (let [json-bytes (comp utf8 json/json-str json-clj)
-        ;; TODO result format
-        tuplefn (if (seq projection) (apply juxt (map (comp (partial comp json-bytes) keyword) projection)) (constantly []))
 
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
@@ -1301,7 +1299,7 @@
         (.hasNext result-set)
         (let [continue
               (try
-                (cmd-write-msg conn msg-data-row {:vals (tuplefn (.next result-set))})
+                (cmd-write-msg conn msg-data-row {:vals (mapv (comp json-bytes (.next result-set)) projection)})
                 :continue
                 ;; allow interrupts - this can happen if we are blocking during the row reduce and our conn is forced to close.
                 (catch InterruptedException e
@@ -1487,7 +1485,7 @@
                     :default-tz (.getZone clock)
                     :args xt-params
                     :default-all-valid-time? default-all-valid-time?
-                    :key-fn :sql-kw}
+                    :key-fn :snake-case-string}
 
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
         ^CompletableFuture

@@ -194,7 +194,7 @@
     ([query] (tx-fn-q* query {}))
 
     ([query opts]
-     (let [query-opts (-> (reduce into [{:key-fn :clojure-kw} tx-opts opts])
+     (let [query-opts (-> (reduce into [{:key-fn :kebab-case-keyword} tx-opts opts])
                           (update :key-fn serde/read-key-fn))
            plan (q/compile-query query query-opts nil)]
        (with-open [res (q/open-query allocator ra-src wm-src plan query-opts)]

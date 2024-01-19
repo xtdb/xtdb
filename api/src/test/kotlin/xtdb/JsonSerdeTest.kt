@@ -425,7 +425,7 @@ class JsonSerdeTest {
                 .defaultTz(ZoneId.of("America/Los_Angeles"))
                 .defaultAllValidTime(true)
                 .explain(true)
-                .keyFn(IKeyFn.KeyFn.CLOJURE_KW)
+                .keyFn(IKeyFn.KeyFn.KEBAB_CASE_KEYWORD)
                 .build()
         ).assertRoundTrip2(
             """{
@@ -438,7 +438,7 @@ class JsonSerdeTest {
                               "defaultTz":"America/Los_Angeles",
                               "defaultAllValidTime":true,
                               "explain":true,
-                              "keyFn":"CLOJURE_KW"}
+                              "keyFn":"KEBAB_CASE_KEYWORD"}
               }
             """.trimJson()
         )

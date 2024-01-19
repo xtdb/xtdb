@@ -44,12 +44,12 @@ INSERT INTO people (xt$id, name, friends)
 query T nosort
 SELECT people.friends FROM people
 ----
-[{:user "Dan"} {:user "Kath"}]
+[{"user" "Dan"} {"user" "Kath"}]
 
 query T nosort
 SELECT people.friends[2] FROM people
 ----
-{:user "Kath"}
+{"user" "Kath"}
 
 #Field Access works here but not in the general case, not on the a5
 query T nosort

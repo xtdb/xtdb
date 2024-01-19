@@ -199,14 +199,14 @@
                  (->cursor allocator schema blocks))}))
 
 (defn <-reader
-  ([^IVectorReader col] (<-reader col #xt/key-fn :clojure-kw))
+  ([^IVectorReader col] (<-reader col #xt/key-fn :kebab-case-keyword))
   ([^IVectorReader col ^IKeyFn key-fn]
    (mapv (fn [idx]
            (.getObject col idx key-fn))
          (range (.valueCount col)))))
 
 (defn <-cursor
-  ([^ICursor cursor] (<-cursor cursor #xt/key-fn :clojure-kw))
+  ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
   ([^ICursor cursor ^IKeyFn key-fn]
    (let [!res (volatile! (transient []))]
      (.forEachRemaining cursor
@@ -218,7 +218,7 @@
 (defn query-ra
   ([query] (query-ra query {}))
   ([query {:keys [node params preserve-blocks? with-col-types? key-fn] :as query-opts
-           :or {key-fn (serde/read-key-fn :clojure-kw)}}]
+           :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
                       node (-> (time/after-latest-submitted-tx node)
@@ -396,7 +396,7 @@
     (map new-uuid (range n))))
 
 (defn vec->vals
-  ([^IVectorReader rdr] (vec->vals rdr #xt/key-fn :clojure-kw))
+  ([^IVectorReader rdr] (vec->vals rdr #xt/key-fn :kebab-case-keyword))
   ([^IVectorReader rdr ^IKeyFn key-fn]
    (->> (for [i (range (.valueCount rdr))]
           (.getObject rdr i key-fn))

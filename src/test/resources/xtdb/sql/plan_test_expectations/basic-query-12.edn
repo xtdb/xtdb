@@ -1,1 +1,1 @@
-[:rename {x1 bar} [:rename {name x1} [:scan {:table starsin} [name]]]]
+[:rename {x1 bar} [:rename {name x1} [:scan {:table stars_in} [name]]]]

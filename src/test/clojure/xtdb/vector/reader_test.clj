@@ -245,7 +245,7 @@
 (deftest struct-normalisation-testing
   (t/testing "structs"
     (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)]
-      (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
+      (let [my-column-wtr1 (.colWriter rel-wtr1 "my_column" (FieldType/notNullable #xt.arrow/type :struct))]
         (.startStruct my-column-wtr1)
         (-> (.structKeyWriter my-column-wtr1 "long_name" (FieldType/notNullable #xt.arrow/type :i64))
             (.writeLong 42))
@@ -255,7 +255,10 @@
         (.endRow rel-wtr1))
 
       (t/is (= [{:my-column {:short-name "forty-two", :long-name 42}}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :clojure-kw)))
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :kebab-case-keyword)))
 
       (t/is (= [{:my_column {:short_name "forty-two", :long_name 42}}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :snake-case-kw))))))
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :snake-case-keyword)))
+
+      (t/is (= [{:myColumn {:shortName "forty-two", :longName 42}}]
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :camel-case-keyword))))))

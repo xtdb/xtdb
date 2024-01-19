@@ -5,4 +5,4 @@
   [:mega-join
    [{x1 x3}]
    [[:rename {title x1} [:scan {:table movie} [title]]]
-    [:rename {title x3} [:scan {:table starsin} [title]]]]]]]
+    [:rename {title x3} [:scan {:table stars_in} [title]]]]]]]

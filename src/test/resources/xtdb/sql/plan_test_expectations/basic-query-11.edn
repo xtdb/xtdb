@@ -1,1 +1,1 @@
-[:scan {:table starsin} [name]]
+[:scan {:table stars_in} [name]]

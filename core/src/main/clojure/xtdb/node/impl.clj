@@ -75,7 +75,7 @@
   (^CompletableFuture openQueryAsync [_ ^String query, ^QueryOptions query-opts]
    (let [query-opts (-> (into {:default-tz default-tz,
                                :after-tx @!latest-submitted-tx
-                               :key-fn #xt/key-fn :sql-str}
+                               :key-fn #xt/key-fn :snake-case-string}
                               query-opts)
                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
                         (with-after-tx-default))]
@@ -95,7 +95,7 @@
   (^CompletableFuture openQueryAsync [_ ^XtqlQuery query, ^QueryOptions query-opts]
    (let [query-opts (-> (into {:default-tz default-tz,
                                :after-tx @!latest-submitted-tx
-                               :key-fn #xt/key-fn :snake-case-str}
+                               :key-fn #xt/key-fn :camel-case-string}
                               query-opts)
                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
                         (with-after-tx-default))]

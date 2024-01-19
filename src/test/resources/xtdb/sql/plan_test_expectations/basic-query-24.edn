@@ -1,7 +1,7 @@
 [:rename
- {x1 movietitle}
+ {x1 movie_title}
  [:top
   {:skip 100}
   [:order-by
    [[x1 {:direction :asc, :null-ordering :nulls-last}]]
-   [:rename {movietitle x1} [:scan {:table starsin} [movietitle]]]]]]
+   [:rename {movie_title x1} [:scan {:table stars_in} [movie_title]]]]]]

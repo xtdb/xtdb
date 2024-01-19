@@ -478,7 +478,7 @@
                              (.defaultTz #time/zone "America/Los_Angeles")
                              (.defaultAllValidTime true)
                              (.explain true)
-                             (.keyFn #xt/key-fn :clojure-kw)
+                             (.keyFn #xt/key-fn :kebab-case-keyword)
                              (.build)))]
     (t/is (= v (roundtrip-query-request v))))
 
