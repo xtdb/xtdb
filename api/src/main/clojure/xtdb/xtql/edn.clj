@@ -185,13 +185,13 @@
 
   Expr$Pull
   (unparse [e]
-    (list* 'q (unparse (.query e))
+    (list* 'pull (unparse (.query e))
            (when-let [args (.args e)]
              [{:args (mapv unparse-arg-spec args)}])))
 
   Expr$PullMany
   (unparse [e]
-    (list* 'q (unparse (.query e))
+    (list* 'pull* (unparse (.query e))
            (when-let [args (.args e)]
              [{:args (mapv unparse-arg-spec args)}]))))
 
