@@ -42,14 +42,12 @@ components:
       example: "docs"
       description: tabel name
     Document:
-      title: document
       description: a document to be added to the db
       type: object
       additionalProperties:
         schema:
           $ref: '#/components/schemas/Any'
     Id:
-      title: entity id
       description: A XTDB entity id
       oneOf:
         - type: string
@@ -62,7 +60,7 @@ components:
         schema:
           $ref: '#/components/schemas/Any'
     ArgRows:
-      title: rows to be passed to a prepared SQL statement
+      description: rows to be passed to a prepared SQL statement
       type: array
       items:
         type: array
@@ -70,7 +68,7 @@ components:
           schema:
             $ref: '#/components/schemas/Any'
     Put:
-      title: put operation
+      description: put transaction operation
       type: object
       properties:
         put:
@@ -82,7 +80,7 @@ components:
         validTo:
           $ref: '#/components/schemas/Instant'
     Delete:
-      title: delete operation
+      description: delete transaction operation
       type: object
       properties:
         delete:
@@ -98,7 +96,7 @@ components:
           schema:
             $ref: '#/components/schemas/Instant'
     Erase:
-      title: erase operation
+      description: erase transaction operation
       type: object
       properties:
         erase:
@@ -108,7 +106,7 @@ components:
           schema:
             $ref: '#/components/schemas/Id'
     SQL:
-      title: sql operation
+      description: sql transaction operation
       type: object
       properties:
         sql:
@@ -119,7 +117,6 @@ components:
           schema:
             $ref: '#/components/schemas/ArgRows'
     Call:
-      title: call operation
       description: a transaction function call
       type: object
       properties:
@@ -129,14 +126,98 @@ components:
         args:
           schema:
             $ref: '#/components/schemas/Args'
+    InsertInto:
+      type: object
+      properties:
+        insertInto:
+          $ref: '#/components/schemas/TabelName'
+        query:
+          $ref: '#/components/schemas/Query'
+    UpdateTable:
+      type: object
+      properties:
+        updateTable:
+          $ref: '#/components/schemas/TabelName'
+        setSpecs:
+          $ref: '#/components/schemas/Bindings'
+        forValidTime:
+          nullable: true
+          $ref: '#/components/schemas/TemporalExtents'
+        bindSpecs:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+        unifyClauses:
+          nullable: true
+          type: array
+          items:
+            $ref: '#/components/schemas/UnifyClause'
+    DeleteFrom:
+      type: object
+      properties:
+        deleteFrom:
+          $ref: '#/components/schemas/TabelName'
+        forValidTime:
+          nullable: true
+          $ref: '#/components/schemas/TemporalExtents'
+        bindSpecs:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+        unifyClauses:
+          nullable: true
+          type: array
+          items:
+            $ref: '#/components/schemas/UnifyClause'
+    EraseFrom:
+      type: object
+      properties:
+        eraseFrom:
+          $ref: '#/components/schemas/TabelName'
+        bindSpecs:
+          nullable: true
+          $ref: '#/components/schemas/Bindings'
+        unifyClauses:
+          nullable: true
+          type: array
+          items:
+            $ref: '#/components/schemas/UnifyClause'
+    AssertExists:
+      type: object
+      properties:
+        assertExists:
+          $ref: '#/components/schemas/Query'
+    AssertNotExists:
+      type: object
+      properties:
+        assertNotExists:
+          $ref: '#/components/schemas/Query'
+    XtqlOp:
+      description: an abstract xtql dml operation
+      oneOf:
+        - $ref: '#/components/schemas/InsertInto'
+        - $ref: '#/components/schemas/UpdateTable'
+        - $ref: '#/components/schemas/DeleteFrom'
+        - $ref: '#/components/schemas/EraseFrom'
+        - $ref: '#/components/schemas/AssertExists'
+        - $ref: '#/components/schemas/AssertNotExists'
+    XtqlAndArgs:
+      type: object
+      properties:
+        op:
+          $ref: '#/components/schemas/XtqlOp'
+        args:
+          type: array
+          items:
+            type: object
     TxOp:
-      titel: transaction operation
+      description: an abstract transaction operation
       oneOf:
         - $ref: '#/components/schemas/Put'
         - $ref: '#/components/schemas/Delete'
         - $ref: '#/components/schemas/Erase'
         - $ref: '#/components/schemas/SQL'
         - $ref: '#/components/schemas/Call'
+        - $ref: '#/components/schemas/XtqlOp'
+        - $ref: '#/components/schemas/XtqlAndArgs'
     TxOptions:
       title: transaction options
       properties:
@@ -182,6 +263,19 @@ components:
           description: requires that the node has indexed at least the specified transaction
           schema:
             $ref: '#/components/schemas/TransactionKey'
+    TemporalExtents:
+      oneOf:
+        - type: string
+          enum: [allTime]
+        - type: object
+          properties:
+            from:
+              nullable: true
+              $ref: '#/components/schemas/Instant'
+            to:
+              nullable: true
+              $ref: '#/components/schemas/Instant'
+
     TemporalFilter:
       oneOf:
         - type: string
