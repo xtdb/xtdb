@@ -9,10 +9,10 @@ import xtdb.api.query.Basis
 import xtdb.api.query.Expr.Companion.call
 import xtdb.api.query.Expr.Companion.param
 import xtdb.api.query.IKeyFn.KeyFn.CLOJURE_STR
-import xtdb.api.query.Query.Companion.from
-import xtdb.api.query.Query.Companion.pipeline
-import xtdb.api.query.Query.Companion.relation
-import xtdb.api.query.Query.Companion.withCols
+import xtdb.api.query.XtqlQuery.Companion.from
+import xtdb.api.query.XtqlQuery.Companion.pipeline
+import xtdb.api.query.XtqlQuery.Companion.relation
+import xtdb.api.query.XtqlQuery.Companion.withCols
 import xtdb.api.query.QueryOptions
 import xtdb.api.tx.TxOp.Companion.put
 import java.time.Instant

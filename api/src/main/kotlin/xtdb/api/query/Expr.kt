@@ -148,17 +148,17 @@ sealed interface Expr {
     data class Get(@JvmField @SerialName("xt:get") val expr: Expr, @JvmField val field: String) : Expr
 
     @Serializable
-    data class Subquery(@JvmField @SerialName("xt:q") val query: Query, @JvmField val args: List<Binding>? = null) : Expr
+    data class Subquery(@JvmField @SerialName("xt:q") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) : Expr
 
     @Serializable
-    data class Exists(@JvmField @SerialName("xt:exists") val query: Query, @JvmField val args: List<Binding>? = null) : Expr
+    data class Exists(@JvmField @SerialName("xt:exists") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) : Expr
 
     @Serializable
-    data class Pull(@JvmField @SerialName("xt:pull") val query: Query, @JvmField val args: List<Binding>? = null) : Expr
+    data class Pull(@JvmField @SerialName("xt:pull") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) : Expr
 
     @Serializable
     data class PullMany(
-        @JvmField @SerialName("xt:pullMany") val query: Query,
+        @JvmField @SerialName("xt:pullMany") val query: XtqlQuery,
         @JvmField val args: List<Binding>? = null,
     ) : Expr
 
@@ -264,16 +264,16 @@ sealed interface Expr {
         fun get(expr: Expr, field: String) = Get(expr, field)
 
         @JvmStatic
-        fun q(query: Query, args: List<Binding>? = null) = Subquery(query, args)
+        fun q(query: XtqlQuery, args: List<Binding>? = null) = Subquery(query, args)
 
         @JvmStatic
-        fun exists(query: Query, args: List<Binding>? = null) = Exists(query, args)
+        fun exists(query: XtqlQuery, args: List<Binding>? = null) = Exists(query, args)
 
         @JvmStatic
-        fun pull(query: Query, args: List<Binding>? = null) = Pull(query, args)
+        fun pull(query: XtqlQuery, args: List<Binding>? = null) = Pull(query, args)
 
         @JvmStatic
-        fun pullMany(query: Query, args: List<Binding>? = null) = PullMany(query, args)
+        fun pullMany(query: XtqlQuery, args: List<Binding>? = null) = PullMany(query, args)
 
         @JvmStatic
         fun list(elements: List<Expr>) = ListExpr(elements)

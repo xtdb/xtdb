@@ -9,7 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static xtdb.api.HttpServerModule.httpServer;
-import static xtdb.api.query.Query.*;
+import static xtdb.api.query.XtqlQuery.*;
 import static xtdb.api.tx.TxOp.put;
 
 public class XtdbClientJavaTest {

@@ -11,23 +11,36 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import xtdb.api.query.Expr.Companion.lVar
 import xtdb.api.query.Expr.Param
-import xtdb.api.query.Query.OrderDirection.ASC
-import xtdb.api.query.Query.OrderDirection.DESC
-import xtdb.api.query.Query.OrderNulls.FIRST
-import xtdb.api.query.Query.OrderNulls.LAST
+import xtdb.api.query.XtqlQuery.OrderDirection.ASC
+import xtdb.api.query.XtqlQuery.OrderDirection.DESC
+import xtdb.api.query.XtqlQuery.OrderNulls.FIRST
+import xtdb.api.query.XtqlQuery.OrderNulls.LAST
 import xtdb.jsonIAE
 
-
 @Serializable(Query.Serde::class)
-sealed interface Query {
-
+sealed interface Query{
     object Serde : JsonContentPolymorphicSerializer<Query>(Query::class) {
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Query> = when (element) {
+            is JsonObject -> when {
+                "sql" in element -> SqlQuery.serializer()
+                else -> XtqlQuery.serializer()
+            }
+            else -> XtqlQuery.serializer()
+        }
+    }
+    @Serializable
+    data class SqlQuery(@JvmField val sql: String) : Query
+}
+
+@Serializable(XtqlQuery.Serde::class)
+sealed interface XtqlQuery : Query {
+
+    object Serde : JsonContentPolymorphicSerializer<XtqlQuery>(XtqlQuery::class) {
+        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<XtqlQuery> = when (element) {
             is JsonArray -> Pipeline.serializer()
             is JsonObject -> when {
                 "from" in element -> From.serializer()
                 "rel" in element -> Relation.serializer()
-                "sql" in element -> SqlQuery.serializer()
                 "unify" in element -> Unify.serializer()
                 "unionAll" in element -> UnionAll.serializer()
                 else -> throw jsonIAE("xtql/malformed-query", element)
@@ -36,9 +49,6 @@ sealed interface Query {
             else -> throw jsonIAE("xtql/malformed-query", element)
         }
     }
-
-    @Serializable
-    data class SqlQuery(@JvmField val sql: String) : Query
 
     @Serializable(QueryTail.Serde::class)
     sealed interface QueryTail {
@@ -85,7 +95,7 @@ sealed interface Query {
     }
 
     @Serializable(Pipeline.Serde::class)
-    data class Pipeline(@JvmField val query: Query, @JvmField val tails: List<QueryTail>) : Query {
+    data class Pipeline(@JvmField val query: XtqlQuery, @JvmField val tails: List<QueryTail>) : XtqlQuery {
         object Serde : KSerializer<Pipeline> {
             override val descriptor: SerialDescriptor =
                 buildClassSerialDescriptor("xtdb.api.query.Query.Pipeline", JsonArray.serializer().descriptor)
@@ -102,7 +112,7 @@ sealed interface Query {
                 require(decoder is JsonDecoder)
                 val element = decoder.decodeJsonElement()
                 if (element !is JsonArray) throw jsonIAE("xtql/malformed-pipeline", element)
-                val query = decoder.json.decodeFromJsonElement<Query>(element[0])
+                val query = decoder.json.decodeFromJsonElement<XtqlQuery>(element[0])
                 var tails: MutableList<QueryTail> = mutableListOf<QueryTail>()
                 for (tailElement in element.subList(1, element.size)) tails.add(
                     decoder.json.decodeFromJsonElement(
@@ -115,7 +125,7 @@ sealed interface Query {
     }
 
     @Serializable
-    data class Unify(@JvmField @SerialName("unify") val clauses: List<UnifyClause>) : Query
+    data class Unify(@JvmField @SerialName("unify") val clauses: List<UnifyClause>) : XtqlQuery
 
     @Serializable
     data class From(
@@ -124,7 +134,7 @@ sealed interface Query {
         @JvmField val forValidTime: TemporalFilter? = null,
         @JvmField val forSystemTime: TemporalFilter? = null,
         @JvmField val projectAllCols: Boolean = false,
-    ) : Query, UnifyClause {
+    ) : XtqlQuery, UnifyClause {
 
         constructor(table: String, bindings: List<Binding>) : this(table, bindings, null, null, false)
 
@@ -186,7 +196,7 @@ sealed interface Query {
 
     @Serializable
     data class Join(
-        @JvmField @SerialName("join") val query: Query,
+        @JvmField @SerialName("join") val query: XtqlQuery,
         @JvmField val args: List<Binding>? = null,
         @JvmField val bindings: List<Binding>? = null,
     ) : IJoin {
@@ -195,7 +205,7 @@ sealed interface Query {
 
     @Serializable
     data class LeftJoin(
-        @JvmField @SerialName("leftJoin") val query: Query,
+        @JvmField @SerialName("leftJoin") val query: XtqlQuery,
         @JvmField val args: List<Binding>? = null,
         @JvmField val bindings: List<Binding>? = null,
     ) : IJoin {
@@ -252,7 +262,7 @@ sealed interface Query {
                         if (value.direction != null) {
                             put(
                                 "dir", when (value.direction) {
-                                    OrderDirection.DESC -> "desc"
+                                    DESC -> "desc"
                                     else -> "asc"
                                 }
                             )
@@ -260,7 +270,7 @@ sealed interface Query {
                         if (value.nulls != null) {
                             put(
                                 "nulls", when (value.nulls) {
-                                    OrderNulls.FIRST -> "first"
+                                    FIRST -> "first"
                                     else -> "last"
                                 }
                             )
@@ -297,7 +307,7 @@ sealed interface Query {
     data class OrderBy(@JvmField @SerialName("orderBy") val orderSpecs: List<OrderSpec?>) : QueryTail
 
     @Serializable
-    data class UnionAll(@JvmField @SerialName("unionAll") val queries: List<Query>) : Query
+    data class UnionAll(@JvmField @SerialName("unionAll") val queries: List<XtqlQuery>) : XtqlQuery
 
     @Serializable
     data class Limit(@JvmField @SerialName("limit") val length: Long) : QueryTail
@@ -306,7 +316,7 @@ sealed interface Query {
     data class Offset(@JvmField @SerialName("offset") val length: Long) : QueryTail
 
     @Serializable(Relation.Serde::class)
-    abstract class Relation : Query, UnifyClause {
+    abstract class Relation : XtqlQuery, UnifyClause {
         object Serde : JsonContentPolymorphicSerializer<Relation>(Relation::class) {
             override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Relation> = when (element) {
                 is JsonObject -> when {
@@ -346,13 +356,10 @@ sealed interface Query {
 
     companion object {
         @JvmStatic
-        fun sql(sql: String) = SqlQuery(sql)
+        fun pipeline(query: XtqlQuery, tails: List<QueryTail>) = Pipeline(query, tails)
 
         @JvmStatic
-        fun pipeline(query: Query, tails: List<QueryTail>) = Pipeline(query, tails)
-
-        @JvmStatic
-        fun pipeline(query: Query, vararg tails: QueryTail) = pipeline(query, tails.toList())
+        fun pipeline(query: XtqlQuery, vararg tails: QueryTail) = pipeline(query, tails.toList())
 
         @JvmStatic
         fun unify(clauses: List<UnifyClause>) = Unify(clauses)
@@ -412,10 +419,10 @@ sealed interface Query {
         fun call(ruleName: String, vararg args: Expr) = Call(ruleName, args.toList())
 
         @JvmStatic
-        fun join(query: Query, args: List<Binding>? = null) = Join(query, args)
+        fun join(query: XtqlQuery, args: List<Binding>? = null) = Join(query, args)
 
         @JvmStatic
-        fun leftJoin(query: Query, args: List<Binding>? = null) = LeftJoin(query, args)
+        fun leftJoin(query: XtqlQuery, args: List<Binding>? = null) = LeftJoin(query, args)
 
         @JvmStatic
         fun aggregate(cols: List<Binding>) = Aggregate(cols)
@@ -442,10 +449,10 @@ sealed interface Query {
         fun orderBy(vararg orderSpecs: OrderSpec) = orderBy(orderSpecs.toList())
 
         @JvmStatic
-        fun unionAll(queries: List<Query>) = UnionAll(queries)
+        fun unionAll(queries: List<XtqlQuery>) = UnionAll(queries)
 
         @JvmStatic
-        fun unionAll(vararg queries: Query) = unionAll(queries.toList())
+        fun unionAll(vararg queries: XtqlQuery) = unionAll(queries.toList())
 
         @JvmStatic
         fun limit(length: Long) = Limit(length)

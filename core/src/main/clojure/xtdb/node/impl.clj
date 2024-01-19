@@ -18,7 +18,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config Xtdb$ModuleFactory XtdbSubmitClient$Config)
            (xtdb.api.log Log)
-           (xtdb.api.query Basis IKeyFn Query QueryOptions)
+           (xtdb.api.query Basis IKeyFn QueryOptions XtqlQuery)
            (xtdb.api.tx Sql TxOptions)
            xtdb.indexer.IIndexer
            (xtdb.query IRaQuerySource)))
@@ -92,7 +92,7 @@
 
                  (q/open-query allocator ra-src wm-src plan query-opts))))))))
 
-  (^CompletableFuture openQueryAsync [_ ^Query query, ^QueryOptions query-opts]
+  (^CompletableFuture openQueryAsync [_ ^XtqlQuery query, ^QueryOptions query-opts]
    (let [query-opts (-> (into {:default-tz default-tz,
                                :after-tx @!latest-submitted-tx
                                :key-fn #xt/key-fn :snake-case-str}
@@ -166,7 +166,7 @@
        :xtdb.operator.scan/scan-emitter {}
        :xtdb.query/ra-query-source {}
        :xtdb/compactor {}
-      
+
        :xtdb/buffer-pool (.getStorage opts)
        :xtdb.indexer/live-index (.indexer opts)
        :xtdb/log (.getTxLog opts)

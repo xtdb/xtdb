@@ -1,6 +1,6 @@
 package xtdb.api
 
-import xtdb.api.query.Query
+import xtdb.api.query.XtqlQuery
 import xtdb.api.query.QueryOptions
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
@@ -22,10 +22,10 @@ interface IXtdb : IXtdbSubmitClient, AutoCloseable {
     }
 
     @JvmOverloads
-    fun openQueryAsync(q: Query, opts: QueryOptions = QueryOptions()): CompletableFuture<Stream<Map<String, *>>>
+    fun openQueryAsync(q: XtqlQuery, opts: QueryOptions = QueryOptions()): CompletableFuture<Stream<Map<String, *>>>
 
     @JvmOverloads
-    fun openQuery(q: Query, opts: QueryOptions = QueryOptions()) = await(openQueryAsync(q, opts))
+    fun openQuery(q: XtqlQuery, opts: QueryOptions = QueryOptions()) = await(openQueryAsync(q, opts))
 
     @JvmOverloads
     fun openQueryAsync(sql: String, opts: QueryOptions = QueryOptions()): CompletableFuture<Stream<Map<String, *>>>
@@ -40,8 +40,8 @@ fun IXtdb.openQueryAsync(sql: String, configure: QueryOptions.() -> Unit) =
 fun IXtdb.openQuery(sql: String, configure: QueryOptions.() -> Unit) =
     openQuery(sql, QueryOptions().also { it.configure() })
 
-fun IXtdb.openQueryAsync(q: Query, configure: QueryOptions.() -> Unit) =
+fun IXtdb.openQueryAsync(q: XtqlQuery, configure: QueryOptions.() -> Unit) =
     openQueryAsync(q, QueryOptions().also { it.configure() })
 
-fun IXtdb.openQuery(q: Query, configure: QueryOptions.() -> Unit) =
+fun IXtdb.openQuery(q: XtqlQuery, configure: QueryOptions.() -> Unit) =
     openQuery(q, QueryOptions().also { it.configure() })

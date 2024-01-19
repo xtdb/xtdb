@@ -3,7 +3,7 @@ package xtdb.api
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb.openNode
-import xtdb.api.query.Query.Companion.from
+import xtdb.api.query.XtqlQuery.Companion.from
 import xtdb.api.tx.TxOp.Companion.put
 import java.net.URL
 

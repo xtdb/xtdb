@@ -3,7 +3,6 @@
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
-            [xtdb.error :as err]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time])
@@ -14,7 +13,7 @@
            java.util.Spliterator
            [java.util.stream StreamSupport]
            xtdb.api.IXtdb
-           (xtdb.api.query Basis Query QueryOptions)))
+           (xtdb.api.query Basis XtqlQuery QueryOptions)))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}
@@ -94,7 +93,7 @@
   (^CompletableFuture openQueryAsync [client ^String query ^QueryOptions query-opts]
    (open-query& client query (into {:key-fn #xt/key-fn :sql-str} query-opts)))
 
-  (^CompletableFuture openQueryAsync [client ^Query query ^QueryOptions query-opts]
+  (^CompletableFuture openQueryAsync [client ^XtqlQuery query ^QueryOptions query-opts]
    (open-query& client query (into {:key-fn #xt/key-fn :snake-case-str} query-opts)))
 
   (submitTxAsync [client opts tx-ops]

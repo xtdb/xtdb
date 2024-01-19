@@ -12,7 +12,7 @@
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey)
-           (xtdb.api.query IKeyFn IKeyFn$KeyFn Query)
+           (xtdb.api.query IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx Call Delete Erase Put Sql TxOp TxOptions Xtql XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -56,7 +56,7 @@
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))
 
-(defn- render-query [^Query query]
+(defn- render-query [^XtqlQuery query]
   (xtql.edn/unparse query))
 
 (defn- xtql-query-reader [q-edn]
@@ -294,7 +294,7 @@
                                                                (str (.duration ^IntervalMonthDayNano %))))
           clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))
 
-          Query (transit/write-handler "xtdb.query/xtql" render-query)
+          XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
 
           Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
 

@@ -22,7 +22,7 @@
            java.util.Map
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
-           (xtdb.api.query Basis Query QueryOptions)
+           (xtdb.api.query Basis XtqlQuery QueryOptions)
            (xtdb.api.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds TxOptions)
            xtdb.types.ClojureForm))
 
@@ -196,10 +196,10 @@
       (if (string? query)
         (.openQueryAsync this ^String query query-opts)
 
-        (let [^Query query (cond
-                             (instance? Query query) query
-                             (seq? query) (xtql.edn/parse-query query)
-                             :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+        (let [^XtqlQuery query (cond
+                                 (instance? XtqlQuery query) query
+                                 (seq? query) (xtql.edn/parse-query query)
+                                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
           (.openQueryAsync this query query-opts))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

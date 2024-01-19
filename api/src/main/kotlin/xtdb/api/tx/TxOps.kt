@@ -1,16 +1,19 @@
 @file:UseSerializers(AnySerde::class, InstantSerde::class)
 package xtdb.api.tx
 
-import kotlinx.serialization.*
+import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.json.JsonContentPolymorphicSerializer
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import xtdb.AnySerde
 import xtdb.InstantSerde
 import xtdb.api.query.Binding
-import xtdb.api.query.Query
-import xtdb.api.query.Query.UnifyClause
 import xtdb.api.query.TemporalFilter.TemporalExtents
+import xtdb.api.query.XtqlQuery
+import xtdb.api.query.XtqlQuery.UnifyClause
 import xtdb.api.tx.TxOp.HasArgs
 import xtdb.api.tx.TxOp.HasValidTimeBounds
 import xtdb.jsonIAE
@@ -156,7 +159,7 @@ sealed interface Xtql: HasArgs<Map<String, *>, XtqlAndArgs> {
     @Serializable
     data class Insert(
         @JvmField @SerialName("insertInto") val table: String,
-        @JvmField val query: Query
+        @JvmField val query: XtqlQuery
     ) : TxOp, Xtql
 
     @Serializable
@@ -198,13 +201,13 @@ sealed interface Xtql: HasArgs<Map<String, *>, XtqlAndArgs> {
     }
 
     @Serializable
-    data class AssertExists(@JvmField @SerialName("assertExists") val query: Query) : TxOp, Xtql
+    data class AssertExists(@JvmField @SerialName("assertExists") val query: XtqlQuery) : TxOp, Xtql
     @Serializable
-    data class AssertNotExists(@JvmField @SerialName("assertNotExists") val query: Query) : TxOp, Xtql
+    data class AssertNotExists(@JvmField @SerialName("assertNotExists") val query: XtqlQuery) : TxOp, Xtql
 
     companion object {
         @JvmStatic
-        fun insert(table: String, query: Query): Insert = Insert(table, query)
+        fun insert(table: String, query: XtqlQuery): Insert = Insert(table, query)
 
         @JvmStatic
         fun update(table: String, setSpecs: List<Binding>) = Update(table, setSpecs)
@@ -216,10 +219,10 @@ sealed interface Xtql: HasArgs<Map<String, *>, XtqlAndArgs> {
         fun erase(table: String): Erase = Erase(table)
 
         @JvmStatic
-        fun assertExists(query: Query) = AssertExists(query)
+        fun assertExists(query: XtqlQuery) = AssertExists(query)
 
         @JvmStatic
-        fun assertNotExists(query: Query) = AssertNotExists(query)
+        fun assertNotExists(query: XtqlQuery) = AssertNotExists(query)
     }
 }
 
