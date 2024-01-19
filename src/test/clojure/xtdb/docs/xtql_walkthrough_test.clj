@@ -1,20 +1,14 @@
 (ns xtdb.docs.xtql-walkthrough-test
-  (:require [jsonista.core :as json]
-            [clj-yaml.core :as yaml]
+  (:require [clj-yaml.core :as yaml]
             [clojure.test :as t :refer [deftest testing]]
             [xtdb.api :as xt]
+            [xtdb.error :as err]
             [xtdb.test-util :as tu]
-            [xtdb.xtql.edn :as x-edn]
-            [xtdb.error :as err])
-  (:import (com.fasterxml.jackson.core JsonParser$Feature)
-           (xtdb JsonSerde)
+            [xtdb.xtql.edn :as x-edn])
+  (:import (xtdb JsonSerde)
            (xtdb.api.query XtqlQuery)))
 
 (t/use-fixtures :each tu/with-node)
-
-(def comment-object-mapper
-  (-> (json/object-mapper)
-      (.configure JsonParser$Feature/ALLOW_COMMENTS true)))
 
 (def examples
   (-> "./src/test/resources/docs/xtql_tutorial_examples.yaml"
