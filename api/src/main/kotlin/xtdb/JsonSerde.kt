@@ -4,8 +4,6 @@ package xtdb
 
 import clojure.lang.*
 import kotlinx.serialization.*
-import kotlinx.serialization.descriptors.PrimitiveKind
-import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -16,8 +14,6 @@ import xtdb.api.TransactionKey
 import xtdb.util.kebabToCamelCase
 import java.io.InputStream
 import java.io.OutputStream
-import java.nio.file.Path
-import java.nio.file.Paths
 import java.time.*
 import java.util.*
 
@@ -166,6 +162,8 @@ fun jsonIAEwithMessage(message: String, element: JsonElement): IllegalArgumentEx
     )
 }
 
+fun jsonRemoveComments(json : String) = json.replace(Regex("//.*\n"), "")
+
 fun decode(value: String): Any {
     try {
         return JSON_SERDE.decodeFromString(value)
@@ -244,3 +242,7 @@ fun <T : Any> encode(value: T, outputStream: OutputStream, clazz: Class<T>) {
 fun encodeStatus(value: Map<String, TransactionKey>): String {
     return JSON_SERDE.encodeToString(value.mapKeys { it.key.kebabToCamelCase()})
 }
+
+@Suppress("unused")
+@OptIn(InternalSerializationApi::class)
+fun <T : Any> encodePretty(value: T, clazz: Class<T>) = JSON_SERDE_PRETTY_PRINT.encodeToString(clazz.kotlin.serializer(), value)

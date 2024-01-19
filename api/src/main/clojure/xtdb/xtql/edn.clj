@@ -89,8 +89,8 @@
                        (Expr/param str-expr)
                        (Expr/lVar str-expr)))
     (keyword? expr) (Expr/val expr)
-    (vector? expr) (Expr/list (mapv parse-expr expr))
-    (set? expr) (Expr/set (mapv parse-expr expr))
+    (vector? expr) (Expr/list ^List (mapv parse-expr expr))
+    (set? expr) (Expr/set ^List (mapv parse-expr expr))
     (map? expr) (Expr/map (into {} (map (juxt (comp #(subs % 1) str key) (comp parse-expr val))) expr))
 
     (seq? expr) (do
@@ -127,7 +127,7 @@
                             pull (Expr/pull parsed-query parsed-args)
                             pull* (Expr/pullMany parsed-query parsed-args))))
 
-                      (Expr/call (str f) (mapv parse-expr args)))))
+                      (Expr/call (str f) ^List (mapv parse-expr args)))))
 
     :else (Expr/val expr)))
 

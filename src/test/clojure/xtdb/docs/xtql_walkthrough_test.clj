@@ -5,9 +5,10 @@
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.xtql.edn :as x-edn]
-            [xtdb.xtql.json :as x-json]
             [xtdb.error :as err])
-  (:import (com.fasterxml.jackson.core JsonParser$Feature)))
+  (:import (com.fasterxml.jackson.core JsonParser$Feature)
+           (xtdb JsonSerde)
+           (xtdb.api.query XtqlQuery)))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -22,8 +23,8 @@
 
 (defn json-example [name]
   (-> (get examples name)
-      (json/read-value comment-object-mapper)
-      x-json/parse-query
+      JsonSerde/jsonRemoveComments
+      (JsonSerde/decode XtqlQuery)
       x-edn/unparse))
 
 (defn sql-example [name]
@@ -276,7 +277,6 @@
                                              {:args [article-id]})}))
                  ;; end::pull-xtql-1[]
                  ,))
-             #_ ;; TODO: Waiting for `pull` to be implemented:
              (set (xt/q tu/*node* (json-example "pull-json-1")))))))
             ;; No SQL for this one
 
@@ -571,7 +571,7 @@
 
   (t/is (= [{:comment-count 1}]
            (xt/q tu/*node* '(from :posts [comment-count]))))
-  
+
   (let [node tu/*node*]
     ;; tag::DML-Update-bitemporal-xtql[]
     (xt/submit-tx node
@@ -594,7 +594,7 @@
 
   (t/is (= [{:comment-count 1}]
            (xt/q tu/*node* '(from :posts [comment-count]))))
-  
+
   (xt/submit-tx tu/*node*
     [(-> (xt/sql-op (sql-example "DML-Update-bitemporal-sql-1"))
          (xt/with-op-args [(random-uuid), "my-post-id"]))
@@ -666,4 +666,3 @@
     (t/is (= [{:xt/committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed?])
                    {:args {:tx-id tx-id}})))))
-

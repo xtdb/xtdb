@@ -2,7 +2,7 @@ bo-json-1: |
   // tag::bo-json-1[]
   {
     "from": "users",
-    "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+    "bind": [ { "xt/id": {"xt:lvar": "user-id"}}, "first-name", "last-name" ]
   }
   // end::bo-json-1[]
 bo-sql-1: |
@@ -14,7 +14,7 @@ bo-json-2: |
   // tag::bo-json-2[]
   {
     "from": "users",
-    "bind": [ { "xt/id": { "@value": "ivan" } }, "first-name", "last-name" ]
+    "bind": [ { "xt/id": "ivan" }, "first-name", "last-name" ]
   }
   // end::bo-json-2[]
 bo-sql-2: |
@@ -27,7 +27,7 @@ bo-json-3: |
   [
     {
       "from": "users",
-      "bind": [{ "xt/id": "user-id" }, "first-name", "last-name"]
+      "bind": [{ "xt/id": {"xt:lvar": "user-id"}}, "first-name", "last-name"]
     },
     { "orderBy": ["last-name", "first-name"] },
     { "limit": 10 }
@@ -47,11 +47,11 @@ joins-json-1: |
     "unify": [
       {
         "from": "users",
-        "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+        "bind": [ { "xt/id": {"xt:lvar": "user-id"}}, "first-name", "last-name" ]
       },
       {
         "from": "articles",
-        "bind": [ { "author-id": "user-id" }, "title", "content" ]
+        "bind": [ { "author-id": {"xt:lvar": "user-id"}}, "title", "content" ]
       }
     ]
   }
@@ -68,14 +68,15 @@ joins-json-2: |
     "unify": [
       {
         "from": "users",
-        "bind": [ { "xt/id": "uid1" }, "age" ]
+        "bind": [ { "xt/id": {"xt:lvar": "uid1"}}, "age" ]
       },
       {
         "from": "users",
-        "bind": [ { "xt/id": "uid2" }, "age" ]
+        "bind": [ { "xt/id": {"xt:lvar": "uid2"}}, "age" ]
       },
       {
-        "where": [ { "<>": [ "uid1", "uid2" ] } ]
+        "where": [ { "xt:call": "<>",
+                     "args": [ {"xt:lvar": "uid1"}, {"xt:lvar": "uid2"} ] } ]
       }
     ]
   }
@@ -95,12 +96,12 @@ joins-json-3: |
       "unify": [
         {
           "from": "customers",
-          "bind": [{ "xt/id": "cid" }]
+          "bind": [{ "xt/id": {"xt:lvar": "cid"}}]
         },
         {
           "leftJoin": {
             "from": "orders",
-            "bind": [{ "xt/id": "oid", "customer-id": "cid" }, "currency", "order-value"]
+            "bind": [{"xt/id": {"xt:lvar": "oid"}}, {"customer-id": {"xt:lvar": "cid"}}, "currency", "order-value"]
           },
           "bind": ["cid", "currency", "order-value"]
         }
@@ -124,20 +125,19 @@ joins-json-4: |
       "unify": [
         {
           "from": "customers",
-          "bind": [{ "xt/id": "cid" }]
+          "bind": [{ "xt/id": {"xt:lvar": "cid"}}]
         },
         {
           "where": [
             {
-              "not": [
-                {
-                  "exists": {
-                    "from": "orders",
-                    "bind": [ { "customer-id": "$cid" } ]
-                  },
-                  "args": [ "cid" ]
-                }
-              ]
+              "xt:call": "not",
+              "args": [{
+                         "xt:exists": {
+                           "from": "orders",
+                           "bind": [ { "customer-id": {"xt:param": "$cid"}} ]
+                         },
+                         "args": [ "cid" ]
+                       }]
             }
           ]
         }
@@ -165,7 +165,8 @@ proj-json-1: |
       "with": [
         {
           "full-name": {
-            "concat": ["first-name", { "@value": " " }, "last-name"]
+            "xt:call": "concat",
+            "args": [{"xt:lvar": "first-name"}, " ", {"xt:lvar": "last-name"}]
           }
         }
       ]
@@ -185,11 +186,11 @@ proj-json-2: |
       "unify": [
         {
           "from": "users",
-          "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+          "bind": [ { "xt/id": {"xt:lvar": "user-id"}}, "first-name", "last-name" ]
         },
         {
           "from": "articles",
-          "bind": [ { "author-id": "user-id" }, "title", "content" ]
+          "bind": [ { "author-id": {"xt:lvar": "user-id"}}, "title", "content" ]
         }
       ]
     },
@@ -197,7 +198,8 @@ proj-json-2: |
       "return": [
         {
           "full-name": {
-            "concat": [ "first-name", { "@value": " " }, "last-name" ]
+            "xt:call": "concat",
+            "args": [{"xt:lvar": "first-name"}, " ", {"xt:lvar": "last-name"}]
           }
         },
         "title",
@@ -220,11 +222,11 @@ proj-json-3: |
       "unify": [
         {
           "from": "users",
-          "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+          "bind": [ { "xt/id": {"xt:lvar": "user-id"}}, "first-name", "last-name" ]
         },
         {
           "from": "articles",
-          "bind": [ { "author-id": "user-id" }, "title", "content" ]
+          "bind": [ { "author-id": {"xt:lvar": "user-id"}}, "title", "content" ]
         }
       ]
     },
@@ -245,12 +247,12 @@ aggr-json-1: |
       "unify": [
         {
           "from": "customers",
-          "bind": [ { "xt/id": "cid" } ]
+          "bind": [ { "xt/id": {"xt:lvar": "cid"} } ]
         },
         {
           "leftJoin": {
             "from": "orders",
-            "bind": [ { "xt/id": "oid", "customer-id": "cid" }, "currency", "order-value" ]
+            "bind": [ { "xt/id": {"xt:lvar": "oid"}}, {"customer-id": {"xt:lvar": "cid"}}, "currency", "order-value"]
           },
           "bind": [ "oid", "cid", "currency", "order-value" ]
         }
@@ -258,22 +260,25 @@ aggr-json-1: |
     },
     {
       "aggregate": [
-        { "cid": "cid" },
-        { "currency": "currency" },
-        { "order-count": { "count": ["oid"] } },
-        { "total-value": { "sum": [ "order-value" ] } }
+        "cid",
+        "currency",
+        { "order-count": { "xt:call": "count",
+                           "args": [ {"xt:lvar": "oid"} ] } },
+        { "total-value": { "xt:call": "sum",
+                           "args": [ {"xt:lvar": "order-value"} ] } }
       ]
     },
-    { 
+    {
        "with": [
          {
            "total-value": {
-             "coalesce": ["total-value", 0]
+             "xt:call": "coalesce",
+             "args": [ {"xt:lvar": "total-value"}, 0]
            }
          }
        ]
     },
-    { "orderBy": [ { "val": "total-value", "dir": "desc" } ] },
+    { "orderBy": [ { "val": {"xt:lvar": "total-value"}, "dir": "desc" } ] },
     { "limit": 100 }
   ]
   // end::aggr-json-1[]
@@ -291,34 +296,38 @@ pull-json-1: |
   // tag::pull-json-1[]
   [
     {
-      "from": "articles",
-      "bind": [{ "xt/id": "article-id" }, "title", "content", "author-id"]
+        "from": "articles",
+        "bind": [{"xt/id": {"xt:lvar": "article-id"}}, "title", "content", "author-id"]
     },
     {
-      "with": [
-        {
-          "author": {
-            "pull": [
-              {
-                "from": "authors",
-                "bind": [{ "xt/id": "$author-id" }, "first-name", "last-name"]
-              }
-            ],
-            "args": ["author-id"]
-          },
-          "comments": {
-            "pullMany": [
-              {
-                "from": "comments",
-                "bind": [{"article-id": "$article-id"}, "created-at", "comment"]
-              },
-              { "orderBy": [{ "val": "created-at", "dir": "desc" }] },
-              { "limit": 10 }
-            ],
-            "args": ["article-id"]
-          }
-        }
-      ]
+        "with": [
+            {
+                "author": {
+                    "xt:pull": {
+                        "from": "authors",
+                        "bind": [{"xt/id": {"xt:param": "$author-id"}}, "first-name", "last-name"]
+                    },
+                    "args": ["author-id"]
+                }
+            },
+            {
+                "comments": {
+                    "xt:pullMany": [
+                        {
+                            "from": "comments",
+                            "bind": [{"article-id": {"xt:param": "$article-id"}}, "created-at", "comment"]
+                        },
+                        {
+                            "orderBy": [{"val": {"xt:lvar": "created-at"}, "dir": "desc"}]
+                        },
+                        {
+                            "limit": 10
+                        }
+                    ],
+                    "args": ["article-id"]
+                }
+            }
+        ]
     }
   ]
   // end::pull-json-1[]
@@ -356,12 +365,12 @@ bitemp-json-3: |
       {
         "from": "users",
         "forValidTime": { "at": { "@value": "2018-01-01", "@type": "xt:date" } },
-        "bind": [ { "xt/id": "user-id"} ]
+        "bind": [ { "xt/id": {"xt:lvar": "user-id"}} ]
       },
       {
         "from": "users",
         "forValidTime": { "at": { "@value": "2023-01-01", "@type": "xt:date" } },
-        "bind": [ { "xt/id": "user-id" } ]
+        "bind": [ { "xt/id": {"xt:lvar": "user-id"}} ]
       }
     ]
   }
