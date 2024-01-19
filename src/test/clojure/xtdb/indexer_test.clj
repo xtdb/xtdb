@@ -327,7 +327,7 @@
                           (xt/put :xt_docs {:xt/id "bar"})])
 
       ;; aborted tx shows up in log
-      (xt/submit-tx node [(xt/sql-op "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')")])
+      (xt/submit-tx node [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
       (-> (xt/submit-tx node [(-> (xt/delete :xt_docs "foo")
                                   (xt/starting-from #inst "2020-04-01"))
@@ -602,7 +602,7 @@
                                  (log* logger level throwable message))))]
       (with-open [node (xtn/start-node {})]
         (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
-                                (-> (xt/submit-tx node [(xt/sql-op "INSERT INTO foo(xt$id) VALUES (1)")])
+                                (-> (xt/submit-tx node [[:sql "INSERT INTO foo(xt$id) VALUES (1)"]])
                                     (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
@@ -616,10 +616,9 @@
 
         (let [last-tx-key (TransactionKey. 0 (time/->instant #inst "2020-01-01"))]
           (t/is (= last-tx-key
-                   (xt/submit-tx node [(-> (xt/sql-op "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)")
-                                           (xt/with-op-args
-                                             [0, 2, "hello", 12]
-                                             [1, 1, "world", 3.3]))])))
+                   (xt/submit-tx node [[:sql "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
+                                        [0, 2, "hello", 12]
+                                        [1, 1, "world", 3.3]]])))
 
           (t/is (= last-tx-key
                    (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))

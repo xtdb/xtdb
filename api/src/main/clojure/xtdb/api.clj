@@ -214,13 +214,13 @@
     [(xt/put :table {:xt/id \"my-id\", ...})
      (xt/delete :table \"my-id\")]
 
-    [(-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [0 1]))
+    [[:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [0 1]]
 
-     (-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [2 3] [4 5] [6 7]))
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [2 3] [4 5] [6 7]]
 
-     (xt/sql-op \"UPDATE foo SET b = 1\")]
+     [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a CompletableFuture containing a map with details about
   the submitted transaction, including system-time and tx-id.
@@ -245,13 +245,13 @@
     [(xt/put :table {:xt/id \"my-id\", ...})
      (xt/delete :table \"my-id\")]
 
-    [(-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [0 1]))
+    [[:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [0 1]]
 
-     (-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [2 3] [4 5] [6 7]))
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [2 3] [4 5] [6 7]]
 
-     (xt/sql-op \"UPDATE foo SET b = 1\")]
+     [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a map with details about the submitted transaction, including system-time and tx-id.
 
@@ -389,32 +389,6 @@
   See also: `put-fn`"
   [f & args]
   (TxOp/call (expect-fn-id f) (or args [])))
-
-(defn sql-op
-  "Returns an SQL DML operation for passing to `submit-tx`
-
-  * `sql`: SQL string - e.g. `\"INSERT INTO ...\"`, `\"UPDATE ...\"`
-
-    See https://docs.xtdb.com/reference/main/sql/txs.html for more details.
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query."
-  [sql]
-  (if-not (string? sql)
-    (throw (err/illegal-arg :xtdb.tx/expected-sql
-                            {::err/message "Expected SQL query",
-                             :sql sql}))
-
-    (TxOp/sql sql)))
-
-(defn ^:deprecated with-op-args
-  "Adds the given (variadic) argument rows to the operation.
-
-  e.g.
-  (-> (xt/update-table :users {:bind [{:xt/id $uid} version], :set {:version (inc version)}})
-      (xt/with-op-args {:uid \"james\"}
-                       {:uid \"dave\"}))"
-  [^TxOp$HasArgs op & args]
-  (.withArgs op ^List args))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.

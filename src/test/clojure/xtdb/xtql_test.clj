@@ -1890,7 +1890,7 @@
 
 
 (t/deftest test-sql-insert
-  (xt/submit-tx tu/*node* [(xt/sql-op "INSERT INTO foo (xt$id) VALUES (0)")])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (0)"]])
   (t/is (= [{:xt/id 0}]
            (xt/q tu/*node*
                  '(from :foo [xt/id])))))

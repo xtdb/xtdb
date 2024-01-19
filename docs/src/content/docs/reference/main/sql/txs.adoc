@@ -13,7 +13,7 @@ SQL transactions are submitted through `xtdb.api/submit-tx`.
 [#tx-ops]
 == Transaction operations
 
-SQL transaction operations are of the form `(xt/sql-op "<sql query>")`.
+SQL transaction operations are of the form `[:sql "<sql query>"]`.
 
 e.g.
 
@@ -21,12 +21,12 @@ e.g.
 ----
 (require '[xtdb.api :as xt])
 
-(xt/submit-tx node [(xt/sql-op "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')")
+(xt/submit-tx node [[:sql "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')"]
 
                     ;; with args - pass multiple vectors if required.
-                    (-> (xt/sql-op "INSERT INTO users (xt$id, name) VALUES (?, ?)")
-                        (xt/with-op-args ["jms" "James"]
-                                         ["jdt", "Jeremy"]))])
+                    [:sql "INSERT INTO users (xt$id, name) VALUES (?, ?)"
+                     ["jms", "James"]
+                     ["jdt", "Jeremy"]]])
 ----
 
 [NOTE]

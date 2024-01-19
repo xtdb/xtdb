@@ -105,7 +105,7 @@
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] param-batch]
                                                            [(xt/submit-tx& node
-                                                                           [(apply xt/with-op-args (xt/sql-op dml) param-batch)])
+                                                                           [(into [:sql dml] param-batch)])
                                                             (+ last-doc-count (count param-batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName table))

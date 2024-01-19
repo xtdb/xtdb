@@ -201,7 +201,7 @@
 (defn- execute-sql-statement [node sql-statement variables opts]
   (binding [r/*memo* (HashMap.)]
     (xt/submit-tx node
-                  [(xt/sql-op sql-statement)]
+                  [[:sql sql-statement]]
                   (-> opts
                       (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
                       (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))

@@ -16,10 +16,9 @@
 
 (t/deftest test-param-metadata-error-310
   (let [tx1 (xt/submit-tx tu/*node*
-                          [(-> (xt/sql-op "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)")
-                               (xt/with-op-args
-                                 ["dave", "Dave", #inst "2018"]
-                                 ["claire", "Claire", #inst "2019"]))])]
+                          [[:sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)"
+                            ["dave", "Dave", #inst "2018"]
+                            ["claire", "Claire", #inst "2019"]]])]
 
     (t/is (= [{:name "Dave"}]
              (xt/q tu/*node* "SELECT users.name FROM users WHERE users.xt$id = ?"

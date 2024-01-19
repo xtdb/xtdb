@@ -56,11 +56,11 @@
    (-> (xt/put :docs {:xt/id 3})
        (xt/during #inst "2023" #inst "2024"))
    (xt/erase :docs 3)
-   (xt/sql-op "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')")
-   (xt/sql-op "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')")
-   (xt/sql-op "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3")
-   (xt/sql-op "DELETE FROM docs WHERE docs.bar = 2")
-   (xt/sql-op "ERASE FROM docs WHERE docs.xt$id = 4")])
+   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
+   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
+   [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]
+   [:sql "DELETE FROM docs WHERE docs.bar = 2"]
+   [:sql "ERASE FROM docs WHERE docs.xt$id = 4"]])
 
 (deftest transit-test
   (xt/submit-tx *node* [(xt/put :foo {:xt/id 1})])

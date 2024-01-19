@@ -2,7 +2,7 @@
   (:require [xtdb.error :as err]
             [xtdb.xtql.edn :as xtql.edn])
   (:import [java.util List]
-           (xtdb.api.tx Xtql Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update XtqlAndArgs)))
+           (xtdb.api.tx TxOp Xtql Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update XtqlAndArgs)))
 
 (defmulti parse-tx-op
   (fn [tx-op]
@@ -21,6 +21,15 @@
 
 (defmethod parse-tx-op ::default [[op]]
   (throw (err/illegal-arg :xtql/unknown-tx-op {:op op})))
+
+(defmethod parse-tx-op :sql [[_ sql & arg-rows]]
+  (if-not (string? sql)
+    (throw (err/illegal-arg :xtdb.tx/expected-sql
+                            {::err/message "Expected SQL query",
+                             :sql sql}))
+
+    (cond-> (TxOp/sql sql)
+      (seq arg-rows) (.withArgs ^List (vec arg-rows)))))
 
 (defmethod parse-tx-op :insert-into [[_ table query & arg-rows :as this]]
   (when-not (keyword? table)

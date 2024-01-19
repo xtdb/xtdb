@@ -353,7 +353,7 @@
                  '(from :users [first-name last-name]))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Insert-sql"))])
+    [[:sql (sql-example "DML-Insert-sql")]])
 
   (t/is (= #{{:first-name "Ivan"
               :last-name "Ivanov"
@@ -392,8 +392,8 @@
   (xt/submit-tx tu/*node* comments)
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Delete-sql"))
-         (xt/with-op-args [1]))])
+    [[:sql (sql-example "DML-Delete-sql")
+      [1]]])
 
   (t/is (empty? (xt/q tu/*node* '(from :comments [{:post-id $post-id}])
                       {:args {:post-id 1}})))
@@ -432,8 +432,8 @@
   (xt/submit-tx tu/*node* (concat posts comments))
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Delete-additional-unify-clauses-sql"))
-         (xt/with-op-args ["ivan"]))])
+    [[:sql (sql-example "DML-Delete-additional-unify-clauses-sql")
+      ["ivan"]]])
 
   (t/is (empty? (xt/q tu/*node*
                       '(unify (from :comments [{:post-id pid}])
@@ -489,7 +489,7 @@
                                               :for-valid-time (from #inst "2023-12-26")}))))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Delete-bitemporal-sql"))])
+    [[:sql (sql-example "DML-Delete-bitemporal-sql")]])
 
   (t/is (= #{{:promotion-type "general"}}
            (set
@@ -521,7 +521,7 @@
   (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Delete-everything-sql"))])
+    [[:sql (sql-example "DML-Delete-everything-sql")]])
 
   (t/is (empty? (xt/q tu/*node* '(from :comments []))))
 
@@ -555,8 +555,8 @@
            (xt/q tu/*node* '(from :documents [version]))))
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Update-sql"))
-         (xt/with-op-args ["doc-id"]))])
+                [[:sql (sql-example "DML-Update-sql")
+                  ["doc-id"]]])
 
   (t/is (= [{:version 2}]
            (xt/q tu/*node* '(from :documents [version])))))
@@ -595,10 +595,10 @@
            (xt/q tu/*node* '(from :posts [comment-count]))))
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Update-bitemporal-sql-1"))
-         (xt/with-op-args [(random-uuid), "my-post-id"]))
-     (-> (xt/sql-op (sql-example "DML-Update-bitemporal-sql-2"))
-         (xt/with-op-args ["my-post-id" "my-post-id"]))])
+    [[:sql (sql-example "DML-Update-bitemporal-sql-1")
+      [(random-uuid), "my-post-id"]]
+     [:sql (sql-example "DML-Update-bitemporal-sql-2")
+      ["my-post-id" "my-post-id"]]])
 
   (t/is (= [{:comment-count 2}]
            (xt/q tu/*node* '(from :posts [comment-count])))))
@@ -626,7 +626,7 @@
   (t/is (not (empty? (xt/q tu/*node* '(from :users [])))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Erase-sql"))])
+    [[:sql (sql-example "DML-Erase-sql")]])
 
   (t/is (empty? (xt/q tu/*node* '(from :users []))))
   (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
@@ -661,7 +661,7 @@
   #_
   (let [{:keys [tx-id]}
         (xt/submit-tx tu/*node*
-          [(xt/sql-op (sql-example "DML-Assert-sql"))])]
+          [[:sql (sql-example "DML-Assert-sql")]])]
     (t/is (= [{:xt/committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed?])
                    {:args {:tx-id tx-id}})))))

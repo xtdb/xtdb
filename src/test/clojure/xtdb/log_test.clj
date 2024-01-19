@@ -90,18 +90,21 @@
 
 (t/deftest can-write-sql-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-sql.json")
-                         [(xt/sql-op "INSERT INTO foo (xt$id) VALUES (0)")
+                         [(-> [:sql "INSERT INTO foo (xt$id) VALUES (0)"]
+                              (tx-ops/parse-tx-op))
 
-                          (-> (xt/sql-op "INSERT INTO foo (xt$id, foo, bar) VALUES (?, ?, ?)")
-                              (xt/with-op-args
-                                [1 nil 3.3]
-                                [2 "hello" 12]))
+                          (-> [:sql "INSERT INTO foo (xt$id, foo, bar) VALUES (?, ?, ?)"
+                               [1 nil 3.3]
+                               [2 "hello" 12]]
+                              (tx-ops/parse-tx-op))
 
-                          (-> (xt/sql-op "UPDATE foo FOR PORTION OF VALID_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt$id = ?")
-                              (xt/with-op-args [1]))
+                          (-> [:sql "UPDATE foo FOR PORTION OF VALID_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt$id = ?"
+                               [1]]
+                              (tx-ops/parse-tx-op))
 
-                          (-> (xt/sql-op "DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt$id = ?")
-                              (xt/with-op-args [1]))]))
+                          (-> [:sql "DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt$id = ?"
+                               [1]]
+                              (tx-ops/parse-tx-op))]))
 
 (t/deftest can-write-xtql
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-xtdml.json")
@@ -116,7 +119,8 @@
 
 (t/deftest can-write-opts
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-opts.json")
-                         [(xt/sql-op "INSERT INTO foo (id) VALUES (0)")]
+                         [(-> [:sql "INSERT INTO foo (id) VALUES (0)"]
+                              (tx-ops/parse-tx-op))]
 
                          {:system-time (time/->instant #inst "2021")
                           :default-all-valid-time? false
