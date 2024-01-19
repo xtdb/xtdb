@@ -276,7 +276,7 @@
 
 (def ^:private table? keyword?)
 
-(defn- expect-table-name [table-name]
+(defn- expect-table-name ^String [table-name]
   (when-not (table? table-name)
     (throw (err/illegal-arg :xtdb.tx/invalid-table
                             {::err/message "expected table name" :table table-name})))

@@ -77,7 +77,7 @@
 
 (declare parse-arg-specs)
 
-(defn parse-expr [expr]
+(defn parse-expr ^xtdb.api.query.Expr [expr]
   (cond
     (nil? expr) Expr/NULL
     (true? expr) Expr/TRUE
@@ -471,23 +471,19 @@
   (when (> 1 (count clauses))
     (throw (err/illegal-arg :xtql/malformed-unify {:unify this
                                                    :message "Unify most contain at least one sub clause"})))
-  (->> clauses
-       (mapv parse-unify-clause)
-       (XtqlQuery/unify)))
+  (XtqlQuery/unify ^List (mapv parse-unify-clause clauses)))
 
 (defmethod parse-query 'union-all [[_ & queries :as this]]
   (when (> 1 (count queries))
     (throw (err/illegal-arg :xtql/malformed-union {:union this
                                                    :message "Union must contain a least one sub query"})))
-  (->> queries
-       (mapv parse-query)
-       (XtqlQuery/unionAll)))
+  (XtqlQuery/unionAll ^List (mapv parse-query queries)))
 
 (defn parse-where [[_ & preds :as this]]
   (when (> 1 (count preds))
     (throw (err/illegal-arg :xtql/malformed-where {:where this
                                                    :message "Where most contain at least one predicate"})))
-  (XtqlQuery/where (mapv parse-expr preds)))
+  (XtqlQuery/where ^List (mapv parse-expr preds)))
 
 (defmethod parse-query-tail 'where [this] (parse-where this))
 (defmethod parse-unify-clause 'where [this] (parse-where this))
@@ -496,7 +492,7 @@
   (when-not head
     (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline this
                                                       :message "Pipeline most contain at least one operator"})))
-  (XtqlQuery/pipeline (parse-query head) (mapv parse-query-tail tails)))
+  (XtqlQuery/pipeline (parse-query head) ^List (mapv parse-query-tail tails)))
 
 ;; TODO Align errors with json ones where appropriate.
 
@@ -511,7 +507,7 @@
   (when-not (every? keyword? cols)
     (throw (err/illegal-arg :xtql/malformed-without {:without this
                                                      ::err/message "Columns must be keywords in without"})))
-  (XtqlQuery/without (map (comp str symbol) cols)))
+  (XtqlQuery/without ^List (map (comp str symbol) cols)))
 
 (defmethod parse-query-tail 'return [[_ & cols :as this]]
   (XtqlQuery/returning (parse-col-specs cols this)))
@@ -591,7 +587,7 @@
     (XtqlQuery/orderSpec (parse-expr order-spec) nil nil)))
 
 (defmethod parse-query-tail 'order-by [[_ & order-specs :as this]]
-  (XtqlQuery/orderBy (mapv #(parse-order-spec % this) order-specs)))
+  (XtqlQuery/orderBy ^List (mapv #(parse-order-spec % this) order-specs)))
 
 (extend-protocol Unparse
   XtqlQuery$OrderSpec
