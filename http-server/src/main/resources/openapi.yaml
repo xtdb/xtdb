@@ -40,7 +40,7 @@ components:
     TabelName:
       type: string
       example: "docs"
-      description: table name
+      description: tabel name
     Document:
       title: document
       description: a document to be added to the db
@@ -50,7 +50,7 @@ components:
           $ref: '#/components/schemas/Any'
     Id:
       title: entity id
-      description: A XTDB endity id
+      description: A XTDB entity id
       oneOf:
         - type: string
         - type: integer
