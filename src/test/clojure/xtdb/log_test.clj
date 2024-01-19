@@ -79,8 +79,9 @@
 
 (t/deftest can-write-tx-fn-calls
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx-fn-calls.json")
-                         [(xt/call :foo 12 nil :bar)
-                          (xt/call :foo2 "hello" "world")]))
+                         (->> [[:call :foo 12 nil :bar]
+                               [:call :foo2 "hello" "world"]]
+                              (mapv tx-ops/parse-tx-op))))
 
 (t/deftest can-write-docs-with-different-keys
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/docs-with-different-keys.json")

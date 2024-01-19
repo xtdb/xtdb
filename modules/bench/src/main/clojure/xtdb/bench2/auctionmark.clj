@@ -321,7 +321,7 @@
 (defn proc-new-bid [worker]
   (let [params (generate-new-bid-params worker)]
     (when (and (:i_id params) (:u_id params))
-      (xt/submit-tx (:sut worker) [(xt/call :new-bid params)]))))
+      (xt/submit-tx (:sut worker) [[:call :new-bid params]]))))
 
 (defn proc-get-item [worker]
   (let [{:keys [sut]} worker

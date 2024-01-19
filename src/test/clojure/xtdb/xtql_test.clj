@@ -1451,7 +1451,7 @@
                                                 (map (fn [{:keys [id app-from app-to]}]
                                                        (-> (xt/delete :docs id)
                                                            (xt/during app-from app-to)))))))
-                             (xt/call :delete-1-week-records)]
+                             [:call :delete-1-week-records]]
                             {:system-time #inst "1998-01-30"})
 
           tx7 (xt/submit-tx tu/*node*
@@ -2084,7 +2084,7 @@
 (deftest row-alias-on-txs-tables-2809
   ;;TODO from-star
   (xt/submit-tx tu/*node* [(xt/put :xt-docs {:xt/id 1 :v 1})])
-  (xt/submit-tx tu/*node* [(xt/call :non-existing-fn)])
+  (xt/submit-tx tu/*node* [[:call :non-existing-fn]])
 
   (let [txs (->> (xt/q tu/*node*
                        '{:find [tx]

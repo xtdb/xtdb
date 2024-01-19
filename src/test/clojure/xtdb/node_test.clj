@@ -356,7 +356,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (xt/submit-tx tu/*node* [(xt/put-fn :tx-fn-fail
                                         '(fn []
                                            (throw (Exception. "boom"))))
-                             (xt/call :tx-fn-fail)])
+                             [:call :tx-fn-fail]])
 
     (t/is (= #{{:tx-id 0, :tx-time (time/->zdt #inst "2020-01-01"), :committed? true}
                {:tx-id 1, :tx-time (time/->zdt #inst "2020-01-02"), :committed? false}

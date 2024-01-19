@@ -383,13 +383,6 @@
   [table id]
   (TxOp/erase (expect-table-name table) (expect-eid id)))
 
-(defn call
-  "Returns a transaction-function call operation for passing to `submit-tx`.
-
-  See also: `put-fn`"
-  [f & args]
-  (TxOp/call (expect-fn-id f) (or args [])))
-
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
 

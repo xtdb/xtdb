@@ -22,6 +22,42 @@
 (defmethod parse-tx-op ::default [[op]]
   (throw (err/illegal-arg :xtql/unknown-tx-op {:op op})))
 
+(def ^:private eid? (some-fn uuid? integer? string? keyword?))
+
+(def ^:private table? keyword?)
+
+(defn- expect-table-name ^String [table-name]
+  (when-not (table? table-name)
+    (throw (err/illegal-arg :xtdb.tx/invalid-table
+                            {::err/message "expected table name" :table table-name})))
+
+  (str (symbol table-name)))
+
+(defn- expect-eid [eid]
+  (if-not (eid? eid)
+    (throw (err/illegal-arg :xtdb.tx/invalid-eid
+                            {::err/message "expected xt/id", :xt/id eid}))
+    eid))
+
+(defn- expect-doc [doc]
+  (when-not (map? doc)
+    (throw (err/illegal-arg :xtdb.tx/expected-doc
+                            {::err/message "expected doc map", :doc doc})))
+  (expect-eid (or (:xt/id doc) (get doc "xt/id")))
+
+  (-> doc
+      (update-keys (fn [k]
+                     (cond-> k
+                       (keyword? k) (-> symbol str))))))
+
+(defn- expect-fn-id [fn-id]
+  (if-not (eid? fn-id)
+    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
+    fn-id))
+
+(defmethod parse-tx-op :call [[_ f & args]]
+  (TxOp/call (expect-fn-id f) (or args [])))
+
 (defmethod parse-tx-op :sql [[_ sql & arg-rows]]
   (if-not (string? sql)
     (throw (err/illegal-arg :xtdb.tx/expected-sql

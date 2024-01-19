@@ -14,6 +14,7 @@
             [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -32,7 +33,7 @@
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
-           xtdb.api.tx.Xtql
+           (xtdb.api.tx TxOp Xtql)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query IRaQuerySource PreparedQuery)
@@ -207,7 +208,7 @@
 
 (def ^:private xt-sci-ns
   (-> (sci/copy-ns xtdb.api (sci/create-ns 'xtdb.api))
-      (select-keys ['put 'put-fn 'delete 'erase 'call
+      (select-keys ['put 'put-fn 'delete 'erase
                     'during 'starting-at 'until])))
 
 (defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src
@@ -233,9 +234,17 @@
                       (sci/binding [sci/out *out*
                                     sci/in *in*]
                         (let [res (apply tx-fn args)]
-                          (cond-> res
-                            (seqable? res) doall)))
+                          (cond->> res
+                            (seqable? res) (mapv (fn [tx-op]
+                                                   (cond-> tx-op
+                                                     (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))))))
                       (catch InterruptedException ie (throw ie))
+                      (catch xtdb.IllegalArgumentException e
+                        (log/warn e "unhandled error evaluating tx fn")
+                        (throw e))
+                      (catch xtdb.RuntimeException e
+                        (log/warn e "unhandled error evaluating tx fn")
+                        (throw e))
                       (catch Throwable t
                         (log/warn t "unhandled error evaluating tx fn")
                         (throw (err/runtime-err :xtdb.call/error-evaluating-tx-fn

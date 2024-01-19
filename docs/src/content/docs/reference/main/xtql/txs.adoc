@@ -218,7 +218,7 @@ This can be used to enforce consistency constraints - for example, to assert tha
 
 Call a transaction function.
 
-`(xt/call <fn-id> <args>*)`
+`[:call <fn-id> <args>*]`
 
 Transaction functions are defined using `put-fn`:
 
