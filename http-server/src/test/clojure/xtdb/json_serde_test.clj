@@ -291,43 +291,42 @@
 (defn- decode-query [^String v]
   (JsonSerde/decode v Query))
 
-(try
-  (-> {"from" "docs" "bind" "xt/id"} encode decode-query )
-  (catch Throwable t
-    t))
-
 (deftest deserialize-query-test
-  (let [v (-> (Query/from "docs")
-              (.bind (Binding. "xt/id" (Expr/lVar "xt/id")))
-              (.bind (Binding. "a" (Expr/lVar "b")))
-              (.build))]
-    (t/is (= v (roundtrip-query v))))
+  (let [query (-> (Query/from "docs")
+                  (.bind (Binding. "xt/id" (Expr/lVar "xt/id")))
+                  (.bind (Binding. "a" (Expr/lVar "b")))
+                  (.build))]
+    (t/is (= query (roundtrip-query query)))
 
-  (let [v (-> (doto (Query/from "docs")
-                (.setBindings [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-                (.forValidTime (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z")))
-                (.forSystemTime TemporalFilter/ALL_TIME))
-              (.build))]
-    (t/is (= v (roundtrip-query v)) "from with temporal bounds"))
+    (let [v (-> (doto (Query/from "docs")
+                  (.setBindings [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+                  (.forValidTime (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z")))
+                  (.forSystemTime TemporalFilter/ALL_TIME))
+                (.build))]
+      (t/is (= v (roundtrip-query v)) "from with temporal bounds"))
 
-  (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                          (-> {"from" "docs" "bind" "xt/id"} encode decode-query))
-        "bind not an array")
+    (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
+                            (-> {"from" "docs" "bind" "xt/id"} encode decode-query))
+          "bind not an array")
 
-  (let [v (Query$Pipeline. (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-                           [(Query/limit 10)])]
-    (t/is (= v (roundtrip-query v)) "pipeline"))
+    (let [v (Query$Pipeline. (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+                             [(Query/limit 10)])]
+      (t/is (= v (roundtrip-query v)) "pipeline"))
 
-  (let [v (Query$Unify. [(Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-                         (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])])]
-    (t/is (= v (roundtrip-query v)) "unify"))
+    (let [v (Query$Unify. [(Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+                           (Query$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])])]
+      (t/is (= v (roundtrip-query v)) "unify"))
 
-  (t/testing "rel"
-    (let [v (Query/relation ^List (list {"foo" (Expr/val :bar)}) ^List (list (Binding. "foo" (Expr/lVar "foo"))))]
-      (t/is (= v (roundtrip-query v))))
+    (t/testing "rel"
+      (let [v (Query/relation ^List (list {"foo" (Expr/val :bar)}) ^List (list (Binding. "foo" (Expr/lVar "foo"))))]
+        (t/is (= v (roundtrip-query v))))
 
-    (let [v (Query/relation (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))]
-      (t/is (= v (roundtrip-query v))))))
+      (let [v (Query/relation (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))]
+        (t/is (= v (roundtrip-query v)))))
+
+    (t/testing "union-all"
+      (let [v (Query/unionAll ^List (list query query))]
+        (t/is (= v (roundtrip-query v)))))))
 
 (defn- roundtrip-query-tail [v]
   (-> v (JsonSerde/encode Query$QueryTail) (JsonSerde/decode Query$QueryTail)))

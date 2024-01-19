@@ -28,6 +28,7 @@ sealed interface Query {
                 "from" in element -> From.serializer()
                 "rel" in element -> Relation.serializer()
                 "unify" in element -> Unify.serializer()
+                "unionAll" in element -> UnionAll.serializer()
                 else -> throw jsonIAE("xtql/malformed-query", element)
             }
 
