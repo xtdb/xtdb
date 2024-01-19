@@ -4,6 +4,7 @@
             [xtdb.api :as xt]
             [xtdb.indexer.live-index :as li]
             [xtdb.metadata :as meta]
+            xtdb.node.impl
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]

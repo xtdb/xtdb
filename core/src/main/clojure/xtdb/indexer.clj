@@ -64,32 +64,33 @@
 (defn- ->put-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
                                               ^IVectorReader tx-ops-rdr, ^Instant system-time]
   (let [put-leg (.legReader tx-ops-rdr :put)
-        doc-rdr (.structKeyReader put-leg "document")
+        docs-rdr (.structKeyReader put-leg "documents")
         valid-from-rdr (.structKeyReader put-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
         system-time-µs (time/instant->micros system-time)
-        tables (->> (.legs doc-rdr)
+        tables (->> (.legs docs-rdr)
                     (into {} (map (fn [table]
                                     (let [table-name (str (symbol table))
-                                          table-rdr (.legReader doc-rdr table)
-                                          table-rel-rdr (vr/rel-reader (for [sk (.structKeys table-rdr)]
-                                                                         (.structKeyReader table-rdr sk))
-                                                                       (.valueCount table-rdr))
+                                          table-docs-rdr (.legReader docs-rdr table)
+                                          doc-rdr (.listElementReader table-docs-rdr)
+                                          table-rel-rdr (vr/rel-reader (for [sk (.structKeys doc-rdr)]
+                                                                         (.structKeyReader doc-rdr sk))
+                                                                       (.valueCount doc-rdr))
                                           live-table (.liveTable live-idx-tx table-name)]
                                       (MapEntry/create table
-                                                       {:id-rdr (.structKeyReader table-rdr "xt$id")
+                                                       {:id-rdr (.structKeyReader doc-rdr "xt$id")
 
                                                         :live-table live-table
+
+                                                        :docs-rdr table-docs-rdr
 
                                                         :doc-copier (-> (.docWriter live-table)
                                                                         (vw/struct-writer->rel-copier table-rel-rdr))}))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [{:keys [^IVectorReader id-rdr, ^ILiveTableTx live-table, ^IRowCopier doc-copier]}
-              (get tables (.getLeg doc-rdr tx-op-idx))
-
-              eid (.getObject id-rdr tx-op-idx)
+        (let [{:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^ILiveTableTx live-table, ^IRowCopier doc-copier]}
+              (get tables (.getLeg docs-rdr tx-op-idx))
 
               valid-from (if (.isNull valid-from-rdr tx-op-idx)
                            system-time-µs
@@ -102,7 +103,11 @@
                                     {:valid-from (time/micros->instant valid-from)
                                      :valid-to (time/micros->instant valid-to)})))
 
-          (.logPut live-table (trie/->iid eid) valid-from valid-to #(.copyRow doc-copier tx-op-idx)))
+          (let [doc-start-idx (.getListStartIndex docs-rdr tx-op-idx)]
+            (dotimes [doc-idx (.getListCount docs-rdr tx-op-idx)]
+              (let [doc-idx (+ doc-start-idx doc-idx)
+                    eid (.getObject id-rdr doc-idx)]
+                (.logPut live-table (trie/->iid eid) valid-from valid-to #(.copyRow doc-copier doc-idx))))))
 
         nil))))
 

@@ -54,14 +54,14 @@
 (deftest deserialize-tx-op-test
   (t/testing "put"
     (let [v #xt.tx/put {:table-name :docs,
-                        :doc {"foo" :bar, "xt/id" "my-id"},
+                        :docs [{"foo" :bar, "xt/id" "my-id"}],
                         :valid-from nil,
                         :valid-to nil}]
 
       (t/is (= v (roundtrip-tx-op v))))
 
     (let [v #xt.tx/put {:table-name :docs,
-                        :doc {"foo" :bar, "xt/id" "my-id"},
+                        :docs [{"foo" :bar, "xt/id" "my-id"}],
                         :valid-from #time/instant "2020-01-01T00:00:00Z",
                         :valid-to #time/instant "2021-01-01T00:00:00Z"}]
 
@@ -179,14 +179,14 @@
 
 (deftest deserialize-tx-test
   (let [v (TxRequest. [#xt.tx/put {:table-name :docs,
-                                   :doc {"xt/id" "my-id"},
+                                   :docs [{"xt/id" "my-id"}],
                                    :valid-from nil,
                                    :valid-to nil}],
                       (TxOptions.))]
     (t/is (= v (roundtrip-tx v))))
 
   (let [v (TxRequest. [#xt.tx/put {:table-name :docs,
-                                   :doc {"xt/id" "my-id"},
+                                   :docs [{"xt/id" "my-id"}],
                                    :valid-from nil,
                                    :valid-to nil}],
                       (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"

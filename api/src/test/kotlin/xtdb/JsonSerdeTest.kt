@@ -160,13 +160,13 @@ class JsonSerdeTest {
             .assertRoundTripTxOp(
                 """{
                   "put": "foo",
-                  "doc": {
-                  "xt/id": "foo",
+                  "docs": [{
+                    "xt/id": "foo",
                     "bar": {
                       "@type": "xt:instant",
                       "@value": "2023-01-01T12:34:56.789Z"
-                     }
-                  }
+                    }
+                  }]
                 }
                 """.trimJson()
             )
@@ -176,13 +176,13 @@ class JsonSerdeTest {
             .assertRoundTripTxOp(
                 """{
                   "put": "foo",
-                  "doc": {
-                  "xt/id": "foo",
-                    "bar": {
-                      "@type": "xt:instant",
-                      "@value": "2023-01-01T12:34:56.789Z"
-                     }
-                  },
+                  "docs": [{
+                    "xt/id": "foo",
+                      "bar": {
+                        "@type": "xt:instant",
+                        "@value": "2023-01-01T12:34:56.789Z"
+                      }
+                  }],
                  "validFrom": "1970-01-01T00:00:00Z",
                  "validTo": "2023-01-01T12:34:56.789Z"
                 }

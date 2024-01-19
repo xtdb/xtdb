@@ -215,13 +215,13 @@
 
 (def json-tx-ops
   [{"put" "docs"
-    "doc" {"xt/id" 1}}
+    "docs" [{"xt/id" 1}]}
    {"put" "docs"
-    "doc" {"xt/id" 2}}
+    "docs" [{"xt/id" 2}]}
    {"delete" "docs"
     "id" 1}
    {"put" "docs"
-    "doc" {"xt/id" 3}
+    "docs" [{"xt/id" 3}]
     "validFrom" (inst->str #inst "2050")
     "validTo" (inst->str #inst "2051")}
    {"erase" "docs"
@@ -396,7 +396,7 @@
 
       ;; using docs in combination with docs3
       (let [assert+put [{"assertExists" {"from" "docs", "bind" ["xt/id"]}}
-                        {"put" "docs3" "doc" {"xt/id" 1}}]
+                        {"put" "docs3" "docs" [{"xt/id" 1}]}]
             tx7 (-> (http/request {:accept :transit+json
                                    :as :string
                                    :request-method :post

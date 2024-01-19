@@ -104,7 +104,7 @@
     :else (throw (err/illegal-arg :xtdb/invalid-xtql {:xtql xtql, :type (type xtql)}))))
 
 (defn- render-put-op [^Put op]
-  {:table-name (keyword (.tableName op)), :doc (.doc op)
+  {:table-name (keyword (.tableName op)), :docs (.docs op)
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
 (defmethod print-dup Put [op ^Writer w]
@@ -113,8 +113,8 @@
 (defmethod print-method Put [op ^Writer w]
   (print-dup op w))
 
-(defn put-op-reader [{:keys [table-name doc valid-from valid-to]}]
-  (-> (TxOp/put (str (symbol table-name)) doc)
+(defn put-op-reader [{:keys [table-name ^List docs valid-from valid-to]}]
+  (-> (TxOp/put (str (symbol table-name)) docs)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
 (defn- render-delete-op [^Delete op]

@@ -21,7 +21,7 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "document",
+            "name" : "documents",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -32,52 +32,59 @@
               "name" : "xt$tx_fns",
               "nullable" : false,
               "type" : {
-                "name" : "struct"
+                "name" : "list"
               },
               "children" : [{
-                "name" : "xt$id",
+                "name" : "$data$",
                 "nullable" : false,
                 "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
+                  "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "keyword",
+                  "name" : "xt$id",
                   "nullable" : false,
                   "type" : {
-                    "name" : "KeywordType"
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
                   },
-                  "children" : [ ],
-                  "metadata" : [{
-                    "value" : "xt/clj-keyword",
-                    "key" : "ARROW:extension:name"
-                  },{
-                    "value" : "",
-                    "key" : "ARROW:extension:metadata"
+                  "children" : [{
+                    "name" : "keyword",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "KeywordType"
+                    },
+                    "children" : [ ],
+                    "metadata" : [{
+                      "value" : "xt/clj-keyword",
+                      "key" : "ARROW:extension:name"
+                    },{
+                      "value" : "",
+                      "key" : "ARROW:extension:metadata"
+                    }]
                   }]
-                }]
-              },{
-                "name" : "xt$fn",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "transit",
+                },{
+                  "name" : "xt$fn",
                   "nullable" : false,
                   "type" : {
-                    "name" : "TransitType"
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
                   },
-                  "children" : [ ],
-                  "metadata" : [{
-                    "value" : "xt/transit+msgpack",
-                    "key" : "ARROW:extension:name"
-                  },{
-                    "value" : "",
-                    "key" : "ARROW:extension:metadata"
+                  "children" : [{
+                    "name" : "transit",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "TransitType"
+                    },
+                    "children" : [ ],
+                    "metadata" : [{
+                      "value" : "xt/transit+msgpack",
+                      "key" : "ARROW:extension:name"
+                    },{
+                      "value" : "",
+                      "key" : "ARROW:extension:metadata"
+                    }]
                   }]
                 }]
               }]
@@ -145,7 +152,7 @@
           "count" : 2,
           "VALIDITY" : [1,1],
           "children" : [{
-            "name" : "document",
+            "name" : "documents",
             "count" : 2,
             "TYPE_ID" : [0,0],
             "OFFSET" : [0,1],
@@ -153,29 +160,35 @@
               "name" : "xt$tx_fns",
               "count" : 2,
               "VALIDITY" : [1,1],
+              "OFFSET" : [0,1,2],
               "children" : [{
-                "name" : "xt$id",
+                "name" : "$data$",
                 "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
+                "VALIDITY" : [1,1],
                 "children" : [{
-                  "name" : "keyword",
+                  "name" : "xt$id",
                   "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,3,6],
-                  "DATA" : ["foo","bar"]
-                }]
-              },{
-                "name" : "xt$fn",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "transit",
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "keyword",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "OFFSET" : [0,3,6],
+                    "DATA" : ["foo","bar"]
+                  }]
+                },{
+                  "name" : "xt$fn",
                   "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,70,140],
-                  "DATA" : ["92af7e23787464622f636c6a2d666f726d92ab7e23787464622f6c697374da002528666e205b69645d205b2878742f707574203a666f6f207b3a78742f69642069647d295d29","92af7e23787464622f636c6a2d666f726d92ab7e23787464622f6c697374da002528666e205b69645d205b2878742f707574203a626172207b3a78742f69642069647d295d29"]
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "transit",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "OFFSET" : [0,70,140],
+                    "DATA" : ["92af7e23787464622f636c6a2d666f726d92ab7e23787464622f6c697374da002528666e205b69645d205b2878742f707574203a666f6f207b3a78742f69642069647d295d29","92af7e23787464622f636c6a2d666f726d92ab7e23787464622f6c697374da002528666e205b69645d205b2878742f707574203a626172207b3a78742f69642069647d295d29"]
+                  }]
                 }]
               }]
             }]

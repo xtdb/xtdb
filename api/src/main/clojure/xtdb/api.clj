@@ -304,13 +304,13 @@
   "Returns a put operation for passing to `submit-tx`.
 
   `table`: table to put the document into.
-  `doc`: document to put.
-    * Must contain an `:xt/id` attribute - currently string, UUID, integer or keyword.
+  `docs`: documents to put.
+    * Each must contain an `:xt/id` attribute - currently string, UUID, integer or keyword.
 
   * `put` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
   * To insert documents using a query, use `insert-into`"
-  [table doc]
-  (TxOp/put (expect-table-name table) (expect-doc doc)))
+  [table & docs]
+  (TxOp/put (expect-table-name table) ^List (mapv expect-doc docs)))
 
 (defn- expect-fn-id [fn-id]
   (if-not (eid? fn-id)

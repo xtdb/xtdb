@@ -45,7 +45,6 @@ sealed interface TxOp {
         }
     }
 
-
     @Suppress("unused")
     interface HasArgs<ArgType, O : HasArgs<ArgType, O>?> {
         fun withArgs(args: List<ArgType>?): O
@@ -65,10 +64,14 @@ sealed interface TxOp {
         fun sql(sql: String, argBytes: ByteBuffer) = SqlByteArgs(sql, argBytes)
 
         @JvmStatic
-        fun put(tableName: String, doc: Map<String, Any>) = Put(tableName, doc)
+        fun put(tableName: String, docs: List<Map<String, *>>) = Put(tableName, docs)
 
         @JvmStatic
-        fun putFn(fnId: Any, fnForm: Any) = put(XT_TXS, mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm)))
+        @SafeVarargs
+        fun put(tableName: String, vararg docs: Map<String, *>) = put(tableName, docs.toList())
+
+        @JvmStatic
+        fun putFn(fnId: Any, fnForm: Any) = put(XT_TXS, listOf(mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm))))
 
         @JvmStatic
         fun delete(tableName: String, entityId: Any) = Delete(tableName, entityId)
@@ -87,14 +90,14 @@ sealed interface TxOp {
 @Serializable
 data class Put(
     @JvmField @SerialName("put") val tableName: String,
-    @JvmField val doc: Map<String, Any>,
+    @JvmField val docs: List<Map<String, *>>,
     @JvmField val validFrom: Instant? = null,
     @JvmField val validTo: Instant? = null
 ) : TxOp, HasValidTimeBounds<Put> {
 
-    override fun startingFrom(validFrom: Instant?): Put = Put(tableName, doc, validFrom, validTo)
-    override fun until(validTo: Instant?): Put = Put(tableName, doc, validFrom, validTo)
-    override fun during(validFrom: Instant?, validTo: Instant?): Put = Put(tableName, doc, validFrom, validTo)
+    override fun startingFrom(validFrom: Instant?): Put = Put(tableName, docs, validFrom, validTo)
+    override fun until(validTo: Instant?): Put = Put(tableName, docs, validFrom, validTo)
+    override fun during(validFrom: Instant?, validTo: Instant?): Put = Put(tableName, docs, validFrom, validTo)
 }
 
 @Serializable

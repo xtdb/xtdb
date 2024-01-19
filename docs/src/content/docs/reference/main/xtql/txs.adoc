@@ -18,18 +18,18 @@ XT submit options are an optional map of the following keys:
 
 === `put`
 
-Upserts a document into the given table, optionally during the given valid time period.
+Upserts documents into the given table, optionally during the given valid time period.
 
-`(xt/put <table> <document>)`
+`(xt/put <table> & <documents>)`
 
 * `table` (keyword).
-* `document` (map): must contain `:xt/id`.
+* `documents` (maps): each must contain `:xt/id`.
 
 To specify a valid-time range:
 
-* `+(-> (xt/put <table> <document>) (xt/starting-from <from>))+`
-* `+(-> (xt/put <table> <document>) (xt/until <to>))+`
-* `+(-> (xt/put <table> <document>) (xt/during <from> <to))+`
+* `+(-> (xt/put <table> & <documents>) (xt/starting-from <from>))+`
+* `+(-> (xt/put <table> & <documents>) (xt/until <to>))+`
+* `+(-> (xt/put <table> & <documents>) (xt/during <from> <to))+`
 
 where:
 

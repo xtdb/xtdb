@@ -229,7 +229,7 @@
 
       (.endStruct sql-writer))))
 
-(defn- ->sql-byte-args-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
+(defn- ->sql-byte-args-writer [^IVectorWriter op-writer]
   (let [sql-writer (.legWriter op-writer :sql (FieldType/notNullable #xt.arrow/type :struct))
         query-writer (.structKeyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
         args-writer (.structKeyWriter sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
@@ -245,7 +245,7 @@
 
 (defn- ->put-writer [^IVectorWriter op-writer]
   (let [put-writer (.legWriter op-writer :put (FieldType/notNullable #xt.arrow/type :struct))
-        doc-writer (.structKeyWriter put-writer "document" (FieldType/notNullable #xt.arrow/type :union))
+        doc-writer (.structKeyWriter put-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
         valid-from-writer (.structKeyWriter put-writer "xt$valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.structKeyWriter put-writer "xt$valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
@@ -254,11 +254,10 @@
       (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/str->normal-form-str (.tableName op))
                                                (util/->jfn
                                                  (fn [table]
-                                                   (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :struct)))))]
-        (vw/write-value! (->> (.doc op)
-                              (into {} (map (juxt (comp util/str->normal-form-str str symbol key)
-                                                  val))))
-                         table-doc-writer))
+                                                   (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
+                                                     (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct))))))]
+
+        (vw/write-value! (.docs op) table-doc-writer))
 
       (vw/write-value! (.validFrom op) valid-from-writer)
       (vw/write-value! (.validTo op) valid-to-writer)
@@ -324,7 +323,7 @@
   (let [!write-xtql+args! (delay (->xtql+args-writer op-writer allocator))
         !write-xtql! (delay (->xtql-writer op-writer))
         !write-sql! (delay (->sql-writer op-writer allocator))
-        !write-sql-byte-args! (delay (->sql-byte-args-writer op-writer allocator))
+        !write-sql-byte-args! (delay (->sql-byte-args-writer op-writer))
         !write-put! (delay (->put-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
         !write-erase! (delay (->erase-writer op-writer))
