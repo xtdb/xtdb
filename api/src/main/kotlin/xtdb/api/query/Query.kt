@@ -184,7 +184,7 @@ sealed interface XtqlQuery : Query {
     data class Call(
         @JvmField @SerialName("call") val ruleName: String,
         @JvmField val args: List<Expr>,
-        @JvmField val bindings: List<Binding>? = null,
+        @JvmField @SerialName("bind") val bindings: List<Binding>? = null,
     ) : UnifyClause {
 
         fun binding(bindings: List<Binding>) = copy(bindings = bindings)
@@ -198,7 +198,7 @@ sealed interface XtqlQuery : Query {
     data class Join(
         @JvmField @SerialName("join") val query: XtqlQuery,
         @JvmField val args: List<Binding>? = null,
-        @JvmField val bindings: List<Binding>? = null,
+        @JvmField @SerialName("bind") val bindings: List<Binding>? = null,
     ) : IJoin {
         override fun binding(bindings: List<Binding>) = copy(bindings = bindings)
     }
@@ -207,7 +207,7 @@ sealed interface XtqlQuery : Query {
     data class LeftJoin(
         @JvmField @SerialName("leftJoin") val query: XtqlQuery,
         @JvmField val args: List<Binding>? = null,
-        @JvmField val bindings: List<Binding>? = null,
+        @JvmField @SerialName("bind") val bindings: List<Binding>? = null,
     ) : IJoin {
 
         override fun binding(bindings: List<Binding>) = copy(bindings = bindings)
