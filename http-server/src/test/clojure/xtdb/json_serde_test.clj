@@ -326,6 +326,10 @@
 
     (t/testing "union-all"
       (let [v (Query/unionAll ^List (list query query))]
+        (t/is (= v (roundtrip-query v)))))
+
+    (t/testing "sql-query"
+      (let [v (Query/sql "SELECT * FROM docs")]
         (t/is (= v (roundtrip-query v)))))))
 
 (defn- roundtrip-query-tail [v]

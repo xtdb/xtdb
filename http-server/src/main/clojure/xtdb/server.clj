@@ -31,7 +31,7 @@
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
            (xtdb.api HttpServerModule TransactionKey Xtdb$Config Xtdb$Module)
-           (xtdb.api.query Basis IKeyFn Query QueryRequest)
+           (xtdb.api.query Basis IKeyFn Query QueryRequest Query$SqlQuery)
            (xtdb.api.tx TxOptions TxRequest)))
 
 (defn decoder [_options]
@@ -214,9 +214,12 @@
     mf/Decode
     (decode [_ data _]
       (with-open [^InputStream data data]
-        (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)]
+        (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)
+              query (.query query-request)]
           (-> (into {} (.queryOpts query-request))
-              (assoc :query (.query query-request))))))))
+              (assoc :query (if (instance? Query$SqlQuery query)
+                              (.sql ^Query$SqlQuery query)
+                              query))))))))
 
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts

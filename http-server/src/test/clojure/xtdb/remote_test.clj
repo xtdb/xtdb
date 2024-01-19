@@ -280,6 +280,18 @@
                  decode-transit*))
           "testing query opts")
 
+    (t/is (= [{:xt/id 2}]
+             (-> (http/request {:accept :transit+json
+                                :as :string
+                                :request-method :post
+                                :content-type :json
+                                :form-params {:query {"sql" "SELECT docs.xt$id FROM docs"}
+                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}}}
+                                :url (http-url "query")})
+                 :body
+                 decode-transit*))
+          "testing sql query")
+
     (t/testing "malformed tx request "
       (let [{:keys [status body] :as _resp}
             (http/request {:accept :transit+json

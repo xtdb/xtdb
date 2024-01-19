@@ -27,6 +27,7 @@ sealed interface Query {
             is JsonObject -> when {
                 "from" in element -> From.serializer()
                 "rel" in element -> Relation.serializer()
+                "sql" in element -> SqlQuery.serializer()
                 "unify" in element -> Unify.serializer()
                 "unionAll" in element -> UnionAll.serializer()
                 else -> throw jsonIAE("xtql/malformed-query", element)
@@ -35,6 +36,9 @@ sealed interface Query {
             else -> throw jsonIAE("xtql/malformed-query", element)
         }
     }
+
+    @Serializable
+    data class SqlQuery(@JvmField val sql: String) : Query
 
     @Serializable(QueryTail.Serde::class)
     sealed interface QueryTail {
@@ -341,6 +345,9 @@ sealed interface Query {
     data class UnnestCol(@JvmField @SerialName("unnest") val col: Binding) : QueryTail
 
     companion object {
+        @JvmStatic
+        fun sql(sql: String) = SqlQuery(sql)
+
         @JvmStatic
         fun pipeline(query: Query, tails: List<QueryTail>) = Pipeline(query, tails)
 

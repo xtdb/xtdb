@@ -467,12 +467,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UnifyClause'
+    SqlQuery:
+      type: object
+      properties:
+        sql:
+          type: string
     Query:
       description: A XTQL query
       oneOf:
         - $ref: '#/components/schemas/From'
         - $ref: '#/components/schemas/Pipeline'
         - $ref: '#/components/schemas/Relation'
+        - $ref: '#/components/schemas/SqlQuery'
         - $ref: '#/components/schemas/Unify'
         - $ref: '#/components/schemas/UnionAll'
     QueryOpts:
