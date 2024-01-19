@@ -2,8 +2,7 @@
   "This namespace is for starting an in-process XTDB node.
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
-  (:require [clojure.tools.logging :as log]
-            [xtdb.time :as time])
+  (:require [xtdb.time :as time])
   (:import [java.time ZoneId]
            [xtdb.api Xtdb Xtdb$Config XtdbSubmitClient XtdbSubmitClient$Config]))
 

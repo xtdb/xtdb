@@ -1,5 +1,5 @@
 (ns xtdb.azure
-  (:require [clojure.tools.logging :as log] 
+  (:require [clojure.tools.logging :as log]
             [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.azure.log :as tx-log]
             [xtdb.azure.object-store :as os]
@@ -15,9 +15,9 @@
            [com.azure.messaging.eventhubs EventHubClientBuilder]
            [com.azure.resourcemanager.eventhubs EventHubsManager]
            [com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs]
-           [com.azure.storage.blob BlobServiceClientBuilder] 
+           [com.azure.storage.blob BlobServiceClientBuilder]
            [java.util.concurrent ConcurrentSkipListSet]
-           [xtdb.api AzureObjectStoreFactory XtdbSubmitClient$Config] 
+           [xtdb.api AConfig AzureObjectStoreFactory]
            [xtdb.api.log AzureEventHubLogFactory]
            [xtdb.api.storage ObjectStore]))
 
@@ -57,8 +57,8 @@
                                file-list-watcher)))
 
 (defmethod xtn/apply-config! ::event-hub-log
-  [^XtdbSubmitClient$Config config _ {:keys [namespace event-hub-name max-wait-time poll-sleep-duration
-                                             create-event-hub? retention-period-in-days resource-group-name]}]
+  [^AConfig config _ {:keys [namespace event-hub-name max-wait-time poll-sleep-duration
+                             create-event-hub? retention-period-in-days resource-group-name]}]
   (doto config
     (.setTxLog (cond-> (AzureEventHubLogFactory. namespace event-hub-name)
                  max-wait-time (.maxWaitTime (time/->duration max-wait-time))

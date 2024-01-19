@@ -9,7 +9,7 @@ import java.time.Duration
 import java.time.InstantSource
 import java.util.concurrent.CompletableFuture
 
-class AzureEventHubLogFactory @JvmOverloads constructor(
+data class AzureEventHubLogFactory @JvmOverloads constructor(
     val namespace: String,
     val eventHubName: String,
     var maxWaitTime: Duration = Duration.ofSeconds(1),

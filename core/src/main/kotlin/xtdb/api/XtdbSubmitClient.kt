@@ -10,13 +10,11 @@ object XtdbSubmitClient {
 
     private val OPEN_CLIENT: IFn = requiringResolve("xtdb.node.impl", "open-submit-client")
 
-    open class Config(
-        var txLog: LogFactory = LogFactory.DEFAULT,
-        var defaultTz: ZoneId = ZoneOffset.UTC,
-    ) {
-        fun txLog(txLog: LogFactory) = apply { this.txLog = txLog }
-        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
-        open fun open() = OPEN_CLIENT(this) as IXtdbSubmitClient
+    data class Config(
+        override var txLog: LogFactory = LogFactory.DEFAULT,
+        override var defaultTz: ZoneId = ZoneOffset.UTC,
+    ): AConfig() {
+        override fun open() = OPEN_CLIENT(this) as IXtdbSubmitClient
     }
 
     @JvmStatic

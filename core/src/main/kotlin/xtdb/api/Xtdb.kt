@@ -11,7 +11,7 @@ import java.time.ZoneOffset
 object Xtdb {
     private val OPEN_NODE: IFn = requiringResolve("xtdb.node.impl", "open-node")
 
-    class IndexerConfig(
+    data class IndexerConfig(
         var logLimit: Long = 64L,
         var pageLimit: Long = 1024L,
         var rowsPerChunk: Long = 102400L,
@@ -23,12 +23,12 @@ object Xtdb {
         fun flushDuration(flushDuration: Duration) = apply { this.flushDuration = flushDuration }
     }
 
-    class Config(
-        txLog: LogFactory = LogFactory.DEFAULT,
+    data class Config(
+        override var txLog: LogFactory = LogFactory.DEFAULT,
         var storage: StorageFactory = StorageFactory.DEFAULT,
-        defaultTz: ZoneId = ZoneOffset.UTC,
+        override var defaultTz: ZoneId = ZoneOffset.UTC,
         @JvmField val indexer: IndexerConfig = IndexerConfig()
-    ) : XtdbSubmitClient.Config(txLog, defaultTz) {
+    ) : AConfig() {
         private val modules: MutableList<ModuleFactory> = mutableListOf()
 
         fun storage(storage: StorageFactory) = apply { this.storage = storage }

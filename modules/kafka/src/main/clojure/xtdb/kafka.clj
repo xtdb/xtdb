@@ -16,7 +16,7 @@
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
            [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
            org.apache.kafka.common.TopicPartition
-           [xtdb.api TransactionKey XtdbSubmitClient$Config]
+           [xtdb.api AConfig TransactionKey]
            [xtdb.api.log Log LogRecord LogSubscriber KafkaLogFactory]))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
@@ -145,8 +145,8 @@
         (throw (IllegalStateException. (format "Topic '%s' does not exist", topic-name))))))
 
 (defmethod xtn/apply-config! ::log 
-  [^XtdbSubmitClient$Config config _ {:keys [topic-name bootstrap-servers create-topic? replication-factor  
-                                             poll-duration topic-config properties-map properties-file]}] 
+  [^AConfig config _ {:keys [topic-name bootstrap-servers create-topic? replication-factor
+                             poll-duration topic-config properties-map properties-file]}]
   (doto config
       (.setTxLog (cond-> (KafkaLogFactory. bootstrap-servers topic-name)
                    create-topic? (.autoCreateTopic create-topic?)

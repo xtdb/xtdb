@@ -5,7 +5,7 @@ import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStoreFactory
 import java.nio.file.Path
 
-class AzureObjectStoreFactory @JvmOverloads constructor(
+data class AzureObjectStoreFactory @JvmOverloads constructor(
         val storageAccount: String,
         val container: String,
         val servicebusNamespace: String,

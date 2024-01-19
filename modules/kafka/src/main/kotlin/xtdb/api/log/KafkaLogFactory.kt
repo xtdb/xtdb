@@ -9,7 +9,7 @@ import java.time.Duration
 import java.time.InstantSource
 import java.util.concurrent.CompletableFuture
 
-class KafkaLogFactory @JvmOverloads constructor(
+data class KafkaLogFactory @JvmOverloads constructor(
     val bootstrapServers: String,
     val topicName: String,
     var autoCreateTopic: Boolean = true, 

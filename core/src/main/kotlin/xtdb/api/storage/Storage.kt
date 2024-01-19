@@ -21,7 +21,7 @@ data object InMemoryStorageFactory : StorageFactory {
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator) as IBufferPool
 }
 
-class LocalStorageFactory(
+data class LocalStorageFactory(
     val path: Path,
     var maxCacheEntries: Long = 1024,
     var maxCacheBytes: Long = 536870912,
@@ -45,7 +45,7 @@ interface ObjectStoreFactory {
     fun openObjectStore(): ObjectStore
 }
 
-class RemoteStorageFactory(
+data class RemoteStorageFactory(
     val objectStore: ObjectStoreFactory,
     val localDiskCache: Path,
     var maxCacheEntries: Long = 1024,

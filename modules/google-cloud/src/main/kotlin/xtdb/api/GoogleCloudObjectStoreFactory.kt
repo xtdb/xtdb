@@ -5,7 +5,7 @@ import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStoreFactory
 import java.nio.file.Path
 
-class GoogleCloudObjectStoreFactory @JvmOverloads constructor(
+data class GoogleCloudObjectStoreFactory @JvmOverloads constructor(
         val projectId: String,
         val bucket: String,
         val pubsubTopic: String,

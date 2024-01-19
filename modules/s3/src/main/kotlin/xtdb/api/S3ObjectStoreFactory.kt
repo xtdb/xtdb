@@ -8,7 +8,7 @@ import java.nio.file.Path
 
 class DefaultS3Configurator: S3Configurator
 
-class S3ObjectStoreFactory @JvmOverloads constructor(
+data class S3ObjectStoreFactory @JvmOverloads constructor(
         val bucket: String,
         val snsTopicArn: String,
         var prefix: Path? = null,
