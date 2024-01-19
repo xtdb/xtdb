@@ -1,9 +1,10 @@
 (ns xtdb.test-json
-  (:require [jsonista.core :as json]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.test :as t]
             [clojure.walk :as walk]
             [cognitect.transit :as transit]
+            [jsonista.core :as json]
+            [xtdb.metadata :as meta]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -48,7 +49,8 @@
         actual))
 
 (defn- read-transit-obj [stream]
-  (transit/read (transit/reader stream :json {:handlers serde/transit-read-handlers})))
+  (transit/read (transit/reader stream :json {:handlers (merge serde/transit-read-handlers
+                                                               meta/arrow-read-handlers)})))
 
 (defn check-transit-json-file [^Path expected, ^Path actual]
   (with-open [expected-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))
