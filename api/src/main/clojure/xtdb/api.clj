@@ -416,16 +416,6 @@
   [^TxOp$HasArgs op & args]
   (.withArgs op ^List args))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ^:deprecated with-op-arg-rows
-  "Adds the given (vector of) argument rows to the operation.
-
-  e.g.
-  (-> (xt/update-table :users {:bind [{:xt/id $uid} version], :set {:version (inc version)}})
-      (xt/with-op-args [{:uid \"james\"}, {:uid \"dave\"}]))"
-  [^TxOp$HasArgs op arg-rows]
-  (.withArgs op ^List arg-rows))
-
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
 

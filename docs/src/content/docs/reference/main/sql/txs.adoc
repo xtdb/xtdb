@@ -24,8 +24,6 @@ e.g.
 (xt/submit-tx node [(xt/sql-op "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')")
 
                     ;; with args - pass multiple vectors if required.
-                    ;; use `xt/with-op-arg-rows` if you don't want a variadic function
-                    ;; (i.e. you already have a vector of vectors).
                     (-> (xt/sql-op "INSERT INTO users (xt$id, name) VALUES (?, ?)")
                         (xt/with-op-args ["jms" "James"]
                                          ["jdt", "Jeremy"]))])
