@@ -2325,8 +2325,9 @@
   ;; Query works after insert
   (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
 
-  (xt/submit-tx tu/*node* [(xt/delete-from :comments '[{:something logic-var}]
-                                           '(from :anything [{:else logic-var}]))])
+  (xt/submit-tx tu/*node* [[:delete '{:from :comments
+                                      :bind [{:something logic-var}]
+                                      :unify [(from :anything [{:else logic-var}])]}]])
 
   ;; Ingester error after delete
   (t/is (empty? (xt/q tu/*node* '(from :xt/txs [{:xt/committed? false}])))))

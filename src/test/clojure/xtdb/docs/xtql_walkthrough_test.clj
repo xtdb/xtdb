@@ -326,9 +326,9 @@
   (let [node tu/*node*]
     ;; tag::DML-Insert-xtql[]
     (xt/submit-tx node
-      [(xt/insert-into :users
-         '(from :old-users [xt/id {:given-name first-name, :surname last-name}
-                            xt/valid-from xt/valid-to]))])
+      [[:insert-into :users
+        '(from :old-users [xt/id {:given-name first-name, :surname last-name}
+                           xt/valid-from xt/valid-to])]])
     ;; end::DML-Insert-xtql[]
     ,)
 
@@ -371,8 +371,8 @@
 ;; tag::DML-Delete-xtql[]
 (defn delete-a-post [node the-post-id]
   (xt/submit-tx node
-    [(-> (xt/delete-from :comments '[{:post-id $post-id}])
-         (xt/with-op-args {:post-id the-post-id}))]))
+    [[:delete {:from :comments, :bind '[{:post-id $post-id}]}
+      {:post-id the-post-id}]]))
 ;; end::DML-Delete-xtql[]
 
 (deftest DML-Delete-xtql
@@ -409,11 +409,12 @@
   (let [node tu/*node*]
     ;; tag::DML-Delete-additional-unify-clauses-xtql[]
     (xt/submit-tx node
-      [(-> (xt/delete-from :comments '[{:post-id pid}]
-                           '(from :posts [{:xt/id pid, :author-id $author}]))
-           (xt/with-op-args {:author "ivan"}))])
+      [[:delete '{:from :comments
+                  :bind [{:post-id pid}]
+                  :unify [(from :posts [{:xt/id pid, :author-id $author}])]}
+        {:author "ivan"}]])
     ;; end::DML-Delete-additional-unify-clauses-xtql[]
-    ,)
+    )
 
   (t/is (empty? (xt/q tu/*node*
                       '(unify (from :comments [{:post-id pid}])
@@ -461,18 +462,19 @@
   (let [node tu/*node*]
     ;; tag::DML-Delete-bitemporal-xtql[]
     (xt/submit-tx node
-      [(xt/delete-from :promotions '{:bind [{:promotion-type "christmas"}]
-                                     :for-valid-time (from #inst "2023-12-26")})])
+      [[:delete '{:from :promotions
+                  :for-valid-time (from #inst "2023-12-26")
+                  :bind [{:promotion-type "christmas"}]}]])
     ;; end::DML-Delete-bitemporal-xtql[]
     ,)
 
   (t/is (= #{{:promotion-type "general"}}
            (set
              (xt/q tu/*node*
-                   '(unify (from :promotions {:bind [promotion-type]
-                                              :for-valid-time (from #inst "2023-12-25")})
-                           (from :promotions {:bind [promotion-type]
-                                              :for-valid-time (from #inst "2023-12-26")})))))))
+                   '(unify (from :promotions {:for-valid-time (from #inst "2023-12-25")
+                                              :bind [promotion-type]})
+                           (from :promotions {:for-valid-time (from #inst "2023-12-26")
+                                              :bind [promotion-type]})))))))
 
 (deftest DML-Delete-bitemporal-sql
   (xt/submit-tx tu/*node* promotions)
@@ -505,7 +507,7 @@
   (let [node tu/*node*]
     ;; tag::DML-Delete-everything-xtql[]
     (xt/submit-tx node
-      [(xt/delete-from :comments '{})])
+      [[:delete {:from :comments}]])
     ;; end::DML-Delete-everything-xtql[]
     ,)
 
@@ -535,9 +537,10 @@
   (let [node tu/*node*]
     ;; tag::DML-Update-xtql[]
     (xt/submit-tx node
-      [(-> (xt/update-table :documents '{:bind [{:xt/id $doc-id, :version v}]
-                                         :set {:version (+ v 1)}})
-           (xt/with-op-args {:doc-id "doc-id"}))])
+      [[:update '{:table :documents
+                  :bind [{:xt/id $doc-id, :version v}]
+                  :set {:version (+ v 1)}}
+        {:doc-id "doc-id"}]])
     ;; end::DML-Update-xtql[]
     ,)
 
@@ -570,10 +573,12 @@
     ;; tag::DML-Update-bitemporal-xtql[]
     (xt/submit-tx node
       [(xt/put :comments {:xt/id (random-uuid), :post-id "my-post-id"})
-       (-> (xt/update-table :posts '{:bind [{:xt/id $post-id}], :set {:comment-count cc}}
-                            '(with {cc (q (-> (from :comments [{:post-id $post-id}])
-                                              (aggregate {:cc (row-count)})))}))
-           (xt/with-op-args {:post-id "my-post-id"}))])
+       [:update '{:table :posts
+                  :bind [{:xt/id $post-id}]
+                  :unify [(with {cc (q (-> (from :comments [{:post-id $post-id}])
+                                           (aggregate {:cc (row-count)})))})]
+                  :set {:comment-count cc}}
+        {:post-id "my-post-id"}]])
     ;; end::DML-Update-bitemporal-xtql[]
     ,)
 
@@ -607,7 +612,7 @@
   (let [node tu/*node*]
     ;; tag::DML-Erase-xtql[]
     (xt/submit-tx node
-      [(xt/erase-from :users '[{:email "jms@example.com"}])])
+      [[:erase {:from :users, :bind '[{:email "jms@example.com"}]}]])
     ;; end::DML-Erase-xtql[]
     ,)
 
@@ -634,8 +639,8 @@
         {my-tx-id :tx-id}
         ;; tag::DML-Assert-xtql[]
         (xt/submit-tx node
-          [(-> (xt/assert-not-exists '(from :users [{:email $email}]))
-               (xt/with-op-args {:email "james@example.com"}))
+          [[:assert-not-exists '(from :users [{:email $email}])
+            {:email "james@example.com"}]
 
            (xt/put :users {:xt/id :james, :email "james@example.com"})])
         ;; end::DML-Assert-xtql[]

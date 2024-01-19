@@ -6,7 +6,8 @@
             [xtdb.log :as log]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]))
+            [xtdb.time :as time]
+            [xtdb.xtql.edn :as xtql.edn]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -104,12 +105,14 @@
 
 (t/deftest can-write-xtql
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-xtdml.json")
-                         [(-> (xt/update-table :users '{:bind [{:xt/id $uid, :version v}]
-                                                        :set {:v (inc v)}})
-                              (xt/with-op-args {:uid :jms}))
+                         (->> [[:update '{:table :users
+                                          :bind [{:xt/id $uid, :version v}]
+                                          :set {:v (inc v)}}
+                                {:uid :jms}]
 
-                          (-> (xt/delete-from :users '{:bind [{:xt/id $uid}]})
-                              (xt/with-op-args {:uid :jms}))]))
+                               [:delete '{:from :users, :bind [{:xt/id $uid}]}
+                                {:uid :jms}]]
+                              (mapv xtql.edn/parse-dml))))
 
 (t/deftest can-write-opts
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-opts.json")

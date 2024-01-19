@@ -239,13 +239,11 @@ e.g. `INSERT INTO users2 SELECT xt$id, first_name AS given_name, last_name AS fa
 .Clojure
 [%collapsible]
 ====
-In Clojure, we use the builder functions in `xtdb.api`:
-
 [source,clojure]
 ----
-(xt/insert-into :users2
-  '(from :users [xt/id {:first-name given-name, :last-name family-name}
-                 xt/valid-from xt/valid-to]))
+[:insert-into :users2
+ '(from :users [xt/id {:first-name given-name, :last-name family-name}
+                xt/valid-from xt/valid-to])]
 ----
 ====
 
@@ -276,11 +274,12 @@ Here, we're incrementing a 'version' attribute - `UPDATE docs SET version = vers
 ====
 [source,clojure]
 ----
-(-> (xt/update-table :documents {:bind [{:xt/id $doc-id, :version v}]
-                                 :set {:version (+ v 1)}})
+[:update {:table :documents
+          :bind [{:xt/id $doc-id, :version v}]
+          :set {:version (+ v 1)}}
 
-    ;; specifying a value for the parameter with `with-op-args`
-    (xt/with-op-args {:doc-id "doc-id"}))
+ ;; specifying a value for the parameter with args
+ {:doc-id "doc-id"}]
 ----
 ====
 
@@ -310,10 +309,10 @@ Here, we delete all the comments for a given post-id - `DELETE FROM comments WHE
 ====
 [source,clojure]
 ----
-(-> (xt/delete-from :posts {:bind [{:post-id $post-id}]})
+[:delete {:from :posts, :bind [{:post-id $post-id}]}
 
-    ;; specifying a value for the parameter with `with-op-args`
-    (xt/with-op-args {:post-id "post-id"}))
+ ;; specifying a value for the parameter with args
+ {:post-id "post-id"}]
 ----
 ====
 

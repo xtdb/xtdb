@@ -175,7 +175,10 @@
                                     (TxOptions. (some-> system-time expect-instant)
                                                 default-tz
                                                 (boolean default-all-valid-time?))))
-                    (into-array TxOp tx-ops))))
+                    (->> (for [tx-op tx-ops]
+                           (cond-> tx-op
+                             (not (instance? TxOp tx-op)) xtql.edn/parse-dml))
+                         (into-array TxOp)))))
 
 (extend-protocol xtp/PNode
   IXtdb
@@ -402,7 +405,7 @@
 
     (TxOp/sql sql)))
 
-(defn with-op-args
+(defn ^:deprecated with-op-args
   "Adds the given (variadic) argument rows to the operation.
 
   e.g.
@@ -413,7 +416,7 @@
   (.withArgs op ^List args))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn with-op-arg-rows
+(defn ^:deprecated with-op-arg-rows
   "Adds the given (vector of) argument rows to the operation.
 
   e.g.
@@ -421,112 +424,6 @@
       (xt/with-op-args [{:uid \"james\"}, {:uid \"dave\"}]))"
   [^TxOp$HasArgs op arg-rows]
   (.withArgs op ^List arg-rows))
-
-(defn insert-into
-  "Returns an insert operation for passing to `submit-tx`.
-
-  When evaluated, insert operations run the query, and insert every returned row as a document into the specified table.
-    * Every row must return an `:xt/id` key - currently string, UUID, integer or keyword.
-    * To insert rows for different valid time periods, return `:xt/valid-from` and/or `:xt/valid-to` from the query.
-
-  `table-name` (keyword): the table to insert documents into
-  `xtql-query`: query to execute
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query.
-  * To put a single document into a table, use `put`."
-
- [table-name xtql-query]
-  (xtql.edn/parse-dml (list 'insert table-name xtql-query)))
-
-(defn update-table
-  "Returns an update operation for passing to `submit-tx`.
-
-  `table-name` (keyword): the table to update
-
-  `bind`: a vector of bindings (e.g. `[{:xt/id $uid}]`)
-    * If bind specs are not specified, will update every document in the table.
-
-  `set`: a map of fields to update (e.g. `{:set {:version (inc version)}}`)
-    * The values of the map can be any XTQL expression.
-    * All variables bound in either `bind` or `unify-clauses` are in scope
-
-  `for-valid-time` (optional): to specify the effective valid-time period of the updates
-    Either:
-
-    * `(from <valid-from>)`
-    * `(to <valid-to>)`
-    * `(in <valid-from> <valid-to>)`
-
-    If not provided, defaults to 'from the current-time of the transaction'.
-
-  `unify-clauses` (optional): additional clauses to unify with the above bindings
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query."
-
-  {:arglists '([table-name {:keys [bind set for-valid-time]} & unify-clauses])}
-  #_{:clj-kondo/ignore [:unused-binding]}
-  [table-name opts & unify-clauses]
-
-  (xtql.edn/parse-dml (list* 'update table-name opts unify-clauses)))
-
-(defn delete-from
-  "Returns a delete operation for passing to `submit-tx`.
-
-  `table-name` (keyword): the table to delete from
-
-  `bind`, `bind-specs`: a vector of bindings (e.g. `[{:xt/id $uid}]`)
-    * If bind specs are not specified, will delete every document in the table.
-
-  `for-valid-time` (optional): to specify the effective valid-time period of the deletes
-    Either:
-
-    * `'(from <valid-from>)`
-    * `'(to <valid-to>)`
-    * `'(in <valid-from> <valid-to>)`
-
-    If not provided, defaults to 'from the current-time of the transaction'.
-
-  `unify-clauses` (optional): additional clauses to unify with the above bindings
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query.
-  * To delete a single document by `:xt/id`, use `delete`"
-
-  {:arglists '([table-name bind-specs & unify-clauses]
-               [table-name {:keys [bind]} & unify-clauses])}
-  [table-name bind-or-opts & unify-clauses]
-  (xtql.edn/parse-dml (list* 'delete table-name bind-or-opts unify-clauses)))
-
-(defn erase-from
-  "Returns an erase operation for passing to `submit-tx`.
-
-  `table-name` (keyword): the table to erase from
-  `bind`, `bind-specs`: a vector of bindings (e.g. `[{:xt/id $uid}]`)
-    * If bind specs are not specified, will erase every document in the table.
-  `unify-clauses` (optional): additional clauses to unify with the above bindings
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query.
-  * To erase a single document by `:xt/id`, use `erase`"
-
-  {:arglists '([table-name bind-specs & unify-clauses]
-               [table-name {:keys [bind]} & unify-clauses])}
-
-  [table-name bind-or-opts & unify-clauses]
-
-  (xtql.edn/parse-dml (list* 'erase table-name bind-or-opts unify-clauses)))
-
-(defn assert-exists
-  "Returns an assert-exists operation for passing to `submit-tx`.
-
-  When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query doesn't return any rows."
-  [xtql-query]
-  (xtql.edn/parse-dml (list 'assert-exists xtql-query)))
-
-(defn assert-not-exists
-  "Returns an assert-not-exists operation for passing to `submit-tx`.
-
-  When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query returns any rows."
-  [xtql-query]
-  (xtql.edn/parse-dml (list 'assert-not-exists xtql-query)))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.

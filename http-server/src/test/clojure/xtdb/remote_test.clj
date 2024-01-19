@@ -358,7 +358,7 @@
         (t/is (= [{:xt/id 2 :version 3}]
                  (xt/q *node* '(from :docs2 [xt/id version])
                        {:basis {:at-tx tx4}}))
-              "update-table"))
+              "update"))
 
       (let [delete {"deleteFrom" "docs2"
                     "bindSpecs" [{"xt/id" 2}]}
@@ -370,7 +370,7 @@
                                    :url (http-url "tx")})
                     :body
                     decode-transit)]
-        (t/testing "delete-from"
+        (t/testing "delete"
           (t/is (= [] (xt/q *node* '(from :docs2 [xt/id version])
                             {:basis {:at-tx tx5}})))
           (t/is (= #{{:xt/id 2} {:xt/id 2 :version 3}}
@@ -392,7 +392,7 @@
         (t/is (= [] (xt/q *node* '(from :docs2 {:bind [{:xt/id 3} xt/id version]
                                                 :for-valid-time :all-time})
                           {:basis {:at-tx tx6}}))
-              "erase-from"))
+              "erase"))
 
       ;; using docs in combination with docs3
       (let [assert+put [{"assertExists" {"from" "docs", "bind" ["xt/id"]}}
@@ -408,6 +408,7 @@
         (t/is (= [{:xt/id 1}] (xt/q *node* '(from :docs3 [xt/id])
                                     {:basis {:at-tx tx7}}))
               "assert-exists"))
+
       (let [assert+put [{"assertNotExists" {"from" "docs2", "bind" ["xt/id"]}}
                         {"delete" "docs3" "id" 1}]
             tx7 (-> (http/request {:accept :transit+json

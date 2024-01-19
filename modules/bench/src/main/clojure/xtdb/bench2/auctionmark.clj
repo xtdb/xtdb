@@ -209,9 +209,10 @@
                      :ii_u_id u_id
                      :ii_path image}))
           ;; fix BitVector metadata issue
-          (when u_id [(-> (xt/update-table :user '{:bind [{:xt/id $uid} u_balance]
-                                                   :set {:u_balance (- u_balance 1)}})
-                          (xt/with-op-args {:uid u_id}))]))
+          (when u_id [[:update '{:table :user
+                                 :bind [{:xt/id $uid} u_balance]
+                                 :set {:u_balance (- u_balance 1)}}
+                       {:uid u_id}]]))
          (xt/submit-tx (:sut worker)))))
 
 ;; represents a probable state of an item that can be sampled randomly

@@ -341,7 +341,7 @@ include::{example}[tags=DML-Delete-sql,indent=0]
 +
 Here, we're passing a dynamic parameter to specify the post to delete.
 +
-* link:../reference/main/xtql/txs.html#[`delete-from`] can also take a collection of extra link:../reference/main/xtql/queries.html#_unify[`unify`] clauses.
+* link:../reference/main/xtql/txs.html#[`delete`] can also take a collection of extra link:../reference/main/xtql/queries.html#_unify[`unify`] clauses.
 Let's say instead we wanted to delete all comments on posts by a certain author - we can do that as follows:
 +
 [source,clojure]
@@ -354,7 +354,7 @@ include::{test}[tags=DML-Delete-additional-unify-clauses-xtql,indent=0]
 include::{example}[tags=DML-Delete-additional-unify-clauses-sql,indent=0]
 ----
 +
-Additional clauses passed to link:../reference/main/xtql/txs.html#[`delete-from`] in this way are unified, in the same way variables within a link:../reference/main/xtql/queries.html#_unify[`unify`] are.
+Additional clauses passed to link:../reference/main/xtql/txs.html#[`delete`] in this way are unified, in the same way variables within a link:../reference/main/xtql/queries.html#_unify[`unify`] are.
 In this case, because we've re-used the `pid` logic variable, XT implicitly joins the two values - the `post-id` from the `comments` table with the `xt/id` on the `posts` table.
 * We can specify a valid-time range to delete using `for-valid-time`, in a similar manner to the link:../reference/main/xtql/queries.html#_from[`from`] clause.
 +
