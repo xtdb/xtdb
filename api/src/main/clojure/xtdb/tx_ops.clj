@@ -1,5 +1,7 @@
 (ns xtdb.tx-ops
-  (:require [xtdb.error :as err]
+  (:require [clojure.spec.alpha :as s]
+            [xtdb.error :as err]
+            [xtdb.time :as time]
             [xtdb.xtql.edn :as xtql.edn])
   (:import [java.util List]
            (xtdb.api.tx TxOp Xtql Xtql$AssertExists Xtql$AssertNotExists Xtql$Delete Xtql$Erase Xtql$Insert Xtql$Update XtqlAndArgs)))
@@ -49,6 +51,14 @@
       (update-keys (fn [k]
                      (cond-> k
                        (keyword? k) (-> symbol str))))))
+
+(defn- expect-instant ^java.time.Instant [instant]
+  (when-not (s/valid? ::time/datetime-value instant)
+    (throw (err/illegal-arg :xtdb/invalid-date-time
+                            {::err/message "expected date-time"
+                             :timestamp instant})))
+
+  (time/->instant instant))
 
 (defn- expect-fn-id [fn-id]
   (if-not (eid? fn-id)
@@ -104,6 +114,14 @@
     bind (.binding (xtql.edn/parse-out-specs bind this))
     unify (.unify (mapv xtql.edn/parse-unify-clause unify))
     (seq arg-rows) (.withArgs ^List arg-rows)))
+
+(defmethod parse-tx-op :delete-doc [[_ table-or-opts id]]
+  (let [{table :from, :keys [valid-from valid-to]} (cond
+                                                     (map? table-or-opts) table-or-opts
+                                                     (keyword? table-or-opts) {:from table-or-opts})]
+    (cond-> (TxOp/delete (expect-table-name table) (expect-eid id))
+      valid-from (.startingFrom (expect-instant valid-from))
+      valid-to (.until (expect-instant valid-to)))))
 
 (defmethod parse-tx-op :erase [[_ {table :from, :keys [bind unify]} & arg-rows :as this]]
   (when-not (keyword? table)

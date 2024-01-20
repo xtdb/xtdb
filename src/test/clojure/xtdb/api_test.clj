@@ -600,7 +600,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
     (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])
                               {:name "James"}]
-                             (xt/delete :users :james)
+                             [:delete-doc :users :james]
                              (xt/put :users {:xt/id :james2, :first-name "James"})])
 
     (t/is (= #{{:xt/id :james2, :first-name "James"}

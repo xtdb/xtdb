@@ -52,7 +52,7 @@
 (def possible-tx-ops
   [(xt/put :docs {:xt/id 1})
    (xt/put :docs {:xt/id 2})
-   (xt/delete :docs 2)
+   [:delete-doc :docs 2]
    (-> (xt/put :docs {:xt/id 3})
        (xt/during #inst "2023" #inst "2024"))
    [:erase-doc :docs 3]

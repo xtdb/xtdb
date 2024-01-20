@@ -128,12 +128,12 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
     (t/is (= {:xt #{"implicit table"}, :t1 #{"explicit table 1"}, :t2 #{"explicit table 2"}}
              (foos)))
 
-    (xt/submit-tx tu/*node* [(xt/delete :docs :foo)])
+    (xt/submit-tx tu/*node* [[:delete-doc :docs :foo]])
 
     (t/is (= {:xt #{}, :t1 #{"explicit table 1"}, :t2 #{"explicit table 2"}}
              (foos)))
 
-    (xt/submit-tx tu/*node* [(xt/delete :explicit_table1 :foo)])
+    (xt/submit-tx tu/*node* [[:delete-doc :explicit_table1 :foo]])
 
     (t/is (= {:xt #{}, :t1 #{}, :t2 #{"explicit table 2"}}
              (foos)))))

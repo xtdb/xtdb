@@ -84,7 +84,7 @@
 
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 20}})]
     (xt/submit-tx node (for [i (range 20)] (xt/put :xt_docs {:xt/id i})))
-    (xt/submit-tx node (for [i (range 20)] (xt/delete :xt_docs i)))
+    (xt/submit-tx node (for [i (range 20)] [:delete-doc :xt_docs i]))
 
     (t/is (= []
              (tu/query-ra '[:scan {:table xt_docs} [{xt$id (< xt$id 20)}]]
@@ -119,7 +119,7 @@
                                       (xt/starting-from #inst "2020"))
                                   (-> (xt/put :xt_docs {:xt/id :doc2 :v 2})
                                       (xt/starting-from #inst "2100"))
-                                  (xt/delete :xt_docs :doc3)])]
+                                  [:delete-doc :xt_docs :doc3]])]
 
       ;; valid-time
       (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
@@ -172,7 +172,7 @@
                                       (xt/starting-from #inst "2020"))
                                   (-> (xt/put :xt_docs {:xt/id :doc2 :v 2})
                                       (xt/starting-from #inst "2100"))
-                                  (xt/delete :xt_docs :doc3)])]
+                                  [:delete-doc :xt_docs :doc3]])]
 
       ;; valid-time
       (t/is (= #{{:v 1, :xt/id :doc1,

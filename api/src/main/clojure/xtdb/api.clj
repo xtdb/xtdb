@@ -24,7 +24,7 @@
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
            (xtdb.api.query Basis QueryOptions XtqlQuery)
-           (xtdb.api.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds TxOptions)
+           (xtdb.api.tx TxOp TxOp$HasValidTimeBounds TxOptions)
            xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]
@@ -212,9 +212,9 @@
 
   tx-ops: XTQL/SQL transaction operations.
     [(xt/put :table {:xt/id \"my-id\", ...})
-     (xt/delete :table \"my-id\")]
+     [:delete-doc :table \"my-id\"]
 
-    [[:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
       [0 1]]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
@@ -243,9 +243,9 @@
 
   tx-ops: XTQL/SQL style transactions.
     [(xt/put :table {:xt/id \"my-id\", ...})
-     (xt/delete :table \"my-id\")]
+     [:delete-doc :table \"my-id\"]
 
-    [[:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
       [0 1]]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
@@ -338,17 +338,6 @@
       * `xt/put`, `xt/delete`, etc: transaction operation builders from this namespace."
   [fn-id tx-fn]
   (TxOp/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn)))
-
-(defn delete
-  "Returns a delete operation for passing to `submit-tx`.
-
-  `table`: table to delete from.
-  `id`: id of the document to delete.
-
-  * `delete` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
-  * To delete documents that match a query, use `delete-from`"
-  [table id]
-  (TxOp/delete (expect-table-name table) (expect-eid id)))
 
 (defn during
   "Adapts the given transaction operation to take effect (in valid time) between `from` and `until`.
