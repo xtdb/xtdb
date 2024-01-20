@@ -373,16 +373,6 @@
   [^TxOp$HasValidTimeBounds tx-op until]
   (.until tx-op (expect-instant until)))
 
-(defn erase
-  "Returns an erase operation for passing to `submit-tx`.
-
-  `table`: table to erase from.
-  `id`: id of the document to erase.
-
-  * To erase documents that match a query, use `erase-from`"
-  [table id]
-  (TxOp/erase (expect-table-name table) (expect-eid id)))
-
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
 

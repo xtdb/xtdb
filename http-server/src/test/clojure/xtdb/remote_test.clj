@@ -55,7 +55,7 @@
    (xt/delete :docs 2)
    (-> (xt/put :docs {:xt/id 3})
        (xt/during #inst "2023" #inst "2024"))
-   (xt/erase :docs 3)
+   [:erase-doc :docs 3]
    [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
    [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
    [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]

@@ -153,11 +153,13 @@ To specify a valid-time range:
 
 with default behaviour as per link:#_put[`put`], above.
 
-=== `erase`
+=== `erase-doc`
 
 Irrevocably erase the document from the given table (including through system time), for all valid-time.
 
-`(xt/erase <table> <id>)`
+`[:erase <table> <id>]`
+
+=== `erase`
 
 Irrevocably erase the document from the given table (including through system time), based on the provided query.
 

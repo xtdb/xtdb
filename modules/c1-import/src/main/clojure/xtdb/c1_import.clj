@@ -57,7 +57,7 @@
                                                (xt/during start-valid-time end-valid-time))
                                       :delete (-> (xt/delete :xt_docs eid)
                                                   (xt/during start-valid-time end-valid-time))
-                                      :evict (xt/erase :xt_docs eid)))
+                                      :evict [:erase-doc :xt_docs eid]))
                           :abort [TxOp/ABORT])
                         {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))

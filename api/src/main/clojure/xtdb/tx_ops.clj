@@ -114,6 +114,9 @@
     unify (.unify (mapv xtql.edn/parse-unify-clause unify))
     (seq arg-rows) (.withArgs ^List arg-rows)))
 
+(defmethod parse-tx-op :erase-doc [[_ table id]]
+  (TxOp/erase (expect-table-name table) (expect-eid id)))
+
 (defmethod parse-tx-op :assert-exists [[_ query & arg-rows]]
   (cond-> (Xtql/assertExists (xtql.edn/parse-query query))
     (seq arg-rows) (XtqlAndArgs. arg-rows)))

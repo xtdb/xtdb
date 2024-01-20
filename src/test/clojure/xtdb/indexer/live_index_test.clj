@@ -107,7 +107,7 @@
     (-> (xt/put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3})
 
         (xt/during #inst "2023" #inst "2024"))]
-   [(xt/erase :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38")]
+   [[:erase-doc :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
    ;; sql
    [[:sql "INSERT INTO foo (xt$id, bar, toto) VALUES (1, 1, 'toto')"]
     [:sql "UPDATE foo SET bar = 2 WHERE foo.xt$id = 1"]
