@@ -60,11 +60,6 @@
 
   (time/->instant instant))
 
-(defn- expect-fn-id [fn-id]
-  (if-not (eid? fn-id)
-    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
-    fn-id))
-
 (defmethod parse-tx-op :sql [[_ sql & arg-rows]]
   (if-not (string? sql)
     (throw (err/illegal-arg :xtdb.tx/expected-sql
@@ -79,6 +74,23 @@
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:into table-or-opts})]
     (cond-> (TxOp/put (expect-table-name table) ^List (mapv expect-doc docs))
+      valid-from (.startingFrom (expect-instant valid-from))
+      valid-to (.until (expect-instant valid-to)))))
+
+(defn- expect-fn-id [fn-id]
+  (if-not (eid? fn-id)
+    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
+    fn-id))
+
+(defn- expect-tx-fn [tx-fn]
+  (or tx-fn
+      (throw (err/illegal-arg :xtdb.tx/invalid-tx-fn {::err/message "expected tx-fn", :tx-fn tx-fn}))))
+
+(defmethod parse-tx-op :put-fn [[_ id-or-opts tx-fn]]
+  (let [{:keys [fn-id valid-from valid-to]} (if (map? id-or-opts)
+                                              id-or-opts
+                                              {:fn-id id-or-opts})]
+    (cond-> (TxOp/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn))
       valid-from (.startingFrom (expect-instant valid-from))
       valid-to (.until (expect-instant valid-to)))))
 

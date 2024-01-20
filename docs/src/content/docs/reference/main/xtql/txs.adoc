@@ -217,14 +217,14 @@ Call a transaction function.
 
 `[:call <fn-id> <args>*]`
 
-Transaction functions are defined using `put-fn`:
+Transaction functions are defined using `:put-fn`:
 
 [source,clojure]
 ----
-(xt/put-fn :increment
-           '(fn [args...]
-              ...
-              ))
+[:put-fn :increment
+ '(fn [args...]
+    ...
+    )]
 ----
 
 Transaction functions are evaluated with the Small Clojure Interpreter (https://github.com/babashka/sci[SCI^]).

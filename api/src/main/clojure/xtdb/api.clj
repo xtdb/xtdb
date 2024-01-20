@@ -24,7 +24,7 @@
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
            (xtdb.api.query Basis QueryOptions XtqlQuery)
-           (xtdb.api.tx TxOp TxOp$HasValidTimeBounds TxOptions)
+           (xtdb.api.tx TxOp TxOptions)
            xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]
@@ -275,72 +275,6 @@
   including details of both the latest submitted and completed tx"
   [node]
   (xtp/status node))
-
-(def ^:private eid? (some-fn uuid? integer? string? keyword?))
-
-(def ^:private table? keyword?)
-
-(defn- expect-table-name ^String [table-name]
-  (when-not (table? table-name)
-    (throw (err/illegal-arg :xtdb.tx/invalid-table
-                            {::err/message "expected table name" :table table-name})))
-
-  (str (symbol table-name)))
-
-(defn- expect-eid [eid]
-  (if-not (eid? eid)
-    (throw (err/illegal-arg :xtdb.tx/invalid-eid
-                            {::err/message "expected xt/id", :xt/id eid}))
-    eid))
-
-(defn- expect-doc [doc]
-  (when-not (map? doc)
-    (throw (err/illegal-arg :xtdb.tx/expected-doc
-                            {::err/message "expected doc map", :doc doc})))
-  (expect-eid (or (:xt/id doc) (get doc "xt/id")))
-
-  (-> doc
-      (update-keys (fn [k]
-                     (cond-> k
-                       (keyword? k) (-> symbol str))))))
-
-(defn- expect-fn-id [fn-id]
-  (if-not (eid? fn-id)
-    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
-    fn-id))
-
-(defn- expect-tx-fn [tx-fn]
-  (or tx-fn
-      (throw (err/illegal-arg :xtdb.tx/invalid-tx-fn {::err/message "expected tx-fn", :tx-fn tx-fn}))))
-
-(defn put-fn
-  "Returns an operation that registers a transaction function.
-
-  * `fn-id`: id of the function.
-  * `tx-fn`: transaction function body.
-    * Transaction functions are run using the Small Clojure Interpreter (SCI).
-    * Within transaction functions, the following built-ins are available:
-      * `q`: (function, `(q query opts)`): a function to run an XTQL/SQL query.
-         See `q` for options.
-      * `*current-tx*`: the current transaction key (`:tx-id`, `:sys-time`)
-      * `xt/put`, `xt/delete`, etc: transaction operation builders from this namespace."
-  [fn-id tx-fn]
-  (TxOp/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn)))
-
-(defn starting-from
-  "Adapts the given transaction operation to take effect (in valid time) from `from` until the end of time.
-
-  `from`, `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^TxOp$HasValidTimeBounds tx-op from]
-
-  (.startingFrom tx-op (expect-instant from)))
-
-(defn until
-  "Adapts the given transaction operation to take effect (in valid time) from the time of the transaction until `until`.
-
-  `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^TxOp$HasValidTimeBounds tx-op until]
-  (.until tx-op (expect-instant until)))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.

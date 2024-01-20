@@ -79,9 +79,9 @@
 
 (t/deftest can-write-put-fns
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-put-fns.json")
-                         [(xt/put-fn :foo '(fn [id] [[:put :foo {:xt/id id}]]))
-                          (-> (xt/put-fn :bar '(fn [id] [[:put :bar {:xt/id id}]]))
-                              (xt/starting-from #inst "2020"))]))
+                         [[:put-fn :foo '(fn [id] [[:put :foo {:xt/id id}]])]
+                          [:put-fn {:fn-id :bar, :valid-from #inst "2020"}
+                           '(fn [id] [[:put :bar {:xt/id id}]])]]))
 
 (t/deftest can-write-tx-fn-calls
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx-fn-calls.json")

@@ -11,9 +11,9 @@
 
 (t/deftest test-call-tx-fn
   (t/testing "simple call"
-    (xt/submit-tx tu/*node* [(xt/put-fn :my-fn
-                                        '(fn [id n]
-                                           [[:put :foo {:xt/id id, :n n}]]))
+    (xt/submit-tx tu/*node* [[:put-fn :my-fn
+                              '(fn [id n]
+                                 [[:put :foo {:xt/id id, :n n}]])]
                              [:call :my-fn :foo 0]
                              [:call :my-fn :bar 1]])
 
@@ -23,13 +23,13 @@
                         '(from :foo [xt/id n]))))))
 
   (t/testing "nested tx fn"
-    (xt/submit-tx tu/*node* [(xt/put-fn :inner-fn
-                                        '(fn [id]
-                                           [[:put :bar {:xt/id (keyword (str (name id) "-inner")), :from :inner}]]))
-                             (xt/put-fn :outer-fn
-                                        '(fn [id]
-                                           [[:call :inner-fn id]
-                                            [:put :bar {:xt/id (keyword (str (name id) "-outer")), :from :outer}]]))
+    (xt/submit-tx tu/*node* [[:put-fn :inner-fn
+                              '(fn [id]
+                                 [[:put :bar {:xt/id (keyword (str (name id) "-inner")), :from :inner}]])]
+                             [:put-fn :outer-fn
+                              '(fn [id]
+                                 [[:call :inner-fn id]
+                                  [:put :bar {:xt/id (keyword (str (name id) "-outer")), :from :outer}]])]
                              [:call :inner-fn :foo]
                              [:call :outer-fn :bar]])
 
@@ -40,7 +40,7 @@
                         '(from :bar [xt/id from])))))))
 
 (t/deftest test-tx-fn-return-values
-  (xt/submit-tx tu/*node* [(xt/put-fn :identity 'identity)])
+  (xt/submit-tx tu/*node* [[:put-fn :identity 'identity]])
 
   (letfn [(run-test [ret-val put-id]
             (xt/submit-tx tu/*node* [[:call :identity ret-val]
@@ -57,10 +57,10 @@
     (t/is (= #{:true} (run-test true :true)))))
 
 (t/deftest test-tx-fn-q
-  (xt/submit-tx tu/*node* [(xt/put-fn :doc-counter
-                                      '(fn [id]
-                                         (let [doc-count (count (q '(from :foo [xt/id])))]
-                                           [[:put :foo {:xt/id id, :doc-count doc-count}]])))
+  (xt/submit-tx tu/*node* [[:put-fn :doc-counter
+                            '(fn [id]
+                               (let [doc-count (count (q '(from :foo [xt/id])))]
+                                 [[:put :foo {:xt/id id, :doc-count doc-count}]]))]
                            [:call :doc-counter :foo]
                            [:call :doc-counter :bar]])
 
@@ -71,13 +71,13 @@
 
   (let [tx2 (xt/submit-tx tu/*node* [[:put :accounts {:xt/id :petr :balance 100}]
                                      [:put :accounts {:xt/id :ivan :balance 200}]
-                                     (xt/put-fn :update-balance
-                                                '(fn [id]
-                                                   (let [[account] (q '(from :accounts [balance xt/id {:xt/id $id}])
-                                                                      {:args {:id id}})]
-                                                     (if account
-                                                       [[:put :accounts (update account :balance inc)]]
-                                                       []))))
+                                     [:put-fn :update-balance
+                                      '(fn [id]
+                                         (let [[account] (q '(from :accounts [balance xt/id {:xt/id $id}])
+                                                            {:args {:id id}})]
+                                           (if account
+                                             [[:put :accounts (update account :balance inc)]]
+                                             [])))]
                                      [:call :update-balance :petr]
                                      [:call :update-balance :undefined]])]
     (t/is (= #{{:xt/id :petr, :balance 101}
@@ -88,10 +88,10 @@
           "query in tx-fn with in-args")))
 
 (t/deftest test-tx-fn-sql-q
-  (xt/submit-tx tu/*node* [(xt/put-fn :doc-counter
-                                      '(fn [id]
-                                         (let [[{:keys [doc-count]}] (q "SELECT COUNT(*) doc_count FROM docs")]
-                                           [[:put :docs {:xt/id id, :doc-count doc-count}]])))
+  (xt/submit-tx tu/*node* [[:put-fn :doc-counter
+                            '(fn [id]
+                               (let [[{:keys [doc-count]}] (q "SELECT COUNT(*) doc_count FROM docs")]
+                                 [[:put :docs {:xt/id id, :doc-count doc-count}]]))]
                            [:call :doc-counter :foo]
                            [:call :doc-counter :bar]])
 
@@ -101,9 +101,9 @@
                  '(from :docs [xt/id doc-count])))))
 
 (t/deftest test-tx-fn-current-tx
-  (let [tx0 (xt/submit-tx tu/*node* [(xt/put-fn :with-tx
-                                                '(fn [id]
-                                                   [[:put :docs (into {:xt/id id} *current-tx*)]]))
+  (let [tx0 (xt/submit-tx tu/*node* [[:put-fn :with-tx
+                                      '(fn [id]
+                                         [[:put :docs (into {:xt/id id} *current-tx*)]])]
                                      [:call :with-tx :foo]
                                      [:call :with-tx :bar]])
         tt0 (.getSystemTime tx0)
@@ -122,9 +122,9 @@
                       '(from :docs [xt/id version]))
                 first :version))]
 
-    (xt/submit-tx tu/*node* [(xt/put-fn :assoc-version
-                                        '(fn [version]
-                                           [[:put :docs {:xt/id :foo, :version version}]]))
+    (xt/submit-tx tu/*node* [[:put-fn :assoc-version
+                              '(fn [version]
+                                 [[:put :docs {:xt/id :foo, :version version}]])]
                              [:call :assoc-version 0]])
     (t/is (= 0 (foo-version)))
 
@@ -138,7 +138,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "invalid results"
-      (xt/submit-tx tu/*node* [(xt/put-fn :invalid-fn '(fn [] [[:foo]]))])
+      (xt/submit-tx tu/*node* [[:put-fn :invalid-fn '(fn [] [[:foo]])]])
       (xt/submit-tx tu/*node* [[:call :invalid-fn]
                                [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
@@ -168,7 +168,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "compilation errors"
-      (xt/submit-tx tu/*node* [(xt/put-fn :compilation-error-fn '(fn [] unknown-symbol))])
+      (xt/submit-tx tu/*node* [[:put-fn :compilation-error-fn '(fn [] unknown-symbol)]])
       (xt/submit-tx tu/*node* [[:call :compilation-error-fn]
                                [:call :assoc-version :fail]])
 
@@ -178,10 +178,10 @@
 
     (t/testing "exception thrown"
       #_{:clj-kondo/ignore [:unused-value]}
-      (xt/submit-tx tu/*node* [(xt/put-fn :exception-fn
-                                          '(fn []
-                                             (/ 1 0)
-                                             []))])
+      (xt/submit-tx tu/*node* [[:put-fn :exception-fn
+                                '(fn []
+                                   (/ 1 0)
+                                   [])]])
 
       (tu/with-log-level 'xtdb.indexer :error
         (xt/submit-tx tu/*node* [[:call :exception-fn]
@@ -198,10 +198,10 @@
   (t/is (thrown-with-msg?
          Exception #"sleep interrupted"
          @(with-open [node (xtn/start-node {})]
-            (xt/submit-tx node [(xt/put-fn :hello-world
-                                           '(fn hello-world [id]
-                                              (sleep 200)
-                                              [[:put :xt_docs {:xt/id id :foo (str id)}]]))])
+            (xt/submit-tx node [[:put-fn :hello-world
+                                 '(fn hello-world [id]
+                                    (sleep 200)
+                                    [[:put :xt_docs {:xt/id id :foo (str id)}]])]])
             (xt/submit-tx node [[:call :hello-world 1]])
 
             (Thread/sleep 100)
@@ -211,9 +211,9 @@
 
 (t/deftest test-call-tx-fn-with-ns-attr
   (t/testing "simple call"
-    (xt/submit-tx tu/*node* [(xt/put-fn :my-fn
-                                        '(fn [id n]
-                                           [[:put :docs {:xt/id id, :a/b n}]]))
+    (xt/submit-tx tu/*node* [[:put-fn :my-fn
+                              '(fn [id n]
+                                 [[:put :docs {:xt/id id, :a/b n}]])]
                              [:call :my-fn :foo 0]
                              [:call :my-fn :bar 1]])
 
@@ -222,10 +222,10 @@
              (xt/q tu/*node* '(from :docs [xt/id {:a/b n}]))))))
 
 (t/deftest test-lazy-error-in-tx-fns-2811
-  (xt/submit-tx tu/*node* [(xt/put-fn :my-fn '(fn [ns] (for [n ns]
-                                                         (if (< n 100)
-                                                           [:put :foo {:xt/id n :v n}]
-                                                           (throw (ex-info "boom" {}))))))])
+  (xt/submit-tx tu/*node* [[:put-fn :my-fn '(fn [ns] (for [n ns]
+                                                       (if (< n 100)
+                                                         [:put :foo {:xt/id n :v n}]
+                                                         (throw (ex-info "boom" {})))))]])
   (xt/submit-tx tu/*node* [[:call :my-fn (range 200)]])
   (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :v 1}]])
   (t/is (= [{:xt/id 1, :v 1}]
@@ -234,12 +234,12 @@
 
 (t/deftest normalisation-in-tx-fn
   (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :first-name "Allan" :last-name "Turing"}]
-                           (xt/put-fn :my-fn '(fn []
-                                                (let [ks (->> (q '(from :docs [first-name last-name])
-                                                                 {:key-fn :snake-case-keyword})
-                                                              (mapcat keys)
-                                                              (into []))]
-                                                  [[:put :the-keys {:xt/id 1 :keys ks}]])))
+                           [:put-fn :my-fn '(fn []
+                                              (let [ks (->> (q '(from :docs [first-name last-name])
+                                                               {:key-fn :snake-case-keyword})
+                                                            (mapcat keys)
+                                                            (into []))]
+                                                [[:put :the-keys {:xt/id 1 :keys ks}]]))]
                            [:call :my-fn]])
 
   (t/is (= #{{:key :first_name} {:key :last_name}}
@@ -249,10 +249,10 @@
                            (return key)))))
         "testing `key-fn` in q")
 
-  (xt/submit-tx tu/*node* [(xt/put-fn :my-case-fn '(fn [{:keys [snake_case kebab-case]}]
-                                                     (cond-> []
-                                                       snake_case (conj [:put :casing {:xt/id snake_case}])
-                                                       kebab-case (conj [:put :casing {:xt/id kebab-case}]))))
+  (xt/submit-tx tu/*node* [[:put-fn :my-case-fn '(fn [{:keys [snake_case kebab-case]}]
+                                                   (cond-> []
+                                                     snake_case (conj [:put :casing {:xt/id snake_case}])
+                                                     kebab-case (conj [:put :casing {:xt/id kebab-case}])))]
                            [:call :my-case-fn {:snake_case "foo"}]
                            [:call :my-case-fn {:kebab-case "bar"}]
                            [:call :my-case-fn {:snake_case "baz" :kebab-case "toto"}]])
@@ -262,7 +262,7 @@
                  '(from :casing [xt/id])))))
 
 (t/deftest test-sql-error
-  (xt/submit-tx tu/*node* [(xt/put-fn :my-fn '(fn [] (q "SELECT t1.foo FROM foo")))
+  (xt/submit-tx tu/*node* [[:put-fn :my-fn '(fn [] (q "SELECT t1.foo FROM foo"))]
                            [:call :my-fn]])
 
   (t/is (= "Invalid SQL query:
