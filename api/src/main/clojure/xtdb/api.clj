@@ -211,7 +211,7 @@
   "Writes transactions to the log for processing. Non-blocking.
 
   tx-ops: XTQL/SQL transaction operations.
-    [(xt/put :table {:xt/id \"my-id\", ...})
+    [[:put :table {:xt/id \"my-id\", ...}]
      [:delete-doc :table \"my-id\"]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
@@ -242,7 +242,7 @@
   "Writes transactions to the log for processing
 
   tx-ops: XTQL/SQL style transactions.
-    [(xt/put :table {:xt/id \"my-id\", ...})
+    [[:put :table {:xt/id \"my-id\", ...}]
      [:delete-doc :table \"my-id\"]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
@@ -304,18 +304,6 @@
                      (cond-> k
                        (keyword? k) (-> symbol str))))))
 
-(defn put
-  "Returns a put operation for passing to `submit-tx`.
-
-  `table`: table to put the document into.
-  `docs`: documents to put.
-    * Each must contain an `:xt/id` attribute - currently string, UUID, integer or keyword.
-
-  * `put` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
-  * To insert documents using a query, use `insert-into`"
-  [table & docs]
-  (TxOp/put (expect-table-name table) ^List (mapv expect-doc docs)))
-
 (defn- expect-fn-id [fn-id]
   (if-not (eid? fn-id)
     (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
@@ -338,14 +326,6 @@
       * `xt/put`, `xt/delete`, etc: transaction operation builders from this namespace."
   [fn-id tx-fn]
   (TxOp/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn)))
-
-(defn during
-  "Adapts the given transaction operation to take effect (in valid time) between `from` and `until`.
-
-  `from`, `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^TxOp$HasValidTimeBounds tx-op from until]
-
-  (.during tx-op (expect-instant from) (expect-instant until)))
 
 (defn starting-from
   "Adapts the given transaction operation to take effect (in valid time) from `from` until the end of time.

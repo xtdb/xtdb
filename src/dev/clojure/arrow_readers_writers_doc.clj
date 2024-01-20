@@ -20,8 +20,8 @@
 
   ;; Our engine works on relations. Think of a relation as a set of vectors where each vector has a name.
   ;; Lets say you submit the following two documents.
-  (xt/put :xt-docs {:xt/id 1 :column-name 42})
-  (xt/put :xt-docs {:xt/id 2 :column-name "foo"})
+  [:put :xt-docs {:xt/id 1 :column-name 42}]
+  [:put :xt-docs {:xt/id 2 :column-name "foo"}]
   ;; then this gets transformed into the relation (forgetting the special treatement of `xt/id` for the moment)
   {"xt/id" [1 2]
    "column-name" [42 "foo"]}

@@ -858,7 +858,7 @@
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
-    (-> (xt/submit-tx *node* [(xt/put :a {:xt/id "map-test", :a {:b 42}})])
+    (-> (xt/submit-tx *node* [[:put :a {:xt/id "map-test", :a {:b 42}}]])
         (tu/then-await-tx *node*))
 
     (let [rs (q conn ["select a.a from a a"])]
@@ -902,7 +902,7 @@
 ;; right now all isolation levels have the same defined behaviour
 (deftest transaction-by-default-pins-the-basis-to-last-tx-test
   (require-node)
-  (let [insert #(xt/submit-tx *node* [(xt/put %1 %2)])]
+  (let [insert #(xt/submit-tx *node* [[:put %1 %2]])]
     (-> (insert :a {:xt/id :fred, :name "Fred"})
         (tu/then-await-tx *node*))
 

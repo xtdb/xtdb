@@ -21,7 +21,7 @@
   (t/is (map? (xt/status *node*))))
 
 (t/deftest test-simple-query
-  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :inst #inst "2021"})])]
+  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id :foo, :inst #inst "2021"}]])]
     (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
@@ -33,11 +33,11 @@
                      (util/rethrowing-cause))))
 
   (t/is (thrown? IllegalArgumentException
-                 (-> (xt/submit-tx *node* [(xt/put :docs {})])
+                 (-> (xt/submit-tx *node* [[:put :docs {}]])
                      (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
-  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]})
+  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
                                  [:sql "INSERT INTO docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                   [4]]])]
     (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
@@ -54,7 +54,7 @@
                    {:tx-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
-  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}})])]
+  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
     (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
@@ -64,8 +64,8 @@
              (xt/q *node* "SELECT b.xt$id, b.v FROM docs b")))))
 
 (t/deftest round-trips-structs
-  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}})
-                                 (xt/put :docs {:xt/id :bar, :struct {:a true, :d 42.0}})])]
+  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
+                                 [:put :docs {:xt/id :bar, :struct {:a true, :d 42.0}}]])]
     (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
@@ -104,13 +104,13 @@
                           {:default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-system-time-47
-  (let [tx1 (xt/submit-tx *node* [(xt/put :docs {:xt/id :foo})]
+  (let [tx1 (xt/submit-tx *node* [[:put :docs {:xt/id :foo}]]
                           {:system-time #inst "2012"})
 
-        _invalid-tx (xt/submit-tx *node* [(xt/put :docs {:xt/id :bar})]
+        _invalid-tx (xt/submit-tx *node* [[:put :docs {:xt/id :bar}]]
                                   {:system-time #inst "2011"})
 
-        tx3 (xt/submit-tx *node* [(xt/put :docs {:xt/id :baz})])]
+        tx3 (xt/submit-tx *node* [[:put :docs {:xt/id :baz}]])]
 
     (t/is (= (TransactionKey. 0 (time/->instant #inst "2012"))
              tx1))
@@ -145,10 +145,10 @@
                   (into #{} (map #(update % :err (juxt ex-message ex-data)))))))))
 
 (def ^:private devs
-  [(xt/put :users {:xt/id :jms, :name "James"})
-   (xt/put :users {:xt/id :hak, :name "Håkan"})
-   (xt/put :users {:xt/id :mat, :name "Matt"})
-   (xt/put :users {:xt/id :wot, :name "Dan"})])
+  [[:put :users {:xt/id :jms, :name "James"}]
+   [:put :users {:xt/id :hak, :name "Håkan"}]
+   [:put :users {:xt/id :mat, :name "Matt"}]
+   [:put :users {:xt/id :wot, :name "Dan"}]])
 
 (t/deftest test-sql-roundtrip
   (let [tx (xt/submit-tx *node* devs)]
@@ -455,7 +455,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 (deftest test-submit-tx-system-time-opt
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"expected date-time"
-                          (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1})]
+                          (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1}]]
                                         {:system-time "foo"}))))
 
 (t/deftest test-basic-xtql-dml
@@ -466,14 +466,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                         :default-all-valid-time? true})
                  (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
 
-    (let [tx1 (xt/submit-tx *node* [(-> (xt/put :users {:xt/id "dave", :first-name "Dave", :last-name "Davis"})
-                                        (xt/starting-from #inst "2018"))
-                                    (-> (xt/put :users {:xt/id "claire", :first-name "Claire", :last-name "Cooper"})
-                                        (xt/starting-from #inst "2019"))
-                                    (-> (xt/put :users {:xt/id "alan", :first-name "Alan", :last-name "Andrews"})
-                                        (xt/starting-from #inst "2020"))
-                                    (-> (xt/put :users {:xt/id "susan", :first-name "Susan", :last-name "Smith"})
-                                        (xt/starting-from #inst "2021"))])
+    (let [tx1 (xt/submit-tx *node* [[:put {:into :users, :valid-from #inst "2018"}
+                                     {:xt/id "dave", :first-name "Dave", :last-name "Davis"}]
+                                    [:put {:into :users, :valid-from #inst "2019"}
+                                     {:xt/id "claire", :first-name "Claire", :last-name "Cooper"}]
+                                    [:put {:into :users, :valid-from #inst "2020"}
+                                     {:xt/id "alan", :first-name "Alan", :last-name "Andrews"}]
+                                    [:put {:into :users, :valid-from #inst "2021"}
+                                     {:xt/id "susan", :first-name "Susan", :last-name "Smith"}]])
           tx1-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), nil]
                          ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
                          ["Alan" "Andrews", (time/->zdt #inst "2020"), nil]
@@ -532,8 +532,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                                            :for-valid-time :all-time})
                        {:basis {:at-tx tx}})))]
     (let [tx1 (xt/submit-tx *node*
-                            [(xt/put :foo {:xt/id "foo", :version 0})
-                             (xt/put :foo {:xt/id "bar", :version 0})])
+                            [[:put :foo {:xt/id "foo", :version 0}]
+                             [:put :foo {:xt/id "bar", :version 0}]])
           tx2 (xt/submit-tx *node* [[:update {:table :foo, :set {:version 1}}]])
           v0 {:version 0,
               :xt/valid-from (time/->zdt #inst "2020-01-01"),
@@ -570,15 +570,15 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
   (t/testing "assert-not-exists"
     (xt/submit-tx tu/*node* [[:assert-not-exists '(from :users [{:first-name $name}])
                               {:name "James"}]
-                             (xt/put :users {:xt/id :james, :first-name "James"})])
+                             [:put :users {:xt/id :james, :first-name "James"}]])
 
     (xt/submit-tx tu/*node* [[:assert-not-exists '(from :users [{:first-name $name}])
                               {:name "Dave"}]
-                             (xt/put :users {:xt/id :dave, :first-name "Dave"}) ])
+                             [:put :users {:xt/id :dave, :first-name "Dave"}] ])
 
     (xt/submit-tx tu/*node* [[:assert-not-exists '(from :users [{:first-name $name}])
                               {:name "James"}]
-                             (xt/put :users {:xt/id :james2, :first-name "James"}) ])
+                             [:put :users {:xt/id :james2, :first-name "James"}] ])
 
     (t/is (= #{{:xt/id :james, :first-name "James"}
                {:xt/id :dave, :first-name "Dave"}}
@@ -596,12 +596,12 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
   (t/testing "assert-exists"
     (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])
                               {:name "Mike"}]
-                             (xt/put :users {:xt/id :mike, :first-name "Mike"}) ])
+                             [:put :users {:xt/id :mike, :first-name "Mike"}] ])
 
     (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])
                               {:name "James"}]
                              [:delete-doc :users :james]
-                             (xt/put :users {:xt/id :james2, :first-name "James"})])
+                             [:put :users {:xt/id :james2, :first-name "James"}]])
 
     (t/is (= #{{:xt/id :james2, :first-name "James"}
                {:xt/id :dave, :first-name "Dave"}}
@@ -618,13 +618,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                          (update row :xt/error (juxt ex-message ex-data)))))))))
 
 (t/deftest test-xtql-with-param-2933
-  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :petr :name "Petr"})])
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :petr :name "Petr"}]])
 
   (t/is (= [{:name "Petr"}]
            (xt/q tu/*node* '(from :docs [{:xt/id $petr} name]) {:args {:petr :petr}}))))
 
 (t/deftest test-close-node-multiple-times
-  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id :petr :name "Petr"})])
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :petr :name "Petr"}]])
   (let [^AutoCloseable node tu/*node*]
     (.close node)
     (.close node)))
@@ -641,14 +641,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                                                (with {:foo (/ 1 0)})))))
 
   ;; Might need to get updated if this kind of error gets handled differently.
-  (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :name 2})])
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :name 2}]])
   (t/is (thrown-with-msg? Exception ;; Exception as type is different for local/remote
                           #"No method in multimethod 'codegen-call' for dispatch value"
                           (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
 
 (def ivan+petr
-  [(xt/put :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"})
-   (xt/put :docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"})])
+  [[:put :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+   [:put :docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (t/deftest normalisation-option
   (xt/submit-tx tu/*node* ivan+petr)
@@ -689,8 +689,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                                 {:key-fn :foo-bar}))))
 
 (t/deftest dynamic-xtql-queries
-  (xt/submit-tx tu/*node* [(xt/put :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"})
-                           (xt/put :posts {:xt/id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"})])
+  (xt/submit-tx tu/*node* [[:put :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"}]
+                           [:put :posts {:xt/id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}]])
 
   (letfn [(build-posts-query [{:keys [with-author? popular?]}]
             (xt/template (-> (from :posts [{:xt/id id} text
@@ -717,9 +717,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
 (t/deftest test-xtql-dml-from-star
 
-  (xt/submit-tx tu/*node* [(xt/put :users {:xt/id :james, :first-name "James"})
-                           (xt/put :users {:xt/id :dave, :first-name "Dave"})
-                           (xt/put :users {:xt/id :rob, :first-name "Rob" :last-name "ert"})])
+  (xt/submit-tx tu/*node* [[:put :users {:xt/id :james, :first-name "James"}]
+                           [:put :users {:xt/id :dave, :first-name "Dave"}]
+                           [:put :users {:xt/id :rob, :first-name "Rob" :last-name "ert"}]])
 
   (xt/submit-tx tu/*node* [[:insert-into :users2 '(from :users [*])]])
 

@@ -20,23 +20,16 @@ XT submit options are an optional map of the following keys:
 
 Upserts documents into the given table, optionally during the given valid time period.
 
-`(xt/put <table> & <documents>)`
+`[:put <table|opts> <documents>*]`
 
-* `table` (keyword).
-* `documents` (maps): each must contain `:xt/id`.
-
-To specify a valid-time range:
-
-* `+(-> (xt/put <table> & <documents>) (xt/starting-from <from>))+`
-* `+(-> (xt/put <table> & <documents>) (xt/until <to>))+`
-* `+(-> (xt/put <table> & <documents>) (xt/during <from> <to))+`
-
-where:
-
-* `from` (timestamp): may be `nil`.
+* `table` (keyword): table to insert into
+* `opts` (map):
+** `:into` (keyword): table to insert into
+** `:valid-from`: (timestamp): may be `nil`.
     Defaults to the current time of the transaction if not provided.
-* `to` (timestamp): may be `nil`.
+** `:valid-to`: (timestamp): may be `nil`.
     Defaults to the end-of-time if not provided.
+* `documents` (maps): each must contain `:xt/id`.
 
 === `insert-into`
 
@@ -215,7 +208,7 @@ This can be used to enforce consistency constraints - for example, to assert tha
 ----
 [[:assert-not-exists '(from :users [{:email $email}])
   {:email "james@example.com"}]
- (xt/put :users {:xt/id :james, :email "james@example.com", ...})]
+  [:put :users {:xt/id :james, :email "james@example.com", ...}]]
 ----
 
 === `call`

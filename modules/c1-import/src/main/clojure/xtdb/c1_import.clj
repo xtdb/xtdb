@@ -53,8 +53,8 @@
                           :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
                                     ;; HACK: what to do if the user has a separate :xt/id  key?
                                     (case tx-op
-                                      :put (-> (xt/put :xt_docs (xform-doc doc))
-                                               (xt/during start-valid-time end-valid-time))
+                                      :put [:put {:into :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time}
+                                            (xform-doc doc)]
                                       :delete [:delete-doc {:from :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time} eid]
                                       :evict [:erase-doc :xt_docs eid]))
                           :abort [TxOp/ABORT])

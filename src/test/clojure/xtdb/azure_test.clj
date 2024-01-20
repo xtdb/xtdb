@@ -129,7 +129,7 @@
 ;;           (let [log (get-in node [:system :xtdb/log])]
 ;;             (t/is (instance? Log log))))
         
-;;         (xt/submit-tx node [(xt/put :xt_docs {:xt/id :foo})])
+;;         (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
 ;;         (t/is (= [{:id :foo}] (xt/q node '(from :xt_docs [{:xt/id id}]))))))
     
 ;;     (t/testing "connecting to previously created event-hub"
@@ -212,9 +212,9 @@
                                                               :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}]
                                        :local-disk-cache local-disk-cache}]})]
       ;; Submit some documents to the node
-      (t/is (xt/submit-tx node [(xt/put :bar {:xt/id "bar1"})
-                                (xt/put :bar {:xt/id "bar2"})
-                                (xt/put :bar {:xt/id "bar3"})]))
+      (t/is (xt/submit-tx node [[:put :bar {:xt/id "bar1"}]
+                                [:put :bar {:xt/id "bar2"}]
+                                [:put :bar {:xt/id "bar3"}]]))
 
       ;; Ensure finish-chunk! works
       (t/is (nil? (tu/finish-chunk! node)))

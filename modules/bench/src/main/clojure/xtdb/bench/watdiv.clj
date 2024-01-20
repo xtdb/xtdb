@@ -34,7 +34,7 @@
                                       (map read-string)
                                       (partition-all 100))]
                  (xt/submit-tx node (for [doc doc-batch]
-                                      (xt/put :docs doc))))))]
+                                      [:put :docs doc])))))]
     (bench/with-timing :await-tx
       (tu/then-await-tx tx node (Duration/ofHours 5)))
 

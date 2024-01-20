@@ -65,9 +65,6 @@
     (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
     fn-id))
 
-(defmethod parse-tx-op :call [[_ f & args]]
-  (TxOp/call (expect-fn-id f) (or args [])))
-
 (defmethod parse-tx-op :sql [[_ sql & arg-rows]]
   (if-not (string? sql)
     (throw (err/illegal-arg :xtdb.tx/expected-sql
@@ -76,6 +73,14 @@
 
     (cond-> (TxOp/sql sql)
       (seq arg-rows) (.withArgs ^List (vec arg-rows)))))
+
+(defmethod parse-tx-op :put [[_ table-or-opts & docs]]
+  (let [{table :into, :keys [valid-from valid-to]} (cond
+                                                     (map? table-or-opts) table-or-opts
+                                                     (keyword? table-or-opts) {:into table-or-opts})]
+    (cond-> (TxOp/put (expect-table-name table) ^List (mapv expect-doc docs))
+      valid-from (.startingFrom (expect-instant valid-from))
+      valid-to (.until (expect-instant valid-to)))))
 
 (defmethod parse-tx-op :insert-into [[_ table query & arg-rows :as this]]
   (when-not (keyword? table)
@@ -142,6 +147,9 @@
 (defmethod parse-tx-op :assert-not-exists [[_ query & arg-rows]]
   (cond-> (Xtql/assertNotExists (xtql.edn/parse-query query))
     (seq arg-rows) (XtqlAndArgs. arg-rows)))
+
+(defmethod parse-tx-op :call [[_ f & args]]
+  (TxOp/call (expect-fn-id f) (or args [])))
 
 (extend-protocol Unparse
   Xtql$Insert

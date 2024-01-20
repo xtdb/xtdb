@@ -21,16 +21,16 @@
 
 (t/deftest test-find-gt-ivan
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 10}})]
-    (-> (xt/submit-tx node [(xt/put :xt_docs {:name "Håkan", :xt/id :hak})])
+    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk! node)
 
-    (xt/submit-tx node [(xt/put :xt_docs {:name "Dan", :xt/id :dan})
-                        (xt/put :xt_docs {:name "Ivan", :xt/id :iva})])
+    (xt/submit-tx node [[:put :xt_docs {:name "Dan", :xt/id :dan}]
+                        [:put :xt_docs {:name "Ivan", :xt/id :iva}]])
 
-    (let [tx1 (-> (xt/submit-tx node [(xt/put :xt_docs {:name "James", :xt/id :jms})
-                                      (xt/put :xt_docs {:name "Jon", :xt/id :jon})])
+    (let [tx1 (-> (xt/submit-tx node [[:put :xt_docs {:name "James", :xt/id :jms}]
+                                      [:put :xt_docs {:name "Jon", :xt/id :jon}]])
                   (tu/then-await-tx node))]
 
       (tu/finish-chunk! node)
@@ -61,7 +61,7 @@
                     (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (true? (.test (.build param-sel table-metadata) 0))))))))
 
-          (let [tx2 (xt/submit-tx node [(xt/put :xt_docs {:name "Jeremy", :xt/id :jdt})])]
+          (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
 
             (test-query-ivan #{{:xt/id :jms, :name "James"}
                                {:xt/id :jon, :name "Jon"}}
@@ -74,15 +74,15 @@
 
 (t/deftest test-find-eq-ivan
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 10}})]
-    (-> (xt/submit-tx node [(xt/put :xt_docs {:name "Håkan", :xt/id :hak})
-                            (xt/put :xt_docs {:name "James", :xt/id :jms})
-                            (xt/put :xt_docs {:name "Ivan", :xt/id :iva})])
+    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]
+                            [:put :xt_docs {:name "James", :xt/id :jms}]
+                            [:put :xt_docs {:name "Ivan", :xt/id :iva}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk! node)
-    (-> (xt/submit-tx node [(xt/put :xt_docs {:name "Håkan", :xt/id :hak})
+    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]
 
-                            (xt/put :xt_docs {:name "James", :xt/id :jms})])
+                            [:put :xt_docs {:name "James", :xt/id :jms}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk! node)
@@ -113,9 +113,9 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (xtn/start-node {})]
-    (let [tx1 (xt/submit-tx node [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx1"})])
+    (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
           tt1 (.getSystemTime tx1)
-          tx2 (xt/submit-tx node [(xt/put :xt_docs {:xt/id :my-doc, :last-updated "tx2"})])
+          tx2 (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
           tt2 (.getSystemTime tx2)]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time}
