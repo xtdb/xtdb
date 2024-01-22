@@ -22,7 +22,7 @@ From this point you should be able to run the commands in the next section.
 
 == Commands
 
-All commands are run from the root of the project, from a terminal:
+All commands are run from the `docs` folder of the project, from a terminal:
 
 [cols="1,2"]
 |===
