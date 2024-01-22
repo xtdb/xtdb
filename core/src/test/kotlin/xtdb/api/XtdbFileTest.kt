@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.query.XtqlQuery
-import xtdb.api.tx.TxOp
+import xtdb.api.tx.putDocs
+import java.io.File
 import kotlin.io.path.Path
 
 internal class XtdbFileTest {
@@ -34,15 +35,20 @@ internal class XtdbFileTest {
         val node = assertDoesNotThrow { Xtdb.openNode(path = Path(resourcePath)) }
 
         // can use the created node
-        node.submitTx(TxOp.put("foo", mapOf("xt/id" to "jms")))
+        assertDoesNotThrow {
+            node.submitTx(putDocs("foo", mapOf("xt\$id" to "jms")))
+        }
 
         assertEquals(
             listOf(mapOf("id" to "jms")),
 
             node.openQuery(
-                XtqlQuery.from("foo") { "xt/id" boundTo "id" }
+                XtqlQuery.from("foo") { "xt\$id" boundTo "id" }
             ).toList()
         )
+
+        File("/tmp/test-storage").deleteRecursively()
+        File("/tmp/test-log").deleteRecursively()
     }
 
     @Test
@@ -51,8 +57,9 @@ internal class XtdbFileTest {
         val submitClient = assertDoesNotThrow { XtdbSubmitClient.openSubmitClient(path = Path(resourcePath)) }
 
         assertDoesNotThrow {
-            submitClient.submitTx(TxOp.put("foo", mapOf("xt/id" to "jms")))
+            submitClient.submitTx(putDocs("foo", mapOf("xt\$id" to "jms")))
         }
 
+        File("/tmp/test-log").deleteRecursively()
     }
 }
