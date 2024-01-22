@@ -77,22 +77,21 @@ class YamlConfigDecoderTest {
             nodeConfig(localConfig).storage
         )
 
-        // TODO - different instances of S3Configurator so test fails
-//        val s3Config = """
-//        storage: !Remote
-//            objectStore: !S3
-//              bucket: xtdb-bucket
-//              snsTopicArn: example-arn
-//            localDiskCache: test-path
-//        """
-//
-//        Assertions.assertEquals(
-//            RemoteStorageFactory(
-//                objectStore = S3ObjectStoreFactory(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
-//                localDiskCache = Paths.get("test-path")
-//                ),
-//            nodeConfig(s3Config).storage
-//        )
+        val s3Config = """
+        storage: !Remote
+            objectStore: !S3
+              bucket: xtdb-bucket
+              snsTopicArn: example-arn
+            localDiskCache: test-path
+        """
+
+        Assertions.assertEquals(
+            RemoteStorageFactory(
+                objectStore = S3ObjectStoreFactory(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
+                localDiskCache = Paths.get("test-path")
+            ),
+            nodeConfig(s3Config).storage
+        )
 
         val azureConfig = """
         storage: !Remote

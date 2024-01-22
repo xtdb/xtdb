@@ -12,7 +12,7 @@ import xtdb.api.storage.ObjectStoreFactory
 import xtdb.s3.S3Configurator
 import java.nio.file.Path
 
-class DefaultS3Configurator: S3Configurator
+data object DefaultS3Configurator: S3Configurator
 
 @Serializable
 @SerialName("!S3")
@@ -20,7 +20,7 @@ data class S3ObjectStoreFactory @JvmOverloads constructor(
         val bucket: String,
         val snsTopicArn: String,
         var prefix: Path? = null,
-        @Transient var s3Configurator: S3Configurator = DefaultS3Configurator()
+        @Transient var s3Configurator: S3Configurator = DefaultS3Configurator
 ) : ObjectStoreFactory {
     companion object {
         private val OPEN_OBJECT_STORE = requiringResolve("xtdb.s3", "open-object-store")
