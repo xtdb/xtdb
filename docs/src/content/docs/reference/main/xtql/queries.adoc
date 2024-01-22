@@ -1,10 +1,10 @@
 ---
 title: XTQL Queries
 ---
+:examples:  ../src/test/resources/docs/xtql_json_examples.yaml
+
 
 NOTE: For specific details of how to submit XTQL queries, see the documentation for your individual link:/reference/main/sdks[client library].
-
-WARNING: JSON support is not yet released - coming soon!
 
 XTQL queries consist of composable operators, optionally combined with a pipeline.
 
@@ -131,6 +131,18 @@ Expr :: <defined separately>
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=aggr-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (-> (unify (from :customers [{:xt/id customer-id, :name customer-name}])
@@ -139,6 +151,7 @@ For example:
                {:order-count (row-count)
                 :total-value (sum order-value)}))
 ----
+====
 
 === From
 
@@ -171,6 +184,18 @@ For more details, see the link:#_binding_specs[binding specs] section.
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=from-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; `SELECT username, first_name, last_name FROM users`
@@ -185,10 +210,23 @@ For example:
 ;; `SELECT first_name, last_name FROM users WHERE username = ?`
 (from :users [{:username $username} first-name last-name])
 ----
+====
 
-Additionally, 'from' supports a special column reference - `*`.
+Additionally, 'from' supports a special column reference - `projectAllCols` in JSON and the `*` symbol in Clojure.
 Like in SQL, this can be used to specify that all columns of a given table are to be projected out.
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=from-star-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; `SELECT * FROM users`
@@ -197,44 +235,70 @@ Like in SQL, this can be used to specify that all columns of a given table are t
 ;; `SELECT *, username AS login FROM users`
 (from :users [* {:username login}])
 ----
+====
 
 [WARNING]
 ====
-Note that, due to the implicit unification properties of 'from' outlined in the link:#_binding_specs[binding specs] section, explicitly projected columns will unify with those projected out as a result of `*`.
+Note that, due to the implicit unification properties of 'from' outlined in the link:#_binding_specs[binding specs] section, explicitly projected columns will unify with those projected out as a result of `projectAllCols`/`*`.
 
-It is due to this property of implicit unification and projection that `*` as a column reference in 'from' is not supported within a unification context.
+It is due to this property of implicit unification and projection that `projectAllCols`/`*` as a column reference in 'from' is not supported within a unification context.
+====
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=star-invalid-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; INVALID
-
 (unify (from :users [*])
        (from :customers [*]))
 ----
 ====
 
+
 ==== Temporal filters
 
 Temporal filters control the document versions that are visible to the query.
 
-* `(at <timestamp>)`: rows that were/will be visible at the specified timestamp - i.e. `+row-from <= timestamp < row-to+`
-* `(from <timestamp>)`: rows that have been visible any time after the timestamp - i.e. `+row-to > timestamp+`
-* `(to <timestamp>)`: rows that were visible any time before the timestamp - i.e. `+row-from < timestamp+`
-* `(in <from-timestamp> <to-timestamp>)`: rows that were visible any time within the period - i.e. `+row-to > <from-timestamp> && row-from < <to-timestamp>+`
-* `:all-time`: all rows, throughout history.
+* `at <timestamp>`: rows that were/will be visible at the specified timestamp - i.e. `+row-from <= timestamp < row-to+`
+* `from <timestamp>`: rows that have been visible any time after the timestamp - i.e. `+row-to > timestamp+`
+* `to <timestamp>`: rows that were visible any time before the timestamp - i.e. `+row-from < timestamp+`
+* `in <from-timestamp> <to-timestamp>`: rows that were visible any time within the period - i.e. `+row-to > <from-timestamp> && row-from < <to-timestamp>+`
+* `all-time`: all rows, throughout history.
 
-Unless otherwise specified, queries will see the current version of the row, `(at <now>)`, in both valid time and system time.
+Unless otherwise specified, queries will see the current version of the row, `at <now>`, in both valid time and system time.
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=temporal-filters-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (from :users {:bind [...]
               :for-valid-time (in #inst "2020-01-01" #inst "2021-01-01")
-              :for-system-time (at #inst "2023-01-01")}
+              :for-system-time (at #inst "2023-01-01")})
 ----
-
 Without any temporal filters, it is valid to just specify the binding specs without a map.
+====
 
 [#_joins]
 === Joins - join, left join
@@ -264,12 +328,27 @@ Parameters in the sub-query can be fulfilled with the `:args` option - see the l
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=joins-json,indent=0]
+----
+====
+
+
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (unify (from :customers [{:xt/id customer-id} customer-name]
        (left-join (from :orders [{:xt/id order-id}, customer-id, order-value])
                   [customer-id order-id order-value])))
 ----
+====
 
 In this case, `customer-id` is specified multiple times, so this adds a join-condition constraint; `order-id` and `order-value` are not specified elsewhere within the unify, so these columns are simply returned.
 
@@ -286,12 +365,26 @@ LimitN :: non-negative integer
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=limit-json,indent=0]
+----
+====
+
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (-> (from :users [username])
     (order-by username)
     (limit 10))
 ----
+====
 
 === Offset
 
@@ -306,6 +399,18 @@ OffsetN :: non-negative integer
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=offset-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (-> (from :users [username])
@@ -313,6 +418,7 @@ For example:
     (offset 10)
     (limit 10))
 ----
+====
 
 === Order by
 
@@ -337,6 +443,18 @@ Expr :: <defined separately>
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=order-by-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; sort by order-value descending, with nulls returned last,
@@ -345,6 +463,7 @@ For example:
     (order-by {:val order-value, :dir :desc, :nulls :last}
               received-at))
 ----
+====
 
 === Return
 
@@ -364,6 +483,18 @@ Expr :: <defined separately>
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=return-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (-> (from :users [username first-name last-name])
@@ -374,6 +505,7 @@ For example:
 [{:username "...", :full-name "..."}
  ...]
 ----
+====
 
 === Rel
 
@@ -393,10 +525,23 @@ Expr :: <defined separately>
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=rel-json,indent=0]
+----
+====
+
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; as a literal
-(rel [{:a 1, :b 2}, {:a 3, :b 4}])
+(rel [{:a 1, :b 2}, {:a 3, :b 4}] [a b])
 
 ;; from a parameter
 (xt/q node '(rel $t [a b])
@@ -411,6 +556,7 @@ For example:
 (unify (from :docs [my-nested-rel])
        (rel my-nested-rel [a b]))
 ----
+====
 
 === Unify
 
@@ -428,11 +574,25 @@ This has the effect of imposing 'join conditions' over the inputs.
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=unify-json,indent=0]
+----
+====
+
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (unify (from :customers [{:xt/id customer-id} customer-name])
        (from :orders [{:xt/id order-id} customer-id order-value]))
 ----
+====
 
 Because this query uses the `customer-id` logic variable twice, we add a constraint that the two occurrences must be equal - it's therefore equivalent to the following SQL:
 
@@ -477,6 +637,18 @@ Expr :: <defined separately>
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=unnest-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; as a 'tail' operator - N.B. `:tag` is a column being added
@@ -496,6 +668,7 @@ For example:
  {:post-id 4, :tag "ai"}
  {:post-id 4, :tag "politics"}]
 ----
+====
 
 === Where
 
@@ -514,6 +687,18 @@ Expr :: <defined separately>
 
 Example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=where-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; as a 'tail' operator
@@ -526,6 +711,7 @@ Example:
        (from :orders [{:xt/id order-id} customer-id order-value])
        (where (or vip? (> order-value 1000000))))
 ----
+====
 
 === With
 
@@ -550,6 +736,18 @@ Expr :: <defined separately>
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=with-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; as a 'tail' operator - N.B. `:full-name` is a column here
@@ -565,6 +763,7 @@ For example:
 [{:username "...", :first-name "...", :last-name "...", :full-name "..."}
  ...]
 ----
+====
 
 === Without
 
@@ -578,12 +777,26 @@ Column :: keyword
 
 For example, in this query, we only want the `customer-id` to join on - we don't want it returned - so we exclude it in a `without` operator.
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=without-json,indent=0]
+----
+====
+
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 (-> (unify (from :customers [{:xt/id customer-id}, customer-name])
            (from :orders [customer-id order-value]))
     (without :customer-id))
 ----
+====
 
 == Expressions
 
@@ -640,22 +853,33 @@ The columns in the returned row will be nested into a map in the outer expressio
   The rows will be nested into an array of maps in the outer expression.
 * The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
 
-For example:
+The following example retrieves a post together with their author and comments:
 
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=expr-json-1,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
-(-> (from :posts [{:xt/id $post-id} author-id])
-    (with {:author (pull (-> (from :authors [{:xt/id $author-id} post-content])
-                             (return :post-content))
+(-> (from :posts [{:xt/id $post-id} post-content author-id])
+    (with {:author (pull (from :authors [{:xt/id $author-id} first-name last-name])
                          {:args [author-id]})
 
            :comments (pull* (-> (from :comments [{:post-id $post-id} comment posted-at])
-                                (order-by :posted-at)
+                                (order-by posted-at)
                                 (limit 2)
-                                (return :comment))
+                                (return comment))
                             {:args [{:post-id $post-id}]})})
 
-    (return :post-content :author :comments))
+    (return post-content author comments))
 
 ;; =>
 
@@ -663,6 +887,7 @@ For example:
  :author {:name "..."}
  :comments [{:comment "..."}, {:comment "..."}]}
 ----
+====
 
 == Binding specs
 
@@ -678,6 +903,36 @@ Binding specs define which columns are retrieved from a relation, and specify co
 
 For example:
 
+.Json
+[%collapsible%open]
+====
+* We can retrieve columns by listing them. The simple (unnested) string type has the meaning of a logic var/column name in this case.
++
+[source,json]
+----
+include::{examples}[tags=binding-json-1,indent=0]
+----
++
+* We can rename columns by specifying a mapping. Notice how we need to specify the logic var type explicitly in this case.
++
+[source,json]
+----
+include::{examples}[tags=binding-json-2,indent=0]
+----
+* We can constrain rows by specifying literals or parameters.
++
+[source,json]
+----
+include::{examples}[tags=binding-json-3,indent=0]
+----
+The first is an example of where we match `username` against a string literal.
+
+====
+
+
+.Clojure
+[%collapsible]
+====
 * We can retrieve columns by listing them:
 +
 [source,clojure]
@@ -705,6 +960,7 @@ For example:
 ;; i.e. `SELECT first_name, last_name FROM users WHERE username = 'james'`
 ;;      `SELECT first_name, last_name FROM users WHERE username = ?`
 ----
+====
 
 (In these examples, we use link:#_from['from'] - but the same applies to link:#_joins['join'] and link:#_joins['left join'].)
 
@@ -726,8 +982,21 @@ Expr :: <defined separately>
 
 For example:
 
-* This is commonly used in 'pull' queries:
-+
+This is commonly used in 'pull' queries and all other link:#_subqueries[Subqueries]:
+
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=argument-json-1,indent=0]
+----
+====
+
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; find the most recent 5 posts and, for each, their most recent 3 comments
@@ -738,11 +1007,24 @@ For example:
                                 (limit 3))
                             {:args [post-id]})}))
 ----
-+
-* As well as 'pull', this is quite commonly used in left joins, because we don't want to filter out rows that don't match (which would happen if the `<>` here was in the outer unify).
-+
-Instead, we want to preserve them, albeit without values for the columns in the RHS of the left-join.
-+
+====
+
+As well as 'pull', this is quite commonly used in left joins, because we don't want to filter out rows that don't match (which would happen if the `<>` here was in the outer unify).
+
+Instead, we want to preserve them, albeit without values for the columns in the right-hand side of the left-join.
+
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=argument-json-2,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 [source,clojure]
 ----
 ;; find everybody and, for those who have them, their siblings
@@ -755,8 +1037,9 @@ Instead, we want to preserve them, albeit without values for the columns in the 
                           (where (<> $person sibling)))
                       {:args [person]
                        :bind [sibling parent]}))
-    (return :person :sibling))
+    (return person sibling))
 ----
+====
 
 == Query options
 
