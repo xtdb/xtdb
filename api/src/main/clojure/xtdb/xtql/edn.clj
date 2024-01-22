@@ -186,7 +186,7 @@
       TemporalFilter/ALL_TIME
 
       (do
-        (when-not (and (list? v) (not-empty v))
+        (when-not (and (seq? v) (not-empty v))
           (throw (err/illegal-arg :xtql/malformed-temporal-filter ctx)))
 
         (let [[tag & args] v]
