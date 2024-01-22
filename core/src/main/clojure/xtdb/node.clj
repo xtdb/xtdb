@@ -3,7 +3,9 @@
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
   (:require [xtdb.time :as time])
-  (:import [java.time ZoneId]
+  (:import [java.io File]
+           [java.nio.file Path]
+           [java.time ZoneId]
            [xtdb.api Xtdb Xtdb$Config XtdbSubmitClient XtdbSubmitClient$Config]))
 
 (defmulti ^:no-doc apply-config!
@@ -48,31 +50,51 @@
 (defn start-node
   "Starts an in-process node with the given configuration.
 
-  For a simple, in-memory node (e.g. for testing/experimentation), you can elide the configuration map.
+  Accepts various parameter types:
+  - An 'edn' map containing configuration options for the node.
+  - An instance of 'xtdb.api.Xtdb$Config'.
+  - An instance of 'java.io.File' pointing to an existing '.yaml' configuration file.
+  - An instance of 'java.nio.file.Path' pointing to an existing '.yaml' configuration file.
+
+  For a simple, in-memory node (e.g. for testing/experimentation), you can elide the configuration altogether.
 
   This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
-  For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
+  For more information on the configuration options, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
   (^xtdb.api.IXtdb [] (start-node {}))
 
   (^xtdb.api.IXtdb [opts]
-   (Xtdb/openNode (doto (Xtdb$Config.)
-                    (as-> config (reduce-kv (fn [config k v]
-                                              (doto config
-                                                (apply-config! k v)))
-                                            config
-                                            opts))))))
+   (cond
+     (instance? Xtdb$Config opts) (Xtdb/openNode opts)
+     (instance? Path opts) (Xtdb/openNode opts)
+     (instance? File opts) (Xtdb/openNode (.toPath ^File opts))
+     (map? opts) (Xtdb/openNode (doto (Xtdb$Config.)
+                                  (as-> config (reduce-kv (fn [config k v]
+                                                            (doto config
+                                                              (apply-config! k v)))
+                                                          config
+                                                          opts)))))))
 
 (defn start-submit-client
   "Starts a submit-only client with the given configuration.
 
+  Accepts various parameter types:
+  - An 'edn' map containing configuration options for the node.
+  - An instance of 'xtdb.api.Xtdb$Config'.
+  - An instance of 'java.io.File' pointing to an existing '.yaml' configuration file.
+  - An instance of 'java.nio.file.Path' pointing to an existing '.yaml' configuration file.
+
   This client *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
-  For more information on the configuration map, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
+  For more information on the configuration options, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
   ^xtdb.api.IXtdbSubmitClient [opts]
-  (XtdbSubmitClient/openSubmitClient (doto (XtdbSubmitClient$Config.)
-                                       (as-> config (reduce-kv (fn [config k v]
-                                                                 (doto config
-                                                                   (apply-config! k v)))
-                                                               config
-                                                               opts)))))
+  (cond
+    (instance? Xtdb$Config opts) (XtdbSubmitClient/openSubmitClient opts)
+    (instance? Path opts) (XtdbSubmitClient/openSubmitClient opts)
+    (instance? File opts) (XtdbSubmitClient/openSubmitClient (.toPath ^File opts))
+    (map? opts) (XtdbSubmitClient/openSubmitClient (doto (XtdbSubmitClient$Config.)
+                                                     (as-> config (reduce-kv (fn [config k v]
+                                                                               (doto config
+                                                                                 (apply-config! k v)))
+                                                                             config
+                                                                             opts))))))
