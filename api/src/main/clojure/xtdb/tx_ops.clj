@@ -4,7 +4,7 @@
             [xtdb.time :as time]
             [xtdb.xtql.edn :as xtql.edn])
   (:import [java.util List]
-           (xtdb.api.tx TxOps Xtql AssertExists AssertNotExists Delete Erase Insert Update XtqlAndArgs)))
+           (xtdb.api.tx AssertExists AssertNotExists Delete Erase Insert TxOps Update XtqlAndArgs)))
 
 (defmulti parse-tx-op
   (fn [tx-op]

@@ -112,7 +112,7 @@ components:
         from:
           schema:
             $ref: '#/components/schemas/TableName'
-    SQL:
+    Sql:
       description: sql transaction operation
       type: object
       properties:
@@ -133,14 +133,18 @@ components:
         args:
           schema:
             $ref: '#/components/schemas/Args'
-    InsertInto:
+    Insert:
       type: object
       properties:
         insertInto:
           $ref: '#/components/schemas/TableName'
         query:
           $ref: '#/components/schemas/Query'
-    UpdateTable:
+        argRows:
+          type: array
+          items:
+            type: object
+    Update:
       type: object
       properties:
         update:
@@ -158,7 +162,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UnifyClause'
-    DeleteFrom:
+        argRows:
+          type: array
+          items:
+            type: object
+    Delete:
       type: object
       properties:
         deleteFrom:
@@ -174,7 +182,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UnifyClause'
-    EraseFrom:
+        argRows:
+          type: array
+          items:
+            type: object
+    Erase:
       type: object
       properties:
         eraseFrom:
@@ -187,30 +199,24 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UnifyClause'
+        argRows:
+          type: array
+          items:
+            type: object
     AssertExists:
       type: object
       properties:
         assertExists:
           $ref: '#/components/schemas/Query'
+        argRows:
+          type: array
+          items:
+            type: object
     AssertNotExists:
       type: object
       properties:
         assertNotExists:
           $ref: '#/components/schemas/Query'
-    XtqlOp:
-      description: an abstract xtql dml operation
-      oneOf:
-        - $ref: '#/components/schemas/InsertInto'
-        - $ref: '#/components/schemas/UpdateTable'
-        - $ref: '#/components/schemas/DeleteFrom'
-        - $ref: '#/components/schemas/EraseFrom'
-        - $ref: '#/components/schemas/AssertExists'
-        - $ref: '#/components/schemas/AssertNotExists'
-    XtqlAndArgs:
-      type: object
-      properties:
-        op:
-          $ref: '#/components/schemas/XtqlOp'
         argRows:
           type: array
           items:
@@ -218,13 +224,17 @@ components:
     TxOp:
       description: an abstract transaction operation
       oneOf:
-        - $ref: '#/components/schemas/Put'
+        - $ref: '#/components/schemas/PutDocs'
+        - $ref: '#/components/schemas/DeleteDocs'
+        - $ref: '#/components/schemas/EraseDocs'
+        - $ref: '#/components/schemas/Sql'
+        - $ref: '#/components/schemas/Call'
+        - $ref: '#/components/schemas/Insert'
+        - $ref: '#/components/schemas/Update'
         - $ref: '#/components/schemas/Delete'
         - $ref: '#/components/schemas/Erase'
-        - $ref: '#/components/schemas/SQL'
-        - $ref: '#/components/schemas/Call'
-        - $ref: '#/components/schemas/XtqlOp'
-        - $ref: '#/components/schemas/XtqlAndArgs'
+        - $ref: '#/components/schemas/AssertExists'
+        - $ref: '#/components/schemas/AssertNotExists'
     TxOptions:
       title: transaction options
       properties:

@@ -14,7 +14,7 @@
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn XtqlQuery)
-           (xtdb.api.tx Call DeleteDocs EraseDocs PutDocs Sql TxOps TxOptions Xtql XtqlAndArgs)
+           (xtdb.api.tx Call DeleteDocs EraseDocs PutDocs Sql TxOps TxOptions XtqlOp XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -76,13 +76,13 @@
 (defmethod print-method Sql [op ^Writer w]
   (print-dup op w))
 
-(defn- render-xtql-op [^Xtql op]
+(defn- render-xtql-op [^XtqlOp op]
   (tx-ops/unparse-tx-op op))
 
-(defmethod print-dup Xtql [op ^Writer w]
+(defmethod print-dup XtqlOp [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql-op op)))))
 
-(defmethod print-method Xtql [op ^Writer w]
+(defmethod print-method XtqlOp [op ^Writer w]
   (print-dup op w))
 
 (defn- render-xtql+args [^XtqlAndArgs op]
@@ -293,7 +293,7 @@
           Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
 
           XtqlAndArgs (transit/write-handler "xtdb.tx/xtql" render-xtql+args)
-          Xtql (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
+          XtqlOp (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
 
           PutDocs (transit/write-handler "xtdb.tx/put" render-put-docs-op)
           DeleteDocs (transit/write-handler "xtdb.tx/delete" render-delete-docs)

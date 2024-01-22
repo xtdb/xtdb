@@ -338,9 +338,9 @@
                        {:basis {:at-tx tx3}}))
               "insert-into"))
 
-      (let [update {"op" {"update" "docs2"
-                          "bind" [{"xt/id" {"xt:param" "$uid"}}]
-                          "set" [{"version" 3}]}
+      (let [update {"update" "docs2"
+                    "bind" [{"xt/id" {"xt:param" "$uid"}}]
+                    "set" [{"version" 3}]
                     "argRows" [{"uid" 2}]}
             tx4 (-> (http/request {:accept :transit+json
                                    :as :string

@@ -188,15 +188,14 @@ class JsonSerdeTest {
             )
         XtqlAndArgs(insert("foo", XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build()))
             .assertRoundTripTxOp(
-                """ {
-                     "op": {
-                            "insertInto": "foo",
-                            "query":{
-                                     "from":"docs",
-                                     "bind":[{"xt/id":{"xt:lvar":"xt/id"}}]
-                                     }
-                            }
-                     }
+                """{
+                  "insertInto": "foo",
+                  "query": {
+                    "from": "docs",
+                    "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
+                  },
+                  "argRows": null
+                }
                 """.trimJson()
             )
         update("foo", listOf(Binding("version", Expr.`val`(1L)))).binding(listOf(Binding("xt/id")))

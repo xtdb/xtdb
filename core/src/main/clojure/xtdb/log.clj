@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.log Log LogFactory LogRecord LogSubscriber)
-           (xtdb.api.tx Abort Call DeleteDocs EraseDocs PutDocs Sql SqlByteArgs Xtql XtqlAndArgs)
+           (xtdb.api.tx Abort Call DeleteDocs EraseDocs PutDocs Sql SqlByteArgs XtqlOp XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -190,7 +190,7 @@
     ;; create this even if it's not required here
     (.structKeyWriter xtql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))
 
-    (fn write-xtql! [^Xtql op]
+    (fn write-xtql! [^XtqlOp op]
       (.startStruct xtql-writer)
       (vw/write-value! (ClojureForm. op) xtql-op-writer)
       (.endStruct xtql-writer))))
@@ -333,7 +333,7 @@
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
         XtqlAndArgs (@!write-xtql+args! tx-op)
-        Xtql (@!write-xtql! tx-op)
+        XtqlOp (@!write-xtql! tx-op)
         Sql (@!write-sql! tx-op)
         SqlByteArgs (@!write-sql-byte-args! tx-op)
         PutDocs (@!write-put! tx-op)
