@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-openapi-docs": "rm -rf public/sdks/openapi && redoc-cli bundle openapi/openapi.yaml --output=public/sdks/openapi/index.html",
+    "build-openapi-docs": "cp openapi/openapi.yaml public/sdks/openapi/openapi.yaml",
     "build-javadoc": "rm -rf public/sdks/java && cd ../ && ./gradlew aggregateJavadoc && cp -r ./build/docs/aggregateJavadoc docs/public/sdks/java",
     "build-clj-docs": "rm -rf public/sdks/clojure && cd ../ && ./gradlew build-codox"
   },
@@ -19,12 +19,10 @@
     "@astrojs/tailwind": "^5.0.3",
     "astro": "^4.0.1",
     "date-fns": "^2.29.3",
-    "redoc-cli": "^0.13.21",
+    "rehype-highlight": "^6.0.0",
     "sharp": "^0.32.5",
-    "tailwindcss": "^3.3.3",
-    "rehype-highlight": "^6.0.0"
+    "tailwindcss": "^3.3.3"
   },
-
   "devDependencies": {
     "@rollup/plugin-yaml": "^4.0.1",
     "@tailwindcss/typography": "^0.5.9",
