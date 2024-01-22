@@ -20,7 +20,7 @@
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector FieldVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Schema]
-           [xtdb.api.tx TxOp]
+           [xtdb.api.tx TxOps]
            [xtdb.api FlightSqlServerModule Xtdb$Config Xtdb$Module]
            [xtdb.indexer IIndexer]
            [xtdb.query BoundQuery IRaQuerySource PreparedQuery]
@@ -173,7 +173,7 @@
         (fn []
           @(-> (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                                   (throw (UnsupportedOperationException. "invalid ps-id")))
-                     dml (TxOp/sql sql (flight-stream->bytes flight-stream))]
+                     dml (TxOps/sql sql (flight-stream->bytes flight-stream))]
                  (exec-dml dml fsql-tx-id))
 
                (then-send-do-put-update-res ack-stream allocator))))

@@ -14,7 +14,7 @@
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn XtqlQuery)
-           (xtdb.api.tx Call DeleteDocs EraseDocs PutDocs Sql TxOp TxOptions Xtql XtqlAndArgs)
+           (xtdb.api.tx Call DeleteDocs EraseDocs PutDocs Sql TxOps TxOptions Xtql XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -67,7 +67,7 @@
   {:sql (.sql op), :arg-rows (.argRows op)})
 
 (defn sql-op-reader [{:keys [sql ^List arg-rows]}]
-  (-> (TxOp/sql sql)
+  (-> (TxOps/sql sql)
       (.argRows arg-rows)))
 
 (defmethod print-dup Sql [op ^Writer w]
@@ -108,7 +108,7 @@
   (print-dup op w))
 
 (defn put-docs-reader [{:keys [table-name ^List docs valid-from valid-to]}]
-  (-> (TxOp/putDocs (str (symbol table-name)) docs)
+  (-> (TxOps/putDocs (str (symbol table-name)) docs)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
 (defn- render-delete-docs [^DeleteDocs op]
@@ -122,7 +122,7 @@
   (print-dup op w))
 
 (defn delete-docs-reader [{:keys [table-name doc-ids valid-from valid-to]}]
-  (-> (TxOp/deleteDocs (str (symbol table-name)) ^List (vec doc-ids))
+  (-> (TxOps/deleteDocs (str (symbol table-name)) ^List (vec doc-ids))
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
 (defn- render-erase-docs [^EraseDocs op]
@@ -135,7 +135,7 @@
   (print-dup op w))
 
 (defn erase-docs-reader [{:keys [table-name doc-ids]}]
-  (TxOp/eraseDocs (str (symbol table-name)) ^List (vec doc-ids)))
+  (TxOps/eraseDocs (str (symbol table-name)) ^List (vec doc-ids)))
 
 (defn- render-call-op [^Call op]
   {:fn-id (.fnId op), :args (.args op)})
@@ -147,7 +147,7 @@
   (print-dup op w))
 
 (defn call-op-reader [{:keys [fn-id args]}]
-  (TxOp/call fn-id args))
+  (TxOps/call fn-id args))
 
 (defn write-key-fn [^IKeyFn$KeyFn key-fn]
   (-> (.name key-fn)

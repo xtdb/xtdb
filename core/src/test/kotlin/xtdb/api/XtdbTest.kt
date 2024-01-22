@@ -14,7 +14,7 @@ import xtdb.api.query.XtqlQuery.Companion.from
 import xtdb.api.query.XtqlQuery.Companion.pipeline
 import xtdb.api.query.XtqlQuery.Companion.relation
 import xtdb.api.query.XtqlQuery.Companion.withCols
-import xtdb.api.tx.TxOp.Companion.putDocs
+import xtdb.api.tx.putDocs
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId

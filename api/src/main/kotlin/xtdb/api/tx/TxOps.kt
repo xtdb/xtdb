@@ -1,3 +1,4 @@
+@file:JvmName("TxOps")
 @file:UseSerializers(AnySerde::class, InstantSerde::class)
 package xtdb.api.tx
 
@@ -33,50 +34,14 @@ sealed interface TxOp {
             "call" in element.jsonObject -> Call.serializer()
             "sql" in element.jsonObject -> Sql.serializer()
             "op" in element.jsonObject -> XtqlAndArgs.serializer()
-            "insertInto" in element.jsonObject ->  Xtql.Insert.serializer()
-            "update" in element.jsonObject -> Xtql.Update.serializer()
-            "deleteFrom" in element.jsonObject -> Xtql.Delete.serializer()
-            "eraseFrom" in element.jsonObject -> Xtql.Erase.serializer()
-            "assertExists" in element.jsonObject -> Xtql.AssertExists.serializer()
-            "assertNotExists" in element.jsonObject -> Xtql.AssertNotExists.serializer()
+            "insertInto" in element.jsonObject -> Insert.serializer()
+            "update" in element.jsonObject -> Update.serializer()
+            "deleteFrom" in element.jsonObject -> Delete.serializer()
+            "eraseFrom" in element.jsonObject -> Erase.serializer()
+            "assertExists" in element.jsonObject -> AssertExists.serializer()
+            "assertNotExists" in element.jsonObject -> AssertNotExists.serializer()
             else -> throw jsonIAE("xtql/malformed-tx-op", element)
         }
-    }
-
-    companion object {
-        @JvmStatic
-        fun sql(sql: String) = Sql(sql)
-
-        @JvmStatic
-        fun sql(sql: String, argBytes: ByteBuffer) = SqlByteArgs(sql, argBytes)
-
-        @JvmStatic
-        fun putDocs(tableName: String, docs: List<Map<String, *>>) = PutDocs(tableName, docs)
-
-        @JvmStatic
-        @SafeVarargs
-        fun putDocs(tableName: String, vararg docs: Map<String, *>) = putDocs(tableName, docs.toList())
-
-        @JvmStatic
-        fun putFn(fnId: Any, fnForm: Any) = putDocs(XT_TXS, listOf(mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm))))
-
-        @JvmStatic
-        fun deleteDocs(tableName: String, docIds: List<*>) = DeleteDocs(tableName, docIds)
-
-        @JvmStatic
-        fun deleteDocs(tableName: String, vararg entityIds: Any) = DeleteDocs(tableName, entityIds.toList())
-
-        @JvmStatic
-        fun eraseDocs(tableName: String, entityIds: List<*>) = EraseDocs(tableName, entityIds)
-
-        @JvmStatic
-        fun eraseDocs(tableName: String, vararg entityIds: Any) = EraseDocs(tableName, entityIds.toList())
-
-        @JvmStatic
-        fun call(fnId: Any, args: List<Any>) = Call(fnId, args)
-
-        @JvmField
-        val ABORT = Abort
     }
 }
 
@@ -93,6 +58,13 @@ data class PutDocs(
     fun during(validFrom: Instant?, validTo: Instant?) = copy(validFrom = validFrom, validTo = validTo)
 }
 
+fun putDocs(tableName: String, docs: List<Map<String, *>>) = PutDocs(tableName, docs)
+
+@SafeVarargs
+fun putDocs(tableName: String, vararg docs: Map<String, *>) = putDocs(tableName, docs.toList())
+
+fun putFn(fnId: Any, fnForm: Any) = putDocs(XT_TXS, listOf(mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm))))
+
 @Serializable
 data class DeleteDocs(
     @JvmField @SerialName("from") val tableName: String,
@@ -106,11 +78,19 @@ data class DeleteDocs(
     fun during(validFrom: Instant?, validTo: Instant?) = copy(validFrom = validFrom, validTo = validTo)
 }
 
+fun deleteDocs(tableName: String, docIds: List<*>) = DeleteDocs(tableName, docIds)
+
+fun deleteDocs(tableName: String, vararg entityIds: Any) = DeleteDocs(tableName, entityIds.toList())
+
 @Serializable
 data class EraseDocs(
     @JvmField @SerialName("from") val tableName: String,
     @JvmField @SerialName("eraseDocs") val docIds: List<*>,
 ) : TxOp
+
+fun eraseDocs(tableName: String, entityIds: List<*>) = EraseDocs(tableName, entityIds)
+
+fun eraseDocs(tableName: String, vararg entityIds: Any) = EraseDocs(tableName, entityIds.toList())
 
 @Serializable
 data class Sql(
@@ -120,6 +100,10 @@ data class Sql(
 
     fun argRows(argRows: List<List<*>>?): Sql = Sql(sql, argRows = argRows)
 }
+
+fun sql(sql: String) = Sql(sql)
+
+fun sql(sql: String, argBytes: ByteBuffer) = SqlByteArgs(sql, argBytes)
 
 data class SqlByteArgs(
     @JvmField val sql: String,
@@ -153,77 +137,69 @@ sealed interface Xtql {
 
     fun argRows(argRows : List<Map<String, *>>?) = XtqlAndArgs(this, argRows)
     fun argRows(vararg argRows : Map<String, *>) = argRows(argRows.toList())
-
-    @Serializable
-    data class Insert(
-        @JvmField @SerialName("insertInto") val table: String,
-        @JvmField val query: XtqlQuery
-    ) : TxOp, Xtql
-
-    @Serializable
-    data class Update(
-        @JvmField @SerialName("update") val table: String,
-        @JvmField val forValidTime: TemporalExtents? = null,
-        @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
-        @JvmField @SerialName("set") val setSpecs: List<Binding>,
-        @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null
-    ) : TxOp, Xtql {
-
-        fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
-        fun binding(bindSpecs: List<Binding>) = copy(bindSpecs = bindSpecs)
-        fun unify(unifyClauses: List<UnifyClause>) = copy(unifyClauses = unifyClauses)
-    }
-
-    @Serializable
-    data class Delete(
-        @JvmField @SerialName("deleteFrom") val table: String,
-        @JvmField val forValidTime: TemporalExtents? = null,
-        @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
-        @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null
-    ) : TxOp, Xtql {
-
-        fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
-        fun binding(bindSpecs: List<Binding>?) = copy(bindSpecs = bindSpecs)
-        fun unify(unifyClauses: List<UnifyClause>?) = copy(unifyClauses = unifyClauses)
-    }
-
-    @Serializable
-    data class Erase(
-        @JvmField @SerialName("eraseFrom") val table: String,
-        @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
-        @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null
-    ) : TxOp, Xtql {
-
-        fun binding(bindSpecs: List<Binding>?) = copy(bindSpecs = bindSpecs)
-        fun unify(unifyClauses: List<UnifyClause>?) = Erase(table, bindSpecs, unifyClauses)
-    }
-
-    @Serializable
-    data class AssertExists(@JvmField @SerialName("assertExists") val query: XtqlQuery) : TxOp, Xtql
-
-    @Serializable
-    data class AssertNotExists(@JvmField @SerialName("assertNotExists") val query: XtqlQuery) : TxOp, Xtql
-
-    companion object {
-        @JvmStatic
-        fun insert(table: String, query: XtqlQuery): Insert = Insert(table, query)
-
-        @JvmStatic
-        fun update(table: String, setSpecs: List<Binding>) = Update(table, setSpecs = setSpecs)
-
-        @JvmStatic
-        fun delete(table: String): Delete = Delete(table)
-
-        @JvmStatic
-        fun erase(table: String): Erase = Erase(table)
-
-        @JvmStatic
-        fun assertExists(query: XtqlQuery) = AssertExists(query)
-
-        @JvmStatic
-        fun assertNotExists(query: XtqlQuery) = AssertNotExists(query)
-    }
 }
+
+@Serializable
+data class Insert(
+    @JvmField @SerialName("insertInto") val table: String,
+    @JvmField val query: XtqlQuery
+) : TxOp, Xtql
+
+fun insert(table: String, query: XtqlQuery): Insert = Insert(table, query)
+
+@Serializable
+data class Update(
+    @JvmField @SerialName("update") val table: String,
+    @JvmField val forValidTime: TemporalExtents? = null,
+    @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
+    @JvmField @SerialName("set") val setSpecs: List<Binding>,
+    @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null
+) : TxOp, Xtql {
+
+    fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
+    fun binding(bindSpecs: List<Binding>) = copy(bindSpecs = bindSpecs)
+    fun unify(unifyClauses: List<UnifyClause>) = copy(unifyClauses = unifyClauses)
+}
+
+fun update(table: String, setSpecs: List<Binding>) = Update(table, setSpecs = setSpecs)
+
+@Serializable
+data class Delete(
+    @JvmField @SerialName("deleteFrom") val table: String,
+    @JvmField val forValidTime: TemporalExtents? = null,
+    @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
+    @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null
+) : TxOp, Xtql {
+
+    fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
+    fun binding(bindSpecs: List<Binding>?) = copy(bindSpecs = bindSpecs)
+    fun unify(unifyClauses: List<UnifyClause>?) = copy(unifyClauses = unifyClauses)
+}
+
+fun delete(table: String): Delete = Delete(table)
+
+@Serializable
+data class Erase(
+    @JvmField @SerialName("eraseFrom") val table: String,
+    @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
+    @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null
+) : TxOp, Xtql {
+
+    fun binding(bindSpecs: List<Binding>?) = copy(bindSpecs = bindSpecs)
+    fun unify(unifyClauses: List<UnifyClause>?) = Erase(table, bindSpecs, unifyClauses)
+}
+
+fun erase(table: String): Erase = Erase(table)
+
+@Serializable
+data class AssertExists(@JvmField @SerialName("assertExists") val query: XtqlQuery) : TxOp, Xtql
+
+fun assertExists(query: XtqlQuery) = AssertExists(query)
+
+@Serializable
+data class AssertNotExists(@JvmField @SerialName("assertNotExists") val query: XtqlQuery) : TxOp, Xtql
+
+fun assertNotExists(query: XtqlQuery) = AssertNotExists(query)
 
 @Serializable
 data class Call(
@@ -231,4 +207,10 @@ data class Call(
     @JvmField val args: List<Any>
 ) : TxOp
 
+fun call(fnId: Any, args: List<Any>) = Call(fnId, args)
+
 data object Abort : TxOp
+
+@JvmField
+val ABORT = Abort
+

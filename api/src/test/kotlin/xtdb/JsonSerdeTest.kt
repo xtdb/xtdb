@@ -7,9 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.TransactionKey
 import xtdb.api.query.*
-import xtdb.api.tx.TxOp
-import xtdb.api.tx.Xtql
-import xtdb.api.tx.XtqlAndArgs
+import xtdb.api.tx.*
 import java.time.*
 import java.util.*
 
@@ -156,7 +154,7 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeTxOp() {
-        TxOp.putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
+        putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
             .assertRoundTripTxOp(
                 """{
                   "into": "foo",
@@ -170,7 +168,7 @@ class JsonSerdeTest {
                 }
                 """.trimJson()
             )
-        TxOp.putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
+        putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
             .startingFrom(Instant.EPOCH)
             .until(Instant.parse("2023-01-01T12:34:56.789Z"))
             .assertRoundTripTxOp(
@@ -188,7 +186,7 @@ class JsonSerdeTest {
                 }
                 """.trimJson()
             )
-        XtqlAndArgs(Xtql.insert("foo", XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build()))
+        XtqlAndArgs(insert("foo", XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build()))
             .assertRoundTripTxOp(
                 """ {
                      "op": {
@@ -201,7 +199,7 @@ class JsonSerdeTest {
                      }
                 """.trimJson()
             )
-        Xtql.update("foo", listOf(Binding("version", Expr.`val`(1L)))).binding(listOf(Binding("xt/id")))
+        update("foo", listOf(Binding("version", Expr.`val`(1L)))).binding(listOf(Binding("xt/id")))
             .assertRoundTripTxOp(
                 """{
                     "update": "foo",
@@ -211,7 +209,7 @@ class JsonSerdeTest {
                 """.trimJson()
             )
 
-        Xtql.update("foo", listOf(Binding("version", Expr.TRUE))).binding(listOf(Binding("xt/id")))
+        update("foo", listOf(Binding("version", Expr.TRUE))).binding(listOf(Binding("xt/id")))
             .assertRoundTripTxOp(
                 """{
                     "update": "foo",

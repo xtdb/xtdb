@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb.openNode
 import xtdb.api.query.XtqlQuery.Companion.from
-import xtdb.api.tx.TxOp.Companion.putDocs
+import xtdb.api.tx.putDocs
 import java.net.URL
 
 internal class XtdbClientTest {

@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static xtdb.api.query.XtqlQuery.*;
-import static xtdb.api.tx.TxOp.putDocs;
+import static xtdb.api.query.XtqlQuery.from;
+import static xtdb.api.tx.TxOps.putDocs;
 import static xtdb.api.tx.TxOptions.txOpts;
 
 class IXtdbJavaTest {
