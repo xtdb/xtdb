@@ -1,10 +1,12 @@
 (ns xtdb.node-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
-  (:import (xtdb.api.tx Abort)))
+  (:import [xtdb.api Xtdb$Config]
+           [xtdb.api.tx Abort]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -574,3 +576,20 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                   WHERE t.album = a.xt$id
                   GROUP BY a.name"))
         "array-agg distinct"))
+
+(t/deftest start-node-from-non-map-config
+  (t/testing "directly using Xtdb$Config"
+    (let [config-object (Xtdb$Config.)
+          node (xtn/start-node config-object)]
+      (t/is node)
+      (xt/submit-tx node [[:put :docs {:xt/id :foo, :inst #inst "2021"}]])
+      (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
+               (xt/q node '(from :docs [{:xt/id e} inst]))))))
+
+  (t/testing "using file based YAML config"
+    (let [config-file (io/resource "test-config.yaml")
+          node (xtn/start-node (io/file config-file))]
+      (t/is node)
+      (xt/submit-tx node [[:put :docs {:xt/id :foo, :inst #inst "2021"}]])
+      (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
+               (xt/q node '(from :docs [{:xt/id e} inst])))))))
