@@ -212,7 +212,7 @@
 
   tx-ops: XTQL/SQL transaction operations.
     [[:put :table {:xt/id \"my-id\", ...}]
-     [:delete-doc :table \"my-id\"]
+     [:delete-docs :table \"my-id\"]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
       [0 1]]
@@ -243,7 +243,7 @@
 
   tx-ops: XTQL/SQL style transactions.
     [[:put :table {:xt/id \"my-id\", ...}]
-     [:delete-doc :table \"my-id\"]
+     [:delete-docs :table \"my-id\"]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
       [0 1]]

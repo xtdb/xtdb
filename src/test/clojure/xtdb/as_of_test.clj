@@ -107,7 +107,7 @@
     (t/is (= {:doc 3, :other-doc 1} (all-time-docs))
           "documents present before erase")
 
-    (xt/submit-tx tu/*node* [[:erase-doc :docs :doc]])
+    (xt/submit-tx tu/*node* [[:erase-docs :docs :doc]])
 
     (t/is (= {:other-doc 1} (all-time-docs))
           "documents removed after erase")))

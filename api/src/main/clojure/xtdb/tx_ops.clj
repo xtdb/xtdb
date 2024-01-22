@@ -132,11 +132,11 @@
     unify (.unify (mapv xtql.edn/parse-unify-clause unify))
     (seq arg-rows) (.withArgs ^List arg-rows)))
 
-(defmethod parse-tx-op :delete-doc [[_ table-or-opts id]]
+(defmethod parse-tx-op :delete-docs [[_ table-or-opts & eids]]
   (let [{table :from, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:from table-or-opts})]
-    (cond-> (TxOp/delete (expect-table-name table) (expect-eid id))
+    (cond-> (TxOp/delete (expect-table-name table) ^List (mapv expect-eid eids))
       valid-from (.startingFrom (expect-instant valid-from))
       valid-to (.until (expect-instant valid-to)))))
 
@@ -149,8 +149,8 @@
     unify (.unify (mapv xtql.edn/parse-unify-clause unify))
     (seq arg-rows) (.withArgs ^List arg-rows)))
 
-(defmethod parse-tx-op :erase-doc [[_ table id]]
-  (TxOp/erase (expect-table-name table) (expect-eid id)))
+(defmethod parse-tx-op :erase-docs [[_ table & eids]]
+  (TxOp/erase (expect-table-name table) ^List (mapv expect-eid eids)))
 
 (defmethod parse-tx-op :assert-exists [[_ query & arg-rows]]
   (cond-> (Xtql/assertExists (xtql.edn/parse-query query))

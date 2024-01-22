@@ -52,10 +52,10 @@
 (def possible-tx-ops
   [[:put :docs {:xt/id 1}]
    [:put :docs {:xt/id 2}]
-   [:delete-doc :docs 2]
+   [:delete-docs :docs 2]
    [:put {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
     {:xt/id 3}]
-   [:erase-doc :docs 3]
+   [:erase-docs :docs 3]
    [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
    [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
    [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]
@@ -219,13 +219,13 @@
    {"put" "docs"
     "docs" [{"xt/id" 2}]}
    {"delete" "docs"
-    "id" 1}
+    "ids" [1]}
    {"put" "docs"
     "docs" [{"xt/id" 3}]
     "validFrom" (inst->str #inst "2050")
     "validTo" (inst->str #inst "2051")}
    {"erase" "docs"
-    "id" 3}
+    "ids" [3]}
    {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"}
    {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"}
    {"sql" "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"}
@@ -298,7 +298,7 @@
                            :as :string
                            :request-method :post
                            :content-type :json
-                           :form-params {:txOps [{"evict" "docs" "id" 3}]}
+                           :form-params {:txOps [{"evict" "docs" "ids" [3]}]}
                            :url (http-url "tx")
                            :throw-exceptions? false})
             body (decode-transit body)]
@@ -410,7 +410,7 @@
               "assert-exists"))
 
       (let [assert+put [{"assertNotExists" {"from" "docs2", "bind" ["xt/id"]}}
-                        {"delete" "docs3" "id" 1}]
+                        {"delete" "docs3" "ids" [1]}]
             tx7 (-> (http/request {:accept :transit+json
                                    :as :string
                                    :request-method :post

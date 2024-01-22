@@ -1277,7 +1277,7 @@
                                        [:put {:into :docs, :valid-from #inst "2021"}
                                         {:xt/id :luke}]])
 
-          tx1 (xt/submit-tx tu/*node* [[:delete-doc {:from :docs, :valid-from #inst "2022"} :luke]
+          tx1 (xt/submit-tx tu/*node* [[:delete-docs {:from :docs, :valid-from #inst "2022"} :luke]
                                        [:put {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
                                         {:xt/id :mark}]
                                        [:put {:into :docs, :valid-from #inst "2016", :valid-to #inst "2020"}
@@ -1427,7 +1427,7 @@
                             {:system-time #inst "1998-01-15"})
 
           _tx2 (xt/submit-tx tu/*node*
-                             [[:delete-doc {:from :docs, :valid-from #inst "1998-01-20"} 1]]
+                             [[:delete-docs {:from :docs, :valid-from #inst "1998-01-20"} 1]]
                              {:system-time #inst "1998-01-20"})
 
           _tx3 (xt/submit-tx tu/*node*
@@ -1436,7 +1436,7 @@
                              {:system-time #inst "1998-01-23"})
 
           _tx4 (xt/submit-tx tu/*node*
-                             [[:delete-doc {:from :docs, :valid-from #inst "1998-01-03", :valid-to #inst "1998-01-05"} 1]]
+                             [[:delete-docs {:from :docs, :valid-from #inst "1998-01-03", :valid-to #inst "1998-01-05"} 1]]
                              {:system-time #inst "1998-01-26"})
 
           tx5 (xt/submit-tx tu/*node*
@@ -1456,7 +1456,7 @@
                                               (where (= (- #inst "1970-01-08" #inst "1970-01-01")
                                                         (- app-to app-from)))))
                                       (map (fn [{:keys [id app-from app-to]}]
-                                             [:delete-doc {:from :docs, :valid-from app-from, :valid-to app-to}
+                                             [:delete-docs {:from :docs, :valid-from app-from, :valid-to app-to}
                                               id]))))]
                              [:call :delete-1-week-records]]
                             {:system-time #inst "1998-01-30"})
@@ -2025,7 +2025,7 @@
                  '(from :xt/txs [{:xt/id tx-id,
                                   :xt/committed? committed?}]))))
   (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 2}]])
-  (xt/submit-tx tu/*node* [[:delete-doc {:from :xt-docs, :valid-to #inst "2011"} 2]])
+  (xt/submit-tx tu/*node* [[:delete-docs {:from :xt-docs, :valid-to #inst "2011"} 2]])
 
   (t/is (= #{{:tx-id 0, :committed? false}
              {:tx-id 1, :committed? true}

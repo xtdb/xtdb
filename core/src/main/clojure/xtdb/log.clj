@@ -267,34 +267,34 @@
 (defn- ->delete-writer [^IVectorWriter op-writer]
   (let [delete-writer (.legWriter op-writer :delete (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        id-writer (.structKeyWriter delete-writer "xt$id" (FieldType/notNullable #xt.arrow/type :union))
+        eids-writer (.structKeyWriter delete-writer "eids" (FieldType/notNullable #xt.arrow/type :list))
         valid-from-writer (.structKeyWriter delete-writer "xt$valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.structKeyWriter delete-writer "xt$valid_to" types/nullable-temporal-field-type)]
     (fn write-delete! [^Delete op]
-      (.startStruct delete-writer)
+      (when-let [eids (not-empty (.entityIds op))]
+        (.startStruct delete-writer)
 
-      (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
+        (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
 
-      (let [eid (.entityId op)]
-        (vw/write-value! eid (.legWriter id-writer (vw/value->arrow-type eid))))
+        (vw/write-value! (vec eids) eids-writer)
 
-      (vw/write-value! (.validFrom op) valid-from-writer)
-      (vw/write-value! (.validTo op) valid-to-writer)
+        (vw/write-value! (.validFrom op) valid-from-writer)
+        (vw/write-value! (.validTo op) valid-to-writer)
 
-      (.endStruct delete-writer))))
+        (.endStruct delete-writer)))))
 
 (defn- ->erase-writer [^IVectorWriter op-writer]
   (let [erase-writer (.legWriter op-writer :erase (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        id-writer (.structKeyWriter erase-writer "xt$id" (FieldType/notNullable #xt.arrow/type :union))]
+        eids-writer (.structKeyWriter erase-writer "eids" (FieldType/notNullable #xt.arrow/type :list))]
     (fn [^Erase op]
-      (.startStruct erase-writer)
-      (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
+      (when-let [eids (not-empty (.entityIds op))]
+        (.startStruct erase-writer)
+        (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
 
-      (let [eid (.entityId op)]
-        (vw/write-value! eid (.legWriter id-writer (vw/value->arrow-type eid))))
+        (vw/write-value! (vec eids) eids-writer)
 
-      (.endStruct erase-writer))))
+        (.endStruct erase-writer)))))
 
 (defn- ->call-writer [^IVectorWriter op-writer]
   (let [call-writer (.legWriter op-writer :call (FieldType/notNullable #xt.arrow/type :struct))

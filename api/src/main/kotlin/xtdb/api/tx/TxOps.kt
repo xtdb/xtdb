@@ -74,10 +74,16 @@ sealed interface TxOp {
         fun putFn(fnId: Any, fnForm: Any) = put(XT_TXS, listOf(mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm))))
 
         @JvmStatic
-        fun delete(tableName: String, entityId: Any) = Delete(tableName, entityId)
+        fun delete(tableName: String, entityIds: List<*>) = Delete(tableName, entityIds)
 
         @JvmStatic
-        fun erase(tableName: String, entityId: Any) = Erase(tableName, entityId)
+        fun delete(tableName: String, vararg entityIds: Any) = Delete(tableName, entityIds.toList())
+
+        @JvmStatic
+        fun erase(tableName: String, entityIds: List<*>) = Erase(tableName, entityIds)
+
+        @JvmStatic
+        fun erase(tableName: String, vararg entityIds: Any) = Erase(tableName, entityIds.toList())
 
         @JvmStatic
         fun call(fnId: Any, args: List<Any>) = Call(fnId, args)
@@ -103,20 +109,20 @@ data class Put(
 @Serializable
 data class Delete(
     @JvmField @SerialName("delete") val tableName: String,
-    @JvmField @SerialName("id") val entityId: Any,
+    @JvmField @SerialName("ids") val entityIds: List<*>,
     @JvmField val validFrom: Instant? = null,
     @JvmField val validTo: Instant? = null
 ) : TxOp, HasValidTimeBounds<Delete> {
 
-    override fun startingFrom(validFrom: Instant?): Delete = Delete(tableName, entityId, validFrom, validTo)
-    override fun until(validTo: Instant?): Delete = Delete(tableName, entityId, validFrom, validTo)
-    override fun during(validFrom: Instant?, validTo: Instant?) = Delete(tableName, entityId, validFrom, validTo)
+    override fun startingFrom(validFrom: Instant?) = copy(validFrom = validFrom)
+    override fun until(validTo: Instant?) = copy(validTo = validTo)
+    override fun during(validFrom: Instant?, validTo: Instant?) = copy(validFrom = validFrom, validTo = validTo)
 }
 
 @Serializable
 data class Erase(
     @JvmField @SerialName("erase") val tableName: String,
-    @JvmField @SerialName("id") val entityId: Any
+    @JvmField @SerialName("ids") val entityIds: List<*>
 ) : TxOp
 
 @Serializable

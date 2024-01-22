@@ -55,8 +55,8 @@
                                     (case tx-op
                                       :put [:put {:into :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time}
                                             (xform-doc doc)]
-                                      :delete [:delete-doc {:from :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time} eid]
-                                      :evict [:erase-doc :xt_docs eid]))
+                                      :delete [:delete-docs {:from :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time} eid]
+                                      :evict [:erase-docs :xt_docs eid]))
                           :abort [TxOp/ABORT])
                         {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))

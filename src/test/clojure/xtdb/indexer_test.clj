@@ -329,7 +329,7 @@
       ;; aborted tx shows up in log
       (xt/submit-tx node [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
-      (-> (xt/submit-tx node [[:delete-doc {:from :xt_docs, :valid-from #inst "2020-04-01"} "foo"]
+      (-> (xt/submit-tx node [[:delete-docs {:from :xt_docs, :valid-from #inst "2020-04-01"} "foo"]
                               [:put {:into :xt_docs, :valid-from #inst "2020-04-01", :valid-to #inst "2020-05-01"}
                                {:xt/id "bar", :month "april"}]])
           (tu/then-await-tx node))

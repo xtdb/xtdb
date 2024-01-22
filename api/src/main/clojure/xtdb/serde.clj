@@ -98,7 +98,7 @@
   (tx-ops/parse-tx-op xtql))
 
 (defn- render-put-op [^Put op]
-  {:table-name (keyword (.tableName op)), :docs (.docs op)
+  {:table-name (keyword (.tableName op)), :docs (vec (.docs op))
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
 (defmethod print-dup Put [op ^Writer w]
@@ -112,7 +112,7 @@
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
 (defn- render-delete-op [^Delete op]
-  {:table-name (keyword (.tableName op)), :xt/id (.entityId op)
+  {:table-name (keyword (.tableName op)), :eids (vec (.entityIds op))
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
 (defmethod print-dup Delete [op ^Writer w]
@@ -121,12 +121,12 @@
 (defmethod print-method Delete [op ^Writer w]
   (print-dup op w))
 
-(defn delete-op-reader [{:keys [table-name xt/id valid-from valid-to]}]
-  (-> (TxOp/delete (str (symbol table-name)) id)
+(defn delete-op-reader [{:keys [table-name eids valid-from valid-to]}]
+  (-> (TxOp/delete (str (symbol table-name)) ^List (vec eids))
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
 (defn- render-erase-op [^Erase op]
-  {:table-name (keyword (.tableName op)), :xt/id (.entityId op)})
+  {:table-name (keyword (.tableName op)), :eids (vec (.entityIds op))})
 
 (defmethod print-dup Erase [op ^Writer w]
   (.write w (format "#xt.tx/erase %s" (pr-str (render-erase-op op)))))
@@ -134,8 +134,8 @@
 (defmethod print-method Erase [op ^Writer w]
   (print-dup op w))
 
-(defn erase-op-reader [{:keys [table-name xt/id]}]
-  (TxOp/erase (str (symbol table-name)) id))
+(defn erase-op-reader [{:keys [table-name eids]}]
+  (TxOp/erase (str (symbol table-name)) ^List (vec eids)))
 
 (defn- render-call-op [^Call op]
   {:fn-id (.fnId op), :args (.args op)})

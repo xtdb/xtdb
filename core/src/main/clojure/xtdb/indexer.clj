@@ -115,14 +115,15 @@
 (defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
   (let [delete-leg (.legReader tx-ops-rdr :delete)
         table-rdr (.structKeyReader delete-leg "table")
-        id-rdr (.structKeyReader delete-leg "xt$id")
+        eids-rdr (.structKeyReader delete-leg "eids")
+        eid-rdr (.listElementReader eids-rdr)
         valid-from-rdr (.structKeyReader delete-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader delete-leg "xt$valid_to")
         current-time-µs (time/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
-              eid (.getObject id-rdr tx-op-idx)
+              live-table (.liveTable live-idx-tx table)
               valid-from (if (.isNull valid-from-rdr tx-op-idx)
                            current-time-µs
                            (.getLong valid-from-rdr tx-op-idx))
@@ -134,23 +135,28 @@
                                     {:valid-from (time/micros->instant valid-from)
                                      :valid-to (time/micros->instant valid-to)})))
 
-          (-> (.liveTable live-idx-tx table)
-              (.logDelete (trie/->iid eid) valid-from valid-to)))
+          (let [eids-start-idx (.getListStartIndex eids-rdr tx-op-idx)]
+            (dotimes [eid-idx (.getListCount eids-rdr tx-op-idx)]
+              (let [eid-idx (+ eids-start-idx eid-idx)
+                    eid (.getObject eid-rdr eid-idx)]
+                (.logDelete live-table (trie/->iid eid) valid-from valid-to)))))
 
         nil))))
 
 (defn- ->erase-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
-
   (let [erase-leg (.legReader tx-ops-rdr :erase)
         table-rdr (.structKeyReader erase-leg "table")
-        id-rdr (.structKeyReader erase-leg "xt$id")]
+        eids-rdr (.structKeyReader erase-leg "eids")
+        eid-rdr (.listElementReader eids-rdr)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
-              eid (.getObject id-rdr tx-op-idx)]
-
-          (-> (.liveTable live-idx-tx table)
-              (.logErase (trie/->iid eid))))
+              live-table (.liveTable live-idx-tx table)
+              eids-start-idx (.getListStartIndex eids-rdr tx-op-idx)]
+          (dotimes [eid-idx (.getListCount eids-rdr tx-op-idx)]
+            (let [eid-idx (+ eids-start-idx eid-idx)
+                  eid (.getObject eid-rdr eid-idx)]
+              (.logErase live-table (trie/->iid eid)))))
 
         nil))))
 

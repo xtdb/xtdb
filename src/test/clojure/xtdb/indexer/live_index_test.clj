@@ -103,10 +103,10 @@
 (def txs
   [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
     [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 2}]]
-   [[:delete-doc :hello #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d"]
+   [[:delete-docs :hello #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d"]
     [:put {:into :world, :valid-from #inst "2023", :valid-to #inst "2024"}
      {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3}]]
-   [[:erase-doc :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
+   [[:erase-docs :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
    ;; sql
    [[:sql "INSERT INTO foo (xt$id, bar, toto) VALUES (1, 1, 'toto')"]
     [:sql "UPDATE foo SET bar = 2 WHERE foo.xt$id = 1"]
