@@ -1407,8 +1407,7 @@
 
 (defn- submit-tx [{:keys [server conn-state]} dml-buf {:keys [default-all-valid-time?]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
-                       (-> (xt/sql-op transformed-query)
-                           (xt/with-op-args params)))
+                       [:sql transformed-query params])
                      dml-buf)]
     ;; TODO review err log policy
     (try
@@ -2086,7 +2085,7 @@
       (xt/submit-tx (:node server)
                     (for [row rows
                           :let [auto-id (str "pgwire-" (random-uuid))]]
-                      (xt/put (merge {:xt/id auto-id} row)))))
+                      [:put (merge {:xt/id auto-id} row)])))
 
     (defn read-xtdb [o]
       (if (instance? org.postgresql.util.PGobject o)

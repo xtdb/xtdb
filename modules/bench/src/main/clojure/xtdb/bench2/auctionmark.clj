@@ -46,7 +46,7 @@
 
   The benchmark randomly selects id from a pool of region ids as an input for u_r_id parameter using flat distribution."
   [worker]
-  (xt/submit-tx (:sut worker) [(xt/put :user (generate-user worker))]))
+  (xt/submit-tx (:sut worker) [[:put :user (generate-user worker)]]))
 
 (def item-query
   '(from :item [{:xt/id $i}
@@ -103,43 +103,43 @@
        (cond-> []
          ;; increment number of bids on item
          i
-         (conj (xt/put :item (assoc (first (q '~item-query {:args {:i i}, :key-fn :snake-case-keyword}))
-                                    :i_num_bids (inc nbids))))
+         (conj [:put :item (assoc (first (q '~item-query {:args {:i i}, :key-fn :snake-case-keyword}))
+                                  :i_num_bids (inc nbids))])
 
          ;; if new bid exceeds old, bump it
          upd_curr_bid
-         (conj (xt/put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
-                                            :imb_bid bid)))
+         (conj [:put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
+                                          :imb_bid bid)])
 
          ;; we exceed the old max, win the bid.
          (and curr_bid new_bid_win)
-         (conj (xt/put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
-                                            :imb_ib_id new_bid_id
-                                            :imb_ib_u_id u_id
-                                            :imb_updated now)))
+         (conj [:put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
+                                          :imb_ib_id new_bid_id
+                                          :imb_ib_u_id u_id
+                                          :imb_updated now)])
 
          ;; no previous max bid, insert new max bid
          (nil? imb_ib_id)
-         (conj (xt/put :item-max-bid {:xt/id (composite-id-fn new_bid_id i_id)
-                                      :imb_i_id i_id
-                                      :imb_u_id u_id
-                                      :imb_ib_id new_bid_id
-                                      :imb_ib_i_id i_id
-                                      :imb_ib_u_id u_id
-                                      :imb_created now
-                                      :imb_updated now}))
+         (conj [:put :item-max-bid {:xt/id (composite-id-fn new_bid_id i_id)
+                                    :imb_i_id i_id
+                                    :imb_u_id u_id
+                                    :imb_ib_id new_bid_id
+                                    :imb_ib_i_id i_id
+                                    :imb_ib_u_id u_id
+                                    :imb_created now
+                                    :imb_updated now}])
 
          :always
          ;; add new bid
-         (conj (xt/put :item-bid {:xt/id new_bid_id
-                                  :ib_id new_bid_id
-                                  :ib_i_id i_id
-                                  :ib_u_id u_id
-                                  :ib_buyer_id i_buyer_id
-                                  :ib_bid new_bid
-                                  :ib_max_bid max_bid
-                                  :ib_created_at now
-                                  :ib_updated now})))))))
+         (conj [:put :item-bid {:xt/id new_bid_id
+                                :ib_id new_bid_id
+                                :ib_i_id i_id
+                                :ib_u_id u_id
+                                :ib_buyer_id i_buyer_id
+                                :ib_bid new_bid
+                                :ib_max_bid max_bid
+                                :ib_created_at now
+                                :ib_updated now}]))))))
 
 (defn- sample-category-id [worker]
   (if-some [weighting (::category-weighting (:custom-state worker))]
@@ -185,33 +185,34 @@
              (str description " "))]
 
     (->> (concat
-          [(xt/put :item
-                   {:xt/id i_id
-                    :i_id i_id
-                    :i_u_id u_id
-                    :i_c_id c_id
-                    :i_name name
-                    :i_description description-with-attributes
-                    :i_user_attributes attributes
-                    :i_initial_price initial-price
-                    :i_num_bids 0
-                    :i_num_images (count images)
-                    :i_num_global_attrs (count gav-ids)
-                    :i_start_date start-date
-                    :i_end_date end-date
-                    :i_status :open})]
+          [[:put :item
+            {:xt/id i_id
+             :i_id i_id
+             :i_u_id u_id
+             :i_c_id c_id
+             :i_name name
+             :i_description description-with-attributes
+             :i_user_attributes attributes
+             :i_initial_price initial-price
+             :i_num_bids 0
+             :i_num_images (count images)
+             :i_num_global_attrs (count gav-ids)
+             :i_start_date start-date
+             :i_end_date end-date
+             :i_status :open}]]
           (for [[i image] (map-indexed vector images)
                 :let [ii_id (bit-or (bit-shift-left i 60) (bit-and i_id-raw 0x0FFFFFFFFFFFFFFF))]]
-            (xt/put :item-comment
-                    {:xt/id (str "ii_" ii_id)
-                     :ii_id ii_id
-                     :ii_i_id i_id
-                     :ii_u_id u_id
-                     :ii_path image}))
+            [:put :item-comment
+             {:xt/id (str "ii_" ii_id)
+              :ii_id ii_id
+              :ii_i_id i_id
+              :ii_u_id u_id
+              :ii_path image}])
           ;; fix BitVector metadata issue
-          (when u_id [(-> (xt/update-table :user '{:bind [{:xt/id $uid} u_balance]
-                                                   :set {:u_balance (- u_balance 1)}})
-                          (xt/with-op-args {:uid u_id}))]))
+          (when u_id [[:update '{:table :user
+                                 :bind [{:xt/id $uid} u_balance]
+                                 :set {:u_balance (- u_balance 1)}}
+                       {:uid u_id}]]))
          (xt/submit-tx (:sut worker)))))
 
 ;; represents a probable state of an item that can be sampled randomly
@@ -320,7 +321,7 @@
 (defn proc-new-bid [worker]
   (let [params (generate-new-bid-params worker)]
     (when (and (:i_id params) (:u_id params))
-      (xt/submit-tx (:sut worker) [(xt/call :new-bid params)]))))
+      (xt/submit-tx (:sut worker) [[:call :new-bid params]]))))
 
 (defn proc-get-item [worker]
   (let [{:keys [sut]} worker

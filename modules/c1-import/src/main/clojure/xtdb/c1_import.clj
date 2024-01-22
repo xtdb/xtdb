@@ -12,7 +12,7 @@
            java.lang.AutoCloseable
            (java.nio.file ClosedWatchServiceException Files OpenOption Path StandardOpenOption StandardWatchEventKinds WatchEvent WatchEvent$Kind)
            java.util.HashSet
-           [xtdb.tx TxOp]
+           [xtdb.api.tx TxOp]
            xtdb.types.ClojureForm))
 
 (defmethod ig/prep-key :xtdb/c1-import [_ opts]
@@ -53,11 +53,10 @@
                           :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
                                     ;; HACK: what to do if the user has a separate :xt/id  key?
                                     (case tx-op
-                                      :put (-> (xt/put :xt_docs (xform-doc doc))
-                                               (xt/during start-valid-time end-valid-time))
-                                      :delete (-> (xt/delete :xt_docs eid)
-                                                  (xt/during start-valid-time end-valid-time))
-                                      :evict (xt/erase :xt_docs eid)))
+                                      :put [:put {:into :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time}
+                                            (xform-doc doc)]
+                                      :delete [:delete-doc {:from :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time} eid]
+                                      :evict [:erase-doc :xt_docs eid]))
                           :abort [TxOp/ABORT])
                         {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))

@@ -2,17 +2,14 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.error :as err]
-            xtdb.serde)
+            xtdb.serde
+            [xtdb.tx-ops :as tx-ops]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (java.time Instant)
            (java.util List)
            (xtdb JsonSerde)
            (xtdb.api TransactionKey)
-           (xtdb.api.query Query Query$SqlQuery
-                           XtqlQuery$From XtqlQuery$ParamRelation XtqlQuery$OrderBy Expr$SetExpr XtqlQuery$Join XtqlQuery$LeftJoin
-                           XtqlQuery$Without XtqlQuery$WithCols XtqlQuery$Aggregate Basis Binding Expr Expr XtqlQuery
-                           XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Unify
-                           XtqlQuery$Return Expr$Call XtqlQuery$Where XtqlQuery$With XtqlQuery$UnnestVar XtqlQuery$UnnestCol
-                           XtqlQuery$Call QueryOptions QueryRequest TemporalFilter )
+           (xtdb.api.query Basis Binding Expr Expr Expr$Call Expr$SetExpr Query Query$SqlQuery QueryOptions QueryRequest TemporalFilter XtqlQuery XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn- encode [v]
@@ -46,7 +43,16 @@
 
 
 (defn roundtrip-tx-op [v]
-  (-> v (JsonSerde/encode TxOp) (JsonSerde/decode TxOp)))
+  (-> v
+      (JsonSerde/encode TxOp)
+      (JsonSerde/decode TxOp)))
+
+(defn roundtrip-edn-tx-op [v]
+  (-> v
+      tx-ops/parse-tx-op
+      (JsonSerde/encode TxOp)
+      (JsonSerde/decode TxOp)
+      tx-ops/unparse-tx-op))
 
 (defn decode-tx-op [^String s]
   (JsonSerde/decode s TxOp))
@@ -147,28 +153,31 @@
 
   ;; TODO keyword args handling when
   (t/testing "xtdml"
-    (let [v (xt/insert-into :foo '(from :bar [xt/id]))]
-      (t/is (= v (roundtrip-tx-op v))))
+    (let [v [:insert-into :foo '(from :bar [xt/id])]]
+      (t/is (= v (roundtrip-edn-tx-op v))))
 
-    (let [v (-> (xt/insert-into :foo '(from :bar [{:xt/id $id}]))
-                (xt/with-op-arg-rows [{"id" 1}]))]
-      (t/is (= v (roundtrip-tx-op v))))
+    (let [v [:insert-into :foo '(from :bar [{:xt/id $id}])
+             {"id" 1}]]
+      (t/is (= v (roundtrip-edn-tx-op v))))
 
-    (let [v (-> (xt/update-table :users '{:bind [{:xt/id $uid} version], :set {:version (inc version)}})
-                (xt/with-op-args {"uid" "james"}, {"uid" "dave"}))]
-      (t/is (= v (roundtrip-tx-op v))))
+    (let [v [:update '{:table :users, :bind [{:xt/id $uid} version], :set {:version (inc version)}}
+             {"uid" "james"}
+             {"uid" "dave"}]]
+      (t/is (= v (roundtrip-edn-tx-op v))))
 
-    (let [v (xt/delete-from :users '[{:xt/id $uid} version] '(from :users [version]))]
-      (t/is (= v (roundtrip-tx-op v))))
+    (let [v [:delete '{:from :users
+                       :bind [{:xt/id $uid} version]
+                       :unify [(from :users [version])]}]]
+      (t/is (= v (roundtrip-edn-tx-op v))))
 
-    (let [v (xt/erase-from :users '[{:xt/id $uid} version] '(from :users [version]))]
-      (t/is (= v (roundtrip-tx-op v))))
+    (let [v [:erase '{:from :users, :bind [{:xt/id $uid} version], :unify [(from :users [version])]}]]
+      (t/is (= v (roundtrip-edn-tx-op v))))
 
-    (let [v (xt/assert-exists '(from :users [xt/id]))]
-      (t/is (= v (roundtrip-tx-op v))))
+    (let [v [:assert-exists '(from :users [xt/id])]]
+      (t/is (= v (roundtrip-edn-tx-op v))))
 
-    (let [v (xt/assert-not-exists '(from :users [xt/id]))]
-      (t/is (= v (roundtrip-tx-op v))))))
+    (let [v [:assert-not-exists '(from :users [xt/id])]]
+      (t/is (= v (roundtrip-edn-tx-op v))))))
 
 
 (defn- roundtrip-tx [v]

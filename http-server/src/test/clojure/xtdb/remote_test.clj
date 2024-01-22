@@ -50,20 +50,20 @@
 (defn- decode-json [^String s] (first (decode-json* s)))
 
 (def possible-tx-ops
-  [(xt/put :docs {:xt/id 1})
-   (xt/put :docs {:xt/id 2})
-   (xt/delete :docs 2)
-   (-> (xt/put :docs {:xt/id 3})
-       (xt/during #inst "2023" #inst "2024"))
-   (xt/erase :docs 3)
-   (xt/sql-op "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')")
-   (xt/sql-op "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')")
-   (xt/sql-op "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3")
-   (xt/sql-op "DELETE FROM docs WHERE docs.bar = 2")
-   (xt/sql-op "ERASE FROM docs WHERE docs.xt$id = 4")])
+  [[:put :docs {:xt/id 1}]
+   [:put :docs {:xt/id 2}]
+   [:delete-doc :docs 2]
+   [:put {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
+    {:xt/id 3}]
+   [:erase-doc :docs 3]
+   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
+   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
+   [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]
+   [:sql "DELETE FROM docs WHERE docs.bar = 2"]
+   [:sql "ERASE FROM docs WHERE docs.xt$id = 4"]])
 
 (deftest transit-test
-  (xt/submit-tx *node* [(xt/put :foo {:xt/id 1})])
+  (xt/submit-tx *node* [[:put :foo {:xt/id 1}]])
   (Thread/sleep 100)
 
   (t/is (= {:latest-completed-tx
@@ -94,7 +94,7 @@
            (xt/q *node* '(from :docs [xt/id])
                  {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
-  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2})])]
+  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id 2}]])]
     (t/is (= #{{:xt/id 1} {:xt/id 2}}
              (-> (http/request {:accept :transit+json
                                 :as :string
@@ -110,7 +110,7 @@
           "testing query")))
 
 (deftest json-response-test
-  (xt/submit-tx *node* [(xt/put :foo {:xt/id 1})])
+  (xt/submit-tx *node* [[:put :foo {:xt/id 1}]])
   (Thread/sleep 100)
 
   (t/is (= {"latestSubmittedTx" {"txId" 0, "systemTime" "2020-01-01T00:00:00Z"},
@@ -139,7 +139,7 @@
            (xt/q *node* '(from :docs [xt/id])
                  {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
-  (let [tx (xt/submit-tx *node* [(xt/put :docs {:xt/id 2 :key :some-keyword})])]
+  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id 2 :key :some-keyword}]])]
     (t/is (=
            ;; TODO figure out clojure bug
            #_#{{"xt/id" 1} {"xt/id" 2 "key" :some-keyword}}
@@ -192,7 +192,7 @@
                (ex-data body)))))
 
   (t/testing "unknown runtime error"
-    (let [tx (xt/submit-tx tu/*node* [(xt/put :docs {:xt/id 1 :name 2})])
+    (let [tx (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :name 2}]])
           {:keys [status body] :as _resp} (http/request {:accept "application/jsonl"
                                                          :as :string
                                                          :request-method :post
@@ -236,7 +236,7 @@
   {"txId" tx-id "systemTime" (str system-time)})
 
 (deftest json-request-test
-  (let [_tx1 (xt/submit-tx *node* [(xt/put :docs {:xt/id 1})])
+  (let [_tx1 (xt/submit-tx *node* [[:put :docs {:xt/id 1}]])
         {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
 
     (t/is (= tx2
@@ -358,7 +358,7 @@
         (t/is (= [{:xt/id 2 :version 3}]
                  (xt/q *node* '(from :docs2 [xt/id version])
                        {:basis {:at-tx tx4}}))
-              "update-table"))
+              "update"))
 
       (let [delete {"deleteFrom" "docs2"
                     "bindSpecs" [{"xt/id" 2}]}
@@ -370,7 +370,7 @@
                                    :url (http-url "tx")})
                     :body
                     decode-transit)]
-        (t/testing "delete-from"
+        (t/testing "delete"
           (t/is (= [] (xt/q *node* '(from :docs2 [xt/id version])
                             {:basis {:at-tx tx5}})))
           (t/is (= #{{:xt/id 2} {:xt/id 2 :version 3}}
@@ -378,7 +378,7 @@
                                                     :for-valid-time :all-time})
                               {:basis {:at-tx tx5}}))))))
 
-      (xt/submit-tx tu/*node* [(xt/put :docs2 {:xt/id 3})])
+      (xt/submit-tx tu/*node* [[:put :docs2 {:xt/id 3}]])
       (let [erase {"eraseFrom" "docs2"
                    "bindSpecs" [{"xt/id" 3}]}
             tx6 (-> (http/request {:accept :transit+json
@@ -392,7 +392,7 @@
         (t/is (= [] (xt/q *node* '(from :docs2 {:bind [{:xt/id 3} xt/id version]
                                                 :for-valid-time :all-time})
                           {:basis {:at-tx tx6}}))
-              "erase-from"))
+              "erase"))
 
       ;; using docs in combination with docs3
       (let [assert+put [{"assertExists" {"from" "docs", "bind" ["xt/id"]}}
@@ -408,6 +408,7 @@
         (t/is (= [{:xt/id 1}] (xt/q *node* '(from :docs3 [xt/id])
                                     {:basis {:at-tx tx7}}))
               "assert-exists"))
+
       (let [assert+put [{"assertNotExists" {"from" "docs2", "bind" ["xt/id"]}}
                         {"delete" "docs3" "id" 1}]
             tx7 (-> (http/request {:accept :transit+json

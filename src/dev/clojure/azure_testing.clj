@@ -39,9 +39,9 @@
 (comment
   (ir/go)
   (xt/status node)
-  (def submit (xt/submit-tx node [(xt/put :posts {:xt/id 1234
-                                                  :user-id 5678
-                                                  :text "hello world!"})]))
+  (def submit (xt/submit-tx node [[:put :posts {:xt/id 1234
+                                                :user-id 5678
+                                                :text "hello world!"}]]))
   
   (def a
     (.appendRecord (:xtdb.azure/event-hub-log (:system node))

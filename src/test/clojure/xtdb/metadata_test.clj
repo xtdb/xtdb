@@ -16,10 +16,9 @@
 
 (t/deftest test-param-metadata-error-310
   (let [tx1 (xt/submit-tx tu/*node*
-                          [(-> (xt/sql-op "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)")
-                               (xt/with-op-args
-                                 ["dave", "Dave", #inst "2018"]
-                                 ["claire", "Claire", #inst "2019"]))])]
+                          [[:sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)"
+                            ["dave", "Dave", #inst "2018"]
+                            ["claire", "Claire", #inst "2019"]]])]
 
     (t/is (= [{:name "Dave"}]
              (xt/q tu/*node* "SELECT users.name FROM users WHERE users.xt$id = ?"
@@ -28,12 +27,12 @@
           "#310")))
 
 (deftest test-bloom-filter-for-num-types-2133
-  (let [tx (-> (xt/submit-tx tu/*node* [(xt/put :xt_docs {:num 0 :xt/id "a"})
-                                        (xt/put :xt_docs {:num 1 :xt/id "b"})
-                                        (xt/put :xt_docs {:num 1.0 :xt/id "c"})
-                                        (xt/put :xt_docs {:num 4 :xt/id "d"})
-                                        (xt/put :xt_docs {:num (short 3) :xt/id "e"})
-                                        (xt/put :xt_docs {:num 2.0 :xt/id "f"})])
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:num 0 :xt/id "a"}]
+                                        [:put :xt_docs {:num 1 :xt/id "b"}]
+                                        [:put :xt_docs {:num 1.0 :xt/id "c"}]
+                                        [:put :xt_docs {:num 4 :xt/id "d"}]
+                                        [:put :xt_docs {:num (short 3) :xt/id "e"}]
+                                        [:put :xt_docs {:num 2.0 :xt/id "f"}]])
                (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
@@ -59,10 +58,10 @@
                           {:node tu/*node* :basis {:at-tx tx} :params {'?x (float 3)}})))))
 
 (deftest test-bloom-filter-for-datetime-types-2133
-  (let [tx (-> (xt/submit-tx tu/*node* [(xt/put :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"})
-                                        (xt/put :xt_docs {:timestamp #time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"})
-                                        (xt/put :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "c"})
-                                        (xt/put :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "d"})]
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"}]
+                                        [:put :xt_docs {:timestamp #time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
+                                        [:put :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "c"}]
+                                        [:put :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "d"}]]
                              {:default-tz #time/zone "Z"})
                (tu/then-await-tx tu/*node*))]
 
@@ -91,8 +90,8 @@
                           {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
 
 (deftest test-bloom-filter-for-time-types
-  (let [tx (-> (xt/submit-tx tu/*node* [(xt/put :xt_docs {:time #time/time "01:02:03" :xt/id "a"})
-                                        (xt/put :xt_docs {:time #time/time "04:05:06" :xt/id "b"})]
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:time #time/time "01:02:03" :xt/id "a"}]
+                                        [:put :xt_docs {:time #time/time "04:05:06" :xt/id "b"}]]
                              {:default-tz #time/zone "Z"})
                (tu/then-await-tx tu/*node*))]
 
@@ -105,7 +104,7 @@
 
 (deftest test-min-max-on-xt-id
   (with-open [node (xtn/start-node {:indexer {:page-limit 16}})]
-    (-> (xt/submit-tx node (for [i (range 20)] (xt/put :xt_docs {:xt/id i})))
+    (-> (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
         (tu/then-await-tx node))
 
     (tu/finish-chunk! node)
@@ -140,7 +139,7 @@
             (t/is (true? (.test page-idx-pred page-idx)))))))))
 
 (t/deftest test-boolean-metadata
-  (xt/submit-tx tu/*node* [(xt/put :xt_docs {:xt/id 1 :boolean-or-int true})])
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :boolean-or-int true}]])
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)

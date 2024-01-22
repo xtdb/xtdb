@@ -8,10 +8,10 @@
 
 #_ ; FIXME port to XTQL
 (deftest simple-temporal-tests
-  (let [tx1 (xt/submit-tx tu/*node* [(-> (xt/put :xt_docs {:xt/id 1 :foo "2000-4000"})
-                                         (xt/during #inst "2000" #inst "4000"))])
-        tx2 (xt/submit-tx tu/*node* [(-> (xt/put :xt_docs {:xt/id 1 :foo "3000-"})
-                                         (xt/starting-from #inst "3000"))])]
+  (let [tx1 (xt/submit-tx tu/*node* [[:put {:into :xt_docs, :valid-from #inst "2000", :valid-to #inst "4000"}
+                                      {:xt/id 1 :foo "2000-4000"}]])
+        tx2 (xt/submit-tx tu/*node* [[:put {:into :xt_docs, :valid-from #inst "3000"}
+                                      {:xt/id 1 :foo "3000-"}]])]
 
     ;; as of tx tests
     (t/is (= [{:foo "2000-4000"}]

@@ -25,40 +25,40 @@
   (get examples name))
 
 (def users
-  [(xt/put :users {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov", :age 25})
-   (-> (xt/put :users {:xt/id "petr", :first-name "Petr", :last-name "Petrov", :age 25})
-       (xt/starting-from #inst "2018"))])
+  [[:put :users {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov", :age 25}]
+   [:put {:into :users, :valid-from #inst "2018"}
+    {:xt/id "petr", :first-name "Petr", :last-name "Petrov", :age 25}]])
 
 (def old-users
-  [(-> (xt/put :old-users {:xt/id "ivan", :given-name "Ivan", :surname "Ivanov"})
-       (xt/starting-from #inst "2017"))
-   (-> (xt/put :old-users {:xt/id "petr", :given-name "Petr", :surname "Petrov"})
-       (xt/starting-from #inst "2018"))])
+  [[:put {:into :old-users, :valid-from #inst "2017"}
+    {:xt/id "ivan", :given-name "Ivan", :surname "Ivanov"}]
+   [:put {:into :old-users, :valid-from #inst "2018"}
+    {:xt/id "petr", :given-name "Petr", :surname "Petrov"}]])
 
 (def articles
-  [(xt/put :articles {:xt/id 1, :author-id "ivan", :title "First" :content "My first blog"})
-   (xt/put :articles {:xt/id 2, :author-id "ivan", :title "Second" :content "My second blog"})])
+  [[:put :articles {:xt/id 1, :author-id "ivan", :title "First" :content "My first blog"}]
+   [:put :articles {:xt/id 2, :author-id "ivan", :title "Second" :content "My second blog"}]])
 
 (def posts
-  [(xt/put :posts {:xt/id 1, :author-id "ivan", :title "First" :content "My first blog"})
-   (xt/put :posts {:xt/id 2, :author-id "ivan", :title "Second" :content "My second blog"})])
+  [[:put :posts {:xt/id 1, :author-id "ivan", :title "First" :content "My first blog"}]
+   [:put :posts {:xt/id 2, :author-id "ivan", :title "Second" :content "My second blog"}]])
 
 (def comments
-  [(xt/put :comments {:xt/id 1, :article-id 1, :post-id 1, :created-at #inst "2020", :comment "1"})
-   (xt/put :comments {:xt/id 2, :article-id 1, :post-id 1, :created-at #inst "2021", :comment "2"})
-   (xt/put :comments {:xt/id 3, :article-id 2, :post-id 2, :created-at #inst "2022", :comment "1"})])
+  [[:put :comments {:xt/id 1, :article-id 1, :post-id 1, :created-at #inst "2020", :comment "1"}]
+   [:put :comments {:xt/id 2, :article-id 1, :post-id 1, :created-at #inst "2021", :comment "2"}]
+   [:put :comments {:xt/id 3, :article-id 2, :post-id 2, :created-at #inst "2022", :comment "1"}]])
 
 (def customers
-  [(xt/put :customers {:xt/id "ivan"})
-   (xt/put :customers {:xt/id "petr"})])
+  [[:put :customers {:xt/id "ivan"}]
+   [:put :customers {:xt/id "petr"}]])
 
 (def orders
-  [(xt/put :orders {:xt/id 1, :customer-id "ivan", :currency :gbp, :order-value 100})
-   (xt/put :orders {:xt/id 2, :customer-id "ivan", :currency :gbp, :order-value 150})])
+  [[:put :orders {:xt/id 1, :customer-id "ivan", :currency :gbp, :order-value 100}]
+   [:put :orders {:xt/id 2, :customer-id "ivan", :currency :gbp, :order-value 150}]])
 
 (def promotions
-  [(xt/put :promotions {:xt/id 1, :promotion-type "christmas"})
-   (xt/put :promotions {:xt/id 2, :promotion-type "general"})])
+  [[:put :promotions {:xt/id 1, :promotion-type "christmas"}]
+   [:put :promotions {:xt/id 2, :promotion-type "general"}]])
 
 (deftest basic-operations
 
@@ -237,8 +237,8 @@
   (xt/submit-tx tu/*node*
     (concat
       articles comments
-      [(xt/put :authors {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov"})
-       (xt/put :authors {:xt/id "petr", :first-name "Petr", :last-name "Petrov"})]))
+      [[:put :authors {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov"}]
+       [:put :authors {:xt/id "petr", :first-name "Petr", :last-name "Petrov"}]]))
 
   (testing "For example, if a user is reading an article, we might also want to show them details about the author as well as any comments."
 
@@ -326,9 +326,9 @@
   (let [node tu/*node*]
     ;; tag::DML-Insert-xtql[]
     (xt/submit-tx node
-      [(xt/insert-into :users
-         '(from :old-users [xt/id {:given-name first-name, :surname last-name}
-                            xt/valid-from xt/valid-to]))])
+      [[:insert-into :users
+        '(from :old-users [xt/id {:given-name first-name, :surname last-name}
+                           xt/valid-from xt/valid-to])]])
     ;; end::DML-Insert-xtql[]
     ,)
 
@@ -353,7 +353,7 @@
                  '(from :users [first-name last-name]))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Insert-sql"))])
+    [[:sql (sql-example "DML-Insert-sql")]])
 
   (t/is (= #{{:first-name "Ivan"
               :last-name "Ivanov"
@@ -371,8 +371,8 @@
 ;; tag::DML-Delete-xtql[]
 (defn delete-a-post [node the-post-id]
   (xt/submit-tx node
-    [(-> (xt/delete-from :comments '[{:post-id $post-id}])
-         (xt/with-op-args {:post-id the-post-id}))]))
+    [[:delete {:from :comments, :bind '[{:post-id $post-id}]}
+      {:post-id the-post-id}]]))
 ;; end::DML-Delete-xtql[]
 
 (deftest DML-Delete-xtql
@@ -392,8 +392,8 @@
   (xt/submit-tx tu/*node* comments)
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Delete-sql"))
-         (xt/with-op-args [1]))])
+    [[:sql (sql-example "DML-Delete-sql")
+      [1]]])
 
   (t/is (empty? (xt/q tu/*node* '(from :comments [{:post-id $post-id}])
                       {:args {:post-id 1}})))
@@ -409,11 +409,12 @@
   (let [node tu/*node*]
     ;; tag::DML-Delete-additional-unify-clauses-xtql[]
     (xt/submit-tx node
-      [(-> (xt/delete-from :comments '[{:post-id pid}]
-                           '(from :posts [{:xt/id pid, :author-id $author}]))
-           (xt/with-op-args {:author "ivan"}))])
+      [[:delete '{:from :comments
+                  :bind [{:post-id pid}]
+                  :unify [(from :posts [{:xt/id pid, :author-id $author}])]}
+        {:author "ivan"}]])
     ;; end::DML-Delete-additional-unify-clauses-xtql[]
-    ,)
+    )
 
   (t/is (empty? (xt/q tu/*node*
                       '(unify (from :comments [{:post-id pid}])
@@ -431,8 +432,8 @@
   (xt/submit-tx tu/*node* (concat posts comments))
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Delete-additional-unify-clauses-sql"))
-         (xt/with-op-args ["ivan"]))])
+    [[:sql (sql-example "DML-Delete-additional-unify-clauses-sql")
+      ["ivan"]]])
 
   (t/is (empty? (xt/q tu/*node*
                       '(unify (from :comments [{:post-id pid}])
@@ -461,18 +462,19 @@
   (let [node tu/*node*]
     ;; tag::DML-Delete-bitemporal-xtql[]
     (xt/submit-tx node
-      [(xt/delete-from :promotions '{:bind [{:promotion-type "christmas"}]
-                                     :for-valid-time (from #inst "2023-12-26")})])
+      [[:delete '{:from :promotions
+                  :for-valid-time (from #inst "2023-12-26")
+                  :bind [{:promotion-type "christmas"}]}]])
     ;; end::DML-Delete-bitemporal-xtql[]
     ,)
 
   (t/is (= #{{:promotion-type "general"}}
            (set
              (xt/q tu/*node*
-                   '(unify (from :promotions {:bind [promotion-type]
-                                              :for-valid-time (from #inst "2023-12-25")})
-                           (from :promotions {:bind [promotion-type]
-                                              :for-valid-time (from #inst "2023-12-26")})))))))
+                   '(unify (from :promotions {:for-valid-time (from #inst "2023-12-25")
+                                              :bind [promotion-type]})
+                           (from :promotions {:for-valid-time (from #inst "2023-12-26")
+                                              :bind [promotion-type]})))))))
 
 (deftest DML-Delete-bitemporal-sql
   (xt/submit-tx tu/*node* promotions)
@@ -487,7 +489,7 @@
                                               :for-valid-time (from #inst "2023-12-26")}))))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Delete-bitemporal-sql"))])
+    [[:sql (sql-example "DML-Delete-bitemporal-sql")]])
 
   (t/is (= #{{:promotion-type "general"}}
            (set
@@ -505,7 +507,7 @@
   (let [node tu/*node*]
     ;; tag::DML-Delete-everything-xtql[]
     (xt/submit-tx node
-      [(xt/delete-from :comments '{})])
+      [[:delete {:from :comments}]])
     ;; end::DML-Delete-everything-xtql[]
     ,)
 
@@ -519,7 +521,7 @@
   (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Delete-everything-sql"))])
+    [[:sql (sql-example "DML-Delete-everything-sql")]])
 
   (t/is (empty? (xt/q tu/*node* '(from :comments []))))
 
@@ -527,7 +529,7 @@
 
 (deftest DML-Update-xtql
   (xt/submit-tx tu/*node*
-    [(xt/put :documents {:xt/id "doc-id", :version 1})])
+    [[:put :documents {:xt/id "doc-id", :version 1}]])
 
   (t/is (= [{:version 1}]
            (xt/q tu/*node* '(from :documents [version]))))
@@ -535,9 +537,10 @@
   (let [node tu/*node*]
     ;; tag::DML-Update-xtql[]
     (xt/submit-tx node
-      [(-> (xt/update-table :documents '{:bind [{:xt/id $doc-id, :version v}]
-                                         :set {:version (+ v 1)}})
-           (xt/with-op-args {:doc-id "doc-id"}))])
+      [[:update '{:table :documents
+                  :bind [{:xt/id $doc-id, :version v}]
+                  :set {:version (+ v 1)}}
+        {:doc-id "doc-id"}]])
     ;; end::DML-Update-xtql[]
     ,)
 
@@ -546,22 +549,22 @@
 
 (deftest DML-Update-sql
   (xt/submit-tx tu/*node*
-    [(xt/put :documents {:xt/id "doc-id", :version 1})])
+    [[:put :documents {:xt/id "doc-id", :version 1}]])
 
   (t/is (= [{:version 1}]
            (xt/q tu/*node* '(from :documents [version]))))
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Update-sql"))
-         (xt/with-op-args ["doc-id"]))])
+                [[:sql (sql-example "DML-Update-sql")
+                  ["doc-id"]]])
 
   (t/is (= [{:version 2}]
            (xt/q tu/*node* '(from :documents [version])))))
 
 (deftest DML-Update-bitemporal-xtql
   (xt/submit-tx tu/*node*
-    [(xt/put :posts {:xt/id "my-post-id" :comment-count 1})
-     (xt/put :comments {:xt/id 1, :post-id "my-post-id"})])
+    [[:put :posts {:xt/id "my-post-id" :comment-count 1}]
+     [:put :comments {:xt/id 1, :post-id "my-post-id"}]])
 
   (t/is (= [{:comment-count 1}]
            (xt/q tu/*node* '(from :posts [comment-count]))))
@@ -569,11 +572,13 @@
   (let [node tu/*node*]
     ;; tag::DML-Update-bitemporal-xtql[]
     (xt/submit-tx node
-      [(xt/put :comments {:xt/id (random-uuid), :post-id "my-post-id"})
-       (-> (xt/update-table :posts '{:bind [{:xt/id $post-id}], :set {:comment-count cc}}
-                            '(with {cc (q (-> (from :comments [{:post-id $post-id}])
-                                              (aggregate {:cc (row-count)})))}))
-           (xt/with-op-args {:post-id "my-post-id"}))])
+      [[:put :comments {:xt/id (random-uuid), :post-id "my-post-id"}]
+       [:update '{:table :posts
+                  :bind [{:xt/id $post-id}]
+                  :unify [(with {cc (q (-> (from :comments [{:post-id $post-id}])
+                                           (aggregate {:cc (row-count)})))})]
+                  :set {:comment-count cc}}
+        {:post-id "my-post-id"}]])
     ;; end::DML-Update-bitemporal-xtql[]
     ,)
 
@@ -583,31 +588,32 @@
 #_ ;; TODO: Uncomment when supported: https://github.com/xtdb/xtdb/issues/3050
 (deftest DML-Update-bitemporal-sql
   (xt/submit-tx tu/*node*
-    [(xt/put :posts {:xt/id "my-post-id" :comment-count 1})
-     (xt/put :comments {:xt/id 1, :post-id "my-post-id"})])
+
+    [[:put :posts {:xt/id "my-post-id" :comment-count 1}]
+     [:put :comments {:xt/id 1, :post-id "my-post-id"}]])
 
   (t/is (= [{:comment-count 1}]
            (xt/q tu/*node* '(from :posts [comment-count]))))
 
   (xt/submit-tx tu/*node*
-    [(-> (xt/sql-op (sql-example "DML-Update-bitemporal-sql-1"))
-         (xt/with-op-args [(random-uuid), "my-post-id"]))
-     (-> (xt/sql-op (sql-example "DML-Update-bitemporal-sql-2"))
-         (xt/with-op-args ["my-post-id" "my-post-id"]))])
+    [[:sql (sql-example "DML-Update-bitemporal-sql-1")
+      [(random-uuid), "my-post-id"]]
+     [:sql (sql-example "DML-Update-bitemporal-sql-2")
+      ["my-post-id" "my-post-id"]]])
 
   (t/is (= [{:comment-count 2}]
            (xt/q tu/*node* '(from :posts [comment-count])))))
 
 (deftest DML-Erase-xtql
   (xt/submit-tx tu/*node*
-    [(xt/put :users {:xt/id "user-id", :email "jms@example.com"})])
+    [[:put :users {:xt/id "user-id", :email "jms@example.com"}]])
 
   (t/is (not (empty? (xt/q tu/*node* '(from :users [])))))
 
   (let [node tu/*node*]
     ;; tag::DML-Erase-xtql[]
     (xt/submit-tx node
-      [(xt/erase-from :users '[{:email "jms@example.com"}])])
+      [[:erase {:from :users, :bind '[{:email "jms@example.com"}]}]])
     ;; end::DML-Erase-xtql[]
     ,)
 
@@ -616,28 +622,28 @@
 
 (deftest DML-Erase-sql
   (xt/submit-tx tu/*node*
-    [(xt/put :users {:xt/id "user-id", :email "jms@example.com"})])
+    [[:put :users {:xt/id "user-id", :email "jms@example.com"}]])
 
   (t/is (not (empty? (xt/q tu/*node* '(from :users [])))))
 
   (xt/submit-tx tu/*node*
-    [(xt/sql-op (sql-example "DML-Erase-sql"))])
+    [[:sql (sql-example "DML-Erase-sql")]])
 
   (t/is (empty? (xt/q tu/*node* '(from :users []))))
   (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
 
 (deftest DML-Assert
   (xt/submit-tx tu/*node*
-    [(xt/put :users {:xt/id :james, :email "james@example.com"})])
+    [[:put :users {:xt/id :james, :email "james@example.com"}]])
 
   (let [node tu/*node*
         {my-tx-id :tx-id}
         ;; tag::DML-Assert-xtql[]
         (xt/submit-tx node
-          [(-> (xt/assert-not-exists '(from :users [{:email $email}]))
-               (xt/with-op-args {:email "james@example.com"}))
+          [[:assert-not-exists '(from :users [{:email $email}])
+            {:email "james@example.com"}]
 
-           (xt/put :users {:xt/id :james, :email "james@example.com"})])
+           [:put :users {:xt/id :james, :email "james@example.com"}]])
         ;; end::DML-Assert-xtql[]
         ,]
     (t/is (= ;; tag::DML-Assert-query-result[]
@@ -656,7 +662,7 @@
   #_
   (let [{:keys [tx-id]}
         (xt/submit-tx tu/*node*
-          [(xt/sql-op (sql-example "DML-Assert-sql"))])]
+          [[:sql (sql-example "DML-Assert-sql")]])]
     (t/is (= [{:xt/committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed?])
                    {:args {:tx-id tx-id}})))))

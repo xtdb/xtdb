@@ -20,7 +20,7 @@
 
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
-         (xt/put-fn id fn-def))
+         [:put-fn id fn-def])
        (xt/submit-tx (:sut worker))))
 
 (defn generate
@@ -28,7 +28,7 @@
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
          partition-count 512]
      (doseq [chunk (partition-all partition-count doc-seq)]
-       (xt/submit-tx (:sut worker) (mapv (partial xt/put table) chunk))))))
+       (xt/submit-tx (:sut worker) [(into [:put table] chunk)])))))
 
 (defn install-proxy-node-meters!
   [^MeterRegistry meter-reg]

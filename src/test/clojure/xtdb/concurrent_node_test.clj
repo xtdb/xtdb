@@ -25,7 +25,7 @@
   (when-not (util/path-exists node-dir)
     (with-open [node (tu/->local-node node-opts)]
       (doseq [tx (->> (random-maps 400000)
-                      (map #(xt/put :docs %))
+                      (map #(do [:put :docs %]))
                       (partition-all 1024))]
         (xt/submit-tx node tx))
       (tu/finish-chunk! node))))

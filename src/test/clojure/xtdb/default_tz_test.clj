@@ -23,8 +23,8 @@
 
 (t/deftest can-specify-default-tz-in-dml-396
   (let [q "INSERT INTO foo (xt$id, dt, tstz) VALUES (?, DATE '2020-08-01', CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE))"]
-    (xt/submit-tx tu/*node* [(-> (xt/sql-op q) (xt/with-op-args ["foo"]))])
-    (let [tx (xt/submit-tx tu/*node* [(-> (xt/sql-op q) (xt/with-op-args ["bar"]))]
+    (xt/submit-tx tu/*node* [[:sql q ["foo"]]])
+    (let [tx (xt/submit-tx tu/*node* [[:sql q ["bar"]]]
                            {:default-tz #time/zone "America/Los_Angeles"})
           q "SELECT foo.xt$id, foo.dt, CAST(foo.dt AS TIMESTAMP WITH TIME ZONE) cast_tstz, foo.tstz FROM foo"]
 

@@ -14,6 +14,7 @@
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io Writer)
            java.util.concurrent.ExecutionException
@@ -22,8 +23,8 @@
            java.util.Map
            [java.util.stream Stream]
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey)
-           (xtdb.api.query Basis XtqlQuery QueryOptions)
-           (xtdb.api.tx TxOp TxOp$HasArgs TxOp$HasValidTimeBounds TxOptions)
+           (xtdb.api.query Basis QueryOptions XtqlQuery)
+           (xtdb.api.tx TxOp TxOptions)
            xtdb.types.ClojureForm))
 
 (defmacro ^:private rethrowing-cause [form]
@@ -175,7 +176,10 @@
                                     (TxOptions. (some-> system-time expect-instant)
                                                 default-tz
                                                 (boolean default-all-valid-time?))))
-                    (into-array TxOp tx-ops))))
+                    (->> (for [tx-op tx-ops]
+                           (cond-> tx-op
+                             (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
+                         (into-array TxOp)))))
 
 (extend-protocol xtp/PNode
   IXtdb
@@ -207,16 +211,16 @@
   "Writes transactions to the log for processing. Non-blocking.
 
   tx-ops: XTQL/SQL transaction operations.
-    [(xt/put :table {:xt/id \"my-id\", ...})
-     (xt/delete :table \"my-id\")]
+    [[:put :table {:xt/id \"my-id\", ...}]
+     [:delete-doc :table \"my-id\"]
 
-    [(-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [0 1]))
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [0 1]]
 
-     (-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [2 3] [4 5] [6 7]))
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [2 3] [4 5] [6 7]]
 
-     (xt/sql-op \"UPDATE foo SET b = 1\")]
+     [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a CompletableFuture containing a map with details about
   the submitted transaction, including system-time and tx-id.
@@ -238,16 +242,16 @@
   "Writes transactions to the log for processing
 
   tx-ops: XTQL/SQL style transactions.
-    [(xt/put :table {:xt/id \"my-id\", ...})
-     (xt/delete :table \"my-id\")]
+    [[:put :table {:xt/id \"my-id\", ...}]
+     [:delete-doc :table \"my-id\"]
 
-    [(-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [0 1]))
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [0 1]]
 
-     (-> (xt/sql-op \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\")
-         (xt/with-op-args [2 3] [4 5] [6 7]))
+     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+      [2 3] [4 5] [6 7]]
 
-     (xt/sql-op \"UPDATE foo SET b = 1\")]
+     [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a map with details about the submitted transaction, including system-time and tx-id.
 
@@ -271,262 +275,6 @@
   including details of both the latest submitted and completed tx"
   [node]
   (xtp/status node))
-
-(def ^:private eid? (some-fn uuid? integer? string? keyword?))
-
-(def ^:private table? keyword?)
-
-(defn- expect-table-name ^String [table-name]
-  (when-not (table? table-name)
-    (throw (err/illegal-arg :xtdb.tx/invalid-table
-                            {::err/message "expected table name" :table table-name})))
-
-  (str (symbol table-name)))
-
-(defn- expect-eid [eid]
-  (if-not (eid? eid)
-    (throw (err/illegal-arg :xtdb.tx/invalid-eid
-                            {::err/message "expected xt/id", :xt/id eid}))
-    eid))
-
-(defn- expect-doc [doc]
-  (when-not (map? doc)
-    (throw (err/illegal-arg :xtdb.tx/expected-doc
-                            {::err/message "expected doc map", :doc doc})))
-  (expect-eid (or (:xt/id doc) (get doc "xt/id")))
-
-  (-> doc
-      (update-keys (fn [k]
-                     (cond-> k
-                       (keyword? k) (-> symbol str))))))
-
-(defn put
-  "Returns a put operation for passing to `submit-tx`.
-
-  `table`: table to put the document into.
-  `docs`: documents to put.
-    * Each must contain an `:xt/id` attribute - currently string, UUID, integer or keyword.
-
-  * `put` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
-  * To insert documents using a query, use `insert-into`"
-  [table & docs]
-  (TxOp/put (expect-table-name table) ^List (mapv expect-doc docs)))
-
-(defn- expect-fn-id [fn-id]
-  (if-not (eid? fn-id)
-    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
-    fn-id))
-
-(defn- expect-tx-fn [tx-fn]
-  (or tx-fn
-      (throw (err/illegal-arg :xtdb.tx/invalid-tx-fn {::err/message "expected tx-fn", :tx-fn tx-fn}))))
-
-(defn put-fn
-  "Returns an operation that registers a transaction function.
-
-  * `fn-id`: id of the function.
-  * `tx-fn`: transaction function body.
-    * Transaction functions are run using the Small Clojure Interpreter (SCI).
-    * Within transaction functions, the following built-ins are available:
-      * `q`: (function, `(q query opts)`): a function to run an XTQL/SQL query.
-         See `q` for options.
-      * `*current-tx*`: the current transaction key (`:tx-id`, `:sys-time`)
-      * `xt/put`, `xt/delete`, etc: transaction operation builders from this namespace."
-  [fn-id tx-fn]
-  (TxOp/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn)))
-
-(defn delete
-  "Returns a delete operation for passing to `submit-tx`.
-
-  `table`: table to delete from.
-  `id`: id of the document to delete.
-
-  * `delete` operations can be passed to `during`, `starting-from` or `until` to set the effective valid time of the operation.
-  * To delete documents that match a query, use `delete-from`"
-  [table id]
-  (TxOp/delete (expect-table-name table) (expect-eid id)))
-
-(defn during
-  "Adapts the given transaction operation to take effect (in valid time) between `from` and `until`.
-
-  `from`, `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^TxOp$HasValidTimeBounds tx-op from until]
-
-  (.during tx-op (expect-instant from) (expect-instant until)))
-
-(defn starting-from
-  "Adapts the given transaction operation to take effect (in valid time) from `from` until the end of time.
-
-  `from`, `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^TxOp$HasValidTimeBounds tx-op from]
-
-  (.startingFrom tx-op (expect-instant from)))
-
-(defn until
-  "Adapts the given transaction operation to take effect (in valid time) from the time of the transaction until `until`.
-
-  `until`: j.u.Date, j.t.Instant or j.t.ZonedDateTime"
-  [^TxOp$HasValidTimeBounds tx-op until]
-  (.until tx-op (expect-instant until)))
-
-(defn erase
-  "Returns an erase operation for passing to `submit-tx`.
-
-  `table`: table to erase from.
-  `id`: id of the document to erase.
-
-  * To erase documents that match a query, use `erase-from`"
-  [table id]
-  (TxOp/erase (expect-table-name table) (expect-eid id)))
-
-(defn call
-  "Returns a transaction-function call operation for passing to `submit-tx`.
-
-  See also: `put-fn`"
-  [f & args]
-  (TxOp/call (expect-fn-id f) (or args [])))
-
-(defn sql-op
-  "Returns an SQL DML operation for passing to `submit-tx`
-
-  * `sql`: SQL string - e.g. `\"INSERT INTO ...\"`, `\"UPDATE ...\"`
-
-    See https://docs.xtdb.com/reference/main/sql/txs.html for more details.
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query."
-  [sql]
-  (if-not (string? sql)
-    (throw (err/illegal-arg :xtdb.tx/expected-sql
-                            {::err/message "Expected SQL query",
-                             :sql sql}))
-
-    (TxOp/sql sql)))
-
-(defn with-op-args
-  "Adds the given (variadic) argument rows to the operation.
-
-  e.g.
-  (-> (xt/update-table :users {:bind [{:xt/id $uid} version], :set {:version (inc version)}})
-      (xt/with-op-args {:uid \"james\"}
-                       {:uid \"dave\"}))"
-  [^TxOp$HasArgs op & args]
-  (.withArgs op ^List args))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn with-op-arg-rows
-  "Adds the given (vector of) argument rows to the operation.
-
-  e.g.
-  (-> (xt/update-table :users {:bind [{:xt/id $uid} version], :set {:version (inc version)}})
-      (xt/with-op-args [{:uid \"james\"}, {:uid \"dave\"}]))"
-  [^TxOp$HasArgs op arg-rows]
-  (.withArgs op ^List arg-rows))
-
-(defn insert-into
-  "Returns an insert operation for passing to `submit-tx`.
-
-  When evaluated, insert operations run the query, and insert every returned row as a document into the specified table.
-    * Every row must return an `:xt/id` key - currently string, UUID, integer or keyword.
-    * To insert rows for different valid time periods, return `:xt/valid-from` and/or `:xt/valid-to` from the query.
-
-  `table-name` (keyword): the table to insert documents into
-  `xtql-query`: query to execute
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query.
-  * To put a single document into a table, use `put`."
-
- [table-name xtql-query]
-  (xtql.edn/parse-dml (list 'insert table-name xtql-query)))
-
-(defn update-table
-  "Returns an update operation for passing to `submit-tx`.
-
-  `table-name` (keyword): the table to update
-
-  `bind`: a vector of bindings (e.g. `[{:xt/id $uid}]`)
-    * If bind specs are not specified, will update every document in the table.
-
-  `set`: a map of fields to update (e.g. `{:set {:version (inc version)}}`)
-    * The values of the map can be any XTQL expression.
-    * All variables bound in either `bind` or `unify-clauses` are in scope
-
-  `for-valid-time` (optional): to specify the effective valid-time period of the updates
-    Either:
-
-    * `(from <valid-from>)`
-    * `(to <valid-to>)`
-    * `(in <valid-from> <valid-to>)`
-
-    If not provided, defaults to 'from the current-time of the transaction'.
-
-  `unify-clauses` (optional): additional clauses to unify with the above bindings
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query."
-
-  {:arglists '([table-name {:keys [bind set for-valid-time]} & unify-clauses])}
-  #_{:clj-kondo/ignore [:unused-binding]}
-  [table-name opts & unify-clauses]
-
-  (xtql.edn/parse-dml (list* 'update table-name opts unify-clauses)))
-
-(defn delete-from
-  "Returns a delete operation for passing to `submit-tx`.
-
-  `table-name` (keyword): the table to delete from
-
-  `bind`, `bind-specs`: a vector of bindings (e.g. `[{:xt/id $uid}]`)
-    * If bind specs are not specified, will delete every document in the table.
-
-  `for-valid-time` (optional): to specify the effective valid-time period of the deletes
-    Either:
-
-    * `'(from <valid-from>)`
-    * `'(to <valid-to>)`
-    * `'(in <valid-from> <valid-to>)`
-
-    If not provided, defaults to 'from the current-time of the transaction'.
-
-  `unify-clauses` (optional): additional clauses to unify with the above bindings
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query.
-  * To delete a single document by `:xt/id`, use `delete`"
-
-  {:arglists '([table-name bind-specs & unify-clauses]
-               [table-name {:keys [bind]} & unify-clauses])}
-  [table-name bind-or-opts & unify-clauses]
-  (xtql.edn/parse-dml (list* 'delete table-name bind-or-opts unify-clauses)))
-
-(defn erase-from
-  "Returns an erase operation for passing to `submit-tx`.
-
-  `table-name` (keyword): the table to erase from
-  `bind`, `bind-specs`: a vector of bindings (e.g. `[{:xt/id $uid}]`)
-    * If bind specs are not specified, will erase every document in the table.
-  `unify-clauses` (optional): additional clauses to unify with the above bindings
-
-  * You can pass the result from this operation to `with-op-args` to supply values for any parameters in the query.
-  * To erase a single document by `:xt/id`, use `erase`"
-
-  {:arglists '([table-name bind-specs & unify-clauses]
-               [table-name {:keys [bind]} & unify-clauses])}
-
-  [table-name bind-or-opts & unify-clauses]
-
-  (xtql.edn/parse-dml (list* 'erase table-name bind-or-opts unify-clauses)))
-
-(defn assert-exists
-  "Returns an assert-exists operation for passing to `submit-tx`.
-
-  When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query doesn't return any rows."
-  [xtql-query]
-  (xtql.edn/parse-dml (list 'assert-exists xtql-query)))
-
-(defn assert-not-exists
-  "Returns an assert-not-exists operation for passing to `submit-tx`.
-
-  When it's evaluated, this transaction operation runs the given query, and aborts the transaction iff the query returns any rows."
-  [xtql-query]
-  (xtql.edn/parse-dml (list 'assert-not-exists xtql-query)))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.

@@ -96,7 +96,7 @@
 (t/deftest if-log-does-not-get-a-new-msg-in-xx-time-we-submit-a-flush-test
   (with-open [node (start-node #time/duration "PT0.001S")]
     (t/testing "sent after a first message"
-      (xt/submit-tx node [(xt/put :foo {:xt/id 42})])
+      (xt/submit-tx node [[:put :foo {:xt/id 42}]])
       (t/is (spin (log-indexed? node)))
       (t/is (spin (= 2 (count (node-log node)))))
       (let [[_ msg2] (node-log node)]
@@ -105,7 +105,7 @@
           (t/is (= -1 flush-tx-id)))))
 
     (t/testing "sent after a second message"
-      (xt/submit-tx node [(xt/put :foo {:xt/id 42})])
+      (xt/submit-tx node [[:put :foo {:xt/id 42}]])
       (t/is (spin (= 4 (count (node-log node)))))
       (let [[_ _ _ msg4] (node-log node)]
         (let [flush-tx-id (:flush-tx-id msg4)]
@@ -115,7 +115,7 @@
 
   (t/testing "test :duration actually does something"
     (with-open [node (start-node #time/duration "PT1H")]
-      (xt/submit-tx node [(xt/put :foo {:xt/id 42})])
+      (xt/submit-tx node [[:put :foo {:xt/id 42}]])
       (t/is (spin (= 1 (count (node-log node)))))
       (t/is (spin-ensure 10 (= 1 (count (node-log node)))))))
 
@@ -126,7 +126,7 @@
       (binding [slf/*on-heartbeat* (fn [_] (.acquire control))]
         (with-open [node (start-node #time/duration "PT0.001S")
                     _ control-close]
-          (let [send-msg (fn [] (xt/submit-tx node [(xt/put :foo {:xt/id 42})]))
+          (let [send-msg (fn [] (xt/submit-tx node [[:put :foo {:xt/id 42}]]))
                 check-sync (fn [] (spin (log-indexed? node)))
                 check-count (fn [n] (spin (= n (count (node-log node)))))
                 check-count-remains (fn [n] (spin-ensure 10 (= n (count (node-log node)))))]
@@ -168,9 +168,9 @@
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
   (with-open [node (start-node #time/duration "PT0.001S")]
     (t/is (spin-ensure 10 (= 0 (count (chunk-path-seq node)))))
-    (xt/submit-tx node [(xt/put :foo {:xt/id 42})])
+    (xt/submit-tx node [[:put :foo {:xt/id 42}]])
     (t/is (spin (= 1 (count (chunk-path-seq node))))))
 
   (with-open [node (start-node #time/duration "PT1H")]
-    (xt/submit-tx node [(xt/put :foo {:xt/id 42})])
+    (xt/submit-tx node [[:put :foo {:xt/id 42}]])
     (t/is (spin-ensure 10 (= 0 (count (chunk-path-seq node)))))))
