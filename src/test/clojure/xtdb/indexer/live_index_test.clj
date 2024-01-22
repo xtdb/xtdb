@@ -25,7 +25,7 @@
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
                            :xtdb.indexer/live-index (Xtdb$IndexerConfig.)
-                           :xtdb/buffer-pool InMemoryStorageFactory/INSTANCE
+                           :xtdb/buffer-pool (InMemoryStorageFactory.)
                            ::meta/metadata-manager {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
