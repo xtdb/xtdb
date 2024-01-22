@@ -15,7 +15,7 @@ import java.nio.file.Path
 @Serializable
 sealed interface StorageFactory {
     companion object {
-        val DEFAULT = InMemoryStorageFactory
+        val DEFAULT = InMemoryStorageFactory()
     }
 
     fun openStorage(allocator: BufferAllocator): IBufferPool
@@ -23,9 +23,10 @@ sealed interface StorageFactory {
 
 @Serializable
 @SerialName("!InMemory")
-data object InMemoryStorageFactory : StorageFactory {
-    private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-in-memory-storage")
-
+class InMemoryStorageFactory() : StorageFactory {
+    companion object {
+        private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-in-memory-storage")
+    }
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator) as IBufferPool
 }
 

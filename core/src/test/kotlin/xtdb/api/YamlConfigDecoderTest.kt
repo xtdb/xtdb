@@ -60,13 +60,12 @@ class YamlConfigDecoderTest {
 
     @Test
     fun testStorageDecoding() {
-        // TODO: THIS doesnt work - because inmemorystorage is an object, check into this and fix
-//        val inMemoryConfig = "storage: !InMemory"
-//
-//        Assertions.assertEquals(
-//            InMemoryStorageFactory,
-//            nodeConfig(inMemoryConfig).storage
-//        )
+        val inMemoryConfig = "storage: !InMemory"
+
+        Assertions.assertEquals(
+            InMemoryStorageFactory::class,
+            nodeConfig(inMemoryConfig).storage::class
+        )
 
         val localConfig = """
         storage: !Local
