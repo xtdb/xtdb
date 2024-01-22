@@ -15,7 +15,7 @@
           "typeIds" : [ ]
         },
         "children" : [{
-          "name" : "put",
+          "name" : "put-docs",
           "nullable" : false,
           "type" : {
             "name" : "struct"
@@ -148,7 +148,7 @@
         "TYPE_ID" : [0,0],
         "OFFSET" : [0,1],
         "children" : [{
-          "name" : "put",
+          "name" : "put-docs",
           "count" : 2,
           "VALIDITY" : [1,1],
           "children" : [{

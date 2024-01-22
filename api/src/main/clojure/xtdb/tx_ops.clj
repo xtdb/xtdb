@@ -67,13 +67,13 @@
                              :sql sql}))
 
     (cond-> (TxOp/sql sql)
-      (seq arg-rows) (.withArgs ^List (vec arg-rows)))))
+      (seq arg-rows) (.argRows ^List (vec arg-rows)))))
 
 (defmethod parse-tx-op :put [[_ table-or-opts & docs]]
   (let [{table :into, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:into table-or-opts})]
-    (cond-> (TxOp/put (expect-table-name table) ^List (mapv expect-doc docs))
+    (cond-> (TxOp/putDocs (expect-table-name table) ^List (mapv expect-doc docs))
       valid-from (.startingFrom (expect-instant valid-from))
       valid-to (.until (expect-instant valid-to)))))
 
@@ -99,7 +99,7 @@
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :insert this})))
 
   (cond-> (Xtql/insert (str (symbol table)) (xtql.edn/parse-query query))
-    (seq arg-rows) (.withArgs ^List arg-rows)))
+    (seq arg-rows) (.argRows ^List arg-rows)))
 
 (defmethod parse-tx-op :update [[_ opts & arg-rows :as this]]
   (when-not (map? opts)
@@ -120,7 +120,7 @@
       for-valid-time (.forValidTime (xtql.edn/parse-temporal-filter for-valid-time :for-valid-time this))
       bind (.binding (xtql.edn/parse-out-specs bind this))
       (seq unify) (.unify (mapv xtql.edn/parse-unify-clause unify))
-      (seq arg-rows) (.withArgs ^List arg-rows))))
+      (seq arg-rows) (.argRows ^List arg-rows))))
 
 (defmethod parse-tx-op :delete [[_ {table :from, :keys [for-valid-time bind unify]} & arg-rows :as this]]
   (when-not (keyword? table)
@@ -130,13 +130,13 @@
     for-valid-time (.forValidTime (xtql.edn/parse-temporal-filter for-valid-time :for-valid-time this))
     bind (.binding (xtql.edn/parse-out-specs bind this))
     unify (.unify (mapv xtql.edn/parse-unify-clause unify))
-    (seq arg-rows) (.withArgs ^List arg-rows)))
+    (seq arg-rows) (.argRows ^List arg-rows)))
 
-(defmethod parse-tx-op :delete-docs [[_ table-or-opts & eids]]
+(defmethod parse-tx-op :delete-docs [[_ table-or-opts & doc-ids]]
   (let [{table :from, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:from table-or-opts})]
-    (cond-> (TxOp/delete (expect-table-name table) ^List (mapv expect-eid eids))
+    (cond-> (TxOp/deleteDocs (expect-table-name table) ^List (mapv expect-eid doc-ids))
       valid-from (.startingFrom (expect-instant valid-from))
       valid-to (.until (expect-instant valid-to)))))
 
@@ -147,10 +147,10 @@
   (cond-> (Xtql/erase (str (symbol table)))
     bind (.binding (xtql.edn/parse-out-specs bind this))
     unify (.unify (mapv xtql.edn/parse-unify-clause unify))
-    (seq arg-rows) (.withArgs ^List arg-rows)))
+    (seq arg-rows) (.argRows ^List arg-rows)))
 
-(defmethod parse-tx-op :erase-docs [[_ table & eids]]
-  (TxOp/erase (expect-table-name table) ^List (mapv expect-eid eids)))
+(defmethod parse-tx-op :erase-docs [[_ table & doc-ids]]
+  (TxOp/eraseDocs (expect-table-name table) ^List (mapv expect-eid doc-ids)))
 
 (defmethod parse-tx-op :assert-exists [[_ query & arg-rows]]
   (cond-> (Xtql/assertExists (xtql.edn/parse-query query))
@@ -208,4 +208,4 @@
   XtqlAndArgs
   (unparse-tx-op [query+args]
     (into (unparse-tx-op (.op query+args))
-          (.args query+args))))
+          (.argRows query+args))))

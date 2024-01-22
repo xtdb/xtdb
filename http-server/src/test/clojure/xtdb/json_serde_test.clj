@@ -58,70 +58,71 @@
   (JsonSerde/decode s TxOp))
 
 (deftest deserialize-tx-op-test
-  (t/testing "put"
-    (let [v #xt.tx/put {:table-name :docs,
-                        :docs [{"foo" :bar, "xt/id" "my-id"}],
-                        :valid-from nil,
-                        :valid-to nil}]
+  (t/testing "put-docs"
+    (let [v #xt.tx/put-docs {:table-name :docs,
+                             :docs [{"foo" :bar, "xt/id" "my-id"}],
+                             :valid-from nil,
+                             :valid-to nil}]
 
       (t/is (= v (roundtrip-tx-op v))))
 
-    (let [v #xt.tx/put {:table-name :docs,
-                        :docs [{"foo" :bar, "xt/id" "my-id"}],
-                        :valid-from #time/instant "2020-01-01T00:00:00Z",
-                        :valid-to #time/instant "2021-01-01T00:00:00Z"}]
+    (let [v #xt.tx/put-docs {:table-name :docs,
+                             :docs [{"foo" :bar, "xt/id" "my-id"}],
+                             :valid-from #time/instant "2020-01-01T00:00:00Z",
+                             :valid-to #time/instant "2021-01-01T00:00:00Z"}]
 
       (t/is (= v (roundtrip-tx-op v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                            (-> {"put" "docs"
-                                 "doc" "blob"
+                            (-> {"into" "docs"
+                                 "putDocs" "blob"
                                  "validFrom" #inst "2020"
                                  "validTo" #inst "2021"}
                                 encode
                                 decode-tx-op))))
 
-  (t/testing "delete"
-    (let [v #xt.tx/delete {:table-name :docs,
-                           :xt/id "my-id",
-                           :valid-from nil,
-                           :valid-to nil}]
+  (t/testing "delete-docs"
+    (let [v #xt.tx/delete-docs {:table-name :docs,
+                                :doc-ids ["my-id"],
+                                :valid-from nil,
+                                :valid-to nil}]
       (t/is (= v (roundtrip-tx-op v))))
 
-    (let [v #xt.tx/delete {:table-name :docs,
-                           :xt/id :keyword-id,
-                           :valid-from nil,
-                           :valid-to nil}]
+    (let [v #xt.tx/delete-docs {:table-name :docs,
+                                :doc-ids [:keyword-id],
+                                :valid-from nil,
+                                :valid-to nil}]
 
       (t/is (= v (roundtrip-tx-op v))))
 
-    (let [v #xt.tx/delete {:table-name :docs,
-                           :xt/id "my-id",
-                           :valid-from #time/instant "2020-01-01T00:00:00Z",
-                           :valid-to #time/instant "2021-01-01T00:00:00Z"}]
+    (let [v #xt.tx/delete-docs {:table-name :docs,
+                                :doc-ids ["my-id"],
+                                :valid-from #time/instant "2020-01-01T00:00:00Z",
+                                :valid-to #time/instant "2021-01-01T00:00:00Z"}]
       (t/is (= v (roundtrip-tx-op v))))
 
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                            (-> {"delete" "docs"
-                                 "id" "my-id"
+                            (-> {"deleteDocs" ["my-id"]
+                                 "from" "docs"
                                  "valid_from" ["not-a-date"]}
                                 encode
                                 decode-tx-op))))
   (t/testing "erase"
-    (let [v #xt.tx/erase {:table-name :docs,
-                          :xt/id "my-id"}]
+    (let [v #xt.tx/erase-docs {:table-name :docs,
+                               :doc-ids ["my-id"]}]
       (t/is (= v (roundtrip-tx-op v))))
 
-    (let [v #xt.tx/erase {:table-name :docs,
-                          :xt/id :keyword-id}]
+    (let [v #xt.tx/erase-docs {:table-name :docs,
+                               :doc-ids [:keyword-id]}]
       (t/is (= v (roundtrip-tx-op v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                            (-> {"erase" "docs"
-                                 "xt/id" "my-id"}
+                            (-> {"eraseDocs" ["my-id"]
+                                 "frmo" "docs"}
                                 encode
-                                decode-tx-op))))
+                                decode-tx-op))
+          "unknown key"))
 
   (t/testing "call"
     (let [v #xt.tx/call {:fn-id :my-fn
@@ -187,17 +188,17 @@
   (JsonSerde/decode s TxRequest))
 
 (deftest deserialize-tx-test
-  (let [v (TxRequest. [#xt.tx/put {:table-name :docs,
-                                   :docs [{"xt/id" "my-id"}],
-                                   :valid-from nil,
-                                   :valid-to nil}],
+  (let [v (TxRequest. [#xt.tx/put-docs {:table-name :docs,
+                                        :docs [{"xt/id" "my-id"}],
+                                        :valid-from nil,
+                                        :valid-to nil}],
                       (TxOptions.))]
     (t/is (= v (roundtrip-tx v))))
 
-  (let [v (TxRequest. [#xt.tx/put {:table-name :docs,
-                                   :docs [{"xt/id" "my-id"}],
-                                   :valid-from nil,
-                                   :valid-to nil}],
+  (let [v (TxRequest. [#xt.tx/put-docs {:table-name :docs,
+                                        :docs [{"xt/id" "my-id"}],
+                                        :valid-from nil,
+                                        :valid-to nil}],
                       (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
                                   #time/zone "America/Los_Angeles"
                                   false))]

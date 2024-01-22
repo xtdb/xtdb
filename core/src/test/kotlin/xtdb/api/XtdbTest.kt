@@ -14,7 +14,7 @@ import xtdb.api.query.XtqlQuery.Companion.from
 import xtdb.api.query.XtqlQuery.Companion.pipeline
 import xtdb.api.query.XtqlQuery.Companion.relation
 import xtdb.api.query.XtqlQuery.Companion.withCols
-import xtdb.api.tx.TxOp.Companion.put
+import xtdb.api.tx.TxOp.Companion.putDocs
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -38,7 +38,7 @@ internal class XtdbTest {
 
     @Test
     fun startsInMemoryNode() {
-        node.submitTx(put("foo", mapOf("xt\$id" to "jms")))
+        node.submitTx(putDocs("foo", mapOf("xt\$id" to "jms")))
 
         assertEquals(
             listOf(mapOf("id" to "jms")),
@@ -59,7 +59,7 @@ internal class XtdbTest {
 
     @Test
     fun `test query opts`() {
-        node.submitTx(put("docs2", mapOf("xt\$id" to 1, "foo" to "bar")))
+        node.submitTx(putDocs("docs2", mapOf("xt\$id" to 1, "foo" to "bar")))
 
         assertEquals(
             listOf(mapOf("myFoo" to "bar")),

@@ -62,9 +62,9 @@
   (^org.apache.arrow.vector.complex.DenseUnionVector indexOp [^long tx-op-idx]
    "returns a tx-ops-vec of more operations (mostly for `:call`)"))
 
-(defn- ->put-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
-                                              ^IVectorReader tx-ops-rdr, ^Instant system-time]
-  (let [put-leg (.legReader tx-ops-rdr :put)
+(defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
+                                                   ^IVectorReader tx-ops-rdr, ^Instant system-time]
+  (let [put-leg (.legReader tx-ops-rdr :put-docs)
         docs-rdr (.structKeyReader put-leg "documents")
         valid-from-rdr (.structKeyReader put-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
@@ -112,11 +112,11 @@
 
         nil))))
 
-(defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
-  (let [delete-leg (.legReader tx-ops-rdr :delete)
+(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
+  (let [delete-leg (.legReader tx-ops-rdr :delete-docs)
         table-rdr (.structKeyReader delete-leg "table")
-        eids-rdr (.structKeyReader delete-leg "eids")
-        eid-rdr (.listElementReader eids-rdr)
+        doc-ids-rdr (.structKeyReader delete-leg "doc-ids")
+        eid-rdr (.listElementReader doc-ids-rdr)
         valid-from-rdr (.structKeyReader delete-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader delete-leg "xt$valid_to")
         current-time-µs (time/instant->micros current-time)]
@@ -135,26 +135,26 @@
                                     {:valid-from (time/micros->instant valid-from)
                                      :valid-to (time/micros->instant valid-to)})))
 
-          (let [eids-start-idx (.getListStartIndex eids-rdr tx-op-idx)]
-            (dotimes [eid-idx (.getListCount eids-rdr tx-op-idx)]
-              (let [eid-idx (+ eids-start-idx eid-idx)
+          (let [doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
+            (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
+              (let [eid-idx (+ doc-ids-start-idx eid-idx)
                     eid (.getObject eid-rdr eid-idx)]
                 (.logDelete live-table (trie/->iid eid) valid-from valid-to)))))
 
         nil))))
 
-(defn- ->erase-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
-  (let [erase-leg (.legReader tx-ops-rdr :erase)
+(defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
+  (let [erase-leg (.legReader tx-ops-rdr :erase-docs)
         table-rdr (.structKeyReader erase-leg "table")
-        eids-rdr (.structKeyReader erase-leg "eids")
-        eid-rdr (.listElementReader eids-rdr)]
+        doc-ids-rdr (.structKeyReader erase-leg "doc-ids")
+        eid-rdr (.listElementReader doc-ids-rdr)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
               live-table (.liveTable live-idx-tx table)
-              eids-start-idx (.getListStartIndex eids-rdr tx-op-idx)]
-          (dotimes [eid-idx (.getListCount eids-rdr tx-op-idx)]
-            (let [eid-idx (+ eids-start-idx eid-idx)
+              doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
+          (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
+            (let [eid-idx (+ doc-ids-start-idx eid-idx)
                   eid (.getObject eid-rdr eid-idx)]
               (.logErase live-table (trie/->iid eid)))))
 
@@ -395,23 +395,23 @@
           (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
             [:insert query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args)))
+                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                 (wrap-sql-args)))
 
             [:update query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args)))
+                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                 (wrap-sql-args)))
 
             [:delete query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args)))
+                             (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                 (wrap-sql-args)))
 
             [:erase query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                               (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
-                                   (wrap-sql-args)))
+                             (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
+                                 (wrap-sql-args)))
 
             (throw (UnsupportedOperationException. "sql query"))))
 
@@ -564,9 +564,9 @@
 
               (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
                         (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
-                              !put-idxer (delay (->put-indexer live-idx-tx tx-ops-rdr system-time))
-                              !delete-idxer (delay (->delete-indexer live-idx-tx tx-ops-rdr system-time))
-                              !erase-idxer (delay (->erase-indexer live-idx-tx tx-ops-rdr))
+                              !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time))
+                              !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time))
+                              !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr))
                               !call-idxer (delay (->call-indexer allocator ra-src wm-src tx-ops-rdr tx-opts))
                               !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
                               !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
@@ -574,9 +574,9 @@
                             (when-let [more-tx-ops (case (.getLeg tx-ops-rdr tx-op-idx)
                                                      :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
                                                      :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                     :put (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
-                                                     :delete (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
-                                                     :erase (.indexOp ^OpIndexer @!erase-idxer tx-op-idx)
+                                                     :put-docs (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                     :delete-docs (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                     :erase-docs (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
                                                      :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
                                                      :abort (throw abort-exn))]
                               (try

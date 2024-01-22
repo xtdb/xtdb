@@ -214,18 +214,14 @@
 (defn- inst->str [^java.util.Date d] (str (.toInstant d)))
 
 (def json-tx-ops
-  [{"put" "docs"
-    "docs" [{"xt/id" 1}]}
-   {"put" "docs"
-    "docs" [{"xt/id" 2}]}
-   {"delete" "docs"
-    "ids" [1]}
-   {"put" "docs"
-    "docs" [{"xt/id" 3}]
+  [{"putDocs" [{"xt/id" 1}], "into" "docs"}
+   {"putDocs" [{"xt/id" 2}], "into" "docs"}
+   {"deleteDocs" [1], "from" "docs"}
+   {"putDocs" [{"xt/id" 3}]
+    "into" "docs"
     "validFrom" (inst->str #inst "2050")
     "validTo" (inst->str #inst "2051")}
-   {"erase" "docs"
-    "ids" [3]}
+   {"eraseDocs" [3], "from" "docs"}
    {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"}
    {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"}
    {"sql" "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"}
@@ -342,10 +338,10 @@
                        {:basis {:at-tx tx3}}))
               "insert-into"))
 
-      (let [update {"op" {"updateTable" "docs2"
-                          "bindSpecs" [{"xt/id" {"xt:param" "$uid"}}]
-                          "setSpecs" [{"version" 3}]}
-                    "args" [{"uid" 2}]}
+      (let [update {"op" {"update" "docs2"
+                          "bind" [{"xt/id" {"xt:param" "$uid"}}]
+                          "set" [{"version" 3}]}
+                    "argRows" [{"uid" 2}]}
             tx4 (-> (http/request {:accept :transit+json
                                    :as :string
                                    :request-method :post
@@ -361,7 +357,7 @@
               "update"))
 
       (let [delete {"deleteFrom" "docs2"
-                    "bindSpecs" [{"xt/id" 2}]}
+                    "bind" [{"xt/id" 2}]}
             tx5 (-> (http/request {:accept :transit+json
                                    :as :string
                                    :request-method :post
@@ -380,7 +376,7 @@
 
       (xt/submit-tx tu/*node* [[:put :docs2 {:xt/id 3}]])
       (let [erase {"eraseFrom" "docs2"
-                   "bindSpecs" [{"xt/id" 3}]}
+                   "bind" [{"xt/id" 3}]}
             tx6 (-> (http/request {:accept :transit+json
                                    :as :string
                                    :request-method :post
@@ -396,7 +392,7 @@
 
       ;; using docs in combination with docs3
       (let [assert+put [{"assertExists" {"from" "docs", "bind" ["xt/id"]}}
-                        {"put" "docs3" "docs" [{"xt/id" 1}]}]
+                        {"into" "docs3" "putDocs" [{"xt/id" 1}]}]
             tx7 (-> (http/request {:accept :transit+json
                                    :as :string
                                    :request-method :post
@@ -410,7 +406,7 @@
               "assert-exists"))
 
       (let [assert+put [{"assertNotExists" {"from" "docs2", "bind" ["xt/id"]}}
-                        {"delete" "docs3" "ids" [1]}]
+                        {"from" "docs3", "deleteDocs" [1]}]
             tx7 (-> (http/request {:accept :transit+json
                                    :as :string
                                    :request-method :post

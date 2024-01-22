@@ -14,7 +14,7 @@
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn XtqlQuery)
-           (xtdb.api.tx Call Delete Erase Put Sql TxOp TxOptions Xtql XtqlAndArgs)
+           (xtdb.api.tx Call DeleteDocs EraseDocs PutDocs Sql TxOp TxOptions Xtql XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -68,7 +68,7 @@
 
 (defn sql-op-reader [{:keys [sql ^List arg-rows]}]
   (-> (TxOp/sql sql)
-      (.withArgs arg-rows)))
+      (.argRows arg-rows)))
 
 (defmethod print-dup Sql [op ^Writer w]
   (.write w (format "#xt.tx/sql %s" (pr-str (render-sql-op op)))))
@@ -86,7 +86,7 @@
   (print-dup op w))
 
 (defn- render-xtql+args [^XtqlAndArgs op]
-  (into (tx-ops/unparse-tx-op (.op op)) (.args op)))
+  (into (tx-ops/unparse-tx-op (.op op)) (.argRows op)))
 
 (defmethod print-dup XtqlAndArgs [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql+args op)))))
@@ -97,45 +97,45 @@
 (defn xtql-reader [xtql]
   (tx-ops/parse-tx-op xtql))
 
-(defn- render-put-op [^Put op]
+(defn- render-put-docs-op [^PutDocs op]
   {:table-name (keyword (.tableName op)), :docs (vec (.docs op))
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
-(defmethod print-dup Put [op ^Writer w]
-  (.write w (format "#xt.tx/put %s" (pr-str (render-put-op op)))))
+(defmethod print-dup PutDocs [op ^Writer w]
+  (.write w (format "#xt.tx/put-docs %s" (pr-str (render-put-docs-op op)))))
 
-(defmethod print-method Put [op ^Writer w]
+(defmethod print-method PutDocs [op ^Writer w]
   (print-dup op w))
 
-(defn put-op-reader [{:keys [table-name ^List docs valid-from valid-to]}]
-  (-> (TxOp/put (str (symbol table-name)) docs)
+(defn put-docs-reader [{:keys [table-name ^List docs valid-from valid-to]}]
+  (-> (TxOp/putDocs (str (symbol table-name)) docs)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
-(defn- render-delete-op [^Delete op]
-  {:table-name (keyword (.tableName op)), :eids (vec (.entityIds op))
+(defn- render-delete-docs [^DeleteDocs op]
+  {:table-name (keyword (.tableName op)), :doc-ids (vec (.docIds op))
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
-(defmethod print-dup Delete [op ^Writer w]
-  (.write w (format "#xt.tx/delete %s" (pr-str (render-delete-op op)))))
+(defmethod print-dup DeleteDocs [op ^Writer w]
+  (.write w (format "#xt.tx/delete-docs %s" (pr-str (render-delete-docs op)))))
 
-(defmethod print-method Delete [op ^Writer w]
+(defmethod print-method DeleteDocs [op ^Writer w]
   (print-dup op w))
 
-(defn delete-op-reader [{:keys [table-name eids valid-from valid-to]}]
-  (-> (TxOp/delete (str (symbol table-name)) ^List (vec eids))
+(defn delete-docs-reader [{:keys [table-name doc-ids valid-from valid-to]}]
+  (-> (TxOp/deleteDocs (str (symbol table-name)) ^List (vec doc-ids))
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
-(defn- render-erase-op [^Erase op]
-  {:table-name (keyword (.tableName op)), :eids (vec (.entityIds op))})
+(defn- render-erase-docs [^EraseDocs op]
+  {:table-name (keyword (.tableName op)), :doc-ids (vec (.docIds op))})
 
-(defmethod print-dup Erase [op ^Writer w]
-  (.write w (format "#xt.tx/erase %s" (pr-str (render-erase-op op)))))
+(defmethod print-dup EraseDocs [op ^Writer w]
+  (.write w (format "#xt.tx/erase-docs %s" (pr-str (render-erase-docs op)))))
 
-(defmethod print-method Erase [op ^Writer w]
+(defmethod print-method EraseDocs [op ^Writer w]
   (print-dup op w))
 
-(defn erase-op-reader [{:keys [table-name eids]}]
-  (TxOp/erase (str (symbol table-name)) ^List (vec eids)))
+(defn erase-docs-reader [{:keys [table-name doc-ids]}]
+  (TxOp/eraseDocs (str (symbol table-name)) ^List (vec doc-ids)))
 
 (defn- render-call-op [^Call op]
   {:fn-id (.fnId op), :args (.args op)})
@@ -240,9 +240,9 @@
           "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
           "xtdb.tx/sql" (transit/read-handler sql-op-reader)
           "xtdb.tx/xtql" (transit/read-handler xtql-reader)
-          "xtdb.tx/put" (transit/read-handler put-op-reader)
-          "xtdb.tx/delete" (transit/read-handler delete-op-reader)
-          "xtdb.tx/erase" (transit/read-handler erase-op-reader)
+          "xtdb.tx/put" (transit/read-handler put-docs-reader)
+          "xtdb.tx/delete" (transit/read-handler delete-docs-reader)
+          "xtdb.tx/erase" (transit/read-handler erase-docs-reader)
           "xtdb.tx/call" (transit/read-handler call-op-reader)
           "xtdb/tx-opts" (transit/read-handler tx-opts-read-fn)}))
 
@@ -295,7 +295,7 @@
           XtqlAndArgs (transit/write-handler "xtdb.tx/xtql" render-xtql+args)
           Xtql (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
 
-          Put (transit/write-handler "xtdb.tx/put" render-put-op)
-          Delete (transit/write-handler "xtdb.tx/delete" render-delete-op)
-          Erase (transit/write-handler "xtdb.tx/erase" render-erase-op)
+          PutDocs (transit/write-handler "xtdb.tx/put" render-put-docs-op)
+          DeleteDocs (transit/write-handler "xtdb.tx/delete" render-delete-docs)
+          EraseDocs (transit/write-handler "xtdb.tx/erase" render-erase-docs)
           Call (transit/write-handler "xtdb.tx/call" render-call-op)}))

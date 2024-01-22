@@ -11,7 +11,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static xtdb.api.query.XtqlQuery.*;
-import static xtdb.api.tx.TxOp.put;
+import static xtdb.api.tx.TxOp.putDocs;
 import static xtdb.api.tx.TxOptions.txOpts;
 
 class IXtdbJavaTest {
@@ -30,7 +30,7 @@ class IXtdbJavaTest {
     @Test
     void javaApiTest() {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
-            put("docs", Map.of("xt$id", 1, "foo", "bar")));
+            putDocs("docs", Map.of("xt$id", 1, "foo", "bar")));
 
         try (var res = node.openQuery(
             from("docs").bindCols("xt$id", "xt$system_from").build())) {

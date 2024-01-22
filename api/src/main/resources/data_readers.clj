@@ -12,7 +12,7 @@
 
  xt.tx/sql xtdb.serde/sql-op-reader
  xt.tx/xtql xtdb.serde/xtql-reader
- xt.tx/put xtdb.serde/put-op-reader
- xt.tx/delete xtdb.serde/delete-op-reader
- xt.tx/erase xtdb.serde/erase-op-reader
+ xt.tx/put-docs xtdb.serde/put-docs-reader
+ xt.tx/delete-docs xtdb.serde/delete-docs-reader
+ xt.tx/erase-docs xtdb.serde/erase-docs-reader
  xt.tx/call xtdb.serde/call-op-reader}

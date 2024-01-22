@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [jsonista.core :as json]
-            [xtdb.api :as xt]
             [xtdb.log :as log]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]

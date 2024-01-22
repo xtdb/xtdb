@@ -37,7 +37,7 @@ components:
           $ref: '#/components/schemas/TransactionKey'
         latestSubmittedTx:
           $ref: '#/components/schemas/TransactionKey'
-    TabelName:
+    TableName:
       type: string
       example: "docs"
       description: tabel name
@@ -67,44 +67,51 @@ components:
         items:
           schema:
             $ref: '#/components/schemas/Any'
-    Put:
+    PutDocs:
       description: put transaction operation
       type: object
       properties:
-        put:
-          $ref: '#/components/schemas/TabelName'
-        doc:
-          $ref: '#/components/schemas/Document'
+        putDocs:
+          type: array
+          items:
+            schema:
+            $ref: '#/components/schemas/Document'
+        from:
+          $ref: '#/components/schemas/TableName'
         validFrom:
           $ref: '#/components/schemas/Instant'
         validTo:
           $ref: '#/components/schemas/Instant'
-    Delete:
+    DeleteDocs:
       description: delete transaction operation
       type: object
       properties:
-        delete:
+        deleteDocs:
+          type: array
+          items:
+            schema:
+              $ref: '#/components/schemas/Id'
+        from:
           schema:
-            $ref: '#/components/schemas/TabelName'
-        id:
-          schema:
-            $ref: '#/components/schemas/Id'
+            $ref: '#/components/schemas/TableName'
         validFrom:
           schema:
             $ref: '#/components/schemas/Instant'
         validTo:
           schema:
             $ref: '#/components/schemas/Instant'
-    Erase:
+    EraseDocs:
       description: erase transaction operation
       type: object
       properties:
-        erase:
+        eraseDocs:
+          type: array
+          items:
+            schema:
+              $ref: '#/components/schemas/Id'
+        from:
           schema:
-            $ref: '#/components/schemas/TabelName'
-        id:
-          schema:
-            $ref: '#/components/schemas/Id'
+            $ref: '#/components/schemas/TableName'
     SQL:
       description: sql transaction operation
       type: object
@@ -130,23 +137,23 @@ components:
       type: object
       properties:
         insertInto:
-          $ref: '#/components/schemas/TabelName'
+          $ref: '#/components/schemas/TableName'
         query:
           $ref: '#/components/schemas/Query'
     UpdateTable:
       type: object
       properties:
-        updateTable:
-          $ref: '#/components/schemas/TabelName'
-        setSpecs:
+        update:
+          $ref: '#/components/schemas/TableName'
+        set:
           $ref: '#/components/schemas/Bindings'
         forValidTime:
           nullable: true
           $ref: '#/components/schemas/TemporalExtents'
-        bindSpecs:
+        bind:
           nullable: true
           $ref: '#/components/schemas/Bindings'
-        unifyClauses:
+        unify:
           nullable: true
           type: array
           items:
@@ -155,14 +162,14 @@ components:
       type: object
       properties:
         deleteFrom:
-          $ref: '#/components/schemas/TabelName'
+          $ref: '#/components/schemas/TableName'
         forValidTime:
           nullable: true
           $ref: '#/components/schemas/TemporalExtents'
-        bindSpecs:
+        bind:
           nullable: true
           $ref: '#/components/schemas/Bindings'
-        unifyClauses:
+        unify:
           nullable: true
           type: array
           items:
@@ -171,11 +178,11 @@ components:
       type: object
       properties:
         eraseFrom:
-          $ref: '#/components/schemas/TabelName'
-        bindSpecs:
+          $ref: '#/components/schemas/TableName'
+        bind:
           nullable: true
           $ref: '#/components/schemas/Bindings'
-        unifyClauses:
+        unify:
           nullable: true
           type: array
           items:
@@ -506,7 +513,7 @@ components:
       type: object
       properties:
         from:
-          $ref: '#/components/schemas/TabelName'
+          $ref: '#/components/schemas/TableName'
         bind:
           $ref: '#/components/schemas/Bindings'
         forValidTime:

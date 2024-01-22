@@ -517,7 +517,7 @@
 
                     (t/is (<= (.getTxId first-half-tx-key)
                               (.getTxId (-> first-half-tx-key
-                                         (tu/then-await-tx node (Duration/ofSeconds 10))))
+                                            (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (.getTxId second-half-tx-key)))
 
                     (t/is (= :utf8
@@ -580,8 +580,8 @@
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]
-    (with-redefs [idx/->put-indexer (fn [& _args]
-                                      (throw e))
+    (with-redefs [idx/->put-docs-indexer (fn [& _args]
+                                           (throw e))
                   log/log* (let [log* log/log*]
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)

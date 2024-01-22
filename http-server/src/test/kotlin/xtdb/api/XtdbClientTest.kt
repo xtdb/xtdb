@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb.openNode
 import xtdb.api.query.XtqlQuery.Companion.from
-import xtdb.api.tx.TxOp.Companion.put
+import xtdb.api.tx.TxOp.Companion.putDocs
 import java.net.URL
 
 internal class XtdbClientTest {
@@ -12,7 +12,7 @@ internal class XtdbClientTest {
     fun startsRemoteNode() {
         openNode { httpServer() }.use { _ ->
             XtdbClient.openClient(URL("http://localhost:3000")).use { client ->
-                client.submitTx(put("foo", mapOf("xt/id" to "jms")))
+                client.submitTx(putDocs("foo", mapOf("xt/id" to "jms")))
 
                 assertEquals(
                     listOf(mapOf("id" to "jms")),

@@ -156,11 +156,11 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeTxOp() {
-        TxOp.put("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
+        TxOp.putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
             .assertRoundTripTxOp(
                 """{
-                  "put": "foo",
-                  "docs": [{
+                  "into": "foo",
+                  "putDocs": [{
                     "xt/id": "foo",
                     "bar": {
                       "@type": "xt:instant",
@@ -170,13 +170,13 @@ class JsonSerdeTest {
                 }
                 """.trimJson()
             )
-        TxOp.put("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
+        TxOp.putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
             .startingFrom(Instant.EPOCH)
             .until(Instant.parse("2023-01-01T12:34:56.789Z"))
             .assertRoundTripTxOp(
                 """{
-                  "put": "foo",
-                  "docs": [{
+                  "into": "foo",
+                  "putDocs": [{
                     "xt/id": "foo",
                       "bar": {
                         "@type": "xt:instant",
@@ -204,9 +204,9 @@ class JsonSerdeTest {
         Xtql.update("foo", listOf(Binding("version", Expr.`val`(1L)))).binding(listOf(Binding("xt/id")))
             .assertRoundTripTxOp(
                 """{
-                    "updateTable": "foo",
-                    "setSpecs":[{"version":1}],
-                    "bindSpecs":[{"xt/id":{"xt:lvar":"xt/id"}}]
+                    "update": "foo",
+                    "bind":[{"xt/id":{"xt:lvar":"xt/id"}}],
+                    "set":[{"version":1}]
                     }
                 """.trimJson()
             )
@@ -214,9 +214,9 @@ class JsonSerdeTest {
         Xtql.update("foo", listOf(Binding("version", Expr.TRUE))).binding(listOf(Binding("xt/id")))
             .assertRoundTripTxOp(
                 """{
-                    "updateTable": "foo",
-                    "setSpecs":[{"version":true}],
-                    "bindSpecs":[{"xt/id":{"xt:lvar":"xt/id"}}]
+                    "update": "foo",
+                    "bind":[{"xt/id":{"xt:lvar":"xt/id"}}],
+                    "set":[{"version":true}]
                     }
                 """.trimJson()
             )

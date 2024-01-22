@@ -10,7 +10,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static xtdb.api.HttpServerModule.httpServer;
 import static xtdb.api.query.XtqlQuery.*;
-import static xtdb.api.tx.TxOp.put;
+import static xtdb.api.tx.TxOp.putDocs;
 
 public class XtdbClientJavaTest {
     @Test
@@ -20,7 +20,7 @@ public class XtdbClientJavaTest {
 
              var client = XtdbClient.openClient(new URL("http://localhost:3000"))) {
 
-            client.submitTx(put("foo", Map.of("xt/id", "jms")));
+            client.submitTx(putDocs("foo", Map.of("xt/id", "jms")));
 
             try (var res = client.openQuery(
                 from("foo").bind("xt/id", "id").build())) {

@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.log Log LogFactory LogRecord LogSubscriber)
-           (xtdb.api.tx Abort Call Delete Erase Put Sql SqlByteArgs Xtql XtqlAndArgs)
+           (xtdb.api.tx Abort Call DeleteDocs EraseDocs PutDocs Sql SqlByteArgs Xtql XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -168,7 +168,7 @@
       (.startStruct xtql-writer)
       (vw/write-value! (ClojureForm. (.op op+args)) xtql-op-writer)
 
-      (when-let [arg-rows (.args op+args)]
+      (when-let [arg-rows (.argRows op+args)]
         (util/with-open [args-wtr (vw/->vec-writer allocator "args" (FieldType/notNullable #xt.arrow/type :struct))]
           (doseq [arg-row arg-rows]
             (vw/write-value! arg-row args-wtr))
@@ -244,12 +244,12 @@
       (.endStruct sql-writer))))
 
 (defn- ->put-writer [^IVectorWriter op-writer]
-  (let [put-writer (.legWriter op-writer :put (FieldType/notNullable #xt.arrow/type :struct))
+  (let [put-writer (.legWriter op-writer :put-docs (FieldType/notNullable #xt.arrow/type :struct))
         doc-writer (.structKeyWriter put-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
         valid-from-writer (.structKeyWriter put-writer "xt$valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.structKeyWriter put-writer "xt$valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
-    (fn write-put! [^Put op]
+    (fn write-put! [^PutDocs op]
       (.startStruct put-writer)
       (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/str->normal-form-str (.tableName op))
                                                (util/->jfn
@@ -265,18 +265,18 @@
       (.endStruct put-writer))))
 
 (defn- ->delete-writer [^IVectorWriter op-writer]
-  (let [delete-writer (.legWriter op-writer :delete (FieldType/notNullable #xt.arrow/type :struct))
+  (let [delete-writer (.legWriter op-writer :delete-docs (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        eids-writer (.structKeyWriter delete-writer "eids" (FieldType/notNullable #xt.arrow/type :list))
+        doc-ids-writer (.structKeyWriter delete-writer "doc-ids" (FieldType/notNullable #xt.arrow/type :list))
         valid-from-writer (.structKeyWriter delete-writer "xt$valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.structKeyWriter delete-writer "xt$valid_to" types/nullable-temporal-field-type)]
-    (fn write-delete! [^Delete op]
-      (when-let [eids (not-empty (.entityIds op))]
+    (fn write-delete! [^DeleteDocs op]
+      (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct delete-writer)
 
         (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
 
-        (vw/write-value! (vec eids) eids-writer)
+        (vw/write-value! (vec doc-ids) doc-ids-writer)
 
         (vw/write-value! (.validFrom op) valid-from-writer)
         (vw/write-value! (.validTo op) valid-to-writer)
@@ -284,15 +284,15 @@
         (.endStruct delete-writer)))))
 
 (defn- ->erase-writer [^IVectorWriter op-writer]
-  (let [erase-writer (.legWriter op-writer :erase (FieldType/notNullable #xt.arrow/type :struct))
+  (let [erase-writer (.legWriter op-writer :erase-docs (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        eids-writer (.structKeyWriter erase-writer "eids" (FieldType/notNullable #xt.arrow/type :list))]
-    (fn [^Erase op]
-      (when-let [eids (not-empty (.entityIds op))]
+        doc-ids-writer (.structKeyWriter erase-writer "doc-ids" (FieldType/notNullable #xt.arrow/type :list))]
+    (fn [^EraseDocs op]
+      (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct erase-writer)
         (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
 
-        (vw/write-value! (vec eids) eids-writer)
+        (vw/write-value! (vec doc-ids) doc-ids-writer)
 
         (.endStruct erase-writer)))))
 
@@ -336,9 +336,9 @@
         Xtql (@!write-xtql! tx-op)
         Sql (@!write-sql! tx-op)
         SqlByteArgs (@!write-sql-byte-args! tx-op)
-        Put (@!write-put! tx-op)
-        Delete (@!write-delete! tx-op)
-        Erase (@!write-erase! tx-op)
+        PutDocs (@!write-put! tx-op)
+        DeleteDocs (@!write-delete! tx-op)
+        EraseDocs (@!write-erase! tx-op)
         Call (@!write-call! tx-op)
         Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
