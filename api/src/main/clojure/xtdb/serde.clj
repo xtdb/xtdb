@@ -236,7 +236,6 @@
           "xtdb.interval/year-month" interval-ym-reader
           "xtdb.interval/day-time" interval-dt-reader
           "xtdb.interval/month-day-nano" interval-mdn-reader
-          "xtdb/list" (transit/read-handler edn/read-string)
           "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
           "xtdb.tx/sql" (transit/read-handler sql-op-reader)
           "xtdb.tx/xtql" (transit/read-handler xtql-reader)
@@ -286,8 +285,6 @@
           IntervalMonthDayNano (transit/write-handler "xtdb.interval/month-day-nano"
                                                       #(vector (str (.period ^IntervalMonthDayNano %))
                                                                (str (.duration ^IntervalMonthDayNano %))))
-          clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))
-
           XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
 
           Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
