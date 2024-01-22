@@ -10,9 +10,13 @@ import xtdb.ZoneIdSerde
 import xtdb.api.log.LogFactory
 import xtdb.api.storage.StorageFactory
 import xtdb.util.requiringResolve
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Duration
 import java.time.ZoneId
 import java.time.ZoneOffset
+import kotlin.io.path.extension
 
 object Xtdb {
     private val OPEN_NODE: IFn = requiringResolve("xtdb.node.impl", "open-node")
@@ -67,6 +71,21 @@ object Xtdb {
     @JvmOverloads
     fun openNode(config: Config = Config()) = config.open()
 
+    @JvmStatic
+    fun openNode(path: Path): IXtdb {
+        if (path.extension != "yaml") {
+            throw IllegalArgumentException("Invalid config file type - must be '.yaml'")
+        } else if (!path.toFile().exists()) {
+            throw IllegalArgumentException("Provided config file does not exist")
+        }
+
+        val yamlString = Files.readString(path)
+        val config = nodeConfig(yamlString)
+
+        return config.open()
+    }
+
     @JvmSynthetic
     fun openNode(build: Config.() -> Unit) = openNode(Config().also(build))
+
 }

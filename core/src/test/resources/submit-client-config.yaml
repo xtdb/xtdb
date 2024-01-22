@@ -1,0 +1,3 @@
+defaultTz: "America/Los_Angeles"
+txLog: !Local
+  path: /tmp/test-log

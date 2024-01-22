@@ -1,0 +1,9 @@
+defaultTz: "America/Los_Angeles"
+txLog: !Local
+  path: /tmp/test-log
+indexer:
+  logLimit: 65
+  flushDuration: PT4H
+storage: !Local
+  path: /tmp/test-storage
+  maxCacheEntries: 1025
