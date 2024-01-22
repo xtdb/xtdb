@@ -10,7 +10,7 @@ import xtdb.api.storage.LocalStorageFactory
 import xtdb.api.storage.RemoteStorageFactory
 import java.nio.file.Paths
 
-class YamlConfigDecoderTest {
+class YamlSerdeTest {
     @Test
     fun testDecoder() {
         val input = """

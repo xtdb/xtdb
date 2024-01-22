@@ -1,4 +1,4 @@
-@file:JvmName("YamlConfigDecoder")
+@file:JvmName("YamlSerde")
 
 package xtdb.api
 
@@ -13,10 +13,7 @@ import kotlinx.serialization.serializer
 import xtdb.api.log.InMemoryLogFactory
 import xtdb.api.log.LocalLogFactory
 import xtdb.api.log.LogFactory
-import xtdb.api.storage.InMemoryStorageFactory
-import xtdb.api.storage.LocalStorageFactory
 import xtdb.api.storage.ObjectStoreFactory
-import xtdb.api.storage.StorageFactory
 import java.util.ServiceLoader
 import java.util.ServiceLoader.Provider
 import kotlin.reflect.KClass
