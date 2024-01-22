@@ -11,18 +11,14 @@ import kotlinx.serialization.json.*
 import xtdb.IllegalArgumentException
 import xtdb.jsonIAE
 
-object TemporalFilterSerializer : KSerializer<TemporalFilter> {
+
+object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalExtents> {
     override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.query.TemporalFilter")
 
-    override fun serialize(encoder: Encoder, value: TemporalFilter) {
+    override fun serialize(encoder: Encoder, value: TemporalFilter.TemporalExtents) {
         require(encoder is JsonEncoder)
         when (value) {
             is TemporalFilter.AllTime -> encoder.encodeString("allTime")
-            is TemporalFilter.At -> encoder.encodeJsonElement(
-                buildJsonObject {
-                    put("at", encoder.json.encodeToJsonElement(value.at))
-                })
-
             is TemporalFilter.In -> encoder.encodeJsonElement(
                 when {
                     value.to != null && value.from != null -> {
@@ -44,10 +40,10 @@ object TemporalFilterSerializer : KSerializer<TemporalFilter> {
         }
     }
 
-    override fun deserialize(decoder: Decoder): TemporalFilter {
+    fun deserialize(decoder: Decoder, element: JsonElement) : TemporalFilter.TemporalExtents {
         require(decoder is JsonDecoder)
 
-        return when (val element = decoder.decodeJsonElement()) {
+        return when (element) {
             is JsonPrimitive -> when {
                 element.isString -> element.contentOrNull?.let {
                     if (it == "allTime") TemporalFilter.ALL_TIME
@@ -58,12 +54,6 @@ object TemporalFilterSerializer : KSerializer<TemporalFilter> {
             }
 
             is JsonObject -> when {
-                "at" in element -> TemporalFilter.at(
-                    decoder.json.decodeFromJsonElement<Expr>(
-                        element["at"] ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
-                    )
-                )
-
                 "from" in element -> TemporalFilter.from(
                     decoder.json.decodeFromJsonElement<Expr>(
                         element["from"] ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
@@ -93,23 +83,68 @@ object TemporalFilterSerializer : KSerializer<TemporalFilter> {
 
             else -> throw jsonIAE("xtql/malformed-temporal-filter", element)
         }
+
+    }
+
+    override fun deserialize(decoder: Decoder): TemporalFilter.TemporalExtents {
+        require(decoder is JsonDecoder)
+        return deserialize(decoder, decoder.decodeJsonElement())
+    }
+}
+
+
+object TemporalFilterSerializer : KSerializer<TemporalFilter> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.query.TemporalFilter")
+
+    override fun serialize(encoder: Encoder, value: TemporalFilter) {
+        require(encoder is JsonEncoder)
+        when (value) {
+            is TemporalFilter.At -> encoder.encodeJsonElement(
+                buildJsonObject {
+                    put("at", encoder.json.encodeToJsonElement(value.at))
+                })
+
+            else -> TemporalExtentsSerializer.serialize(encoder, value as TemporalFilter.TemporalExtents)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): TemporalFilter {
+        require(decoder is JsonDecoder)
+
+        return when (val element = decoder.decodeJsonElement()) {
+            is JsonObject -> when {
+                "at" in element -> TemporalFilter.at(
+                    decoder.json.decodeFromJsonElement<Expr>(
+                        element["at"] ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
+                    )
+                )
+                else -> TemporalExtentsSerializer.deserialize(decoder, element)
+            }
+
+            else -> TemporalExtentsSerializer.deserialize(decoder, element)
+        }
     }
 }
 
 @Serializable(TemporalFilterSerializer::class)
 sealed interface TemporalFilter {
+
+    @Serializable(TemporalExtentsSerializer::class)
     sealed interface TemporalExtents : TemporalFilter {
         val from: Expr?
         val to: Expr?
     }
 
+    @Serializable
     object AllTime : TemporalFilter, TemporalExtents {
         override val from = null
         override val to = null
     }
 
+    @Serializable
     data class At(val at: Expr) : TemporalFilter
 
+    @Serializable
     data class In(override val from: Expr?, override val to: Expr?) : TemporalFilter, TemporalExtents
 
     companion object {

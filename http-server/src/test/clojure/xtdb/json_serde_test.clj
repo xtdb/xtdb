@@ -171,6 +171,11 @@
                        :unify [(from :users [version])]}]]
       (t/is (= v (roundtrip-edn-tx-op v))))
 
+    (let [v [:delete '{:from :users
+                       :bind [{:promotion-type "christmas"}]
+                       :for-valid-time (in #time/instant "2023-12-26T00:00:00Z" nil)}]]
+      (t/is (= v (roundtrip-edn-tx-op v))))
+
     (let [v [:erase '{:from :users, :bind [{:xt/id $uid} version], :unify [(from :users [version])]}]]
       (t/is (= v (roundtrip-edn-tx-op v))))
 
@@ -179,7 +184,6 @@
 
     (let [v [:assert-not-exists '(from :users [xt/id])]]
       (t/is (= v (roundtrip-edn-tx-op v))))))
-
 
 (defn- roundtrip-tx [v]
   (-> v (JsonSerde/encode TxRequest) (JsonSerde/decode TxRequest)))
