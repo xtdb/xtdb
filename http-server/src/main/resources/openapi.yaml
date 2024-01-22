@@ -123,7 +123,7 @@ components:
         argRows:
           schema:
             $ref: '#/components/schemas/ArgRows'
-    Call:
+    CallOp:
       description: a transaction function call
       type: object
       properties:
@@ -228,7 +228,7 @@ components:
         - $ref: '#/components/schemas/DeleteDocs'
         - $ref: '#/components/schemas/EraseDocs'
         - $ref: '#/components/schemas/Sql'
-        - $ref: '#/components/schemas/Call'
+        - $ref: '#/components/schemas/CallOp'
         - $ref: '#/components/schemas/Insert'
         - $ref: '#/components/schemas/Update'
         - $ref: '#/components/schemas/Delete'
