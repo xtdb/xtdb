@@ -67,8 +67,21 @@ val YAML_SERDE = Yaml(
             }
     })
 
-fun nodeConfig(yamlString: String): Xtdb.Config =
-    YAML_SERDE.decodeFromString<Xtdb.Config>(yamlString)
+fun getEnvVariable(name: String): String? = System.getenv(name)
 
-fun submitClient(yamlString: String): XtdbSubmitClient.Config =
-    YAML_SERDE.decodeFromString<XtdbSubmitClient.Config>(yamlString)
+fun replaceEnvVariables(input: String): String {
+    val envVarPattern = Regex("!Env\\s+(\\w+)")
+    return envVarPattern.replace(input) { matchResult ->
+        val envVarName = matchResult.groupValues[1]
+        getEnvVariable(envVarName) ?: "null"
+    }
+}
+fun nodeConfig(yamlString: String): Xtdb.Config {
+    val yamlWithEnv = replaceEnvVariables(yamlString)
+    return YAML_SERDE.decodeFromString<Xtdb.Config>(yamlWithEnv)
+}
+
+fun submitClient(yamlString: String): XtdbSubmitClient.Config {
+    val yamlWithEnv = replaceEnvVariables(yamlString)
+    return YAML_SERDE.decodeFromString<XtdbSubmitClient.Config>(yamlWithEnv)
+}

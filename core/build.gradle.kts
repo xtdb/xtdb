@@ -47,6 +47,7 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
     api("com.charleskorn.kaml","kaml","0.56.0")
 
+    testImplementation("io.mockk","mockk", "1.13.9")
     testImplementation(project(":http-server"))
     testImplementation(project(":pgwire-server"))
     testImplementation(project(":modules:kafka"))
