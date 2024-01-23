@@ -1,2 +1,5 @@
-xtdb.cli-test/foo:
-  baz: 1
+txLog: !InMemory
+indexer:
+  logLimit: 65
+  flushDuration: PT4H
+storage: !InMemory

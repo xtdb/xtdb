@@ -2,11 +2,18 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as xt]
             [xtdb.cli :as cli]
-            [xtdb.config :as config]))
+            [xtdb.node :as xtn]))
 
 (def xtdb-cli-edn
   (io/resource "xtdb/cli-test.edn"))
+
+(def xtdb-cli-edn-env
+  (io/resource "xtdb/cli-test-env.edn"))
+
+(def xtdb-cli-yaml
+  (io/resource "xtdb/cli-test.yaml"))
 
 (defn with-file-override [files f]
   (with-redefs [io/file (some-fn files io/file)]
@@ -19,6 +26,10 @@
       (f))))
 
 (defmethod ig/init-key ::foo [_ opts] opts)
+
+(t/deftest no-config
+  (t/testing "if no config present via file, returns an empty map as the node-opts"
+    (t/is (= {::cli/node-opts {}} (cli/parse-args [])))))
 
 (t/deftest test-config
   (letfn [(->system [cli-args]
@@ -34,28 +45,11 @@
       (with-file-override {"xtdb.edn" (io/as-file xtdb-cli-edn)}
         (fn []
           (t/is (= {::foo {:bar {}}}
-                   (->system []))))))
-
-    (t/testing "uses config passed in via --edn"
-      (t/is (= {::foo 1}
-               (->system ["--edn" "{:xtdb.cli-test/foo 1}"]))))
-    
-
-    (t/testing "if file config passed in, prefers to edn"
-      (fn []
-        (= {::foo {:baz {}}}
-           (->system ["-f" (str (io/as-file xtdb-cli-edn))
-                      "--edn" "{:xtdb.cli-test/foo 1}"]))))
-    
-    (t/testing "if xtdb.edn present, uses this in place to --edn"
-      (with-file-override {"xtdb.edn" (io/as-file xtdb-cli-edn)}
-        (fn []
-          (= {::foo {:baz {}}}
-             (->system ["--edn" "{:xtdb.cli-test/foo 1}"])))))))
+                   (->system []))))))))
 
 (t/deftest test-env-loading
-  (with-redefs [config/read-env-var (fn [env-name]
-                                      (when (= (str env-name) "TEST_ENV") "hello world"))]
+  (with-redefs [cli/read-env-var (fn [env-name]
+                                   (when (= (str env-name) "TEST_ENV") "hello world"))]
     (letfn [(->system [cli-args]
               (-> (::cli/node-opts (cli/parse-args cli-args))
                   ig/prep
@@ -64,53 +58,36 @@
 
       (t/testing "EDN config - #env reader tag fetches from env"
         (t/is (= {::foo "hello world"}
-                 (->system ["--edn" "{:xtdb.cli-test/foo #env TEST_ENV}"])))))))
+                 (->system ["-f" (str (io/as-file xtdb-cli-edn-env))])))))))
 
 (defmethod ig/init-key ::bar [_ opts] opts)
 
-(t/deftest test-ref-handling
-  (letfn [(->system [cli-args]
-            (-> (::cli/node-opts (cli/parse-args cli-args))
-                ig/prep
-                ig/init
-                (->> (into {}))))]
-    
-    (t/testing "EDN config - #ig/ref reader tag correctly includes ref"
-      (t/is (= {::foo {:baz 1}
-                ::bar {:foo {:baz 1}}}
-               (->system ["--edn" "{:xtdb.cli-test/foo {:baz 1}
-                                    :xtdb.cli-test/bar {:foo #ig/ref :xtdb.cli-test/foo}}"]))))))
-
+;; Expect YAML config file to return the file in `node-opts` - this will get passed to
+;; start-node and subsequently decoded by the Kotlin API
 (t/deftest test-config-yaml
-  (letfn [(->system [cli-args]
-            (-> (::cli/node-opts (cli/parse-args cli-args))
-                ig/prep
-                ig/init
-                (->> (into {}))))]
+  (letfn [(->node-opts [cli-args] (::cli/node-opts (cli/parse-args cli-args)))]
 
-    (t/testing "CLI supplied YAML file outputs proper config"
-      (t/is (= {::foo {:baz 1}}
-               (->system ["-f" (str (io/as-file (io/resource "xtdb/cli-test.yaml")))]))))
+    (t/testing "Explicitly provided YAML file will output specified file-location"
+      (t/is (= (io/file xtdb-cli-yaml)
+               (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))])))) 
 
-    (t/testing "uses xtdb.yaml if present"
-      (with-file-override {"xtdb.yaml" (io/as-file (io/resource "xtdb/cli-test.yaml"))}
+    (t/testing "returns file location of xtdb.yaml if present"
+      (with-file-override {"xtdb.yaml" (io/as-file xtdb-cli-yaml)}
         (fn []
-          (t/is (= {::foo {:baz 1}}
-                   (->system []))))))
+          (t/is (= (io/file (io/resource "xtdb/cli-test.yaml"))
+                   (->node-opts []))))))
     
-    (t/testing "also looks for xtdb.yaml on the classpath"
-      (with-resource-override {"xtdb.yaml" (io/as-file (io/resource "xtdb/cli-test.yaml"))}
+    (t/testing "also returns file location of xtdb.yaml if on the classpath"
+      (with-resource-override {"xtdb.yaml" (io/as-file xtdb-cli-yaml)}
         (fn []
-          (t/is (= {::foo {:baz 1}}
-                   (->system []))))))    
-
-    (t/testing "YAML config fetches env with !Env tag"
-      (with-redefs [config/read-env-var (fn [env-name]
-                                          (when (= (str env-name) "TEST_ENV") "hello world"))]
-        (t/is (= {::foo "hello world"}
-                 (->system ["-f" (str (io/as-file (io/resource "xtdb/cli-test-env.yaml")))])))))
+          (t/is (= (io/file (io/resource "xtdb/cli-test.yaml"))
+                   (->node-opts []))))))
     
-    (t/testing "YAML config handles integrant refs with !Ref tag"
-      (t/is (= {::foo {:baz 1}
-                ::bar {:foo {:baz 1}}}
-               (->system ["-f" (str (io/as-file (io/resource "xtdb/cli-test-ref.yaml")))]))))))
+    (t/testing "node opts passed to start-node passes through yaml file and starts node"
+      (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))]))] 
+        (t/is (= 65 (-> node
+                        (get-in [:system :xtdb.indexer/live-index])
+                        (.log-limit))) 
+              "using provided config")
+        (xt/submit-tx node [[:put :docs {:xt/id :foo}]])
+        (t/is (= [{:e :foo}] (xt/q node '(from :docs [{:xt/id e}]))))))))
