@@ -9,7 +9,7 @@
            (xtdb JsonSerde)
            (xtdb.api TransactionKey)
            (xtdb.api.query Basis Binding Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Exprs
-                           Queries Query QueryOptions QueryRequest Query$SqlQuery TemporalFilter TemporalFilter$AllTime
+                           Queries Query QueryOptions QueryRequest Query$SqlQuery TemporalFilter TemporalFilter$AllTime TemporalFilters
                            XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
@@ -286,16 +286,16 @@
                           (-> "all_times" encode decode-temporal-filter))
         "all-time (wrong format)")
 
-  (let [v (TemporalFilter/at (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
+  (let [v (TemporalFilters/at (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "at"))
 
-  (let [v (TemporalFilter/from (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
+  (let [v (TemporalFilters/from (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "from"))
 
-  (let [v (TemporalFilter/to (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
+  (let [v (TemporalFilters/to (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "to"))
 
-  (let [v (TemporalFilter/in (Exprs/val #time/instant "2020-01-01T00:00:00Z") (Exprs/val #time/instant "2021-01-01T00:00:00Z"))]
+  (let [v (TemporalFilters/in (Exprs/val #time/instant "2020-01-01T00:00:00Z") (Exprs/val #time/instant "2021-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "in"))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtql/malformed-temporal-filter'"
@@ -317,7 +317,7 @@
 
     (let [v (-> (doto (Queries/from "docs")
                   (.setBindings [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
-                  (.forValidTime (TemporalFilter/at (Exprs/val #time/instant "2020-01-01T00:00:00Z")))
+                  (.forValidTime (TemporalFilters/at (Exprs/val #time/instant "2020-01-01T00:00:00Z")))
                   (.forSystemTime TemporalFilter$AllTime/INSTANCE))
                 (.build))]
       (t/is (= v (roundtrip-query v)) "from with temporal bounds"))

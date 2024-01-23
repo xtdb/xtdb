@@ -41,7 +41,6 @@ import xtdb.api.tx.TxOps.putDocs
 import xtdb.api.tx.TxOps.update
 import java.time.*
 import java.util.*
-import kotlin.with as with
 
 class JsonSerdeTest {
 
@@ -315,7 +314,7 @@ class JsonSerdeTest {
             """.trimJson())
         from("docs")
             .bind(Binding("xt/id", lVar("xt/id")))
-            .forValidTime(TemporalFilter.at(`val`(Instant.parse("2020-01-01T00:00:00Z"))))
+            .forValidTime(TemporalFilters.at(`val`(Instant.parse("2020-01-01T00:00:00Z"))))
             .forSystemTime(TemporalFilter.AllTime)
             .build().assertRoundTrip2(
             """{

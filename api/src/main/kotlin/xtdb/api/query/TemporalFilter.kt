@@ -53,13 +53,13 @@ internal object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalE
             }
 
             is JsonObject -> when {
-                "from" in element -> TemporalFilter.from(
+                "from" in element -> TemporalFilters.from(
                     decoder.json.decodeFromJsonElement<Expr>(
                         element["from"] ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
                     )
                 )
 
-                "to" in element -> TemporalFilter.to(
+                "to" in element -> TemporalFilters.to(
                     decoder.json.decodeFromJsonElement<Expr>(
                         element["to"] ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
                     )
@@ -71,7 +71,7 @@ internal object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalE
                         "xtql/malformed-temporal-filter",
                         element
                     )
-                    TemporalFilter.`in`(
+                    TemporalFilters.`in`(
                         decoder.json.decodeFromJsonElement(inElement[0]),
                         decoder.json.decodeFromJsonElement(inElement[1])
                     )
@@ -111,7 +111,7 @@ internal object TemporalFilterSerializer : KSerializer<TemporalFilter> {
 
         return when (val element = decoder.decodeJsonElement()) {
             is JsonObject -> when {
-                "at" in element -> TemporalFilter.at(
+                "at" in element -> TemporalFilters.at(
                     decoder.json.decodeFromJsonElement<Expr>(
                         element["at"] ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
                     )
@@ -144,18 +144,22 @@ sealed interface TemporalFilter {
 
     @Serializable
     data class In(override val from: Expr?, override val to: Expr?) : TemporalFilter, TemporalExtents
+}
 
-    companion object {
-        @JvmStatic
-        fun at(atExpr: Expr) = At(atExpr)
+object TemporalFilters {
 
-        @JvmStatic
-        fun `in`(fromExpr: Expr?, toExpr: Expr?) = In(fromExpr, toExpr)
+    @JvmField
+    val allTime = TemporalFilter.AllTime
 
-        @JvmStatic
-        fun from(fromExpr: Expr?) = In(fromExpr, null)
+    @JvmStatic
+    fun at(atExpr: Expr) = TemporalFilter.At(atExpr)
 
-        @JvmStatic
-        fun to(toExpr: Expr?) = In(null, toExpr)
-    }
+    @JvmStatic
+    fun `in`(fromExpr: Expr?, toExpr: Expr?) = TemporalFilter.In(fromExpr, toExpr)
+
+    @JvmStatic
+    fun from(fromExpr: Expr?) = TemporalFilter.In(fromExpr, null)
+
+    @JvmStatic
+    fun to(toExpr: Expr?) = TemporalFilter.In(null, toExpr)
 }

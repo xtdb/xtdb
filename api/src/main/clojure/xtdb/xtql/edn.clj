@@ -13,7 +13,7 @@
                            XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnionAll XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without
                            XtqlQuery$DocsRelation XtqlQuery$ParamRelation XtqlQuery$OrderDirection XtqlQuery$OrderNulls
                            XtqlQuery$UnnestCol XtqlQuery$UnnestVar
-                           TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
+                           TemporalFilters TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 ;; TODO inline once the type we support is fixed
 (defn- query-type? [q] (seq? q))
@@ -183,7 +183,7 @@
 (defn parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
     (if (= :all-time v)
-      TemporalFilter$AllTime/INSTANCE
+      TemporalFilters/allTime
 
       (do
         (when-not (and (seq? v) (not-empty v))
@@ -200,16 +200,16 @@
                     args)]
             (case tag
               at (let [[at] (assert-arg-count 1 args)]
-                   (TemporalFilter/at (parse-expr at)))
+                   (TemporalFilters/at (parse-expr at)))
 
               in (let [[from to] (assert-arg-count 2 args)]
-                   (TemporalFilter/in (parse-expr from) (parse-expr to)))
+                   (TemporalFilters/in (parse-expr from) (parse-expr to)))
 
               from (let [[from] (assert-arg-count 1 args)]
-                     (TemporalFilter/from (parse-expr from)))
+                     (TemporalFilters/from (parse-expr from)))
 
               to (let [[to] (assert-arg-count 1 args)]
-                   (TemporalFilter/to (parse-expr to)))
+                   (TemporalFilters/to (parse-expr to)))
 
               (throw (err/illegal-arg :xtql/malformed-temporal-filter (into ctx {:tag tag}))))))))))
 
