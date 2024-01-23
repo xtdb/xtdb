@@ -13,24 +13,36 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 
+/**
+ * @suppress
+ */
 object InstantSerde : KSerializer<Instant> {
     override val descriptor = PrimitiveSerialDescriptor("xtdb.instant", PrimitiveKind.STRING)
     override fun serialize(encoder: Encoder, value: Instant) = encoder.encodeString(value.toString())
     override fun deserialize(decoder: Decoder): Instant = Instant.parse(decoder.decodeString())
 }
 
+/**
+ * @suppress
+ */
 object DurationSerde : KSerializer<Duration> {
     override val descriptor = PrimitiveSerialDescriptor("xtdb.duration", PrimitiveKind.STRING)
     override fun serialize(encoder: Encoder, value: Duration) = encoder.encodeString(value.toString())
     override fun deserialize(decoder: Decoder): Duration = Duration.parse(decoder.decodeString())
 }
 
+/**
+ * @suppress
+ */
 object ZoneIdSerde : KSerializer<ZoneId> {
     override val descriptor = PrimitiveSerialDescriptor("xtdb.timezone", PrimitiveKind.STRING)
     override fun serialize(encoder: Encoder, value: ZoneId) = encoder.encodeString(value.toString())
     override fun deserialize(decoder: Decoder): ZoneId = ZoneId.of(decoder.decodeString())
 }
 
+/**
+ * @suppress
+ */
 object PathSerde : KSerializer<Path> {
     override val descriptor = PrimitiveSerialDescriptor("Path", PrimitiveKind.STRING)
 

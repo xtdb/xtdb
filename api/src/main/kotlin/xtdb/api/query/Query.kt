@@ -19,6 +19,9 @@ import xtdb.jsonIAE
 
 @Serializable(Query.Serde::class)
 sealed interface Query{
+    /**
+     * @suppress
+     */
     object Serde : JsonContentPolymorphicSerializer<Query>(Query::class) {
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Query> = when (element) {
             is JsonObject -> when {
@@ -35,6 +38,9 @@ sealed interface Query{
 @Serializable(XtqlQuery.Serde::class)
 sealed interface XtqlQuery : Query {
 
+    /**
+     * @suppress
+     */
     object Serde : JsonContentPolymorphicSerializer<XtqlQuery>(XtqlQuery::class) {
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<XtqlQuery> = when (element) {
             is JsonArray -> Pipeline.serializer()
@@ -52,6 +58,9 @@ sealed interface XtqlQuery : Query {
 
     @Serializable(QueryTail.Serde::class)
     sealed interface QueryTail {
+        /**
+         * @suppress
+         */
         object Serde : JsonContentPolymorphicSerializer<QueryTail>(QueryTail::class) {
             override fun selectDeserializer(element: JsonElement): DeserializationStrategy<QueryTail> = when (element) {
                 is JsonObject -> when {
@@ -74,6 +83,9 @@ sealed interface XtqlQuery : Query {
 
     @Serializable(UnifyClause.Serde::class)
     sealed interface UnifyClause {
+        /**
+         * @suppress
+         */
         object Serde : JsonContentPolymorphicSerializer<UnifyClause>(UnifyClause::class) {
             override fun selectDeserializer(element: JsonElement): DeserializationStrategy<UnifyClause> =
                 when (element) {
@@ -96,7 +108,7 @@ sealed interface XtqlQuery : Query {
 
     @Serializable(Pipeline.Serde::class)
     data class Pipeline(@JvmField val query: XtqlQuery, @JvmField val tails: List<QueryTail>) : XtqlQuery {
-        object Serde : KSerializer<Pipeline> {
+        internal object Serde : KSerializer<Pipeline> {
             override val descriptor: SerialDescriptor =
                 buildClassSerialDescriptor("xtdb.api.query.Query.Pipeline", JsonArray.serializer().descriptor)
 
@@ -249,7 +261,7 @@ sealed interface XtqlQuery : Query {
         fun nullsFirst() = copy(nulls = FIRST)
         fun nullsLast() = copy(nulls = LAST)
 
-        object Serde : KSerializer<OrderSpec> {
+        internal object Serde : KSerializer<OrderSpec> {
             override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.query.Query.OrderSpec")
             override fun serialize(encoder: Encoder, value: OrderSpec) {
                 require(encoder is JsonEncoder)
@@ -317,7 +329,7 @@ sealed interface XtqlQuery : Query {
 
     @Serializable(Relation.Serde::class)
     abstract class Relation : XtqlQuery, UnifyClause {
-        object Serde : JsonContentPolymorphicSerializer<Relation>(Relation::class) {
+        internal object Serde : JsonContentPolymorphicSerializer<Relation>(Relation::class) {
             override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Relation> = when (element) {
                 is JsonObject -> when {
                     "rel" in element ->
@@ -354,7 +366,7 @@ sealed interface XtqlQuery : Query {
     @Serializable
     data class UnnestCol(@JvmField @SerialName("unnest") val col: Binding) : QueryTail
 
-    companion object {
+    companion object Queries {
         @JvmStatic
         fun pipeline(query: XtqlQuery, tails: List<QueryTail>) = Pipeline(query, tails)
 

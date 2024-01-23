@@ -183,7 +183,7 @@
 (defn parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
     (if (= :all-time v)
-      TemporalFilter/ALL_TIME
+      TemporalFilter$AllTime/INSTANCE
 
       (do
         (when-not (and (seq? v) (not-empty v))

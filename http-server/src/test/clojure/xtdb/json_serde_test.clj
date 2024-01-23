@@ -8,7 +8,7 @@
            (java.util List)
            (xtdb JsonSerde)
            (xtdb.api TransactionKey)
-           (xtdb.api.query Basis Binding Expr Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Query Query$SqlQuery QueryOptions QueryRequest TemporalFilter XtqlQuery XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
+           (xtdb.api.query Basis Binding Expr Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Query Query$SqlQuery QueryOptions QueryRequest TemporalFilter TemporalFilter$AllTime XtqlQuery XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn- encode [v]
@@ -277,7 +277,7 @@
   (JsonSerde/decode s TemporalFilter))
 
 (deftest deserialize-temporal-filter-test
-  (t/is (= TemporalFilter/ALL_TIME (roundtrip-temporal-filter TemporalFilter/ALL_TIME)) "all-time")
+  (t/is (= TemporalFilter$AllTime/INSTANCE (roundtrip-temporal-filter TemporalFilter$AllTime/INSTANCE)) "all-time")
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtql/malformed-temporal-filter'"
                           (-> "all_times" encode decode-temporal-filter))
@@ -315,7 +315,7 @@
     (let [v (-> (doto (XtqlQuery/from "docs")
                   (.setBindings [(Binding. "xt/id" (Expr/lVar "xt/id"))])
                   (.forValidTime (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z")))
-                  (.forSystemTime TemporalFilter/ALL_TIME))
+                  (.forSystemTime TemporalFilter$AllTime/INSTANCE))
                 (.build))]
       (t/is (= v (roundtrip-query v)) "from with temporal bounds"))
 

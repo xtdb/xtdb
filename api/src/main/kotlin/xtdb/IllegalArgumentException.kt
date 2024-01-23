@@ -7,6 +7,9 @@ import clojure.lang.PersistentHashMap
 
 private val ERROR_KEY: Keyword = Keyword.intern("xtdb.error", "error-key")
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 data class IllegalArgumentException(
     val key: Keyword?,
@@ -18,6 +21,9 @@ data class IllegalArgumentException(
     override fun getData(): IPersistentMap =
         (data as? IPersistentMap ?: PersistentHashMap.create(data)).assoc(ERROR_KEY, key)
 
+    /**
+     * @suppress
+     */
     companion object {
         @JvmStatic
         @JvmOverloads

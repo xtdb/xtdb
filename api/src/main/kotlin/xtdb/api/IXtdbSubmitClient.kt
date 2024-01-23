@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 
 interface IXtdbSubmitClient {
-    companion object {
+    private companion object {
         private fun <T> await(fut: CompletableFuture<T>): T {
             try {
                 return fut.get()

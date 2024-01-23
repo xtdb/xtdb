@@ -27,6 +27,9 @@ private fun String.camelCase() = replace(Regex("_.")) { match -> match.value.dro
 @Serializable(IKeyFn.Serde::class)
 fun interface IKeyFn<out V> {
 
+    /**
+     * @suppress
+     */
     object Serde : KSerializer<IKeyFn<Any>> {
         override val descriptor: SerialDescriptor get() = KeyFn.serializer().descriptor
 

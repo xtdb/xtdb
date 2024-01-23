@@ -11,7 +11,7 @@ import kotlinx.serialization.json.*
 import xtdb.api.query.Expr.Companion.lVar
 import xtdb.jsonIAE
 
-object BindingSerde : KSerializer<Binding> {
+internal object BindingSerde : KSerializer<Binding> {
     @OptIn(ExperimentalSerializationApi::class, InternalSerializationApi::class)
     override val descriptor: SerialDescriptor =
         buildSerialDescriptor("xtdb.api.query.Binding", PolymorphicKind.SEALED) {
@@ -63,6 +63,9 @@ data class Binding(val binding: String, val expr: Expr) {
         fun cols(vararg cols: String) = cols.map(::Binding).toTypedArray()
     }
 
+    /**
+     * @suppress
+     */
     abstract class ABuilder<B : ABuilder<B, O>, O> {
         private val bindings: MutableList<Binding> = mutableListOf()
 

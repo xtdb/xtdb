@@ -24,6 +24,9 @@ private const val XT_FN = "xt/fn"
 
 @Serializable(TxOp.Serde::class)
 sealed interface TxOp {
+    /**
+     * @suppress
+     */
     object Serde : JsonContentPolymorphicSerializer<TxOp>(TxOp::class) {
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<TxOp> = when {
             "putDocs" in element.jsonObject -> PutDocs.serializer()
@@ -108,7 +111,7 @@ data class XtqlAndArgs(
     @JvmField val argRows: List<Map<String, *>>? = null,
 ) : TxOp {
 
-    object Serde : KSerializer<XtqlAndArgs> {
+    internal object Serde : KSerializer<XtqlAndArgs> {
         // TODO add argRows
         override val descriptor = XtqlOp.serializer().descriptor
 
@@ -138,6 +141,9 @@ data class XtqlAndArgs(
 @Serializable(XtqlOp.Serde::class)
 sealed interface XtqlOp : TxOp {
 
+    /**
+     * @suppress
+     */
     object Serde : JsonContentPolymorphicSerializer<XtqlOp>(XtqlOp::class) {
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<XtqlOp> = when {
             "insertInto" in element.jsonObject -> Insert.serializer()

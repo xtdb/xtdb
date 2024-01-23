@@ -287,7 +287,7 @@ class JsonSerdeTest {
         XtqlQuery.from("docs")
             .bind(Binding("xt/id", Expr.lVar("xt/id")))
             .forValidTime(TemporalFilter.at(Expr.`val`(Instant.parse("2020-01-01T00:00:00Z"))))
-            .forSystemTime(TemporalFilter.ALL_TIME)
+            .forSystemTime(TemporalFilter.AllTime)
             .build().assertRoundTrip2(
             """{
                 "from": "docs",

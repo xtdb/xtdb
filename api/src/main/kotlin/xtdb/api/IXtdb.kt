@@ -9,8 +9,8 @@ import java.util.stream.Stream
 @Suppress("OVERLOADS_INTERFACE")
 interface IXtdb : IXtdbSubmitClient, AutoCloseable {
 
-    companion object {
-        private fun <T> await(fut: CompletableFuture<T>): T {
+    private companion object {
+        fun <T> await(fut: CompletableFuture<T>): T {
             try {
                 return fut.get()
             } catch (e: InterruptedException) {

@@ -11,8 +11,7 @@ import kotlinx.serialization.json.*
 import xtdb.IllegalArgumentException
 import xtdb.jsonIAE
 
-
-object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalExtents> {
+internal object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalExtents> {
     override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.query.TemporalFilter")
 
     override fun serialize(encoder: Encoder, value: TemporalFilter.TemporalExtents) {
@@ -46,7 +45,7 @@ object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalExtents> {
         return when (element) {
             is JsonPrimitive -> when {
                 element.isString -> element.contentOrNull?.let {
-                    if (it == "allTime") TemporalFilter.ALL_TIME
+                    if (it == "allTime") TemporalFilter.AllTime
                     else throw jsonIAE("xtql/malformed-temporal-filter", element)
                 } ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
 
@@ -92,8 +91,7 @@ object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalExtents> {
     }
 }
 
-
-object TemporalFilterSerializer : KSerializer<TemporalFilter> {
+internal object TemporalFilterSerializer : KSerializer<TemporalFilter> {
     override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.query.TemporalFilter")
 
     override fun serialize(encoder: Encoder, value: TemporalFilter) {
@@ -159,8 +157,5 @@ sealed interface TemporalFilter {
 
         @JvmStatic
         fun to(toExpr: Expr?) = In(null, toExpr)
-
-        @JvmField
-        val ALL_TIME = AllTime
     }
 }

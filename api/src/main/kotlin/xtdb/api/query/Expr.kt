@@ -20,48 +20,49 @@ private fun JsonObject.requireType(errorType: String) =
 
 private fun JsonObject.requireValue(errorType: String) = this["@value"] ?: throw jsonIAE(errorType, this)
 
-@Serializable(Expr.Serde::class)
-sealed interface Expr {
-    object Serde : JsonContentPolymorphicSerializer<Expr>(Expr::class) {
-        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Expr> = when (element) {
-            JsonNull -> Null.serializer()
-            is JsonPrimitive -> when {
-                element.booleanOrNull != null -> Bool.serializer()
-                element.longOrNull != null -> Long.serializer()
-                element.doubleOrNull != null -> Double.serializer()
-                element.isString -> Obj.serializer()
-                else -> TODO("unknown primitive")
-            }
-
-            is JsonObject -> when {
-                "xt:lvar" in element -> LogicVar.serializer()
-                "xt:param" in element -> Param.serializer()
-                "xt:call" in element -> Call.serializer()
-                "xt:get " in element -> Get.serializer()
-                "xt:q" in element -> Subquery.serializer()
-                "xt:exists" in element -> Exists.serializer()
-                "xt:pull" in element -> Pull.serializer()
-                "xt:pullMany" in element -> PullMany.serializer()
-                // TODO check against non string type Element
-                "@type" in element -> {
-                    val type = (element["@type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-                    when (type) {
-                        "xt:set" -> SetExpr.serializer()
-                        else -> Obj.serializer()
-                    }
-                }
-
-                else -> MapExpr.serializer()
-            }
-
-            is JsonArray -> ListExpr.serializer()
-            else -> Obj.serializer()
+internal object ExprSerde : JsonContentPolymorphicSerializer<Expr>(Expr::class) {
+    override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Expr> = when (element) {
+        JsonNull -> Expr.Null.serializer()
+        is JsonPrimitive -> when {
+            element.booleanOrNull != null -> Expr.Bool.serializer()
+            element.longOrNull != null -> Expr.Long.serializer()
+            element.doubleOrNull != null -> Expr.Double.serializer()
+            element.isString -> Expr.Obj.serializer()
+            else -> TODO("unknown primitive")
         }
+
+        is JsonObject -> when {
+            "xt:lvar" in element -> Expr.LogicVar.serializer()
+            "xt:param" in element -> Expr.Param.serializer()
+            "xt:call" in element -> Expr.Call.serializer()
+            "xt:get " in element -> Expr.Get.serializer()
+            "xt:q" in element -> Expr.Subquery.serializer()
+            "xt:exists" in element -> Expr.Exists.serializer()
+            "xt:pull" in element -> Expr.Pull.serializer()
+            "xt:pullMany" in element -> Expr.PullMany.serializer()
+            // TODO check against non string type Element
+            "@type" in element -> {
+                val type = (element["@type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                when (type) {
+                    "xt:set" -> Expr.SetExpr.serializer()
+                    else -> Expr.Obj.serializer()
+                }
+            }
+
+            else -> Expr.MapExpr.serializer()
+        }
+
+        is JsonArray -> Expr.ListExpr.serializer()
+        else -> Expr.Obj.serializer()
     }
+}
+
+@Serializable(ExprSerde::class)
+sealed interface Expr {
 
     @Serializable(Null.Serde::class)
     data object Null : Expr {
-        object Serde : KSerializer<Null> {
+        internal object Serde : KSerializer<Null> {
             @OptIn(ExperimentalSerializationApi::class)
             override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.Null" ,JsonNull.serializer().descriptor)
 
@@ -79,7 +80,7 @@ sealed interface Expr {
     enum class Bool(@JvmField val bool: Boolean) : Expr {
         TRUE(true), FALSE(false);
 
-        object Serde : KSerializer<Bool> {
+        internal object Serde : KSerializer<Bool> {
             override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.api.query.Expr.Bool", BOOLEAN)
             override fun serialize(encoder: Encoder, value: Bool) {
                 require(encoder is JsonEncoder)
@@ -96,7 +97,7 @@ sealed interface Expr {
 
     @Serializable(Long.Serde::class)
     data class Long(@JvmField val lng: kotlin.Long) : Expr {
-        object Serde : KSerializer<Long> {
+        internal object Serde : KSerializer<Long> {
             override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.api.query.Expr.Long", LONG)
             override fun serialize(encoder: Encoder, value: Long) {
                 require(encoder is JsonEncoder)
@@ -109,7 +110,7 @@ sealed interface Expr {
 
     @Serializable(Double.Serde::class)
     data class Double(@JvmField val dbl: kotlin.Double) : Expr {
-        object Serde : KSerializer<Double> {
+        internal object Serde : KSerializer<Double> {
             override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.api.query.Expr.Double", DOUBLE)
             override fun serialize(encoder: Encoder, value: Double) {
                 require(encoder is JsonEncoder)
@@ -122,7 +123,7 @@ sealed interface Expr {
 
     @Serializable(Obj.Serde::class)
     data class Obj(@JvmField val obj: Any) : Expr {
-        object Serde : KSerializer<Obj> {
+        internal object Serde : KSerializer<Obj> {
             @OptIn(ExperimentalSerializationApi::class)
             override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.Obj" ,JsonElement.serializer().descriptor)
             override fun serialize(encoder: Encoder, value: Obj) {
@@ -166,7 +167,7 @@ sealed interface Expr {
 
     @Serializable(ListExpr.Serde::class)
     data class ListExpr(@JvmField val elements: List<Expr>) : Expr {
-        object Serde : KSerializer<ListExpr> {
+        internal object Serde : KSerializer<ListExpr> {
             @OptIn(ExperimentalSerializationApi::class)
             override val descriptor: SerialDescriptor =  SerialDescriptor("xtdb.api.query.Expr.ListExpr", JsonArray.serializer().descriptor)
 
@@ -186,7 +187,7 @@ sealed interface Expr {
 
     @Serializable(SetExpr.Serde::class)
     data class SetExpr(@JvmField val elements: List<Expr>) : Expr {
-        object Serde : KSerializer<SetExpr> {
+        internal object Serde : KSerializer<SetExpr> {
             @OptIn(ExperimentalSerializationApi::class)
             override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.SetExpr", JsonArray.serializer().descriptor)
             override fun serialize(encoder: Encoder, value: SetExpr) {
@@ -214,7 +215,7 @@ sealed interface Expr {
 
     @Serializable(MapExpr.Serde::class)
     data class MapExpr(@JvmField val elements: Map<String, Expr>) : Expr {
-        object Serde: KSerializer<MapExpr> {
+        internal object Serde: KSerializer<MapExpr> {
             @OptIn(ExperimentalSerializationApi::class)
             override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.MapExpr", JsonObject.serializer().descriptor)
             override fun serialize(encoder: Encoder, value: MapExpr) {
@@ -283,6 +284,7 @@ sealed interface Expr {
         @JvmStatic
         fun map(elements: Map<String, Expr>) = MapExpr(elements)
 
+        @JvmSynthetic
         fun map(vararg elements: Pair<String, Expr>) = map(elements.toMap())
     }
 }

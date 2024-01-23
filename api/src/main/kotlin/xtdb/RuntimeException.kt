@@ -7,6 +7,9 @@ import clojure.lang.PersistentHashMap
 
 private val ERROR_KEY: Keyword = Keyword.intern("xtdb.error", "error-key")
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 data class RuntimeException(
     val key: Keyword?,

@@ -17,10 +17,16 @@ data class Basis(
     @JvmField val currentTime: Instant? = null
 ) : ILookup, Seqable {
 
+    /**
+     * @suppress
+     */
     override fun valAt(key: Any?): Any? {
         return valAt(key, null)
     }
 
+    /**
+     * @suppress
+     */
     override fun valAt(key: Any?, notFound: Any?) =
         when {
             key === AT_TX_KEY -> atTx
@@ -28,6 +34,9 @@ data class Basis(
             else -> notFound
         }
 
+    /**
+     * @suppress
+     */
     override fun seq(): ISeq? {
         val seqList: MutableList<Any?> = ArrayList()
         if (atTx != null) {

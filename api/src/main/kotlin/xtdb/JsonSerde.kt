@@ -17,6 +17,9 @@ import java.io.OutputStream
 import java.time.*
 import java.util.*
 
+/**
+ * @suppress
+ */
 object AnySerde : KSerializer<Any> {
     @OptIn(ExperimentalSerializationApi::class)
     override val descriptor = SerialDescriptor("xtdb.any", JsonElement.serializer().descriptor)
@@ -137,6 +140,9 @@ object AnySerde : KSerializer<Any> {
         encoder.encodeSerializableValue(JsonElement.serializer(), value.toJsonElement())
 }
 
+/**
+ * @suppress
+ */
 @JvmField
 val JSON_SERDE = Json {
     serializersModule =
@@ -145,25 +151,34 @@ val JSON_SERDE = Json {
         }
 }
 
+/**
+ * @suppress
+ */
 @JvmField
 val JSON_SERDE_PRETTY_PRINT = Json(JSON_SERDE) { prettyPrint = true }
 
-fun jsonIAE(errorType: String, element: JsonElement): IllegalArgumentException {
+internal fun jsonIAE(errorType: String, element: JsonElement): IllegalArgumentException {
     return IllegalArgumentException(
         Keyword.intern(errorType),
         data = mapOf(Keyword.intern("json") to JSON_SERDE_PRETTY_PRINT.encodeToString(element))
     )
 }
 
-fun jsonIAEwithMessage(message: String, element: JsonElement): IllegalArgumentException {
+internal fun jsonIAEwithMessage(message: String, element: JsonElement): IllegalArgumentException {
     return IllegalArgumentException.createNoKey(
         message,
         mapOf(Keyword.intern("json") to JSON_SERDE_PRETTY_PRINT.encodeToString(element))
     )
 }
 
+/**
+ * @suppress
+ */
 fun jsonRemoveComments(json : String) = json.replace(Regex("//.*\n"), "")
 
+/**
+ * @suppress
+ */
 fun decode(value: String): Any {
     try {
         return JSON_SERDE.decodeFromString(value)
@@ -176,6 +191,9 @@ fun decode(value: String): Any {
     }
 }
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 @OptIn(InternalSerializationApi::class)
 fun <T : Any> decode(value: String, clazz: Class<T>): Any {
@@ -190,6 +208,9 @@ fun <T : Any> decode(value: String, clazz: Class<T>): Any {
     }
 }
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 @OptIn(ExperimentalSerializationApi::class)
 fun decode(inputStream: InputStream): Any {
@@ -205,6 +226,9 @@ fun decode(inputStream: InputStream): Any {
     }
 }
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 @OptIn(InternalSerializationApi::class, ExperimentalSerializationApi::class)
 fun <T : Any> decode(inputStream: InputStream, clazz: Class<T>): Any {
@@ -220,29 +244,47 @@ fun <T : Any> decode(inputStream: InputStream, clazz: Class<T>): Any {
     }
 }
 
+/**
+ * @suppress
+ */
 fun encode(value: Any): String = JSON_SERDE.encodeToString(value)
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 @OptIn(InternalSerializationApi::class)
 fun <T : Any> encode(value: T, clazz: Class<T>) = JSON_SERDE.encodeToString(clazz.kotlin.serializer(), value)
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 @OptIn(ExperimentalSerializationApi::class)
 fun encode(value: Any, outputStream: OutputStream) {
     JSON_SERDE.encodeToStream(value, outputStream)
 }
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 @OptIn(InternalSerializationApi::class, ExperimentalSerializationApi::class)
 fun <T : Any> encode(value: T, outputStream: OutputStream, clazz: Class<T>) {
     JSON_SERDE.encodeToStream(clazz.kotlin.serializer(), value, outputStream)
 }
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 fun encodeStatus(value: Map<String, TransactionKey>): String {
     return JSON_SERDE.encodeToString(value.mapKeys { it.key.kebabToCamelCase()})
 }
 
+/**
+ * @suppress
+ */
 @Suppress("unused")
 @OptIn(InternalSerializationApi::class)
 fun <T : Any> encodePretty(value: T, clazz: Class<T>) = JSON_SERDE_PRETTY_PRINT.encodeToString(clazz.kotlin.serializer(), value)
