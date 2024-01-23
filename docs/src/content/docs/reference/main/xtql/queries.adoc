@@ -2,7 +2,7 @@
 title: XTQL Queries
 ---
 :examples:  ../src/test/resources/docs/xtql_json_examples.yaml
-
+:openapi: /sdks/openapi/index.html
 
 NOTE: For specific details of how to submit XTQL queries, see the documentation for your individual link:/reference/main/sdks[client library].
 
@@ -113,9 +113,26 @@ This allows for very declarative yet terse method of specifying join conditions;
 
 === Aggregate
 
-The 'aggregate' operator aggregates rows in a query according to the aggregate specs.
+The 'aggregate' operator aggregates rows in a query according to a list of aggregate specs.
+An aggregate spec is either a grouping variable/column or (new) column plus and link:#_expressions[expression].
 
 The available aggregate functions are documented link:../stdlib/aggregates[here].
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-Aggregate[JSON Aggregate spec]
+
+[source,json]
+----
+include::{examples}[tags=aggr-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 
 [source]
 ----
@@ -129,20 +146,6 @@ Column :: keyword
 Expr :: <defined separately>
 ----
 
-For example:
-
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=aggr-json,indent=0]
-----
-====
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 (-> (unify (from :customers [{:xt/id customer-id, :name customer-name}])
@@ -157,6 +160,27 @@ include::{examples}[tags=aggr-json,indent=0]
 
 The 'from' operator sources data from a table in XTDB - it expects the table to fetch from, as well as options that define what columns to return, and optionally any temporal filters to apply.
 
+The binding specs define which columns are retrieved from the table, and specify constraints on those columns.
+For more details, see the link:#_binding_specs[binding specs] section.
+
+For example:
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-From[JSON From spec]
+
+[source,json]
+----
+include::{examples}[tags=from-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
+
 [source]
 ----
 From :: (from Table FromOpts)
@@ -169,33 +193,8 @@ FromOpts :: [BindSpec+]
                ; optional
                :for-valid-time TemporalFilter
                :for-system-time TemporalFilter}
-
-TemporalFilter :: (at Timestamp)
-                | (from Timestamp)
-                | (to Timestamp)
-                | (in Timestamp Timestamp)
-                | :all-time
-
-Timestamp :: java.util.Date | java.time.Instant | java.time.ZonedDateTime
 ----
 
-The binding specs define which columns are retrieved from the table, and specify constraints on those columns.
-For more details, see the link:#_binding_specs[binding specs] section.
-
-For example:
-
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=from-json,indent=0]
-----
-====
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 ;; `SELECT username, first_name, last_name FROM users`
@@ -277,11 +276,12 @@ Temporal filters control the document versions that are visible to the query.
 
 Unless otherwise specified, queries will see the current version of the row, `at <now>`, in both valid time and system time.
 
-For example:
-
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-TemporalFilter[JSON TemporalFilter spec]
+
 [source,json]
 ----
 include::{examples}[tags=temporal-filters-json,indent=0]
@@ -291,6 +291,18 @@ include::{examples}[tags=temporal-filters-json,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+TemporalFilter :: (at Timestamp)
+                | (from Timestamp)
+                | (to Timestamp)
+                | (in Timestamp Timestamp)
+                | :all-time
+
+Timestamp :: java.util.Date | java.time.Instant | java.time.ZonedDateTime
+----
+
 [source,clojure]
 ----
 (from :users {:bind [...]
@@ -305,6 +317,33 @@ Without any temporal filters, it is valid to just specify the binding specs with
 
 The 'join' and 'left join' link:#_unify_clauses[unify clauses] further constrain a unification by joining against the given query.
 
+
+We join the inner query to the rest of the unify inputs using the binding specs - see the link:#_binding_specs[binding specs] section for more details.
+These binding specs act as both 'join conditions' (if the logic variables are reused within the link:#_unify[unify] operator) and a specification of which columns from the sub-query should be returned from the outer query.
+
+* The 'join' operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
+* The 'left-join' operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
+
+Parameters in the sub-query can be fulfilled with the `:args` option - see the link:#_argument_specs[argument specs] section for more details.
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-Join[JSON Join spec] +
+link:{openapi}#model-LeftJoin[JSON LeftJoin spec]
+
+[source,json]
+----
+include::{examples}[tags=joins-json,indent=0]
+----
+====
+
+
+.Clojure
+[%collapsible]
+====
+
 [source]
 ----
 Join :: (join Query JoinOpts)
@@ -318,30 +357,6 @@ JoinOpts :: [BindSpec+]
              :args [ArgSpec+]}
 ----
 
-We join the inner query to the rest of the unify inputs using the binding specs - see the link:#_binding_specs[binding specs] section for more details.
-These binding specs act as both 'join conditions' (if the logic variables are reused within the link:#_unify[unify] operator) and a specification of which columns from the sub-query should be returned from the outer query.
-
-* The 'join' operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
-* The 'left-join' operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
-
-Parameters in the sub-query can be fulfilled with the `:args` option - see the link:#_argument_specs[argument specs] section for more details.
-
-For example:
-
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=joins-json,indent=0]
-----
-====
-
-
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 (unify (from :customers [{:xt/id customer-id} customer-name]
@@ -357,17 +372,12 @@ In this case, `customer-id` is specified multiple times, so this adds a join-con
 The 'limit' operator limits the rows returned by the query.
 Without an explicit preceding link:#_order_by[order by], the rows selected for return are undefined.
 
-[source]
-----
-Limit :: (limit LimitN)
-LimitN :: non-negative integer
-----
-
-For example:
-
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Limit[JSON Limit spec]
+
 [source,json]
 ----
 include::{examples}[tags=limit-json,indent=0]
@@ -378,6 +388,13 @@ include::{examples}[tags=limit-json,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+Limit :: (limit LimitN)
+LimitN :: non-negative integer
+----
+
 [source,clojure]
 ----
 (-> (from :users [username])
@@ -391,17 +408,15 @@ include::{examples}[tags=limit-json,indent=0]
 The 'offset' operator skips the first N rows that would have otherwise been returned by the query.
 Without an explicit preceding link:#_order_by[order by], the rows selected for return are undefined.
 
-[source]
-----
-Offset :: (offset OffsetN)
-OffsetN :: non-negative integer
-----
 
 For example:
 
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Offset[JSON Offset spec]
+
 [source,json]
 ----
 include::{examples}[tags=offset-json,indent=0]
@@ -411,6 +426,13 @@ include::{examples}[tags=offset-json,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+Offset :: (offset OffsetN)
+OffsetN :: non-negative integer
+----
+
 [source,clojure]
 ----
 (-> (from :users [username])
@@ -422,7 +444,27 @@ include::{examples}[tags=offset-json,indent=0]
 
 === Order by
 
-The 'order by' operator sorts the rows in a relation.
+The 'order by' operator sorts the rows in a relation. It takes a collection of order specs.
+An order spec is either a simple column to sort by (default descending) or a composite object
+of an expression to sort by, a direction and a default null ordering. When multiple order
+spec are supplied priority is given from left to right.
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-OrderBy[JSON OrderBy spec] +
+link:{openapi}#model-OrderSpec[JSON OrderSpec spec]
+
+[source,json]
+----
+include::{examples}[tags=order-by-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 
 [source]
 ----
@@ -441,20 +483,6 @@ NullOrdering :: :first | :last
 Expr :: <defined separately>
 ----
 
-For example:
-
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=order-by-json,indent=0]
-----
-====
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 ;; sort by order-value descending, with nulls returned last,
@@ -470,7 +498,23 @@ include::{examples}[tags=order-by-json,indent=0]
 The 'return' operator specifies the columns to return from the query.
 It also allows additional projections, should you want to return a new column based on existing columns.
 
-If you want to introduce a projected column keeping while keeping the existing columns see the link:#_with[with] operator.
+If you want to introduce a projected column while keeping the existing columns see the link:#_with[with] operator.
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-Return[JSON Return spec]
+
+[source,json]
+----
+include::{examples}[tags=return-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 
 [source]
 ----
@@ -481,20 +525,6 @@ Column :: keyword
 Expr :: <defined separately>
 ----
 
-For example:
-
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=return-json,indent=0]
-----
-====
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 (-> (from :users [username first-name last-name])
@@ -507,27 +537,20 @@ include::{examples}[tags=return-json,indent=0]
 ----
 ====
 
-=== Rel
+=== Rel(ation)
 
 The 'rel' operator creates an inline relation with the provided values.
-The first argument is array of maps, either as a literal, a parameter, or a value nested within another document.
+The first argument is an array of maps, either as a literal, a parameter, or a value nested within another document.
 The 'rel' operator yields each element as a row, with the values in the map link:#_binding_specs[bound/constrained] as required.
 
 * To unwrap an array of values rather than an array of maps, with a variable bound to each row instead, see link:#_unnest[`unnest`].
 
-[source]
-----
-Rel :: (rel RelExpr [BindSpec+])
-RelExpr :: Expr
-
-Expr :: <defined separately>
-----
-
-For example:
-
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Rel[JSON Rel(ation) spec]
+
 [source,json]
 ----
 include::{examples}[tags=rel-json,indent=0]
@@ -538,6 +561,16 @@ include::{examples}[tags=rel-json,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+Rel :: (rel RelExpr [BindSpec+])
+RelExpr :: Expr
+
+Expr :: <defined separately>
+----
+
+
 [source,clojure]
 ----
 ;; as a literal
@@ -562,21 +595,17 @@ include::{examples}[tags=rel-json,indent=0]
 
 The 'unify' operator combines multiple input relations using Datalog-style unification (explained below), to achieve join-like behaviour.
 
-[source]
-----
-Unify :: (unify UnifyClause+)
-UnifyClause :: From | Join | LeftJoin | Rel | Where | With
-----
 
 [[unify_explanation]]
 Each input relation defines a set of 'logic variables' in its binding specs - if a logic variable appears more than once within a single `unify` operator, the results are constrained such that the logic variable has the same value everywhere it's used.
 This has the effect of imposing 'join conditions' over the inputs.
 
-For example:
-
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Unify[JSON Unify spec]
+
 [source,json]
 ----
 include::{examples}[tags=unify-json,indent=0]
@@ -587,6 +616,13 @@ include::{examples}[tags=unify-json,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+Unify :: (unify UnifyClause+)
+UnifyClause :: From | Join | LeftJoin | Rel | Where | With
+----
+
 [source,clojure]
 ----
 (unify (from :customers [{:xt/id customer-id} customer-name])
@@ -618,6 +654,24 @@ The other columns in the query are duplicated for each row.
 
 * To unwrap an array of maps (a relation) rather than an array of values, with a variable bound to each map-key instead, see link:#_rel[rel].
 
+* If the value in question isn't an array, or the array is empty, the row is filtered out.
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-Unnest[JSON Unnest spec]
+
+[source,json]
+----
+include::{examples}[tags=unnest-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
+
 [source]
 ----
 Unnest :: (unnest UnnestSpec)
@@ -633,22 +687,6 @@ LogicVar :: symbol
 Expr :: <defined separately>
 ----
 
-* If the value in question isn't an array, or the array is empty, the row is filtered out.
-
-For example:
-
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=unnest-json,indent=0]
-----
-====
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 ;; as a 'tail' operator - N.B. `:tag` is a column being added
@@ -675,21 +713,15 @@ include::{examples}[tags=unnest-json,indent=0]
 The 'where' operator filters rows in a query or unification operator.
 It expects (optionally) many link:../stdlib/predicates[predicates] - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
 
-[source]
-----
-Where :: (where Expr*)
-
-Expr :: <defined separately>
-----
-
 * Like all other XTQL expressions, `where` respects 'three-valued logic' - if an expression returns either false or null, the row will be filtered out.
 * `where` is short-circuiting - if an earlier predicate doesn't return true for a row, the remaining predicates won't be evaluated.
-
-Example:
 
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Where[JSON Where spec]
+
 [source,json]
 ----
 include::{examples}[tags=where-json,indent=0]
@@ -699,6 +731,14 @@ include::{examples}[tags=where-json,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+Where :: (where Expr*)
+
+Expr :: <defined separately>
+----
+
 [source,clojure]
 ----
 ;; as a 'tail' operator
@@ -715,7 +755,25 @@ include::{examples}[tags=where-json,indent=0]
 
 === With
 
-The 'with' operator specifies columns to add to the query.
+The 'with' operator specifies columns to add to the query. It takes a collection of with specs.
+A with spec takes a column name (in the pipeline context) or a logic var (in the unify context) and
+an link:#_expressions[expression] to bind that column/logic var to.
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-With[JSON With spec]
+
+[source,json]
+----
+include::{examples}[tags=with-json,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
 
 [source]
 ----
@@ -734,20 +792,6 @@ LogicVar :: symbol
 Expr :: <defined separately>
 ----
 
-For example:
-
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=with-json,indent=0]
-----
-====
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 ;; as a 'tail' operator - N.B. `:full-name` is a column here
@@ -769,17 +813,15 @@ include::{examples}[tags=with-json,indent=0]
 
 The 'without' operator removes columns from the ongoing query:
 
-[source]
-----
-Without :: (without Column*)
-Column :: keyword
-----
 
 For example, in this query, we only want the `customer-id` to join on - we don't want it returned - so we exclude it in a `without` operator.
 
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Without[JSON Without spec]
+
 [source,json]
 ----
 include::{examples}[tags=without-json,indent=0]
@@ -790,6 +832,13 @@ include::{examples}[tags=without-json,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+Without :: (without Column*)
+Column :: keyword
+----
+
 [source,clojure]
 ----
 (-> (unify (from :customers [{:xt/id customer-id}, customer-name])
@@ -801,6 +850,50 @@ include::{examples}[tags=without-json,indent=0]
 == Expressions
 
 XTQL expressions are valid within predicates, projections, bindings and arguments.
+
+
+* Call expressions can use functions from the link:../stdlib[XTDB standard library].
+* Variable expressions can refer to any variable in scope - within a `unify` clause, any logic variable; within any other operator, any column returned in the previous step.
+
+=== Subqueries
+
+* Subquery expressions must return a single row containing a single column - otherwise, a runtime exception will be thrown.
+* 'Exists' expressions will return false if the subquery returns no rows; true otherwise.
+* 'Pull' expressions must return a single row - otherwise, a runtime exception will be thrown.
+The columns in the returned row will be nested into a map in the outer expression.
+* 'Pull many' expressions may return any number of rows.
+  The rows will be nested into an array of maps in the outer expression.
+* The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
+
+.Json
+[%collapsible%open]
+====
+
+link:{openapi}#model-Expr[JSON Expr spec] +
+link:{openapi}#model-LogicVar[JSON LogicVar spec] +
+link:{openapi}#model-Param[JSON Param spec] +
+link:{openapi}#model-Call[JSON Expr Call spec] +
+link:{openapi}#model-ExprGet[JSON Expr Get spec] +
+link:{openapi}#model-ExprQuery[JSON Subquery spec] +
+link:{openapi}#model-ExprExists[JSON Exists spec] +
+link:{openapi}#model-ExprPull[JSON Pull spec] +
+link:{openapi}#model-ExprPullMany[JSON PullMany spec] +
+link:{openapi}#model-ExprSet[JSON Expr set spec] +
+link:{openapi}#model-ExprList[JSON Expr List spec]
+
+The following example retrieves a post together with their author and comments:
+
+[source,json]
+----
+include::{examples}[tags=expr-json-1,indent=0]
+----
+====
+
+.Clojure
+[%collapsible]
+====
+
+* In Clojure parameter symbols must be prefixed by a `$`; other variables must not start with a `$`.
 
 [source]
 ----
@@ -839,34 +932,8 @@ PullManyExpr :: (pull* Query
                         :args ArgSpec})
 ----
 
-* Call expressions can use functions from the link:../stdlib[XTDB standard library].
-* Variable expressions can refer to any variable in scope - within a `unify` clause, any logic variable; within any other operator, any column returned in the previous step.
-* Parameter symbols must be prefixed by a `$`; other variables must not start with a `$`.
-
-=== Subqueries
-
-* Subquery expressions must return a single row containing a single column - otherwise, a runtime exception will be thrown.
-* 'Exists' expressions will return false if the subquery returns no rows; true otherwise.
-* 'Pull' expressions must return a single row - otherwise, a runtime exception will be thrown.
-The columns in the returned row will be nested into a map in the outer expression.
-* 'Pull many' expressions may return any number of rows.
-  The rows will be nested into an array of maps in the outer expression.
-* The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
-
 The following example retrieves a post together with their author and comments:
 
-.Json
-[%collapsible%open]
-====
-[source,json]
-----
-include::{examples}[tags=expr-json-1,indent=0]
-----
-====
-
-.Clojure
-[%collapsible]
-====
 [source,clojure]
 ----
 (-> (from :posts [{:xt/id $post-id} post-content author-id])
@@ -891,21 +958,14 @@ include::{examples}[tags=expr-json-1,indent=0]
 
 == Binding specs
 
-[source]
-----
-BindSpec :: BindVariable | {BindColumn Expr, ...}
-BindVariable :: symbol
-BindColumn :: keyword
-Expr :: <defined separately>
-----
-
 Binding specs define which columns are retrieved from a relation, and specify constraints on those columns.
-
-For example:
 
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Binding[JSON Binding spec]
+
 * We can retrieve columns by listing them. The simple (unnested) string type has the meaning of a logic var/column name in this case.
 +
 [source,json]
@@ -933,6 +993,15 @@ The first is an example of where we match `username` against a string literal.
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+BindSpec :: BindVariable | {BindColumn Expr, ...}
+BindVariable :: symbol
+BindColumn :: keyword
+Expr :: <defined separately>
+----
+
 * We can retrieve columns by listing them:
 +
 [source,clojure]
@@ -968,25 +1037,20 @@ Within unify operators, these output names (`first-name`, `last-name` etc.) crea
 
 == Argument specs
 
-Argument specs are used to fulfil parameters in a sub-query.
+Argument specs are used to fulfil parameters in a sub-query (exists, pull, pull-many) or join (and left-join).
 
-Where link:#_binding_specs[bindings] specify how to join the _output_ of the sub-query to the outer query, arguments specify the _inputs_ to the sub-query from the outer query.
+Where link:#_binding_specs[bindings] specify how to join the *output* of the sub-query/join to the outer query, arguments specify the *inputs* to the sub-query/join from the outer query.
 
-[source]
-----
-ArgSpec :: ArgVariable | {Parameter Expr, ...}
-ArgVariable :: symbol
-Parameter :: keyword
-Expr :: <defined separately>
-----
-
-For example:
 
 This is commonly used in 'pull' queries and all other link:#_subqueries[Subqueries]:
 
 .Json
 [%collapsible%open]
 ====
+
+link:{openapi}#model-Binding[JSON Argument spec]. +
+Arguments and Bindings share thier schema.
+
 [source,json]
 ----
 include::{examples}[tags=argument-json-1,indent=0]
@@ -997,6 +1061,15 @@ include::{examples}[tags=argument-json-1,indent=0]
 .Clojure
 [%collapsible]
 ====
+
+[source]
+----
+ArgSpec :: ArgVariable | {Parameter Expr, ...}
+ArgVariable :: symbol
+Parameter :: keyword
+Expr :: <defined separately>
+----
+
 [source,clojure]
 ----
 ;; find the most recent 5 posts and, for each, their most recent 3 comments
