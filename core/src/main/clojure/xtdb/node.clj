@@ -65,8 +65,8 @@
 
   (^xtdb.api.IXtdb [opts]
    (cond
-     (instance? Xtdb$Config opts) (Xtdb/openNode opts)
-     (instance? Path opts) (Xtdb/openNode opts)
+     (instance? Xtdb$Config opts) (Xtdb/openNode ^Xtdb$Config opts)
+     (instance? Path opts) (Xtdb/openNode ^Path opts)
      (instance? File opts) (Xtdb/openNode (.toPath ^File opts))
      (map? opts) (Xtdb/openNode (doto (Xtdb$Config.)
                                   (as-> config (reduce-kv (fn [config k v]
@@ -89,8 +89,8 @@
   For more information on the configuration options, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
   ^xtdb.api.IXtdbSubmitClient [opts]
   (cond
-    (instance? Xtdb$Config opts) (XtdbSubmitClient/openSubmitClient opts)
-    (instance? Path opts) (XtdbSubmitClient/openSubmitClient opts)
+    (instance? XtdbSubmitClient$Config opts) (XtdbSubmitClient/openSubmitClient ^XtdbSubmitClient$Config opts)
+    (instance? Path opts) (XtdbSubmitClient/openSubmitClient ^Path opts)
     (instance? File opts) (XtdbSubmitClient/openSubmitClient (.toPath ^File opts))
     (map? opts) (XtdbSubmitClient/openSubmitClient (doto (XtdbSubmitClient$Config.)
                                                      (as-> config (reduce-kv (fn [config k v]

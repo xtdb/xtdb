@@ -28,7 +28,7 @@ object XtdbSubmitClient {
     }
 
     @JvmStatic
-    fun configure() = Xtdb.Config()
+    fun configure() = Config()
 
     @JvmStatic
     @JvmOverloads

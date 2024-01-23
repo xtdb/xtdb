@@ -215,7 +215,7 @@
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
   (^java.util.concurrent.CompletableFuture [node tx-ops] (submit-tx& node tx-ops {}))
-  (^java.util.concurrent.CompletableFuture [node tx-ops tx-opts]
+  (^java.util.concurrent.CompletableFuture [^IXtdbSubmitClient node tx-ops tx-opts]
    (.submitTxAsync node
                    (cond
                      (instance? TxOptions tx-opts) tx-opts
