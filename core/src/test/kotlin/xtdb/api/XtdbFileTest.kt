@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
-import xtdb.api.query.XtqlQuery.Queries.from
+import xtdb.api.query.Queries.from
 import xtdb.api.tx.putDocs
 import java.io.File
 import kotlin.io.path.Path

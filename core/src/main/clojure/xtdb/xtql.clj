@@ -7,7 +7,7 @@
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
                            Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs
-                           XtqlQuery XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset
+                           Queries XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset
                            XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline
                            XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestCol XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without
                            TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
@@ -934,7 +934,7 @@
   Delete
   (plan-dml [delete-query tx-opts]
     (let [table-name (.table delete-query)
-          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (XtqlQuery/from table-name)
+          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
                                                                          (doto (.setBindings (concat (.bindSpecs delete-query)
                                                                                                      extra-dml-bind-specs)))
                                                                          (.build))]
@@ -949,7 +949,7 @@
   Erase
   (plan-dml [erase-query _tx-opts]
     (let [table-name (.table erase-query)
-          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (XtqlQuery/from table-name)
+          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
                                                                          (doto (.setBindings (concat (.bindSpecs erase-query)
                                                                                                      [(Binding. "xt$iid" (Exprs/lVar "xt$dml$iid"))])))
                                                                          (.build))]
@@ -971,7 +971,7 @@
                                                          (util/str->normal-form-str (.getBinding set-spec)))))
                                   (disj "xt$id"))
 
-          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (XtqlQuery/from table-name)
+          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
                                                                          (doto (.setBindings
                                                                                 (concat (.bindSpecs update-query)
                                                                                         [(Binding. "xt$id" (Exprs/lVar "xt$dml$id"))]

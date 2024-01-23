@@ -131,7 +131,7 @@ sealed interface XtqlQuery : Query {
                         tailElement
                     )
                 )
-                return pipeline(query, tails)
+                return Pipeline(query, tails)
             }
         }
     }
@@ -365,130 +365,132 @@ sealed interface XtqlQuery : Query {
 
     @Serializable
     data class UnnestCol(@JvmField @SerialName("unnest") val col: Binding) : QueryTail
+}
 
-    companion object Queries {
-        @JvmStatic
-        fun pipeline(query: XtqlQuery, tails: List<QueryTail>) = Pipeline(query, tails)
+object Queries {
+    @JvmStatic
+    fun pipeline(query: XtqlQuery, tails: List<XtqlQuery.QueryTail>) = XtqlQuery.Pipeline(query, tails)
 
-        @JvmStatic
-        fun pipeline(query: XtqlQuery, vararg tails: QueryTail) = pipeline(query, tails.toList())
+    @JvmStatic
+    fun pipeline(query: XtqlQuery, vararg tails: XtqlQuery.QueryTail) = pipeline(query, tails.toList())
 
-        @JvmStatic
-        fun unify(clauses: List<UnifyClause>) = Unify(clauses)
+    @JvmStatic
+    fun unify(clauses: List<XtqlQuery.UnifyClause>) = XtqlQuery.Unify(clauses)
 
-        @JvmStatic
-        fun unify(vararg clauses: UnifyClause) = unify(clauses.toList())
+    @JvmStatic
+    fun unify(vararg clauses: XtqlQuery.UnifyClause) = unify(clauses.toList())
 
-        @JvmStatic
-        fun from(table: String) = From.Builder(table)
+    @JvmStatic
+    fun from(table: String) = XtqlQuery.From.Builder(table)
 
-        @JvmSynthetic
-        fun from(table: String, b: From.Builder.() -> Unit) = from(table).also { it.b() }.build()
+    @JvmSynthetic
+    fun from(table: String, b: XtqlQuery.From.Builder.() -> Unit) = from(table).also { it.b() }.build()
 
-        @JvmStatic
-        fun where(preds: List<Expr>) = Where(preds)
+    @JvmStatic
+    fun where(preds: List<Expr>) = XtqlQuery.Where(preds)
 
-        @JvmStatic
-        fun where(vararg preds: Expr) = where(preds.toList())
+    @JvmStatic
+    fun where(vararg preds: Expr) = where(preds.toList())
 
-        @JvmStatic
-        fun with(vars: List<Binding>) = With(vars)
+    @JvmStatic
+    fun with(vars: List<Binding>) = XtqlQuery.With(vars)
 
-        @JvmStatic
-        fun with() = With.Builder()
+    @JvmStatic
+    fun with() = XtqlQuery.With.Builder()
 
-        @JvmSynthetic
-        fun with(b: With.Builder.() -> Unit) = with().also { it.b() }.build()
+    @JvmSynthetic
+    fun with(b: XtqlQuery.With.Builder.() -> Unit) = with().also { it.b() }.build()
 
-        @JvmStatic
-        fun withCols(cols: List<Binding>) = WithCols(cols)
+    @JvmStatic
+    fun withCols(cols: List<Binding>) = XtqlQuery.WithCols(cols)
 
-        @JvmStatic
-        fun withCols() = WithCols.Builder()
+    @JvmStatic
+    fun withCols() = XtqlQuery.WithCols.Builder()
 
-        @JvmSynthetic
-        fun withCols(b: WithCols.Builder.() -> Unit) = withCols().also { it.b() }.build()
+    @JvmSynthetic
+    fun withCols(b: XtqlQuery.WithCols.Builder.() -> Unit) = withCols().also { it.b() }.build()
 
-        @JvmStatic
-        fun without(cols: List<String>) = Without(cols)
+    @JvmStatic
+    fun without(cols: List<String>) = XtqlQuery.Without(cols)
 
-        @JvmStatic
-        fun without(vararg cols: String) = without(cols.toList())
+    @JvmStatic
+    fun without(vararg cols: String) = without(cols.toList())
 
-        @JvmStatic
-        fun returning(cols: List<Binding>) = Return(cols)
+    @JvmStatic
+    fun returning(cols: List<Binding>) = XtqlQuery.Return(cols)
 
-        @JvmStatic
-        fun returning() = Return.Builder()
+    @JvmStatic
+    fun returning() = XtqlQuery.Return.Builder()
 
-        @JvmSynthetic
-        fun returning(b: Return.Builder.() -> Unit) = returning().also { it.b() }.build()
+    @JvmSynthetic
+    fun returning(b: XtqlQuery.Return.Builder.() -> Unit) = returning().also { it.b() }.build()
 
-        @JvmStatic
-        fun call(ruleName: String, args: List<Expr>) = Call(ruleName, args)
+    @JvmStatic
+    fun call(ruleName: String, args: List<Expr>) = XtqlQuery.Call(ruleName, args)
 
-        @JvmStatic
-        fun call(ruleName: String, vararg args: Expr) = Call(ruleName, args.toList())
+    @JvmStatic
+    fun call(ruleName: String, vararg args: Expr) = XtqlQuery.Call(ruleName, args.toList())
 
-        @JvmStatic
-        fun join(query: XtqlQuery, args: List<Binding>? = null) = Join(query, args)
+    @JvmStatic
+    fun join(query: XtqlQuery, args: List<Binding>? = null) = XtqlQuery.Join(query, args)
 
-        @JvmStatic
-        fun leftJoin(query: XtqlQuery, args: List<Binding>? = null) = LeftJoin(query, args)
+    @JvmStatic
+    fun leftJoin(query: XtqlQuery, args: List<Binding>? = null) = XtqlQuery.LeftJoin(query, args)
 
-        @JvmStatic
-        fun aggregate(cols: List<Binding>) = Aggregate(cols)
+    @JvmStatic
+    fun aggregate(cols: List<Binding>) = XtqlQuery.Aggregate(cols)
 
-        @JvmStatic
-        fun aggregate() = Aggregate.Builder()
+    @JvmStatic
+    fun aggregate() = XtqlQuery.Aggregate.Builder()
 
-        @JvmSynthetic
-        fun aggregate(b: Aggregate.Builder.() -> Unit) = aggregate().also { it.b() }.build()
+    @JvmSynthetic
+    fun aggregate(b: XtqlQuery.Aggregate.Builder.() -> Unit) = aggregate().also { it.b() }.build()
 
-        @JvmStatic
-        fun orderSpec(col: String) = orderSpec(lVar(col))
+    @JvmStatic
+    fun orderSpec(col: String) = orderSpec(lVar(col))
 
-        @JvmStatic
-        fun orderSpec(expr: Expr) = OrderSpec(expr)
+    @JvmStatic
+    fun orderSpec(expr: Expr) = XtqlQuery.OrderSpec(expr)
 
-        @JvmStatic
-        fun orderSpec(expr: Expr, direction: OrderDirection?, nulls: OrderNulls?) = OrderSpec(expr, direction, nulls)
+    @JvmStatic
+    fun orderSpec(expr: Expr, direction: XtqlQuery.OrderDirection?, nulls: XtqlQuery.OrderNulls?) =
+        XtqlQuery.OrderSpec(expr, direction, nulls)
 
-        @JvmStatic
-        fun orderBy(orderSpecs: List<OrderSpec>) = OrderBy(orderSpecs)
+    @JvmStatic
+    fun orderBy(orderSpecs: List<XtqlQuery.OrderSpec>) = XtqlQuery.OrderBy(orderSpecs)
 
-        @JvmStatic
-        fun orderBy(vararg orderSpecs: OrderSpec) = orderBy(orderSpecs.toList())
+    @JvmStatic
+    fun orderBy(vararg orderSpecs: XtqlQuery.OrderSpec) = orderBy(orderSpecs.toList())
 
-        @JvmStatic
-        fun unionAll(queries: List<XtqlQuery>) = UnionAll(queries)
+    @JvmStatic
+    fun unionAll(queries: List<XtqlQuery>) = XtqlQuery.UnionAll(queries)
 
-        @JvmStatic
-        fun unionAll(vararg queries: XtqlQuery) = unionAll(queries.toList())
+    @JvmStatic
+    fun unionAll(vararg queries: XtqlQuery) = unionAll(queries.toList())
 
-        @JvmStatic
-        fun limit(length: Long) = Limit(length)
+    @JvmStatic
+    fun limit(length: Long) = XtqlQuery.Limit(length)
 
-        @JvmStatic
-        fun offset(length: Long) = Offset(length)
+    @JvmStatic
+    fun offset(length: Long) = XtqlQuery.Offset(length)
 
-        @JvmStatic
-        fun relation(documents: List<Map<String, Expr>>, bindings: List<Binding>) = DocsRelation(documents, bindings)
+    @JvmStatic
+    fun relation(documents: List<Map<String, Expr>>, bindings: List<Binding>) =
+        XtqlQuery.DocsRelation(documents, bindings)
 
-        @JvmStatic
-        fun relation(documents: List<Map<String, Expr>>, vararg bindings: Binding) =
-            relation(documents, bindings.toList())
+    @JvmStatic
+    fun relation(documents: List<Map<String, Expr>>, vararg bindings: Binding) =
+        relation(documents, bindings.toList())
 
-        @JvmStatic
-        fun relation(param: Param, bindings: List<Binding>) = ParamRelation(param, bindings)
+    @JvmStatic
+    fun relation(param: Param, bindings: List<Binding>) = XtqlQuery.ParamRelation(param, bindings)
 
-        @JvmStatic
-        fun relation(param: Param, vararg bindings: Binding) = relation(param, bindings.toList())
+    @JvmStatic
+    fun relation(param: Param, vararg bindings: Binding) = relation(param, bindings.toList())
 
-        @JvmStatic
-        fun unnestVar(`var`: Binding) = UnnestVar(`var`)
+    @JvmStatic
+    fun unnestVar(`var`: Binding) = XtqlQuery.UnnestVar(`var`)
 
-        @JvmStatic
-        fun unnestCol(col: Binding) = UnnestCol(col)
-    }
+    @JvmStatic
+    fun unnestCol(col: Binding) = XtqlQuery.UnnestCol(col)
 }

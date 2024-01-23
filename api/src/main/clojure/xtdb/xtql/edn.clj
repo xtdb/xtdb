@@ -8,7 +8,7 @@
                            Exprs Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                            Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
                            Expr$ListExpr Expr$MapExpr
-                           XtqlQuery XtqlQuery$Aggregate XtqlQuery$From XtqlQuery$LeftJoin XtqlQuery$Join XtqlQuery$Limit
+                           Queries XtqlQuery$Aggregate XtqlQuery$From XtqlQuery$LeftJoin XtqlQuery$Join XtqlQuery$Limit
                            XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderSpec XtqlQuery$Pipeline XtqlQuery$Offset
                            XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnionAll XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without
                            XtqlQuery$DocsRelation XtqlQuery$ParamRelation XtqlQuery$OrderDirection XtqlQuery$OrderNulls
@@ -330,7 +330,7 @@
   (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :from this}))
 
-    (let [q (XtqlQuery/from (str (symbol table)))]
+    (let [q (Queries/from (str (symbol table)))]
       (cond
         (or (nil? opts) (map? opts))
 
@@ -373,10 +373,10 @@
     (map? opts) (do
                   (check-opt-keys join-clause-opt-keys opts)
                   (let [{:keys [args bind]} opts]
-                    (-> (XtqlQuery/join (parse-query query) (parse-arg-specs args join))
+                    (-> (Queries/join (parse-query query) (parse-arg-specs args join))
                         (.binding (some-> bind (parse-out-specs join))))))
 
-    :else (-> (XtqlQuery/join (parse-query query) nil)
+    :else (-> (Queries/join (parse-query query) nil)
               (.binding (parse-out-specs opts join)))))
 
 (defmethod parse-unify-clause 'left-join [[_ query opts :as left-join]]
@@ -386,10 +386,10 @@
     (map? opts) (do
                   (check-opt-keys join-clause-opt-keys opts)
                   (let [{:keys [args bind]} opts]
-                    (-> (XtqlQuery/leftJoin (parse-query query) (parse-arg-specs args left-join))
+                    (-> (Queries/leftJoin (parse-query query) (parse-arg-specs args left-join))
                         (.binding (some-> bind (parse-out-specs left-join))))))
 
-    :else (-> (XtqlQuery/leftJoin (parse-query query) nil)
+    :else (-> (Queries/leftJoin (parse-query query) nil)
               (.binding (parse-out-specs opts left-join)))))
 
 (extend-protocol Unparse
@@ -456,19 +456,19 @@
   (when (> 1 (count clauses))
     (throw (err/illegal-arg :xtql/malformed-unify {:unify this
                                                    :message "Unify most contain at least one sub clause"})))
-  (XtqlQuery/unify ^List (mapv parse-unify-clause clauses)))
+  (Queries/unify ^List (mapv parse-unify-clause clauses)))
 
 (defmethod parse-query 'union-all [[_ & queries :as this]]
   (when (> 1 (count queries))
     (throw (err/illegal-arg :xtql/malformed-union {:union this
                                                    :message "Union must contain a least one sub query"})))
-  (XtqlQuery/unionAll ^List (mapv parse-query queries)))
+  (Queries/unionAll ^List (mapv parse-query queries)))
 
 (defn parse-where [[_ & preds :as this]]
   (when (> 1 (count preds))
     (throw (err/illegal-arg :xtql/malformed-where {:where this
                                                    :message "Where most contain at least one predicate"})))
-  (XtqlQuery/where ^List (mapv parse-expr preds)))
+  (Queries/where ^List (mapv parse-expr preds)))
 
 (defmethod parse-query-tail 'where [this] (parse-where this))
 (defmethod parse-unify-clause 'where [this] (parse-where this))
@@ -477,38 +477,38 @@
   (when-not head
     (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline this
                                                       :message "Pipeline most contain at least one operator"})))
-  (XtqlQuery/pipeline (parse-query head) ^List (mapv parse-query-tail tails)))
+  (Queries/pipeline (parse-query head) ^List (mapv parse-query-tail tails)))
 
 ;; TODO Align errors with json ones where appropriate.
 
 (defmethod parse-query-tail 'with [[_ & cols :as this]]
   ;;TODO with uses col-specs but doesn't support short form, this needs handling
-  (XtqlQuery/withCols (parse-col-specs cols this)))
+  (Queries/withCols (parse-col-specs cols this)))
 
 (defmethod parse-unify-clause 'with [[_ & vars :as this]]
-  (XtqlQuery/with (parse-var-specs vars this)))
+  (Queries/with (parse-var-specs vars this)))
 
 (defmethod parse-query-tail 'without [[_ & cols :as this]]
   (when-not (every? keyword? cols)
     (throw (err/illegal-arg :xtql/malformed-without {:without this
                                                      ::err/message "Columns must be keywords in without"})))
-  (XtqlQuery/without ^List (map (comp str symbol) cols)))
+  (Queries/without ^List (map (comp str symbol) cols)))
 
 (defmethod parse-query-tail 'return [[_ & cols :as this]]
-  (XtqlQuery/returning (parse-col-specs cols this)))
+  (Queries/returning (parse-col-specs cols this)))
 
 (defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
-  (XtqlQuery/aggregate (parse-col-specs cols this)))
+  (Queries/aggregate (parse-col-specs cols this)))
 
 (defmethod parse-query-tail 'limit [[_ length :as this]]
   (when-not (= 2 (count this))
     (throw (err/illegal-arg :xtql/limit {:limit this :message "Limit can only take a single value"})))
-  (XtqlQuery/limit length))
+  (Queries/limit length))
 
 (defmethod parse-query-tail 'offset [[_ length :as this]]
   (when-not (= 2 (count this))
     (throw (err/illegal-arg :xtql/offset {:offset this :message "Offset can only take a single value"})))
-  (XtqlQuery/offset length))
+  (Queries/offset length))
 
 (defn- keyword-map? [m]
   (every? keyword? (keys m)))
@@ -523,10 +523,10 @@
     (if (symbol? param-or-docs)
       (let [parsed-expr (parse-expr param-or-docs)]
         (if (instance? Expr$Param parsed-expr)
-          (XtqlQuery/relation ^Expr$Param parsed-expr parsed-bind)
+          (Queries/relation ^Expr$Param parsed-expr parsed-bind)
           (throw (err/illegal-arg :xtql/rel {::err/message "Illegal second argument to `rel`"
                                              :arg param-or-docs}))))
-      (XtqlQuery/relation ^List (mapv #(into {} (map (fn [[k v]] (MapEntry/create (subs (str k) 1) (parse-expr v)))) %) param-or-docs) parsed-bind))))
+      (Queries/relation ^List (mapv #(into {} (map (fn [[k v]] (MapEntry/create (subs (str k) 1) (parse-expr v)))) %) param-or-docs) parsed-bind))))
 
 (defmethod parse-query 'rel [this] (parse-rel this))
 (defmethod parse-unify-clause 'rel [this] (parse-rel this))
@@ -539,11 +539,11 @@
 
 (defmethod parse-query-tail 'unnest [[_ binding :as this]]
   (check-unnest binding this)
-  (XtqlQuery/unnestCol (first (parse-col-specs binding this))))
+  (Queries/unnestCol (first (parse-col-specs binding this))))
 
 (defmethod parse-unify-clause 'unnest [[_ binding :as this]]
   (check-unnest binding this)
-  (XtqlQuery/unnestVar (first (parse-var-specs binding this))))
+  (Queries/unnestVar (first (parse-var-specs binding this))))
 
 (def order-spec-opt-keys #{:val :dir :nulls})
 
@@ -568,11 +568,11 @@
 
                   (throw (err/illegal-arg :xtql/malformed-order-by-nulls
                                           {:nulls nulls, :order-spec order-spec, :query this})))]
-      (XtqlQuery/orderSpec (parse-expr val) dir nulls))
-    (XtqlQuery/orderSpec (parse-expr order-spec) nil nil)))
+      (Queries/orderSpec (parse-expr val) dir nulls))
+    (Queries/orderSpec (parse-expr order-spec) nil nil)))
 
 (defmethod parse-query-tail 'order-by [[_ & order-specs :as this]]
-  (XtqlQuery/orderBy ^List (mapv #(parse-order-spec % this) order-specs)))
+  (Queries/orderBy ^List (mapv #(parse-order-spec % this) order-specs)))
 
 (extend-protocol Unparse
   XtqlQuery$OrderSpec

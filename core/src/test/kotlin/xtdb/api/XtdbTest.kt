@@ -9,10 +9,10 @@ import xtdb.api.query.*
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_STRING
 import xtdb.api.query.Exprs.call
 import xtdb.api.query.Exprs.param
-import xtdb.api.query.XtqlQuery.Queries.from
-import xtdb.api.query.XtqlQuery.Queries.pipeline
-import xtdb.api.query.XtqlQuery.Queries.relation
-import xtdb.api.query.XtqlQuery.Queries.withCols
+import xtdb.api.query.Queries.from
+import xtdb.api.query.Queries.pipeline
+import xtdb.api.query.Queries.relation
+import xtdb.api.query.Queries.withCols
 import xtdb.api.tx.putDocs
 import java.time.Instant
 import java.time.LocalDate
