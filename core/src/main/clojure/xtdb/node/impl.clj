@@ -19,7 +19,7 @@
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config Xtdb$ModuleFactory XtdbSubmitClient$Config)
            (xtdb.api.log Log)
            (xtdb.api.query Basis IKeyFn QueryOptions XtqlQuery)
-           (xtdb.api.tx Sql TxOptions)
+           (xtdb.api.tx TxOp$Sql TxOptions)
            xtdb.indexer.IIndexer
            (xtdb.query IRaQuerySource)))
 
@@ -34,8 +34,8 @@
 (defn- validate-tx-ops [tx-ops]
   (try
     (doseq [tx-op tx-ops
-            :when (instance? Sql tx-op)]
-      (sql/parse-query (.sql ^Sql tx-op)))
+            :when (instance? TxOp$Sql tx-op)]
+      (sql/parse-query (.sql ^TxOp$Sql tx-op)))
     (catch Throwable e
       (CompletableFuture/failedFuture e))))
 

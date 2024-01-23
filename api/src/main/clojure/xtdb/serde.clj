@@ -1,7 +1,6 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
     xtdb.serde
-  (:require [clojure.edn :as edn]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [cognitect.transit :as transit]
             [time-literals.read-write :as time-literals]
             [xtdb.error :as err]
@@ -14,7 +13,7 @@
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionKey)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn XtqlQuery)
-           (xtdb.api.tx Call DeleteDocs EraseDocs PutDocs Sql TxOps TxOptions XtqlOp XtqlAndArgs)
+           (xtdb.api.tx TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$XtqlAndArgs TxOp$XtqlOp TxOps TxOptions)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
@@ -63,87 +62,87 @@
 (defn- xtql-query-reader [q-edn]
   (xtql.edn/parse-query q-edn))
 
-(defn- render-sql-op [^Sql op]
+(defn- render-sql-op [^TxOp$Sql op]
   {:sql (.sql op), :arg-rows (.argRows op)})
 
 (defn sql-op-reader [{:keys [sql ^List arg-rows]}]
   (-> (TxOps/sql sql)
       (.argRows arg-rows)))
 
-(defmethod print-dup Sql [op ^Writer w]
+(defmethod print-dup TxOp$Sql [op ^Writer w]
   (.write w (format "#xt.tx/sql %s" (pr-str (render-sql-op op)))))
 
-(defmethod print-method Sql [op ^Writer w]
+(defmethod print-method TxOp$Sql [op ^Writer w]
   (print-dup op w))
 
-(defn- render-xtql-op [^XtqlOp op]
+(defn- render-xtql-op [^TxOp$XtqlOp op]
   (tx-ops/unparse-tx-op op))
 
-(defmethod print-dup XtqlOp [op ^Writer w]
+(defmethod print-dup TxOp$XtqlOp [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql-op op)))))
 
-(defmethod print-method XtqlOp [op ^Writer w]
+(defmethod print-method TxOp$XtqlOp [op ^Writer w]
   (print-dup op w))
 
-(defn- render-xtql+args [^XtqlAndArgs op]
+(defn- render-xtql+args [^TxOp$XtqlAndArgs op]
   (into (tx-ops/unparse-tx-op (.op op)) (.argRows op)))
 
-(defmethod print-dup XtqlAndArgs [op ^Writer w]
+(defmethod print-dup TxOp$XtqlAndArgs [op ^Writer w]
   (.write w (format "#xt.tx/xtql %s" (pr-str (render-xtql+args op)))))
 
-(defmethod print-method XtqlAndArgs [op ^Writer w]
+(defmethod print-method TxOp$XtqlAndArgs [op ^Writer w]
   (print-dup op w))
 
 (defn xtql-reader [xtql]
   (tx-ops/parse-tx-op xtql))
 
-(defn- render-put-docs-op [^PutDocs op]
+(defn- render-put-docs-op [^TxOp$PutDocs op]
   {:table-name (keyword (.tableName op)), :docs (vec (.docs op))
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
-(defmethod print-dup PutDocs [op ^Writer w]
+(defmethod print-dup TxOp$PutDocs [op ^Writer w]
   (.write w (format "#xt.tx/put-docs %s" (pr-str (render-put-docs-op op)))))
 
-(defmethod print-method PutDocs [op ^Writer w]
+(defmethod print-method TxOp$PutDocs [op ^Writer w]
   (print-dup op w))
 
 (defn put-docs-reader [{:keys [table-name ^List docs valid-from valid-to]}]
   (-> (TxOps/putDocs (str (symbol table-name)) docs)
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
-(defn- render-delete-docs [^DeleteDocs op]
+(defn- render-delete-docs [^TxOp$DeleteDocs op]
   {:table-name (keyword (.tableName op)), :doc-ids (vec (.docIds op))
    :valid-from (.validFrom op), :valid-to (.validTo op)})
 
-(defmethod print-dup DeleteDocs [op ^Writer w]
+(defmethod print-dup TxOp$DeleteDocs [op ^Writer w]
   (.write w (format "#xt.tx/delete-docs %s" (pr-str (render-delete-docs op)))))
 
-(defmethod print-method DeleteDocs [op ^Writer w]
+(defmethod print-method TxOp$DeleteDocs [op ^Writer w]
   (print-dup op w))
 
 (defn delete-docs-reader [{:keys [table-name doc-ids valid-from valid-to]}]
   (-> (TxOps/deleteDocs (str (symbol table-name)) ^List (vec doc-ids))
       (.during (time/->instant valid-from) (time/->instant valid-to))))
 
-(defn- render-erase-docs [^EraseDocs op]
+(defn- render-erase-docs [^TxOp$EraseDocs op]
   {:table-name (keyword (.tableName op)), :doc-ids (vec (.docIds op))})
 
-(defmethod print-dup EraseDocs [op ^Writer w]
+(defmethod print-dup TxOp$EraseDocs [op ^Writer w]
   (.write w (format "#xt.tx/erase-docs %s" (pr-str (render-erase-docs op)))))
 
-(defmethod print-method EraseDocs [op ^Writer w]
+(defmethod print-method TxOp$EraseDocs [op ^Writer w]
   (print-dup op w))
 
 (defn erase-docs-reader [{:keys [table-name doc-ids]}]
   (TxOps/eraseDocs (str (symbol table-name)) ^List (vec doc-ids)))
 
-(defn- render-call-op [^Call op]
+(defn- render-call-op [^TxOp$Call op]
   {:fn-id (.fnId op), :args (.args op)})
 
-(defmethod print-dup Call [op ^Writer w]
+(defmethod print-dup TxOp$Call [op ^Writer w]
   (.write w (format "#xt.tx/call %s" (pr-str (render-call-op op)))))
 
-(defmethod print-method Call [op ^Writer w]
+(defmethod print-method TxOp$Call [op ^Writer w]
   (print-dup op w))
 
 (defn call-op-reader [{:keys [fn-id args]}]
@@ -287,12 +286,12 @@
                                                                (str (.duration ^IntervalMonthDayNano %))))
           XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
 
-          Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
+          TxOp$Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
 
-          XtqlAndArgs (transit/write-handler "xtdb.tx/xtql" render-xtql+args)
-          XtqlOp (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
+          TxOp$XtqlAndArgs (transit/write-handler "xtdb.tx/xtql" render-xtql+args)
+          TxOp$XtqlOp (transit/write-handler "xtdb.tx/xtql" render-xtql-op)
 
-          PutDocs (transit/write-handler "xtdb.tx/put" render-put-docs-op)
-          DeleteDocs (transit/write-handler "xtdb.tx/delete" render-delete-docs)
-          EraseDocs (transit/write-handler "xtdb.tx/erase" render-erase-docs)
-          Call (transit/write-handler "xtdb.tx/call" render-call-op)}))
+          TxOp$PutDocs (transit/write-handler "xtdb.tx/put" render-put-docs-op)
+          TxOp$DeleteDocs (transit/write-handler "xtdb.tx/delete" render-delete-docs)
+          TxOp$EraseDocs (transit/write-handler "xtdb.tx/erase" render-erase-docs)
+          TxOp$Call (transit/write-handler "xtdb.tx/call" render-call-op)}))

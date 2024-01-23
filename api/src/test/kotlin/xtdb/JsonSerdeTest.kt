@@ -36,6 +36,9 @@ import xtdb.api.query.Queries.with
 import xtdb.api.query.Queries.withCols
 import xtdb.api.query.Queries.without
 import xtdb.api.tx.*
+import xtdb.api.tx.TxOps.insert
+import xtdb.api.tx.TxOps.putDocs
+import xtdb.api.tx.TxOps.update
 import java.time.*
 import java.util.*
 import kotlin.with as with
@@ -215,7 +218,7 @@ class JsonSerdeTest {
                 }
                 """.trimJson()
             )
-        XtqlAndArgs(insert("foo", from("docs").bind(Binding("xt/id", lVar("xt/id"))).build()))
+        TxOp.XtqlAndArgs(insert("foo", from("docs").bind(Binding("xt/id", lVar("xt/id"))).build()))
             .assertRoundTripTxOp(
                 """{
                   "insertInto": "foo",

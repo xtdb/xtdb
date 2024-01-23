@@ -13,7 +13,7 @@ import xtdb.api.query.Queries.from
 import xtdb.api.query.Queries.pipeline
 import xtdb.api.query.Queries.relation
 import xtdb.api.query.Queries.withCols
-import xtdb.api.tx.putDocs
+import xtdb.api.tx.TxOps.putDocs
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId

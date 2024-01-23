@@ -33,7 +33,7 @@
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
-           (xtdb.api.tx TxOp XtqlOp)
+           (xtdb.api.tx TxOp TxOp$XtqlOp)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query IRaQuerySource PreparedQuery)
@@ -452,7 +452,7 @@
       (indexOp [_ tx-op-idx]
         (let [xtql-op (.form ^ClojureForm (.getObject op-rdr tx-op-idx))
               tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
-          (when-not (instance? XtqlOp xtql-op)
+          (when-not (instance? TxOp$XtqlOp xtql-op)
             (throw (UnsupportedOperationException. "unknown XTQL DML op")))
 
           (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info tables-with-cols))

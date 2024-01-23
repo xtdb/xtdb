@@ -11,7 +11,7 @@
                            XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline
                            XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestCol XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without
                            TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
-           (xtdb.api.tx AssertExists AssertNotExists Delete Erase Insert Update)))
+           (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -920,7 +920,7 @@
                                          (Exprs/val 'xtdb/end-of-time))])]))])
 
 (extend-protocol PlanDml
-  Insert
+  TxOp$Insert
   (plan-dml [insert-query _tx-opts]
     (let [{:keys [ra-plan provided-vars]} (plan-query (.query insert-query))]
       [:insert {:table (.table insert-query)}
@@ -931,7 +931,7 @@
                                      col)})))
         ra-plan]]))
 
-  Delete
+  TxOp$Delete
   (plan-dml [delete-query tx-opts]
     (let [table-name (.table delete-query)
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
@@ -946,7 +946,7 @@
       [:delete {:table table-name}
        target-plan]))
 
-  Erase
+  TxOp$Erase
   (plan-dml [erase-query _tx-opts]
     (let [table-name (.table erase-query)
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
@@ -961,7 +961,7 @@
       [:erase {:table table-name}
        target-plan]))
 
-  Update
+  TxOp$Update
   (plan-dml [update-query tx-opts]
     (let [table-name (.table update-query)
           set-specs (.setSpecs update-query)
@@ -991,11 +991,11 @@
       [:update {:table table-name}
        target-plan]))
 
-  AssertNotExists
+  TxOp$AssertNotExists
   (plan-dml [query _tx-opts]
     [:assert-not-exists {} (:ra-plan (plan-query (.query query)))])
 
-  AssertExists
+  TxOp$AssertExists
   (plan-dml [query _tx-opts]
     [:assert-exists {} (:ra-plan (plan-query (.query query)))]))
 
