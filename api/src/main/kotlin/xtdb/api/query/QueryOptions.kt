@@ -34,10 +34,16 @@ data class QueryOptions(
     @JvmField val keyFn: IKeyFn<*>? = null
 ) : ILookup, Seqable {
 
+    /**
+     * @suppress
+     */
     override fun valAt(key: Any?): Any? {
         return valAt(key, null)
     }
 
+    /**
+     * @suppress
+     */
     override fun valAt(key: Any?, notFound: Any?): Any? {
         return when {
             key === ARGS_KEY -> args
@@ -52,6 +58,9 @@ data class QueryOptions(
         }
     }
 
+    /**
+     * @suppress
+     */
     override fun seq(): ISeq? {
         val seqList: MutableList<Any?> = ArrayList()
         seqList.add(MapEntry.create(ARGS_KEY, args))
@@ -91,16 +100,75 @@ data class QueryOptions(
         private var explain: Boolean = false
         private var keyFn: IKeyFn<Any>? = null
 
+        /**
+         * Supply query arguments as a map (e.g. for named parameters in an XTQL query)
+         */
         fun args(args: Map<String, Any>?) = apply { this.args = args }
+
+        /**
+         * Supply query arguments as a list (e.g. for positional parameters in an SQL query)
+         */
         fun args(args: List<Any>?) = apply { this.args = args?.mapIndexed { idx, arg -> "_$idx" to arg }?.toMap() }
+
+        /**
+         * The basis of the query - queries with the same (fully-specified) basis are guaranteed to return the same
+         * results, no matter when/where they're run.
+         *
+         * @see Basis
+         */
         fun basis(basis: Basis?) = apply { this.basis = basis }
+
+        /**
+         * The lower-bound transaction of the query - the query will wait until _at least_ this transaction has been indexed before running the query.
+         *
+         * If not provided, this defaults to the latest transaction submitted through this client - this means that (assuming you query the same client that you submitted to) you will always see the effect of any transaction you've submitted (known as 'reading your writes').
+         *
+         * (If you're not querying through the same client you submitted to, pass your result from [xtdb.api.IXtdbSubmitClient.submitTx] as [afterTx] to achieve the same effect.
+         */
         fun afterTx(afterTx: TransactionKey?) = apply { this.afterTx = afterTx }
+
+        /**
+         * Time to wait for the requested transaction (either [Basis.atTx] or [afterTx], whichever is later) to be indexed by the executing node.
+         *
+         * If this timeout is exceeded, the query will throw a [java.util.concurrent.TimeoutException].
+         *
+         * If not provided, the query will wait indefinitely.
+         */
         fun txTimeout(txTimeout: Duration?) = apply { this.txTimeout = txTimeout }
+
+        /**
+         * Specifies whether operations within the transaction should default to all valid-time.
+         *
+         * By default, operations in XT default to 'as of current-time' (contrary to SQL:2011, which defaults to all valid-time) -
+         * setting this flag to true restores the standards-compliant behaviour.
+         */
         fun defaultAllValidTime(defaultAllValidTime: Boolean) = apply { this.defaultAllValidTime = defaultAllValidTime }
+
+        /**
+         * The default time-zone that applies to any functions within the query without an explicitly specified time-zone.
+         *
+         * If not provided, defaults to UTC.
+         */
         fun defaultTz(defaultTz: ZoneId?) = apply { this.defaultTz = defaultTz }
+
+        /**
+         * If set, the query will return its 'explain plan' (a plan of the operations it would perform, similar to SQL `EXPLAIN`) rather than the query results.
+         */
         fun explain(explain: Boolean) = apply { this.explain = explain }
+
+        /**
+         * Specifies the casing of object keys in the query results.
+         *
+         * If not provided, will default to [IKeyFn.KeyFn.CAMEL_CASE_STRING] - e.g. `firstName`, `xt$id`, `xt$validTime`.
+         *
+         * @see IKeyFn
+         * @see IKeyFn.KeyFn
+         */
         fun keyFn(keyFn: IKeyFn<Any>?) = apply { this.keyFn = keyFn }
 
+        /**
+         * build the [QueryOptions] object.
+         */
         fun build() = QueryOptions(args, basis, afterTx, txTimeout, defaultTz, defaultAllValidTime, explain, keyFn)
     }
 }
