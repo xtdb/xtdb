@@ -25,7 +25,8 @@
            "date-time" #time/date-time "2020-01-01T12:34:56.789"
            "zoned-date-time" #time/zoned-date-time "2020-01-01T12:34:56.789Z"
            "time-zone" #time/zone "America/Los_Angeles"
-           "duration" #time/duration "PT3H1M35.23S"}]
+           "duration" #time/duration "PT3H1M35.23S"
+           "period" #time/period "P18Y"}]
     (t/is (= v
              (roundtrip-json-ld v))
           "testing json ld values"))

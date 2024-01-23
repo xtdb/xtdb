@@ -63,6 +63,7 @@ object AnySerde : KSerializer<Any> {
                     "xt:date" -> LocalDate.parse(value.asStringOrThrow())
                     "xt:duration" -> Duration.parse(value.asStringOrThrow())
                     "xt:timeZone" -> ZoneId.of(value.asStringOrThrow())
+                    "xt:period" -> Period.parse(value.asStringOrThrow())
                     "xt:keyword" -> Keyword.intern(value.asStringOrThrow())
                     "xt:symbol" -> Symbol.intern(value.asStringOrThrow())
                     "xt:set" -> (value as? JsonArray ?: throw jsonIAEwithMessage(
@@ -127,6 +128,7 @@ object AnySerde : KSerializer<Any> {
         is LocalDate -> toJsonLdElement("xt:date")
         is LocalDateTime -> toJsonLdElement("xt:timestamp")
         is ZoneId -> toJsonLdElement("xt:timeZone")
+        is Period -> toJsonLdElement("xt:period")
         is Date -> toInstant().toJsonElement()
         is Duration -> toJsonLdElement("xt:duration")
         is Throwable -> toJsonLdElement()
