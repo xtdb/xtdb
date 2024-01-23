@@ -1,0 +1,1 @@
+{:xtdb.cli-test/foo #env TEST_ENV}

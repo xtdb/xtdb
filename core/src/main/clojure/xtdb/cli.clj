@@ -1,8 +1,9 @@
 (ns ^:no-doc xtdb.cli
-  (:require [clojure.java.io :as io]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log] 
-            [xtdb.config :as config] 
+            [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import java.io.File))
@@ -11,17 +12,26 @@
   (when (.exists f)
     f))
 
+(defn read-env-var [env-var]
+  (System/getenv (str env-var)))
+
+(defn edn-read-string [edn-string]
+  (edn/read-string {:readers {'env read-env-var}} edn-string))
+
 (def cli-options
   [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, YAML"
     :parse-fn io/file
     :validate [if-it-exists "Config file doesn't exist"
-               #(contains? #{"edn" "yaml"} (util/file-extension %)) "Config file must be .edn or .yaml"]]
-
-   ["-e" "--edn EDN" "Options as EDN."
-    :default nil
-    :parse-fn config/edn-read-string] 
+               #(contains? #{"edn" "yaml"} (util/file-extension %)) "Config file must be .edn or .yaml"]] 
 
    ["-h" "--help"]])
+
+(defn edn-file->config-opts
+  [^File f]
+  (if (.exists f)
+    (edn-read-string (slurp f))
+    (throw (err/illegal-arg :opts-file-not-found
+                            {::err/message (format "File not found: '%s'" (.getName f))}))))
 
 (defn parse-args [args]
   (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)]
@@ -30,14 +40,17 @@
 
       (:help options) {::help summary}
 
-      :else (let [{:keys [file edn]} options]
-              {::node-opts (let [config-file (or file
-                                                 (some-> (io/file "xtdb.edn") if-it-exists) 
-                                                 (some-> (io/file "xtdb.yaml") if-it-exists)
-                                                 (io/resource "xtdb.edn") 
-                                                 (io/resource "xtdb.yaml"))
-                                 config-from-file (some-> config-file config/file->config-opts)]
-                             (or config-from-file edn))}))))
+      :else (let [{:keys [file]} options] 
+              {::node-opts (let [file-extension (some-> file util/file-extension)
+                                 yaml-file (if (= file-extension "yaml")
+                                             file
+                                             (or (some-> (io/file "xtdb.yaml") if-it-exists)
+                                                 (some-> (io/resource "xtdb.yaml") (io/file))))
+                                 edn-file-config (some-> (if (= file-extension "edn") 
+                                                           file (or (some-> (io/file "xtdb.edn") if-it-exists)
+                                                                    (some-> (io/resource "xtdb.edn") (io/file))))
+                                                         edn-file->config-opts)]
+                             (or yaml-file edn-file-config {}))}))))
 
 (defn- shutdown-hook-promise []
   (let [main-thread (Thread/currentThread)
