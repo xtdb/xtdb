@@ -1,11 +1,10 @@
-@file:UseSerializers(PathSerde::class)
+@file:UseSerializers(PathWithEnvVarSerde::class, StringWithEnvVarSerde::class)
 package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.Transient
-import xtdb.PathSerde
 import xtdb.util.requiringResolve
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStoreFactory
@@ -17,10 +16,10 @@ data object DefaultS3Configurator: S3Configurator
 @Serializable
 @SerialName("!S3")
 data class S3ObjectStoreFactory @JvmOverloads constructor(
-        val bucket: String,
-        val snsTopicArn: String,
-        var prefix: Path? = null,
-        @Transient var s3Configurator: S3Configurator = DefaultS3Configurator
+    val bucket: String,
+    val snsTopicArn: String,
+    var prefix: Path? = null,
+    @Transient var s3Configurator: S3Configurator = DefaultS3Configurator
 ) : ObjectStoreFactory {
     companion object {
         private val OPEN_OBJECT_STORE = requiringResolve("xtdb.s3", "open-object-store")

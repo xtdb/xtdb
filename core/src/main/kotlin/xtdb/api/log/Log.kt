@@ -1,4 +1,4 @@
-@file:UseSerializers(DurationSerde::class, PathSerde::class)
+@file:UseSerializers(DurationSerde::class, PathWithEnvVarSerde::class)
 package xtdb.api.log
 
 import clojure.lang.IFn
@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
-import xtdb.PathSerde
+import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.TransactionKey
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer

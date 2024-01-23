@@ -6,9 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
-import xtdb.api.ModuleRegistration
-import xtdb.api.ModuleRegistry
-import xtdb.api.TransactionKey
+import xtdb.api.*
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -19,14 +17,14 @@ import java.util.concurrent.CompletableFuture
 @Serializable
 @SerialName("!Kafka")
 data class KafkaLogFactory @JvmOverloads constructor(
-    val bootstrapServers: String,
-    val topicName: String,
-    var autoCreateTopic: Boolean = true, 
+    @Serializable(with = StringWithEnvVarSerde::class) val bootstrapServers: String,
+    @Serializable(with = StringWithEnvVarSerde::class) val topicName: String,
+    var autoCreateTopic: Boolean = true,
     var replicationFactor: Int = 1,
     var pollDuration: Duration = Duration.ofSeconds(1),
     var topicConfig: Map<String, String> = emptyMap<String, String>(),
     var propertiesMap: Map<String, String> = emptyMap<String, String>(),
-    var propertiesFile: Path? = null
+    @Serializable(with = PathWithEnvVarSerde::class) var propertiesFile: Path? = null
 ) : LogFactory {
 
     companion object {

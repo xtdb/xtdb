@@ -1,5 +1,5 @@
 @file:JvmName("Storage")
-@file:UseSerializers(PathSerde::class)
+@file:UseSerializers(PathWithEnvVarSerde::class)
 
 package xtdb.api.storage
 
@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.IBufferPool
-import xtdb.PathSerde
+import xtdb.api.PathWithEnvVarSerde
 import xtdb.util.requiringResolve
 import java.nio.file.Path
 

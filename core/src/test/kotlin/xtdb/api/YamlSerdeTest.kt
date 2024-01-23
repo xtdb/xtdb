@@ -1,9 +1,7 @@
 package xtdb.api
 
 import com.charleskorn.kaml.InvalidPropertyValueException
-import io.mockk.every
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
+import io.mockk.*
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import xtdb.api.log.InMemoryLogFactory
@@ -172,17 +170,17 @@ class YamlSerdeTest {
             path: !Env TX_LOG_PATH
         """
 
-        val thrown = Assertions.assertThrows(InvalidPropertyValueException::class.java) {
+        val thrown = Assertions.assertThrows(IllegalArgumentException::class.java) {
             nodeConfig(inputWithEnv)
         }
 
-        Assertions.assertTrue(thrown.message.contains("Value for 'path' is invalid: Unexpected null or empty value for non-null field"))
+        Assertions.assertEquals("Environment variable 'TX_LOG_PATH' not found", thrown.message)
     }
 
     @Test
     fun testEnvVarsWithSetVariable() {
-        mockkStatic(::getEnvVariable)
-        every { getEnvVariable("TX_LOG_PATH") } returns "test-path"
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("TX_LOG_PATH") } returns "test-path"
 
         val inputWithEnv = """
         txLog: !Local
@@ -196,6 +194,34 @@ class YamlSerdeTest {
             output.txLog
         )
 
-        unmockkStatic(::getEnvVariable)
+        unmockkObject(EnvironmentVariableProvider)
+    }
+
+    @Test
+    fun testEnvVarsMultipleSetVariables() {
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("BUCKET") } returns "xtdb-bucket"
+        every { EnvironmentVariableProvider.getEnvVariable("SNS_TOPIC_ARN") } returns "example-arn"
+        every { EnvironmentVariableProvider.getEnvVariable("DISK_CACHE_PATH") } returns "test-path"
+
+        val inputWithEnv = """
+        storage: !Remote
+            objectStore: !S3
+              bucket: !Env BUCKET 
+              snsTopicArn: !Env SNS_TOPIC_ARN
+            localDiskCache: !Env DISK_CACHE_PATH 
+        """
+
+        val output = nodeConfig(inputWithEnv)
+
+        Assertions.assertEquals(
+            RemoteStorageFactory(
+                objectStore = S3ObjectStoreFactory(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
+                localDiskCache = Paths.get("test-path")
+            ),
+            output.storage
+        )
+
+        unmockkObject(EnvironmentVariableProvider)
     }
 }
