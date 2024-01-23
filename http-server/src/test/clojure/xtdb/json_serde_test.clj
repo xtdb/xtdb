@@ -9,7 +9,7 @@
            (xtdb JsonSerde)
            (xtdb.api TransactionKey)
            (xtdb.api.query Basis Binding Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Exprs
-                           Queries Query QueryOptions QueryRequest Query$SqlQuery TemporalFilter TemporalFilter$AllTime TemporalFilters
+                           Queries Query QueryOptions QueryRequest SqlQuery TemporalFilter TemporalFilter$AllTime TemporalFilters
                            XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
@@ -346,7 +346,7 @@
         (t/is (= v (roundtrip-query v)))))
 
     (t/testing "sql-query"
-      (let [v (Query$SqlQuery. "SELECT * FROM docs")]
+      (let [v (SqlQuery. "SELECT * FROM docs")]
         (t/is (= v (roundtrip-query v)))))))
 
 

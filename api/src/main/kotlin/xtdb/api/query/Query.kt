@@ -31,9 +31,10 @@ sealed interface Query{
             else -> XtqlQuery.serializer()
         }
     }
-    @Serializable
-    data class SqlQuery(@JvmField val sql: String) : Query
 }
+
+@Serializable
+data class SqlQuery(@JvmField val sql: String) : Query
 
 @Serializable(XtqlQuery.Serde::class)
 sealed interface XtqlQuery : Query {

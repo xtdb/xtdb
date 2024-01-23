@@ -20,10 +20,10 @@
             [spec-tools.core :as st]
             xtdb.api
             [xtdb.error :as err]
+            [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
-            [xtdb.util :as util]
-            [xtdb.node :as xtn])
+            [xtdb.util :as util])
   (:import (java.io InputStream OutputStream)
            (java.time Duration ZoneId)
            [java.util.function Consumer]
@@ -31,8 +31,8 @@
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
            (xtdb.api HttpServerModule IXtdb TransactionKey Xtdb$Config Xtdb$Module)
-           (xtdb.api.query Basis IKeyFn Query Query$SqlQuery QueryRequest XtqlQuery)
-           (xtdb.api.tx TxOptions TxOp TxRequest)))
+           (xtdb.api.query Basis IKeyFn Query QueryRequest SqlQuery XtqlQuery)
+           (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn decoder [_options]
   (reify
@@ -219,7 +219,7 @@
           (-> (into {} (.queryOpts query-request))
               (assoc :query (if (instance? XtqlQuery query)
                               query
-                              (.sql ^Query$SqlQuery query)))))))))
+                              (.sql ^SqlQuery query)))))))))
 
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts
