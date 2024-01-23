@@ -4,11 +4,6 @@
 (defprotocol PNode
   (^java.util.concurrent.CompletableFuture open-query& [node query opts]))
 
-(defprotocol PSubmitNode
-  (^java.util.concurrent.CompletableFuture #_<TransactionKey> submit-tx&
-   [node tx-ops]
-   [node tx-ops opts]))
-
 (defprotocol PStatus
   (latest-submitted-tx [node])
   (status [node]))

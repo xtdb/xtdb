@@ -162,25 +162,6 @@
    (-> @(q& node q+args opts)
        (rethrowing-cause))))
 
-(extend-protocol xtp/PSubmitNode
-  IXtdbSubmitClient
-  (submit-tx& [this tx-ops]
-    (xtp/submit-tx& this tx-ops nil))
-
-  (submit-tx& [this tx-ops opts]
-    (.submitTxAsync this
-                    (cond
-                      (instance? TxOptions opts) opts
-                      (nil? opts) (TxOptions.)
-                      (map? opts) (let [{:keys [system-time default-tz default-all-valid-time?]} opts]
-                                    (TxOptions. (some-> system-time expect-instant)
-                                                default-tz
-                                                (boolean default-all-valid-time?))))
-                    (->> (for [tx-op tx-ops]
-                           (cond-> tx-op
-                             (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
-                         (into-array TxOp)))))
-
 (extend-protocol xtp/PNode
   IXtdb
   (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
@@ -235,7 +216,18 @@
      should be an instance of java.time.ZoneId"
   (^java.util.concurrent.CompletableFuture [node tx-ops] (submit-tx& node tx-ops {}))
   (^java.util.concurrent.CompletableFuture [node tx-ops tx-opts]
-   (xtp/submit-tx& node tx-ops tx-opts)))
+   (.submitTxAsync node
+                   (cond
+                     (instance? TxOptions tx-opts) tx-opts
+                     (nil? tx-opts) (TxOptions.)
+                     (map? tx-opts) (let [{:keys [system-time default-tz default-all-valid-time?]} tx-opts]
+                                      (TxOptions. (some-> system-time expect-instant)
+                                                  default-tz
+                                                  (boolean default-all-valid-time?))))
+                   (->> (for [tx-op tx-ops]
+                          (cond-> tx-op
+                            (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
+                        (into-array TxOp)))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx

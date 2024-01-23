@@ -47,11 +47,11 @@
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops ^TxOptions opts]
 
   (or (validate-tx-ops tx-ops)
-      (let [system-time (.getSystemTime opts)]
+      (let [system-time (some-> opts .getSystemTime)]
         (.appendRecord log (log/serialize-tx-ops allocator tx-ops
-                                                 {:default-tz (or (.getDefaultTz opts) default-tz)
+                                                 {:default-tz (or (some-> opts .getDefaultTz) default-tz)
                                                   :system-time system-time
-                                                  :default-all-valid-time? (.getDefaultAllValidTime opts)})))))
+                                                  :default-all-valid-time? (some-> opts .getDefaultAllValidTime)})))))
 
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
@@ -62,7 +62,7 @@
                  system, close-fn]
   IXtdb
   (submitTxAsync [this opts tx-ops]
-    (let [system-time (.getSystemTime opts)]
+    (let [system-time (some-> opts .getSystemTime)]
       (-> (submit-tx& this (vec tx-ops) opts)
           (util/then-apply
             (fn [^TransactionKey tx-key]

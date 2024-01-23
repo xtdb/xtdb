@@ -7,7 +7,8 @@
             [xtdb.client.impl :as xtc]
             [xtdb.error :as err]
             [xtdb.serde :as serde]
-            [xtdb.test-util :as tu :refer [*node*]])
+            [xtdb.test-util :as tu :refer [*node*]]
+            [xtdb.tx-ops :as tx-ops])
   (:import (java.io ByteArrayInputStream EOFException)
            (xtdb JsonSerde)))
 
@@ -50,17 +51,18 @@
 (defn- decode-json [^String s] (first (decode-json* s)))
 
 (def possible-tx-ops
-  [[:put :docs {:xt/id 1}]
-   [:put :docs {:xt/id 2}]
-   [:delete-docs :docs 2]
-   [:put {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
-    {:xt/id 3}]
-   [:erase-docs :docs 3]
-   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
-   [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
-   [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]
-   [:sql "DELETE FROM docs WHERE docs.bar = 2"]
-   [:sql "ERASE FROM docs WHERE docs.xt$id = 4"]])
+  (->> [[:put :docs {:xt/id 1}]
+        [:put :docs {:xt/id 2}]
+        [:delete-docs :docs 2]
+        [:put {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
+         {:xt/id 3}]
+        [:erase-docs :docs 3]
+        [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
+        [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
+        [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]
+        [:sql "DELETE FROM docs WHERE docs.bar = 2"]
+        [:sql "ERASE FROM docs WHERE docs.xt$id = 4"]]
+       (mapv tx-ops/parse-tx-op)))
 
 (deftest transit-test
   (xt/submit-tx *node* [[:put :foo {:xt/id 1}]])

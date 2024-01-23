@@ -30,9 +30,9 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
-           (xtdb.api HttpServerModule TransactionKey Xtdb$Config Xtdb$Module)
+           (xtdb.api HttpServerModule IXtdb TransactionKey Xtdb$Config Xtdb$Module)
            (xtdb.api.query Basis IKeyFn Query Query$SqlQuery QueryRequest XtqlQuery)
-           (xtdb.api.tx TxOptions TxRequest)))
+           (xtdb.api.tx TxOptions TxOp TxRequest)))
 
 (defn decoder [_options]
   (reify
@@ -120,9 +120,9 @@
                            (assoc-in [:formats "application/json" :encoder] (json-tx-encoder))
                            (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
 
-   :post {:handler (fn [{:keys [node] :as req}]
+   :post {:handler (fn [{:keys [^IXtdb node] :as req}]
                      (let [{:keys [tx-ops opts]} (get-in req [:parameters :body])]
-                       (-> (xtp/submit-tx& node tx-ops opts)
+                       (-> (.submitTxAsync node opts (into-array TxOp tx-ops))
                            (util/then-apply (fn [tx]
                                               {:status 200, :body tx})))))
 
@@ -298,7 +298,7 @@
                                                ::r.coercion/request-coercion handle-request-coercion-error
                                                :muuntaja/decode handle-muuntaja-decode-error
                                                ::ri.exception/wrap (fn [handler e req]
-                                                                     (log/debug (format "response error (%s): '%s'" (class e) (ex-message e)))
+                                                                     (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e)))
                                                                      (let [response-format (:raw-format (:muuntaja/response req))]
                                                                        (cond-> (handler e req)
                                                                          (#{"application/jsonl"} response-format)
