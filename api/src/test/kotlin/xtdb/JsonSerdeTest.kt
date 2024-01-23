@@ -7,6 +7,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.TransactionKey
 import xtdb.api.query.*
+import xtdb.api.query.Expr.Bool.FALSE
+import xtdb.api.query.Expr.Bool.TRUE
+import xtdb.api.query.Expr.Null
 import xtdb.api.tx.*
 import java.time.*
 import java.util.*
@@ -208,7 +211,7 @@ class JsonSerdeTest {
                 """.trimJson()
             )
 
-        update("foo", listOf(Binding("version", Expr.TRUE))).binding(listOf(Binding("xt/id")))
+        update("foo", listOf(Binding("version", TRUE))).binding(listOf(Binding("xt/id")))
             .assertRoundTripTxOp(
                 """{
                     "update": "foo",
@@ -227,16 +230,16 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeExpr() {
-        Expr.NULL.assertRoundTripExpr("null")
-        Expr.TRUE.assertRoundTripExpr("true")
-        Expr.FALSE.assertRoundTripExpr("false")
+        Null.assertRoundTripExpr("null")
+        TRUE.assertRoundTripExpr("true")
+        FALSE.assertRoundTripExpr("false")
         Expr.`val`("foo").assertRoundTripExpr(""""foo"""")
         Expr.`val`(Instant.parse("2023-01-01T12:34:56.789Z")).assertRoundTripExpr(
             """{"@type":"xt:instant","@value":"2023-01-01T12:34:56.789Z"}"""
         )
         Expr.lVar("foo").assertRoundTripExpr("""{"xt:lvar":"foo"}""")
-        Expr.list(listOf(Expr.TRUE, Expr.FALSE)).assertRoundTripExpr("[true, false]".trimJson())
-        Expr.set(listOf(Expr.TRUE, Expr.FALSE)).assertRoundTripExpr(
+        Expr.list(listOf(TRUE, FALSE)).assertRoundTripExpr("[true, false]".trimJson())
+        Expr.set(listOf(TRUE, FALSE)).assertRoundTripExpr(
             """{
                 "@type": "xt:set",
                 "@value": [true, false]
@@ -295,7 +298,7 @@ class JsonSerdeTest {
             """.trimJson())
         XtqlQuery.pipeline(
             XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build(),
-            XtqlQuery.where(Expr.TRUE)
+            XtqlQuery.where(TRUE)
         ).assertRoundTrip2(
             """[{
                 "from": "docs",
@@ -340,7 +343,7 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeQueryTail(){
-        XtqlQuery.where(Expr.TRUE).assertRoundTrip2(
+        XtqlQuery.where(TRUE).assertRoundTrip2(
             """{"where":[true]}"""
         )
         XtqlQuery.limit(10).assertRoundTrip2(
@@ -388,7 +391,7 @@ class JsonSerdeTest {
         val from = XtqlQuery.from("docs").bind(Binding("xt/id")).build()
         XtqlQuery.unify(
             from,
-            XtqlQuery.where(Expr.TRUE),
+            XtqlQuery.where(TRUE),
             XtqlQuery.unnestVar(Binding("a")),
             XtqlQuery.with().bind(Binding("a", Expr.lVar("b"))).bind("c", Expr.lVar("d")).build(),
             XtqlQuery.join(from),

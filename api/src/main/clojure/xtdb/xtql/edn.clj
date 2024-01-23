@@ -64,9 +64,9 @@
 
 (defn parse-expr ^xtdb.api.query.Expr [expr]
   (cond
-    (nil? expr) Expr/NULL
-    (true? expr) Expr/TRUE
-    (false? expr) Expr/FALSE
+    (nil? expr) Expr$Null/INSTANCE
+    (true? expr) Expr$Bool/TRUE
+    (false? expr) Expr$Bool/FALSE
     (int? expr) (Expr/val (long expr))
     (double? expr) (Expr/val (double expr))
     (symbol? expr) (let [str-expr (str expr)]

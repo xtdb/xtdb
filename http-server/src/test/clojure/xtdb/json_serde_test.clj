@@ -3,13 +3,12 @@
             [xtdb.api :as xt]
             [xtdb.error :as err]
             xtdb.serde
-            [xtdb.tx-ops :as tx-ops]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.tx-ops :as tx-ops])
   (:import (java.time Instant)
            (java.util List)
            (xtdb JsonSerde)
            (xtdb.api TransactionKey)
-           (xtdb.api.query Basis Binding Expr Expr Expr$Call Expr$SetExpr Query Query$SqlQuery QueryOptions QueryRequest TemporalFilter XtqlQuery XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
+           (xtdb.api.query Basis Binding Expr Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Query Query$SqlQuery QueryOptions QueryRequest TemporalFilter XtqlQuery XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn- encode [v]
@@ -221,7 +220,7 @@
   (-> v (JsonSerde/encode Expr) (JsonSerde/decode Expr)))
 
 (deftest deserialize-expr-test
-  (t/is (= Expr/NULL (roundtrip-expr Expr/NULL))
+  (t/is (= Expr$Null/INSTANCE (roundtrip-expr Expr$Null/INSTANCE))
         "null")
   (t/is (= (Expr/val "foo") (roundtrip-expr (Expr/val "foo")))
         "string")
@@ -229,7 +228,7 @@
         "logic-var")
   (t/is (= (Expr/param "foo") (roundtrip-expr (Expr/param "foo")))
         "param")
-  (t/is (= Expr/FALSE (roundtrip-expr Expr/FALSE)))
+  (t/is (= Expr$Bool/FALSE (roundtrip-expr Expr$Bool/FALSE)))
   (t/is (= (Expr/val (long 1)) (roundtrip-expr (Expr/val (long 1)))))
   (t/is (= (Expr/val (double 1.2)) (roundtrip-expr (Expr/val (double 1.2)))))
 

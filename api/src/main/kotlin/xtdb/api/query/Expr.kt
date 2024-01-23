@@ -71,12 +71,14 @@ sealed interface Expr {
                 encoder.encodeJsonElement(JsonNull)
             }
 
-            override fun deserialize(decoder: Decoder): Null = NULL
+            override fun deserialize(decoder: Decoder) = Null
         }
     }
 
     @Serializable(Bool.Serde::class)
-    data class Bool(@JvmField val bool: Boolean) : Expr {
+    enum class Bool(@JvmField val bool: Boolean) : Expr {
+        TRUE(true), FALSE(false);
+
         object Serde : KSerializer<Bool> {
             override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.api.query.Expr.Bool", BOOLEAN)
             override fun serialize(encoder: Encoder, value: Bool) {
@@ -230,15 +232,6 @@ sealed interface Expr {
     }
 
     companion object {
-        @JvmField
-        val NULL = Null
-
-        @JvmField
-        val TRUE = Bool(true)
-
-        @JvmField
-        val FALSE = Bool(false)
-
         @JvmStatic
         fun `val`(l: kotlin.Long) = Long(l)
 
