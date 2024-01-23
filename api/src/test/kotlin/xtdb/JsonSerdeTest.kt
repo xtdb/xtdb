@@ -417,7 +417,7 @@ class JsonSerdeTest {
         val txKey = TransactionKey(1, Instant.EPOCH)
         QueryRequest(
             XtqlQuery.from("docs").bind(Binding("xt/id")).build(),
-            QueryOptions.queryOpts()
+            queryOpts()
                 .args(mapOf("foo" to "bar"))
                 .basis(Basis(txKey, Instant.EPOCH))
                 .afterTx(txKey)

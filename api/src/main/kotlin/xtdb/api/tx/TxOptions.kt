@@ -14,12 +14,16 @@ data class TxOptions(
     val defaultTz: ZoneId? = null,
     val defaultAllValidTime: Boolean = false
 ) {
+
+    /**
+     * @suppress
+     */
     companion object {
         @JvmStatic
         fun txOpts() = Builder()
     }
 
-    class Builder {
+    class Builder internal constructor(){
         private var systemTime: Instant? = null
         private var defaultTz: ZoneId? = null
         private var defaultAllValidTime = false
@@ -51,3 +55,8 @@ data class TxOptions(
         fun build() = TxOptions(systemTime, defaultTz, defaultAllValidTime)
     }
 }
+
+/**
+ * Creates a tx-options builder.
+ */
+fun txOpts() = TxOptions.txOpts()

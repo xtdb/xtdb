@@ -37,6 +37,14 @@ data class QueryOptions(
     /**
      * @suppress
      */
+    companion object {
+        @JvmStatic
+        fun queryOpts() = Builder()
+    }
+
+    /**
+     * @suppress
+     */
     override fun valAt(key: Any?): Any? {
         return valAt(key, null)
     }
@@ -85,12 +93,7 @@ data class QueryOptions(
         return PersistentList.create(seqList).seq()
     }
 
-    companion object {
-        @JvmStatic
-        fun queryOpts() = Builder()
-    }
-
-    class Builder {
+    class Builder internal constructor() {
         private var args: Map<String, Any>? = null
         private var basis: Basis? = null
         private var afterTx: TransactionKey? = null
@@ -172,3 +175,5 @@ data class QueryOptions(
         fun build() = QueryOptions(args, basis, afterTx, txTimeout, defaultTz, defaultAllValidTime, explain, keyFn)
     }
 }
+
+fun queryOpts() = QueryOptions.queryOpts()
