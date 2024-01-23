@@ -1,4 +1,4 @@
-@file:UseSerializers(PathSerde::class)
+@file:UseSerializers(StringWithEnvVarSerde::class, PathWithEnvVarSerde::class)
 package xtdb.api
 
 import kotlinx.serialization.SerialName
@@ -13,10 +13,10 @@ import java.nio.file.Path
 @Serializable
 @SerialName("!GoogleCloud")
 data class GoogleCloudObjectStoreFactory @JvmOverloads constructor(
-        val projectId: String,
-        val bucket: String,
-        val pubsubTopic: String,
-        var prefix: Path? = null,
+    val projectId: String,
+    val bucket: String,
+    val pubsubTopic: String,
+    var prefix: Path? = null,
 ) : ObjectStoreFactory {
     companion object {
         private val OPEN_OBJECT_STORE = requiringResolve("xtdb.google-cloud", "open-object-store")

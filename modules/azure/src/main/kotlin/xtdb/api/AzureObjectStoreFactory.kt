@@ -1,13 +1,12 @@
-@file:UseSerializers(PathSerde::class)
+@file:UseSerializers(StringWithEnvVarSerde::class, PathWithEnvVarSerde::class)
 package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import xtdb.PathSerde
-import xtdb.util.requiringResolve
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStoreFactory
+import xtdb.util.requiringResolve
 import java.nio.file.Path
 
 @Serializable
