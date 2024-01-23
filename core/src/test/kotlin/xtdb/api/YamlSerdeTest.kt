@@ -1,5 +1,9 @@
 package xtdb.api
 
+import com.charleskorn.kaml.InvalidPropertyValueException
+import io.mockk.every
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import xtdb.api.log.InMemoryLogFactory
@@ -9,6 +13,7 @@ import xtdb.api.storage.InMemoryStorageFactory
 import xtdb.api.storage.LocalStorageFactory
 import xtdb.api.storage.RemoteStorageFactory
 import java.nio.file.Paths
+import kotlin.io.path.Path
 
 class YamlSerdeTest {
     @Test
@@ -158,5 +163,39 @@ class YamlSerdeTest {
             ),
             output.getModules()
         )
+    }
+
+    @Test
+    fun testEnvVarsWithUnsetVariable() {
+        val inputWithEnv = """
+        txLog: !Local
+            path: !Env TX_LOG_PATH
+        """
+
+        val thrown = Assertions.assertThrows(InvalidPropertyValueException::class.java) {
+            nodeConfig(inputWithEnv)
+        }
+
+        Assertions.assertTrue(thrown.message.contains("Value for 'path' is invalid: Unexpected null or empty value for non-null field"))
+    }
+
+    @Test
+    fun testEnvVarsWithSetVariable() {
+        mockkStatic(::getEnvVariable)
+        every { getEnvVariable("TX_LOG_PATH") } returns "test-path"
+
+        val inputWithEnv = """
+        txLog: !Local
+            path: !Env TX_LOG_PATH
+        """
+
+        val output = nodeConfig(inputWithEnv)
+
+        Assertions.assertEquals(
+            LocalLogFactory(path = Paths.get("test-path")),
+            output.txLog
+        )
+
+        unmockkStatic(::getEnvVariable)
     }
 }
