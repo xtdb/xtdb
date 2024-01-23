@@ -8,7 +8,9 @@
            (java.util List)
            (xtdb JsonSerde)
            (xtdb.api TransactionKey)
-           (xtdb.api.query Basis Binding Expr Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Query Query$SqlQuery QueryOptions QueryRequest TemporalFilter TemporalFilter$AllTime XtqlQuery XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
+           (xtdb.api.query Basis Binding Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Exprs
+                           Query QueryOptions QueryRequest Query$SqlQuery TemporalFilter TemporalFilter$AllTime
+                           XtqlQuery XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn- encode [v]
@@ -223,51 +225,51 @@
 (deftest deserialize-expr-test
   (t/is (= Expr$Null/INSTANCE (roundtrip-expr Expr$Null/INSTANCE))
         "null")
-  (t/is (= (Expr/val "foo") (roundtrip-expr (Expr/val "foo")))
+  (t/is (= (Exprs/val "foo") (roundtrip-expr (Exprs/val "foo")))
         "string")
-  (t/is (= (Expr/lVar "foo") (roundtrip-expr (Expr/lVar "foo") ))
+  (t/is (= (Exprs/lVar "foo") (roundtrip-expr (Exprs/lVar "foo") ))
         "logic-var")
-  (t/is (= (Expr/param "foo") (roundtrip-expr (Expr/param "foo")))
+  (t/is (= (Exprs/param "foo") (roundtrip-expr (Exprs/param "foo")))
         "param")
   (t/is (= Expr$Bool/FALSE (roundtrip-expr Expr$Bool/FALSE)))
-  (t/is (= (Expr/val (long 1)) (roundtrip-expr (Expr/val (long 1)))))
-  (t/is (= (Expr/val (double 1.2)) (roundtrip-expr (Expr/val (double 1.2)))))
+  (t/is (= (Exprs/val (long 1)) (roundtrip-expr (Exprs/val (long 1)))))
+  (t/is (= (Exprs/val (double 1.2)) (roundtrip-expr (Exprs/val (double 1.2)))))
 
-  (let [v (Expr/exists (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (let [v (Exprs/exists (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
                        [])]
     (t/is (= v (roundtrip-expr v))
           "exists"))
 
-  (let [v (Expr/q (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (let [v (Exprs/q (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
                   [])]
 
     (t/is (= v (roundtrip-expr v))
           "subquery"))
 
-  (let [v (Expr/pull (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (let [v (Exprs/pull (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
                      [])]
 
     (t/is (= v (roundtrip-expr v))
           "pull"))
 
-  (let [v (Expr/pullMany (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (let [v (Exprs/pullMany (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
                          [])]
     (t/is (= v (roundtrip-expr v))
           "pull-many"))
 
-  (let [v (Expr$Call. "+" [(Expr/val "foo") (Expr/val "bar")])]
+  (let [v (Expr$Call. "+" [(Exprs/val "foo") (Exprs/val "bar")])]
     (t/is (= v (roundtrip-expr v))
           "call"))
 
-  (let [v (Expr/list ^List (list (Expr/val 1) (Expr/val 2)))]
+  (let [v (Exprs/list ^List (list (Exprs/val 1) (Exprs/val 2)))]
     (t/is (= v (roundtrip-expr v))
           "list"))
 
-  (let [v (Expr/map {"foo" (Expr/val 1)})]
+  (let [v (Exprs/map {"foo" (Exprs/val 1)})]
     (t/is (= v (roundtrip-expr v))
           "maps"))
 
-  (let [v (Expr$SetExpr. [(Expr/val 1) (Expr/val :foo)])]
+  (let [v (Expr$SetExpr. [(Exprs/val 1) (Exprs/val :foo)])]
     (t/is (= v (roundtrip-expr v))
           "sets")))
 
@@ -284,16 +286,16 @@
                           (-> "all_times" encode decode-temporal-filter))
         "all-time (wrong format)")
 
-  (let [v (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z"))]
+  (let [v (TemporalFilter/at (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "at"))
 
-  (let [v (TemporalFilter/from (Expr/val #time/instant "2020-01-01T00:00:00Z"))]
+  (let [v (TemporalFilter/from (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "from"))
 
-  (let [v (TemporalFilter/to (Expr/val #time/instant "2020-01-01T00:00:00Z"))]
+  (let [v (TemporalFilter/to (Exprs/val #time/instant "2020-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "to"))
 
-  (let [v (TemporalFilter/in (Expr/val #time/instant "2020-01-01T00:00:00Z") (Expr/val #time/instant "2021-01-01T00:00:00Z"))]
+  (let [v (TemporalFilter/in (Exprs/val #time/instant "2020-01-01T00:00:00Z") (Exprs/val #time/instant "2021-01-01T00:00:00Z"))]
     (t/is (= v (roundtrip-temporal-filter v)) "in"))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'xtql/malformed-temporal-filter'"
@@ -308,14 +310,14 @@
 
 (deftest deserialize-query-test
   (let [query (-> (XtqlQuery/from "docs")
-                  (.bind (Binding. "xt/id" (Expr/lVar "xt/id")))
-                  (.bind (Binding. "a" (Expr/lVar "b")))
+                  (.bind (Binding. "xt/id" (Exprs/lVar "xt/id")))
+                  (.bind (Binding. "a" (Exprs/lVar "b")))
                   (.build))]
     (t/is (= query (roundtrip-query query)))
 
     (let [v (-> (doto (XtqlQuery/from "docs")
-                  (.setBindings [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-                  (.forValidTime (TemporalFilter/at (Expr/val #time/instant "2020-01-01T00:00:00Z")))
+                  (.setBindings [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
+                  (.forValidTime (TemporalFilter/at (Exprs/val #time/instant "2020-01-01T00:00:00Z")))
                   (.forSystemTime TemporalFilter$AllTime/INSTANCE))
                 (.build))]
       (t/is (= v (roundtrip-query v)) "from with temporal bounds"))
@@ -324,19 +326,19 @@
                             (-> {"from" "docs" "bind" "xt/id"} encode decode-query))
           "bind not an array")
 
-    (let [v (XtqlQuery$Pipeline. (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+    (let [v (XtqlQuery$Pipeline. (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
                                  [(XtqlQuery/limit 10)])]
       (t/is (= v (roundtrip-query v)) "pipeline"))
 
-    (let [v (XtqlQuery$Unify. [(XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
-                               (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])])]
+    (let [v (XtqlQuery$Unify. [(XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
+                               (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])])]
       (t/is (= v (roundtrip-query v)) "unify"))
 
     (t/testing "rel"
-      (let [v (XtqlQuery/relation ^List (list {"foo" (Expr/val :bar)}) ^List (list (Binding. "foo" (Expr/lVar "foo"))))]
+      (let [v (XtqlQuery/relation ^List (list {"foo" (Exprs/val :bar)}) ^List (list (Binding. "foo" (Exprs/lVar "foo"))))]
         (t/is (= v (roundtrip-query v))))
 
-      (let [v (XtqlQuery/relation (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))]
+      (let [v (XtqlQuery/relation (Exprs/param "bar") ^List (list (Binding. "foo" (Exprs/lVar "foo"))))]
         (t/is (= v (roundtrip-query v)))))
 
     (t/testing "union-all"
@@ -356,8 +358,8 @@
 
 (deftest deserialize-query-tail-test
   (t/testing "where"
-    (let [v (XtqlQuery$Where. [(Expr$Call. ">=" [(Expr/val 1) (Expr/val 2)])
-                           (Expr$Call. "<" [(Expr/val 1) (Expr/val 2)])])]
+    (let [v (XtqlQuery$Where. [(Expr$Call. ">=" [(Exprs/val 1) (Exprs/val 2)])
+                           (Expr$Call. "<" [(Exprs/val 1) (Exprs/val 2)])])]
       (t/is (= v (roundtrip-query-tail v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
@@ -377,10 +379,10 @@
                             (-> {"offset" "not-an-offset"} encode decode-query-tail))))
 
   (t/testing "orderBy"
-    (t/is (= (XtqlQuery$OrderBy. [(XtqlQuery/orderSpec (Expr/lVar "someField") nil nil)])
-             (roundtrip-query-tail (XtqlQuery$OrderBy. [(XtqlQuery/orderSpec (Expr/lVar "someField") nil nil)]))))
+    (t/is (= (XtqlQuery$OrderBy. [(XtqlQuery/orderSpec (Exprs/lVar "someField") nil nil)])
+             (roundtrip-query-tail (XtqlQuery$OrderBy. [(XtqlQuery/orderSpec (Exprs/lVar "someField") nil nil)]))))
 
-    (let [v (XtqlQuery$OrderBy. [(XtqlQuery/orderSpec (Expr/lVar "someField") XtqlQuery$OrderDirection/ASC XtqlQuery$OrderNulls/FIRST)])]
+    (let [v (XtqlQuery$OrderBy. [(XtqlQuery/orderSpec (Exprs/lVar "someField") XtqlQuery$OrderDirection/ASC XtqlQuery$OrderNulls/FIRST)])]
       (t/is (= v (roundtrip-query-tail v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
@@ -394,20 +396,20 @@
                                 decode-query-tail))))
 
   (t/testing "return"
-    (let [v (XtqlQuery$Return. [(Binding. "a" (Expr/lVar "a"))
-                            (Binding. "b" (Expr/lVar "b"))])]
+    (let [v (XtqlQuery$Return. [(Binding. "a" (Exprs/lVar "a"))
+                            (Binding. "b" (Exprs/lVar "b"))])]
       (t/is (= v (roundtrip-query-tail v))))
 
-    (let [v (XtqlQuery$Return. [(Binding. "a" (Expr/lVar "a"))
-                            (Binding. "b" (Expr/lVar "c"))])]
+    (let [v (XtqlQuery$Return. [(Binding. "a" (Exprs/lVar "a"))
+                            (Binding. "b" (Exprs/lVar "c"))])]
       (t/is (= v (roundtrip-query-tail v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
                             (-> {"return" "a"} encode decode-query-tail))))
 
   (t/testing "unnest"
-    (t/is (= (XtqlQuery/unnestCol (Binding. "a" (Expr/lVar "b")))
-             (roundtrip-query-tail (XtqlQuery/unnestCol (Binding. "a" (Expr/lVar "b"))))))
+    (t/is (= (XtqlQuery/unnestCol (Binding. "a" (Exprs/lVar "b")))
+             (roundtrip-query-tail (XtqlQuery/unnestCol (Binding. "a" (Exprs/lVar "b"))))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Illegal argument: 'xtql/malformed-binding'"
                             (-> {"unnest" {"a" {"xt:lvar" "b"} "c" {"xt:lvar" "d"}}}
@@ -416,10 +418,10 @@
           "should fail with >1 binding"))
 
   (t/testing "with"
-    (let [v (XtqlQuery$WithCols. [(Binding. "a" (Expr/lVar "a")) (Binding. "b" (Expr/lVar "b"))])]
+    (let [v (XtqlQuery$WithCols. [(Binding. "a" (Exprs/lVar "a")) (Binding. "b" (Exprs/lVar "b"))])]
       (t/is (= v (roundtrip-query-tail v))))
 
-    (let [v (XtqlQuery$WithCols. [(Binding. "a" (Expr/lVar "b")) (Binding. "c" (Expr/lVar "d"))])]
+    (let [v (XtqlQuery$WithCols. [(Binding. "a" (Exprs/lVar "b")) (Binding. "c" (Exprs/lVar "d"))])]
       (t/is (= v (roundtrip-query-tail v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
@@ -436,8 +438,8 @@
 
 
   (t/testing "aggregate"
-    (let [v (XtqlQuery$Aggregate. [(Binding. "bar" (Expr/lVar "bar"))
-                               (Binding. "baz" (Expr$Call. "sum" [(Expr/val 1)]))])]
+    (let [v (XtqlQuery$Aggregate. [(Binding. "bar" (Exprs/lVar "bar"))
+                               (Binding. "baz" (Expr$Call. "sum" [(Exprs/val 1)]))])]
       (t/is (= v (roundtrip-query-tail v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
@@ -451,21 +453,21 @@
   (JsonSerde/decode v XtqlQuery$Unify))
 
 (deftest deserialize-unify-test
-  (let [parsed-q (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+  (let [parsed-q (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
         simply-unify (XtqlQuery$Unify. [parsed-q])
         complex-unify (XtqlQuery$Unify. [parsed-q
-                                         (XtqlQuery$Where. [(Expr$Call. ">=" [(Expr/val 1) (Expr/val 2)])])
-                                         (XtqlQuery$UnnestVar. (Binding. "a" (Expr/lVar "b")))
-                                         (XtqlQuery$With. [(Binding. "a" (Expr/lVar "a"))
-                                                           (Binding. "b" (Expr/lVar "b"))])
+                                         (XtqlQuery$Where. [(Expr$Call. ">=" [(Exprs/val 1) (Exprs/val 2)])])
+                                         (XtqlQuery$UnnestVar. (Binding. "a" (Exprs/lVar "b")))
+                                         (XtqlQuery$With. [(Binding. "a" (Exprs/lVar "a"))
+                                                           (Binding. "b" (Exprs/lVar "b"))])
                                          (XtqlQuery$Join. parsed-q
-                                                          [(Binding. "id" (Expr/lVar "id"))]
-                                                          [(Binding. "id" (Expr/lVar "id"))])
+                                                          [(Binding. "id" (Exprs/lVar "id"))]
+                                                          [(Binding. "id" (Exprs/lVar "id"))])
                                          (XtqlQuery$LeftJoin. parsed-q
-                                                              [(Binding. "id" (Expr/lVar "id"))]
-                                                              [(Binding. "id" (Expr/lVar "id"))])
-                                         (XtqlQuery$ParamRelation. (Expr/param "bar") ^List (list (Binding. "foo" (Expr/lVar "foo"))))
-                                         (XtqlQuery$Call. "my-fn" [(Expr/val 1)] nil)])]
+                                                              [(Binding. "id" (Exprs/lVar "id"))]
+                                                              [(Binding. "id" (Exprs/lVar "id"))])
+                                         (XtqlQuery$ParamRelation. (Exprs/param "bar") ^List (list (Binding. "foo" (Exprs/lVar "foo"))))
+                                         (XtqlQuery$Call. "my-fn" [(Exprs/val 1)] nil)])]
 
     (t/is (= simply-unify (roundtrip-unify simply-unify)))
 
@@ -483,7 +485,7 @@
 
 (deftest deserialize-query-map-test
   (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")
-        v (QueryRequest. (XtqlQuery$From. "docs" [(Binding. "xt/id" (Expr/lVar "xt/id"))])
+        v (QueryRequest. (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
                          (-> (QueryOptions/queryOpts)
                              (.args {"id" :foo})
                              (.basis (Basis. tx-key Instant/EPOCH))

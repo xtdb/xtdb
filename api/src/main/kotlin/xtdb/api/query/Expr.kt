@@ -11,12 +11,13 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import xtdb.AnySerde
 import xtdb.jsonIAE
+import kotlin.Double as KDouble
+import kotlin.Long as KLong
 
 private fun JsonElement.requireObject(errorType: String) = this as? JsonObject ?: throw jsonIAE(errorType, this)
 private fun JsonElement.requireArray(errorType: String) = this as? JsonArray ?: throw jsonIAE(errorType, this)
 
-private fun JsonObject.requireType(errorType: String) =
-    apply { if ("@type" !in this) throw jsonIAE(errorType, this) }
+private fun JsonObject.requireType(errorType: String) = apply { if ("@type" !in this) throw jsonIAE(errorType, this) }
 
 private fun JsonObject.requireValue(errorType: String) = this["@value"] ?: throw jsonIAE(errorType, this)
 
@@ -64,9 +65,9 @@ sealed interface Expr {
     data object Null : Expr {
         internal object Serde : KSerializer<Null> {
             @OptIn(ExperimentalSerializationApi::class)
-            override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.Null" ,JsonNull.serializer().descriptor)
+            override val descriptor: SerialDescriptor =
+                SerialDescriptor("xtdb.expr.Null", JsonNull.serializer().descriptor)
 
-            @OptIn(ExperimentalSerializationApi::class)
             override fun serialize(encoder: Encoder, value: Null) {
                 require(encoder is JsonEncoder)
                 encoder.encodeJsonElement(JsonNull)
@@ -81,7 +82,7 @@ sealed interface Expr {
         TRUE(true), FALSE(false);
 
         internal object Serde : KSerializer<Bool> {
-            override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.api.query.Expr.Bool", BOOLEAN)
+            override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.expr.Bool", BOOLEAN)
             override fun serialize(encoder: Encoder, value: Bool) {
                 require(encoder is JsonEncoder)
                 if (value == TRUE) encoder.encodeJsonElement(JsonPrimitive(true))
@@ -96,28 +97,28 @@ sealed interface Expr {
     }
 
     @Serializable(Long.Serde::class)
-    data class Long(@JvmField val lng: kotlin.Long) : Expr {
+    data class Long(@JvmField val lng: KLong) : Expr {
         internal object Serde : KSerializer<Long> {
-            override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.api.query.Expr.Long", LONG)
+            override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.expr.Long", LONG)
             override fun serialize(encoder: Encoder, value: Long) {
                 require(encoder is JsonEncoder)
                 encoder.encodeJsonElement(JsonPrimitive(value.lng))
             }
 
-            override fun deserialize(decoder: Decoder): Long = `val`(decoder.decodeLong())
+            override fun deserialize(decoder: Decoder) = Long(decoder.decodeLong())
         }
     }
 
     @Serializable(Double.Serde::class)
-    data class Double(@JvmField val dbl: kotlin.Double) : Expr {
+    data class Double(@JvmField val dbl: KDouble) : Expr {
         internal object Serde : KSerializer<Double> {
-            override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.api.query.Expr.Double", DOUBLE)
+            override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("xtdb.expr.Double", DOUBLE)
             override fun serialize(encoder: Encoder, value: Double) {
                 require(encoder is JsonEncoder)
                 encoder.encodeJsonElement(JsonPrimitive(value.dbl))
             }
 
-            override fun deserialize(decoder: Decoder): Double = `val`(decoder.decodeDouble())
+            override fun deserialize(decoder: Decoder) = Double(decoder.decodeDouble())
         }
     }
 
@@ -125,7 +126,9 @@ sealed interface Expr {
     data class Obj(@JvmField val obj: Any) : Expr {
         internal object Serde : KSerializer<Obj> {
             @OptIn(ExperimentalSerializationApi::class)
-            override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.Obj" ,JsonElement.serializer().descriptor)
+            override val descriptor: SerialDescriptor =
+                SerialDescriptor("xtdb.expr.Obj", JsonElement.serializer().descriptor)
+
             override fun serialize(encoder: Encoder, value: Obj) {
                 require(encoder is JsonEncoder)
                 encoder.encodeJsonElement(encoder.json.encodeToJsonElement<Any>(value.obj))
@@ -133,7 +136,7 @@ sealed interface Expr {
 
             override fun deserialize(decoder: Decoder): Obj {
                 require(decoder is JsonDecoder)
-                return `val`(decoder.json.decodeFromJsonElement<Any>(decoder.decodeJsonElement()))
+                return Obj(decoder.json.decodeFromJsonElement<Any>(decoder.decodeJsonElement()))
             }
         }
     }
@@ -151,13 +154,18 @@ sealed interface Expr {
     data class Get(@JvmField @SerialName("xt:get") val expr: Expr, @JvmField val field: String) : Expr
 
     @Serializable
-    data class Subquery(@JvmField @SerialName("xt:q") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) : Expr
+    data class Subquery(@JvmField @SerialName("xt:q") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) :
+        Expr
 
     @Serializable
-    data class Exists(@JvmField @SerialName("xt:exists") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) : Expr
+    data class Exists(
+        @JvmField @SerialName("xt:exists") val query: XtqlQuery,
+        @JvmField val args: List<Binding>? = null,
+    ) : Expr
 
     @Serializable
-    data class Pull(@JvmField @SerialName("xt:pull") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) : Expr
+    data class Pull(@JvmField @SerialName("xt:pull") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) :
+        Expr
 
     @Serializable
     data class PullMany(
@@ -169,7 +177,8 @@ sealed interface Expr {
     data class ListExpr(@JvmField val elements: List<Expr>) : Expr {
         internal object Serde : KSerializer<ListExpr> {
             @OptIn(ExperimentalSerializationApi::class)
-            override val descriptor: SerialDescriptor =  SerialDescriptor("xtdb.api.query.Expr.ListExpr", JsonArray.serializer().descriptor)
+            override val descriptor: SerialDescriptor =
+                SerialDescriptor("xtdb.expr.ListExpr", JsonArray.serializer().descriptor)
 
             override fun serialize(encoder: Encoder, value: ListExpr) {
                 require(encoder is JsonEncoder)
@@ -180,7 +189,7 @@ sealed interface Expr {
                 require(decoder is JsonDecoder)
                 val element = decoder.decodeJsonElement()
                 if (element !is JsonArray) throw jsonIAE("xtql/malformed-list-expr", element)
-                return list(decoder.json.decodeFromJsonElement<List<Expr>>(element))
+                return ListExpr(decoder.json.decodeFromJsonElement<List<Expr>>(element))
             }
         }
     }
@@ -189,7 +198,9 @@ sealed interface Expr {
     data class SetExpr(@JvmField val elements: List<Expr>) : Expr {
         internal object Serde : KSerializer<SetExpr> {
             @OptIn(ExperimentalSerializationApi::class)
-            override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.SetExpr", JsonArray.serializer().descriptor)
+            override val descriptor: SerialDescriptor =
+                SerialDescriptor("xtdb.expr.SetExpr", JsonArray.serializer().descriptor)
+
             override fun serialize(encoder: Encoder, value: SetExpr) {
                 require(encoder is JsonEncoder)
                 encoder.encodeJsonElement(buildJsonObject {
@@ -202,22 +213,22 @@ sealed interface Expr {
                 require(decoder is JsonDecoder)
                 val errorType = "xtql/malformed-set-expr"
 
-                val value = decoder.decodeJsonElement()
-                    .requireObject(errorType)
-                    .requireType(errorType)
-                    .requireValue(errorType)
-                    .requireArray(errorType)
+                val value =
+                    decoder.decodeJsonElement().requireObject(errorType).requireType(errorType).requireValue(errorType)
+                        .requireArray(errorType)
 
-                return set(decoder.json.decodeFromJsonElement<List<Expr>>(value))
+                return SetExpr(decoder.json.decodeFromJsonElement<List<Expr>>(value))
             }
         }
     }
 
     @Serializable(MapExpr.Serde::class)
     data class MapExpr(@JvmField val elements: Map<String, Expr>) : Expr {
-        internal object Serde: KSerializer<MapExpr> {
+        internal object Serde : KSerializer<MapExpr> {
             @OptIn(ExperimentalSerializationApi::class)
-            override val descriptor: SerialDescriptor = SerialDescriptor("xtdb.api.query.Expr.MapExpr", JsonObject.serializer().descriptor)
+            override val descriptor: SerialDescriptor =
+                SerialDescriptor("xtdb.expr.MapExpr", JsonObject.serializer().descriptor)
+
             override fun serialize(encoder: Encoder, value: MapExpr) {
                 require(encoder is JsonEncoder)
                 encoder.encodeJsonElement(encoder.json.encodeToJsonElement(value.elements))
@@ -227,64 +238,64 @@ sealed interface Expr {
                 require(decoder is JsonDecoder)
                 val element = decoder.decodeJsonElement()
                 if (element !is JsonObject) throw jsonIAE("xtql/malformed-map-expr", element)
-                return map(decoder.json.decodeFromJsonElement<Map<String, Expr>>(element))
+                return MapExpr(decoder.json.decodeFromJsonElement<Map<String, Expr>>(element))
             }
         }
     }
+}
 
-    companion object {
-        @JvmStatic
-        fun `val`(l: kotlin.Long) = Long(l)
+object Exprs {
+    @JvmStatic
+    fun `val`(l: KLong) = Expr.Long(l)
 
-        @JvmStatic
-        fun `val`(d: kotlin.Double) = Double(d)
+    @JvmStatic
+    fun `val`(d: KDouble) = Expr.Double(d)
 
-        @JvmStatic
-        fun `val`(obj: Any) = Obj(obj)
+    @JvmStatic
+    fun `val`(obj: Any) = Expr.Obj(obj)
 
-        @JvmStatic
-        fun lVar(lv: String) = LogicVar(lv)
+    @JvmStatic
+    fun lVar(lv: String) = Expr.LogicVar(lv)
 
-        @JvmStatic
-        fun param(v: String) = Param(v)
+    @JvmStatic
+    fun param(v: String) = Expr.Param(v)
 
-        @JvmStatic
-        fun call(f: String, args: List<Expr>) = Call(f, args)
+    @JvmStatic
+    fun call(f: String, args: List<Expr>) = Expr.Call(f, args)
 
-        @JvmStatic
-        fun call(f: String, vararg args: Expr) = call(f, args.toList())
+    @JvmStatic
+    fun call(f: String, vararg args: Expr) = call(f, args.toList())
 
-        @JvmStatic
-        fun get(expr: Expr, field: String) = Get(expr, field)
+    @JvmStatic
+    fun get(expr: Expr, field: String) = Expr.Get(expr, field)
 
-        @JvmStatic
-        fun q(query: XtqlQuery, args: List<Binding>? = null) = Subquery(query, args)
+    @JvmStatic
+    fun q(query: XtqlQuery, args: List<Binding>? = null) = Expr.Subquery(query, args)
 
-        @JvmStatic
-        fun exists(query: XtqlQuery, args: List<Binding>? = null) = Exists(query, args)
+    @JvmStatic
+    fun exists(query: XtqlQuery, args: List<Binding>? = null) = Expr.Exists(query, args)
 
-        @JvmStatic
-        fun pull(query: XtqlQuery, args: List<Binding>? = null) = Pull(query, args)
+    @JvmStatic
+    fun pull(query: XtqlQuery, args: List<Binding>? = null) = Expr.Pull(query, args)
 
-        @JvmStatic
-        fun pullMany(query: XtqlQuery, args: List<Binding>? = null) = PullMany(query, args)
+    @JvmStatic
+    fun pullMany(query: XtqlQuery, args: List<Binding>? = null) = Expr.PullMany(query, args)
 
-        @JvmStatic
-        fun list(elements: List<Expr>) = ListExpr(elements)
+    @JvmStatic
+    fun list(elements: List<Expr>) = Expr.ListExpr(elements)
 
-        @JvmStatic
-        fun list(vararg elements: Expr) = list(elements.toList())
+    @JvmStatic
+    fun list(vararg elements: Expr) = list(elements.toList())
 
-        @JvmStatic
-        fun set(elements: List<Expr>) = SetExpr(elements)
+    @JvmStatic
+    fun set(elements: List<Expr>) = Expr.SetExpr(elements)
 
-        @JvmStatic
-        fun set(vararg elements: Expr) = set(elements.toList())
+    @JvmStatic
+    fun set(vararg elements: Expr) = set(elements.toList())
 
-        @JvmStatic
-        fun map(elements: Map<String, Expr>) = MapExpr(elements)
+    @JvmStatic
+    fun map(elements: Map<String, Expr>) = Expr.MapExpr(elements)
 
-        @JvmSynthetic
-        fun map(vararg elements: Pair<String, Expr>) = map(elements.toMap())
-    }
+    @JvmSynthetic
+    fun map(vararg elements: Pair<String, Expr>) = map(elements.toMap())
 }

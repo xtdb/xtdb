@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
-import xtdb.api.query.XtqlQuery
+import xtdb.api.query.XtqlQuery.Queries.from
 import xtdb.api.tx.putDocs
 import java.io.File
 import kotlin.io.path.Path
@@ -43,7 +43,7 @@ internal class XtdbFileTest {
             listOf(mapOf("id" to "jms")),
 
             node.openQuery(
-                XtqlQuery.from("foo") { "xt\$id" boundTo "id" }
+                from("foo") { "xt\$id" boundTo "id" }
             ).toList()
         )
 

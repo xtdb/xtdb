@@ -5,7 +5,7 @@
   (:import (clojure.lang MapEntry)
            (java.util List)
            (xtdb.api.query Binding
-                           Expr Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
+                           Exprs Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                            Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
                            Expr$ListExpr Expr$MapExpr
                            XtqlQuery XtqlQuery$Aggregate XtqlQuery$From XtqlQuery$LeftJoin XtqlQuery$Join XtqlQuery$Limit
@@ -67,16 +67,16 @@
     (nil? expr) Expr$Null/INSTANCE
     (true? expr) Expr$Bool/TRUE
     (false? expr) Expr$Bool/FALSE
-    (int? expr) (Expr/val (long expr))
-    (double? expr) (Expr/val (double expr))
+    (int? expr) (Exprs/val (long expr))
+    (double? expr) (Exprs/val (double expr))
     (symbol? expr) (let [str-expr (str expr)]
                      (if (str/starts-with? str-expr "$")
-                       (Expr/param str-expr)
-                       (Expr/lVar str-expr)))
-    (keyword? expr) (Expr/val expr)
-    (vector? expr) (Expr/list ^List (mapv parse-expr expr))
-    (set? expr) (Expr/set ^List (mapv parse-expr expr))
-    (map? expr) (Expr/map (into {} (map (juxt (comp #(subs % 1) str key) (comp parse-expr val))) expr))
+                       (Exprs/param str-expr)
+                       (Exprs/lVar str-expr)))
+    (keyword? expr) (Exprs/val expr)
+    (vector? expr) (Exprs/list ^List (mapv parse-expr expr))
+    (set? expr) (Exprs/set ^List (mapv parse-expr expr))
+    (map? expr) (Exprs/map (into {} (map (juxt (comp #(subs % 1) str key) (comp parse-expr val))) expr))
 
     (seq? expr) (do
                   (when (empty? expr)
@@ -94,7 +94,7 @@
                                        (symbol? (second args)))
                           (throw (err/illegal-arg :xtql/malformed-get {:expr expr})))
 
-                        (Expr/get (parse-expr (first args)) (str (second args))))
+                        (Exprs/get (parse-expr (first args)) (str (second args))))
 
                       (exists? q pull pull*)
                       (do
@@ -107,14 +107,14 @@
                               parsed-query (parse-query query)
                               parsed-args (some-> args (parse-arg-specs expr))]
                           (case f
-                            exists? (Expr/exists parsed-query parsed-args)
-                            q (Expr/q parsed-query parsed-args)
-                            pull (Expr/pull parsed-query parsed-args)
-                            pull* (Expr/pullMany parsed-query parsed-args))))
+                            exists? (Exprs/exists parsed-query parsed-args)
+                            q (Exprs/q parsed-query parsed-args)
+                            pull (Exprs/pull parsed-query parsed-args)
+                            pull* (Exprs/pullMany parsed-query parsed-args))))
 
-                      (Expr/call (str f) ^List (mapv parse-expr args)))))
+                      (Exprs/call (str f) ^List (mapv parse-expr args)))))
 
-    :else (Expr/val expr)))
+    :else (Exprs/val expr)))
 
 (defprotocol Unparse
   (unparse [this]))

@@ -10,9 +10,35 @@ import xtdb.api.query.*
 import xtdb.api.query.Expr.Bool.FALSE
 import xtdb.api.query.Expr.Bool.TRUE
 import xtdb.api.query.Expr.Null
+import xtdb.api.query.Exprs.lVar
+import xtdb.api.query.Exprs.list
+import xtdb.api.query.Exprs.map
+import xtdb.api.query.Exprs.param
+import xtdb.api.query.Exprs.q
+import xtdb.api.query.Exprs.set
+import xtdb.api.query.Exprs.`val`
+import xtdb.api.query.XtqlQuery.Queries.aggregate
+import xtdb.api.query.XtqlQuery.Queries.from
+import xtdb.api.query.XtqlQuery.Queries.join
+import xtdb.api.query.XtqlQuery.Queries.leftJoin
+import xtdb.api.query.XtqlQuery.Queries.limit
+import xtdb.api.query.XtqlQuery.Queries.offset
+import xtdb.api.query.XtqlQuery.Queries.orderBy
+import xtdb.api.query.XtqlQuery.Queries.orderSpec
+import xtdb.api.query.XtqlQuery.Queries.pipeline
+import xtdb.api.query.XtqlQuery.Queries.relation
+import xtdb.api.query.XtqlQuery.Queries.returning
+import xtdb.api.query.XtqlQuery.Queries.unify
+import xtdb.api.query.XtqlQuery.Queries.unnestCol
+import xtdb.api.query.XtqlQuery.Queries.unnestVar
+import xtdb.api.query.XtqlQuery.Queries.where
+import xtdb.api.query.XtqlQuery.Queries.with
+import xtdb.api.query.XtqlQuery.Queries.withCols
+import xtdb.api.query.XtqlQuery.Queries.without
 import xtdb.api.tx.*
 import java.time.*
 import java.util.*
+import kotlin.with as with
 
 class JsonSerdeTest {
 
@@ -189,7 +215,7 @@ class JsonSerdeTest {
                 }
                 """.trimJson()
             )
-        XtqlAndArgs(insert("foo", XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build()))
+        XtqlAndArgs(insert("foo", from("docs").bind(Binding("xt/id", lVar("xt/id"))).build()))
             .assertRoundTripTxOp(
                 """{
                   "insertInto": "foo",
@@ -201,7 +227,7 @@ class JsonSerdeTest {
                 }
                 """.trimJson()
             )
-        update("foo", listOf(Binding("version", Expr.`val`(1L)))).binding(listOf(Binding("xt/id")))
+        update("foo", listOf(Binding("version", `val`(1L)))).binding(listOf(Binding("xt/id")))
             .assertRoundTripTxOp(
                 """{
                     "update": "foo",
@@ -233,26 +259,26 @@ class JsonSerdeTest {
         Null.assertRoundTripExpr("null")
         TRUE.assertRoundTripExpr("true")
         FALSE.assertRoundTripExpr("false")
-        Expr.`val`("foo").assertRoundTripExpr(""""foo"""")
-        Expr.`val`(Instant.parse("2023-01-01T12:34:56.789Z")).assertRoundTripExpr(
+        `val`("foo").assertRoundTripExpr(""""foo"""")
+        `val`(Instant.parse("2023-01-01T12:34:56.789Z")).assertRoundTripExpr(
             """{"@type":"xt:instant","@value":"2023-01-01T12:34:56.789Z"}"""
         )
-        Expr.lVar("foo").assertRoundTripExpr("""{"xt:lvar":"foo"}""")
-        Expr.list(listOf(TRUE, FALSE)).assertRoundTripExpr("[true, false]".trimJson())
-        Expr.set(listOf(TRUE, FALSE)).assertRoundTripExpr(
+        lVar("foo").assertRoundTripExpr("""{"xt:lvar":"foo"}""")
+        list(listOf(TRUE, FALSE)).assertRoundTripExpr("[true, false]".trimJson())
+        set(listOf(TRUE, FALSE)).assertRoundTripExpr(
             """{
                 "@type": "xt:set",
                 "@value": [true, false]
                 }
             """.trimJson()
         )
-        Expr.map(mapOf("foo" to Expr.`val`(1L))).assertRoundTripExpr(
+        map(mapOf("foo" to `val`(1L))).assertRoundTripExpr(
             """{
                 "foo": 1
                 }
             """.trimJson()
         )
-        Expr.q(XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build()).assertRoundTripExpr(
+        q(from("docs").bind(Binding("xt/id", lVar("xt/id"))).build()).assertRoundTripExpr(
            """{
                "xt:q": 
                  {
@@ -278,15 +304,15 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeQuery() {
-        XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build().assertRoundTrip2(
+        from("docs").bind(Binding("xt/id", lVar("xt/id"))).build().assertRoundTrip2(
             """{
                 "from": "docs",
                 "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
                }
             """.trimJson())
-        XtqlQuery.from("docs")
-            .bind(Binding("xt/id", Expr.lVar("xt/id")))
-            .forValidTime(TemporalFilter.at(Expr.`val`(Instant.parse("2020-01-01T00:00:00Z"))))
+        from("docs")
+            .bind(Binding("xt/id", lVar("xt/id")))
+            .forValidTime(TemporalFilter.at(`val`(Instant.parse("2020-01-01T00:00:00Z"))))
             .forSystemTime(TemporalFilter.AllTime)
             .build().assertRoundTrip2(
             """{
@@ -296,9 +322,9 @@ class JsonSerdeTest {
                 "forSystemTime": "allTime"
                }
             """.trimJson())
-        XtqlQuery.pipeline(
-            XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build(),
-            XtqlQuery.where(TRUE)
+        pipeline(
+            from("docs").bind(Binding("xt/id", lVar("xt/id"))).build(),
+            where(TRUE)
         ).assertRoundTrip2(
             """[{
                 "from": "docs",
@@ -307,9 +333,9 @@ class JsonSerdeTest {
                 {"where": [true]}
                ]
             """.trimJson())
-        XtqlQuery.unify(
-            XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build(),
-            XtqlQuery.from("docs").bind(Binding("xt/id", Expr.lVar("xt/id"))).build()
+        unify(
+            from("docs").bind(Binding("xt/id", lVar("xt/id"))).build(),
+            from("docs").bind(Binding("xt/id", lVar("xt/id"))).build()
         ).assertRoundTrip2(
             """{
                 "unify": 
@@ -324,14 +350,14 @@ class JsonSerdeTest {
                   ]
                 }
             """.trimJson())
-        XtqlQuery.relation(Expr.param("foo"), Binding("xt/id", Expr.lVar("xt/id")))
+        relation(param("foo"), Binding("xt/id", lVar("xt/id")))
             .assertRoundTrip2(
                 """{
                     "rel": {"xt:param": "foo"},
                     "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
                    }
                 """.trimJson())
-        XtqlQuery.relation(listOf(mapOf("xt/id" to Expr.`val`(1)), mapOf("xt/id" to Expr.`val`(2))), Binding("xt/id", Expr.lVar("xt/id")))
+        relation(listOf(mapOf("xt/id" to `val`(1)), mapOf("xt/id" to `val`(2))), Binding("xt/id", lVar("xt/id")))
             .assertRoundTrip2(
                 """{
                     "rel": [{"xt/id": 1}, {"xt/id": 2}],
@@ -343,42 +369,42 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeQueryTail(){
-        XtqlQuery.where(TRUE).assertRoundTrip2(
+        where(TRUE).assertRoundTrip2(
             """{"where":[true]}"""
         )
-        XtqlQuery.limit(10).assertRoundTrip2(
+        limit(10).assertRoundTrip2(
             """{"limit":10}"""
         )
-        XtqlQuery.offset(10).assertRoundTrip2(
+        offset(10).assertRoundTrip2(
             """{"offset":10}"""
         )
-        XtqlQuery.orderBy(XtqlQuery.OrderSpec(Expr.lVar("foo"))).assertRoundTrip2(
+        orderBy(orderSpec(lVar("foo"))).assertRoundTrip2(
             """
                 {"orderBy": ["foo"]}
             """.trimJson()
         )
-        XtqlQuery.orderBy(XtqlQuery.OrderSpec(Expr.lVar("foo"), direction = XtqlQuery.OrderDirection.DESC, nulls = XtqlQuery.OrderNulls.LAST)).assertRoundTrip2(
+        orderBy(orderSpec(lVar("foo")).desc().nullsLast()).assertRoundTrip2(
             """
                 {"orderBy": [{"val": {"xt:lvar": "foo"}, "dir": "desc", "nulls": "last"}]}
             """.trimJson()
         )
-        XtqlQuery.returning(listOf(Binding("a", Expr.lVar("a")), Binding("b", Expr.lVar("b")))).assertRoundTrip2(
+        returning(listOf(Binding("a", lVar("a")), Binding("b", lVar("b")))).assertRoundTrip2(
             """{"return": ["a", {"b": {"xt:lvar": "b"}}]}""".trimJson(),
             """{"return": [{"a": {"xt:lvar": "a"}}, {"b": {"xt:lvar": "b"}}]}""".trimJson()
         )
-        XtqlQuery.unnestCol(Binding("a", Expr.lVar("b"))).assertRoundTrip2(
+        unnestCol(Binding("a", lVar("b"))).assertRoundTrip2(
             """{
                 "unnest": {"a": {"xt:lvar": "b"}}
                }
             """.trimJson()
         )
-        XtqlQuery.withCols().bind(Binding("a", Expr.lVar("b"))).bind("c", Expr.lVar("d")).build().assertRoundTrip2(
+        withCols().bind(Binding("a", lVar("b"))).bind("c", lVar("d")).build().assertRoundTrip2(
             """{"with": [{"a": {"xt:lvar": "b"}}, {"c": {"xt:lvar": "d"}}]}""".trimJson()
         )
-        XtqlQuery.without("a","b").assertRoundTrip2(
+        without("a","b").assertRoundTrip2(
             """{"without": ["a", "b"]}""".trimJson()
         )
-        XtqlQuery.aggregate().bind(Binding("a", Expr.lVar("b"))).bind("c", Expr.lVar("d")).build().assertRoundTrip2(
+        aggregate().bind(Binding("a", lVar("b"))).bind("c", lVar("d")).build().assertRoundTrip2(
             """{
                 "aggregate": [{"a": {"xt:lvar": "b"}}, {"c": {"xt:lvar": "d"}}]
                }
@@ -388,15 +414,15 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeUnify(){
-        val from = XtqlQuery.from("docs").bind(Binding("xt/id")).build()
-        XtqlQuery.unify(
+        val from = from("docs").bind(Binding("xt/id")).build()
+        unify(
             from,
-            XtqlQuery.where(TRUE),
-            XtqlQuery.unnestVar(Binding("a")),
-            XtqlQuery.with().bind(Binding("a", Expr.lVar("b"))).bind("c", Expr.lVar("d")).build(),
-            XtqlQuery.join(from),
-            XtqlQuery.leftJoin(from),
-            XtqlQuery.relation(Expr.param("foo"), Binding("xt/id", Expr.lVar("xt/id")))
+            where(TRUE),
+            unnestVar(Binding("a")),
+            with().bind(Binding("a", lVar("b"))).bind("c", lVar("d")).build(),
+            join(from),
+            leftJoin(from),
+            relation(param("foo"), Binding("xt/id", lVar("xt/id")))
         ).assertRoundTrip2(
             """{
                 "unify": [{"from":"docs",
@@ -416,7 +442,7 @@ class JsonSerdeTest {
     fun shouldDeserializeQueryRequest(){
         val txKey = TransactionKey(1, Instant.EPOCH)
         QueryRequest(
-            XtqlQuery.from("docs").bind(Binding("xt/id")).build(),
+            from("docs").bind(Binding("xt/id")).build(),
             queryOpts()
                 .args(mapOf("foo" to "bar"))
                 .basis(Basis(txKey, Instant.EPOCH))

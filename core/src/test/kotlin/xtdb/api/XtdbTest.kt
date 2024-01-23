@@ -5,11 +5,10 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.api.query.Basis
-import xtdb.api.query.Expr.Companion.call
-import xtdb.api.query.Expr.Companion.param
+import xtdb.api.query.*
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_STRING
-import xtdb.api.query.QueryOptions
+import xtdb.api.query.Exprs.call
+import xtdb.api.query.Exprs.param
 import xtdb.api.query.XtqlQuery.Queries.from
 import xtdb.api.query.XtqlQuery.Queries.pipeline
 import xtdb.api.query.XtqlQuery.Queries.relation

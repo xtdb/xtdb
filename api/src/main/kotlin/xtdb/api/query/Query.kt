@@ -9,7 +9,7 @@ import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
-import xtdb.api.query.Expr.Companion.lVar
+import xtdb.api.query.Exprs.lVar
 import xtdb.api.query.Expr.Param
 import xtdb.api.query.XtqlQuery.OrderDirection.ASC
 import xtdb.api.query.XtqlQuery.OrderDirection.DESC

@@ -8,7 +8,7 @@ import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
-import xtdb.api.query.Expr.Companion.lVar
+import xtdb.api.query.Exprs.lVar
 import xtdb.jsonIAE
 
 internal object BindingSerde : KSerializer<Binding> {
