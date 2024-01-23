@@ -225,7 +225,3 @@ data class Call(
 fun call(fnId: Any, args: List<Any>) = Call(fnId, args)
 
 data object Abort : TxOp
-
-@JvmField
-val ABORT = Abort
-

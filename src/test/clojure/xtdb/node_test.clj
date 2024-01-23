@@ -4,7 +4,7 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
-  (:import (xtdb.api.tx TxOps)))
+  (:import (xtdb.api.tx Abort)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -301,7 +301,7 @@ WHERE foo.xt$id = 1"]])]
   (xt/submit-tx tu/*node* [[:put :docs {:xt/id :foo}]])
 
   (xt/submit-tx tu/*node* [[:put :docs {:xt/id :bar}]
-                           TxOps/ABORT
+                           Abort/INSTANCE
                            [:put :docs {:xt/id :baz}]])
   (t/is (= [{:id :foo}]
            (xt/q tu/*node* '(from :docs [{:xt/id id}])))))
@@ -351,7 +351,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 (t/deftest test-txs-table-485
   (tu/with-log-level 'xtdb.indexer :error
     (xt/submit-tx tu/*node* [[:put :docs {:xt/id :foo}]])
-    (xt/submit-tx tu/*node* [TxOps/ABORT])
+    (xt/submit-tx tu/*node* [Abort/INSTANCE])
     (xt/submit-tx tu/*node* [[:put :docs {:xt/id :bar}]])
     (xt/submit-tx tu/*node* [[:put-fn :tx-fn-fail
                               '(fn []
