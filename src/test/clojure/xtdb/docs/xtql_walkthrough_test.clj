@@ -626,6 +626,19 @@
   (t/is (= [{:version 2}]
            (xt/q tu/*node* '(from :documents [version])))))
 
+(deftest DML-Update-json
+  (xt/submit-tx tu/*node*
+                [[:put :documents {:xt/id "doc-id", :version 1}]])
+
+  (t/is (= [{:version 1}]
+           (xt/q tu/*node* '(from :documents [version]))))
+
+  (let [node tu/*node*]
+    (xt/submit-tx node [(json-example-dml "DML-Update-json")]))
+
+  (t/is (= [{:version 2}]
+           (xt/q tu/*node* '(from :documents [version])))))
+
 (deftest DML-Update-sql
   (xt/submit-tx tu/*node*
                 [[:put :documents {:xt/id "doc-id", :version 1}]])

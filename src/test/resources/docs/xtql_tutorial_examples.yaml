@@ -447,6 +447,23 @@ DML-Update-sql: |
   WHERE documents.xt$id = ?
   -- end::DML-Update-sql[]
 
+DML-Update-json: |
+  // tag::DML-Update-json[]
+  {
+    "update": "documents",
+    "bind": [ { "xt/id": { "xt:param": "$doc-id" } }, { "version": { "xt:lvar": "v" } } ],
+    "set": [
+      {
+        "version": {
+          "xt:call": "+",
+          "args": [ { "xt:lvar": "v" }, 1 ]
+        }
+      }
+    ],
+    "argRows": [ { "doc-id": "doc-id" } ]
+  }
+  // end::DML-Update-json[]
+
 DML-Update-bitemporal-sql-1: |
   -- tag::DML-Update-bitemporal-sql-1[]
   INSERT INTO comments (xt$id, post_id) VALUES (?, ?)
