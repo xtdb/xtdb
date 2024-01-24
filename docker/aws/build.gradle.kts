@@ -8,10 +8,10 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":http-server"))
-    implementation(project(":modules:kafka"))
-    implementation(project(":modules:s3"))
+    implementation(project(":xtdb-core"))
+    implementation(project(":xtdb-http-server"))
+    implementation(project(":modules:xtdb-kafka"))
+    implementation(project(":modules:xtdb-s3"))
     implementation("ch.qos.logback", "logback-classic", "1.4.5")
 }
 

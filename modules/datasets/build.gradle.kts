@@ -6,8 +6,8 @@ plugins {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
 
     api("io.airlift.tpch", "tpch", "0.10")
     api("org.clojure", "data.csv", "1.0.1")

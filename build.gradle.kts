@@ -113,8 +113,6 @@ allprojects {
         if (plugins.hasPlugin("maven-publish")) {
             extensions.configure(PublishingExtension::class) {
                 publications.named("maven", MavenPublication::class) {
-                    artifactId = "xtdb-${proj.name}"
-                    version = proj.version.toString()
                     from(components["java"])
 
                     pom {
@@ -172,23 +170,23 @@ dependencies {
         devImplementation(mainSourceSet.resources.sourceDirectories)
     }
 
-    projectDep(":api")
-    projectDep(":core")
+    projectDep(":xtdb-api")
+    projectDep(":xtdb-core")
 
-    projectDep(":http-server")
-    projectDep(":http-client-clj")
-    projectDep(":pgwire-server")
+    projectDep(":xtdb-http-server")
+    projectDep(":xtdb-http-client-clj")
+    projectDep(":xtdb-pgwire-server")
 
-    projectDep(":modules:jdbc")
-    projectDep(":modules:kafka")
-    projectDep(":modules:s3")
-    projectDep(":modules:azure")
-    projectDep(":modules:google-cloud")
+    projectDep(":modules:xtdb-jdbc")
+    projectDep(":modules:xtdb-kafka")
+    projectDep(":modules:xtdb-s3")
+    projectDep(":modules:xtdb-azure")
+    projectDep(":modules:xtdb-google-cloud")
 
     projectDep(":modules:bench")
     projectDep(":modules:c1-import")
     projectDep(":modules:datasets")
-    projectDep(":modules:flight-sql")
+    projectDep(":modules:xtdb-flight-sql")
 
     api("ch.qos.logback", "logback-classic", "1.4.5")
 

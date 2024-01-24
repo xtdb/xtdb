@@ -21,8 +21,8 @@ publishing {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
 
     api("com.cognitect", "transit-clj", "1.0.324")
 }

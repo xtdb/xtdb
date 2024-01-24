@@ -6,12 +6,12 @@ plugins {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
     api(project(":modules:datasets"))
-    api(project(":modules:jdbc"))
-    api(project(":modules:kafka"))
-    api(project(":modules:s3"))
+    api(project(":modules:xtdb-jdbc"))
+    api(project(":modules:xtdb-kafka"))
+    api(project(":modules:xtdb-s3"))
 
     api("org.clojure", "data.csv", "1.0.1")
     api("ch.qos.logback", "logback-classic", "1.4.5")

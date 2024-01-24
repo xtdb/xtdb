@@ -19,7 +19,7 @@ publishing {
 }
 
 dependencies {
-    api(project(":api"))
+    api(project(":xtdb-api"))
     compileOnlyApi(files("src/main/resources"))
 
     api("org.clojure", "tools.logging", "1.2.4")
@@ -48,13 +48,13 @@ dependencies {
     api("com.charleskorn.kaml","kaml","0.56.0")
 
     testImplementation("io.mockk","mockk", "1.13.9")
-    testImplementation(project(":http-server"))
-    testImplementation(project(":pgwire-server"))
-    testImplementation(project(":modules:kafka"))
-    testImplementation(project(":modules:s3"))
-    testImplementation(project(":modules:google-cloud"))
-    testImplementation(project(":modules:azure"))
-    testImplementation(project(":modules:flight-sql"))
+    testImplementation(project(":xtdb-http-server"))
+    testImplementation(project(":xtdb-pgwire-server"))
+    testImplementation(project(":modules:xtdb-kafka"))
+    testImplementation(project(":modules:xtdb-s3"))
+    testImplementation(project(":modules:xtdb-google-cloud"))
+    testImplementation(project(":modules:xtdb-azure"))
+    testImplementation(project(":modules:xtdb-flight-sql"))
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))

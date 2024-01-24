@@ -25,8 +25,8 @@ publishing {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
 
     api("com.azure", "azure-storage-blob", "12.22.0")
     api("com.azure", "azure-messaging-eventhubs", "5.15.0")

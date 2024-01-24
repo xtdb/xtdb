@@ -5,8 +5,8 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":http-server"))
+    implementation(project(":xtdb-core"))
+    implementation(project(":xtdb-http-server"))
     implementation("ch.qos.logback", "logback-classic", "1.4.5")
 }
 

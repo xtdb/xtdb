@@ -21,8 +21,8 @@ publishing {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
 
     api("software.amazon.awssdk", "s3", "2.16.76")
     api("software.amazon.awssdk", "sqs", "2.16.76")

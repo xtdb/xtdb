@@ -25,8 +25,8 @@ publishing {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
 
     api("org.apache.arrow", "arrow-vector", "14.0.0")
     api("org.apache.arrow", "flight-sql", "14.0.0")
@@ -34,7 +34,7 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
 
     testImplementation(project(":"))
-    testImplementation(project(":http-client-clj"))
+    testImplementation(project(":xtdb-http-client-clj"))
 
     // brings in vendored SLF4J (but doesn't change the class names). naughty.
     // https://github.com/apache/arrow/issues/34516

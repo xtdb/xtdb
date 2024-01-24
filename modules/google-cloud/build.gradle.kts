@@ -25,8 +25,8 @@ publishing {
 }
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
 
     api("com.google.cloud", "google-cloud-storage", "2.23.0") {
         exclude("com.google.guava","listenablefuture")

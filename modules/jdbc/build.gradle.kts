@@ -21,8 +21,8 @@ publishing {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
-    api(project(":api"))
-    api(project(":core"))
+    api(project(":xtdb-api"))
+    api(project(":xtdb-core"))
 
     api("org.clojure", "java.data", "1.0.95")
     api("pro.juxt.clojars-mirrors.com.github.seancorfield", "next.jdbc", "1.2.674")
