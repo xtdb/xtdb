@@ -2,7 +2,7 @@
 title: XTDB SDKs
 ---
 
-For the time being, XTDB is accessible through our HTTP API and Clojure SDK - we are hard at work on SDKs for Java/Kotlin, JavaScript, Python and many more, which will be available shortly.
+XTDB is accessible through our HTTP API and Java, Kotlin and Clojure SDKs - we are hard at work on SDKs for JavaScript, Python and many more, which will be available shortly.
 
 * link:/sdks/openapi/index.html[OpenAPI HTTP specification^]
 * link:/sdks/clojure/index.html[Clojure API docs^]
@@ -54,6 +54,30 @@ The XTDB artifacts for each release are deployed to Maven Central:
         <version>2.0.0-SNAPSHOT</version>
     </dependency>
 </dependencies>
+----
+====
+
+.build.gradle.kts
+[%collapsible]
+====
+[source,kotlin]
+----
+repositories {
+    maven {
+        url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots")
+    }
+}
+
+dependencies {
+    // xtdb-api for the main public API, for both remote-client and in-process nodes
+    implementation("com.xtdb:xtdb-api:2.0.0-SNAPSHOT")
+
+    // xtdb-http-client-jvm for connecting to a remote server
+    implementation("com.xtdb:xtdb-http-client-jvm:2.0.0-SNAPSHOT")
+
+    // xtdb-core for running an in-process (test) node
+    implementation("com.xtdb:xtdb-http-core:2.0.0-SNAPSHOT")
+}
 ----
 ====
 
