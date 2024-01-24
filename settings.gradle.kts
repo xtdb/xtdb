@@ -12,9 +12,9 @@ include("api", "core")
 project(":api").name = "xtdb-api"
 project(":core").name = "xtdb-core"
 
-include("http-server", "http-client-clj", "pgwire-server")
+include("http-server", "http-client-jvm", "pgwire-server")
 project(":http-server").name = "xtdb-http-server"
-project(":http-client-clj").name = "xtdb-http-client-clj"
+project(":http-client-jvm").name = "xtdb-http-client-jvm"
 project(":pgwire-server").name = "xtdb-pgwire-server"
 
 include("docker:standalone","docker:aws")

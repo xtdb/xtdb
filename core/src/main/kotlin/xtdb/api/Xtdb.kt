@@ -4,13 +4,11 @@ package xtdb.api
 import clojure.lang.IFn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import kotlinx.serialization.modules.SerializersModule
 import xtdb.DurationSerde
 import xtdb.ZoneIdSerde
 import xtdb.api.log.LogFactory
 import xtdb.api.storage.StorageFactory
 import xtdb.util.requiringResolve
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration

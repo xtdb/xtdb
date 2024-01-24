@@ -40,10 +40,10 @@ The XTDB artifacts for each release are deployed to Maven Central:
         <version>2.0.0-SNAPSHOT</version>
     </dependency>
 
-    <!-- xtdb-http-client-clj for connecting to a remote server -->
+    <!-- xtdb-http-client-jvm for connecting to a remote server -->
     <dependency>
         <groupId>com.xtdb</groupId>
-        <artifactId>xtdb-http-client-clj</artifactId>
+        <artifactId>xtdb-http-client-jvm</artifactId>
         <version>2.0.0-SNAPSHOT</version>
     </dependency>
 
@@ -70,8 +70,8 @@ The XTDB artifacts for each release are deployed to Maven Central:
         ;; xtdb-api for the main public API, for both remote-client and in-process nodes
         com.xtdb/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
 
-        ;; xtdb-http-client-clj for connecting to a remote server
-        com.xtdb/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}
+        ;; xtdb-http-client-jvm for connecting to a remote server
+        com.xtdb/xtdb-http-client-jvm {:mvn/version "2.0.0-SNAPSHOT"}
 
         ;; xtdb-core for running an in-process (test) node (JDK 17+)
         com.xtdb/xtdb-core {:mvn/version "2.0.0-SNAPSHOT"}}

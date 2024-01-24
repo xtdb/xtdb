@@ -35,7 +35,7 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
 
     testImplementation(project(":"))
-    testImplementation(project(":xtdb-http-client-clj"))
+    testImplementation(project(":xtdb-http-client-jvm"))
 
     // brings in vendored SLF4J (but doesn't change the class names). naughty.
     // https://github.com/apache/arrow/issues/34516

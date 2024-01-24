@@ -108,7 +108,7 @@ XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x 
 * `api` contains the user API to XTDB 2.x.
 * `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, JDBC, S3 DB etc.).
   Implementations of these storage options are located in their own projects.
-* `http-server` and `http-client-clj` contain the HTTP server implementation, and a remote client for Clojure users.
+* `http-server` and `http-client-jvm` contain the HTTP server implementation, and a remote client for JVM users.
 * Storage and other modules are under `modules`.
   Modules are published to Maven independently so that you can maintain granular dependencies on precisely the individual components needed for your application.
 

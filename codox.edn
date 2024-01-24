@@ -3,7 +3,7 @@
 {:output-path "docs/public/sdks/clojure"
  :source-paths ["api/src/main"
                 "core/src/main"
-                "http-client-clj/src/main"]
+                "http-client-jvm/src/main"]
  :namespaces '[xtdb.api xtdb.node xtdb.client]
  :doc-files ["modules/kafka/docs/kafka-module.md"
              "modules/s3/docs/s3-module.md"]

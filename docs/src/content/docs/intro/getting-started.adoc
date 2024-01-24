@@ -44,7 +44,7 @@ From here, check out the link:/sdks/openapi/index.html[OpenAPI docs] to see what
 
 NOTE: other client libraries coming soon!
 
-If you're using Clojure, you can use the Clojure client library to connect to this node.
+If you're using Clojure, you can use the JVM client library to connect to this node.
 
 First, add the thin client to your `deps.edn`, or dependency manager of choice:
 
@@ -56,7 +56,7 @@ First, add the thin client to your `deps.edn`, or dependency manager of choice:
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         com.xtdb/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
-        com.xtdb/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}}}
+        com.xtdb/xtdb-http-client-jvm {:mvn/version "2.0.0-SNAPSHOT"}}}
 ----
 
 Once you have a REPL (e.g. by running `clj`), you can connect to the XTDB node with:
