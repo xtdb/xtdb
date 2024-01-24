@@ -8,7 +8,7 @@ XTQL is our new, data-oriented, composable query language, inspired by the stron
 These two combine to create a joyful, productive, interactive development experience, with the ability to build queries iteratively, testing and debugging smaller parts in isolation.
 
 * It is designed to be highly amenable to dynamic query generation - we believe that our industry has spent more than enough time trying to generate SQL strings (not to mention the concomitant https://owasp.org/www-community/attacks/SQL_Injection[security vulnerabilities^]).
-* It has **JSON** footnote:[in active development, arriving shortly] and **EDN** flavours, with client libraries to come in Java/Kotlin, JavaScript, and many more.
+* It has **JSON** and **EDN** flavours, with client libraries to come in Java/Kotlin, JavaScript, and many more.
 * It can be used for both link:#operators_and_relations[queries] and link:#dml[transactions].
 
 Let's start with XTQL queries:
@@ -68,17 +68,18 @@ By default, this shows the table at the current time, but it can be overridden:
   "bind": [ "first_name", "last_name" ],
 
   // at another point in time
-  "for_valid_time": { "at": "2023-01-01" },
+  "forValidTime": { "at": {"@type": "xt:date", "@value": "2023-01-01" }},
 
   // within a given range
-  "for_valid_time": { "in": [ "2023-01-01", "2024-01-01" ] },
-  "for_valid_time": { "from": "2023-01-01" },
-  "for_valid_time": { "to": "2024-01-01" },
+  "forValidTime": { "in": [ {"@type": "xt:date", "@value": "2023-01-01" },
+                            {"@type": "xt:date", "@value": "2024-01-01" }]},
+  "forValidTime": { "from": {"@type": "xt:date", "@value": "2023-01-01" }},
+  "forValidTime": { "to": {"@type": "xt:date", "@value": "2024-01-01" }},
 
   // for all time
-  "for_valid_time": "all_time",
+  "forValidTime": "allTime",
 
-  // and all of the above "for_system_time" too.
+  // and all of the above "forSystemTime" too.
 }
 ----
 ====
@@ -127,7 +128,7 @@ In JSON, we wrap the operators in an array to denote a pipeline:
 ----
 [
   { "from": "users", "bind": [ "first_name", "last_name" ] },
-  { "order_by" : [ "last_name", "first_name" ]},
+  { "orderBy" : [ "last_name", "first_name" ]},
   { "limit": 10 },
 ]
 ----
@@ -230,7 +231,7 @@ e.g. `INSERT INTO users2 SELECT xt$id, first_name AS given_name, last_name AS fa
   "insert": "users2",
   "query": {
     "from": "users",
-    "bind": [ "xt$id", { "first_name": "given_name", "last_name": "family_name" } ]
+    "bind": [ "xt$id", {"first_name": "given_name"}, {"last_name": "family_name"}]
   }
 }
 ----
@@ -256,7 +257,7 @@ Here, we're incrementing a 'version' attribute - `UPDATE docs SET version = vers
 .JSON
 [%collapsible%open]
 ====
-[source,javascript]
+[source,json]
 ----
 {
   "update": "documents",
@@ -292,7 +293,7 @@ Here, we delete all the comments for a given post-id - `DELETE FROM comments WHE
 .JSON
 [%collapsible%open]
 ====
-[source,javascript]
+[source,json]
 ----
 {
   "delete": "comments",

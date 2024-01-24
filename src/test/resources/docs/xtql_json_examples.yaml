@@ -48,7 +48,7 @@ star-invalid-json: |
               "projectAllCols": true}]}
   // end::star-invalid-json[]
 
-temporal-fitlers-json: |
+temporal-filters-json: |
   // tag::temporal-filters-json[]
   {"from": "users",
    "bind": [{"xt/id" : { "xt:lvar": "user"}}],
