@@ -6,6 +6,7 @@ For the time being, XTDB is accessible through our HTTP API and Clojure SDK - we
 
 * link:/sdks/openapi/index.html[OpenAPI HTTP specification^]
 * link:/sdks/clojure/index.html[Clojure API docs^]
+* link:/sdks/kotlin/index.html[Kotlin API docs^]
 
 == Maven artifacts (JVM)
 

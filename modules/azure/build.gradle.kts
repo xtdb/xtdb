@@ -7,6 +7,7 @@ plugins {
     signing
     kotlin("jvm")
     kotlin("plugin.serialization")
+    id("org.jetbrains.dokka")
 }
 
 ext {

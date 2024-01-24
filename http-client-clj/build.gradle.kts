@@ -6,6 +6,7 @@ plugins {
     `maven-publish`
     signing
     kotlin("jvm")
+    id("org.jetbrains.dokka")
 }
 
 publishing {

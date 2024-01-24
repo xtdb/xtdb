@@ -49,7 +49,10 @@ All commands are run from the `docs` folder of the project, from a terminal:
 | Moves `openapi/openapi.yaml` to `public/sdks/openapi.yaml` to be statically served together with an `index.hmtl`.
 
 | `yarn run build-javadoc`
-| Builds the full aggregate set of project javadocs via gradle to `dist/javadoc`
+| Builds the full aggregate set of project JavaDocs via gradle to `dist/javadoc`
+
+| `yarn run build-kdoc`
+| Builds the full aggregate set of project KDocs via gradle to `dist/kdoc`
 
 | `yarn run build-clj-docs`
 | Builds API docs for Clojure to `dist/clojure-docs`.

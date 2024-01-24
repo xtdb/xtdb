@@ -3,6 +3,8 @@ plugins {
     id("dev.clojurephant.clojure")
     `maven-publish`
     signing
+    kotlin("jvm")
+    id("org.jetbrains.dokka")
 }
 
 ext {

@@ -1,0 +1,24 @@
+:root {
+    --dokka-logo-image-url: url('/shared/images/logo-text.svg');
+    --dokka-logo-height: 125px;
+    --dokka-logo-width: 50px;
+
+    --active-section-color: #ea580c;
+    --active-tab-border-color: #ea580c;
+    --sidemenu-section-active-color: #ea580c;
+}
+
+.theme-dark {
+    --sidemenu-section-active-color: #7c2d12;
+}
+
+/* link custom rules styles */
+.library-name--link {
+    /* ... */
+}
+
+/* logo custom rules styles */
+.library-name--link::before {
+    background-position: left;
+    width: 125px;
+}

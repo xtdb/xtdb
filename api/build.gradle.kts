@@ -7,6 +7,7 @@ plugins {
     signing
     kotlin("jvm")
     kotlin("plugin.serialization")
+    id("org.jetbrains.dokka")
 }
 
 publishing {
@@ -59,4 +60,8 @@ kotlin {
             freeCompilerArgs.add("-Xjvm-default=all")
         }
     }
+}
+
+tasks.dokkaHtmlPartial {
+    moduleName.set("xtdb-api")
 }

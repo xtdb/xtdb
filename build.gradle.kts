@@ -1,7 +1,15 @@
 import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
-import java.io.File
+import org.jetbrains.dokka.base.DokkaBase
+import org.jetbrains.dokka.base.DokkaBaseConfiguration
+import java.time.Year
 
 evaluationDependsOnChildren()
+
+buildscript {
+    dependencies {
+        classpath("org.jetbrains.dokka:dokka-base:1.9.10")
+    }
+}
 
 plugins {
     `java-library`
@@ -9,6 +17,7 @@ plugins {
     id("io.freefair.aggregate-javadoc") version "6.6"
     kotlin("jvm")
     kotlin("plugin.serialization")
+    id("org.jetbrains.dokka")
 }
 
 val defaultJvmArgs = listOf(
@@ -44,8 +53,14 @@ allprojects {
     if (plugins.hasPlugin("java-library")) {
         java {
             withSourcesJar()
-            withJavadocJar()
         }
+
+        if (plugins.hasPlugin("org.jetbrains.dokka"))
+            tasks.register<Jar>("dokkaJavadocJar") {
+                dependsOn(tasks.dokkaJavadoc)
+                from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
+                archiveClassifier.set("javadoc")
+            }
 
         tasks.test {
             useJUnitPlatform {
@@ -114,6 +129,11 @@ allprojects {
             extensions.configure(PublishingExtension::class) {
                 publications.named("maven", MavenPublication::class) {
                     from(components["java"])
+
+                    if (plugins.hasPlugin("org.jetbrains.dokka"))
+                        artifact(tasks["dokkaJavadocJar"]) {
+                            this.classifier = "javadoc"
+                        }
 
                     pom {
                         url.set("https://xtdb.com")
@@ -289,7 +309,7 @@ fun createSltTask(
     maxFailures: Long = 0,
     maxErrors: Long = 0,
     testFiles: List<String> = emptyList(),
-    extraArgs: List<String> = emptyList()
+    extraArgs: List<String> = emptyList(),
 ) {
     tasks.create(taskName, JavaExec::class) {
         classpath = sourceSets.test.get().runtimeClasspath
@@ -336,29 +356,33 @@ createSltTask(
     "slt-test-dir",
     maxFailures = if (project.hasProperty("testMaxFailures")) {
         val testMaxFailures: String by project
-        if (testMaxFailures.isEmpty()) {
-            0
-        } else {
-            testMaxFailures.toLong()
-        }
-    } else {
-        0
-    },
+        if (testMaxFailures.isEmpty()) 0 else testMaxFailures.toLong()
+    } else 0,
+
     maxErrors = if (project.hasProperty("testMaxErrors")) {
         val testMaxErrors: String by project
-        if (testMaxErrors.isEmpty()) {
-            0
-        } else {
-            testMaxErrors.toLong()
-        }
-    } else {
-        0
-    },
+        if (testMaxErrors.isEmpty()) 0 else testMaxErrors.toLong()
+    } else 0,
+
     testFiles = if (project.hasProperty("testDir")) {
         val testDir: String by project
         listOf(testDir)
-    } else {
-        emptyList()
-    },
+    } else emptyList(),
+
     extraArgs = listOf("--dirs")
 )
+
+tasks.dokkaHtmlMultiModule {
+    moduleName.set("")
+    moduleVersion.set("2.0.0-SNAPSHOT")
+
+    inputs.file("dokka/logo-styles.css")
+    inputs.file("dokka/logo-icon.svg")
+
+    pluginConfiguration<DokkaBase, DokkaBaseConfiguration> {
+        customAssets = listOf(file("dokka/logo-icon.svg"))
+        customStyleSheets = listOf(file("dokka/logo-styles.css"))
+
+        footerMessage = "© ${Year.now().value} JUXT Ltd"
+    }
+}

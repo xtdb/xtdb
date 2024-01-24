@@ -111,7 +111,9 @@ export default defineConfig({
               items: [
                 { label: 'Overview', link: '/reference/main/sdks' },
                 { label: 'Clojure ↗', link: '/sdks/clojure/index.html', attrs: {target: '_blank'} },
-                { label: 'Java ↗', link: '/sdks/java/index.html', attrs: {target: '_blank'}},
+                // broken atm.
+                // { label: 'Java ↗', link: '/sdks/java/index.html', attrs: {target: '_blank'}},
+                { label: 'Kotlin ↗', link: '/sdks/kotlin/index.html', attrs: {target: '_blank'}},
                 { label: 'HTTP (OpenAPI) ↗', link: '/sdks/openapi/index.html', attrs: {target: '_blank'}},
               ]
             },

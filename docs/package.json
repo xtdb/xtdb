@@ -9,7 +9,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "build-openapi-docs": "cp openapi/openapi.yaml public/sdks/openapi/openapi.yaml",
-    "build-javadoc": "rm -rf public/sdks/java && cd ../ && ./gradlew aggregateJavadoc && cp -r ./build/docs/aggregateJavadoc docs/public/sdks/java",
+    "build-javadoc": "rm -rf public/sdks/java && cd ../ && ./gradlew dokkaJavadocCollector && cp -r ./build/docs/dokka/javadoc docs/public/sdks/java",
+    "build-kdoc": "rm -rf public/sdks/kotlin && cd ../ && ./gradlew dokkaHtmlMultiModule && cp -r ./build/dokka/htmlMultiModule docs/public/sdks/kotlin",
     "build-clj-docs": "rm -rf public/sdks/clojure && cd ../ && ./gradlew build-codox"
   },
   "dependencies": {
