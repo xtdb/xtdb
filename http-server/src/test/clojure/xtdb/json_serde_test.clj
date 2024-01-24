@@ -2,7 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.error :as err]
-            xtdb.serde
+            [xtdb.serde]
             [xtdb.tx-ops :as tx-ops])
   (:import (java.time Instant)
            (java.util List)
@@ -10,7 +10,7 @@
            (xtdb.api TransactionKey)
            (xtdb.api.query Basis Binding Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Exprs
                            Queries Query QueryOptions QueryRequest SqlQuery TemporalFilter TemporalFilter$AllTime TemporalFilters
-                           XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without)
+                           XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn- encode [v]
@@ -408,8 +408,8 @@
                             (-> {"return" "a"} encode decode-query-tail))))
 
   (t/testing "unnest"
-    (t/is (= (Queries/unnestCol (Binding. "a" (Exprs/lVar "b")))
-             (roundtrip-query-tail (Queries/unnestCol (Binding. "a" (Exprs/lVar "b"))))))
+    (t/is (= (Queries/unnest (Binding. "a" (Exprs/lVar "b")))
+             (roundtrip-query-tail (Queries/unnest (Binding. "a" (Exprs/lVar "b"))))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Illegal argument: 'xtql/malformed-binding'"
                             (-> {"unnest" {"a" {"xt:lvar" "b"} "c" {"xt:lvar" "d"}}}
@@ -418,10 +418,10 @@
           "should fail with >1 binding"))
 
   (t/testing "with"
-    (let [v (XtqlQuery$WithCols. [(Binding. "a" (Exprs/lVar "a")) (Binding. "b" (Exprs/lVar "b"))])]
+    (let [v (XtqlQuery$With. [(Binding. "a" (Exprs/lVar "a")) (Binding. "b" (Exprs/lVar "b"))])]
       (t/is (= v (roundtrip-query-tail v))))
 
-    (let [v (XtqlQuery$WithCols. [(Binding. "a" (Exprs/lVar "b")) (Binding. "c" (Exprs/lVar "d"))])]
+    (let [v (XtqlQuery$With. [(Binding. "a" (Exprs/lVar "b")) (Binding. "c" (Exprs/lVar "d"))])]
       (t/is (= v (roundtrip-query-tail v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
@@ -457,7 +457,7 @@
         simply-unify (XtqlQuery$Unify. [parsed-q])
         complex-unify (XtqlQuery$Unify. [parsed-q
                                          (XtqlQuery$Where. [(Expr$Call. ">=" [(Exprs/val 1) (Exprs/val 2)])])
-                                         (XtqlQuery$UnnestVar. (Binding. "a" (Exprs/lVar "b")))
+                                         (XtqlQuery$Unnest. (Binding. "a" (Exprs/lVar "b")))
                                          (XtqlQuery$With. [(Binding. "a" (Exprs/lVar "a"))
                                                            (Binding. "b" (Exprs/lVar "b"))])
                                          (XtqlQuery$Join. parsed-q

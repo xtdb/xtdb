@@ -29,13 +29,11 @@ import xtdb.api.query.Queries.pipeline
 import xtdb.api.query.Queries.relation
 import xtdb.api.query.Queries.returning
 import xtdb.api.query.Queries.unify
-import xtdb.api.query.Queries.unnestCol
-import xtdb.api.query.Queries.unnestVar
+import xtdb.api.query.Queries.unnest
 import xtdb.api.query.Queries.where
 import xtdb.api.query.Queries.with
-import xtdb.api.query.Queries.withCols
 import xtdb.api.query.Queries.without
-import xtdb.api.tx.*
+import xtdb.api.tx.TxOp
 import xtdb.api.tx.TxOps.insert
 import xtdb.api.tx.TxOps.putDocs
 import xtdb.api.tx.TxOps.update
@@ -394,13 +392,13 @@ class JsonSerdeTest {
             """{"return": ["a", {"b": {"xt:lvar": "b"}}]}""".trimJson(),
             """{"return": [{"a": {"xt:lvar": "a"}}, {"b": {"xt:lvar": "b"}}]}""".trimJson()
         )
-        unnestCol(Binding("a", lVar("b"))).assertRoundTrip2(
+        unnest(Binding("a", lVar("b"))).assertRoundTrip2(
             """{
                 "unnest": {"a": {"xt:lvar": "b"}}
                }
             """.trimJson()
         )
-        withCols().bind(Binding("a", lVar("b"))).bind("c", lVar("d")).build().assertRoundTrip2(
+        with().bind(Binding("a", lVar("b"))).bind("c", lVar("d")).build().assertRoundTrip2(
             """{"with": [{"a": {"xt:lvar": "b"}}, {"c": {"xt:lvar": "d"}}]}""".trimJson()
         )
         without("a","b").assertRoundTrip2(
@@ -420,7 +418,7 @@ class JsonSerdeTest {
         unify(
             from,
             where(TRUE),
-            unnestVar(Binding("a")),
+            unnest(Binding("a")),
             with().bind(Binding("a", lVar("b"))).bind("c", lVar("d")).build(),
             join(from),
             leftJoin(from),

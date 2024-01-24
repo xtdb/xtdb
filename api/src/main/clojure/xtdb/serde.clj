@@ -57,7 +57,7 @@
   (print-dup i w))
 
 (defn- render-query [^XtqlQuery query]
-  (xtql.edn/unparse query))
+  (xtql.edn/unparse-query query))
 
 (defn- xtql-query-reader [q-edn]
   (xtql.edn/parse-query q-edn))

@@ -20,7 +20,7 @@
   (-> (get examples name)
       JsonSerde/jsonRemoveComments
       (JsonSerde/decode XtqlQuery)
-      x-edn/unparse))
+      x-edn/unparse-query))
 
 (defn json-example-dml [name]
   (-> (get examples name)

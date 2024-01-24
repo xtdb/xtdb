@@ -9,7 +9,7 @@
                            Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs
                            Queries XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset
                            XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline
-                           XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnnestCol XtqlQuery$UnnestVar XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without
+                           XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without
                            TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
            (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update)))
 
@@ -539,9 +539,9 @@
                     (wrap-project (vec provided-vars)))
        :provided-vars provided-vars}))
 
-  XtqlQuery$WithCols
+  XtqlQuery$With
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [projections (map #(plan-col-spec % provided-vars) (.cols this))
+    (let [projections (map #(plan-col-spec % provided-vars) (.bindings this))
           return-vars (set/union
                        provided-vars
                        (set (map :l projections)))]
@@ -571,9 +571,9 @@
       {:ra-plan [:project projections ra-plan]
        :provided-vars (set (map #(first (keys %)) projections))}))
 
-  XtqlQuery$UnnestCol
+  XtqlQuery$Unnest
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [{:keys [l r subqueries]} (plan-col-spec (.col this) provided-vars)
+    (let [{:keys [l r subqueries]} (plan-col-spec (.binding this) provided-vars)
           pre-col (gen-col)
           return-vars (conj provided-vars l)]
       {:ra-plan
@@ -623,16 +623,16 @@
 
   XtqlQuery$With
   (plan-unify-clause [this]
-    (for [binding (.vars this)
+    (for [binding (.bindings this)
           :let [{:keys [l r required-vars subqueries]} (plan-var-spec binding)]]
       [:with {:expr r
               :provided-vars #{l}
               :required-vars required-vars
               :subqueries subqueries}]))
 
-  XtqlQuery$UnnestVar
+  XtqlQuery$Unnest
   (plan-unify-clause [this]
-    (let [{:keys [l r subqueries required-vars]} (plan-var-spec (.var this))]
+    (let [{:keys [l r subqueries required-vars]} (plan-var-spec (.binding this))]
       [[:unnest {:expr r
                  :required-vars required-vars
                  :provided-vars #{l}

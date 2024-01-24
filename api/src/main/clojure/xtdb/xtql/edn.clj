@@ -4,15 +4,13 @@
             [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.api.query Binding
-                           Exprs Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
+           (xtdb.api.query Binding Exprs Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
                            Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
                            Expr$ListExpr Expr$MapExpr
                            Queries XtqlQuery$Aggregate XtqlQuery$From XtqlQuery$LeftJoin XtqlQuery$Join XtqlQuery$Limit
                            XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderSpec XtqlQuery$Pipeline XtqlQuery$Offset
-                           XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnionAll XtqlQuery$Where XtqlQuery$With XtqlQuery$WithCols XtqlQuery$Without
-                           XtqlQuery$DocsRelation XtqlQuery$ParamRelation XtqlQuery$OrderDirection XtqlQuery$OrderNulls
-                           XtqlQuery$UnnestCol XtqlQuery$UnnestVar
+                           XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnionAll XtqlQuery$Where XtqlQuery$With XtqlQuery$Without
+                           XtqlQuery$DocsRelation XtqlQuery$ParamRelation XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$Unnest
                            TemporalFilters TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 ;; TODO inline once the type we support is fixed
@@ -116,8 +114,10 @@
 
     :else (Exprs/val expr)))
 
-(defprotocol Unparse
-  (unparse [this]))
+(defprotocol Unparse (unparse [this]))
+(defprotocol UnparseQuery (unparse-query [this]))
+(defprotocol UnparseQueryTail (unparse-query-tail [this]))
+(defprotocol UnparseUnifyClause (unparse-unify-clause [this]))
 
 (defn unparse-binding [base-type nested-type, ^Binding binding]
   (let [attr (.getBinding binding)
@@ -157,26 +157,26 @@
 
   Expr$Exists
   (unparse [e]
-    (list* 'exists? (unparse (.query e))
+    (list* 'exists? (unparse-query (.query e))
            (when-let [args (.args e)]
              [{:args (mapv unparse-arg-spec args)}])))
 
 
   Expr$Subquery
   (unparse [e]
-    (list* 'q (unparse (.query e))
+    (list* 'q (unparse-query (.query e))
            (when-let [args (.args e)]
              [{:args (mapv unparse-arg-spec args)}])))
 
   Expr$Pull
   (unparse [e]
-    (list* 'pull (unparse (.query e))
+    (list* 'pull (unparse-query (.query e))
            (when-let [args (.args e)]
              [{:args (mapv unparse-arg-spec args)}])))
 
   Expr$PullMany
   (unparse [e]
-    (list* 'pull* (unparse (.query e))
+    (list* 'pull* (unparse-query (.query e))
            (when-let [args (.args e)]
              [{:args (mapv unparse-arg-spec args)}]))))
 
@@ -392,9 +392,9 @@
     :else (-> (Queries/leftJoin (parse-query query) nil)
               (.binding (parse-out-specs opts left-join)))))
 
-(extend-protocol Unparse
+(extend-protocol UnparseQuery
   XtqlQuery$From
-  (unparse [from]
+  (unparse-query [from]
     (let [for-valid-time (.forValidTime from)
           for-sys-time (.forSystemTime from)
           bind (mapv unparse-out-spec (.bindings from))
@@ -404,53 +404,64 @@
               (cond-> {:bind bind}
                 for-valid-time (assoc :for-valid-time (unparse for-valid-time))
                 for-sys-time (assoc :for-system-time (unparse for-sys-time)))
-              bind))))
+              bind)))))
+
+(extend-protocol UnparseUnifyClause
+  XtqlQuery$From
+  (unparse-unify-clause [from] (unparse-query from))
 
   XtqlQuery$Join
-  (unparse [join]
+  (unparse-unify-clause [join]
     (let [args (.args join)
           bind (mapv unparse-col-spec (.bindings join))]
-      (list 'join (unparse (.query join))
+      (list 'join (unparse-query (.query join))
             (if args
               (cond-> {:bind bind}
                 (seq args) (assoc :args (mapv unparse-arg-spec args)))
               bind))))
 
   XtqlQuery$LeftJoin
-  (unparse [left-join]
+  (unparse-unify-clause [left-join]
     (let [args (.args left-join)
           bind (mapv unparse-col-spec (.bindings left-join))]
-      (list 'left-join (unparse (.query left-join))
+      (list 'left-join (unparse-query (.query left-join))
             (if args
               (cond-> {:bind bind}
                 (seq args) (assoc :args (mapv unparse-arg-spec args)))
               bind)))))
 
-(extend-protocol Unparse
-  XtqlQuery$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))
-  XtqlQuery$Where (unparse [query] (list* 'where (mapv unparse (.preds query))))
-  XtqlQuery$With (unparse [query] (list* 'with (mapv unparse-var-spec (.vars query))))
-  XtqlQuery$WithCols (unparse [query] (list* 'with (mapv unparse-col-spec (.cols query))))
-  XtqlQuery$Without (unparse [query] (list* 'without (map keyword (.cols query))))
-  XtqlQuery$Return (unparse [query] (list* 'return (mapv unparse-col-spec (.cols query))))
-  XtqlQuery$Aggregate (unparse [query] (list* 'aggregate (mapv unparse-col-spec (.cols query))))
-  XtqlQuery$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
-  XtqlQuery$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
-  XtqlQuery$Limit (unparse [this] (list 'limit (.length this)))
-  XtqlQuery$Offset (unparse [this] (list 'offset (.length this)))
+(extend-protocol UnparseQuery
+  XtqlQuery$Pipeline (unparse-query [query] (list* '-> (unparse-query (.query query)) (mapv unparse-query-tail (.tails query))))
+
+  XtqlQuery$Unify (unparse-query [query] (list* 'unify (mapv unparse-unify-clause (.clauses query))))
+  XtqlQuery$UnionAll (unparse-query [query] (list* 'union-all (mapv unparse-query (.queries query))))
 
   XtqlQuery$DocsRelation
-  (unparse [this]
+  (unparse-query [this]
     (list 'rel
           (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) (.documents this))
           (mapv unparse-out-spec (.bindings this))))
 
   XtqlQuery$ParamRelation
-  (unparse [this]
-    (list 'rel (symbol (.v (.param this))) (mapv unparse-out-spec (.bindings this))))
+  (unparse-query [this]
+    (list 'rel (symbol (.v (.param this))) (mapv unparse-out-spec (.bindings this)))))
 
-  XtqlQuery$UnnestCol (unparse [this] (list 'unnest (unparse-col-spec (.col this))))
-  XtqlQuery$UnnestVar (unparse [this] (list 'unnest (unparse-var-spec (.var this)))))
+(extend-protocol UnparseQueryTail
+  XtqlQuery$Where (unparse-query-tail [query] (list* 'where (mapv unparse (.preds query))))
+  XtqlQuery$With (unparse-query-tail [query] (list* 'with (mapv unparse-col-spec (.bindings query))))
+  XtqlQuery$Without (unparse-query-tail [query] (list* 'without (map keyword (.cols query))))
+  XtqlQuery$Return (unparse-query-tail [query] (list* 'return (mapv unparse-col-spec (.cols query))))
+  XtqlQuery$Aggregate (unparse-query-tail [query] (list* 'aggregate (mapv unparse-col-spec (.cols query))))
+  XtqlQuery$Limit (unparse-query-tail [this] (list 'limit (.length this)))
+  XtqlQuery$Offset (unparse-query-tail [this] (list 'offset (.length this)))
+  XtqlQuery$Unnest (unparse-query-tail [this] (list 'unnest (unparse-col-spec (.binding this)))))
+
+(extend-protocol UnparseUnifyClause
+  XtqlQuery$Where (unparse-unify-clause [where] (unparse-query-tail where))
+  XtqlQuery$With (unparse-unify-clause [with] (list* 'with (mapv unparse-var-spec (.bindings with))))
+  XtqlQuery$DocsRelation (unparse-unify-clause [this] (unparse-query this))
+  XtqlQuery$ParamRelation (unparse-unify-clause [this] (unparse-query this))
+  XtqlQuery$Unnest (unparse-unify-clause [this] (list 'unnest (unparse-var-spec (.binding this)))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -483,7 +494,7 @@
 
 (defmethod parse-query-tail 'with [[_ & cols :as this]]
   ;;TODO with uses col-specs but doesn't support short form, this needs handling
-  (Queries/withCols (parse-col-specs cols this)))
+  (Queries/with (parse-col-specs cols this)))
 
 (defmethod parse-unify-clause 'with [[_ & vars :as this]]
   (Queries/with (parse-var-specs vars this)))
@@ -539,11 +550,11 @@
 
 (defmethod parse-query-tail 'unnest [[_ binding :as this]]
   (check-unnest binding this)
-  (Queries/unnestCol (first (parse-col-specs binding this))))
+  (Queries/unnest (first (parse-col-specs binding this))))
 
 (defmethod parse-unify-clause 'unnest [[_ binding :as this]]
   (check-unnest binding this)
-  (Queries/unnestVar (first (parse-var-specs binding this))))
+  (Queries/unnest (first (parse-var-specs binding this))))
 
 (def order-spec-opt-keys #{:val :dir :nulls})
 
@@ -584,8 +595,9 @@
         expr
         (cond-> {:val expr}
           dir (assoc :dir (if (= XtqlQuery$OrderDirection/ASC dir) :asc :desc))
-          nulls (assoc :nulls (if (= XtqlQuery$OrderNulls/FIRST nulls) :first :last))))))
+          nulls (assoc :nulls (if (= XtqlQuery$OrderNulls/FIRST nulls) :first :last)))))))
 
+(extend-protocol UnparseQueryTail
   XtqlQuery$OrderBy
-  (unparse [query]
+  (unparse-query-tail [query]
     (list* 'order-by (mapv unparse (.orderSpecs query)))))

@@ -66,13 +66,13 @@
            (roundtrip-expr '(q (from :foo [a]))))))
 
 (defn- roundtrip-q [q]
-  (edn/unparse (edn/parse-query q)))
+  (edn/unparse-query (edn/parse-query q)))
 
 (defn- roundtrip-q-tail [q]
-  (edn/unparse (edn/parse-query-tail q)))
+  (edn/unparse-query-tail (edn/parse-query-tail q)))
 
 (defn- roundtrip-unify-clause [q]
-  (edn/unparse (edn/parse-unify-clause q)))
+  (edn/unparse-unify-clause (edn/parse-unify-clause q)))
 
 (t/deftest test-parse-from
   (t/is (= '(from :foo [a])

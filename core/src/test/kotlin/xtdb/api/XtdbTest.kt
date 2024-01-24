@@ -12,7 +12,7 @@ import xtdb.api.query.Exprs.param
 import xtdb.api.query.Queries.from
 import xtdb.api.query.Queries.pipeline
 import xtdb.api.query.Queries.relation
-import xtdb.api.query.Queries.withCols
+import xtdb.api.query.Queries.with
 import xtdb.api.tx.TxOps.putDocs
 import java.time.Instant
 import java.time.LocalDate
@@ -97,7 +97,7 @@ internal class XtdbTest {
             node.openQuery(
                 pipeline(
                     emptyRel,
-                    withCols { "currentTime" boundTo call("current-date") }
+                    with { "currentTime" boundTo call("current-date") }
                 ),
 
                 QueryOptions(basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")))
@@ -112,7 +112,7 @@ internal class XtdbTest {
             node.openQuery(
                 pipeline(
                     emptyRel,
-                    withCols { "timestamp" boundTo call("current-timestamp") }
+                    with { "timestamp" boundTo call("current-timestamp") }
                 ),
 
                 QueryOptions(

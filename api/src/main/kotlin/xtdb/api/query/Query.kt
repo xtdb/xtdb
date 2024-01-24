@@ -9,8 +9,8 @@ import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
-import xtdb.api.query.Exprs.lVar
 import xtdb.api.query.Expr.Param
+import xtdb.api.query.Exprs.lVar
 import xtdb.api.query.XtqlQuery.OrderDirection.ASC
 import xtdb.api.query.XtqlQuery.OrderDirection.DESC
 import xtdb.api.query.XtqlQuery.OrderNulls.FIRST
@@ -18,7 +18,7 @@ import xtdb.api.query.XtqlQuery.OrderNulls.LAST
 import xtdb.jsonIAE
 
 @Serializable(Query.Serde::class)
-sealed interface Query{
+sealed interface Query {
     /**
      * @suppress
      */
@@ -28,6 +28,7 @@ sealed interface Query{
                 "sql" in element -> SqlQuery.serializer()
                 else -> XtqlQuery.serializer()
             }
+
             else -> XtqlQuery.serializer()
         }
     }
@@ -70,9 +71,9 @@ sealed interface XtqlQuery : Query {
                     "offset" in element -> Offset.serializer()
                     "orderBy" in element -> OrderBy.serializer()
                     "return" in element -> Return.serializer()
-                    "unnest" in element -> UnnestCol.serializer()
+                    "unnest" in element -> Unnest.serializer()
                     "where" in element -> Where.serializer()
-                    "with" in element -> WithCols.serializer()
+                    "with" in element -> With.serializer()
                     "without" in element -> Without.serializer()
                     else -> throw jsonIAE("xtql/malformed-query-tail", element)
                 }
@@ -96,7 +97,7 @@ sealed interface XtqlQuery : Query {
                         "join" in element -> Join.serializer()
                         "leftJoin" in element -> LeftJoin.serializer()
                         "rel" in element -> Relation.serializer()
-                        "unnest" in element -> UnnestVar.serializer()
+                        "unnest" in element -> Unnest.serializer()
                         "where" in element -> Where.serializer()
                         "with" in element -> With.serializer()
                         else -> throw jsonIAE("xtql/malformed-unify-clause", element)
@@ -126,12 +127,9 @@ sealed interface XtqlQuery : Query {
                 val element = decoder.decodeJsonElement()
                 if (element !is JsonArray) throw jsonIAE("xtql/malformed-pipeline", element)
                 val query = decoder.json.decodeFromJsonElement<XtqlQuery>(element[0])
-                var tails: MutableList<QueryTail> = mutableListOf<QueryTail>()
-                for (tailElement in element.subList(1, element.size)) tails.add(
-                    decoder.json.decodeFromJsonElement(
-                        tailElement
-                    )
-                )
+                val tails: MutableList<QueryTail> = mutableListOf()
+                for (tailElement in element.subList(1, element.size))
+                    tails.add(decoder.json.decodeFromJsonElement(tailElement))
                 return Pipeline(query, tails)
             }
         }
@@ -170,16 +168,9 @@ sealed interface XtqlQuery : Query {
     data class Where(@JvmField @SerialName("where") val preds: List<Expr>) : QueryTail, UnifyClause
 
     @Serializable
-    data class With(@JvmField @SerialName("with") val vars: List<Binding>) : UnifyClause {
+    data class With(@JvmField @SerialName("with") val bindings: List<Binding>) : QueryTail, UnifyClause {
         class Builder : Binding.ABuilder<Builder, With>() {
             override fun build() = With(buildBindings())
-        }
-    }
-
-    @Serializable
-    data class WithCols(@JvmField @SerialName("with") val cols: List<Binding>) : QueryTail {
-        class Builder : Binding.ABuilder<Builder, WithCols>() {
-            override fun build() = WithCols(buildBindings())
         }
     }
 
@@ -362,10 +353,7 @@ sealed interface XtqlQuery : Query {
     ) : Relation()
 
     @Serializable
-    data class UnnestVar(@JvmField @SerialName("unnest") val `var`: Binding) : UnifyClause
-
-    @Serializable
-    data class UnnestCol(@JvmField @SerialName("unnest") val col: Binding) : QueryTail
+    data class Unnest(@JvmField @SerialName("unnest") val binding: Binding) : QueryTail, UnifyClause
 }
 
 object Queries {
@@ -401,15 +389,6 @@ object Queries {
 
     @JvmSynthetic
     fun with(b: XtqlQuery.With.Builder.() -> Unit) = with().also { it.b() }.build()
-
-    @JvmStatic
-    fun withCols(cols: List<Binding>) = XtqlQuery.WithCols(cols)
-
-    @JvmStatic
-    fun withCols() = XtqlQuery.WithCols.Builder()
-
-    @JvmSynthetic
-    fun withCols(b: XtqlQuery.WithCols.Builder.() -> Unit) = withCols().also { it.b() }.build()
 
     @JvmStatic
     fun without(cols: List<String>) = XtqlQuery.Without(cols)
@@ -490,8 +469,5 @@ object Queries {
     fun relation(param: Param, vararg bindings: Binding) = relation(param, bindings.toList())
 
     @JvmStatic
-    fun unnestVar(`var`: Binding) = XtqlQuery.UnnestVar(`var`)
-
-    @JvmStatic
-    fun unnestCol(col: Binding) = XtqlQuery.UnnestCol(col)
+    fun unnest(binding: Binding) = XtqlQuery.Unnest(binding)
 }

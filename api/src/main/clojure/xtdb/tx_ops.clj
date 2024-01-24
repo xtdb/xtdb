@@ -166,13 +166,13 @@
 (extend-protocol Unparse
   TxOp$Insert
   (unparse-tx-op [query]
-    [:insert-into (keyword (.table query)) (xtql.edn/unparse (.query query))])
+    [:insert-into (keyword (.table query)) (xtql.edn/unparse-query (.query query))])
 
   TxOp$Update
   (unparse-tx-op [query]
     (let [for-valid-time (some-> (.forValidTime query) xtql.edn/unparse)
           bind (some->> (.bindSpecs query) (mapv xtql.edn/unparse-out-spec))
-          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse))]
+          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse-unify-clause))]
       [:update (cond-> {:table (keyword (.table query))
                         :set (into {} (map xtql.edn/unparse-col-spec) (.setSpecs query))}
                  for-valid-time (assoc :for-valid-time for-valid-time)
@@ -183,7 +183,7 @@
   (unparse-tx-op [query]
     (let [for-valid-time (some-> (.forValidTime query) xtql.edn/unparse)
           bind (some->> (.bindSpecs query) (mapv xtql.edn/unparse-out-spec))
-          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse))]
+          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse-unify-clause))]
       [:delete (cond-> {:from (keyword (.table query))}
                  for-valid-time (assoc :for-valid-time for-valid-time)
                  bind (assoc :bind bind)
@@ -192,18 +192,18 @@
   TxOp$Erase
   (unparse-tx-op [query]
     (let [bind (some->> (.bindSpecs query) (mapv xtql.edn/unparse-out-spec))
-          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse))]
+          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse-unify-clause))]
       [:erase (cond-> {:from (keyword (.table query))}
                 bind (assoc :bind bind)
                 unify (assoc :unify unify))]))
 
   TxOp$AssertExists
   (unparse-tx-op [query]
-    [:assert-exists (xtql.edn/unparse (.query query))])
+    [:assert-exists (xtql.edn/unparse-query (.query query))])
 
   TxOp$AssertNotExists
   (unparse-tx-op [query]
-    [:assert-not-exists (xtql.edn/unparse (.query query))])
+    [:assert-not-exists (xtql.edn/unparse-query (.query query))])
 
   TxOp$XtqlAndArgs
   (unparse-tx-op [query+args]
