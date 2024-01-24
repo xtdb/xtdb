@@ -68,13 +68,13 @@ By default, this shows the table at the current time, but it can be overridden:
   "bind": [ "first_name", "last_name" ],
 
   // at another point in time
-  "forValidTime": { "at": {"@type": "xt:date", "@value": "2023-01-01" }},
+  "forValidTime": { "at": { "@type": "xt:date", "@value": "2023-01-01" } },
 
   // within a given range
-  "forValidTime": { "in": [ {"@type": "xt:date", "@value": "2023-01-01" },
-                            {"@type": "xt:date", "@value": "2024-01-01" }]},
-  "forValidTime": { "from": {"@type": "xt:date", "@value": "2023-01-01" }},
-  "forValidTime": { "to": {"@type": "xt:date", "@value": "2024-01-01" }},
+  "forValidTime": { "in": [ { "@type": "xt:date", "@value": "2023-01-01" },
+                            { "@type": "xt:date", "@value": "2024-01-01" } ] },
+  "forValidTime": { "from": { "@type": "xt:date", "@value": "2023-01-01" } },
+  "forValidTime": { "to": { "@type": "xt:date", "@value": "2024-01-01" } },
 
   // for all time
   "forValidTime": "allTime",
