@@ -686,11 +686,9 @@
            (xt/q tu/*node* '(from :posts [comment-count]))))
 
   (let [node tu/*node*]
-    ;; tag::DML-Update-bitemporal-xtql[]
     (xt/submit-tx node
                   [[:put :comments {:xt/id (random-uuid), :post-id "my-post-id"}]
                    (json-example-dml "DML-Update-bitemporal-json")])
-    ;; end::DML-Update-bitemporal-xtql[]
     ,)
 
   (t/is (= [{:comment-count 2}]

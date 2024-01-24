@@ -306,9 +306,15 @@ We're hoping that a reasonable proportion of use-cases that previously required 
 We submit link:../reference/main/xtql/txs.html#_insert_into[`insert-into`] operations to link:../reference/main/xtql/txs.html[`xt/submit-tx`].
 link:../reference/main/xtql/txs.html#_insert_into[`insert-into`] accepts a query that inserts every result into the given table:
 
+
 [source,clojure]
 ----
 include::{test}[tags=DML-Insert-xtql,indent=0]
+----
+
+[source,json]
+----
+include::{example}[tags=DML-Insert-json,indent=0]
 ----
 
 [source,sql]
@@ -332,6 +338,11 @@ We can delete documents using queries as well.
 [source,clojure]
 ----
 include::{test}[tags=DML-Delete-xtql,indent=0]
+----
++
+[source,json]
+----
+include::{example}[tags=DML-Delete-json,indent=0]
 ----
 +
 [source,sql]
@@ -365,6 +376,11 @@ For example, if we want to take down all Christmas promotions on the 26th Decemb
 include::{test}[tags=DML-Delete-bitemporal-xtql,indent=0]
 ----
 +
+[source,json]
+----
+include::{example}[tags=DML-Delete-bitemporal-json,indent=0]
+----
++
 [source,sql]
 ----
 include::{example}[tags=DML-Delete-bitemporal-sql,indent=0]
@@ -377,6 +393,11 @@ include::{example}[tags=DML-Delete-bitemporal-sql,indent=0]
 include::{test}[tags=DML-Delete-everything-xtql,indent=0]
 ----
 +
+[source,json]
+----
+include::{example}[tags=DML-Delete-everything-json,indent=0]
+----
++
 [source,sql]
 ----
 include::{example}[tags=DML-Delete-everything-sql,indent=0]
@@ -384,11 +405,17 @@ include::{example}[tags=DML-Delete-everything-sql,indent=0]
 
 === Update
 
+
 * Update operations are almost exactly the same as deletes, except - well, they update the document rather than deleting it, obviously - but they additionally take a `set` clause.
 +
 [source,clojure]
 ----
 include::{test}[tags=DML-Update-xtql,indent=0]
+----
++
+[source,json]
+----
+include::{example}[tags=DML-Update-json,indent=0]
 ----
 +
 [source,sql]
@@ -402,6 +429,11 @@ You can, for example, copy a value from another related table, or even update a 
 [source,clojure]
 ----
 include::{test}[tags=DML-Update-bitemporal-xtql,indent=0]
+----
++
+[source,json]
+----
+include::{example}[tags=DML-Update-bitemporal-json,indent=0]
 ----
 +
 [source,sql]
@@ -424,6 +456,11 @@ We can irretrievably erase a document using an link:../reference/main/xtql/txs.h
 include::{test}[tags=DML-Erase-xtql,indent=0]
 ----
 +
+[source,json]
+----
+include::{example}[tags=DML-Erase-json,indent=0]
+----
++
 [source,sql]
 ----
 include::{example}[tags=DML-Erase-sql,indent=0]
@@ -442,13 +479,18 @@ This query asserts that no user has the email `james@example.com` before inserti
 include::{test}[tags=DML-Assert-xtql,indent=0]
 ----
 
+[source,json]
+----
+include::{example}[tags=DML-Assert-Not-json,indent=0]
+----
+
 [source,sql]
 ----
 -- not implemented yet
 include::{example}[tags=DML-Assert-sql,indent=0]
 ----
 
-You can check the `:xt/txs` table to see whether and why a transaction failed:
+You can check the `xt/txs` table to see whether and why a transaction failed:
 
 [source,clojure]
 ----
@@ -459,5 +501,9 @@ include::{test}[tags=DML-Assert-query,indent=0]
 include::{test}[tags=DML-Assert-query-result,indent=0]
 ----
 
+[source,json]
+----
+include::{example}[tags=DML-Assert-Not-Tx-Table-json,indent=0]
+----
 
 Those familiar with XT1 might recognise this as `::xt/match` - albeit more powerful because you have the full query language available rather than just matching a whole document.

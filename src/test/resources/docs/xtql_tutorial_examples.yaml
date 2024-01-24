@@ -388,8 +388,13 @@ DML-Insert-json: |
     "insertInto": "users",
     "query": {
       "from": "oldUsers",
-      "bind": ["xt$id", {"givenName": {"xt:lvar": "firstName"}}, {"surname": {"xt:lvar": "lastName"}},
-               "xt$validFrom", "xt$validTo"]
+      "bind": [
+        "xt$id",
+        { "givenName": { "xt:lvar": "firstName" } },
+        { "surname": { "xt:lvar": "lastName" } },
+        "xt$validFrom",
+        "xt$validTo"
+      ]
     }
   }
   // end::DML-Insert-json[]
@@ -403,8 +408,8 @@ DML-Delete-json: |
   // tag::DML-Delete-json[]
   {
     "deleteFrom": "comments",
-    "bind": [{"postId": {"xt:param": "$postId"}}],
-    "argRows": [{"postId": 1}]
+    "bind": [ { "postId": { "xt:param": "$postId" } } ],
+    "argRows": [ { "postId": 1 } ]
   }
   // end::DML-Delete-json[]
 
@@ -415,13 +420,13 @@ DML-Delete-additional-unify-clauses-sql: |
   -- end::DML-Delete-additional-unify-clauses-sql[]
 
 DML-Delete-bitemporal-json: |
-  // tag::DML-Delete-json[]
+  // tag::DML-Delete-bitemporal-json[]
   {
     "deleteFrom": "promotions",
     "forValidTime": { "from": { "@type": "xt:instant", "@value": "2023-12-26T00:00:00Z" } },
     "bind": [ { "promotionType": "christmas" } ]
   }
-  // end::DML-Delete-json[]
+  // end::DML-Delete-bitemporal-json[]
 
 DML-Delete-bitemporal-sql: |
   -- tag::DML-Delete-bitemporal-sql[]
@@ -524,7 +529,7 @@ DML-Assert-Not-sql: |
   -- end::DML-Assert-sql[]
 
 DML-Assert-Not-json: |
-  // tag::DML-Erase-json[]
+  // tag::DML-Assert-Not-json[]
   {
     "assertNotExists": {
       "from": "users",
@@ -533,4 +538,45 @@ DML-Assert-Not-json: |
 
     "argRows": [ { "email": "james@example.com" } ]
   }
-  // end::DML-Erase-json[]
+  // end::DML-Assert-Not-json[]
+
+DML-Assert-Not-Tx-Table-json: |
+  // tag::DML-Assert-Not-Tx-Table-json[]
+  // The transaction payload
+  [
+    {
+      "assertNotExists": {
+        "from": "users",
+        "bind": [ { "email": { "xt:param": "$email" } } ]
+      },
+
+      "argRows": [ { "email": "james@example.com" } ]
+    }
+    {
+      "into": "docs",
+      "putDocs": [ { "xt/id": "james", "email": "james@example.com" } ]
+    }
+  ]
+
+  // querying the tx/txs table
+  {
+    "from": "xt/txs",
+    "bind": [ { "xt/id": { "xt:param": "$tx-id" } }, "xt/committed?", "xt/error" ]
+  }
+
+  // result
+  {
+    "xt/committed?": false,
+    "xt/error": {
+      "@type": "xt:error",
+      "@value": {
+        "xtdb.error/message": "Precondition failed: assert-not-exists",
+        "xtdb.error/class": "xtdb.RuntimeException",
+        "xtdb.error/error-key": "xtdb/assert-failed",
+        "xtdb.error/data": {
+          "row-count": 1
+        }
+      }
+    }
+  }
+  // end::DML-Assert-Not-Tx-Table-json[]
