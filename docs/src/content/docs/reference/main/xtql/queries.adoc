@@ -263,7 +263,7 @@ include::{examples}[tags=star-invalid-json,indent=0]
 ----
 ====
 
-
+[#temporal-filter]
 ==== Temporal filters
 
 Temporal filters control the document versions that are visible to the query.

@@ -1,25 +1,64 @@
 ---
 title: XTQL Transactions
 ---
+:examples:  ../src/test/resources/docs/xtql_dml_json_examples.yaml
+:walkthrough: ../src/test/resources/docs/xtql_tutorial_examples.yaml
+:openapi: /sdks/openapi/index.html
 
+
+XT transactions are submitted through a client's `submitTx` method or the JSON link:{openapi}#operations-default-post_tx[tx] endpoint.
+They specify how new data enters the systems or gets updated.
+
+.There are broadly two categories:
+* Simple transaction operations that do not contain a query.
+These include link:#_put[Put], link:#delete-docs[Delete Docs] and link:#erase-docs[Erase Docs]
+* XTQL DML (Direct Manipulation Language) transaction operations.
+These are characterized by their usage of a link:./queries[Query].
+These include link:#_insert_into[Insert],  link:#_update[Update], link:#_delete[Delete],
+link:#_delete[Erase] and link:#asserts[Asserts].
+
+
+
+.Clojure
+[%collapsible]
+====
 XTQL transactions are submitted through `xtdb.api/submit-tx` (`xtdb.api` aliased here as `xt`).
 
 * `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns the transaction key of the submitted transaction.
 ** `tx-ops`: vector of link:#tx-ops[transaction operations].
 * `(xt/submit-tx& <node> <tx-ops> <opts>?)`: returns a `CompletableFuture` of the transaction key.
-
-XT submit options are an optional map of the following keys:
-
-* `system-time`: overrides system-time for the transaction, mustn't be earlier than any previous system-time.
-* `default-tz`: overrides the default time zone for the transaction.
+====
 
 [#tx-ops]
-== Transaction operations
+= Transaction operations
+
 
 === `put`
 
 Upserts documents into the given table, optionally during the given valid time period.
 
+
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=put-json,indent=0]
+----
+
+* `into`: table to insert into
+* `putDocs`: array of documents of which each must contain `:xt/id`.
+* `validFrom`: timestamp (optional).
+   Defaults to the current time of the transaction if not provided.
+* `validTo`: timestamp (optinal).
+   Defaults to the end-of-time if not provided.
+
+====
+
+
+.Clojure
+[%collapsible]
+====
 `[:put <table|opts> <documents>*]`
 
 * `table` (keyword): table to insert into
@@ -30,44 +69,162 @@ Upserts documents into the given table, optionally during the given valid time p
 ** `:valid-to`: (timestamp): may be `nil`.
     Defaults to the end-of-time if not provided.
 * `documents` (maps): each must contain `:xt/id`.
+====
+
+
+[#delete-docs]
+=== `delete-docs`
+
+Deletes documents from the given table, optionally during the given valid time period.
+The default valid time behaviour as per link:#_put[Put], above.
+
+
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=delete-docs-json,indent=0]
+----
+
+* `from`: table to delete from
+* `deleteDocs`: array of ids to delete.
+* `validFrom`: timestamp (optional).
+   Defaults to the current time of the transaction if not provided.
+* `validTo`: timestamp (optinal).
+   Defaults to the end-of-time if not provided.
+====
+
+
+.Clojure
+[%collapsible]
+====
+`[:delete-docs <table|opts> <id>*]`
+
+* `table` (keyword): table to delete from
+* `opts` (map):
+** `:from` (keyword): table to delete from
+** `:valid-from`: (timestamp): may be `nil`.
+    Defaults to the current time of the transaction if not provided.
+** `:valid-to`: (timestamp): may be `nil`.
+    Defaults to the end-of-time if not provided.
+* `ids`: each id to delete from the table.
+
+====
+
+[#erase-docs]
+=== `erase-docs`
+
+Irrevocably erases documents from the given table (including through system time), for all valid-time.
+
+
+.Json
+[%collapsible%open]
+====
+[source,json]
+----
+include::{examples}[tags=erase-docs-json,indent=0]
+----
+
+* `from`: table to erase from
+* `eraseDocs`: array of ids to erase.
+====
+
+.Clojure
+[%collapsible]
+====
+`[:erase <table> <id>*]`
+
+* `table` (keyword): table to delete from
+* `ids`: each id to erase from the table.
+
+====
 
 === `insert-into`
 
-Inserts documents into a table from the given query.
+Inserts documents into a table from the given (link:./queries[query]).
 
-`(xt/insert-into <table> <query>)`
+.Json
+[%collapsible%open]
+====
+
+[source,json]
+----
+include::{examples}[tags=insert-into-json,indent=0]
+----
+
+* `insertInto`: table to insert into.
+* `query` (link:./queries[Query]).
+** The query must return an `xt$id` column.
+** To specify a valid-time range, the query may return `xt$valid-from` and/or `xt$valid-to` columns.
+   If not provided, these will default as per link:#_put[Put].
+====
+
+.Clojure
+[%collapsible]
+====
+`[:insert-into <table> <query>]`
 
 * `table` (keyword): table to insert into.
-* `query` (link:./queries[`Query`]).
+* `query` (link:./queries[Query]).
 ** The query must return an `xt/id` column.
 ** To specify a valid-time range, the query may return `xt/valid-from` and/or `xt/valid-to` columns.
-   If not provided, these will default as per link:#_put[`put`].
+   If not provided, these will default as per link:#_put[Put].
 
 For example:
 
 [source,clojure]
 ----
-(xt/insert-into :users
-                '(from :old-users [xt/id {:first-name given-name} {:last-name family-name}]))
+[:insert-into :users (from :old-users [xt/id {:first-name given-name} {:last-name family-name}])]
 
 ;; equivalent to:
 ;; "INSERT INTO users SELECT xt$id, first_name AS given_name, last_name AS family_name FROM old_users"
 ----
+====
 
 === `update`
 
 Updates documents in a given table based on the provided query.
+It is an operation from timeline to timeline (now to end of time if not otherwise specified).
+
+.Json
+[%collapsible%open]
+====
+
+[source,json]
+----
+include::{examples}[tags=update-json,indent=0]
+----
+
+* `update`: table to update.
+* `bind` (array of link:./queries#_binding_specs[`BindingSpec`], optional): select the documents to update using binding constraints.
+** If not provided, this will update every document in the table.
+** May also bind extra logic variables for use in the `:set` clause or `unify-clauses`.
+* `set` (array of string -> link:./queries#_expressions[`Expr`], optional): columns to update.
+** Altering any `xt$...` column in set results in an error.
+* `unify` (link:./queries#_unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[`unify`] for more details.
+* `forValidTime`(link:./queries#_temporal_filter[Temporal Filter], optional) : The valid time range to update the table for.
+* `argRows` (array of link:./queries#_argument_specs[`ArgumentSpec`], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The update operation will be run for every argument spec input.
+====
+
+
+.Clojure
+[%collapsible]
+====
 
 `[:update <opts> <args>*]`
 
 * `opts` (map):
 ** `:table` (keyword, required): table to update.
-** `:bind` (link:./queries#_binding_specs[`BindingSpec`], optional): select the documents to update using binding constraints.
+** `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to update using binding constraints.
 *** If not provided, this will update every document in the table.
 *** May also bind extra logic variables for use in the `:set` clause or `unify-clauses`.
 ** `:set` (map, keyword -> link:./queries#_expressions[`Expr`]): columns to update.
+*** Altering any `xt/...` column in set results in an error.
 ** `:unify` (link:./queries#_unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
   See link:./queries#_unify[`unify`] for more details.
+* `:args` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind`,`set` or `unify` contexts.
 
 For example:
 
@@ -75,8 +232,8 @@ For example:
 ----
 [:update {:table :users,
           :bind [{:email $email}, version],
-          :set {:version (inc version)}}
- {:email "james@example.com"}]
+          :set {:version (+ version 1)}}
+  {"email" "james@example.com"}]
 
 ;; equivalent to:
 ;; "UPDATE users SET version = version + 1 WHERE email = 'james@example.com'"
@@ -91,34 +248,45 @@ To specify a valid-time range:
 ----
 
 with default behaviour as per link:#_put[`put`], above.
-
-=== `delete-doc`
-
-Deletes a document from the given table, optionally during the given valid time period.
-
-`(xt/delete <table> <id>)`
-
-To specify a valid-time range:
-
-* `+(-> (xt/delete ...) (xt/starting-from <from>))+`
-* `+(-> (xt/delete ...) (xt/until <to>))+`
-* `+(-> (xt/delete ...) (xt/during <from> <to))+`
-
-with default behaviour as per link:#_put[`put`], above.
+====
 
 === `delete`
 
 Deletes documents from the given table, based on the provided query.
 
+.Json
+[%collapsible%open]
+====
+
+[source,json]
+----
+include::{examples}[tags=delete-json,indent=0]
+----
+
+* `deleteDocs`: table to delete from.
+* `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to delete using binding constraints.
+** If not provided, this will delete every document in the table.
+** May also bind extra logic variables for use in the `unify-clauses`.
+* `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+   See link:./queries#_unify[`unify`] for more details.
+* `argRows` (array of link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The delete operation will be run for every argument spec input.
+====
+
+
+
+.Clojure
+[%collapsible]
+====
 `[:delete <opts> <args>*]`
 
 * `opts` (map):
 ** `:table` (keyword, required): table to delete from.
-** `:bind` (link:./queries#_binding_specs[`BindingSpec`], optional): select the documents to delete using binding constraints.
+** `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to delete using binding constraints.
 *** If not provided, this will delete every document in the table.
 *** May also bind extra logic variables for use in the `unify-clauses`.
 ** `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
   See link:./queries#_unify[`unify`] for more details.
+* `:args` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind` or `unify` contexts.
 
 For example:
 
@@ -147,17 +315,33 @@ To specify a valid-time range:
 ----
 
 with default behaviour as per link:#_put[`put`], above.
-
-=== `erase-doc`
-
-Irrevocably erase the document from the given table (including through system time), for all valid-time.
-
-`[:erase <table> <id>]`
+====
 
 === `erase`
 
 Irrevocably erase the document from the given table (including through system time), based on the provided query.
 
+.Json
+[%collapsible%open]
+====
+
+[source,json]
+----
+include::{examples}[tags=erase-json,indent=0]
+----
+* `eraseDocs`: table to erase from.
+* `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to erase using binding constraints.
+** If not provided, this will delete every document in the table.
+** May also bind extra logic variables for use in the `unify-clauses`.
+* `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+   See link:./queries#_unify[`unify`] for more details.
+* `argRows` (array of link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind` or `unify` contexts. The erase operation will be run for every argument spec input.
+
+====
+
+.Clojure
+[%collapsible]
+====
 `[:erase <opts> <args>*]`
 
 * `opts` (map):
@@ -166,6 +350,7 @@ Irrevocably erase the document from the given table (including through system ti
   May also bind extra logic variables for use in the `unify-clauses`.
 ** `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
   See link:./queries#_unify[`unify`] for more details.
+* `:args` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind`,`set` or `unify` contexts.
 
 For example:
 [source,clojure]
@@ -186,6 +371,7 @@ For example:
 ;; "ERASE FROM users
 ;;  WHERE author_id IN (SELECT author_id FROM email = ?)
 ----
+====
 
 Notes:
 
@@ -194,13 +380,34 @@ Notes:
 [#asserts]
 === Asserts: `assert-exists`, `assert-not-exists`
 
-Within a transaction, `assert-exists`/`assert-not-exists` operations assert that the given query returns at least one row/no rows respectively - if not, the transaction will roll back.
+Within a transaction, `assertExists`/`assertNotExists` (potentiall `snake_case` or `kebab-case`,
+depending on your client library) operations assert that the given query returns at least one row/no rows
+respectively - if not, the transaction will roll back.
 
+.Json
+[%collapsible%open]
+====
+
+[source,json]
+----
+include::{walkthrough}[tags=DML-Assert-Not-json,indent=0]
+----
+* `assertExists`/`assertNotExists` (link:./queries[`Query`]): query to evaluate.
+** For `assertExists` the query needs to return at least one row so that the transaction gets committed.
+** For `assertNotExists` the query needs to return no row so that the transaction gets committed.
+* `argRows` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `query`.
+
+====
+
+.Clojure
+[%collapsible]
+====
 `[:assert-exists <query> <args>*]`
 
 `[:assert-not-exists <query> <args>*]`
 
 * `query` (link:./queries[`Query`]): query to evaluate.
+* `:args` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `query`.
 
 This can be used to enforce consistency constraints - for example, to assert that there's no user with a certain email address before adding one:
 
@@ -208,13 +415,17 @@ This can be used to enforce consistency constraints - for example, to assert tha
 ----
 [[:assert-not-exists '(from :users [{:email $email}])
   {:email "james@example.com"}]
-  [:put :users {:xt/id :james, :email "james@example.com", ...}]]
+ [:put :users {:xt/id :james, :email "james@example.com", ...}]]
 ----
+====
 
 === `call`
 
 Call a transaction function.
 
+.Clojure
+[%collapsible%open ]
+====
 `[:call <fn-id> <args>*]`
 
 Transaction functions are defined using `:put-fn`:
@@ -235,3 +446,14 @@ There are a few functions available in scope during the transaction function:
 
 * `(q <query> <opts>?)` runs an link:./queries[XTQL]/SQL query
 * `+*current-tx*+`: the current transaction being indexed.
+====
+
+== Transaction options
+
+XT submit options are an optional map of the following keys:
+
+N.B.: options here are specified with `camelCase` - depending on your client library, these may be `snake_case` or `kebab-case`.
+
+* `systemTime`: overrides system time for the transaction, mustn't be earlier than any previous system time.
+* `defaultTz`: overrides the default time zone for the transaction.
+* `defaultAllValidTime` (boolean, default false): whether to default to all valid time if not explicitly specified in the query.

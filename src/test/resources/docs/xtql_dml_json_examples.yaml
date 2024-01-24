@@ -1,0 +1,112 @@
+put-json: |
+  // tag::put-json[]
+  {
+    "into": "docs",
+    "putDocs": [{ "xt/id": 1, "foo": "bar"} ...],
+    "validFrom": "2023-01-01T00:00:00Z",
+    "validTo": "2024-01-01T00:00:00Z"
+  }
+  // end::put-json[]
+
+delete-docs-json: |
+  // tag::delete-docs-json[]
+  {
+    "from": "docs",
+    "deleteDocs": [ 1, "alan" ],
+    "validFrom": "2023-01-01T00:00:00Z",
+    "validTo": "2024-01-01T00:00:00Z"
+  }
+  // end::delete-docs-json[]
+
+erase-docs-json: |
+  // tag::erase-docs-json[]
+  {
+    "from": "docs",
+    "eraseDocs": [ 1, "alan" ]
+  }
+  // end::erase-docs-json[]
+
+insert-into-json: |
+  // tag::insert-into-json[]
+  {
+    "insertInto": "users",
+    "query": {
+      "from": "old-users",
+      "bind": [
+        "xt$id"
+        { "first-name": { "xt:lvar": "given-name" } },
+        { "last-name": { "xt:lvar": "family-name" } }
+      ]
+    }
+  }
+  // end::insert-into-json[]
+
+update-json: |
+  // tag::update-json[]
+  {
+    "update": "users",
+    "bind": [ { "email": { "xt:param": "$email" } }, "version" ],
+    "set": [
+      {
+        "version": {
+          "xt:call": "+",
+          "args": [ { "xt:lvar": "version" }, 1]
+        }
+      }
+    ],
+    "argRows": [ { "email": "james@example.com" } ]
+  }
+  // end::update-json[]
+
+delete-json: |
+  // tag::delete-json[]
+  {
+    "deleteFrom": "users",
+    "bind": [ { "email": "james@example.com" } ]
+  }
+  // equivalent to:
+  // "DELETE FROM users WHERE email = 'james@example.com'"
+
+  {
+    "deleteFrom": "posts",
+    "bind": [ "author-id" ],
+    "unify": [
+      {
+        "from": "authors",
+        "bind": [ { "xt/id": { "xt:lvar": "author-id" } }, { "email": "james@example.com" } ]
+      }
+    ]
+  }
+  // equivalent to:
+  // "DELETE FROM users
+  //  WHERE author_id IN (SELECT author_id FROM email = 'james@example.com'")
+  // end::delete-json[]
+
+erase-json: |
+  // tag::erase-json[]
+  {
+    "eraseFrom": "users",
+    "bind": [ { "email": { "xt:param": "$email" } } ],
+    "argRows": [ { "email": "james@example.com" } ]
+  }
+  // equivalent to:
+  // "ERASE FROM users WHERE email = 'james@example.com'"
+
+  {
+    "eraseFrom": "posts",
+    "bind": [ { "author-id": { "xt:lvar": "author-id" } } ],
+    "unify": [
+        {
+          "from": "authors",
+          "bind": [
+            { "xt/id": { "xt:lvar": "author-id" } },
+            { "email": { "xt:param": "$email" } }
+          ]
+        }
+    ],
+    "argRows": [ { "email": "james@example.com" } ]
+  }
+  // equivalent to:
+  // "ERASE FROM users
+  // WHERE author_id IN (SELECT author_id FROM email = ?)
+  // tag::erase-json[]
