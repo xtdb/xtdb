@@ -58,11 +58,6 @@ data class Binding(val binding: String, val expr: Expr) {
     @JvmOverloads
     constructor(binding: String, bindVar: String = binding) : this(binding, lVar(bindVar))
 
-    companion object {
-        @JvmStatic
-        fun cols(vararg cols: String) = cols.map(::Binding).toTypedArray()
-    }
-
     /**
      * @suppress
      */
