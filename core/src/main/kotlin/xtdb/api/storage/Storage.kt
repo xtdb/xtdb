@@ -12,6 +12,10 @@ import xtdb.api.PathWithEnvVarSerde
 import xtdb.util.requiringResolve
 import java.nio.file.Path
 
+/**
+ * Represents a factory interface for creating storage instances.
+ * The default implementation is [InMemoryStorageFactory] which stores data in memory
+ * */
 @Serializable
 sealed interface StorageFactory {
     companion object {
@@ -21,6 +25,10 @@ sealed interface StorageFactory {
     fun openStorage(allocator: BufferAllocator): IBufferPool
 }
 
+/**
+ * Default implementation for the storage module when configuring an XTDB node. Stores everything within in-process memory -
+ * a **non-persistent** option for storage.
+ */
 @Serializable
 @SerialName("!InMemory")
 class InMemoryStorageFactory() : StorageFactory {
@@ -30,6 +38,11 @@ class InMemoryStorageFactory() : StorageFactory {
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator) as IBufferPool
 }
 
+/**
+ * Implementation for the storage module that persists data to the local file system, under the **path** directory.
+ *
+ * @property path The directory path where data will be stored.
+ */
 @Serializable
 @SerialName("!Local")
 data class LocalStorageFactory(
@@ -56,7 +69,18 @@ interface ObjectStoreFactory {
     fun openObjectStore(): ObjectStore
 }
 
-
+/**
+ * Implementation for the storage module that persists data remotely within a specified **objectStore**, while maintaining a local
+ * cache of the working set cache under the **localDiskCache** directory.
+ *
+ * Any implementer of [ObjectStoreFactory] can be used as the **objectStore**, the ones we currently offer being:
+ * * [S3ObjectStoreFactory] (under **xtdb-s3**)
+ * * [AzureObjectStoreFactory] (under **xtdb-azure**)
+ * * [GoogleCloudObjectStoreFactory] (under **xtdb-google-cloud**)
+ *
+ * @property objectStore Configuration of the Object Store we want to use for remote storage.
+ * @property localDiskCache Local directory that we store the working-set cache on.
+ */
 @Serializable
 @SerialName("!Remote")
 data class RemoteStorageFactory(
