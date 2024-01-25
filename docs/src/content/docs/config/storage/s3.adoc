@@ -2,65 +2,132 @@
 title: S3
 ---
 
-S3 can be used as an "Object Store" for XTDB's remote storage module.
+S3 can be used as a shared object-store for XTDB's remote storage module.
 
-== Required Infrastructure
+[NOTE]
+====
+The S3 module uses an SNS topic and SQS queues to maintain a local copy of the file listings on S3, saving on expensive/lengthy operations to list objects on S3.
 
-In order to use S3 as the object store, we require the following infrastructure to be in place:
+If not using the link:#_cloudformation_stack[CloudFormation stack], ensure that you have a similar setup with the SNS topic setup to receive notifications from your bucket, and that XTDB has all the relevant permissions it needs with S3, SNS, and SQS.
+====
 
-* An **S3 bucket** for us to persist our data to.
-* An **SNS topic** which receives notifications from the S3 bucket around object creation/deletion.
-** An **SNS topic policy** to allow the bucket to publish to the topic.
-* Some form of **IAM role** or something similar that provides relevant permissions for:
-** _Using the created S3 bucket_ (`Get`, `Put`, `Delete` and `List`).
-** _Subscribe to the SNS topic._
-** _Creating and operating on SQS queues_
-*** (Said queues handle their own permissions, and subscribe to the SNS topic)
+== Setup
 
-NOTE: The SNS topic and SQS queues are used to a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3.
-If not using the CloudFormation template, ensure that you at have a similar setup with the SNS topic setup to receive notifications from your bucket, and that XTDB has all the relevant permissions it needs with S3, SNS, and SQS.
+First, ensure the `com.xtdb/xtdb-s3` Maven dependency is added to your XTDB node.
 
-=== Cloudformation Stack
+=== Infrastructure
 
-We provide a https://github.com/xtdb/xtdb/blob/2.x/modules/s3/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help setup everything that you should need. The stack expects the following inputs:
+[NOTE]
+.CloudFormation stack
+====
+We provide a https://github.com/xtdb/xtdb/blob/2.x/modules/s3/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help set up everything that you need.
 
-* The (globally unique) name of S3 Bucket - this will be used by the created object store bucket and referenced in associated resources.
+The stack accepts the (globally unique) name of an S3 bucket as an input - this will be created, and referenced in associated resources - and outputs the SNS topic ARN, to be used in your XTDB configuration.
+====
 
-The template will output a number of things, some of which will be needed configuring your node:
+To use S3 as the object store, the following infrastructure is required:
 
-* The S3 Bucket Name (**this will be used in configuring the module**)
-* The SNS Topic ARN (**this will be used in configuring the module**)
-* ARN of the created XTDB IAM Role (this, or something with equivalent permissions, will be required to use all of the above)
+. An **S3 bucket**.
+. An **SNS topic** to receive notifications from the S3 bucket around object creation/deletion.
+. The bucket should be granted permissions to publish to the SNS topic:
++
+[source,yaml]
+----
+SNSTopicPolicy:
+  Type: AWS::SNS::TopicPolicy
+  Properties:
+    PolicyDocument:
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: 's3.amazonaws.com'
+          Action: sns:Publish
+          Resource: !Ref SNSTopic
+          Condition:
+            ArnEquals:
+              aws:SourceArn: !Ref S3BucketArn
+            StringEquals:
+              aws:SourceAccount: !Ref 'AWS::AccountId'
+    Topics:
+      - !Ref SNSTopic
+----
+. IAM policies which grant XTDB permission to:
+  * the S3 bucket:
++
+[source,yaml]
+----
+Statement:
+- Effect: Allow
+  Action:
+    - 's3:GetObject'
+    - 's3:PutObject'
+    - 's3:DeleteObject'
+    - 's3:ListBucket'
+    - 's3:AbortMultipartUpload'
+    - 's3:ListBucketMultipartUploads'
+  Resource:
+    - !Ref S3BucketArn
+    - !Join [ '', [ !Ref S3BucketArn, '/*'] ]
+----
 
-== Authentication
+  * subscribe to the SNS topic:
++
+[source,yaml]
+----
+Statement:
+- Effect: Allow
+  Action:
+    - 'sns:Subscribe'
+    - 'sns:Unsubscribe'
+  Resource:
+    - !Ref SNSTopic
+----
+  * create and operate on SQS queues:
++
+[source,yaml]
+----
+Statement:
+- Effect: Allow
+  Action:
+    - 'sqs:CreateQueue'
+    - 'sqs:GetQueueUrl'
+    - 'sqs:GetQueueAttributes'
+    - 'sqs:DeleteQueue'
+    - 'sqs:DeleteMessage'
+    - 'sqs:ReceiveMessage'
+    - 'sqs:SetQueueAttributes'
+  Resource:
+    - '*'
+----
 
-Authentication to S3 within the module is handled via the S3 API, which in turn uses the Default AWS Credential Provider Chain. See the https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default[AWS documentation] on the various methods which your application can handle authentication to be able to make use of the operations inside the modules.
+=== Authentication
 
-Within the provided CloudFormation stack, we create an XTDB IAM role.
-One can use this role to provide all necessary permissions for XTDB and the resources it is using on AWS, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services. See the IAM policy set on the `XTDBIamRole` in the https://github.com/xtdb/xtdb/blob/2.x/modules/s3/cloudformation/s3-stack.yml[CloudFormation stack] for what exactly that includes.
+Authentication is done via the AWS SDK, using the default AWS credential provider chain.
+See the https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html[AWS documentation] for setup instructions.
 
-== Configuring the Node
+== Configuration
 
-As S3 is a submodule of the XTDB project, in order to use S3 as an object store, you will need to include a dependency on the `com.xtdb/xtdb-s3` module.
+To use the S3 module, include the following in your node configuration:
 
-=== Expected Parameters
+[source,yaml]
+----
+storage: !Remote
+  objectStore: !S3
+    # -- required
 
-When configuring the S3 module, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
-[cols="2,3,1"]
-|===
-| *Parameter* | *Description* | *Required?*
-| S3 Bucket
-| The name of the https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html[S3 Bucket] to use an an object store
-| Yes
+    # The name of the S3 bucket to use for the object store
+    bucket: "my-s3-bucket"
 
-| SNS Topic ARN
-| The https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html[ARN] of the https://aws.amazon.com/sns/[SNS topic] which is collecting notifications from the S3 bucket you are using.
-| Yes
+    # The ARN of the SNS topic which is collecting notifications from the S3 bucket.
+    snsTopicArn: "arn:aws:sns:region:account-id:my-sns-topic"
 
-| Prefix
-| A file path to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
-| No
-|===
+    # -- optional
+    # A file path to prefix all of your files with
+    # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+    # prefix: my-xtdb-node
+
+  localDiskCache: /var/cache/xtdb/object-store
+----
 
 === Examples
 
