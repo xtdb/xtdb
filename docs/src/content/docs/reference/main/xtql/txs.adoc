@@ -47,7 +47,7 @@ include::{examples}[tags=put-json,indent=0]
 ----
 
 * `into`: table to insert into
-* `putDocs`: array of documents of which each must contain `:xt/id`.
+* `putDocs`: array of documents of which each must contain `xt$id`.
 * `validFrom`: timestamp (optional).
    Defaults to the current time of the transaction if not provided.
 * `validTo`: timestamp (optinal).
@@ -142,7 +142,7 @@ include::{examples}[tags=erase-docs-json,indent=0]
 
 === `insert-into`
 
-Inserts documents into a table from the given (link:./queries[query]).
+Inserts documents into a table from the given link:./queries[query].
 
 .Json
 [%collapsible%open]
@@ -156,7 +156,7 @@ include::{examples}[tags=insert-into-json,indent=0]
 * `insertInto`: table to insert into.
 * `query` (link:./queries[Query]).
 ** The query must return an `xt$id` column.
-** To specify a valid-time range, the query may return `xt$valid-from` and/or `xt$valid-to` columns.
+** To specify a valid-time range, the query may return `xt$validFrom` and/or `xt$validTo` columns.
    If not provided, these will default as per link:#_put[Put].
 ====
 
@@ -197,15 +197,15 @@ include::{examples}[tags=update-json,indent=0]
 ----
 
 * `update`: table to update.
-* `bind` (array of link:./queries#_binding_specs[`BindingSpec`], optional): select the documents to update using binding constraints.
+* `bind` (link:./queries#_binding_specs[Binding Specs], optional): select the documents to update using binding constraints.
 ** If not provided, this will update every document in the table.
-** May also bind extra logic variables for use in the `:set` clause or `unify-clauses`.
-* `set` (array of string -> link:./queries#_expressions[`Expr`], optional): columns to update.
+** May also bind extra logic variables for use in the `set` clause or `unify-clauses`.
+* `set` (array of string -> link:./queries#_expressions[Expressions], optional): columns to update.
 ** Altering any `xt$...` column in set results in an error.
-* `unify` (link:./queries#_unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#_unify[`unify`] for more details.
+* `unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[unify] for more details.
 * `forValidTime`(link:./queries#_temporal_filter[Temporal Filter], optional) : The valid time range to update the table for.
-* `argRows` (array of link:./queries#_argument_specs[`ArgumentSpec`], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The update operation will be run for every argument spec input.
+* `argRows` (link:./queries#_argument_specs[Argument Specs], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The update operation will be run for every argument spec input.
 ====
 
 
@@ -220,10 +220,10 @@ include::{examples}[tags=update-json,indent=0]
 ** `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to update using binding constraints.
 *** If not provided, this will update every document in the table.
 *** May also bind extra logic variables for use in the `:set` clause or `unify-clauses`.
-** `:set` (map, keyword -> link:./queries#_expressions[`Expr`]): columns to update.
+** `:set` (map, keyword -> link:./queries#_expressions[Expressions]): columns to update.
 *** Altering any `xt/...` column in set results in an error.
-** `:unify` (link:./queries#_unify_clauses[unify clause], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#_unify[`unify`] for more details.
+** `:unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[unify] for more details.
 * `:args` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind`,`set` or `unify` contexts.
 
 For example:
@@ -247,7 +247,7 @@ To specify a valid-time range:
  ...]
 ----
 
-with default behaviour as per link:#_put[`put`], above.
+with default behaviour as per link:#_put[Put], above.
 ====
 
 === `delete`
@@ -264,12 +264,12 @@ include::{examples}[tags=delete-json,indent=0]
 ----
 
 * `deleteDocs`: table to delete from.
-* `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to delete using binding constraints.
+* `bind` (link:./queries#_binding_specs[Binding Specs], optional): select the documents to delete using binding constraints.
 ** If not provided, this will delete every document in the table.
 ** May also bind extra logic variables for use in the `unify-clauses`.
-* `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
-   See link:./queries#_unify[`unify`] for more details.
-* `argRows` (array of link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The delete operation will be run for every argument spec input.
+* `unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+   See link:./queries#_unify[unify] for more details.
+* `argRows` (link:./queries#_argument_specs[Argument Specs], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The delete operation will be run for every argument spec input.
 ====
 
 
@@ -284,8 +284,8 @@ include::{examples}[tags=delete-json,indent=0]
 ** `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to delete using binding constraints.
 *** If not provided, this will delete every document in the table.
 *** May also bind extra logic variables for use in the `unify-clauses`.
-** `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#_unify[`unify`] for more details.
+** `:unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[unify] for more details.
 * `:args` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind` or `unify` contexts.
 
 For example:
@@ -314,7 +314,7 @@ To specify a valid-time range:
  ...]
 ----
 
-with default behaviour as per link:#_put[`put`], above.
+with default behaviour as per link:#_put[Put], above.
 ====
 
 === `erase`
@@ -330,12 +330,12 @@ Irrevocably erase the document from the given table (including through system ti
 include::{examples}[tags=erase-json,indent=0]
 ----
 * `eraseDocs`: table to erase from.
-* `:bind` (link:./queries#_binding_specs[Binding Spec], optional): select the documents to erase using binding constraints.
+* `bind` (link:./queries#_binding_specs[Binding Specs], optional): select the documents to erase using binding constraints.
 ** If not provided, this will delete every document in the table.
 ** May also bind extra logic variables for use in the `unify-clauses`.
-* `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
-   See link:./queries#_unify[`unify`] for more details.
-* `argRows` (array of link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind` or `unify` contexts. The erase operation will be run for every argument spec input.
+* `unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+   See link:./queries#_unify[unify] for more details.
+* `argRows` (link:./queries#_argument_specs[Argument Specs], optional): arguments to be used in the `bind` or `unify` contexts. The erase operation will be run for every argument spec input.
 
 ====
 
@@ -348,8 +348,8 @@ include::{examples}[tags=erase-json,indent=0]
 ** `:table` (keyword, required): table to erase from.
 ** `:bind` (link:./queries#_binding_specs[BindingSpec]): select the documents to erase using binding constraints.
   May also bind extra logic variables for use in the `unify-clauses`.
-** `:unify` (link:./queries#_unify_clauses[unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#_unify[`unify`] for more details.
+** `:unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
+  See link:./queries#_unify[unify] for more details.
 * `:args` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `bind`,`set` or `unify` contexts.
 
 For example:
@@ -392,7 +392,7 @@ respectively - if not, the transaction will roll back.
 ----
 include::{walkthrough}[tags=DML-Assert-Not-json,indent=0]
 ----
-* `assertExists`/`assertNotExists` (link:./queries[`Query`]): query to evaluate.
+* `assertExists`/`assertNotExists` (link:./queries[Query]): query to evaluate.
 ** For `assertExists` the query needs to return at least one row so that the transaction gets committed.
 ** For `assertNotExists` the query needs to return no row so that the transaction gets committed.
 * `argRows` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `query`.
