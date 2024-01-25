@@ -42,7 +42,7 @@ interface LogFactory {
 @SerialName("!InMemory")
 @Serializable
 data class InMemoryLogFactory(@Transient var instantSource: InstantSource = InstantSource.system()) : LogFactory {
-    private companion object {
+    internal companion object {
         private val OPEN_LOG: IFn = requiringResolve("xtdb.log.memory-log", "open-log")
     }
 
@@ -60,7 +60,7 @@ data class LocalLogFactory @JvmOverloads constructor(
     var pollSleepDuration: Duration = Duration.ofMillis(100),
 ) : LogFactory {
 
-    private companion object {
+    internal companion object {
         private val OPEN_LOG: IFn = requiringResolve("xtdb.log.local-directory-log", "open-log")
     }
 
