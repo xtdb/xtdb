@@ -11,11 +11,6 @@ components:
       properties:
         aggregate:
           $ref: '#/components/schemas/Bindings'
-    Any:
-      oneOf:
-        - type: string
-        - type: integer
-        - type: object
     ArgRows:
       description: rows to be passed to a prepared SQL statement
       type: array
@@ -23,12 +18,12 @@ components:
         type: array
         items:
           schema:
-            $ref: '#/components/schemas/Any'
+            $ref: '#/components/schemas/TypedAny'
     Args:
       type: array
       items:
         schema:
-          $ref: '#/components/schemas/Any'
+          $ref: '#/components/schemas/TypedAny'
     AssertExists:
       type: object
       properties:
@@ -137,7 +132,7 @@ components:
       type: object
       additionalProperties:
         schema:
-          $ref: '#/components/schemas/Any'
+          $ref: '#/components/schemas/TypedAny'
     Duration:
       description: duration in milliseconds
       type: integer
@@ -558,6 +553,132 @@ components:
             $ref: '#/components/schemas/TxOp'
         opts:
           $ref: '#/components/schemas/TxOptions'
+    TypedAny:
+      description: |
+        As JSON only permits a limited amount of build in types. We are using the JSON-LD format to encode other types.
+        Most often in the form of a '@type' property field describing the type of the object and a '@value' field to 
+        encode the data of the type.
+      oneOf:
+        - type: string
+        - type: integer
+        - $ref: '#/components/schemas/TypedDuration'
+        - $ref: '#/components/schemas/TypedInstant'
+        - $ref: '#/components/schemas/TypedKeyword'
+        - $ref: '#/components/schemas/TypedLocalDate'
+        - $ref: '#/components/schemas/TypedLocalDateTime'
+        - $ref: '#/components/schemas/TypedPeriod'
+        - $ref: '#/components/schemas/TypedSet'
+        - $ref: '#/components/schemas/TypedSymbol'
+        - $ref: '#/components/schemas/TypedTimeZone'
+        - $ref: '#/components/schemas/TypedZoneDateTime'
+        - type: object
+          description: a nested map
+          additionalProperties:
+            schema:
+              $ref: '#/components/schemas/TypedAny'
+        - type: array
+          description: an array/list type of XT
+          items:
+            schema:
+              $ref: '#/components/schemas/TypedAny'
+    TypedDuration:
+      description: A time-based amount of time, such as '34.5 seconds'.
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:duration]
+        '@value':
+          type: string
+          example: "PT3H1M35.23S"
+    TypedInstant:
+      description: An instantaneous point on the time-line. An object where a simple string would be ambiguous.
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:instant]
+        '@value':
+          type: string
+          example: "2024-01-01T00:00Z"
+          format: date-time
+    TypedKeyword:
+      description: a keyword literal - See [Keyword](https://clojure.org/reference/data_structures#Keywords) for details.
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:keyword]
+        '@value':
+          type: string
+    TypedLocalDate:
+      description: A date without a time-zone in the ISO-8601 calendar system, such as 2007-12-03
+      properties:
+        '@type':
+          type: string
+          enum: [xt:date]
+        '@value':
+          type: string
+          example: "2024-01-01"
+          format: date
+    TypedLocalDateTime:
+      description: A date-time without a time-zone in the ISO-8601 calendar system, such as 2007-12-03T10:15:30.
+      properties:
+        '@type':
+          type: string
+          enum: [xt:timestamp]
+        '@value':
+          type: string
+          example: "2020-01-01T12:34:56.789"
+    TypedPeriod:
+      description: A date-based amount of time in the ISO-8601 calendar system, such as '2 years, 3 months and 4 days'.
+      properties:
+        '@type':
+          type: string
+          enum: [xt:period]
+        '@value':
+          type: string
+          example: "P18Y12D"
+    TypedSet:
+      description: A set data literal.
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:set]
+        '@value':
+          type: array
+          items:
+            $ref: '#/components/schemas/TypedAny'
+    TypedSymbol:
+      description: A symbol literal - See [Symbol](https://clojure.org/reference/data_structures#Symbols) for details.
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:symbol]
+        '@value':
+          type: string
+    TypedTimeZone:
+      description: A time-zone ID, such as Europe/Paris.
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:timeZone]
+        '@value':
+          type: string
+          example: "2020-01-01T12:34:56.789[Europe/Paris]"
+    TypedZoneDateTime:
+      description: A date-time with a time-zone in the ISO-8601 calendar system, such as 2007-12-03T10:15:30+01:00 Europe/Paris.
+      type: object
+      properties:
+        '@type':
+          type: string
+          enum: [xt:timestamptz]
+        '@value':
+          type: string
+          example: "2020-01-01T12:34:56.789[Europe/Paris]"
     Unify:
       type: object
       properties:
