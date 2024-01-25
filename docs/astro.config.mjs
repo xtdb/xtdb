@@ -129,11 +129,30 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { label: 'Overview', link: '/reference/main/drivers' },
-                { label: 'Clojure ↗', link: '/drivers/clojure/index.html', attrs: {target: '_blank'} },
-                // broken atm.
-                // { label: 'Java ↗', link: '/drivers/java/index.html', attrs: {target: '_blank'}},
-                { label: 'Kotlin ↗', link: '/drivers/kotlin/index.html', attrs: {target: '_blank'}},
+
+                {
+                  label: 'Clojure',
+                  items: [
+                    { label: 'ClojureDoc ↗', link: '/drivers/clojure/index.html', attrs: {target: '_blank'} }
+                  ]
+                },
+
+                {
+                  label: 'Kotlin',
+                  items: [
+                    { label: 'KDoc ↗', link: '/drivers/kotlin/index.html', attrs: {target: '_blank'} }
+                  ]
+                },
+
                 { label: 'HTTP (OpenAPI) ↗', link: '/drivers/openapi/index.html', attrs: {target: '_blank'}},
+
+                {
+                  label: 'Java',
+                  items: [
+                    // TODO broken atm
+                    // { label: 'Javadoc ↗', link: '/drivers/java/index.html', attrs: {target: '_blank'} }
+                  ]
+                },
               ]
             },
           ]
