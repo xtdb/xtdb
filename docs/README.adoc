@@ -45,9 +45,6 @@ All commands are run from the `docs` folder of the project, from a terminal:
 | `yarn run astro --help`
 | Get help using the Astro CLI
 
-| `yarn run build-openapi-docs`
-| Moves `openapi/openapi.yaml` to `public/drivers/openapi.yaml` to be statically served together with an `index.hmtl`.
-
 | `yarn run build-javadoc`
 | Builds the full aggregate set of project JavaDocs via gradle to `dist/javadoc`
 
