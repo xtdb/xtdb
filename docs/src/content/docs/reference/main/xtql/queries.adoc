@@ -4,7 +4,7 @@ title: XTQL Queries
 :examples:  ../src/test/resources/docs/xtql_json_examples.yaml
 :openapi: /drivers/openapi/index.html
 
-NOTE: For specific details of how to submit XTQL queries, see the documentation for your individual link:/reference/main/drivers[client library].
+NOTE: For specific details of how to submit XTQL queries, see the documentation for your individual link:/drivers[client library].
 
 XTQL queries consist of composable operators, optionally combined with a pipeline.
 

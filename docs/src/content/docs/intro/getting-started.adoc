@@ -44,9 +44,9 @@ If you're running on the JVM, you can use the JVM client library to connect to t
 
 For more details, check out the relevant instructions for your language:
 
-* link:/reference/main/drivers/clojure/getting-started.html#_connecting_through_http[Clojure]
-* link:/reference/main/drivers/java/getting-started.html#_connecting_through_http[Java]
-* link:/reference/main/drivers/kotlin/getting-started.html#_connecting_through_http[Kotlin]
+* link:/drivers/clojure/getting-started.html#_connecting_through_http[Clojure]
+* link:/drivers/java/getting-started.html#_connecting_through_http[Java]
+* link:/drivers/kotlin/getting-started.html#_connecting_through_http[Kotlin]
 
 
 == In process (JVM)
@@ -56,7 +56,6 @@ In-process XTDB is particularly useful for testing and interactive development -
 
 For more details, check out the relevant instructions for your language:
 
-* link:/reference/main/drivers/clojure/getting-started.html#_in_process[Clojure]
-* link:/reference/main/drivers/java/getting-started.html#_in_process[Java]
-* link:/reference/main/drivers/kotlin/getting-started.html#_in_process[Kotlin]
-
+* link:/drivers/clojure/getting-started.html#_in_process[Clojure]
+* link:/drivers/java/getting-started.html#_in_process[Java]
+* link:/drivers/kotlin/getting-started.html#_in_process[Kotlin]

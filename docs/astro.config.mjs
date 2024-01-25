@@ -131,39 +131,39 @@ export default defineConfig({
                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates'},
               ]
             },
+          ]
+        },
+
+        {
+          label: 'Drivers',
+          collapsed: true,
+          items: [
+            { label: 'Overview', link: '/drivers' },
 
             {
-              label: 'Drivers',
-              collapsed: true,
+              label: 'Clojure',
               items: [
-                { label: 'Overview', link: '/reference/main/drivers' },
+                { label: 'Getting started', link: '/drivers/clojure/getting-started' },
+                { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: {target: '_blank'} }
+              ]
+            },
 
-                {
-                  label: 'Clojure',
-                  items: [
-                    { label: 'Getting started', link: '/reference/main/drivers/clojure/getting-started' },
-                    { label: 'ClojureDoc ↗', link: '/drivers/clojure/index.html', attrs: {target: '_blank'} }
-                  ]
-                },
+            {
+              label: 'Kotlin',
+              items: [
+                { label: 'Getting started', link: '/drivers/kotlin/getting-started' },
+                { label: 'KDoc ↗', link: '/drivers/kotlin/kdoc/index.html', attrs: {target: '_blank'} }
+              ]
+            },
 
-                {
-                  label: 'Kotlin',
-                  items: [
-                    { label: 'Getting started', link: '/reference/main/drivers/kotlin/getting-started' },
-                    { label: 'KDoc ↗', link: '/drivers/kotlin/index.html', attrs: {target: '_blank'} }
-                  ]
-                },
+            { label: 'HTTP (OpenAPI) ↗', link: '/drivers/http/openapi/index.html', attrs: {target: '_blank'}},
 
-                { label: 'HTTP (OpenAPI) ↗', link: '/drivers/openapi/index.html', attrs: {target: '_blank'}},
-
-                {
-                  label: 'Java',
-                  items: [
-                    { label: 'Getting started', link: '/reference/main/drivers/java/getting-started' },
-                    // TODO broken atm
-                    // { label: 'Javadoc ↗', link: '/drivers/java/index.html', attrs: {target: '_blank'} }
-                  ]
-                },
+            {
+              label: 'Java',
+              items: [
+                { label: 'Getting started', link: '/drivers/java/getting-started' },
+                // TODO broken atm
+                // { label: 'Javadoc ↗', link: '/drivers/java/javadoc/index.html', attrs: {target: '_blank'} }
               ]
             },
           ]
