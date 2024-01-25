@@ -2,8 +2,7 @@
 dist/
 
 # generated docs
-public/drivers/*
-!public/drivers/openapi/
+public/drivers/clojure/codox
 
 # generated types
 .astro/

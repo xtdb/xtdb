@@ -8,9 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-javadoc": "mkdir -p public/drivers/java && rm -rf public/drivers/java/javadoc && cd ../ && ./gradlew dokkaJavadocCollector && cp -r ./build/docs/dokka/javadoc docs/public/drivers/java/javadoc",
-    "build-kdoc": "mkdir -p public/drivers/kotlin && rm -rf public/drivers/kotlin/kdoc && cd ../ && ./gradlew dokkaHtmlMultiModule && cp -r ./build/dokka/htmlMultiModule docs/public/drivers/kotlin/kdoc",
-    "build-clj-docs": "mkdir -p public/drivers/clojure && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox"
+    "build-api-docs": "mkdir -p public/drivers/clojure && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox dokkaHtmlMultiModule",
+    "build-api-docs-when-java-works": "mkdir -p public/drivers/clojure && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox dokkaHtmlMultiModule dokkaJavadocCollector"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.0.3",
