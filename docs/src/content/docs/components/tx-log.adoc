@@ -33,8 +33,7 @@ While generally provided as is/without any configuration options, you can expect
 
 For examples on how to enable/configure the in-memory transaction log as part of your node, for each client library, see the individual SDK documentation:
 
-// TODO: Add Log Module to codox?
-// * link:/drivers/clojure/codox/log.html[Clojure]
+* link:/drivers/clojure/configuration#in-memory-log[Clojure]
 * link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-in-memory-log-factory/index.html[Kotlin]
 
 == Local
@@ -48,7 +47,7 @@ When configuring the local directory log, you can expect the following parameter
 |===
 | *Parameter* | *Description* | *Required?*
 | Path 
-| The path to the local directory to store the transaction log in. 
+| The path to the local directory to store t2he transaction log in. 
 | Yes
 
 | Instant Source
@@ -67,6 +66,5 @@ When configuring the local directory log, you can expect the following parameter
 
 === Examples
 
-// TODO: Add Log Docs to codox?
-// * link:/drivers/clojure/codox/log.html[Clojure]
+* link:/drivers/clojure/configuration#local-log[Clojure]
 * link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-local-log-factory/index.html[Kotlin]

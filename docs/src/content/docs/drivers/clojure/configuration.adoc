@@ -1,0 +1,39 @@
+---
+title: Configuration Examples
+---
+
+The following document provides a number of examples for the EDN configuration for numerous XTDB node components.
+
+== Transaction Log 
+
+For more info on the transaction log, see the link:/components/tx-log[Transaction Log] documentation.
+
+[#in-memory-log]
+=== In-Memory
+
+```clojure
+{:log [:in-memory {:instant-src (InstantSource/system)}]}
+```
+
+Opts that can be passed within the `in-memory` config map are:
+
+* `instant-src` (`java.time.InstantSource`, optional, defaults to `InstantSource/system`)
+
+As it is the default `:log` implementation, if you do not specify any `:log` config, you will get an in-memory log with the defaults set.
+
+[#local-log]
+=== Local
+
+```clojure
+{:log [:local {:path "/tmp/tx-log"
+               :instant-src (InstantSource/system)
+               :buffer-size 8092
+               :poll-sleep-duration "PT1S"}]}
+```
+
+Opts that can be passed within the `local` config map are:
+
+* `path` (string/`File`/`Path`, required)
+* `instant-src` (`java.time.InstantSource`, optional, defaults to `InstantSource/system`)
+* `buffer-size` (int, optional, defaults to `4096`)
+* `poll-sleep-duration` (string/`Duration`, defaults to 1 second, "PT1S")
