@@ -2,8 +2,64 @@
 title: Kafka
 ---
 
-Coming https://github.com/xtdb/xtdb/issues/3037[soon^]
+https://kafka.apache.org/[Apache Kafka] can be used as an XTDB transaction log.
 
-For details on how to enable the Kafka module in each client library, see the individual SDK documentation:
+== Required Infrastructure
 
-* link:/drivers/clojure/kafka-module.html[Clojure]
+In order to use Kafka as the transaction log, you will need to have a **Kafka cluster** available to use. On that cluster, we will require the following:
+
+* A Kafka topic to use for the transaction log. This can be created manually, or automatically by XTDB (see below).
+* If **setting up the topic manually**, you will need to ensure that the topic has a few propeties:
+** A single partition - we require this to ensure that the transaction log is strictly ordered.
+** `message.timestamp.type` set to `LogAppendTime` - this ensures that the timestamp of the message is the time it was appended to the log, rather than the time it was sent by the producer.
+* If **allowing XTDB to create the topic automatically**, you will need to ensure that the connection properties you supply to the XTDB node have the appropriate permissions to create topics.
+
+== Configuring the Node
+
+As Kafka is a submodule of the XTDB project, in order to use Kafka as the transaction log, you will need to include a dependency on the `com.xtdb/xtdb-kafka` module.
+
+=== Expected Parameters
+
+When configuring the Kafka module, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
+[cols="2,3,1"]
+|===
+| *Parameter* | *Description* | *Required?*
+| Bootstrap Servers 
+| A comma-separated list of host:port pairs to use for establishing the initial connection to the Kafka cluster. 
+| Yes
+
+| Topic Name
+| Name of the Kafka topic to use for the transaction log.
+| Yes
+
+| Poll Duration
+| The maximum amount of time to block waiting for records to be returned by the Kafka consumer.
+| No - defaults to 1 second.
+
+| Properties File
+| Path to a Java properties file containing Kafka connection properties, supplied directly to the Kafka client.
+| No - defaults to `null`.
+
+| Properties Map
+| A map of Kafka connection properties, supplied directly to the Kafka client.
+| No - defaults to an empty map.
+
+| Auto Create Topic?
+| Whether or not to automatically create the topic, if it does not already exist.
+| No - defaults to True.
+
+| Replication Factor
+| The https://kafka.apache.org/documentation/#replication.factor[replication factor] of the transaction log topic (if it is automatically created by XTDB).
+| No - defaults to 1.
+
+| Topic Config
+| A map of https://kafka.apache.org/documentation/#topicconfigs[topic configuration options] to use when creating the transaction log topic (if it is automatically created by XTDB).
+| No - defaults to an empty map.
+|===
+
+=== Examples
+
+For examples on how to enable/configure the Kafka module as part of your node, for each client library, see the individual SDK documentation:
+
+* link:/drivers/clojure/codox/kafka-module.html[Clojure]
+* link:/drivers/kotlin/kdoc/modules/xtdb-kafka/xtdb.api.log/-kafka-log-factory/index.html[Kotlin]
