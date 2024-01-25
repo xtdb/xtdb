@@ -39,6 +39,18 @@ interface LogFactory {
     fun openLog(): Log
 }
 
+/**
+ * Used to set configuration options for an in-memory XTDB Transaction Log. As a note -
+ * if nothing is provided under `log` on the Xtdb.Config class, the in-memory log will be used by default.
+ *
+ * Example usage, as part of a node config:
+ * ```kotlin
+ * Xtdb.Config(
+ *    log = InMemoryLogFactory(instantSource = InstantSource.system()),
+ *    ...
+ * )
+* ```
+*/
 @SerialName("!InMemory")
 @Serializable
 data class InMemoryLogFactory(@Transient var instantSource: InstantSource = InstantSource.system()) : LogFactory {
@@ -51,6 +63,22 @@ data class InMemoryLogFactory(@Transient var instantSource: InstantSource = Inst
     override fun openLog() = OPEN_LOG(this) as Log
 }
 
+/**
+ * Used to set configuration options for a local directory based XTDB Transaction Log.
+ *
+ * Example usage, as part of a node config:
+ * ```kotlin
+ * Xtdb.Config(
+ *    log = LocalLogFactory(
+ *              path = Paths.get("test-path"),
+ *              instantSource = InstantSource.system(),
+ *              bufferSize = 4096,
+ *              pollSleepDuration = Duration.ofMillis(100)
+ *          ),
+ *    ...
+ * )
+ * ```
+*/
 @SerialName("!Local")
 @Serializable
 data class LocalLogFactory @JvmOverloads constructor(

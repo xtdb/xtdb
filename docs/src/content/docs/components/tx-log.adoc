@@ -1,3 +1,72 @@
 ---
 title: Transaction Log
 ---
+
+One of the key components of an XTDB node is the transaction log - this is a totally ordered log of all transaction operations that have been applied to the database, generally persistent & shared between nodes.
+
+== Implementations
+
+We offer a number of separate implementations of the transaction log, currently:
+
+* Log implementations within `xtdb-core`:
+** <<In Memory>> - non persistent, for a single in-process node - used by default if you do not specify otherwise.
+** <<Local>> - log persisted to provided file-path.
+* Log implementations within their own modules: 
+** link:tx-log/kafka[Kafka] - log persisted to a Kafka topic.
+
+== In Memory
+
+An in-memory transaction log - the default transaction log implementation used by an XTDB node if you do not specify otherwise.
+
+=== Parameters
+
+While generally provided as is/without any configuration options, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
+[cols="2,3,1"]
+|===
+| *Parameter* | *Description* | *Required?*
+| Instant Source
+| A java https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation. This is used to within the transaction log to provide a timestamp for each transaction.
+| No, will default to the system clock
+|===
+
+=== Examples
+
+For examples on how to enable/configure the in-memory transaction log as part of your node, for each client library, see the individual SDK documentation:
+
+// TODO: Add Log Module to codox?
+// * link:/drivers/clojure/codox/log.html[Clojure]
+* link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-in-memory-log-factory/index.html[Kotlin]
+
+== Local
+
+A local directory transaction log - a persistent transaction log implementation that writes to a local file.
+
+=== Parameters 
+
+When configuring the local directory log, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
+[cols="2,3,1"]
+|===
+| *Parameter* | *Description* | *Required?*
+| Path 
+| The path to the local directory to store the transaction log in. 
+| Yes
+
+| Instant Source
+| A java https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation. This is used to within the transaction log to provide a timestamp for each transaction. If not provided, the default is to use the system clock.
+| No, will default to the system clock
+
+| Buffer Size
+| The number of entries of the buffer to use when writing to the transaction log.
+| No, defaults to 4096
+
+| Poll Sleep Duration
+| The duration to sleep for when polling for new transactions to write to the transaction log.
+| No, defaults to 100ms
+
+|===
+
+=== Examples
+
+// TODO: Add Log Docs to codox?
+// * link:/drivers/clojure/codox/log.html[Clojure]
+* link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-local-log-factory/index.html[Kotlin]
