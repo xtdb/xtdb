@@ -141,10 +141,12 @@
           (finally
             (.clear elements)))))))
 
-(defmethod xtn/apply-config! :xtdb.log/local-directory-log [^AConfig config _ {:keys [path instant-src]}]
+(defmethod xtn/apply-config! :xtdb.log/local-directory-log [^AConfig config _ {:keys [path instant-src buffer-size poll-sleep-duration]}]
   (doto config
     (.setTxLog (cond-> (LocalLogFactory. (util/->path path))
-                 instant-src (.instantSource instant-src)))))
+                 instant-src (.instantSource instant-src)
+                 buffer-size (.bufferSize buffer-size)
+                 poll-sleep-duration (.pollSleepDuration (time/->duration poll-sleep-duration))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-log [^LocalLogFactory factory]
