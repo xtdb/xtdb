@@ -72,6 +72,25 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'Overview', link: '/reference/main' },
+
+            {
+              label: 'Transaction Log',
+              collapsed: true,
+              items: [
+                { label: 'Overview', link: '/reference/main/tx-log' },
+                { label: 'Kafka', link: '/reference/main/tx-log/kafka'},
+              ],
+            },
+
+            {
+              label: 'Storage',
+              collapsed: true,
+              items: [
+                { label: 'Overview', link: '/reference/main/storage'},
+                { label: 'S3', link: '/reference/main/storage/s3'},
+              ]
+            },
+
             {
               label: 'XTQL',
               collapsed: true,
@@ -117,15 +136,6 @@ export default defineConfig({
                 { label: 'HTTP (OpenAPI) ↗', link: '/drivers/openapi/index.html', attrs: {target: '_blank'}},
               ]
             },
-
-            {
-              label: 'Modules',
-              collapsed: true,
-              items: [
-                { label: 'Kafka', link: '/reference/main/modules/kafka'},
-                { label: 'S3', link: '/reference/main/modules/s3'},
-              ]
-            }
           ]
         },
       ],
