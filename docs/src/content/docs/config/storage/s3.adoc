@@ -129,9 +129,11 @@ storage: !Remote
   localDiskCache: /var/cache/xtdb/object-store
 ----
 
+If configured as an in-process node, you can also specify an `S3Configurator` instance - this is used to modify the requests sent to S3.
+
 === Examples
 
 For examples on how to enable/configure the S3 module as part of your node, for each client library, see the individual SDK documentation:
 
-* link:/drivers/clojure/codox/s3-module.html[Clojure]
+* link:/drivers/clojure/configuration#_s3[Clojure]
 * link:/drivers/kotlin/kdoc/modules/xtdb-s3/xtdb.api/-s3-object-store-factory/index.html[Kotlin]

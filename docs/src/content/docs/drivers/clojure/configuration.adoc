@@ -1,39 +1,119 @@
 ---
-title: Configuration Examples
+title: Configuration Cookbook
 ---
 
-The following document provides a number of examples for the EDN configuration for numerous XTDB node components.
+This document provides examples for the EDN configuration of XTDB components, to be supplied to `xtdb.api/start-node`.
 
 == Transaction Log 
 
-For more info on the transaction log, see the link:/config/tx-log[Transaction Log] documentation.
+Main article: link:/config/tx-log[Transaction Log]
 
 [#in-memory-log]
 === In-Memory
 
-```clojure
-{:log [:in-memory {:instant-src (InstantSource/system)}]}
-```
+Main article: link:/config/tx-log#_in_memory[in-memory transaction log]
 
-Opts that can be passed within the `in-memory` config map are:
+This is the default, and can be omitted.
 
-* `instant-src` (`java.time.InstantSource`, optional, defaults to `InstantSource/system`)
+[source,clojure]
+----
+{:log [:in-memory
+       {;; -- optional
 
-As it is the default `:log` implementation, if you do not specify any `:log` config, you will get an in-memory log with the defaults set.
+        ;; :instant-src (java.time.InstantSource/system)
+        }]}
+----
 
 [#local-log]
-=== Local
+=== Local disk
 
-```clojure
-{:log [:local {:path "/tmp/tx-log"
-               :instant-src (InstantSource/system)
-               :buffer-size 8092
-               :poll-sleep-duration "PT1S"}]}
-```
+Main article: link:/config/tx-log#_local_disk[local-disk transaction log]
 
-Opts that can be passed within the `local` config map are:
+[source,clojure]
+----
+{:log [:local
+       {;; -- required
+        ;; accepts `String`, `File` or `Path`
+        :path "/tmp/tx-log"
 
-* `path` (string/`File`/`Path`, required)
-* `instant-src` (`java.time.InstantSource`, optional, defaults to `InstantSource/system`)
-* `buffer-size` (int, optional, defaults to `4096`)
-* `poll-sleep-duration` (string/`Duration`, defaults to 1 second, "PT1S")
+        ;; -- optional
+
+        ;; accepts `java.time.InstantSource`
+        ;; :instant-src (InstantSource/system)
+
+        ;; :buffer-size 4096
+        ;; :poll-sleep-duration "PT1S"
+        }]}
+----
+
+=== Kafka
+
+Main article: link:/config/tx-log/kafka[Kafka]
+
+[source,clojure]
+----
+{:log [:kafka
+       {;; -- required
+        :bootstrap-servers "localhost:9092"
+        :topic-name "xtdb-log"
+
+        ;; -- optional
+
+        ;; :create-topic? true
+        ;; :poll-duration #time/duration "PT1S"
+        ;; :properties-file "kafka.properties"
+        ;; :properties-map {}
+        ;; :replication-factor 1
+        ;; :topic-config {}
+        }]}
+----
+
+== Storage
+
+Main article: link:/config/storage[Storage]
+
+[#in-memory-storage]
+=== In-Memory
+
+Main article: link:/config/storage#_in_memory[in-memory storage]
+
+This is the default, and should be omitted.
+
+=== Local disk
+
+Main article: link:/config/storage#_local_disk[local-disk storage]
+
+[source,clojure]
+----
+{:storage [:local
+           {;; -- required
+
+            ;; accepts `String`, `File` or `Path`
+            :path "/var/lib/xtdb/storage"
+
+            ;; -- optional
+
+            ;; :max-cache-bytes 1024
+            ;; :max-cache-entries 536870912
+           }]}
+----
+
+=== S3
+
+Main article: link:/config/storage/s3[S3]
+
+[source,clojure]
+----
+{:storage [:remote
+           {:object-store [:s3
+                           {;; -- required
+                            :bucket "my-bucket"
+                            :sns-topic-arn "arn:aws:sns:region:account-id:my-sns-topic"
+
+                            ;; -- optional
+
+                            ;; :prefix my-xtdb-node
+                            ;; :configurator (reify S3Configurator
+                            ;;                 ...)
+                           }]}]}
+----

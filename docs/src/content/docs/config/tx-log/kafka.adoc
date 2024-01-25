@@ -60,5 +60,5 @@ txLog: !Kafka
 
 For examples on how to enable/configure the Kafka module as part of your node, for each client library, see the individual SDK documentation:
 
-* link:/drivers/clojure/codox/kafka-module.html[Clojure]
+* link:/drivers/clojure/configuration#_kafka[Clojure]
 * link:/drivers/kotlin/kdoc/modules/xtdb-kafka/xtdb.api.log/-kafka-log-factory/index.html[Kotlin]
