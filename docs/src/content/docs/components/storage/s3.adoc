@@ -66,5 +66,5 @@ When configuring the S3 module, you can expect the following parameters to be av
 
 For examples on how to enable/configure the S3 module as part of your node, for each client library, see the individual SDK documentation:
 
-* link:/drivers/clojure/s3-module.html[Clojure]
-* link:/drivers/kotlin/modules/xtdb-s3/xtdb.api/-s3-object-store-factory/index.html[Kotlin]
+* link:/drivers/clojure/codox/s3-module.html[Clojure]
+* link:/drivers/kotlin/kdoc/modules/xtdb-s3/xtdb.api/-s3-object-store-factory/index.html[Kotlin]
