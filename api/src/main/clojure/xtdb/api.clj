@@ -192,7 +192,7 @@
   "Writes transactions to the log for processing. Non-blocking.
 
   tx-ops: XTQL/SQL transaction operations.
-    [[:put :table {:xt/id \"my-id\", ...}]
+    [[:put-docs :table {:xt/id \"my-id\", ...}]
      [:delete-docs :table \"my-id\"]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
@@ -234,7 +234,7 @@
   "Writes transactions to the log for processing
 
   tx-ops: XTQL/SQL style transactions.
-    [[:put :table {:xt/id \"my-id\", ...}]
+    [[:put-docs :table {:xt/id \"my-id\", ...}]
      [:delete-docs :table \"my-id\"]
 
      [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"

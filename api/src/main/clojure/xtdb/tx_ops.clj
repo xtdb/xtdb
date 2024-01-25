@@ -69,7 +69,7 @@
     (cond-> (TxOps/sql sql)
       (seq arg-rows) (.argRows ^List (vec arg-rows)))))
 
-(defmethod parse-tx-op :put [[_ table-or-opts & docs]]
+(defmethod parse-tx-op :put-docs [[_ table-or-opts & docs]]
   (let [{table :into, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:into table-or-opts})]

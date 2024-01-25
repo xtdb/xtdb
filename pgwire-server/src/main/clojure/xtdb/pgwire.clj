@@ -2085,7 +2085,7 @@
       (xt/submit-tx (:node server)
                     (for [row rows
                           :let [auto-id (str "pgwire-" (random-uuid))]]
-                      [:put (merge {:xt/id auto-id} row)])))
+                      [:put-docs (merge {:xt/id auto-id} row)])))
 
     (defn read-xtdb [o]
       (if (instance? org.postgresql.util.PGobject o)

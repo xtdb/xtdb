@@ -69,7 +69,7 @@
            [initial-readings rest-readings] (split-at (count device-infos) readings)]
 
        (->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
-              [:put (cond-> {:into :docs}
+              [:put-docs (cond-> {:into :docs}
                       time (assoc :valid-from time))
                doc])
             (partition-all batch-size)

@@ -59,7 +59,7 @@ include::{examples}[tags=put-json,indent=0]
 .Clojure
 [%collapsible]
 ====
-`[:put <table|opts> <documents>*]`
+`[:put-docs <table|opts> <documents>*]`
 
 * `table` (keyword): table to insert into
 * `opts` (map):
@@ -415,7 +415,7 @@ This can be used to enforce consistency constraints - for example, to assert tha
 ----
 [[:assert-not-exists '(from :users [{:email $email}])
   {:email "james@example.com"}]
- [:put :users {:xt/id :james, :email "james@example.com", ...}]]
+ [:put-docs :users {:xt/id :james, :email "james@example.com", ...}]]
 ----
 ====
 

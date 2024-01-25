@@ -30,13 +30,13 @@
                 (tj/sort-arrow-json (json/read-value actual))))))))
 
 (def devices-docs
-  [[:put :device-info
+  [[:put-docs :device-info
     {:xt/id "device-info-demo000000",
      :api-version "23",
      :manufacturer "iobeam",
      :model "pinto",
      :os-name "6.0.1"}]
-   [:put :device-readings
+   [:put-docs :device-readings
     {:xt/id "reading-demo000000",
      :device-id "device-info-demo000000",
      :cpu-avg-15min 8.654,
@@ -51,13 +51,13 @@
      :cpu-avg-1min 24.81,
      :mem-free 4.10011078E8,
      :mem-used 5.89988922E8}]
-   [:put :device-info
+   [:put-docs :device-info
     {:xt/id "device-info-demo000001",
      :api-version "23",
      :manufacturer "iobeam",
      :model "mustang",
      :os-name "6.0.1"}]
-   [:put :device-readings
+   [:put-docs :device-readings
     {:xt/id "reading-demo000001",
      :device-id "device-info-demo000001",
      :cpu-avg-15min 8.822,
@@ -78,9 +78,9 @@
 
 (t/deftest can-write-put-fns
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-put-fns.json")
-                         [[:put-fn :foo '(fn [id] [[:put :foo {:xt/id id}]])]
+                         [[:put-fn :foo '(fn [id] [[:put-docs :foo {:xt/id id}]])]
                           [:put-fn {:fn-id :bar, :valid-from #inst "2020"}
-                           '(fn [id] [[:put :bar {:xt/id id}]])]]))
+                           '(fn [id] [[:put-docs :bar {:xt/id id}]])]]))
 
 (t/deftest can-write-tx-fn-calls
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx-fn-calls.json")
@@ -89,9 +89,9 @@
 
 (t/deftest can-write-docs-with-different-keys
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/docs-with-different-keys.json")
-                         [[:put :foo {:xt/id :a, :a 1}]
-                          [:put :foo {:xt/id "b", :b 2}]
-                          [:put :bar {:xt/id 3, :c 3}]]))
+                         [[:put-docs :foo {:xt/id :a, :a 1}]
+                          [:put-docs :foo {:xt/id "b", :b 2}]
+                          [:put-docs :bar {:xt/id 3, :c 3}]]))
 
 (t/deftest can-write-sql-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-sql.json")

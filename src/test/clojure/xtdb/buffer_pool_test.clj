@@ -44,7 +44,7 @@
   (util/with-tmp-dirs #{path}
     (util/with-open [node (xtn/start-node {:storage [:remote {:object-store [:in-memory {}]
                                                               :local-disk-cache path}]})]
-      (xt/submit-tx node [[:put :foo {:xt/id :foo}]])
+      (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
 
       (t/is (= [{:xt/id :foo}]
                (xt/q node '(from :foo [xt/id]))))

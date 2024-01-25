@@ -89,5 +89,5 @@
                         (get-in [:system :xtdb.indexer/live-index])
                         (.log-limit))) 
               "using provided config")
-        (xt/submit-tx node [[:put :docs {:xt/id :foo}]])
+        (xt/submit-tx node [[:put-docs :docs {:xt/id :foo}]])
         (t/is (= [{:e :foo}] (xt/q node '(from :docs [{:xt/id e}]))))))))

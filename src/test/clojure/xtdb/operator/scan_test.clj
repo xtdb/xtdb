@@ -20,9 +20,9 @@
 
 (t/deftest test-simple-scan
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :col1 "foo1"}]
-                        [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]
-                        [:put :xt_docs {:xt/id :foo, :col2 "baz2"}]])
+    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :col1 "foo1"}]
+                        [:put-docs :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]
+                        [:put-docs :xt_docs {:xt/id :foo, :col2 "baz2"}]])
 
     (t/is (= #{{:xt/id :bar, :col1 "bar1", :col2 "bar2"}
                {:xt/id :foo, :col2 "baz2"}}
@@ -31,9 +31,9 @@
 
 (t/deftest test-simple-scan-with-namespaced-attributes
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :the-ns/col1 "foo1"}]
-                        [:put :xt_docs {:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
-                        [:put :xt_docs {:xt/id :foo, :the-ns/col2 "baz2"}]])
+    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :the-ns/col1 "foo1"}]
+                        [:put-docs :xt_docs {:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
+                        [:put-docs :xt_docs {:xt/id :foo, :the-ns/col2 "baz2"}]])
 
     (t/is (= #{{:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}
                {:xt/id :foo}}
@@ -42,7 +42,7 @@
 
 (t/deftest test-duplicates-in-scan-1
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
+    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
 
     (t/is (= [{:xt/id :foo}]
              (tu/query-ra '[:scan {:table xt_docs} [xt$id xt$id]]
@@ -51,7 +51,7 @@
 (t/deftest test-chunk-boundary
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 20}})]
     (->> (for [i (range 110)]
-           [:put :xt_docs {:xt/id i}])
+           [:put-docs :xt_docs {:xt/id i}])
          (partition-all 10)
          (mapv #(xt/submit-tx node %)))
 
@@ -61,7 +61,7 @@
 
 (t/deftest test-smaller-page-limit
   (with-open [node (xtn/start-node {:indexer {:page-limit 16}})]
-    (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
+    (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
     (tu/finish-chunk! node)
 
@@ -72,7 +72,7 @@
 (t/deftest test-metadata
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 20}})]
     (->> (for [i (range 100)]
-           [:put :xt_docs {:xt/id i}])
+           [:put-docs :xt_docs {:xt/id i}])
          (partition-all 20)
          (mapv #(xt/submit-tx node %)))
 
@@ -83,7 +83,7 @@
           "testing only getting some trie matches"))
 
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 20}})]
-    (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
+    (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
     (xt/submit-tx node (for [i (range 20)] [:delete-docs :xt_docs i]))
 
     (t/is (= []
@@ -97,8 +97,8 @@
           "testing nothing matches"))
 
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :boolean-or-int true}]
-                        [:put :xt_docs {:xt/id 2 :boolean-or-int 2}]])
+    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]
+                        [:put-docs :xt_docs {:xt/id 2 :boolean-or-int 2}]])
     (tu/finish-chunk! node)
 
     (t/is (= [{:boolean-or-int true}]
@@ -108,16 +108,16 @@
 
 (t/deftest test-past-point-point-queries
   (with-open [node (xtn/start-node {})]
-    (let [tx1 (xt/submit-tx node [[:put {:into :xt_docs, :valid-from #inst "2015"}
+    (let [tx1 (xt/submit-tx node [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
                                    {:xt/id :doc1 :v 1}]
-                                  [:put {:into :xt_docs, :valid-from #inst "2015"}
+                                  [:put-docs {:into :xt_docs, :valid-from #inst "2015"}
                                    {:xt/id :doc2 :v 1}]
-                                  [:put {:into :xt_docs, :valid-from #inst "2018"}
+                                  [:put-docs {:into :xt_docs, :valid-from #inst "2018"}
                                    {:xt/id :doc3 :v 1}]])
 
-          tx2 (xt/submit-tx node [[:put {:into :xt_docs, :valid-from #inst "2020"}
+          tx2 (xt/submit-tx node [[:put-docs {:into :xt_docs, :valid-from #inst "2020"}
                                    {:xt/id :doc1 :v 2}]
-                                  [:put {:into :xt_docs, :valid-from #inst "2100"}
+                                  [:put-docs {:into :xt_docs, :valid-from #inst "2100"}
                                    {:xt/id :doc2 :v 2}]
                                   [:delete-docs :xt_docs :doc3]])]
 
@@ -161,16 +161,16 @@
 
 (t/deftest test-past-point-point-queries-with-valid-time
   (with-open [node (xtn/start-node tu/*node-opts*)]
-    (let [tx1 (xt/submit-tx node [[:put {:into :xt_docs, :valid-from #inst "2015"}
+    (let [tx1 (xt/submit-tx node [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
                                    {:xt/id :doc1 :v 1}]
-                                  [:put {:into :xt_docs, :valid-from #inst "2015"}
+                                  [:put-docs {:into :xt_docs, :valid-from #inst "2015"}
                                    {:xt/id :doc2 :v 1}]
-                                  [:put {:into :xt_docs, :valid-from #inst "2018"}
+                                  [:put-docs {:into :xt_docs, :valid-from #inst "2018"}
                                    {:xt/id :doc3 :v 1}]])
 
-          tx2 (xt/submit-tx node [[:put {:into :xt_docs, :valid-from #inst "2020"}
+          tx2 (xt/submit-tx node [[:put-docs {:into :xt_docs, :valid-from #inst "2020"}
                                    {:xt/id :doc1 :v 2}]
-                                  [:put {:into :xt_docs, :valid-from #inst "2100"}
+                                  [:put-docs {:into :xt_docs, :valid-from #inst "2100"}
                                    {:xt/id :doc2 :v 2}]
                                   [:delete-docs :xt_docs :doc3]])]
 
@@ -247,7 +247,7 @@
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put {:into :xt_docs, :valid-from #inst "2021", :valid-to #inst "3000"}
+    (xt/submit-tx node [[:put-docs {:into :xt_docs, :valid-from #inst "2021", :valid-to #inst "3000"}
                          {:xt/id :doc}]])
 
     (let [res (first (tu/query-ra '[:scan {:table xt_docs}
@@ -272,7 +272,7 @@
 
 (t/deftest test-only-scanning-temporal-cols-45
   (with-open [node (xtn/start-node {})]
-    (let [tx (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}]])
+    (let [tx (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :doc}]])
           tt (.getSystemTime tx)]
 
       (t/is (= #{{:xt/valid-from (time/->zdt tt)
@@ -286,9 +286,9 @@
 
 (t/deftest test-aligns-temporal-columns-correctly-363
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+    (xt/submit-tx node [[:put-docs :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
 
-    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
+    (xt/submit-tx node [[:put-docs :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
 
     (tu/finish-chunk! node)
 
@@ -319,10 +319,10 @@
   (let [tt1 (time/->zdt #inst "2020-01-01")
         tt2 (time/->zdt #inst "2020-01-02")]
     (with-open [node (xtn/start-node {})]
-      (xt/submit-tx node [[:put {:into :foo, :valid-from tt1}
+      (xt/submit-tx node [[:put-docs {:into :foo, :valid-from tt1}
                            {:xt/id 1, :version "version 1" :last_updated "tx1"}]])
 
-      (xt/submit-tx node [[:put {:into :foo, :valid-from tt2}
+      (xt/submit-tx node [[:put-docs {:into :foo, :valid-from tt2}
                            {:xt/id 2, :version "version 2" :last_updated "tx2"}]])
       (t/is (= #{{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}}
                (set (tu/query-ra '[:scan {:table foo,
@@ -347,14 +347,14 @@
                     (.columnFields)
                     (update-vals types/field->col-type)))]
 
-        (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}]])
+        (let [tx (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :doc}]])
                      (tu/then-await-tx node))]
           (tu/finish-chunk! node)
 
           (t/is (= '{xt$id :keyword}
                    (->col-types tx))))
 
-        (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:xt/id "foo"}]])
+        (let [tx (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]])
                      (tu/then-await-tx node))]
 
           (t/is (= '{xt$id [:union #{:keyword :utf8}]}
@@ -423,8 +423,8 @@
 
 (t/deftest test-content-pred
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
-                        [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
+    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+                        [:put-docs :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
     (t/is (= [{:first-name "Ivan", :xt/id :ivan}]
              (tu/query-ra '[:scan
                             {:table xt_docs,  :for-valid-time nil, :for-system-time nil}
@@ -433,8 +433,8 @@
 
 (t/deftest test-absent-columns
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :col1 "foo1"}]
-                        [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]])
+    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :col1 "foo1"}]
+                        [:put-docs :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]])
 
 
     ;; column not existent in all docs
@@ -453,10 +453,10 @@
         search-uuid #uuid "80000000-0000-0000-0000-000000000000"
         after-uuid #uuid "f0000000-0000-0000-0000-000000000000"]
     (with-open [node (xtn/start-node {})]
-      (xt/submit-tx node [[:put :xt-docs {:xt/id before-uuid :version 1}]
-                          [:put :xt-docs {:xt/id search-uuid :version 1}]
-                          [:put :xt-docs {:xt/id after-uuid :version 1}]])
-      (xt/submit-tx node [[:put :xt-docs {:xt/id search-uuid :version 2}]])
+      (xt/submit-tx node [[:put-docs :xt-docs {:xt/id before-uuid :version 1}]
+                          [:put-docs :xt-docs {:xt/id search-uuid :version 1}]
+                          [:put-docs :xt-docs {:xt/id after-uuid :version 1}]])
+      (xt/submit-tx node [[:put-docs :xt-docs {:xt/id search-uuid :version 2}]])
 
       (t/is (nil? (scan/selects->iid-byte-buffer {} vw/empty-params)))
 
@@ -513,7 +513,7 @@
              (let [uuid (rand-nth uuids)]
                (when (= uuid search-uuid)
                  (swap! !search-uuid-versions conj i))
-               [[:put :xt_docs {:xt/id uuid :version i}]]))
+               [[:put-docs :xt_docs {:xt/id uuid :version i}]]))
            (mapv #(xt/submit-tx node %)))
 
       (t/is (= [{:version (last @!search-uuid-versions), :xt/id search-uuid}]
@@ -532,9 +532,9 @@
   (with-open [node (xtn/start-node {:indexer {:page-limit 16}})]
     (let [uuids (tu/uuid-seq 40)
           search-uuid (rand-nth uuids)]
-      (xt/submit-tx node (for [uuid (take 20 uuids)] [:put :xt_docs {:xt/id uuid}]))
+      (xt/submit-tx node (for [uuid (take 20 uuids)] [:put-docs :xt_docs {:xt/id uuid}]))
       (tu/finish-chunk! node)
-      (xt/submit-tx node (for [uuid (drop 20 uuids)] [:put :xt_docs {:xt/id uuid}]))
+      (xt/submit-tx node (for [uuid (drop 20 uuids)] [:put-docs :xt_docs {:xt/id uuid}]))
       (tu/finish-chunk! node)
 
       (t/is (= [{:xt/id search-uuid}]
@@ -581,7 +581,7 @@
 
 (deftest test-live-tries-with-multiple-leaves-are-loaded-correctly-2710
   (with-open [node (xtn/start-node {:indexer {:page-limit 16}})]
-    (-> (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
+    (-> (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
         (tu/then-await-tx node))
 
     (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
@@ -589,10 +589,10 @@
                                {:node node}))))))
 
 (deftest test-pushdown-blooms
-  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id :foo, :col "foo"}]
-                           [:put :xt-docs {:xt/id :bar, :col "bar"}]])
+  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col "foo"}]
+                           [:put-docs :xt-docs {:xt/id :bar, :col "bar"}]])
   (tu/finish-chunk! tu/*node*)
-  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id :toto, :col "toto"}]])
+  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
   (tu/finish-chunk! tu/*node*)
 
   (let [!page-idxs-cnt (atom 0)
@@ -620,10 +620,10 @@
             second-page (for [i (range page-limit)] (java.util.UUID. 1 i))
             uuid (first first-page)]
         (xt/submit-tx node (for [uuid (concat first-page second-page)]
-                             [:put :docs {:xt/id uuid}]))
+                             [:put-docs :docs {:xt/id uuid}]))
         (tu/then-await-tx node)
         (tu/finish-chunk! node)
-        (xt/submit-tx node [[:put :docs {:xt/id uuid}]])
+        (xt/submit-tx node [[:put-docs :docs {:xt/id uuid}]])
         (tu/then-await-tx node)
 
         ;; first + second page
@@ -638,8 +638,8 @@
                                          {:node node}))))))))
 
 (deftest dont-use-fast-path-on-non-literals-2768
-  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id "foo-start" :v "foo-start"}]
-                           [:put :xt-docs {:xt/id "bar-start" :v "bar-start"}]])
+  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id "foo-start" :v "foo-start"}]
+                           [:put-docs :xt-docs {:xt/id "bar-start" :v "bar-start"}]])
 
   (t/is (= [#:xt{:id "foo-start"}]
            (tu/query-ra
@@ -648,7 +648,7 @@
             {:node tu/*node*}))))
 
 (t/deftest test-iid-col-type-3016
-  (xt/submit-tx tu/*node* [[:put :comments {:xt/id 1}]])
+  (xt/submit-tx tu/*node* [[:put-docs :comments {:xt/id 1}]])
 
   (t/is (= {'xt$iid [:fixed-size-binary 16]
             'xt$valid_from [:timestamp-tz :micro "UTC"]

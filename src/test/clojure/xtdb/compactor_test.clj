@@ -89,7 +89,7 @@
       (letfn [(submit! [xs]
                 (doseq [batch (partition-all 8 xs)]
                   (xt/submit-tx node (for [x batch]
-                                       [:put :foo {:xt/id x}]))))
+                                       [:put-docs :foo {:xt/id x}]))))
 
               (q []
                 (->> (xt/q node

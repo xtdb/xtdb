@@ -111,9 +111,9 @@
                                                                      :prefix (str "xtdb.google-cloud-test." (random-uuid))}]
                                        :local-disk-cache local-disk-cache}]})]
       ;; Submit some documents to the node
-      (t/is (xt/submit-tx node [[:put :bar {:xt/id "bar1"}]
-                                [:put :bar {:xt/id "bar2"}]
-                                [:put :bar {:xt/id "bar3"}]]))
+      (t/is (xt/submit-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                [:put-docs :bar {:xt/id "bar2"}]
+                                [:put-docs :bar {:xt/id "bar3"}]]))
 
       ;; Ensure finish-chunk! works
       (t/is (nil? (tu/finish-chunk! node)))

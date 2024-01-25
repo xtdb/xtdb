@@ -13,7 +13,7 @@
   (t/testing "simple call"
     (xt/submit-tx tu/*node* [[:put-fn :my-fn
                               '(fn [id n]
-                                 [[:put :foo {:xt/id id, :n n}]])]
+                                 [[:put-docs :foo {:xt/id id, :n n}]])]
                              [:call :my-fn :foo 0]
                              [:call :my-fn :bar 1]])
 
@@ -25,11 +25,11 @@
   (t/testing "nested tx fn"
     (xt/submit-tx tu/*node* [[:put-fn :inner-fn
                               '(fn [id]
-                                 [[:put :bar {:xt/id (keyword (str (name id) "-inner")), :from :inner}]])]
+                                 [[:put-docs :bar {:xt/id (keyword (str (name id) "-inner")), :from :inner}]])]
                              [:put-fn :outer-fn
                               '(fn [id]
                                  [[:call :inner-fn id]
-                                  [:put :bar {:xt/id (keyword (str (name id) "-outer")), :from :outer}]])]
+                                  [:put-docs :bar {:xt/id (keyword (str (name id) "-outer")), :from :outer}]])]
                              [:call :inner-fn :foo]
                              [:call :outer-fn :bar]])
 
@@ -44,7 +44,7 @@
 
   (letfn [(run-test [ret-val put-id]
             (xt/submit-tx tu/*node* [[:call :identity ret-val]
-                                     [:put :docs {:xt/id put-id}]])
+                                     [:put-docs :docs {:xt/id put-id}]])
 
             (->> (xt/q tu/*node*
                        '(from :docs [{:xt/id id} {:xt/id $id}])
@@ -60,7 +60,7 @@
   (xt/submit-tx tu/*node* [[:put-fn :doc-counter
                             '(fn [id]
                                (let [doc-count (count (q '(from :foo [xt/id])))]
-                                 [[:put :foo {:xt/id id, :doc-count doc-count}]]))]
+                                 [[:put-docs :foo {:xt/id id, :doc-count doc-count}]]))]
                            [:call :doc-counter :foo]
                            [:call :doc-counter :bar]])
 
@@ -69,14 +69,14 @@
            (xt/q tu/*node*
                  '(from :foo [xt/id doc-count]))))
 
-  (let [tx2 (xt/submit-tx tu/*node* [[:put :accounts {:xt/id :petr :balance 100}]
-                                     [:put :accounts {:xt/id :ivan :balance 200}]
+  (let [tx2 (xt/submit-tx tu/*node* [[:put-docs :accounts {:xt/id :petr :balance 100}]
+                                     [:put-docs :accounts {:xt/id :ivan :balance 200}]
                                      [:put-fn :update-balance
                                       '(fn [id]
                                          (let [[account] (q '(from :accounts [balance xt/id {:xt/id $id}])
                                                             {:args {:id id}})]
                                            (if account
-                                             [[:put :accounts (update account :balance inc)]]
+                                             [[:put-docs :accounts (update account :balance inc)]]
                                              [])))]
                                      [:call :update-balance :petr]
                                      [:call :update-balance :undefined]])]
@@ -91,7 +91,7 @@
   (xt/submit-tx tu/*node* [[:put-fn :doc-counter
                             '(fn [id]
                                (let [[{:keys [doc-count]}] (q "SELECT COUNT(*) doc_count FROM docs")]
-                                 [[:put :docs {:xt/id id, :doc-count doc-count}]]))]
+                                 [[:put-docs :docs {:xt/id id, :doc-count doc-count}]]))]
                            [:call :doc-counter :foo]
                            [:call :doc-counter :bar]])
 
@@ -103,7 +103,7 @@
 (t/deftest test-tx-fn-current-tx
   (let [tx0 (xt/submit-tx tu/*node* [[:put-fn :with-tx
                                       '(fn [id]
-                                         [[:put :docs (into {:xt/id id} *current-tx*)]])]
+                                         [[:put-docs :docs (into {:xt/id id} *current-tx*)]])]
                                      [:call :with-tx :foo]
                                      [:call :with-tx :bar]])
         tt0 (.getSystemTime tx0)
@@ -124,7 +124,7 @@
 
     (xt/submit-tx tu/*node* [[:put-fn :assoc-version
                               '(fn [version]
-                                 [[:put :docs {:xt/id :foo, :version version}]])]
+                                 [[:put-docs :docs {:xt/id :foo, :version version}]])]
                              [:call :assoc-version 0]])
     (t/is (= 0 (foo-version)))
 
@@ -147,7 +147,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "no :fn"
-      (xt/submit-tx tu/*node* [[:put :xt/tx-fns {:xt/id :no-fn}]])
+      (xt/submit-tx tu/*node* [[:put-docs :xt/tx-fns {:xt/id :no-fn}]])
 
       (xt/submit-tx tu/*node* [[:call :no-fn]
                                [:call :assoc-version :fail]])
@@ -158,7 +158,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "not a fn"
-      (xt/submit-tx tu/*node* [[:put :xt/tx-fns {:xt/id :not-a-fn, :xt/fn 0}]])
+      (xt/submit-tx tu/*node* [[:put-docs :xt/tx-fns {:xt/id :not-a-fn, :xt/fn 0}]])
       (xt/submit-tx tu/*node* [[:call :not-a-fn]
                                [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
@@ -201,7 +201,7 @@
             (xt/submit-tx node [[:put-fn :hello-world
                                  '(fn hello-world [id]
                                     (sleep 200)
-                                    [[:put :xt_docs {:xt/id id :foo (str id)}]])]])
+                                    [[:put-docs :xt_docs {:xt/id id :foo (str id)}]])]])
             (xt/submit-tx node [[:call :hello-world 1]])
 
             (Thread/sleep 100)
@@ -213,7 +213,7 @@
   (t/testing "simple call"
     (xt/submit-tx tu/*node* [[:put-fn :my-fn
                               '(fn [id n]
-                                 [[:put :docs {:xt/id id, :a/b n}]])]
+                                 [[:put-docs :docs {:xt/id id, :a/b n}]])]
                              [:call :my-fn :foo 0]
                              [:call :my-fn :bar 1]])
 
@@ -224,22 +224,22 @@
 (t/deftest test-lazy-error-in-tx-fns-2811
   (xt/submit-tx tu/*node* [[:put-fn :my-fn '(fn [ns] (for [n ns]
                                                        (if (< n 100)
-                                                         [:put :foo {:xt/id n :v n}]
+                                                         [:put-docs :foo {:xt/id n :v n}]
                                                          (throw (ex-info "boom" {})))))]])
   (xt/submit-tx tu/*node* [[:call :my-fn (range 200)]])
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :v 1}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :v 1}]])
   (t/is (= [{:xt/id 1, :v 1}]
            (xt/q tu/*node*
                  '(from :docs [xt/id v])))))
 
 (t/deftest normalisation-in-tx-fn
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :first-name "Allan" :last-name "Turing"}]
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :first-name "Allan" :last-name "Turing"}]
                            [:put-fn :my-fn '(fn []
                                               (let [ks (->> (q '(from :docs [first-name last-name])
                                                                {:key-fn :snake-case-keyword})
                                                             (mapcat keys)
                                                             (into []))]
-                                                [[:put :the-keys {:xt/id 1 :keys ks}]]))]
+                                                [[:put-docs :the-keys {:xt/id 1 :keys ks}]]))]
                            [:call :my-fn]])
 
   (t/is (= #{{:key :first_name} {:key :last_name}}
@@ -251,8 +251,8 @@
 
   (xt/submit-tx tu/*node* [[:put-fn :my-case-fn '(fn [{:keys [snake_case kebab-case]}]
                                                    (cond-> []
-                                                     snake_case (conj [:put :casing {:xt/id snake_case}])
-                                                     kebab-case (conj [:put :casing {:xt/id kebab-case}])))]
+                                                     snake_case (conj [:put-docs :casing {:xt/id snake_case}])
+                                                     kebab-case (conj [:put-docs :casing {:xt/id kebab-case}])))]
                            [:call :my-case-fn {:snake_case "foo"}]
                            [:call :my-case-fn {:kebab-case "bar"}]
                            [:call :my-case-fn {:snake_case "baz" :kebab-case "toto"}]])

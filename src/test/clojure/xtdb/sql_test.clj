@@ -1166,9 +1166,9 @@
            (plan-sql "SELECT (SELECT ARRAY_AGG(x.y) FROM (VALUES (1), (2), (3), (tab0.z)) AS x(y)) FROM tab0")))))
 
 (deftest test-order-by-3065
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :x 3}]
-                           [:put :docs {:xt/id 2 :x 2}]
-                           [:put :docs {:xt/id 3 :x 1}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3}]
+                           [:put-docs :docs {:xt/id 2 :x 2}]
+                           [:put-docs :docs {:xt/id 3 :x 1}]])
 
   (t/is (= [{:x 1, :xt/id 3} {:x 2, :xt/id 2} {:x 3, :xt/id 1}]
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY docs.x")))
@@ -1183,9 +1183,9 @@
            (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY docs.x"))))
 
 (deftest test-order-by-unqualified-derived-column-refs
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :x 3}]
-                           [:put :docs {:xt/id 2 :x 2}]
-                           [:put :docs {:xt/id 3 :x 1}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3}]
+                           [:put-docs :docs {:xt/id 2 :x 2}]
+                           [:put-docs :docs {:xt/id 3 :x 1}]])
 
   (t/is (= [{:b 2} {:b 3} {:b 4}]
              (xt/q tu/*node* "SELECT (docs.x + 1) AS b FROM docs ORDER BY b")))

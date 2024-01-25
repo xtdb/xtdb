@@ -51,10 +51,10 @@
 (defn- decode-json [^String s] (first (decode-json* s)))
 
 (def possible-tx-ops
-  (->> [[:put :docs {:xt/id 1}]
-        [:put :docs {:xt/id 2}]
+  (->> [[:put-docs :docs {:xt/id 1}]
+        [:put-docs :docs {:xt/id 2}]
         [:delete-docs :docs 2]
-        [:put {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
+        [:put-docs {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
          {:xt/id 3}]
         [:erase-docs :docs 3]
         [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
@@ -65,7 +65,7 @@
        (mapv tx-ops/parse-tx-op)))
 
 (deftest transit-test
-  (xt/submit-tx *node* [[:put :foo {:xt/id 1}]])
+  (xt/submit-tx *node* [[:put-docs :foo {:xt/id 1}]])
   (Thread/sleep 100)
 
   (t/is (= {:latest-completed-tx
@@ -96,7 +96,7 @@
            (xt/q *node* '(from :docs [xt/id])
                  {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
-  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id 2}]])]
+  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2}]])]
     (t/is (= #{{:xt/id 1} {:xt/id 2}}
              (-> (http/request {:accept :transit+json
                                 :as :string
@@ -112,7 +112,7 @@
           "testing query")))
 
 (deftest json-response-test
-  (xt/submit-tx *node* [[:put :foo {:xt/id 1}]])
+  (xt/submit-tx *node* [[:put-docs :foo {:xt/id 1}]])
   (Thread/sleep 100)
 
   (t/is (= {"latestSubmittedTx" {"txId" 0, "systemTime" "2020-01-01T00:00:00Z"},
@@ -141,7 +141,7 @@
            (xt/q *node* '(from :docs [xt/id])
                  {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
-  (let [tx (xt/submit-tx *node* [[:put :docs {:xt/id 2 :key :some-keyword}]])]
+  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])]
     (t/is (=
            ;; TODO figure out clojure bug
            #_#{{"xt/id" 1} {"xt/id" 2 "key" :some-keyword}}
@@ -194,7 +194,7 @@
                (ex-data body)))))
 
   (t/testing "unknown runtime error"
-    (let [tx (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :name 2}]])
+    (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :name 2}]])
           {:keys [status body] :as _resp} (http/request {:accept "application/jsonl"
                                                          :as :string
                                                          :request-method :post
@@ -234,7 +234,7 @@
   {"txId" tx-id "systemTime" (str system-time)})
 
 (deftest json-request-test
-  (let [_tx1 (xt/submit-tx *node* [[:put :docs {:xt/id 1}]])
+  (let [_tx1 (xt/submit-tx *node* [[:put-docs :docs {:xt/id 1}]])
         {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
 
     (t/is (= tx2
@@ -376,7 +376,7 @@
                                                     :for-valid-time :all-time})
                               {:basis {:at-tx tx5}}))))))
 
-      (xt/submit-tx tu/*node* [[:put :docs2 {:xt/id 3}]])
+      (xt/submit-tx tu/*node* [[:put-docs :docs2 {:xt/id 3}]])
       (let [erase {"eraseFrom" "docs2"
                    "bind" [{"xt/id" 3}]}
             tx6 (-> (http/request {:accept :transit+json

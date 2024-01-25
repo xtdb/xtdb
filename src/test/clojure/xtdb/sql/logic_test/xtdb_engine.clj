@@ -186,7 +186,7 @@
 
 (defn- insert-statement [node insert-statement]
   (xt/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                            [:put (:table (meta doc))
+                            [:put-docs (:table (meta doc))
                              (merge {:xt/id (UUID/randomUUID)} doc)]))
                 {:default-all-valid-time? true})
   node)

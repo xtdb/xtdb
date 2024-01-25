@@ -123,9 +123,9 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                  (into {})))]
 
     (xt/submit-tx tu/*node*
-                  [[:put :docs {:xt/id :foo, :v "implicit table"}]
-                   [:put :explicit_table1 {:xt/id :foo, :v "explicit table 1"}]
-                   [:put :explicit_table2 {:xt/id :foo, :v "explicit table 2"}]])
+                  [[:put-docs :docs {:xt/id :foo, :v "implicit table"}]
+                   [:put-docs :explicit_table1 {:xt/id :foo, :v "explicit table 1"}]
+                   [:put-docs :explicit_table2 {:xt/id :foo, :v "explicit table 2"}]])
 
     (t/is (= {:xt #{"implicit table"}, :t1 #{"explicit table 1"}, :t2 #{"explicit table 2"}}
              (foos)))
@@ -300,11 +300,11 @@ WHERE foo.xt$id = 1"]])]
            (xt/q tu/*node* "SELECT foo.xt$id foo, foo.x FROM foo LEFT JOIN bar USING (xt$id) WHERE foo.x = bar.x"))))
 
 (t/deftest test-c1-importer-abort-op
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :foo}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])
 
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id :bar}]
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]
                            TxOps/abort
-                           [:put :docs {:xt/id :baz}]])
+                           [:put-docs :docs {:xt/id :baz}]])
   (t/is (= [{:id :foo}]
            (xt/q tu/*node* '(from :docs [{:xt/id id}])))))
 
@@ -352,9 +352,9 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (t/deftest test-txs-table-485
   (tu/with-log-level 'xtdb.indexer :error
-    (xt/submit-tx tu/*node* [[:put :docs {:xt/id :foo}]])
+    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])
     (xt/submit-tx tu/*node* [TxOps/abort])
-    (xt/submit-tx tu/*node* [[:put :docs {:xt/id :bar}]])
+    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])
     (xt/submit-tx tu/*node* [[:put-fn :tx-fn-fail
                               '(fn []
                                  (throw (Exception. "boom")))]
@@ -442,15 +442,15 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (deftest test-scan-all-table-col-names
   (t/testing "testing scan.allTableColNames combines table info from both live and past chunks"
-    (-> (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo1" :a 1}]
-                                 [:put :bar {:xt/id "bar1"}]
-                                 [:put :bar {:xt/id "bar2" :b 2}]])
+    (-> (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id "foo1" :a 1}]
+                                 [:put-docs :bar {:xt/id "bar1"}]
+                                 [:put-docs :bar {:xt/id "bar2" :b 2}]])
         (tu/then-await-tx tu/*node*))
 
     (tu/finish-chunk! tu/*node*)
 
-    (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo2" :c 3}]
-                             [:put :baz {:xt/id "foo1" :a 4}]])
+    (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id "foo2" :c 3}]
+                             [:put-docs :baz {:xt/id "foo1" :a 4}]])
 
     (t/is (= #{{:a 1, :xt/id "foo1"} {:xt/id "foo2", :c 3}}
              (set (xt/q tu/*node* "SELECT * FROM foo"))))
@@ -486,7 +486,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                  {:explain? true}))))
 
 (t/deftest test-normalising-nested-cols-2483
-  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :foo {:a/b "foo"}}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo {:a/b "foo"}}]])
   (t/is (= [{:foo {:a/b "foo"}}] (xt/q tu/*node* "SELECT docs.foo FROM docs")))
   (t/is (= [{:a/b "foo"}] (xt/q tu/*node* "SELECT docs.foo.a$b FROM docs"))))
 
@@ -505,7 +505,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                          (assoc :xt/id id))))]
 
         (xt/submit-tx node (for [doc docs]
-                             [:put :docs doc]))
+                             [:put-docs :docs doc]))
 
         #_ ; FIXME #2923
         (t/is (= (set docs)
@@ -557,9 +557,9 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (t/deftest test-array-agg-2946
   (xt/submit-tx tu/*node*
-                [[:put :track {:xt/id :track-1 :name "foo1" :composer "bar" :album :album-1}]
-                 [:put :track {:xt/id :track-2 :name "foo2" :composer "bar" :album :album-1}]
-                 [:put :album {:xt/id :album-1 :name "foo-album"}]])
+                [[:put-docs :track {:xt/id :track-1 :name "foo1" :composer "bar" :album :album-1}]
+                 [:put-docs :track {:xt/id :track-2 :name "foo2" :composer "bar" :album :album-1}]
+                 [:put-docs :album {:xt/id :album-1 :name "foo-album"}]])
 
 
   (t/is (= [{:name "foo-album", :tracks ["foo1" "foo2"]}]
@@ -582,7 +582,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (let [config-object (Xtdb$Config.)
           node (xtn/start-node config-object)]
       (t/is node)
-      (xt/submit-tx node [[:put :docs {:xt/id :foo, :inst #inst "2021"}]])
+      (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
       (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
                (xt/q node '(from :docs [{:xt/id e} inst]))))))
 
@@ -590,6 +590,6 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (let [config-file (io/resource "test-config.yaml")
           node (xtn/start-node (io/file config-file))]
       (t/is node)
-      (xt/submit-tx node [[:put :docs {:xt/id :foo, :inst #inst "2021"}]])
+      (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
       (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
                (xt/q node '(from :docs [{:xt/id e} inst])))))))

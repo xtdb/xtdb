@@ -4,7 +4,7 @@
 (def tx-ops
   (vec
    (for [doc (read-string (slurp (io/resource "james-bond.edn")))]
-     [:put (keyword (:type doc))
+     [:put-docs (keyword (:type doc))
       (-> doc
           (dissoc :type)
           ;; no sets as yet

@@ -101,10 +101,10 @@
       (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 104))))))
 
 (def txs
-  [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
-    [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 2}]]
+  [[[:put-docs :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
+    [:put-docs :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 2}]]
    [[:delete-docs :hello #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d"]
-    [:put {:into :world, :valid-from #inst "2023", :valid-to #inst "2024"}
+    [:put-docs {:into :world, :valid-from #inst "2023", :valid-to #inst "2024"}
      {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3}]]
    [[:erase-docs :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
    ;; sql

@@ -8,8 +8,8 @@
 (t/use-fixtures :each tu/with-node)
 
 (t/deftest test-as-of-tx
-  (let [tx1 (xt/submit-tx tu/*node* [[:put :docs {:xt/id :my-doc, :last-updated "tx1"}]])]
-    (xt/submit-tx tu/*node* [[:put :docs {:xt/id :my-doc, :last-updated "tx2"}]])
+  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx1"}]])]
+    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx2"}]])
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan {:table docs} [last_updated]]
@@ -28,8 +28,8 @@
                           {:basis {:at-tx tx1}})))))))
 
 (t/deftest test-app-time
-  (let [tx (xt/submit-tx tu/*node* [[:put :docs {:xt/id :doc, :version 1}]
-                                    [:put {:into :docs, :valid-from #inst "2021"}
+  (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]
+                                    [:put-docs {:into :docs, :valid-from #inst "2021"}
                                      {:xt/id :doc-with-app-time}]])
         system-time (time/->zdt (.getSystemTime tx))]
 
@@ -51,10 +51,10 @@
                   (into {} (map (juxt :xt/id identity))))))))
 
 (t/deftest test-system-time
-  (let [tx1 (xt/submit-tx tu/*node* [[:put :docs {:xt/id :doc, :version 0}]])
+  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 0}]])
         tt1 (time/->zdt (.getSystemTime tx1))
 
-        tx2 (xt/submit-tx tu/*node* [[:put :docs {:xt/id :doc, :version 1}]])
+        tx2 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]])
         tt2 (time/->zdt (.getSystemTime tx2))
 
         original-v0-doc {:xt/id :doc, :version 0
@@ -99,10 +99,10 @@
                  (map :xt/id)
                  frequencies))]
 
-    (xt/submit-tx tu/*node* [[:put :docs {:xt/id :doc, :version 0}]
-                             [:put :docs {:xt/id :other-doc, :version 0}]])
+    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 0}]
+                             [:put-docs :docs {:xt/id :other-doc, :version 0}]])
 
-    (xt/submit-tx tu/*node* [[:put :docs {:xt/id :doc, :version 1}]])
+    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]])
 
     (t/is (= {:doc 3, :other-doc 1} (all-time-docs))
           "documents present before erase")

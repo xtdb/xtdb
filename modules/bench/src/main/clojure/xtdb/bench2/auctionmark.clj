@@ -46,7 +46,7 @@
 
   The benchmark randomly selects id from a pool of region ids as an input for u_r_id parameter using flat distribution."
   [worker]
-  (xt/submit-tx (:sut worker) [[:put :user (generate-user worker)]]))
+  (xt/submit-tx (:sut worker) [[:put-docs :user (generate-user worker)]]))
 
 (def item-query
   '(from :item [{:xt/id $i}
@@ -103,24 +103,24 @@
        (cond-> []
          ;; increment number of bids on item
          i
-         (conj [:put :item (assoc (first (q '~item-query {:args {:i i}, :key-fn :snake-case-keyword}))
+         (conj [:put-docs :item (assoc (first (q '~item-query {:args {:i i}, :key-fn :snake-case-keyword}))
                                   :i_num_bids (inc nbids))])
 
          ;; if new bid exceeds old, bump it
          upd_curr_bid
-         (conj [:put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
+         (conj [:put-docs :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
                                           :imb_bid bid)])
 
          ;; we exceed the old max, win the bid.
          (and curr_bid new_bid_win)
-         (conj [:put :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
+         (conj [:put-docs :item-max-bid (assoc (first (q '~item-max-bid-query {:args {:imb imb}, :key-fn :snake-case-keyword}))
                                           :imb_ib_id new_bid_id
                                           :imb_ib_u_id u_id
                                           :imb_updated now)])
 
          ;; no previous max bid, insert new max bid
          (nil? imb_ib_id)
-         (conj [:put :item-max-bid {:xt/id (composite-id-fn new_bid_id i_id)
+         (conj [:put-docs :item-max-bid {:xt/id (composite-id-fn new_bid_id i_id)
                                     :imb_i_id i_id
                                     :imb_u_id u_id
                                     :imb_ib_id new_bid_id
@@ -131,7 +131,7 @@
 
          :always
          ;; add new bid
-         (conj [:put :item-bid {:xt/id new_bid_id
+         (conj [:put-docs :item-bid {:xt/id new_bid_id
                                 :ib_id new_bid_id
                                 :ib_i_id i_id
                                 :ib_u_id u_id
@@ -185,7 +185,7 @@
              (str description " "))]
 
     (->> (concat
-          [[:put :item
+          [[:put-docs :item
             {:xt/id i_id
              :i_id i_id
              :i_u_id u_id
@@ -202,7 +202,7 @@
              :i_status :open}]]
           (for [[i image] (map-indexed vector images)
                 :let [ii_id (bit-or (bit-shift-left i 60) (bit-and i_id-raw 0x0FFFFFFFFFFFFFFF))]]
-            [:put :item-comment
+            [:put-docs :item-comment
              {:xt/id (str "ii_" ii_id)
               :ii_id ii_id
               :ii_i_id i_id
