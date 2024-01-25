@@ -1,0 +1,54 @@
+---
+title: Getting started (Kotlin)
+---
+
+In Kotlin, you can access XTDB via a link:#_connecting_through_http[remote HTTP client], or link:#_in_process[in-process] (e.g. for testing purposes).
+
+== Connecting through HTTP
+
+1. Firstly, to run the XTDB server, check out the general link:/intro/getting-started[getting started guide].
+2. Then, add the thin client link:/reference/main/drivers/java/getting-started#_maven_artifacts[Maven coordinates] to your dependency manager of choice.
+3. You can then open up an XTDB client by running:
++
+--
+[source,kotlin]
+----
+import java.net.URL
+import xtdb.api.XtdbClient
+
+XtdbClient.openClient(URL("http://localhost:3000"))
+    .use { client ->
+        // ...
+    }
+----
+--
+
+From here, check out the link:/drivers/kotlin/xtdb-api/xtdb.api/-i-xtdb/index.html[`IXtdb` API docs^] to submit data and run queries.
+
+== In process
+
+If you're running a JVM, you can also use XTDB directly, in-process.
+In-process XTDB is particularly useful for testing and interactive development - you can start an in-memory node quickly and with little hassle, which makes it a great tool for unit tests and REPL experimentation.
+
+1. First, ensure you are running JDK 17+ and then add the `xtdb-core` link:/reference/main/drivers/java/getting-started#_maven_artifacts[Maven coordinates] to your dependency manager.
+2. You'll also need to add the following JVM arguments to run Apache Arrow:
++
+--
+* `--add-opens=java.base/java.nio=ALL-UNNAMED`
+* `-Dio.netty.tryReflectionSetAccessible=true`
+--
+3. Open up an in-process node using `Xtdb`:
++
+--
+[source,kotlin]
+----
+import xtdb.api.Xtdb
+
+Xtdb.openNode()
+    .use { xtdb ->
+        // ...
+    }
+----
+--
+
+This node uses exactly the same API as the thin client - so, again, from here, check out the link:/drivers/kotlin/xtdb-api/xtdb.api/-i-xtdb/index.html[`IXtdb` API docs^] to submit data and run queries.

@@ -133,6 +133,7 @@ export default defineConfig({
                 {
                   label: 'Clojure',
                   items: [
+                    { label: 'Getting started', link: '/reference/main/drivers/clojure/getting-started' },
                     { label: 'ClojureDoc ↗', link: '/drivers/clojure/index.html', attrs: {target: '_blank'} }
                   ]
                 },
@@ -140,6 +141,7 @@ export default defineConfig({
                 {
                   label: 'Kotlin',
                   items: [
+                    { label: 'Getting started', link: '/reference/main/drivers/kotlin/getting-started' },
                     { label: 'KDoc ↗', link: '/drivers/kotlin/index.html', attrs: {target: '_blank'} }
                   ]
                 },
@@ -149,6 +151,7 @@ export default defineConfig({
                 {
                   label: 'Java',
                   items: [
+                    { label: 'Getting started', link: '/reference/main/drivers/java/getting-started' },
                     // TODO broken atm
                     // { label: 'Javadoc ↗', link: '/drivers/java/index.html', attrs: {target: '_blank'} }
                   ]
