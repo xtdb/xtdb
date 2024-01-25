@@ -4,60 +4,59 @@ title: Kafka
 
 https://kafka.apache.org/[Apache Kafka] can be used as an XTDB transaction log.
 
-== Required Infrastructure
+== Setup
 
-In order to use Kafka as the transaction log, you will need to have a **Kafka cluster** available to use. On that cluster, we will require the following:
-
-* A Kafka topic to use for the transaction log. This can be created manually, or automatically by XTDB (see below).
-* If **setting up the topic manually**, you will need to ensure that the topic has a few propeties:
-** A single partition - we require this to ensure that the transaction log is strictly ordered.
+1. Add a dependency to the `com.xtdb/xtdb-kafka` module in your dependency manager.
+2. On your Kafka cluster, XTDB requires a Kafka topic to use for its transaction log.
+   This can be created manually, or automatically by XTDB (see below).
++
+--
+* If setting up the topic **manually**, ensure that the topic has:
+** A single partition - this ensures that the transaction log is strictly ordered.
 ** `message.timestamp.type` set to `LogAppendTime` - this ensures that the timestamp of the message is the time it was appended to the log, rather than the time it was sent by the producer.
-* If **allowing XTDB to create the topic automatically**, you will need to ensure that the connection properties you supply to the XTDB node have the appropriate permissions to create topics.
+* If allowing XTDB to create the topic **automatically**, ensure that the connection properties supplied to the XTDB node have the appropriate permissions to create topics.
+--
 
-== Configuring the Node
+== Configuration
 
-As Kafka is a submodule of the XTDB project, in order to use Kafka as the transaction log, you will need to include a dependency on the `com.xtdb/xtdb-kafka` module.
+To use the Kafka module, include the following in your node configuration:
 
-=== Expected Parameters
+[source,yaml]
+----
+txLog: !Kafka
+  # -- required
 
-When configuring the Kafka module, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
-[cols="2,3,1"]
-|===
-| *Parameter* | *Description* | *Required?*
-| Bootstrap Servers 
-| A comma-separated list of host:port pairs to use for establishing the initial connection to the Kafka cluster. 
-| Yes
+  # A comma-separated list of host:port pairs to use for establishing the
+  # initial connection to the Kafka cluster.
+  bootstrapServers: "localhost:9092"
 
-| Topic Name
-| Name of the Kafka topic to use for the transaction log.
-| Yes
+  # Name of the Kafka topic to use for the transaction log.
+  topicName: "xtdb-log"
 
-| Poll Duration
-| The maximum amount of time to block waiting for records to be returned by the Kafka consumer.
-| No - defaults to 1 second.
+  # -- optional
 
-| Properties File
-| Path to a Java properties file containing Kafka connection properties, supplied directly to the Kafka client.
-| No - defaults to `null`.
+  # Whether or not to automatically create the topic, if it does not already exist.
+  # autoCreateTopic: true
 
-| Properties Map
-| A map of Kafka connection properties, supplied directly to the Kafka client.
-| No - defaults to an empty map.
+  # The maximum amount of time to block waiting for records to be returned by the Kafka consumer.
+  # pollDuration: "PT1S"
 
-| Auto Create Topic?
-| Whether or not to automatically create the topic, if it does not already exist.
-| No - defaults to True.
+  # Path to a Java properties file containing Kafka connection properties,
+  # supplied directly to the Kafka client.
+  # propertiesFile: "kafka.properties"
 
-| Replication Factor
-| The https://kafka.apache.org/documentation/#replication.factor[replication factor] of the transaction log topic (if it is automatically created by XTDB).
-| No - defaults to 1.
+  # A map of Kafka connection properties, supplied directly to the Kafka client.
+  # propertiesMap:
 
-| Topic Config
-| A map of https://kafka.apache.org/documentation/#topicconfigs[topic configuration options] to use when creating the transaction log topic (if it is automatically created by XTDB).
-| No - defaults to an empty map.
-|===
+  # The replication factor of the transaction log topic (if it is automatically created by XTDB).
+  # see https://kafka.apache.org/documentation/#replication.factor
+  # replicationFactor: 1
 
-=== Examples
+  # A map of topic configuration options to use when creating the transaction log topic
+  # (if it is automatically created by XTDB).
+  # see https://kafka.apache.org/documentation/#topicconfigs
+  # topicConfig:
+----
 
 For examples on how to enable/configure the Kafka module as part of your node, for each client library, see the individual SDK documentation:
 
