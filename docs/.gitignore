@@ -2,7 +2,7 @@
 dist/
 
 # generated docs
-public/sdks
+public/drivers
 
 # generated types
 .astro/

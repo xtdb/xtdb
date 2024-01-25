@@ -60,7 +60,7 @@
 
   This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
-  For more information on the configuration options, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
+  For more information on the configuration options, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/drivers/clojure/index.html)"
   (^xtdb.api.IXtdb [] (start-node {}))
 
   (^xtdb.api.IXtdb [opts]
@@ -86,7 +86,7 @@
 
   This client *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
-  For more information on the configuration options, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/sdks/clojure/index.html)"
+  For more information on the configuration options, see the relevant module pages in the [ClojureDocs](https://docs.xtdb.com/reference/main/drivers/clojure/index.html)"
   ^xtdb.api.IXtdbSubmitClient [opts]
   (cond
     (instance? XtdbSubmitClient$Config opts) (XtdbSubmitClient/openSubmitClient ^XtdbSubmitClient$Config opts)

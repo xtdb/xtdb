@@ -3,7 +3,7 @@ title: XTQL Transactions
 ---
 :examples:  ../src/test/resources/docs/xtql_dml_json_examples.yaml
 :walkthrough: ../src/test/resources/docs/xtql_tutorial_examples.yaml
-:openapi: /sdks/openapi/index.html
+:openapi: /drivers/openapi/index.html
 
 
 XT transactions are submitted through a client's `submitTx` method or the JSON link:{openapi}#operations-default-post_tx[tx] endpoint.
