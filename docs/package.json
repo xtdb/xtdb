@@ -8,10 +8,10 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-openapi-docs": "cp openapi/openapi.yaml public/drivers/openapi/openapi.yaml",
-    "build-javadoc": "rm -rf public/drivers/java && cd ../ && ./gradlew dokkaJavadocCollector && cp -r ./build/docs/dokka/javadoc docs/public/drivers/java",
-    "build-kdoc": "rm -rf public/drivers/kotlin && cd ../ && ./gradlew dokkaHtmlMultiModule && cp -r ./build/dokka/htmlMultiModule docs/public/drivers/kotlin",
-    "build-clj-docs": "rm -rf public/drivers/clojure && cd ../ && ./gradlew build-codox"
+    "build-openapi-docs": "mkdir -p public/drivers/openapi/ && cp openapi/openapi.yaml public/drivers/openapi/openapi.yaml",
+    "build-javadoc": "mkdir -p public/drivers && rm -rf public/drivers/java && cd ../ && ./gradlew dokkaJavadocCollector && cp -r ./build/docs/dokka/javadoc docs/public/drivers/java",
+    "build-kdoc": "mkdir -p public/drivers && rm -rf public/drivers/kotlin && cd ../ && ./gradlew dokkaHtmlMultiModule && cp -r ./build/dokka/htmlMultiModule docs/public/drivers/kotlin",
+    "build-clj-docs": "mkdir -p public/drivers && rm -rf public/drivers/clojure && cd ../ && ./gradlew build-codox"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.0.3",
