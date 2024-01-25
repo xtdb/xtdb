@@ -7,6 +7,8 @@ import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.ZoneIdSerde
 import xtdb.api.log.LogFactory
+import xtdb.api.log.Logs.inMemoryLog
+import xtdb.api.storage.Storage.inMemoryStorage
 import xtdb.api.storage.StorageFactory
 import xtdb.util.requiringResolve
 import java.nio.file.Files
@@ -34,8 +36,8 @@ object Xtdb {
 
     @Serializable
     data class Config(
-        override var txLog: LogFactory = LogFactory.DEFAULT,
-        var storage: StorageFactory = StorageFactory.DEFAULT,
+        override var txLog: LogFactory = inMemoryLog(),
+        var storage: StorageFactory = inMemoryStorage(),
         override var defaultTz: ZoneId = ZoneOffset.UTC,
         @JvmField val indexer: IndexerConfig = IndexerConfig()
     ) : AConfig() {
@@ -84,6 +86,6 @@ object Xtdb {
     }
 
     @JvmSynthetic
-    fun openNode(build: Config.() -> Unit) = openNode(Config().also(build))
+    fun openNode(configure: Config.() -> Unit) = openNode(Config().also(configure))
 
 }

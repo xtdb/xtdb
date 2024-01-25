@@ -26,18 +26,19 @@ import java.util.*
 import java.util.ServiceLoader.Provider
 import kotlin.reflect.KClass
 
-object EnvironmentVariableProvider {
+internal object EnvironmentVariableProvider {
     fun getEnvVariable(name: String): String? = System.getenv(name)
 }
 
-fun envFromTaggedNode(taggedNode: YamlTaggedNode ): String {
+internal fun envFromTaggedNode(taggedNode: YamlTaggedNode ): String {
     if (taggedNode.tag == "!Env") {
         val value = taggedNode.innerNode.yamlScalar.content
         return EnvironmentVariableProvider.getEnvVariable(value) ?: throw IllegalArgumentException("Environment variable '$value' not found")
     }
     return taggedNode.innerNode.yamlScalar.content
 }
-fun handleEnvTag(input: YamlInput): String {
+
+internal fun handleEnvTag(input: YamlInput): String {
     val currentLocation = input.getCurrentLocation()
     val scalar = input.node.yamlMap.entries.values.find { it.location == currentLocation }
 
@@ -47,6 +48,10 @@ fun handleEnvTag(input: YamlInput): String {
         else -> throw IllegalStateException()
     }
 }
+
+/**
+ * @suppress
+ */
 object PathWithEnvVarSerde : KSerializer<Path> {
     override val descriptor = PrimitiveSerialDescriptor("PathWithEnvVars", PrimitiveKind.STRING)
 
@@ -58,6 +63,10 @@ object PathWithEnvVarSerde : KSerializer<Path> {
         return Paths.get(str)
     }
 }
+
+/**
+ * @suppress
+ */
 object StringWithEnvVarSerde : KSerializer<String> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("StringWithEnvVars", PrimitiveKind.STRING)
 
@@ -69,6 +78,7 @@ object StringWithEnvVarSerde : KSerializer<String> {
         return handleEnvTag(yamlInput)
     }
 }
+
 interface ModuleRegistry {
     @OptIn(InternalSerializationApi::class)
     fun <F : Xtdb.ModuleFactory> registerModuleFactory(factory: KClass<F>, serializer: KSerializer<F> = factory.serializer())
@@ -82,6 +92,9 @@ interface ModuleRegistration {
     fun register(registry: ModuleRegistry)
 }
 
+/**
+ * @suppress
+ */
 val YAML_SERDE = Yaml(
     serializersModule = SerializersModule {
         polymorphic(LogFactory::class) {
@@ -117,8 +130,15 @@ val YAML_SERDE = Yaml(
                 })
             }
     })
+
+/**
+ * @suppress
+ */
 fun nodeConfig(yamlString: String): Xtdb.Config =
     YAML_SERDE.decodeFromString<Xtdb.Config>(yamlString)
 
+/**
+ * @suppress
+ */
 fun submitClient(yamlString: String): XtdbSubmitClient.Config =
     YAML_SERDE.decodeFromString<XtdbSubmitClient.Config>(yamlString)

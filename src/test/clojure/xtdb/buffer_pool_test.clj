@@ -58,8 +58,8 @@
 
 (t/deftest cache-counter-test
   (util/with-open [bp (bp/open-remote-storage tu/*allocator*
-                                              (Storage/remote (bp/->object-store-factory :in-memory {})
-                                                              (create-tmp-dir)))]
+                                              (Storage/remoteStorage (bp/->object-store-factory :in-memory {})
+                                                                     (create-tmp-dir)))]
     (let [{^ObjectStore os :remote-store} bp]
       (bp/clear-cache-counters)
       (t/is (= 0 (.get bp/cache-hit-byte-counter)))
@@ -207,7 +207,7 @@
 
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/open-remote-storage tu/*allocator*
-                          (Storage/remote simulated-obj-store-factory (create-tmp-dir))))
+                          (Storage/remoteStorage simulated-obj-store-factory (create-tmp-dir))))
 
 (defn get-remote-calls [test-bp]
   @(:calls (:remote-store test-bp)))

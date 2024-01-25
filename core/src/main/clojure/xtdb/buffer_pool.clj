@@ -216,7 +216,7 @@
                      (.getPath factory)))
 
 (defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
-  (.storage config (cond-> (Storage/local (util/->path path))
+  (.storage config (cond-> (Storage/localStorage (util/->path path))
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 
@@ -403,9 +403,9 @@
 (defmethod ->object-store-factory :azure [_ opts] (->object-store-factory :xtdb.azure/object-store opts))
 
 (defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store local-disk-cache max-cache-bytes max-cache-entries]}]
-  (.storage config (cond-> (Storage/remote (let [[tag opts] object-store]
-                                             (->object-store-factory tag opts))
-                                           (util/->path local-disk-cache))
+  (.storage config (cond-> (Storage/remoteStorage (let [[tag opts] object-store]
+                                                    (->object-store-factory tag opts))
+                                                  (util/->path local-disk-cache))
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 

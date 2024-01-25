@@ -3,6 +3,9 @@ package xtdb.api
 import xtdb.api.log.LogFactory
 import java.time.ZoneId
 
+/**
+ * @suppress
+ */
 abstract class AConfig {
     abstract var txLog: LogFactory
     abstract var defaultTz: ZoneId

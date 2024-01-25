@@ -54,7 +54,7 @@
   (let [data-dir (doto (util/->path "target/compactor/test-merges-tries")
                    util/delete-dir
                    util/mkdirs)]
-    (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/local data-dir))]
+    (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage data-dir))]
       (let [expected-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-merges-tries")))]
 
         (util/with-open [lt0 (tu/open-live-table "foo")

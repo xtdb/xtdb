@@ -7,8 +7,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
 import xtdb.api.log.LogFactory
+import xtdb.api.log.Logs.inMemoryLog
 import xtdb.util.requiringResolve
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.ZoneId
@@ -21,7 +21,7 @@ object XtdbSubmitClient {
 
     @Serializable
     data class Config(
-        override var txLog: LogFactory = LogFactory.DEFAULT,
+        override var txLog: LogFactory = inMemoryLog(),
         override var defaultTz: ZoneId = ZoneOffset.UTC,
     ): AConfig() {
         override fun open() = OPEN_CLIENT(this) as IXtdbSubmitClient

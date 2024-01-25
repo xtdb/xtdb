@@ -28,22 +28,21 @@ interface Log : AutoCloseable {
     fun readRecords(afterTxId: Long?, limit: Int): List<LogRecord>
     fun subscribe(afterTxId: Long?, subscriber: LogSubscriber)
 
+    /**
+     * @suppress
+     */
     override fun close() {
     }
 }
 
 interface LogFactory {
     fun openLog(): Log
-
-    companion object {
-        val DEFAULT = InMemoryLogFactory()
-    }
 }
 
 @SerialName("!InMemory")
 @Serializable
 data class InMemoryLogFactory(@Transient var instantSource: InstantSource = InstantSource.system()) : LogFactory {
-    companion object {
+    private companion object {
         private val OPEN_LOG: IFn = requiringResolve("xtdb.log.memory-log", "open-log")
     }
 
@@ -61,7 +60,7 @@ data class LocalLogFactory @JvmOverloads constructor(
     var pollSleepDuration: Duration = Duration.ofMillis(100),
 ) : LogFactory {
 
-    companion object {
+    private companion object {
         private val OPEN_LOG: IFn = requiringResolve("xtdb.log.local-directory-log", "open-log")
     }
 
@@ -70,4 +69,15 @@ data class LocalLogFactory @JvmOverloads constructor(
     fun pollSleepDuration(pollSleepDuration: Duration) = apply { this.pollSleepDuration = pollSleepDuration }
 
     override fun openLog() = OPEN_LOG(this) as Log
+}
+
+object Logs {
+    @JvmStatic
+    fun inMemoryLog() = InMemoryLogFactory()
+
+    @JvmStatic
+    fun localLog(path: Path) = LocalLogFactory(path)
+
+    @JvmSynthetic
+    fun localLog(path: Path, configure: LocalLogFactory.() -> Unit) = localLog(path).also(configure)
 }

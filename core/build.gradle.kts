@@ -71,3 +71,17 @@ kotlin {
         }
     }
 }
+
+tasks.dokkaHtmlPartial {
+    dokkaSourceSets["main"].run {
+        perPackageOption {
+            matchingRegex.set(".*")
+            suppress.set(true)
+        }
+
+        perPackageOption {
+            matchingRegex.set("xtdb\\.api.*")
+            suppress.set(false)
+        }
+    }
+}

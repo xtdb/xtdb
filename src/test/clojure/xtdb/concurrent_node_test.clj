@@ -39,9 +39,9 @@
 (deftest ^:integration concurrent-buffer-pool-test
   (populate-node node-opts)
   (tu/with-system {:xtdb/allocator {}
-                   :xtdb/buffer-pool (Storage/local (.resolve (.toPath node-dir) "objects"))}
-    (fn []
-      (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
+                   :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))}
+                  (fn []
+                    (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
             objs (.listObjects buffer-pool)
             get-item #(with-open [^ArrowBuf _buf (deref (.getBuffer buffer-pool (rand-nth objs)))]
                         (Thread/sleep 10))

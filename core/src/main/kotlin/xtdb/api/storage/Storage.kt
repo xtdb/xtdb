@@ -1,4 +1,3 @@
-@file:JvmName("Storage")
 @file:UseSerializers(PathWithEnvVarSerde::class)
 
 package xtdb.api.storage
@@ -15,13 +14,9 @@ import java.nio.file.Path
 /**
  * Represents a factory interface for creating storage instances.
  * The default implementation is [InMemoryStorageFactory] which stores data in memory
- * */
+ */
 @Serializable
 sealed interface StorageFactory {
-    companion object {
-        val DEFAULT = InMemoryStorageFactory()
-    }
-
     fun openStorage(allocator: BufferAllocator): IBufferPool
 }
 
@@ -31,8 +26,8 @@ sealed interface StorageFactory {
  */
 @Serializable
 @SerialName("!InMemory")
-class InMemoryStorageFactory() : StorageFactory {
-    companion object {
+class InMemoryStorageFactory : StorageFactory {
+    private companion object {
         private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-in-memory-storage")
     }
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator) as IBufferPool
@@ -50,7 +45,7 @@ data class LocalStorageFactory(
     var maxCacheEntries: Long = 1024,
     var maxCacheBytes: Long = 536870912,
 ) : StorageFactory {
-    companion object {
+    private companion object {
         private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-local-storage")
     }
 
@@ -60,26 +55,21 @@ data class LocalStorageFactory(
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator, this) as IBufferPool
 }
 
-fun local(path: Path) = LocalStorageFactory(path)
-
-@JvmSynthetic
-fun local(path: Path, build: LocalStorageFactory.() -> Unit) = LocalStorageFactory(path).also(build)
-
 interface ObjectStoreFactory {
     fun openObjectStore(): ObjectStore
 }
 
 /**
- * Implementation for the storage module that persists data remotely within a specified **objectStore**, while maintaining a local
- * cache of the working set cache under the **localDiskCache** directory.
+ * Implementation for the storage module that persists data remotely within a specified [objectStore],
+ * while maintaining a local cache of the working set cache under the [localDiskCache] directory.
  *
- * Any implementer of [ObjectStoreFactory] can be used as the **objectStore**, the ones we currently offer being:
- * * [S3ObjectStoreFactory] (under **xtdb-s3**)
- * * [AzureObjectStoreFactory] (under **xtdb-azure**)
- * * [GoogleCloudObjectStoreFactory] (under **xtdb-google-cloud**)
+ * Any implementer of [ObjectStoreFactory] can be used as the [objectStore]. We currently offer:
+ * * `S3ObjectStoreFactory` (under **xtdb-s3**)
+ * * `AzureObjectStoreFactory` (under **xtdb-azure**)
+ * * `GoogleCloudObjectStoreFactory` (under **xtdb-google-cloud**)
  *
- * @property objectStore Configuration of the Object Store we want to use for remote storage.
- * @property localDiskCache Local directory that we store the working-set cache on.
+ * @property objectStore configuration of the Object Store to use for remote storage.
+ * @property localDiskCache local directory to store the working-set cache in.
  */
 @Serializable
 @SerialName("!Remote")
@@ -89,7 +79,7 @@ data class RemoteStorageFactory(
     var maxCacheEntries: Long = 1024,
     var maxCacheBytes: Long = 536870912,
 ) : StorageFactory {
-    companion object {
+    private companion object {
         private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-remote-storage")
     }
 
@@ -99,10 +89,22 @@ data class RemoteStorageFactory(
     override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator, this) as IBufferPool
 }
 
-fun remote(objectStore: ObjectStoreFactory, localDiskCachePath: Path) =
-    RemoteStorageFactory(objectStore, localDiskCachePath)
+object Storage {
+    @JvmStatic
+    fun inMemoryStorage() = InMemoryStorageFactory()
 
-@JvmSynthetic
-fun remote(objectStore: ObjectStoreFactory, localDiskCachePath: Path, build: RemoteStorageFactory.() -> Unit) =
-    RemoteStorageFactory(objectStore, localDiskCachePath).also(build)
+    @JvmStatic
+    fun localStorage(path: Path) = LocalStorageFactory(path)
+
+    @JvmSynthetic
+    fun localStorage(path: Path, configure: LocalStorageFactory.() -> Unit) = LocalStorageFactory(path).also(configure)
+
+    @JvmStatic
+    fun remoteStorage(objectStore: ObjectStoreFactory, localDiskCachePath: Path) =
+        RemoteStorageFactory(objectStore, localDiskCachePath)
+
+    @JvmSynthetic
+    fun remoteStorage(objectStore: ObjectStoreFactory, localDiskCachePath: Path, configure: RemoteStorageFactory.() -> Unit) =
+        RemoteStorageFactory(objectStore, localDiskCachePath).also(configure)
+}
 
