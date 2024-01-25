@@ -22,7 +22,7 @@ object Kafka {
      * Used to set configuration options for Kafka as an XTDB Transaction Log.
      *
      * For more info on setting up the necessary infrastructure to be able to use Kafka as an XTDB Transaction Log, see the
-     * section on infrastructure within our [Kafka Module Reference](https://docs.xtdb.com/components/tx-log/kafka.html).
+     * section on infrastructure within our [Kafka Module Reference](https://docs.xtdb.com/config/tx-log/kafka.html).
      *
      * Example usage, as part of a node config:
      * ```kotlin

@@ -25,7 +25,7 @@ Next up:
 
 * Find out link:/intro/what-is-xtdb[what makes XTDB great].
 * Find out more about link:/intro/what-is-xtql[XTQL].
-* Find out how to configure the XTDB link:/components/tx-log[transaction-log] and link:/components/storage[storage].
+* Find out how to configure the XTDB link:/config/tx-log[transaction-log] and link:/config/storage[storage].
 * Check out the link:/reference/main[XTDB reference documentation].
 * Learn more about the individual link:/drivers[client drivers].
 * For help and support, visit the link:/intro/community[XTDB community].

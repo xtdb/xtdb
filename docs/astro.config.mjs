@@ -69,25 +69,25 @@ export default defineConfig({
         },
 
         {
-          label: 'Components',
+          label: 'Configuration',
           collapsed: true,
           items: [
             // TODO could probably use an architectural overview at some point.
-            // { label: 'Overview', link: '/components' },
+            // { label: 'Overview', link: '/config' },
 
             {
               label: 'Transaction Log',
               items: [
-                { label: 'Overview', link: '/components/tx-log' },
-                { label: 'Kafka', link: '/components/tx-log/kafka'},
+                { label: 'Overview', link: '/config/tx-log' },
+                { label: 'Kafka', link: '/config/tx-log/kafka'},
               ],
             },
 
             {
               label: 'Storage',
               items: [
-                { label: 'Overview', link: '/components/storage'},
-                { label: 'S3', link: '/components/storage/s3'},
+                { label: 'Overview', link: '/config/storage'},
+                { label: 'S3', link: '/config/storage/s3'},
               ]
             },
           ]

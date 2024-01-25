@@ -6,7 +6,7 @@ The following document provides a number of examples for the EDN configuration f
 
 == Transaction Log 
 
-For more info on the transaction log, see the link:/components/tx-log[Transaction Log] documentation.
+For more info on the transaction log, see the link:/config/tx-log[Transaction Log] documentation.
 
 [#in-memory-log]
 === In-Memory
