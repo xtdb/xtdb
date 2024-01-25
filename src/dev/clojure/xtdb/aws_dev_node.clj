@@ -9,7 +9,7 @@
            (java.io Closeable StringWriter)
            (java.time Duration)
            (java.util List)
-           (xtdb.s3 S3Configurator)))
+           (xtdb.api.s3 S3Configurator)))
 
 ;; pre-reqs:
 ;; aws cli v2

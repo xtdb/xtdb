@@ -46,3 +46,7 @@ interface ObjectStore : AutoCloseable {
     override fun close() {
     }
 }
+
+interface ObjectStoreFactory {
+    fun openObjectStore(): ObjectStore
+}

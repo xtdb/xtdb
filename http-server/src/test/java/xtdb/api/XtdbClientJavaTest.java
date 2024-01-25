@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static xtdb.api.HttpServerModule.httpServer;
+import static xtdb.api.HttpServer.httpServer;
 import static xtdb.api.query.Queries.from;
 import static xtdb.api.tx.TxOps.putDocs;
 

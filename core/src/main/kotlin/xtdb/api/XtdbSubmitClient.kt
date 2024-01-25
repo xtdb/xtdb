@@ -6,7 +6,7 @@ import clojure.lang.IFn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
-import xtdb.api.log.LogFactory
+import xtdb.api.log.Log
 import xtdb.api.log.Logs.inMemoryLog
 import xtdb.util.requiringResolve
 import java.nio.file.Files
@@ -21,7 +21,7 @@ object XtdbSubmitClient {
 
     @Serializable
     data class Config(
-        override var txLog: LogFactory = inMemoryLog(),
+        override var txLog: Log.Factory = inMemoryLog(),
         override var defaultTz: ZoneId = ZoneOffset.UTC,
     ): AConfig() {
         override fun open() = OPEN_CLIENT(this) as IXtdbSubmitClient

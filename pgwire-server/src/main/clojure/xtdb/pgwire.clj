@@ -28,8 +28,8 @@
            [java.util.function BiConsumer BiFunction]
            [java.util.stream Stream]
            [org.apache.arrow.vector PeriodDuration]
-           [xtdb.api PgwireServerModule Xtdb$Config]
-           xtdb.api.module.Module
+           [xtdb.api PgwireServer$Factory Xtdb$Config]
+           xtdb.api.module.XtdbModule
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]))
 
 ;; references
@@ -2054,21 +2054,20 @@
   (run! stop-server (vec (.values servers))))
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads]}]
-  (.module config (cond-> (PgwireServerModule.) 
+  (.module config (cond-> (PgwireServer$Factory.)
                     (some? port) (.port port)
                     (some? num-threads) (.numThreads num-threads))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [node ^PgwireServerModule module]
+(defn open-server [node ^PgwireServer$Factory module]
   (let [port (.getPort module)
         num-threads (.getNumThreads module)
         srv (serve node {:port port, :num-threads num-threads})]
     (log/info "PGWire server started on port:" port)
-    (reify Module
-      (close
-       [_]
-       (util/try-close ^Closeable srv)
-       (log/info "PGWire server stopped")))))
+    (reify XtdbModule
+      (close [_]
+        (util/try-close ^Closeable srv)
+        (log/info "PGWire server stopped")))))
 
 (comment
 

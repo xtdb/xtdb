@@ -1,17 +1,21 @@
 package xtdb.api
 
-import com.charleskorn.kaml.InvalidPropertyValueException
-import io.mockk.*
-import org.junit.jupiter.api.Assertions
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
-import xtdb.api.log.InMemoryLogFactory
-import xtdb.api.log.KafkaLogFactory
-import xtdb.api.log.LocalLogFactory
-import xtdb.api.storage.InMemoryStorageFactory
-import xtdb.api.storage.LocalStorageFactory
-import xtdb.api.storage.RemoteStorageFactory
+import xtdb.api.log.Kafka
+import xtdb.api.log.Logs.InMemoryLogFactory
+import xtdb.api.log.Logs.LocalLogFactory
+import xtdb.api.storage.AzureBlobStorage.azureBlobStorage
+import xtdb.api.storage.GoogleCloudStorage
+import xtdb.api.storage.S3.s3
+import xtdb.api.storage.Storage.InMemoryStorageFactory
+import xtdb.api.storage.Storage.LocalStorageFactory
+import xtdb.api.storage.Storage.RemoteStorageFactory
 import java.nio.file.Paths
-import kotlin.io.path.Path
 
 class YamlSerdeTest {
     @Test
@@ -25,38 +29,32 @@ class YamlSerdeTest {
         storage: !Local
             path: local-storage
             maxCacheEntries: 1025
-        """
-        val output = nodeConfig(input)
-        println(output.toString())
+        """.trimIndent()
+
+        println(nodeConfig(input).toString())
     }
 
     @Test
-    fun testTxlogDecoding() {
+    fun testTxLogDecoding() {
         val inMemoryConfig = "txLog: !InMemory"
 
-        Assertions.assertEquals(
-            InMemoryLogFactory(),
-            nodeConfig(inMemoryConfig).txLog
-        )
+        assertEquals(InMemoryLogFactory(), nodeConfig(inMemoryConfig).txLog)
 
         val localConfig = """
         txLog: !Local
             path: test-path
-        """
+        """.trimIndent()
 
-        Assertions.assertEquals(
-            LocalLogFactory(path= Paths.get("test-path")),
-            nodeConfig(localConfig).txLog
-        )
+        assertEquals(LocalLogFactory(path = Paths.get("test-path")), nodeConfig(localConfig).txLog)
 
         val kafkaConfig = """
         txLog: !Kafka
             bootstrapServers: localhost:9092
             topicName: xtdb_topic
-        """
+        """.trimIndent()
 
-        Assertions.assertEquals(
-            KafkaLogFactory(bootstrapServers = "localhost:9092", topicName = "xtdb_topic"),
+        assertEquals(
+            Kafka.Factory(bootstrapServers = "localhost:9092", topicName = "xtdb_topic"),
             nodeConfig(kafkaConfig).txLog
         )
     }
@@ -65,7 +63,7 @@ class YamlSerdeTest {
     fun testStorageDecoding() {
         val inMemoryConfig = "storage: !InMemory"
 
-        Assertions.assertEquals(
+        assertEquals(
             InMemoryStorageFactory::class,
             nodeConfig(inMemoryConfig).storage::class
         )
@@ -73,10 +71,10 @@ class YamlSerdeTest {
         val localConfig = """
         storage: !Local
             path: test-path
-        """
+        """.trimIndent()
 
-        Assertions.assertEquals(
-            LocalStorageFactory(path= Paths.get("test-path")),
+        assertEquals(
+            LocalStorageFactory(path = Paths.get("test-path")),
             nodeConfig(localConfig).storage
         )
 
@@ -86,11 +84,11 @@ class YamlSerdeTest {
               bucket: xtdb-bucket
               snsTopicArn: example-arn
             localDiskCache: test-path
-        """
+        """.trimIndent()
 
-        Assertions.assertEquals(
+        assertEquals(
             RemoteStorageFactory(
-                objectStore = S3ObjectStoreFactory(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
+                objectStore = s3(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
                 localDiskCache = Paths.get("test-path")
             ),
             nodeConfig(s3Config).storage
@@ -101,18 +99,18 @@ class YamlSerdeTest {
             objectStore: !Azure
               storageAccount: storage-account
               container: xtdb-container
-              servicebusNamespace: xtdb-service-bus
-              servicebusTopicName: xtdb-service-bus-topic
+              serviceBusNamespace: xtdb-service-bus
+              serviceBusTopicName: xtdb-service-bus-topic
             localDiskCache: test-path
-        """
+        """.trimIndent()
 
-        Assertions.assertEquals(
+        assertEquals(
             RemoteStorageFactory(
-                objectStore = AzureObjectStoreFactory(
+                objectStore = azureBlobStorage(
                     storageAccount = "storage-account",
                     container = "xtdb-container",
-                    servicebusNamespace = "xtdb-service-bus",
-                    servicebusTopicName = "xtdb-service-bus-topic"
+                    serviceBusNamespace = "xtdb-service-bus",
+                    serviceBusTopicName = "xtdb-service-bus-topic"
                 ),
                 localDiskCache = Paths.get("test-path")
             ),
@@ -121,19 +119,19 @@ class YamlSerdeTest {
 
         val googleCloudConfig = """
         storage: !Remote
-            objectStore: !GoogleCloud
-              projectId: xtdb-project
-              bucket: xtdb-bucket
-              pubsubTopic: xtdb-bucket-topic
-            localDiskCache: test-path
-        """
+          objectStore: !GoogleCloud
+            projectId: xtdb-project
+            bucket: xtdb-bucket
+            pubSubTopic: xtdb-bucket-topic
+          localDiskCache: test-path
+        """.trimIndent()
 
-        Assertions.assertEquals(
+        assertEquals(
             RemoteStorageFactory(
-                objectStore = GoogleCloudObjectStoreFactory(
+                objectStore = GoogleCloudStorage.Factory(
                     projectId = "xtdb-project",
                     bucket ="xtdb-bucket",
-                    pubsubTopic = "xtdb-bucket-topic"
+                    pubSubTopic = "xtdb-bucket-topic"
                 ),
                 localDiskCache = Paths.get("test-path")
             ),
@@ -151,15 +149,15 @@ class YamlSerdeTest {
               port: 5433
             - !FlightSqlServer
               port: 9833
-        """
-        val output = nodeConfig(input)
-        Assertions.assertEquals(
+        """.trimIndent()
+
+        assertEquals(
             listOf(
-                HttpServerModule(port=3001),
-                PgwireServerModule(port=5433),
-                FlightSqlServerModule(port=9833)
+                HttpServer.Factory(port = 3001),
+                PgwireServer.Factory(port = 5433),
+                FlightSqlServer.Factory(port = 9833)
             ),
-            output.getModules()
+            nodeConfig(input).getModules()
         )
     }
 
@@ -168,13 +166,13 @@ class YamlSerdeTest {
         val inputWithEnv = """
         txLog: !Local
             path: !Env TX_LOG_PATH
-        """
+        """.trimIndent()
 
-        val thrown = Assertions.assertThrows(IllegalArgumentException::class.java) {
+        val thrown = assertThrows(IllegalArgumentException::class.java) {
             nodeConfig(inputWithEnv)
         }
 
-        Assertions.assertEquals("Environment variable 'TX_LOG_PATH' not found", thrown.message)
+        assertEquals("Environment variable 'TX_LOG_PATH' not found", thrown.message)
     }
 
     @Test
@@ -185,13 +183,11 @@ class YamlSerdeTest {
         val inputWithEnv = """
         txLog: !Local
             path: !Env TX_LOG_PATH
-        """
+        """.trimIndent()
 
-        val output = nodeConfig(inputWithEnv)
-
-        Assertions.assertEquals(
+        assertEquals(
             LocalLogFactory(path = Paths.get("test-path")),
-            output.txLog
+            nodeConfig(inputWithEnv).txLog
         )
 
         unmockkObject(EnvironmentVariableProvider)
@@ -210,16 +206,15 @@ class YamlSerdeTest {
               bucket: !Env BUCKET 
               snsTopicArn: !Env SNS_TOPIC_ARN
             localDiskCache: !Env DISK_CACHE_PATH 
-        """
+        """.trimIndent()
 
-        val output = nodeConfig(inputWithEnv)
-
-        Assertions.assertEquals(
+        assertEquals(
             RemoteStorageFactory(
-                objectStore = S3ObjectStoreFactory(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
+                objectStore = s3(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
                 localDiskCache = Paths.get("test-path")
             ),
-            output.storage
+
+            nodeConfig(inputWithEnv).storage
         )
 
         unmockkObject(EnvironmentVariableProvider)

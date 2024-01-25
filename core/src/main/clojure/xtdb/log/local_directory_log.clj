@@ -15,7 +15,7 @@
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
            (xtdb.api AConfig TransactionKey)
-           (xtdb.api.log LocalLogFactory Log LogRecord)))
+           (xtdb.api.log Log Logs Log$Record Logs$LocalLogFactory)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
 (def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))
@@ -53,11 +53,11 @@
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (LogRecord. (TransactionKey. offset system-time) (ByteBuffer/wrap record))))
+                                  (Log$Record. (TransactionKey. offset system-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
-                     (+ offset header-size (.capacity ^ByteBuffer (.getRecord ^LogRecord record)) footer-size))
+                     (+ offset header-size (.capacity ^ByteBuffer (.getRecord ^Log$Record record)) footer-size))
               (if after-offset
                 (subvec acc 1)
                 acc)))))))
@@ -114,21 +114,21 @@
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (LogRecord. (TransactionKey. offset system-time) record)))
+                      (.set elements n (MapEntry/create f (Log$Record. (TransactionKey. offset system-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)
                   (throw t)))
               (.flush log-out)
               (.force log-channel true)
-              (doseq [[^CompletableFuture f, ^LogRecord log-record] elements]
+              (doseq [[^CompletableFuture f, ^Log$Record log-record] elements]
                 (.complete f (.getTxKey log-record)))))
           (catch ClosedByInterruptException e
             (log/warn e "channel interrupted while closing")
             (doseq [[^CompletableFuture f] elements
                     :when (not (.isDone f))]
               (.cancel f true)))
-          (catch InterruptedException e
+          (catch InterruptedException _
             (doseq [[^CompletableFuture f] elements
                     :when (not (.isDone f))]
               (.cancel f true))
@@ -143,13 +143,13 @@
 
 (defmethod xtn/apply-config! :xtdb.log/local-directory-log [^AConfig config _ {:keys [path instant-src buffer-size poll-sleep-duration]}]
   (doto config
-    (.setTxLog (cond-> (LocalLogFactory. (util/->path path))
+    (.setTxLog (cond-> (Logs/localLog (util/->path path))
                  instant-src (.instantSource instant-src)
                  buffer-size (.bufferSize buffer-size)
                  poll-sleep-duration (.pollSleepDuration (time/->duration poll-sleep-duration))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-log [^LocalLogFactory factory]
+(defn open-log [^Logs$LocalLogFactory factory]
   (let [root-path (.getPath factory)
         buffer-size (.getBufferSize factory)]
     (util/mkdirs root-path)

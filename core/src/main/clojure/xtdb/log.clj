@@ -1,14 +1,14 @@
 (ns xtdb.log
   (:require [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.error :as err]
+            [xtdb.node :as xtn]
             xtdb.protocols
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.node :as xtn])
+            [xtdb.vector.writer :as vw])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
@@ -19,8 +19,8 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api.log Log LogFactory LogRecord LogSubscriber)
-           (xtdb.api.tx TxOp$Abort TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$SqlByteArgs TxOp$XtqlOp TxOp$XtqlAndArgs)
+           (xtdb.api.log Log Log$Factory Log$Record Log$Subscriber)
+           (xtdb.api.tx TxOp$Abort TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$SqlByteArgs TxOp$XtqlAndArgs TxOp$XtqlOp)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -29,8 +29,8 @@
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
   (util/->prefix-thread-factory "xtdb-tx-subscription"))
 
-(defn- tx-handler [^LogSubscriber subscriber]
-  (fn [_last-tx-id ^LogRecord record]
+(defn- tx-handler [^Log$Subscriber subscriber]
+  (fn [_last-tx-id ^Log$Record record]
     (when (Thread/interrupted)
       (throw (InterruptedException.)))
 
@@ -38,7 +38,7 @@
 
     (.getTxId (.getTxKey record))))
 
-(defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^LogSubscriber subscriber]
+(defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^Log$Subscriber subscriber]
   (doto (.newThread subscription-thread-factory
                     (fn []
                       (let [thread (Thread/currentThread)]
@@ -68,7 +68,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
   (notifyTx [^xtdb.api.TransactionKey tx])
-  (subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.LogSubscriber subscriber]))
+  (subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.Log$Subscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]
   INotifyingSubscriberHandler
@@ -97,7 +97,7 @@
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
                                                          (->> (.readRecords log after-tx-id 100)
-                                                              (take-while #(<= ^long (.getTxId (.getTxKey ^LogRecord %))
+                                                              (take-while #(<= ^long (.getTxId (.getTxKey ^Log$Record %))
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live
@@ -377,7 +377,7 @@
                          :azure-event-hub :xtdb.azure/event-hub-log)
                        opts)))
 
-(defmethod ig/init-key :xtdb/log [_ ^LogFactory factory]
+(defmethod ig/init-key :xtdb/log [_ ^Log$Factory factory]
   (.openLog factory))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]

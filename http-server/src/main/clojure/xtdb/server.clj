@@ -30,8 +30,8 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
-           (xtdb.api HttpServerModule IXtdb TransactionKey Xtdb$Config)
-           xtdb.api.module.Module
+           (xtdb.api HttpServer$Factory IXtdb TransactionKey Xtdb$Config)
+           xtdb.api.module.XtdbModule
            (xtdb.api.query Basis IKeyFn Query QueryRequest SqlQuery XtqlQuery)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
@@ -313,7 +313,7 @@
             (update ctx :request merge opts))})
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [node ^HttpServerModule module]
+(defn open-server [node ^HttpServer$Factory module]
   (let [port (.getPort module)
         ^Server server (j/run-jetty (http/ring-handler router
                                                        (r.ring/create-default-handler)
@@ -324,12 +324,12 @@
                                            #_jetty-opts
                                            {:async? true, :join? false}))]
     (log/info "HTTP server started on port: " port)
-    (reify Module
+    (reify XtdbModule
       (close [_]
         (.stop server)
         (log/info "HTTP server stopped.")))))
 
 (defmethod xtn/apply-config! :xtdb/server [^Xtdb$Config config, _ {:keys [port read-only?]}]
-  (.module config (cond-> (HttpServerModule.)
+  (.module config (cond-> (HttpServer$Factory.)
                     (some? port) (.port port)
                     (some? read-only?) (.readOnly read-only?))))

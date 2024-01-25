@@ -17,8 +17,8 @@
            [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedPart CompletedMultipartUpload CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest UploadPartRequest UploadPartResponse]
            xtdb.api.storage.ObjectStore
            [xtdb.multipart SupportsMultipart IMultipartUpload]
-           [xtdb.s3 S3Configurator]
-           [xtdb.api S3ObjectStoreFactory]))
+           [xtdb.api.storage.s3 S3Configurator]
+           [xtdb.api.storage S3 S3$Factory]))
 
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket ^Path prefix]} ^Path k]
@@ -196,13 +196,13 @@
     (.close client)))
 
 (defmethod bp/->object-store-factory ::object-store [_ {:keys [bucket sns-topic-arn ^S3Configurator configurator prefix]}]
-  (cond-> (S3ObjectStoreFactory. bucket sns-topic-arn)
+  (cond-> (S3/s3 bucket sns-topic-arn)
     configurator (.s3Configurator configurator)
     prefix (.prefix (util/->path prefix))))
 
 (def minimum-part-size (* 5 1024 1024))
 
-(defn open-object-store ^ObjectStore [^S3ObjectStoreFactory factory]
+(defn open-object-store ^ObjectStore [^S3$Factory factory]
   (let [bucket (.getBucket factory)
         sns-topic-arn (.getSnsTopicArn factory)
         configurator (.getS3Configurator factory)

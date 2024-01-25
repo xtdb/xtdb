@@ -21,8 +21,8 @@
            [org.apache.arrow.vector FieldVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api.tx TxOps]
-           [xtdb.api FlightSqlServerModule Xtdb$Config]
-           xtdb.api.module.Module
+           [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
+           xtdb.api.module.XtdbModule
            [xtdb.indexer IIndexer]
            [xtdb.query BoundQuery IRaQuerySource PreparedQuery]
            [xtdb.vector IVectorReader]))
@@ -297,15 +297,15 @@
                        (log/error e "FSQL server error")))))))
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [host port]}]
-  (.module config (cond-> (FlightSqlServerModule.)
+  (.module config (cond-> (FlightSqlServer/flightSqlServer)
                     (some? host) (.host host)
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-server [{:keys [allocator indexer ra-src wm-src] :as node}
-                   ^FlightSqlServerModule module]
-  (let [host (.getHost module)
-        port (.getPort module)
+                   ^FlightSqlServer$Factory factory]
+  (let [host (.getHost factory)
+        port (.getPort factory)
         fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)
         tickets (ConcurrentHashMap.)]
@@ -320,7 +320,7 @@
                                         (.start))]
 
       (log/infof "Flight SQL server started, port %d" port)
-      (reify Module
+      (reify XtdbModule
         (close [_]
           (util/try-close server)
           (run! util/try-close (vals stmts))

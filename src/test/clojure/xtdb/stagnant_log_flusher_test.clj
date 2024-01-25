@@ -11,7 +11,7 @@
            (java.util.concurrent Semaphore)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           (xtdb.api.log Log LogRecord)
+           (xtdb.api.log Log Log$Record)
            xtdb.IBufferPool
            (xtdb.indexer IIndexer)))
 
@@ -57,7 +57,7 @@
 (t/use-fixtures :each each-fixture)
 
 (defn log-seq [^Log log ^BufferAllocator allocator]
-  (letfn [(clj-record [^LogRecord record]
+  (letfn [(clj-record [^Log$Record record]
             (condp = (Byte/toUnsignedInt (.get (.getRecord record) 0))
               xt-log/hb-flush-chunk
               {:header-byte xt-log/hb-flush-chunk
@@ -78,7 +78,7 @@
          (when-some [records (seq (.readRecords log (long offset) 100))]
            (concat
              (map clj-record records)
-             (! (.getTxId (.getTxKey ^LogRecord (last records))))))))
+             (! (.getTxId (.getTxKey ^Log$Record (last records))))))))
      -1)))
 
 (defn node-log [node]

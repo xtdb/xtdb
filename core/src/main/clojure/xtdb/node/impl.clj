@@ -18,7 +18,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config XtdbSubmitClient$Config)
            (xtdb.api.log Log)
-           xtdb.api.module.ModuleFactory
+           xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis IKeyFn QueryOptions XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOptions)
            xtdb.indexer.IIndexer
@@ -150,7 +150,7 @@
 
 (defmethod ig/init-key :xtdb/modules [_ {:keys [node modules]}]
   (util/with-close-on-catch [!started-modules (HashMap. (count modules))]
-    (doseq [^ModuleFactory module modules]
+    (doseq [^XtdbModule$Factory module modules]
       (.put !started-modules (.getModuleKey module) (.openModule module node)))
 
     (into {} !started-modules)))

@@ -13,12 +13,10 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
-import xtdb.api.log.InMemoryLogFactory
-import xtdb.api.log.LocalLogFactory
-import xtdb.api.log.LogFactory
-import xtdb.api.module.ModuleFactory
-import xtdb.api.module.ModuleRegistration
-import xtdb.api.module.ModuleRegistry
+import xtdb.api.log.Log
+import xtdb.api.log.Logs.InMemoryLogFactory
+import xtdb.api.log.Logs.LocalLogFactory
+import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStoreFactory
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -84,28 +82,28 @@ object StringWithEnvVarSerde : KSerializer<String> {
  */
 val YAML_SERDE = Yaml(
     serializersModule = SerializersModule {
-        polymorphic(LogFactory::class) {
+        polymorphic(Log.Factory::class) {
             subclass(InMemoryLogFactory::class)
             subclass(LocalLogFactory::class)
         }
 
-        ServiceLoader.load(ModuleRegistration::class.java)
+        ServiceLoader.load(XtdbModule.Registration::class.java)
             .stream()
-            .map(Provider<ModuleRegistration>::get)
+            .map(Provider<XtdbModule.Registration>::get)
             .forEach {
-                it.register(object : ModuleRegistry {
-                    override fun <F : ModuleFactory> registerModuleFactory(
+                it.register(object : XtdbModule.Registry {
+                    override fun <F : XtdbModule.Factory> registerModuleFactory(
                         factory: KClass<F>,
                         serializer: KSerializer<F>,
                     ) {
-                        polymorphic(ModuleFactory::class) { subclass(factory, serializer) }
+                        polymorphic(XtdbModule.Factory::class) { subclass(factory, serializer) }
                     }
 
-                    override fun <F : LogFactory> registerLogFactory(
+                    override fun <F : Log.Factory> registerLogFactory(
                         factory: KClass<F>,
                         serializer: KSerializer<F>,
                     ) {
-                        polymorphic(LogFactory::class) { subclass(factory, serializer) }
+                        polymorphic(Log.Factory::class) { subclass(factory, serializer) }
                     }
 
                     override fun <F : ObjectStoreFactory> registerObjectStore(

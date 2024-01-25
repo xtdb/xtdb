@@ -12,7 +12,7 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.ipc.ArrowStreamReader
            org.apache.arrow.vector.TimeStampMicroTZVector
-           [xtdb.api.log Log LogSubscriber]
+           [xtdb.api.log Log Log$Subscriber]
            xtdb.indexer.IIndexer))
 
 (defmethod ig/prep-key :xtdb.log/watcher [_ opts]
@@ -30,7 +30,7 @@
   (let [!cancel-hook (promise)]
     (.subscribe log
                 (some-> (.latestCompletedTx indexer) (.getTxId))
-                (reify LogSubscriber
+                (reify Log$Subscriber
                   (onSubscribe [_ cancel-hook]
                     (deliver !cancel-hook cancel-hook))
 

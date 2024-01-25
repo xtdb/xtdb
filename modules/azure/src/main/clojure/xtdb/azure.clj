@@ -17,18 +17,18 @@
            [com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs]
            [com.azure.storage.blob BlobServiceClientBuilder]
            [java.util.concurrent ConcurrentSkipListSet]
-           [xtdb.api AConfig AzureObjectStoreFactory]
-           [xtdb.api.log AzureEventHubLogFactory]
-           [xtdb.api.storage ObjectStore]))
+           [xtdb.api AConfig ]
+           [xtdb.api.log AzureEventHub AzureEventHub$Factory]
+           [xtdb.api.storage AzureBlobStorage AzureBlobStorage$Factory]))
 
 (defmethod bp/->object-store-factory ::object-store [_ {:keys [storage-account container servicebus-namespace servicebus-topic-name prefix]}]
-  (cond-> (AzureObjectStoreFactory. storage-account container servicebus-namespace servicebus-topic-name) 
+  (cond-> (AzureBlobStorage/azureBlobStorage storage-account container servicebus-namespace servicebus-topic-name)
     prefix (.prefix (util/->path prefix))))
 
 ;; No minimum block size in azure
 (def minimum-part-size 0)
 
-(defn open-object-store ^ObjectStore [^AzureObjectStoreFactory factory]
+(defn open-object-store [^AzureBlobStorage$Factory factory]
   (let [credential (.build (DefaultAzureCredentialBuilder.))
         storage-account (.getStorageAccount factory)
         container (.getContainer factory)
@@ -60,7 +60,7 @@
   [^AConfig config _ {:keys [namespace event-hub-name max-wait-time poll-sleep-duration
                              create-event-hub? retention-period-in-days resource-group-name]}]
   (doto config
-    (.setTxLog (cond-> (AzureEventHubLogFactory. namespace event-hub-name)
+    (.setTxLog (cond-> (AzureEventHub/azureEventHub namespace event-hub-name)
                  max-wait-time (.maxWaitTime (time/->duration max-wait-time))
                  poll-sleep-duration (.pollSleepDuration (time/->duration poll-sleep-duration))
                  create-event-hub? (.autoCreateEventHub create-event-hub?)
@@ -90,7 +90,7 @@
         (throw e)))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-log [^AzureEventHubLogFactory factory]
+(defn open-log [^AzureEventHub$Factory factory]
   (let [namespace (.getNamespace factory)
         event-hub-name (.getEventHubName factory)
         max-wait-time (.getMaxWaitTime factory)

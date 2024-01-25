@@ -5,14 +5,13 @@
             [xtdb.util :as util])
   (:import [com.google.cloud.storage StorageOptions StorageOptions$Builder]
            [java.util.concurrent ConcurrentSkipListSet]
-           [xtdb.api.storage ObjectStore]
-           [xtdb.api GoogleCloudObjectStoreFactory]))
+           [xtdb.api.storage GoogleCloudStorage GoogleCloudStorage$Factory ObjectStore]))
 
 (defmethod bp/->object-store-factory ::object-store [_ {:keys [project-id bucket pubsub-topic prefix]}]
-  (cond-> (GoogleCloudObjectStoreFactory. project-id bucket pubsub-topic)
+  (cond-> (GoogleCloudStorage/googleCloudStorage project-id bucket pubsub-topic)
     prefix (.prefix (util/->path prefix))))
 
-(defn open-object-store ^ObjectStore [^GoogleCloudObjectStoreFactory factory]
+(defn open-object-store ^ObjectStore [^GoogleCloudStorage$Factory factory]
   (let [project-id (.getProjectId factory)
         bucket (.getBucket factory)
         pubsub-topic (.getPubsubTopic factory)

@@ -1,5 +1,5 @@
 (ns xtdb.kafka
-  (:require [clojure.java.io :as io] 
+  (:require [clojure.java.io :as io]
             [xtdb.api :as xt]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
@@ -17,7 +17,7 @@
            [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
            org.apache.kafka.common.TopicPartition
            [xtdb.api AConfig TransactionKey]
-           [xtdb.api.log Log LogRecord LogSubscriber KafkaLogFactory]))
+           [xtdb.api.log Kafka Kafka$Factory Log Log$Record Log$Subscriber]))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -57,10 +57,10 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (LogRecord. (TransactionKey. (.offset record) (Instant/ofEpochMilli (.timestamp record)))
-              (.value record)))
+  (Log$Record. (TransactionKey. (.offset record) (Instant/ofEpochMilli (.timestamp record)))
+               (.value record)))
 
-(defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^LogSubscriber subscriber]
+(defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^Log$Subscriber subscriber]
   (doto (.newThread log/subscription-thread-factory
                     (fn []
                       (let [thread (Thread/currentThread)]
@@ -148,7 +148,7 @@
   [^AConfig config _ {:keys [topic-name bootstrap-servers create-topic? replication-factor
                              poll-duration topic-config properties-map properties-file]}]
   (doto config
-      (.setTxLog (cond-> (KafkaLogFactory. bootstrap-servers topic-name)
+      (.setTxLog (cond-> (Kafka/kafka bootstrap-servers topic-name)
                    create-topic? (.autoCreateTopic create-topic?)
                    replication-factor (.replicationFactor (int replication-factor))
                    poll-duration (.pollDuration (time/->duration poll-duration)) 
@@ -157,7 +157,7 @@
                    properties-file (.propertiesFile (util/->path properties-file))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-log [^KafkaLogFactory factory] 
+(defn open-log [^Kafka$Factory factory]
   (let [topic-name (.getTopicName factory)
         poll-duration (.getPollDuration factory)
         kafka-config (->kafka-config {:bootstrap-servers (.getBootstrapServers factory)

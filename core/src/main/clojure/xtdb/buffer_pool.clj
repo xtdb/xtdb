@@ -19,7 +19,7 @@
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            (xtdb IArrowWriter IBufferPool)
            xtdb.api.Xtdb$Config
-           (xtdb.api.storage Storage LocalStorageFactory ObjectStore RemoteStorageFactory StorageFactory)
+           (xtdb.api.storage Storage Storage$LocalStorageFactory ObjectStore Storage$RemoteStorageFactory Storage$Factory)
            (xtdb.multipart IMultipartUpload SupportsMultipart)
            xtdb.util.ArrowBufLRU))
 
@@ -210,7 +210,7 @@
     (util/close allocator)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^LocalStorageFactory factory]
+(defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory]
   (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                      (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
                      (.getPath factory)))
@@ -377,7 +377,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^RemoteStorageFactory factory]
+(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                         (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
@@ -439,7 +439,7 @@
   {:allocator (ig/ref :xtdb/allocator)
    :factory factory})
 
-(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^StorageFactory factory]}]
+(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory]}]
   (.openStorage factory allocator))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^IBufferPool buffer-pool]

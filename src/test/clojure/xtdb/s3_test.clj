@@ -13,8 +13,7 @@
            [java.time Duration]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
-           xtdb.api.storage.ObjectStore
-           [xtdb.api S3ObjectStoreFactory]
+           [xtdb.api.storage ObjectStore S3 S3$Factory]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
@@ -29,7 +28,7 @@
       "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-iam-test-bucket-events"))
 
 (defn object-store ^Closeable [prefix]
-  (let [factory (-> (S3ObjectStoreFactory. bucket sns-topic-arn)
+  (let [factory (-> (S3/s3 bucket sns-topic-arn)
                     (.prefix (util/->path (str prefix))))]
     (s3/open-object-store factory)))
 

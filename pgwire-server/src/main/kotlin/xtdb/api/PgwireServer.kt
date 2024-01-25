@@ -2,27 +2,28 @@ package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import xtdb.util.requiringResolve
 import xtdb.api.module.XtdbModule
+import xtdb.util.requiringResolve
 
-object HttpServer {
+object PgwireServer {
+    private val OPEN_SERVER = requiringResolve("xtdb.pgwire", "open-server")
+
     @JvmStatic
-    fun httpServer() = Factory()
+    fun pgwireServer() = Factory()
 
-    private val OPEN_SERVER = requiringResolve("xtdb.server", "open-server")
-
+    @SerialName("!PgwireServer")
     @Serializable
-    @SerialName("!HttpServer")
     data class Factory(
-        var port: Int = 3000,
-        var readOnly: Boolean = false,
+        var port: Int = 5432,
+        var numThreads: Int = 42,
     ) : XtdbModule.Factory {
-        override val moduleKey = "xtdb.http-server"
+        override val moduleKey = "xtdb.pgwire-server"
 
         fun port(port: Int) = apply { this.port = port }
-        fun readOnly(readOnly: Boolean) = apply { this.readOnly = readOnly }
+        fun numThreads(numThreads: Int) = apply { this.numThreads = numThreads }
 
         override fun openModule(xtdb: IXtdb) = OPEN_SERVER(xtdb, this) as XtdbModule
+
     }
 
     /**
@@ -36,6 +37,6 @@ object HttpServer {
 }
 
 @JvmSynthetic
-fun Xtdb.Config.httpServer(configure: HttpServer.Factory.() -> Unit = {}) {
-    modules(HttpServer.Factory().also(configure))
+fun Xtdb.Config.pgwireServer(configure: PgwireServer.Factory.() -> Unit = {}) {
+    modules(PgwireServer.Factory().also(configure))
 }

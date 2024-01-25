@@ -2,7 +2,7 @@
   (:require [clojure.java.shell :as sh]
             [clojure.set :as set]
             [clojure.test :as t]
-            [clojure.tools.logging :as log] 
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.azure :as azure]
             [xtdb.datasets.tpch :as tpch]
@@ -10,17 +10,14 @@
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [com.azure.storage.blob BlobContainerClient]
-           [com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions]
-           [java.io Closeable]
-           [java.nio ByteBuffer]
-           [java.nio.file Path]
-           [java.time Duration]
-           [java.util UUID]
-           [xtdb.api AzureObjectStoreFactory]
-           [xtdb.api.log Log]
-           [xtdb.api.storage ObjectStore]
-           [xtdb.multipart IMultipartUpload SupportsMultipart]))
+  (:import (com.azure.storage.blob BlobContainerClient)
+           (com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions)
+           (java.io Closeable)
+           (java.nio ByteBuffer)
+           (java.nio.file Path)
+           (java.time Duration)
+           (xtdb.api.storage AzureBlobStorage ObjectStore)
+           (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (def resource-group-name "azure-modules-test")
 (def storage-account "xtdbteststorageaccount")
@@ -60,7 +57,7 @@
 (t/use-fixtures :each wait-between-tests)
 
 (defn object-store ^Closeable [prefix]
-  (let [factory (-> (AzureObjectStoreFactory. storage-account container servicebus-namespace servicebus-topic-name)
+  (let [factory (-> (AzureBlobStorage/azureBlobStorage storage-account container servicebus-namespace servicebus-topic-name)
                     (.prefix (util/->path (str prefix))))]
     (azure/open-object-store factory)))
 

@@ -1,19 +1,18 @@
 (ns xtdb.google-cloud-test
   (:require [clojure.java.shell :as sh]
+            [clojure.test :as t]
             [clojure.tools.logging :as log]
-            [clojure.test :as t] 
             [xtdb.api :as xt]
             [xtdb.datasets.tpch :as tpch]
-            [xtdb.node :as xtn]
             [xtdb.google-cloud :as google-cloud]
+            [xtdb.node :as xtn]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]
-           [java.io Closeable]
-           [xtdb.api.storage ObjectStore]
-           [xtdb.api GoogleCloudObjectStoreFactory]
-           [java.time Duration]))
+  (:import (com.google.cloud.storage Bucket Bucket$BucketSourceOption Storage Storage$BucketGetOption StorageException StorageOptions StorageOptions$Builder)
+           (java.io Closeable)
+           (java.time Duration)
+           (xtdb.api.storage GoogleCloudStorage ObjectStore)))
 
 ;; Ensure you are authenticated with google cloud before running these tests - there are two options to do this:
 ;; - gcloud auth Login onto an account which belongs to the `xtdb-devs@gmail.com` group
@@ -53,7 +52,7 @@
 (t/use-fixtures :once run-if-auth-available)
 
 (defn object-store ^Closeable [prefix]
-  (let [factory (-> (GoogleCloudObjectStoreFactory. project-id test-bucket pubsub-topic)
+  (let [factory (-> (GoogleCloudStorage/googleCloudStorage project-id test-bucket pubsub-topic)
                     (.prefix (util/->path (str prefix))))]
     (google-cloud/open-object-store factory)))
 
