@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-api-docs": "mkdir -p public/drivers/clojure && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox dokkaHtmlMultiModule",
+    "build-api-docs": "mkdir -p public/drivers/{clojure,java/javadoc} && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox dokkaHtmlMultiModule",
     "build-api-docs-when-java-works": "mkdir -p public/drivers/clojure && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox dokkaHtmlMultiModule dokkaJavadocCollector"
   },
   "dependencies": {
