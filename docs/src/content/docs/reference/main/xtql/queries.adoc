@@ -118,7 +118,7 @@ An aggregate spec is either a grouping variable/column or (new) column plus and 
 
 The available aggregate functions are documented link:../stdlib/aggregates[here].
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -165,7 +165,7 @@ For more details, see the link:#_binding_specs[binding specs] section.
 
 For example:
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -214,7 +214,7 @@ FromOpts :: [BindSpec+]
 Additionally, 'from' supports a special column reference - `projectAllCols` in JSON and the `*` symbol in Clojure.
 Like in SQL, this can be used to specify that all columns of a given table are to be projected out.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 [source,json]
@@ -243,7 +243,7 @@ Note that, due to the implicit unification properties of 'from' outlined in the 
 It is due to this property of implicit unification and projection that `projectAllCols`/`*` as a column reference in 'from' is not supported within a unification context.
 ====
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 [source,json]
@@ -276,7 +276,7 @@ Temporal filters control the document versions that are visible to the query.
 
 Unless otherwise specified, queries will see the current version of the row, `at <now>`, in both valid time and system time.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -326,7 +326,7 @@ These binding specs act as both 'join conditions' (if the logic variables are re
 
 Parameters in the sub-query can be fulfilled with the `:args` option - see the link:#_argument_specs[argument specs] section for more details.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -372,7 +372,7 @@ In this case, `customer-id` is specified multiple times, so this adds a join-con
 The 'limit' operator limits the rows returned by the query.
 Without an explicit preceding link:#_order_by[order by], the rows selected for return are undefined.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -411,7 +411,7 @@ Without an explicit preceding link:#_order_by[order by], the rows selected for r
 
 For example:
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -449,7 +449,7 @@ An order spec is either a simple column to sort by (default descending) or a com
 of an expression to sort by, a direction and a default null ordering. When multiple order
 spec are supplied priority is given from left to right.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -500,7 +500,7 @@ It also allows additional projections, should you want to return a new column ba
 
 If you want to introduce a projected column while keeping the existing columns see the link:#_with[with] operator.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -545,7 +545,7 @@ The 'rel' operator yields each element as a row, with the values in the map link
 
 * To unwrap an array of values rather than an array of maps, with a variable bound to each row instead, see link:#_unnest[`unnest`].
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -600,7 +600,7 @@ The 'unify' operator combines multiple input relations using Datalog-style unifi
 Each input relation defines a set of 'logic variables' in its binding specs - if a logic variable appears more than once within a single `unify` operator, the results are constrained such that the logic variable has the same value everywhere it's used.
 This has the effect of imposing 'join conditions' over the inputs.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -656,7 +656,7 @@ The other columns in the query are duplicated for each row.
 
 * If the value in question isn't an array, or the array is empty, the row is filtered out.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -716,7 +716,7 @@ It expects (optionally) many link:../stdlib/predicates[predicates] - rows that m
 * Like all other XTQL expressions, `where` respects 'three-valued logic' - if an expression returns either false or null, the row will be filtered out.
 * `where` is short-circuiting - if an earlier predicate doesn't return true for a row, the remaining predicates won't be evaluated.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -759,7 +759,7 @@ The 'with' operator specifies columns to add to the query. It takes a collection
 A with spec takes a column name (in the pipeline context) or a logic var (in the unify context) and
 an link:#_expressions[expression] to bind that column/logic var to.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -816,7 +816,7 @@ The 'without' operator removes columns from the ongoing query:
 
 For example, in this query, we only want the `customer-id` to join on - we don't want it returned - so we exclude it in a `without` operator.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -865,7 +865,7 @@ The columns in the returned row will be nested into a map in the outer expressio
   The rows will be nested into an array of maps in the outer expression.
 * The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -960,7 +960,7 @@ The following example retrieves a post together with their author and comments:
 
 Binding specs define which columns are retrieved from a relation, and specify constraints on those columns.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -1044,7 +1044,7 @@ Where link:#_binding_specs[bindings] specify how to join the *output* of the sub
 
 This is commonly used in 'pull' queries and all other link:#_subqueries[Subqueries]:
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -1086,7 +1086,7 @@ As well as 'pull', this is quite commonly used in left joins, because we don't w
 
 Instead, we want to preserve them, albeit without values for the columns in the right-hand side of the left-join.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 [source,json]

@@ -30,15 +30,14 @@ XTQL transactions are submitted through `xtdb.api/submit-tx` (`xtdb.api` aliased
 ====
 
 [#tx-ops]
-= Transaction operations
+== Transaction operations
 
-
-=== `put`
+=== `put-docs`
 
 Upserts documents into the given table, optionally during the given valid time period.
 
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 [source,json]
@@ -79,7 +78,7 @@ Deletes documents from the given table, optionally during the given valid time p
 The default valid time behaviour as per link:#_put[Put], above.
 
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 [source,json]
@@ -118,7 +117,7 @@ include::{examples}[tags=delete-docs-json,indent=0]
 Irrevocably erases documents from the given table (including through system time), for all valid-time.
 
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 [source,json]
@@ -144,7 +143,7 @@ include::{examples}[tags=erase-docs-json,indent=0]
 
 Inserts documents into a table from the given link:./queries[query].
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -187,7 +186,7 @@ For example:
 Updates documents in a given table based on the provided query.
 It is an operation from timeline to timeline (now to end of time if not otherwise specified).
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -254,7 +253,7 @@ with default behaviour as per link:#_put[Put], above.
 
 Deletes documents from the given table, based on the provided query.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -321,7 +320,7 @@ with default behaviour as per link:#_put[Put], above.
 
 Irrevocably erase the document from the given table (including through system time), based on the provided query.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
@@ -384,7 +383,7 @@ Within a transaction, `assertExists`/`assertNotExists` (potentiall `snake_case` 
 depending on your client library) operations assert that the given query returns at least one row/no rows
 respectively - if not, the transaction will roll back.
 
-.Json
+.JSON
 [%collapsible%open]
 ====
 
