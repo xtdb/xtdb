@@ -2,7 +2,8 @@
 dist/
 
 # generated docs
-public/drivers
+public/drivers/*
+!public/drivers/openapi/
 
 # generated types
 .astro/
