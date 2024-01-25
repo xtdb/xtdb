@@ -2,8 +2,69 @@
 title: S3
 ---
 
-Coming https://github.com/xtdb/xtdb/issues/3036[soon^]
+S3 can be used as an "Object Store" for XTDB's remote storage module.
 
-For details on how to enable the S3 module in each client library, see the individual SDK documentation:
+== Required Infrastructure
+
+In order to use S3 as the object store, we require the following infrastructure to be in place:
+
+* An **S3 bucket** for us to persist our data to.
+* An **SNS topic** which receives notifications from the S3 bucket around object creation/deletion.
+** An **SNS topic policy** to allow the bucket to publish to the topic.
+* Some form of **IAM role** or something similar that provides relevant permissions for:
+** _Using the created S3 bucket_ (`Get`, `Put`, `Delete` and `List`).
+** _Subscribe to the SNS topic._
+** _Creating and operating on SQS queues_
+*** (Said queues handle their own permissions, and subscribe to the SNS topic)
+
+NOTE: The SNS topic and SQS queues are used to a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3.
+If not using the CloudFormation template, ensure that you at have a similar setup with the SNS topic setup to receive notifications from your bucket, and that XTDB has all the relevant permissions it needs with S3, SNS, and SQS.
+
+=== Cloudformation Stack
+
+We provide a https://github.com/xtdb/xtdb/blob/2.x/modules/s3/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help setup everything that you should need. The stack expects the following inputs:
+
+* The (globally unique) name of S3 Bucket - this will be used by the created object store bucket and referenced in associated resources.
+
+The template will output a number of things, some of which will be needed configuring your node:
+
+* The S3 Bucket Name (**this will be used in configuring the module**)
+* The SNS Topic ARN (**this will be used in configuring the module**)
+* ARN of the created XTDB IAM Role (this, or something with equivalent permissions, will be required to use all of the above)
+
+== Authentication
+
+Authentication to S3 within the module is handled via the S3 API, which in turn uses the Default AWS Credential Provider Chain. See the https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default[AWS documentation] on the various methods which your application can handle authentication to be able to make use of the operations inside the modules.
+
+Within the provided CloudFormation stack, we create an XTDB IAM role.
+One can use this role to provide all necessary permissions for XTDB and the resources it is using on AWS, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services. See the IAM policy set on the `XTDBIamRole` in the https://github.com/xtdb/xtdb/blob/2.x/modules/s3/cloudformation/s3-stack.yml[CloudFormation stack] for what exactly that includes.
+
+== Configuring the Node
+
+As S3 is a submodule of the XTDB project, in order to use S3 as an object store, you will need to include a dependency on the `com.xtdb/xtdb-s3` module.
+
+=== Expected Parameters
+
+When configuring the S3 module, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
+[cols="2,3,1"]
+|===
+| *Parameter* | *Description* | *Required?*
+| S3 Bucket
+| The name of the https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html[S3 Bucket] to use an an object store
+| Yes
+
+| SNS Topic ARN
+| The https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html[ARN] of the https://aws.amazon.com/sns/[SNS topic] which is collecting notifications from the S3 bucket you are using.
+| Yes
+
+| Prefix
+| A file path to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
+| No
+|===
+
+=== Examples
+
+For examples on how to enable/configure the S3 module as part of your node, for each client library, see the individual SDK documentation:
 
 * link:/drivers/clojure/s3-module.html[Clojure]
+* link:/drivers/kotlin/modules/xtdb-s3/xtdb.api/-s3-object-store-factory/index.html[Kotlin]
