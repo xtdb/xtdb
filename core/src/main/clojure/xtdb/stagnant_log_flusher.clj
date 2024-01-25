@@ -8,7 +8,7 @@
            (java.nio.channels ClosedByInterruptException)
            (java.time Duration)
            (java.util.concurrent ExecutorService Executors TimeUnit)
-           (xtdb.api TransactionKey Xtdb$IndexerConfig)
+           (xtdb.api IndexerConfig TransactionKey)
            (xtdb.api.log Log)
            (xtdb.indexer IIndexer)))
 
@@ -24,7 +24,7 @@
    :log (ig/ref :xtdb/log)
    :indexer-config indexer-config})
 
-(defmethod ig/init-key ::flusher [_ {:keys [^IIndexer indexer, ^Log log, ^Xtdb$IndexerConfig indexer-config]}]
+(defmethod ig/init-key ::flusher [_ {:keys [^IIndexer indexer, ^Log log, ^IndexerConfig indexer-config]}]
   (let [duration (.getFlushDuration indexer-config)
         exr-tf (util/->prefix-thread-factory "xtdb.stagnant-log-flush")
         exr (Executors/newSingleThreadScheduledExecutor exr-tf)

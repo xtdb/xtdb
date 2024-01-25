@@ -4,6 +4,8 @@ package xtdb.api
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import xtdb.api.module.ModuleRegistration
+import xtdb.api.module.ModuleRegistry
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStoreFactory
 import xtdb.util.requiringResolve

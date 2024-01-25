@@ -7,12 +7,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.*
+import xtdb.api.module.ModuleRegistration
+import xtdb.api.module.ModuleRegistry
 import xtdb.util.requiringResolve
-import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Duration
-import java.time.InstantSource
-import java.util.concurrent.CompletableFuture
 
 /**
  * Used to set configuration options for Kafka as an XTDB Transaction Log.

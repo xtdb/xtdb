@@ -17,7 +17,7 @@
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.api TransactionKey Xtdb$IndexerConfig)
+           (xtdb.api IndexerConfig TransactionKey)
            xtdb.IBufferPool
            xtdb.metadata.IMetadataManager
            (xtdb.trie LiveHashTrie)
@@ -434,7 +434,7 @@
    :metadata-mgr (ig/ref ::meta/metadata-manager)
    :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr ^Xtdb$IndexerConfig config]}]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr ^IndexerConfig config]}]
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (->LiveIndex allocator buffer-pool metadata-mgr

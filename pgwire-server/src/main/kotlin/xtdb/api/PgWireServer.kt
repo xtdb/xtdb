@@ -4,7 +4,10 @@ package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import xtdb.api.Xtdb.Module
+import xtdb.api.module.Module
+import xtdb.api.module.ModuleFactory
+import xtdb.api.module.ModuleRegistration
+import xtdb.api.module.ModuleRegistry
 import xtdb.util.requiringResolve
 
 private val OPEN_SERVER = requiringResolve("xtdb.pgwire", "open-server")
@@ -14,7 +17,7 @@ private val OPEN_SERVER = requiringResolve("xtdb.pgwire", "open-server")
 data class PgwireServerModule(
         var port: Int = 5432,
         var numThreads: Int = 42
-) : Xtdb.ModuleFactory {
+) : ModuleFactory {
     override val moduleKey = "xtdb.pgwire-server"
 
     fun port(port: Int) = apply { this.port = port }

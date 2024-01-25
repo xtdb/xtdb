@@ -30,7 +30,8 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
-           (xtdb.api HttpServerModule IXtdb TransactionKey Xtdb$Config Xtdb$Module)
+           (xtdb.api HttpServerModule IXtdb TransactionKey Xtdb$Config)
+           xtdb.api.module.Module
            (xtdb.api.query Basis IKeyFn Query QueryRequest SqlQuery XtqlQuery)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
@@ -323,7 +324,7 @@
                                            #_jetty-opts
                                            {:async? true, :join? false}))]
     (log/info "HTTP server started on port: " port)
-    (reify Xtdb$Module
+    (reify Module
       (close [_]
         (.stop server)
         (log/info "HTTP server stopped.")))))

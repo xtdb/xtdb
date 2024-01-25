@@ -28,7 +28,8 @@
            [java.util.function BiConsumer BiFunction]
            [java.util.stream Stream]
            [org.apache.arrow.vector PeriodDuration]
-           [xtdb.api PgwireServerModule Xtdb$Config Xtdb$Module]
+           [xtdb.api PgwireServerModule Xtdb$Config]
+           xtdb.api.module.Module
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]))
 
 ;; references
@@ -2063,7 +2064,7 @@
         num-threads (.getNumThreads module)
         srv (serve node {:port port, :num-threads num-threads})]
     (log/info "PGWire server started on port:" port)
-    (reify Xtdb$Module
+    (reify Module
       (close
        [_]
        (util/try-close ^Closeable srv)

@@ -1,38 +1,24 @@
-@file:UseSerializers(DurationSerde::class, ZoneIdSerde::class)
+@file:UseSerializers(ZoneIdSerde::class)
 package xtdb.api
 
 import clojure.lang.IFn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import xtdb.DurationSerde
 import xtdb.ZoneIdSerde
 import xtdb.api.log.LogFactory
 import xtdb.api.log.Logs.inMemoryLog
+import xtdb.api.module.ModuleFactory
 import xtdb.api.storage.Storage.inMemoryStorage
 import xtdb.api.storage.StorageFactory
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
 import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlin.io.path.extension
 
 object Xtdb {
     private val OPEN_NODE: IFn = requiringResolve("xtdb.node.impl", "open-node")
-
-    @Serializable
-    data class IndexerConfig(
-        var logLimit: Long = 64L,
-        var pageLimit: Long = 1024L,
-        var rowsPerChunk: Long = 102400L,
-        var flushDuration: Duration = Duration.ofHours(4),
-    ) {
-        fun logLimit(logLimit: Long) = apply { this.logLimit = logLimit }
-        fun pageLimit(pageLimit: Long) = apply { this.pageLimit = pageLimit }
-        fun rowsPerChunk(rowsPerChunk: Long) = apply { this.rowsPerChunk = rowsPerChunk }
-        fun flushDuration(flushDuration: Duration) = apply { this.flushDuration = flushDuration }
-    }
 
     @Serializable
     data class Config(
@@ -54,14 +40,6 @@ object Xtdb {
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
 
         override fun open() = OPEN_NODE.invoke(this) as IXtdb
-    }
-
-    interface Module : AutoCloseable
-
-    interface ModuleFactory {
-        val moduleKey: String
-
-        fun openModule(xtdb: IXtdb): Module
     }
 
     @JvmStatic

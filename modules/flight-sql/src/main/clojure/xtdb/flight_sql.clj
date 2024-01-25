@@ -21,7 +21,8 @@
            [org.apache.arrow.vector FieldVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api.tx TxOps]
-           [xtdb.api FlightSqlServerModule Xtdb$Config Xtdb$Module]
+           [xtdb.api FlightSqlServerModule Xtdb$Config]
+           xtdb.api.module.Module
            [xtdb.indexer IIndexer]
            [xtdb.query BoundQuery IRaQuerySource PreparedQuery]
            [xtdb.vector IVectorReader]))
@@ -319,7 +320,7 @@
                                         (.start))]
 
       (log/infof "Flight SQL server started, port %d" port)
-      (reify Xtdb$Module
+      (reify Module
         (close [_]
           (util/try-close server)
           (run! util/try-close (vals stmts))

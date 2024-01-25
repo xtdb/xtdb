@@ -16,8 +16,9 @@
            java.util.HashMap
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config Xtdb$ModuleFactory XtdbSubmitClient$Config)
+           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config XtdbSubmitClient$Config)
            (xtdb.api.log Log)
+           xtdb.api.module.ModuleFactory
            (xtdb.api.query Basis IKeyFn QueryOptions XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOptions)
            xtdb.indexer.IIndexer
@@ -149,7 +150,7 @@
 
 (defmethod ig/init-key :xtdb/modules [_ {:keys [node modules]}]
   (util/with-close-on-catch [!started-modules (HashMap. (count modules))]
-    (doseq [^Xtdb$ModuleFactory module modules]
+    (doseq [^ModuleFactory module modules]
       (.put !started-modules (.getModuleKey module) (.openModule module node)))
 
     (into {} !started-modules)))

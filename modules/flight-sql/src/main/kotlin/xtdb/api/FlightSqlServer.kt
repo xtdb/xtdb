@@ -4,7 +4,10 @@ package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import xtdb.api.Xtdb.Module
+import xtdb.api.module.Module
+import xtdb.api.module.ModuleFactory
+import xtdb.api.module.ModuleRegistration
+import xtdb.api.module.ModuleRegistry
 import xtdb.util.requiringResolve
 
 private val OPEN_SERVER = requiringResolve("xtdb.flight-sql", "open-server")
@@ -14,7 +17,7 @@ private val OPEN_SERVER = requiringResolve("xtdb.flight-sql", "open-server")
 data class FlightSqlServerModule(
         var host: String = "127.0.0.1",
         var port: Int = 9832
-) : Xtdb.ModuleFactory {
+) : ModuleFactory {
     override val moduleKey = "xtdb.flight-sql-server"
 
     fun host(host: String) = apply { this.host = host }
