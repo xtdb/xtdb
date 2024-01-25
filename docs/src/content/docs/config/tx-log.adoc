@@ -8,63 +8,53 @@ One of the key components of an XTDB node is the transaction log - this is a tot
 
 We offer a number of separate implementations of the transaction log, currently:
 
-* Log implementations within `xtdb-core`:
-** <<In Memory>> - non persistent, for a single in-process node - used by default if you do not specify otherwise.
-** <<Local>> - log persisted to provided file-path.
+* Single-node log implementations, within `xtdb-core`:
+** <<In memory>>: transient in-memory log.
+** <<Local disk>>: log using the local filesystem.
 * Log implementations within their own modules: 
-** link:tx-log/kafka[Kafka] - log persisted to a Kafka topic.
+** link:tx-log/kafka[Kafka]
 
-== In Memory
+== In memory
 
-An in-memory transaction log - the default transaction log implementation used by an XTDB node if you do not specify otherwise.
+By default, the default transaction log is a transient, in-memory log:
 
-=== Parameters
+[source,yaml]
+----
+# default, no need to explicitly specify
+# txLog: !InMemory
+----
 
-While generally provided as is/without any configuration options, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
-[cols="2,3,1"]
-|===
-| *Parameter* | *Description* | *Required?*
-| Instant Source
-| A java https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation. This is used to within the transaction log to provide a timestamp for each transaction.
-| No, will default to the system clock
-|===
+If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.
 
-=== Examples
-
-For examples on how to enable/configure the in-memory transaction log as part of your node, for each client library, see the individual SDK documentation:
+For examples on how to enable/configure the in-memory transaction log as part of your node, see the individual client library documentation:
 
 * link:/drivers/clojure/configuration#in-memory-log[Clojure]
 * link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-in-memory-log-factory/index.html[Kotlin]
 
-== Local
+== Local disk
 
-A local directory transaction log - a persistent transaction log implementation that writes to a local file.
+A single-node persistent transaction log implementation that writes to a local directory.
 
-=== Parameters 
+[source,yaml]
+----
+txLog: !Local
+  # -- required
 
-When configuring the local directory log, you can expect the following parameters to be available to all client libraries (naming differs between the various SDK implementations - see the examples mentioned below):
-[cols="2,3,1"]
-|===
-| *Parameter* | *Description* | *Required?*
-| Path 
-| The path to the local directory to store t2he transaction log in. 
-| Yes
+  # The path to the local directory to store the transaction log in.
+  path: /var/lib/xtdb/log
 
-| Instant Source
-| A java https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation. This is used to within the transaction log to provide a timestamp for each transaction. If not provided, the default is to use the system clock.
-| No, will default to the system clock
+  # -- optional
 
-| Buffer Size
-| The number of entries of the buffer to use when writing to the transaction log.
-| No, defaults to 4096
+  # The number of entries of the buffer to use when writing to the transaction log.
+  # bufferSize: 4096
 
-| Poll Sleep Duration
-| The duration to sleep for when polling for new transactions to write to the transaction log.
-| No, defaults to 100ms
+  # The duration to sleep for when polling for new transactions written to the transaction log.
+  # pollSleepDuration: PT0.1S
+----
 
-|===
+If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.
 
-=== Examples
+For examples on how to enable/configure the local-dsk transaction log as part of your node, see the individual client library documentation:
 
 * link:/drivers/clojure/configuration#local-log[Clojure]
 * link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-local-log-factory/index.html[Kotlin]
