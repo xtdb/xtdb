@@ -26,6 +26,7 @@ export default defineConfig({
 
       sidebar: [
         { label: '← xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
+
         { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: {target: '_blank'}},
 
         {
@@ -68,28 +69,35 @@ export default defineConfig({
         },
 
         {
-          label: 'Reference',
+          label: 'Components',
           collapsed: true,
           items: [
-            { label: 'Overview', link: '/reference/main' },
+            // TODO could probably use an architectural overview at some point.
+            // { label: 'Overview', link: '/components' },
 
             {
               label: 'Transaction Log',
-              collapsed: true,
               items: [
-                { label: 'Overview', link: '/reference/main/tx-log' },
-                { label: 'Kafka', link: '/reference/main/tx-log/kafka'},
+                { label: 'Overview', link: '/components/tx-log' },
+                { label: 'Kafka', link: '/components/tx-log/kafka'},
               ],
             },
 
             {
               label: 'Storage',
-              collapsed: true,
               items: [
-                { label: 'Overview', link: '/reference/main/storage'},
-                { label: 'S3', link: '/reference/main/storage/s3'},
+                { label: 'Overview', link: '/components/storage'},
+                { label: 'S3', link: '/components/storage/s3'},
               ]
             },
+          ]
+        },
+
+        {
+          label: 'Reference',
+          collapsed: true,
+          items: [
+            { label: 'Overview', link: '/reference/main' },
 
             {
               label: 'XTQL',
