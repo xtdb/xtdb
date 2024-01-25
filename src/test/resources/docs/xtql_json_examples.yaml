@@ -6,25 +6,25 @@ aggr-json: |
         {
           "from": "customers",
           "bind": [
-            { "xt/id": { "xt:lvar": "customer-id" } },
-            { "name": {"xt:lvar": "customer-name" } }
+            { "xt$id": { "xt:lvar": "customerId" } },
+            { "name": {"xt:lvar": "customerName" } }
           ]
         },
         {
           "from": "orders",
           "bind": [
-           { "customer-id": {"xt:lvar": "customer-id"} },
-           { "order-value": { "xt:lvar": "order-value"} }
+           { "customerId": {"xt:lvar": "customerId"} },
+           { "orderValue": { "xt:lvar": "orderValue"} }
           ]
         }
       ]
     },
     {
       "aggregate": [
-        "customer-id",
-        "customer-name",
-        { "order-count": { "xt:call": "row-count", "args": []}},
-        { "total-value": { "xt:call": "sum", "args": [ { "xt:lvar": "order-value" } ] }}
+        "customerId",
+        "customerName",
+        { "orderCount": { "xt:call": "row-count", "args": []}},
+        { "totalValue": { "xt:call": "sum", "args": [ { "xt:lvar": "orderValue" } ] }}
       ]
     }
   ]
@@ -89,7 +89,7 @@ temporal-filters-json: |
   // tag::temporal-filters-json[]
   {
     "from": "users",
-    "bind": [ { "xt/id" : { "xt:lvar": "user"} } ],
+    "bind": [ { "xt$id" : { "xt:lvar": "user"} } ],
     "forValidTime": {
       "in": [
         { "@type": "xt:instant", "@value": "2020-01-01T00:00:00Z" },
@@ -106,14 +106,14 @@ joins-json: |
     "unify": [
       {
         "from": "customers",
-        "bind": [ { "xt/id": { "xt:lvar": "customer-id" } }, "customer-name" ]
+        "bind": [ { "xt$id": { "xt:lvar": "customerId" } }, "customerName" ]
       },
       {
         "leftJoin": {
           "from": "orders",
-          "bind": [{ "xt/id": { "xt:lvar": "order-id"}}, "customer-id", "order-value" ]
+          "bind": [{ "xt$id": { "xt:lvar": "orderId"}}, "customerId", "orderValue" ]
         },
-        "bind": [ "customer-id", "order-id", "order-value" ]
+        "bind": [ "customerId", "orderId", "orderValue" ]
       }
     ]
   }
@@ -149,11 +149,11 @@ order-by-json: |
   [
     {
       "from": "orders",
-      "bind": [ "order-value", "received-at" ]
+      "bind": [ "orderValue", "receivedAt" ]
     },
     {
       "orderBy": [
-        { "val": { "xt:lvar": "order-value" }, "dir": "desc", "nulls": "last" },
+        { "val": { "xt:lvar": "orderValue" }, "dir": "desc", "nulls": "last" },
         "received-at"
       ]
     }
@@ -165,7 +165,7 @@ return-json: |
   [
     {
       "from": "users",
-      "bind": [ "username", "first-name", "last-name" ]
+      "bind": [ "username", "firstName", "lastName" ]
     },
     {
       "return": [
@@ -173,7 +173,7 @@ return-json: |
         {
           "full-name": {
             "xt:call": "concat",
-            "args": [ { "xt:lvar": "last-name" }, ", ", { "xt:lvar": "first-name" } ]
+            "args": [ { "xt:lvar": "lastName" }, ", ", { "xt:lvar": "firstName" } ]
           }
         }
       ]
@@ -205,11 +205,11 @@ unify-json: |
     "unify": [
       {
         "from": "customers",
-        "bind": [ { "xt/id": { "xt:lvar": "customer-id" } }, "customer-name" ]
+        "bind": [ { "xt$id": { "xt:lvar": "customerId" } }, "customerName" ]
       },
       {
         "from": "orders",
-        "bind": [ { "xt/id": { "xt:lvar": "order-id" } }, "customer-id", "order-value" ]
+        "bind": [ { "xt$id": { "xt:lvar": "orderId" } }, "customerId", "orderValue" ]
       }
     ]
   }
@@ -221,7 +221,7 @@ unnest-json: |
   [
     {
       "from": "posts",
-      "bind": [ { "xt/id": { "xt:lvar": "post-id" } }, "tags" ]
+      "bind": [ { "xt$id": { "xt:lvar": "postId" } }, "tags" ]
     },
     { "unnest": { "tag": { "xt:lvar": "tags" } } }
   ]
@@ -231,7 +231,7 @@ unnest-json: |
     "unify": [
       {
         "from": "posts",
-        "bind": [ { "xt/id": { "xt:lvar": "post-id" } }, "tags" ]
+        "bind": [ { "xt$id": { "xt:lvar": "postId" } }, "tags" ]
       },
       { "unnest": { "tag": { "xt:lvar": "tags" } } }
     ]
@@ -244,7 +244,7 @@ where-json: |
   [
     {
       "from": "users",
-      "bind": [ "username", "date-of-birth" ]
+      "bind": [ "username", "dateOfBirth" ]
     },
     {
       "where": [
@@ -255,7 +255,7 @@ where-json: |
             {
               "xt:call": "+",
               "args": [
-                { "xt:lvar": "date-of-birth" },
+                { "xt:lvar": "dateOfBirth" },
                 { "@type": "xt:period", "@value": "P18Y" }
               ]
             }
@@ -270,11 +270,11 @@ where-json: |
     "unify": [
       {
         "from": "customers",
-        "bind": [ { "xt/id": { "xt:lvar": "customer-id" } }, "customer-name", "vip?" ]
+        "bind": [ { "xt$id": { "xt:lvar": "customerId" } }, "customerName", "vip?" ]
       },
       {
         "from": "orders",
-        "bind": [ { "xt/id": { "xt:lvar": "order-id" } }, "customer-id", "order-value" ]
+        "bind": [ { "xt/id": { "xt:lvar": "orderId" } }, "customerId", "orderValue" ]
       },
       {
         "where": [
@@ -284,7 +284,7 @@ where-json: |
               { "xt:lvar": "vip?" },
               {
                 "xt:call": ">",
-                "args": [ { "xt:lvar": "order-value" }, 1000000 ]
+                "args": [ { "xt:lvar": "orderValue" }, 1000000 ]
               }
             ]
           }
@@ -296,36 +296,36 @@ where-json: |
 
 with-json: |
   // tag::with-json[]
-  // as a 'tail' operator - N.B. `full-name` is a column here
+  // as a 'tail' operator - N.B. `fullName` is a column here
   [
     {
       "from": "users",
-      "bind": [ "username", "first-name", "last-name" ]
+      "bind": [ "username", "firstName", "lastName" ]
     },
     {
       "with": [
         {
-          "full-name": {
+          "fullName": {
             "xt:call": "concat",
-            "args": [ { "xt:lvar": "last-name" }, ", ", { "xt:lvar": "first-name" } ]
+            "args": [ { "xt:lvar": "lastName" }, ", ", { "xt:lvar": "firstName" } ]
           }
         }
       ]
     }
   ]
-  // in 'unify' - N.B. `full-name` is a logic variable here
+  // in 'unify' - N.B. `fullName` is a logic variable here
   {
     "unify": [
       {
         "from": "users",
-        "bind": [ "username", "first-name", "last-name" ]
+        "bind": [ "username", "firstName", "lastName" ]
       },
       {
         "with": [
           {
-            "full-name": {
+            "fullName": {
               "xt:call": "concat",
-              "args": [ { "xt:lvar": "last-name" }, ", ", { "xt:lvar": "first-name" } ]
+              "args": [ { "xt:lvar": "lastName" }, ", ", { "xt:lvar": "firstName" } ]
             }
           }
         ]
@@ -341,15 +341,15 @@ without-json: |
       "unify": [
         {
           "from": "customers",
-          "bind": [ { "xt/id": { "xt:lvar": "customer-id" } }, "customer-name" ]
+          "bind": [ { "xt$id": { "xt:lvar": "customerId" } }, "customerName" ]
         },
         {
           "from": "orders",
-          "bind": [ "customer-id", "order-value" ]
+          "bind": [ "customerId", "orderValue" ]
         }
       ]
     },
-    { "without": [ "customer-id" ] }
+    { "without": [ "customerId" ] }
   ]
   // end::without-json[]
 
@@ -358,7 +358,7 @@ expr-json-1: |
   [
     {
       "from": "posts",
-      "bind": [ { "xt/id": { "xt:param": "$post-id" } }, "author-id" ]
+      "bind": [ { "xt$id": { "xt:param": "$postId" } }, "authorId" ]
     },
     {
       "with": [
@@ -366,9 +366,9 @@ expr-json-1: |
           "author": {
             "xt:pull": {
               "from": "authors",
-              "bind": [ { "xt/id": { "xt:param": "$author-id" } }, "first-name", "last-name" ]
+              "bind": [ { "xt$id": { "xt:param": "$authorId" } }, "firstName", "lastName" ]
             },
-            "args": [ "author-id" ]
+            "args": [ "authorId" ]
           }
         },
         {
@@ -376,18 +376,18 @@ expr-json-1: |
             "xt:pullMany": [
               {
                 "from": "comments",
-                "bind": [ { "post-id": { "xt:param": "$post-id" } }, "comment", "posted-at" ]
+                "bind": [ { "postId": { "xt:param": "$postId" } }, "comment", "postedAt" ]
               },
-              { "orderBy": [ "posted-at" ] },
+              { "orderBy": [ "postedAt" ] },
               { "limit": 2 },
               { "return": [ "comment" ] }
             ],
-            "args": [ { "post-id": { "xt:param": "$post-id" } } ]
+            "args": [ { "postId": { "xt:param": "$postId" } } ]
           }
         }
       ]
     },
-    { "return": [ "post-content", "authot", "comments" ] }
+    { "return": [ "postContent", "authot", "comments" ] }
   ]
   // end::expr-json-1[]
 
@@ -395,7 +395,7 @@ binding-json-1: |
   // tag::binding-json-1[]
   {
     "from": "users",
-    "bind": [ "username", "first-name", "last-name" ]
+    "bind": [ "username", "firstName", "lastName" ]
   }
   // i.e. `SELECT username, first_name, last_name FROM users`
   // end::binding-json-1[]
@@ -404,7 +404,7 @@ binding-json-2: |
   // tag::binding-json-2[]
   {
     "from": "users",
-    "bind": [ { "username": {"xt:lvar": "login" } } , "first-name", "last-name"]
+    "bind": [ { "username": {"xt:lvar": "login" } } , "firstName", "lastName"]
   }
   // i.e. `SELECT username AS login, first_name, last_name FROM users`
   // end::binding-json-2[]
@@ -413,13 +413,13 @@ binding-json-3: |
   // tag::binding-json-3[]
   {
     "from": "users",
-    "bind": [ { "username": "james" } , "first-name", "last-name" ]
+    "bind": [ { "username": "james" } , "firstName", "lastName" ]
   }
   // i.e. `SELECT first_name, last_name FROM users WHERE username = 'james'`
 
   {
     "from": "users",
-    "bind": [ { "username": { "xt:param": "$username" } } , "first-name", "last-name" ]
+    "bind": [ { "username": { "xt:param": "$username" } } , "firstName", "lastName" ]
   }
   // i.e. `SELECT first_name, last_name FROM users WHERE username = ?`
   // end::binding-json-3[]
@@ -428,11 +428,11 @@ argument-json-1: |
   // tag::argument-json-1[]
   // find the most recent 5 posts and, for each, their most recent 3 comments
 
-  // in this query, the `post-id` argument fulfils the `$post-id` parameter in the sub-query
+  // in this query, the `postId` argument fulfils the `$postId` parameter in the sub-query
   [
     {
       "from": "posts",
-      "bind": [ {"xt/id": {"xt:lvar": "post-id"}} ... ]
+      "bind": [ {"xt$id": {"xt:lvar": "postId"}} ... ]
     },
     {
       "with": [
@@ -441,11 +441,11 @@ argument-json-1: |
             "xt:pullMany": [
               {
                 "from": "comments",
-                "bind": [ { "post-id": { "xt:param": "$post-id" } }, "comment", "commented-at" ]
+                "bind": [ { "postId": { "xt:param": "$postId" } }, "comment", "commentedAt" ]
               },
               { "limit": 3 }
             ],
-            "args": [ "post-id" ]
+            "args": [ "postId" ]
           }
         }
       ]
@@ -464,13 +464,13 @@ argument-json-2: |
       "unify": [
         {
           "from": "people",
-          "bind": [ { "xt/id": {"xt:lvar": "person"}}, "parent" ]
+          "bind": [ { "xt$id": {"xt:lvar": "person"}}, "parent" ]
         },
         {
           "leftJoin": [
             {
               "from": "people",
-              "bind": [ { "xt/id": { "xt:lvar": "sibling" } }, "parent" ]
+              "bind": [ { "xt$id": { "xt:lvar": "sibling" } }, "parent" ]
             },
             {
               "where": [

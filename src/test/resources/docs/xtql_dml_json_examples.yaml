@@ -2,7 +2,7 @@ put-json: |
   // tag::put-json[]
   {
     "into": "docs",
-    "putDocs": [{ "xt/id": 1, "foo": "bar"} ...],
+    "putDocs": [{ "xt$id": 1, "foo": "bar"} ...],
     "validFrom": "2023-01-01T00:00:00Z",
     "validTo": "2024-01-01T00:00:00Z"
   }
@@ -31,11 +31,11 @@ insert-into-json: |
   {
     "insertInto": "users",
     "query": {
-      "from": "old-users",
+      "from": "oldUsers",
       "bind": [
         "xt$id"
-        { "first-name": { "xt:lvar": "given-name" } },
-        { "last-name": { "xt:lvar": "family-name" } }
+        { "firstName": { "xt:lvar": "givenName" } },
+        { "lastName": { "xt:lvar": "familyName" } }
       ]
     }
   }
@@ -69,11 +69,11 @@ delete-json: |
 
   {
     "deleteFrom": "posts",
-    "bind": [ "author-id" ],
+    "bind": [ "authorId" ],
     "unify": [
       {
         "from": "authors",
-        "bind": [ { "xt/id": { "xt:lvar": "author-id" } }, { "email": "james@example.com" } ]
+        "bind": [ { "xt$id": { "xt:lvar": "authorId" } }, { "email": "james@example.com" } ]
       }
     ]
   }
@@ -94,12 +94,12 @@ erase-json: |
 
   {
     "eraseFrom": "posts",
-    "bind": [ { "author-id": { "xt:lvar": "author-id" } } ],
+    "bind": [ "authorId" ],
     "unify": [
         {
           "from": "authors",
           "bind": [
-            { "xt/id": { "xt:lvar": "author-id" } },
+            { "xt$id": { "xt:lvar": "authorId" } },
             { "email": { "xt:param": "$email" } }
           ]
         }

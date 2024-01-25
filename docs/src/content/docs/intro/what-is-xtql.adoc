@@ -37,7 +37,7 @@ In this first example, we're reading the first-name and last-name fields from th
 ----
 {
   "from": "users",
-  "bind": [ "first_name", "last_name" ]
+  "bind": [ "firstName", "lastName" ]
 }
 ----
 ====
@@ -65,7 +65,7 @@ By default, this shows the table at the current time, but it can be overridden:
 ----
 {
   "from": "users",
-  "bind": [ "first_name", "last_name" ],
+  "bind": [ "firstName", "lastName" ],
 
   // at another point in time
   "forValidTime": { "at": { "@type": "xt:date", "@value": "2023-01-01" } },
@@ -127,8 +127,8 @@ In JSON, we wrap the operators in an array to denote a pipeline:
 [source,json]
 ----
 [
-  { "from": "users", "bind": [ "first_name", "last_name" ] },
-  { "orderBy" : [ "last_name", "first_name" ]},
+  { "from": "users", "bind": [ "firstName", "lastName" ] },
+  { "orderBy" : [ "lastName", "firstName" ]},
   { "limit": 10 },
 ]
 ----
@@ -183,14 +183,14 @@ In XTQL, we specify the join condition by re-using a logic variable (`customer_i
   {
     "unify": [
       // bind `customer_id` to the `xt$id` of the `customers` table
-      { "from": "customers", "bind": [ { "xt$id": "customer_id" }, "customer_name" ] },
+      { "from": "customers", "bind": [ { "xt$id": "customerId" }, "customerName" ] },
 
       // also bind `customer_id` to the `customer_id` of the `orders` table
-      { "from": "orders", "bind": [ { "xt$id": "order_id" }, "customer_id", "order_value" ] }
+      { "from": "orders", "bind": [ { "xt$id": "orderId" }, "customerId", "orderValue" ] }
     ]
   },
 
-  { "return": [ "customer_name", "order_id", "order_value" ]}
+  { "return": [ "customerName", "orderId", "orderValue" ]}
 ]
 ----
 ====
@@ -231,7 +231,7 @@ e.g. `INSERT INTO users2 SELECT xt$id, first_name AS given_name, last_name AS fa
   "insert": "users2",
   "query": {
     "from": "users",
-    "bind": [ "xt$id", {"first_name": "given_name"}, {"last_name": "family_name"}]
+    "bind": [ "xt$id", {"firstName": "givenName"}, {"lastName": "familyName"}]
   }
 }
 ----
@@ -261,12 +261,12 @@ Here, we're incrementing a 'version' attribute - `UPDATE docs SET version = vers
 ----
 {
   "update": "documents",
-  "bind": [ { "xt$id": "$doc_id", "version": "v" }],
+  "bind": [ { "xt$id": "$docId", "version": "v" }],
   "set": { "version": { "@call": "+", "@args": [ "v", 1 ] } }
 }
 
 // separately, we pass the following as the arguments to the query:
-{ "doc_id": "my-doc-id" }
+{ "docId": "myDocId" }
 ----
 ====
 
@@ -297,11 +297,11 @@ Here, we delete all the comments for a given post-id - `DELETE FROM comments WHE
 ----
 {
   "delete": "comments",
-  "bind": [ { "post_id": "$post_id" }]
+  "bind": [ { "postId": "$postId" }]
 }
 
 // separately, we pass the following as the arguments to the query:
-{ "post_id": "my-post-id" }
+{ "postId": "myPostId" }
 ----
 ====
 

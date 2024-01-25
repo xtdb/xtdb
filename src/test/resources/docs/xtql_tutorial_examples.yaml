@@ -106,7 +106,12 @@ joins-json-3: |
         {
           "leftJoin": {
             "from": "orders",
-            "bind": [{"xt$id": {"xt:lvar": "oid"}}, {"customerId": {"xt:lvar": "cid"}}, "currency", "orderValue"]
+            "bind": [
+              {"xt$id": {"xt:lvar": "oid"}},
+              {"customerId": {"xt:lvar": "cid"}},
+              "currency",
+              "orderValue"
+            ]
           },
           "bind": ["cid", "currency", "orderValue"]
         }
@@ -560,14 +565,14 @@ DML-Assert-Not-Tx-Table-json: |
 
   // querying the tx/txs table
   {
-    "from": "xt/txs",
-    "bind": [ { "xt/id": { "xt:param": "$tx-id" } }, "xt/committed?", "xt/error" ]
+    "from": "xt$txs",
+    "bind": [ { "xt$id": { "xt:param": "$txId" } }, "xt$committed?", "xt$error" ]
   }
 
   // result
   {
-    "xt/committed?": false,
-    "xt/error": {
+    "xt$committed?": false,
+    "xt$error": {
       "@type": "xt:error",
       "@value": {
         "xtdb.error/message": "Precondition failed: assert-not-exists",
