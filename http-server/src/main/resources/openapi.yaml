@@ -555,9 +555,14 @@ components:
           $ref: '#/components/schemas/TxOptions'
     TypedAny:
       description: |
-        As JSON only permits a limited amount of build in types. We are using the JSON-LD format to encode other types.
-        Most often in the form of a '@type' property field describing the type of the object and a '@value' field to 
-        encode the data of the type.
+        Due to the inherent limitations in the native type system of JSON, our implementation leverages the JSON-LD
+        format to encode a broader range of types. This approach primarily involves two key components:
+        
+        - '@type' Property: This field specifies the object's type, offering a clear description of the nature of the data being represented.
+        - '@value' Property: This field is used to encapsulate the actual data corresponding to the type described in the @type property.
+        
+        By integrating these elements, JSON-LD enables a more flexible and descriptive representation of
+        data types beyond the standard capabilities of JSON.
       oneOf:
         - type: string
         - type: integer
