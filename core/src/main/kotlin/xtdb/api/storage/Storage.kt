@@ -43,6 +43,17 @@ object Storage {
     /**
      * Implementation for the storage module that persists data to the local file system, under the **path** directory.
      *
+     * Example usage, as part of a node config:
+     * ```kotlin
+     * Xtdb.openNode {
+     *    localStorage(path = Paths.get("test-path")) {
+     *        maxCacheEntries = 1024,
+     *        maxCacheBytes = 536870912
+     *    },
+     *    ...
+     * }
+     * ```
+     * 
      * @property path The directory path where data will be stored.
      */
     @Serializable
@@ -77,6 +88,20 @@ object Storage {
      * * AWS S3 (under **xtdb-s3**)
      * * Azure Blob Storage (under **xtdb-azure**)
      * * Google Cloud Storage (under **xtdb-google-cloud**)
+     * 
+     * Example usage, as part of a node config:
+     * ```kotlin
+     * Xtdb.openNode {
+     *    remoteStorage(
+     *       objectStore = objStoreImpl(...) { ... },
+     *       localDiskCache = Paths.get("test-path")
+     *    ) {
+     *       maxCacheEntries = 1024,
+     *       maxCacheBytes = 536870912
+     *    },
+     *    ...
+     * }
+     * ```
      *
      * @property objectStore configuration of the object store to use for remote storage.
      * @property localDiskCache local directory to store the working-set cache in.

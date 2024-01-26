@@ -75,13 +75,14 @@ Main article: link:/config/storage[Storage]
 [#in-memory-storage]
 === In-Memory
 
-Main article: link:/config/storage#_in_memory[in-memory storage]
+Main article: link:/config/storage#in-memory[in-memory storage]
 
 This is the default, and should be omitted.
 
+[#local-storage]
 === Local disk
 
-Main article: link:/config/storage#_local_disk[local-disk storage]
+Main article: link:/config/storage#local-disk[local-disk storage]
 
 [source,clojure]
 ----
@@ -97,6 +98,29 @@ Main article: link:/config/storage#_local_disk[local-disk storage]
             ;; :max-cache-entries 536870912
            }]}
 ----
+
+[#remote-storage]
+=== Remote
+
+Main article: link:/config/storage#remote[remote storage]
+
+[source,clojure]
+----
+{:storage [:remote {;; -- required 
+                    
+                    ;; Each object store implementation has its own configuration - 
+                    ;; see below for some examples.
+                    :object-store [:object-store-implementation {}]
+                    
+                    ;; accepts `String`, `File` or `Path`
+                    :local-disk-cache "/tmp/local-disk-cache"
+
+                    ;; -- optional
+                    ;; :max-cache-entries 1024
+                    ;; :max-cache-bytes 536870912
+                    }]}
+----
+
 
 === S3
 

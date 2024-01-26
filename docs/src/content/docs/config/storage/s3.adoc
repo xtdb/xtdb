@@ -136,4 +136,4 @@ If configured as an in-process node, you can also specify an `S3Configurator` in
 For examples on how to enable/configure the S3 module as part of your node, for each client library, see the individual SDK documentation:
 
 * link:/drivers/clojure/configuration#_s3[Clojure]
-* link:/drivers/kotlin/kdoc/modules/xtdb-s3/xtdb.api/-s3-object-store-factory/index.html[Kotlin]
+* link:/drivers/kotlin/kdoc/modules/xtdb-s3/xtdb.api.storage/-s3/index.html[Kotlin]

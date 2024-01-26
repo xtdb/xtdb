@@ -1,3 +1,89 @@
 ---
 title: Storage
 ---
+
+One of the key components of an XTDB node is the storage module - used to store the data and indexes that make up the database.
+
+We offer the following implementations of the storage module:
+
+** <<In memory>>: transient in-memory storage.
+** <<Local disk>>: storage persisted to the local filesystem.
+** <<Remote>>: storage persisted remotely.
+
+[#in-memory]
+== In memory
+
+By default, the storage module is configured to use transient, in-memory storage. 
+
+[source,yaml]
+----
+# default, no need to explicitly specify
+# storage: !InMemory
+----
+
+[#local-disk]
+== Local disk
+
+A persistent storage implementation that writes to a local directory, also maintaining an in-memory cache of the working set. 
+
+[source,yaml]
+----
+storage: !Local
+  # -- required
+
+  # The path to the local directory to persist the data to.
+  path: /var/lib/xtdb/storage
+
+  # -- optional
+
+  # The maximum number of entries to store in the in-memory cache.
+  # maxCacheEntries: 1024
+
+  # The maximum number of bytes to store in the in-memory cache.
+  # maxCacheBytes: 536870912
+----
+
+For examples on how to enable/configure the local-disk storage module as part of your node, see the individual client library documentation:
+
+* link:/drivers/clojure/configuration#local-storage[Clojure]
+* link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.storage/-storage/-local-storage-factory/index.html[Kotlin]
+
+[#remote]
+== Remote
+
+A persistent storage implementation that:
+
+* Persists data remotely to a provided object store.
+* Maintains an local-disk cache and in-memory cache of the working set.
+
+[source,yaml]
+----
+storage: !Remote
+  # -- required
+
+  # Configuration of the Object Store to use for remote storage
+  # Each of these is configured separately - see below for more information.
+  objectStore: <ObjectStoreImplementation>
+
+  # Local directory to store the working-set cache in.
+  localDiskCache: /var/lib/xtdb/remote-cache
+
+  ## -- optional
+
+  # The maximum number of entries to store in the in-memory cache.
+  # maxCacheEntries: 1024
+
+  # The maximum number of bytes to store in the in-memory cache.
+  # maxCacheBytes: 536870912
+----
+
+Each Object Store implementation is configured separately - see the individual documentation for more information:
+
+* link:storage/s3[S3]
+// * link:/storage/azure[Azure]
+// * link:/storage/google-cloud[Google Cloud]
+
+For examples on how to enable/configure the remote storage module as part of your node, see the individual client library documentation:
+
+* link:/drivers/clojure/configuration#remote-storage[Clojure]
+* link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.storage/-storage/-remote-storage-factory/index.html[Kotlin]
