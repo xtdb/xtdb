@@ -102,3 +102,11 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
 .sl-markdown-content pre {
     padding: initial
 }
+
+.lang-icons.right {
+    @apply float-right
+}
+
+.lang-icons img {
+    @apply inline-block h-5 mr-2
+}
