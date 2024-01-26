@@ -486,6 +486,14 @@
                                                ~((:continue (get emitted-thens local-type)) f))))))}))
         (wrap-boxed-poly-return opts))))
 
+(def ^:private normalise-fn-name
+  (-> (fn [f]
+        (let [f (keyword (namespace f) (name f))]
+          (case f
+            (:- :/) f
+            (util/kw->normal-form-kw f))))
+      memoize))
+
 (defmulti codegen-call
   "Expects a map containing both the expression and an `:arg-types` key - a vector of col-types.
    This `:arg-types` vector should be monomorphic - if the args are polymorphic, call this multimethod multiple times.
@@ -498,16 +506,16 @@
         where f :: return-type, code -> code"
 
   (fn [{:keys [f arg-types]}]
-    (vec (cons (keyword (namespace f) (name f))
+    (vec (cons (normalise-fn-name f)
                (map types/col-type-head arg-types))))
 
   :hierarchy #'types/col-type-hierarchy)
 
 (def ^:private shortcut-null-args?
-  (complement (comp #{:true? :false? :nil? :boolean :null-eq
-                      :compare-nulls-first :compare-nulls-last
+  (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean :null_eq
+                      :compare_nulls_first :compare_nulls_last
                       :period}
-                    keyword)))
+                    normalise-fn-name)))
 
 (defn- cont-b3-call [arg-type code]
   (if (= :null arg-type)
@@ -657,16 +665,16 @@
 
 ;; null-eq is an internal function used in situations where two nulls should compare equal,
 ;; e.g when grouping rows in group-by.
-(defmethod codegen-call [:null-eq :any :any] [call]
+(defmethod codegen-call [:null_eq :any :any] [call]
   (codegen-call (assoc call :f :=)))
 
-(defmethod codegen-call [:null-eq :null :any] [_]
+(defmethod codegen-call [:null_eq :null :any] [_]
   {:return-type :bool, :->call-code (constantly false)})
 
-(defmethod codegen-call [:null-eq :any :null] [_]
+(defmethod codegen-call [:null_eq :any :null] [_]
   {:return-type :bool, :->call-code (constantly false)})
 
-(defmethod codegen-call [:null-eq :null :null] [_]
+(defmethod codegen-call [:null_eq :null :null] [_]
   {:return-type :bool, :->call-code (constantly true)})
 
 (defmethod codegen-call [:<> :num :num] [_]
@@ -690,6 +698,10 @@
 (doseq [f #{:true? :false? :nil?}]
   (defmethod codegen-call [f :any] [_]
     {:return-type :bool, :->call-code (constantly false)}))
+
+(defmethod codegen-call [:is_true :any] [expr] (codegen-call (assoc expr :f :true?)))
+(defmethod codegen-call [:is_false :any] [expr] (codegen-call (assoc expr :f :false?)))
+(defmethod codegen-call [:is_null :any] [expr] (codegen-call (assoc expr :f :nil?)))
 
 (defmethod codegen-call [:boolean :null] [_]
   {:return-type :bool, :->call-code (constantly false)})
@@ -861,7 +873,7 @@
                                         `(like->regex (binary->hex-like-pattern (buf->bytes ~needle-code))))
                                      (Hex/encodeHexString (buf->bytes ~haystack-code)))))})
 
-(defmethod codegen-call [:like-regex :utf8 :utf8 :utf8] [{:keys [args]}]
+(defmethod codegen-call [:like_regex :utf8 :utf8 :utf8] [{:keys [args]}]
   (let [[_ re-literal flags] (map :literal args)
 
         flag-map
@@ -929,14 +941,14 @@
       (sql-trim-leading trim-char)
       (sql-trim-trailing trim-char)))
 
-(defmethod codegen-call [:trim-leading :utf8 :utf8] [_]
+(defmethod codegen-call [:trim_leading :utf8 :utf8] [_]
   {:return-type :utf8
    :->call-code (fn [[s trim-char]]
                   `(-> (sql-trim-leading (resolve-string ~s) (resolve-string ~trim-char))
                        (.getBytes StandardCharsets/UTF_8)
                        ByteBuffer/wrap))})
 
-(defmethod codegen-call [:trim-trailing :utf8 :utf8] [_]
+(defmethod codegen-call [:trim_trailing :utf8 :utf8] [_]
   {:return-type :utf8
    :->call-code (fn [[s trim-char]]
                   `(-> (sql-trim-trailing (resolve-string ~s) (resolve-string ~trim-char))
@@ -983,14 +995,14 @@
       (binary-trim-leading trim-octet)
       (binary-trim-trailing trim-octet)))
 
-(defmethod codegen-call [:trim-leading :varbinary :varbinary] [_]
+(defmethod codegen-call [:trim_leading :varbinary :varbinary] [_]
   {:return-type :varbinary
    :->call-code (fn [[s trim-octet]]
                   `(-> (resolve-bytes ~s)
                        (binary-trim-leading (first (resolve-bytes ~trim-octet)))
                        ByteBuffer/wrap))})
 
-(defmethod codegen-call [:trim-trailing :varbinary :varbinary] [_]
+(defmethod codegen-call [:trim_trailing :varbinary :varbinary] [_]
   {:return-type :varbinary
    :->call-code (fn [[s trim-octet]]
                   `(-> (resolve-bytes ~s)
@@ -1004,7 +1016,7 @@
                        (binary-trim-both (first (resolve-bytes ~trim-octet)))
                        ByteBuffer/wrap))})
 
-(defmethod codegen-call [:trim-leading :varbinary :num] [_]
+(defmethod codegen-call [:trim_leading :varbinary :num] [_]
   {:return-type :varbinary
    :->call-code (fn [[s trim-octet]]
                   ;; should we throw an explicit error if no good cast to byte is possible?
@@ -1012,7 +1024,7 @@
                        (binary-trim-leading (byte ~trim-octet))
                        ByteBuffer/wrap))})
 
-(defmethod codegen-call [:trim-trailing :varbinary :num] [_]
+(defmethod codegen-call [:trim_trailing :varbinary :num] [_]
   {:return-type :varbinary
    :->call-code (fn [[s trim-octet]]
                   ;; should we throw an explicit error if no good cast to byte is possible?
@@ -1115,15 +1127,15 @@
    :->call-code (fn [[x start length]]
                   `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length true))})
 
-(defmethod codegen-call [:character-length :utf8] [_]
+(defmethod codegen-call [:character_length :utf8] [_]
   {:return-type :i32
    :->call-code #(do `(StringUtil/utf8Length (resolve-utf8-buf ~(first %))))})
 
-(defmethod codegen-call [:octet-length :utf8] [_]
+(defmethod codegen-call [:octet_length :utf8] [_]
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-utf8-buf ~@%)))})
 
-(defmethod codegen-call [:octet-length :varbinary] [_]
+(defmethod codegen-call [:octet_length :varbinary] [_]
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-buf ~@%)))})
 
@@ -1132,12 +1144,12 @@
    :->call-code (fn [[needle haystack]]
                   `(StringUtil/sqlUtf8Position (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))})
 
-(defmethod codegen-call [:octet-position :utf8 :utf8] [_]
+(defmethod codegen-call [:octet_position :utf8 :utf8] [_]
   {:return-type :i32
    :->call-code (fn [[needle haystack]]
                   `(StringUtil/SqlBinPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))})
 
-(defmethod codegen-call [:octet-position :varbinary :varbinary] [_]
+(defmethod codegen-call [:octet_position :varbinary :varbinary] [_]
   {:return-type :i32
    :->call-code (fn [[needle haystack]]
                   `(StringUtil/SqlBinPosition (resolve-buf ~needle) (resolve-buf ~haystack)))})
@@ -1152,11 +1164,11 @@
    :->call-code (fn [[target replacement from len]]
                   `(StringUtil/sqlBinOverlay (resolve-buf ~target) (resolve-buf ~replacement) ~from ~len))})
 
-(defmethod codegen-call [:default-overlay-length :utf8] [_]
+(defmethod codegen-call [:default_overlay_length :utf8] [_]
   {:return-type :i32
    :->call-code #(do `(StringUtil/utf8Length (resolve-utf8-buf ~@%)))})
 
-(defmethod codegen-call [:default-overlay-length :varbinary] [_]
+(defmethod codegen-call [:default_overlay_length :varbinary] [_]
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-buf ~@%)))})
 
@@ -1219,7 +1231,7 @@
 
                     ~(f return-type map-sym)))}))
 
-(defmethod codegen-call [:get-field :struct] [{[[_ field-types]] :arg-types, :keys [field]}]
+(defmethod codegen-call [:get_field :struct] [{[[_ field-types]] :arg-types, :keys [field]}]
   (if-let [val-type (get field-types field)]
     {:return-type val-type
      :continue-call (fn [f [struct-code]]
@@ -1228,7 +1240,7 @@
 
     {:return-type :null, :->call-code (constantly nil)}))
 
-(defmethod codegen-call [:get-field :any] [_]
+(defmethod codegen-call [:get_field :any] [_]
   {:return-type :null, :->call-code (constantly nil)})
 
 (doseq [[op return-code] [[:= 1] [:<> -1]]]
@@ -1362,7 +1374,7 @@
     (size [_] trimmed-value-count)
     (nth [_ idx] (.nth lst idx))))
 
-(defmethod codegen-call [:trim-array :list :int] [{[[_list list-el-type] _n-type] :arg-types}]
+(defmethod codegen-call [:trim_array :list :int] [{[[_list list-el-type] _n-type] :arg-types}]
   (let [return-type [:list list-el-type]]
     {:return-type return-type
      :continue-call (fn [f [list-code n-code]]
@@ -1422,10 +1434,10 @@
                                ~(f :null nil)
                                ~(f :bool `(== ~return-code ~res-sym))))))})))
 
-(defmethod codegen-call [:= :set :set] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
+(defmethod codegen-call [:= :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-types}]
   (throw (UnsupportedOperationException. "TODO: `=` on sets")))
 
-(defmethod codegen-call [:<> :set :set] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
+(defmethod codegen-call [:<> :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-types}]
   (throw (UnsupportedOperationException. "TODO: `<>` on sets")))
 
 (def out-vec-sym (gensym 'out_vec))

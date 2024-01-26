@@ -271,7 +271,7 @@
                  (dissoc :xt/system-from :xt/system-to))))))
 
 (t/deftest test-only-scanning-temporal-cols-45
-  (with-open [node (xtn/start-node {})]
+  (util/with-open [node (xtn/start-node {})]
     (let [tx (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :doc}]])
           tt (.getSystemTime tx)]
 
@@ -285,7 +285,7 @@
                                  {:node node})))))))
 
 (t/deftest test-aligns-temporal-columns-correctly-363
-  (with-open [node (xtn/start-node {})]
+  (util/with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put-docs :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
 
     (xt/submit-tx node [[:put-docs :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})

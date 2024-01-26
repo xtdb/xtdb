@@ -245,7 +245,7 @@
 (defmethod expr/codegen-cast [:time-local :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
 
-(defmethod expr/codegen-call [:cast-tstz :any] [expr]
+(defmethod expr/codegen-call [:cast_tstz :any] [expr]
   (expr/codegen-call (assoc expr :f :cast, :target-type [:timestamp-tz :micro (str (.getZone expr/*clock*))])))
 
 (defmethod expr/codegen-cast [:interval :interval] [{:keys [source-type target-type]}]
@@ -672,7 +672,7 @@
                             {::err/message "The maximum fractional seconds precision is 9."
                              :fractional-precision fractional-precision}))))
 
-(defmethod expr/codegen-call [:single-field-interval :int :utf8 :int :int] [{:keys [args]}]
+(defmethod expr/codegen-call [:single_field_interval :int :utf8 :int :int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]
     (ensure-interval-precision-valid precision)
     (when (= "SECOND" unit)
@@ -724,7 +724,7 @@
                                 {::err/message "Parse error. SECOND INTERVAL string must contain a positive or negative integer or decimal."
                                  :interval interval-str}))))))
 
-(defmethod expr/codegen-call [:single-field-interval :utf8 :utf8 :int :int] [{:keys [args]}]
+(defmethod expr/codegen-call [:single_field_interval :utf8 :utf8 :int :int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]
     (ensure-interval-precision-valid precision)
     (when (= "SECOND" unit)
@@ -860,7 +860,7 @@
           (parse-day-to-second-literal s unit1 unit2))
         (throw (->iae "Cannot parse interval, incorrect format.")))))
 
-(defmethod expr/codegen-call [:multi-field-interval :utf8 :utf8 :int :utf8 :int] [{:keys [args]}]
+(defmethod expr/codegen-call [:multi_field_interval :utf8 :utf8 :int :utf8 :int] [{:keys [args]}]
   (let [[_ unit1 precision unit2 fractional-precision] (map :literal args)]
 
     (ensure-interval-precision-valid precision)
@@ -897,7 +897,7 @@
                     "HOUR" `(int 0)
                     "MINUTE" `(int 0)))})
 
-(defmethod expr/codegen-call [:date-trunc :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ [_ts ts-unit :as ts-type]] :arg-types}]
+(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ [_ts ts-unit :as ts-type]] :arg-types}]
   {:return-type ts-type
    :->call-code (fn [[_ x]]
                   (-> `(-> ~(ts->ldt x ts-unit)
@@ -913,7 +913,7 @@
                                                 "MICROSECOND" `ChronoUnit/MICROS))))
                       (ldt->ts ts-unit)))})
 
-(defmethod expr/codegen-call [:date-trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_tstz ts-unit tz :as ts-type]] :arg-types}]
+(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_tstz ts-unit tz :as ts-type]] :arg-types}]
   (let [zone-id-sym (gensym 'zone-id)]
     {:return-type ts-type
      :batch-bindings [[zone-id-sym `(ZoneId/of ~tz)]]
@@ -931,7 +931,7 @@
                                                   "MICROSECOND" `ChronoUnit/MICROS))))
                         (zdt->ts ts-unit)))}))
 
-(defmethod expr/codegen-call [:date-trunc :utf8 :date] [{[{field :literal} _] :args, [_ [_date _date-unit :as date-type]] :arg-types}]
+(defmethod expr/codegen-call [:date_trunc :utf8 :date] [{[{field :literal} _] :args, [_ [_date _date-unit :as date-type]] :arg-types}]
   ;; FIXME this assumes epoch-day
   {:return-type date-type
    :->call-code (fn [[_ epoch-day-code]]
@@ -973,14 +973,14 @@
 
 (def ^:private default-time-precision 6)
 
-(defmethod expr/codegen-call [:current-timestamp] [_]
+(defmethod expr/codegen-call [:current_timestamp] [_]
   (current-timestamp default-time-precision))
 
-(defmethod expr/codegen-call [:current-timestamp :int] [{[{precision :literal}] :args}]
+(defmethod expr/codegen-call [:current_timestamp :int] [{[{precision :literal}] :args}]
   (assert (integer? precision) "precision must be literal for now")
   (current-timestamp precision))
 
-(defmethod expr/codegen-call [:current-date] [_]
+(defmethod expr/codegen-call [:current_date] [_]
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
   ;; but Arrow expects Dates to be in UTC.
   ;; we then turn DateDays into LocalDates, which confuses things further.
@@ -1003,10 +1003,10 @@
                                    (quot ~(nanos-divisor precision))))
                         (truncate-for-precision precision)))}))
 
-(defmethod expr/codegen-call [:current-time] [_]
+(defmethod expr/codegen-call [:current_time] [_]
   (current-time default-time-precision))
 
-(defmethod expr/codegen-call [:current-time :int] [{[{precision :literal}] :args}]
+(defmethod expr/codegen-call [:current_time :int] [{[{precision :literal}] :args}]
   (assert (integer? precision) "precision must be literal for now")
   (current-time precision))
 
@@ -1020,10 +1020,10 @@
                                     (quot (.getNano ldt#) ~(nanos-divisor precision)))))
                         (truncate-for-precision precision)))}))
 
-(defmethod expr/codegen-call [:local-timestamp] [_]
+(defmethod expr/codegen-call [:local_timestamp] [_]
   (local-timestamp default-time-precision))
 
-(defmethod expr/codegen-call [:local-timestamp :num] [{[{precision :literal}] :args}]
+(defmethod expr/codegen-call [:local_timestamp :num] [{[{precision :literal}] :args}]
   (assert (integer? precision) "precision must be literal for now")
   (local-timestamp precision))
 
@@ -1038,10 +1038,10 @@
                                    (quot ~(nanos-divisor precision))))
                         (truncate-for-precision precision)))}))
 
-(defmethod expr/codegen-call [:local-time] [_]
+(defmethod expr/codegen-call [:local_time] [_]
   (local-time default-time-precision))
 
-(defmethod expr/codegen-call [:local-time :int] [{[{precision :literal}] :args}]
+(defmethod expr/codegen-call [:local_time :int] [{[{precision :literal}] :args}]
   (assert (integer? precision) "precision must be literal for now")
   (local-time precision))
 
@@ -1163,24 +1163,28 @@
   (and (= (from p1) (from p2))
        (> (to p1) (to p2))))
 
-(doseq [[pred-name pred-sym] [[:contains? `temporal-contains?]
-                              [:strictly-contains? `temporal-strictly-contains?]
+(doseq [[pred-name pred-sym] [[:contains `temporal-contains?]
+                              [:strictly_contains `temporal-strictly-contains?]
                               [:overlaps? `overlaps?]
-                              [:strictly-overlaps? `strictly-overlaps?]
+                              [:strictly_overlaps `strictly-overlaps?]
                               [:equals? `equals?]
                               [:precedes? `precedes?]
-                              [:strictly-precedes? `strictly-precedes?]
-                              [:immediately-precedes? `immediately-precedes?]
-                              [:succeeds? `succeeds?]
-                              [:strictly-succeeds? `strictly-succeeds?]
-                              [:immediately-succeeds? `immediately-succeeds?]
-                              [:leads? `leads?]
-                              [:strictly-leads? `strictly-leads?]
-                              [:immediately-leads? `immediately-leads?]
-                              [:lags? `lags?]
-                              [:strictly-lags? `strictly-lags?]
-                              [:immediately-lags? `immediately-lags?]]]
+                              [:strictly_precedes `strictly-precedes?]
+                              [:immediately_precedes `immediately-precedes?]
+                              [:succeeds `succeeds?]
+                              [:strictly_succeeds `strictly-succeeds?]
+                              [:immediately_succeeds `immediately-succeeds?]
+                              [:leads `leads?]
+                              [:strictly_leads `strictly-leads?]
+                              [:immediately_leads `immediately-leads?]
+                              [:lags `lags?]
+                              [:strictly_lags `strictly-lags?]
+                              [:immediately_lags `immediately-lags?]]]
   (defmethod expr/codegen-call [pred-name :struct :struct] [_]
     {:return-type :bool
      :->call-code (fn [[p1-code p2-code]]
-                    `(~pred-sym ~p1-code ~p2-code))}))
+                    `(~pred-sym ~p1-code ~p2-code))})
+
+  ;; add aliases with `?` suffix
+  (defmethod expr/codegen-call [(keyword (str (name pred-name) "?")) :struct :struct] [expr]
+    (expr/codegen-call (assoc expr :f pred-name))))

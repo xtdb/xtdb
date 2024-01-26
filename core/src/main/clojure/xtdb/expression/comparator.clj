@@ -29,17 +29,17 @@
      :->call-code (fn [emitted-args]
                     `(util/compare-nio-buffers-unsigned ~@emitted-args))}))
 
-(doseq [[f left-type right-type res] [[:compare-nulls-first :null :null 0]
-                                      [:compare-nulls-first :null :any -1]
-                                      [:compare-nulls-first :any :null 1]
-                                      [:compare-nulls-last :null :null 0]
-                                      [:compare-nulls-last :null :any 1]
-                                      [:compare-nulls-last :any :null -1]]]
+(doseq [[f left-type right-type res] [[:compare_nulls_first :null :null 0]
+                                      [:compare_nulls_first :null :any -1]
+                                      [:compare_nulls_first :any :null 1]
+                                      [:compare_nulls_last :null :null 0]
+                                      [:compare_nulls_last :null :any 1]
+                                      [:compare_nulls_last :any :null -1]]]
   (defmethod expr/codegen-call [f left-type right-type] [_]
     {:return-type :i32
      :->call-code (constantly res)}))
 
-(doseq [f [:compare-nulls-first :compare-nulls-last]]
+(doseq [f [:compare_nulls_first :compare_nulls_last]]
   (defmethod expr/codegen-call [f :any :any] [expr]
     (expr/codegen-call (assoc expr :f :compare))))
 
@@ -53,8 +53,8 @@
               {cont :continue, :as emitted-expr}
               (expr/codegen-expr {:op :call,
                                   :f (case null-ordering
-                                       :nulls-first :compare-nulls-first
-                                       :nulls-last :compare-nulls-last)
+                                       :nulls-first :compare_nulls_first
+                                       :nulls-last :compare_nulls_last)
                                   :args [{:op :variable, :variable left-col-sym, :idx left-idx-sym}
                                          {:op :variable, :variable right-col-sym, :idx right-idx-sym}]}
 
