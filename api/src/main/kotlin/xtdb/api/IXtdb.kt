@@ -77,19 +77,4 @@ interface IXtdb : IXtdbSubmitClient, AutoCloseable {
      */
     @JvmOverloads
     fun openQuery(sql: String, opts: QueryOptions = QueryOptions()) = await(openQueryAsync(sql, opts))
-
-    companion object {
-        fun IXtdb.openQueryAsync(sql: String, configure: QueryOptions.() -> Unit) =
-            openQueryAsync(sql, QueryOptions().also { it.configure() })
-
-        fun IXtdb.openQuery(sql: String, configure: QueryOptions.() -> Unit) =
-            openQuery(sql, QueryOptions().also { it.configure() })
-
-        fun IXtdb.openQueryAsync(q: XtqlQuery, configure: QueryOptions.() -> Unit) =
-            openQueryAsync(q, QueryOptions().also { it.configure() })
-
-        fun IXtdb.openQuery(q: XtqlQuery, configure: QueryOptions.() -> Unit) =
-            openQuery(q, QueryOptions().also { it.configure() })
-    }
 }
-

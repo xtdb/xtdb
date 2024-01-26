@@ -144,7 +144,8 @@ export default defineConfig({
               label: 'Clojure',
               items: [
                 { label: 'Getting started', link: '/drivers/clojure/getting-started' },
-                { label: 'Configuration', link: '/drivers/clojure/configuration' },
+                { label: 'Configuration cookbook', link: '/drivers/clojure/configuration' },
+                { label: 'Transactions cookbook', link: '/drivers/clojure/txs' },
                 { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: { target: '_blank' } }
               ]
             },

@@ -1,0 +1,444 @@
+---
+title: Transactions cookbook
+---
+:txs: /reference/main/xtql/txs
+:codox: /drivers/clojure/codox
+
+This document provides examples for EDN transaction operations, to be submitted to link:{codox}/xtdb.api.html#var-submit-tx[`xtdb.api/submit-tx`^].
+
+Main article: link:{txs}[Transactions]
+
+== Transaction operations
+
+=== `put-docs`
+
+Main article: link:{txs}#_putdocs[put-docs]
+
+[source,clojure]
+----
+[:put-docs
+ ;; -- required
+
+ ;; options map
+ ;; * can just provide `<table>` rather than a map if there are no other options
+ {;; -- required
+
+  ;; table to put docs into (keyword)
+  :into <table>
+
+  ;; --optional
+
+  ;; valid-from, valid-to can be `java.util.Date`, `java.time.Instant` or `java.time.ZonedDateTime`
+  :valid-from #inst "..."
+  :valid-to #inst "..."
+  }
+
+ ;; -- required
+ ;; documents to submit (variadic, 0..n)
+ ;; * each must contain `:xt/id`
+ & <docs>
+ ]
+----
+
+==== Examples
+
+* single document
++
+[source,clojure]
+----
+[:put-docs :my-table {:xt/id :foo}]
+----
+* with options
++
+[source,clojure]
+----
+[:put-docs {:into :my-table, :valid-from #inst "2024-01-01"}
+ {:xt/id :foo, ...}
+ {:xt/id :bar, ...}]
+----
+* dynamically generated
++
+[source,clojure]
+----
+(into [:put-docs {:into :my-table, ...}]
+      (->> (range 100)
+           (map (fn [n]
+                  {:xt/id n, :n-str (str n)}))))
+----
+
+=== `delete-docs`
+
+Main article: link:{txs}#delete-docs[delete-docs]
+
+[source,clojure]
+----
+[:delete-docs
+ ;; -- required
+
+ ;; options map
+ ;; * can just provide `<table>` rather than a map if there are no other options
+ {;; -- required
+
+  ;; table to delete docs from
+  :from <table>
+
+  ;; --optional
+
+  ;; valid-from, valid-to can be `java.util.Date`, `java.time.Instant` or `java.time.ZonedDateTime`
+  :valid-from #inst "..."
+  :valid-to #inst "..."
+  }
+
+ ;; -- required
+ ;; document ids to delete (variadic, 0..n)
+ & <ids>
+ ]
+----
+
+Examples:
+
+* single document
++
+[source,clojure]
+----
+[:delete-docs :my-table :foo]
+----
+* with options
++
+[source,clojure]
+----
+[:delete-docs {:from :my-table, :valid-from #inst "2024-01-01"}
+ :foo :bar ...]
+----
+* dynamically generated
++
+[source,clojure]
+----
+(into [:delete-docs {:from :my-table, ...}]
+      (range 100))
+----
+
+=== `erase-docs`
+
+Main article: link:{txs}#erase-docs[erase-docs]
+
+[source,clojure]
+----
+[:erase-docs
+ ;; -- required
+
+ ;; table to erase documents from
+ <table>
+
+ ;; document ids to erase (variadic, 0..n)
+ & <ids>
+ ]
+----
+
+Examples:
+
+* single document
++
+[source,clojure]
+----
+[:erase-docs :my-table :foo]
+----
+* dynamically generated
++
+[source,clojure]
+----
+(into [:erase-docs :my-table] (range 100))
+----
+
+=== `insert-into`
+
+Main article: link:{txs}#_insertinto[insert-into]
+
+[source,clojure]
+----
+[:insert-into
+ ;; -- required
+ <table>
+ <query>]
+----
+
+Example:
+
+* copy from another table
++
+[source,sql]
+----
+INSERT INTO users SELECT xt$id, first_name AS given_name, last_name AS family_name FROM old_users
+----
++
+[source,clojure]
+----
+[:insert-into :users (from :old-users [xt/id {:first-name given-name} {:last-name family-name}])]
+----
+
+=== `update`
+
+Main article: link:{txs}#_update[update]
+
+[source,clojure]
+----
+[:update
+ {;; -- required
+  ;; table: keyword
+  :table <table>
+
+  ;; -- optional
+
+  ;; specify the valid-time of the update
+  ;; see 'temporal filters'
+  :for-valid-time (from <valid-from>)
+  :for-valid-time (to <valid-to>)
+  :for-valid-time (in <valid-from> <valid-to>)
+
+  ;; select the documents to update using binding constraints.
+  ;; * if not provided, will update every document in the table
+  ;; * may also bind logic variables for use in `:set` or `:unify`
+  ;; see 'binding specs'
+  :bind [& <bindings>]
+
+  ;; -- required
+  ;; Map<Keyword, Expr>
+  ;; see 'expressions'
+  :set { ... }
+
+  ;; -- optional
+  ;; extra clauses to unify with (e.g. to join against another table)
+  ;; see 'unify'
+  :unify [& <unify-clauses>]}
+
+ ;; -- optional, variadic (0..n)
+ ;; argument-rows to be used in the `:bind`, `:set` or `:unify` clauses.
+ ;; * if provided, the update operation will be executed for every argument-row.
+ ;; * see 'argument specs'
+ & <arg-rows>]
+----
+
+Example:
+
+* increment a 'version' field:
++
+[source,sql]
+----
+UPDATE users SET version = version + 1 WHERE email = 'james@example.com'
+----
++
+[source,clojure]
+----
+[:update {:table :users,
+          :bind [{:email $email}, version],
+          :set {:version (+ version 1)}}
+ {:email "james@example.com"}]
+----
+
+=== `delete`
+
+Main article: link:{txs}#_delete[delete]
+
+[source,clojure]
+----
+[:delete
+ {;; -- required
+  ;; table: keyword
+  :from <table>
+
+  ;; -- optional
+
+  ;; specify the valid-time of the delete
+  ;; see 'temporal filters'
+  :for-valid-time (from <valid-from>)
+  :for-valid-time (to <valid-to>)
+  :for-valid-time (in <valid-from> <valid-to>)
+
+  ;; select the documents to delete using binding constraints.
+  ;; * if not provided, will delete every document in the table
+  ;; * may also bind logic variables for use in `:unify`
+  ;; see 'binding specs'
+  :bind [& <bindings>]
+
+  ;; extra clauses to unify with (e.g. to join against another table)
+  ;; see 'unify'
+  :unify [& <unify-clauses>]}
+
+ ;; -- optional, variadic (0..n)
+ ;; argument-rows to be used in the `:bind` or `:unify` clauses.
+ ;; * if provided, the delete operation will be executed for every argument-row.
+ ;; * see 'argument specs'
+ & <arg-rows>]
+----
+
+Example:
+
+* delete by email
++
+[source,sql]
+----
+DELETE FROM users WHERE email = 'james@example.com'
+----
++
+[source,clojure]
+----
+[:delete {:table :users
+          :bind [{:email $email}]}
+ {:email "james@example.com"}]
+----
+
+=== `erase`
+
+Main article: link:{txs}#_erase[erase]
+
+[source,clojure]
+----
+[:erase
+ {;; -- required
+  ;; table: keyword
+  :from <table>
+
+  ;; -- optional
+
+  ;; select the documents to erase using binding constraints.
+  ;; * if not provided, will erase every document in the table
+  ;; * may also bind logic variables for use in `:unify`
+  ;; see 'binding specs'
+  :bind [& <bindings>]
+
+  ;; extra clauses to unify with (e.g. to join against another table)
+  ;; see 'unify'
+  :unify [& <unify-clauses>]}
+
+ ;; -- optional, variadic (0..n)
+ ;; argument-rows to be used in the `:bind` or `:unify` clauses.
+ ;; * if provided, the erase operation will be executed for every argument-row.
+ ;; * see 'argument specs'
+ & <arg-rows>]
+----
+
+Example:
+
+* erase by email
++
+[source,sql]
+----
+ERASE FROM users WHERE email = 'james@example.com'
+----
++
+[source,clojure]
+----
+[:erase {:table :users
+         :bind [{:email $email}]}
+ {:email "james@example.com"}]
+----
+
+[#asserts]
+=== Asserts
+
+Main article: link:{txs}#asserts[asserts]
+
+[source,clojure]
+----
+[:assert-exists
+ ;; -- required
+ <query>
+
+ ;; -- optional
+ ;; maps
+ & <arg-rows>]
+
+[:assert-not-exists
+ ;; -- required
+ <query>
+
+ ;; -- optional
+ ;; maps
+ & <arg-rows>]
+----
+
+Example:
+
+* check email doesn't exist
++
+[source,clojure]
+----
+[;; first, we assert the email doesn't already exist
+ [:assert-not-exists '(from :users [{:email $email}])
+  {:email "james@example.com"}]
+
+ ;; then, if the pre-condition holds, put a document
+ [:put-docs :users {:xt/id :james, :email "james@example.com", ...}]]
+----
+
+=== `call`
+
+Main article: link:{txs}#_call[call]
+
+[source,clojure]
+----
+[:call
+ ;; -- required
+ <fn-id>
+
+ ;; -- optional
+ ;; variadic: arguments to pass to the function
+ & <args>]
+----
+
+Example:
+
+* call a function to increment a field:
++
+[source,clojure]
+----
+[:call :increment-version :my-eid]
+----
+
+Transaction functions are defined using `:put-fn`:
+
+[source,clojure]
+----
+[:put-fn
+ ;; -- required
+
+ <fn-id>
+ <fn-body>]
+----
+
+Transaction functions are evaluated with the Small Clojure Interpreter (https://github.com/babashka/sci[SCI^]).
+They should return a vector of other transaction operations (including invoking other transaction functions).
+If they return false, or throw an exception, the transaction will be rolled back.
+
+There are a few functions available in scope during the transaction function:
+
+* `(q <query> <opts>?)` runs an link:./queries[XTQL]/SQL query
+* `+*current-tx*+`: the current transaction being indexed.
+
+Example:
+
+* function to increment a version
++
+[source,clojure]
+----
+[:put-fn :increment-version
+ '(fn [eid]
+    (let [doc (first (q '(from :my-table [{:xt/id $eid} *])
+                        {:args {:eid eid}}))]
+      [[:put-docs :my-table
+        (-> doc (update :version inc))]]))]
+----
++
+(in practice, use link:#_update[`:update`] for this exact function)
+
+== Transaction options
+
+Main article: link:{txs}#_transaction_options[transaction options]
+
+[source,clojure]
+----
+{;; -- optional
+ :system-time #inst "2024-01-01"
+ :default-tz #time/zone "America/Los_Angeles"
+ :default-all-valid-time? false}
+----
