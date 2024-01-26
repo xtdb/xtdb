@@ -1,0 +1,109 @@
+---
+title: Azure Blob Storage
+---
+
+Azure Blob Storage can be used as a shared object-store for XTDB's remote storage module.
+
+[NOTE]
+====
+The Azure Blob Storage module uses an Event Grid topic and Service Bus Topic to maintain a local copy of the file listings on Azure, saving on expensive/lengthy operations to list objects on Azure Blob Storage.
+
+If not using the link:#resource-manager[Resource Manager template], ensure that you have a similar setup to track file changes on whichever storage account/container you are using, and that XTDB has relevant permissions to use all of the services. 
+====
+
+== Setup
+
+First, ensure the `com.xtdb/xtdb-azure` Maven dependency is added to your XTDB node.
+
+=== Infrastructure
+
+[#resource-manager]
+[NOTE]
+.Resource Manager template
+====
+We provide a https://github.com/xtdb/xtdb/blob/2.x/modules/azure/azure-resource-manager/azure-stack.json[parameterized 'Azure Resource Manager' stack] to help set up everything that you need.
+====
+
+To use Azure Blob Storage as the object store, the following infrastructure is required:
+
+. An **Azure Storage Account**.
+.. A **Storage Account Container** within the storage account.
+. An **EventGrid System Topic**, subscribed to blob creation/deletion events on the container.
+. A `standard` tier **Service Bus Namespace**
+.. A **Service Bus Topic** within the namespace.
+. A Custom Role Definition, granting XTDB permission to:
+.. Use the created storage container (Get, Put, Delete and List)
+.. Read messages sent to **EventGrid**
+.. Create Subscriptions on the **Service Bus Topic**
+[source,json]
+----
+{
+  "permissions": [
+    {
+      "actions": [
+        "Microsoft.ServiceBus/*",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/write",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/read",
+        "Microsoft.EventGrid/systemTopics/read",
+        "Microsoft.EventGrid/systemTopics/eventSubscriptions/read",
+        "Microsoft.EventGrid/systemTopics/eventSubscriptions/write",
+        "Microsoft.EventGrid/systemTopics/eventSubscriptions/delete",
+        "Microsoft.EventGrid/systemTopics/eventSubscriptions/getFullUrl/action",
+        "Microsoft.EventGrid/systemTopics/eventSubscriptions/getDeliveryAttributes/action"
+      ],
+      "notActions": [],
+      "dataActions": [
+        "Microsoft.ServiceBus/*",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/move/action"
+      ],
+      "notDataActions": []
+    }
+  ]
+}
+----
+
+=== Authentication
+
+Authentication is done via the Azure SDK, which uses the *DefaultAzureCredential*. See the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[Azure Documentation] for setup instructions.
+
+== Configuration
+
+To use the Azure module, include the following in your node configuration:
+
+[source,yaml]
+----
+storage: !Remote
+  objectStore: !Azure
+    # -- required
+
+    # The storage account which has the storage container
+    storageAccount: storage-account
+    
+    # The name of the blob storage container to be used as the object store
+    container: xtdb-container
+
+    # The service bus namespace which contains the serviceBusTopicName
+    serviceBusNamespace: xtdb-service-bus
+
+    # The name of the service bus topic which is collecting notifications from the container
+    serviceBusTopicName: xtdb-service-bus-topic
+
+    # -- optional
+    # A file path to prefix all of your files with
+    # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+    # prefix: my-xtdb-node
+
+  localDiskCache: /var/cache/xtdb/object-store
+----
+
+=== Examples
+
+For examples on how to enable/configure the Azure module as part of your node, for each client library, see the individual SDK documentation:
+
+* link:/drivers/clojure/configuration#azure[Clojure]
+* link:/drivers/kotlin/kdoc/modules/xtdb-azure/xtdb.api.storage/-azure-blob-storage/index.html[Kotlin]

@@ -80,8 +80,8 @@ storage: !Remote
 Each Object Store implementation is configured separately - see the individual documentation for more information:
 
 * link:storage/s3[S3]
-// * link:/storage/azure[Azure]
-// * link:/storage/google-cloud[Google Cloud]
+* link:storage/azure[Azure]
+// * link:storage/google-cloud[Google Cloud]
 
 For examples on how to enable/configure the remote storage module as part of your node, see the individual client library documentation:
 

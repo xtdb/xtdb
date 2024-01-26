@@ -25,17 +25,17 @@ export default defineConfig({
       },
 
       sidebar: [
-        { label: '← xtdb.com', link: 'https://xtdb.com', attrs: {target: '_blank'}},
+        { label: '← xtdb.com', link: 'https://xtdb.com', attrs: { target: '_blank' } },
 
-        { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: {target: '_blank'}},
+        { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
 
         {
           label: 'Introduction',
           collapsed: false,
           items: [
             { label: 'Overview', link: '/' },
-            { label: 'Why XTDB?', link: '/intro/why-xtdb'},
-            { label: 'Getting started', link: '/intro/getting-started'},
+            { label: 'Why XTDB?', link: '/intro/why-xtdb' },
+            { label: 'Getting started', link: '/intro/getting-started' },
             {
               label: 'What is XTDB?',
               items: [
@@ -46,8 +46,8 @@ export default defineConfig({
                 // { label: 'Bitemporality', link: '/intro/bitemporality' }
               ]
             },
-            { label: 'Community', link: '/intro/community'},
-            { label: 'Roadmap', link: '/intro/roadmap'},
+            { label: 'Community', link: '/intro/community' },
+            { label: 'Roadmap', link: '/intro/roadmap' },
           ],
         },
 
@@ -79,15 +79,16 @@ export default defineConfig({
               label: 'Transaction Log',
               items: [
                 { label: 'Overview', link: '/config/tx-log' },
-                { label: 'Kafka', link: '/config/tx-log/kafka'},
+                { label: 'Kafka', link: '/config/tx-log/kafka' },
               ],
             },
 
             {
               label: 'Storage',
               items: [
-                { label: 'Overview', link: '/config/storage'},
-                { label: 'S3', link: '/config/storage/s3'},
+                { label: 'Overview', link: '/config/storage' },
+                { label: 'S3', link: '/config/storage/s3' },
+                { label: 'Azure Blob Storage', link: '/config/storage/azure' }
               ]
             },
           ]
@@ -103,8 +104,8 @@ export default defineConfig({
               label: 'XTQL',
               collapsed: true,
               items: [
-                { label: 'Transactions', link: '/reference/main/xtql/txs'},
-                { label: 'Queries', link: '/reference/main/xtql/queries'},
+                { label: 'Transactions', link: '/reference/main/xtql/txs' },
+                { label: 'Queries', link: '/reference/main/xtql/queries' },
               ]
             },
 
@@ -112,23 +113,23 @@ export default defineConfig({
               label: 'SQL',
               collapsed: true,
               items: [
-                { label: 'Transactions', link: '/reference/main/sql/txs'},
-                { label: 'Queries', link: '/reference/main/sql/queries'},
+                { label: 'Transactions', link: '/reference/main/sql/txs' },
+                { label: 'Queries', link: '/reference/main/sql/queries' },
               ]
             },
 
-            { label: 'Data Types', link: '/reference/main/data-types'},
+            { label: 'Data Types', link: '/reference/main/data-types' },
 
             {
               label: 'Standard Library',
               collapsed: true,
               items: [
-                { label: 'Overview', link: '/reference/main/stdlib'},
-                { label: 'Predicates', link: '/reference/main/stdlib/predicates'},
-                { label: 'Numeric functions', link: '/reference/main/stdlib/numeric'},
-                { label: 'String functions', link: '/reference/main/stdlib/string'},
-                { label: 'Temporal functions', link: '/reference/main/stdlib/temporal'},
-                { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates'},
+                { label: 'Overview', link: '/reference/main/stdlib' },
+                { label: 'Predicates', link: '/reference/main/stdlib/predicates' },
+                { label: 'Numeric functions', link: '/reference/main/stdlib/numeric' },
+                { label: 'String functions', link: '/reference/main/stdlib/string' },
+                { label: 'Temporal functions', link: '/reference/main/stdlib/temporal' },
+                { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates' },
               ]
             },
           ]
@@ -145,7 +146,7 @@ export default defineConfig({
               items: [
                 { label: 'Getting started', link: '/drivers/clojure/getting-started' },
                 { label: 'Configuration', link: '/drivers/clojure/configuration' },
-                { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: {target: '_blank'} }
+                { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: { target: '_blank' } }
               ]
             },
 
@@ -153,11 +154,11 @@ export default defineConfig({
               label: 'Kotlin',
               items: [
                 { label: 'Getting started', link: '/drivers/kotlin/getting-started' },
-                { label: 'KDoc ↗', link: '/drivers/kotlin/kdoc/index.html', attrs: {target: '_blank'} }
+                { label: 'KDoc ↗', link: '/drivers/kotlin/kdoc/index.html', attrs: { target: '_blank' } }
               ]
             },
 
-            { label: 'HTTP (OpenAPI) ↗', link: '/drivers/http/openapi/index.html', attrs: {target: '_blank'}},
+            { label: 'HTTP (OpenAPI) ↗', link: '/drivers/http/openapi/index.html', attrs: { target: '_blank' } },
 
             {
               label: 'Java',

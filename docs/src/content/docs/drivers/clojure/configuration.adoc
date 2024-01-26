@@ -111,7 +111,7 @@ Main article: link:/config/storage#remote[remote storage]
                     ;; Each object store implementation has its own configuration - 
                     ;; see below for some examples.
                     :object-store [:object-store-implementation {}]
-                    
+
                     ;; accepts `String`, `File` or `Path`
                     :local-disk-cache "/tmp/local-disk-cache"
 
@@ -120,7 +120,6 @@ Main article: link:/config/storage#remote[remote storage]
                     ;; :max-cache-bytes 536870912
                     }]}
 ----
-
 
 === S3
 
@@ -136,8 +135,29 @@ Main article: link:/config/storage/s3[S3]
 
                             ;; -- optional
 
-                            ;; :prefix my-xtdb-node
+                            ;; :prefix "my-xtdb-node"
                             ;; :configurator (reify S3Configurator
                             ;;                 ...)
+                           }]}]}
+----
+
+[#azure]
+=== Azure Blob Storage
+
+Main article: link:/config/storage/azure[Azure Blob Storage]
+
+[source,clojure]
+----
+{:storage [:remote
+           {:object-store [:azure
+                           {;; -- required
+                            :storage-account "storage-account"
+                            :container "xtdb-container"
+                            :service-bus-namespace "xtdb-service-bus"
+                            :service-bus-topic-name "xtdb-service-bus-topic"
+
+                            ;; -- optional
+
+                            ;; :prefix "my-xtdb-node"
                            }]}]}
 ----

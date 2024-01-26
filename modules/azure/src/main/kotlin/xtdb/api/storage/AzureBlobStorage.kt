@@ -20,6 +20,24 @@ import java.nio.file.Path
  * Authentication for the components in the module is done via the [DefaultAzureCredential] class - you will need to set up authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
  *
  * For more info on setting up the necessary Azure infrastructure to use Azure Blob Storage as an XTDB object store, see the section on setting up the [Azure Resource Manager Stack](https://github.com/xtdb/xtdb/tree/2.x/modules/azure#azure-resource-manager-stack) within our Azure docs.
+ * 
+ * Example usage, as part of a node config:
+ * ```kotlin
+ * Xtdb.openNode {
+ *    remoteStorage(
+ *       objectStore = azureBlobStorage(
+ *          storageAccount = "xtdb-storage-account",
+ *          container = "xtdb-container",
+ *          serviceBusNamespace = "xtdb-service-bus-namespace",
+ *          serviceBusTopicName = "xtdb-service-bus-topic"
+ *       ) {
+ *          prefix = Path.of("my/custom/prefix")
+ *       },
+ *       localDiskCache = Paths.get("test-path")
+ *    ),
+ *    ...
+ * }
+ * ```
  */
 object AzureBlobStorage {
     /**
