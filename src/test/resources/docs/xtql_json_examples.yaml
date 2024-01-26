@@ -13,8 +13,8 @@ aggr-json: |
         {
           "from": "orders",
           "bind": [
-           { "customerId": {"xt:lvar": "customerId"} },
-           { "orderValue": { "xt:lvar": "orderValue"} }
+           { "customerId": { "xt:lvar": "customerId" } },
+           { "orderValue": { "xt:lvar": "orderValue" } }
           ]
         }
       ]
@@ -23,8 +23,8 @@ aggr-json: |
       "aggregate": [
         "customerId",
         "customerName",
-        { "orderCount": { "xt:call": "row-count", "args": []}},
-        { "totalValue": { "xt:call": "sum", "args": [ { "xt:lvar": "orderValue" } ] }}
+        { "orderCount": { "xt:call": "rowCount", "args": [] } },
+        { "totalValue": { "xt:call": "sum", "args": [ { "xt:lvar": "orderValue" } ] } }
       ]
     }
   ]
@@ -251,7 +251,7 @@ where-json: |
         {
           "xt:call": ">",
           "args": [
-            { "xt:call": "current-timestamp" },
+            { "xt:call": "currentTimestamp" },
             {
               "xt:call": "+",
               "args": [

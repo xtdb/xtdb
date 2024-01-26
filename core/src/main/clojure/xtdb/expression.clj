@@ -486,7 +486,7 @@
                                                ~((:continue (get emitted-thens local-type)) f))))))}))
         (wrap-boxed-poly-return opts))))
 
-(def ^:private normalise-fn-name
+(def normalise-fn-name
   (-> (fn [f]
         (let [f (keyword (namespace f) (name f))]
           (case f

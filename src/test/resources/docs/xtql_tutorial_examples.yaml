@@ -503,7 +503,7 @@ DML-Update-bitemporal-json: |
                 "bind": [ { "postId": { "xt:param": "$postId" } } ]
               },
               {
-                "aggregate": [ { "cc": { "xt:call": "row-count", "args": [] } } ]
+                "aggregate": [ { "cc": { "xt:call": "rowCount", "args": [] } } ]
               }
             ]
           }

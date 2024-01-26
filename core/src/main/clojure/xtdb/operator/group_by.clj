@@ -109,9 +109,9 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.operator.group_by.IAggregateSpecFactory ->aggregate-factory
   (fn [{:keys [f from-name from-type to-name zero-row?]}]
-    (keyword (name f))))
+    (expr/normalise-fn-name f)))
 
-(defmethod ->aggregate-factory :row-count [{:keys [to-name zero-row?]}]
+(defmethod ->aggregate-factory :row_count [{:keys [to-name zero-row?]}]
   (reify IAggregateSpecFactory
     (getToColumnName [_] to-name)
     (getToColumnField [_] (types/col-type->field :i64))
@@ -352,8 +352,8 @@
               (util/try-close sumx2-agg)
               (util/try-close countx-agg))))))))
 
-(defmethod ->aggregate-factory :var-pop [agg-opts] (->variance-agg-factory :var-pop agg-opts))
-(defmethod ->aggregate-factory :var-samp [agg-opts] (->variance-agg-factory :var-samp agg-opts))
+(defmethod ->aggregate-factory :var_pop [agg-opts] (->variance-agg-factory :var-pop agg-opts))
+(defmethod ->aggregate-factory :var_samp [agg-opts] (->variance-agg-factory :var-samp agg-opts))
 
 (defn- ->stddev-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
   (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type
@@ -381,10 +381,10 @@
               (util/try-close res-vec)
               (util/try-close variance-agg))))))))
 
-(defmethod ->aggregate-factory :stddev-pop [agg-opts]
+(defmethod ->aggregate-factory :stddev_pop [agg-opts]
   (->stddev-agg-factory :var-pop agg-opts))
 
-(defmethod ->aggregate-factory :stddev-samp [agg-opts]
+(defmethod ->aggregate-factory :stddev_samp [agg-opts]
   (->stddev-agg-factory :var-samp agg-opts))
 
 (defn- assert-supported-min-max-types [from-types to-type]
@@ -422,11 +422,11 @@
                                              :else {:op :local, :local acc-local}}}))))
 
 (defmethod ->aggregate-factory :min [agg-opts] (min-max-factory :< agg-opts))
-(defmethod ->aggregate-factory :min-all [agg-opts] (min-max-factory :< agg-opts))
-(defmethod ->aggregate-factory :min-distinct [agg-opts] (min-max-factory :< agg-opts))
+(defmethod ->aggregate-factory :min_all [agg-opts] (min-max-factory :< agg-opts))
+(defmethod ->aggregate-factory :min_distinct [agg-opts] (min-max-factory :< agg-opts))
 (defmethod ->aggregate-factory :max [agg-opts] (min-max-factory :> agg-opts))
-(defmethod ->aggregate-factory :max-all [agg-opts] (min-max-factory :> agg-opts))
-(defmethod ->aggregate-factory :max-distinct [agg-opts] (min-max-factory :> agg-opts))
+(defmethod ->aggregate-factory :max_all [agg-opts] (min-max-factory :> agg-opts))
+(defmethod ->aggregate-factory :max_distinct [agg-opts] (min-max-factory :> agg-opts))
 
 (defn- wrap-distinct [^IAggregateSpecFactory agg-factory, from-name, from-type]
   (reify IAggregateSpecFactory
@@ -475,25 +475,25 @@
             (util/try-close agg-spec)
             (run! util/try-close rel-maps)))))))
 
-(defmethod ->aggregate-factory :count-distinct [{:keys [from-name from-type] :as agg-opts}]
+(defmethod ->aggregate-factory :count_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :count))
       (wrap-distinct from-name from-type)))
 
-(defmethod ->aggregate-factory :count-all [agg-opts]
+(defmethod ->aggregate-factory :count_all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :count)))
 
-(defmethod ->aggregate-factory :sum-distinct [{:keys [from-name from-type] :as agg-opts}]
+(defmethod ->aggregate-factory :sum_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :sum))
       (wrap-distinct from-name from-type)))
 
-(defmethod ->aggregate-factory :sum-all [agg-opts]
+(defmethod ->aggregate-factory :sum_all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :sum)))
 
-(defmethod ->aggregate-factory :avg-distinct [{:keys [from-name from-type] :as agg-opts}]
+(defmethod ->aggregate-factory :avg_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :avg))
       (wrap-distinct from-name from-type)))
 
-(defmethod ->aggregate-factory :avg-all [agg-opts]
+(defmethod ->aggregate-factory :avg_all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :avg)))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
@@ -541,7 +541,7 @@
     (util/try-close acc-col)
     (util/try-close out-vec)))
 
-(defmethod ->aggregate-factory :array-agg [{:keys [from-name from-type to-name]}]
+(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name]}]
   (let [to-type [:list from-type]]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
@@ -552,8 +552,8 @@
                                 (vw/->vec-writer al (name to-name) (FieldType/notNullable #xt.arrow/type :union))
                                 nil 0 (ArrayList.))))))
 
-(defmethod ->aggregate-factory :array-agg-distinct [{:keys [from-name from-type] :as agg-opts}]
-  (-> (->aggregate-factory (assoc agg-opts :f :array-agg))
+(defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-type] :as agg-opts}]
+  (-> (->aggregate-factory (assoc agg-opts :f :array_agg))
       (wrap-distinct from-name from-type)))
 
 (defn- bool-agg-factory [step-f-kw {:keys [from-name] :as agg-opts}]

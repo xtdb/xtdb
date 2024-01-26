@@ -3,7 +3,8 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.expression :as expr])
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
                            Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs
@@ -108,11 +109,12 @@
   ;; directly, but wanted to avoid duplicating that code.
   (apply set/union (map (comp :required-vars plan-arg-spec) subquery-args)))
 
-(def ^:private aggregate-fn? (->> group-by/->aggregate-factory
-                                  (methods)
-                                  (keys)
-                                  (map symbol)
-                                  (set)))
+(def ^:private aggregate-fn?
+  (comp (->> group-by/->aggregate-factory
+             (methods)
+             (keys)
+             (set))
+        expr/normalise-fn-name))
 
 (extend-protocol ExprPlan
   Expr$Null

@@ -688,8 +688,7 @@
   (let [node tu/*node*]
     (xt/submit-tx node
                   [[:put-docs :comments {:xt/id (random-uuid), :post-id "my-post-id"}]
-                   (json-example-dml "DML-Update-bitemporal-json")])
-    ,)
+                   (json-example-dml "DML-Update-bitemporal-json")]))
 
   (t/is (= [{:comment-count 2}]
            (xt/q tu/*node* '(from :posts [comment-count])))))
