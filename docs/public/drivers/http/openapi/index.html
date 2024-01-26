@@ -1,26 +1,31 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta
-    name="description"
-    content="SwaggerIU"
-  />
-  <title>SwaggerUI</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.4.1/swagger-ui.css" />
-</head>
-<body>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@4.4.1/swagger-ui-bundle.js" crossorigin></script>
-  <script src="https://unpkg.com/swagger-ui-dist@4.4.1/swagger-ui-standalone-preset.js" crossorigin></script>
-  <script>
-    window.onload = () => {
-      window.ui = SwaggerUIBundle({
-        url: `/drivers/http/openapi/openapi.yaml`,
-        dom_id: '#swagger-ui',
-      });
-    };
-  </script>
-</body>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="module" src="https://unpkg.com/rapidoc/dist/rapidoc-min.js"></script>
+    <title>XTDB OpenAPI Specification</title>
+    <link rel="shortcut icon" href="/shared/favicon.svg" type="image/svg+xml">
+  </head>
+  <body>
+    <rapi-doc
+      spec-url="/drivers/http/openapi/openapi.yaml"
+      allow-authentication=false
+      allow-server-selection=false
+      allow-spec-url-load=false
+      allow-spec-file-load=false
+      allow-try=false
+      default-schema-tab=schema
+      render-style=focused
+      show-components="true"
+      show-header="false"
+      schema-expand-level=1
+    >
+      <img
+        slot="nav-logo"
+        src="/shared/images/logo-text.svg"
+        style="height: 4rem; margin: 0.5rem auto"
+      />
+    </rapi-doc>
+  </body>
 </html>
