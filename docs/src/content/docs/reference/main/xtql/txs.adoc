@@ -1,23 +1,13 @@
 ---
 title: XTQL Transactions
 ---
-:examples:  ../src/test/resources/docs/xtql_dml_json_examples.yaml
-:walkthrough: ../src/test/resources/docs/xtql_tutorial_examples.yaml
+:examples: ../src/test/resources/docs/xtql_dml_json_examples.yaml
 :openapi: /drivers/http/openapi/index.html
 
+Transactions in XTDB are submitted to the link:/config/tx-log[transaction log], to be processed asynchronously.
+They each consist of an array of link:#tx-ops[operations].
 
-XT transactions are submitted through a client's `submitTx` method or the JSON link:{openapi}#operations-default-post_tx[tx] endpoint.
-They specify how new data enters the systems or gets updated.
-
-.There are broadly two categories:
-* Simple transaction operations that do not contain a query.
-These include link:#_put[Put], link:#delete-docs[Delete Docs] and link:#erase-docs[Erase Docs]
-* XTQL DML (Direct Manipulation Language) transaction operations.
-These are characterized by their usage of a link:./queries[Query].
-These include link:#_insert_into[Insert],  link:#_update[Update], link:#_delete[Delete],
-link:#_delete[Erase] and link:#asserts[Asserts].
-
-
+For details about how transactions are submitted, see your individual client language documentation.
 
 .Clojure
 [%collapsible]
@@ -36,24 +26,10 @@ XTQL transactions are submitted through `xtdb.api/submit-tx` (`xtdb.api` aliased
 
 Upserts documents into the given table, optionally during the given valid time period.
 
-
-.JSON
-[%collapsible%open]
-====
 [source,json]
 ----
-include::{examples}[tags=put-json,indent=0]
+include::{examples}[tags=put-docs-json,indent=0]
 ----
-
-* `into`: table to insert into
-* `putDocs`: array of documents of which each must contain `xt$id`.
-* `validFrom`: timestamp (optional).
-   Defaults to the current time of the transaction if not provided.
-* `validTo`: timestamp (optinal).
-   Defaults to the end-of-time if not provided.
-
-====
-
 
 .Clojure
 [%collapsible]
@@ -75,24 +51,12 @@ include::{examples}[tags=put-json,indent=0]
 === `delete-docs`
 
 Deletes documents from the given table, optionally during the given valid time period.
-The default valid time behaviour as per link:#_put[Put], above.
+The default valid time behaviour is the same as link:#_put_docs[put], above.
 
-
-.JSON
-[%collapsible%open]
-====
 [source,json]
 ----
 include::{examples}[tags=delete-docs-json,indent=0]
 ----
-
-* `from`: table to delete from
-* `deleteDocs`: array of ids to delete.
-* `validFrom`: timestamp (optional).
-   Defaults to the current time of the transaction if not provided.
-* `validTo`: timestamp (optinal).
-   Defaults to the end-of-time if not provided.
-====
 
 
 .Clojure
@@ -116,18 +80,10 @@ include::{examples}[tags=delete-docs-json,indent=0]
 
 Irrevocably erases documents from the given table (including through system time), for all valid-time.
 
-
-.JSON
-[%collapsible%open]
-====
 [source,json]
 ----
 include::{examples}[tags=erase-docs-json,indent=0]
 ----
-
-* `from`: table to erase from
-* `eraseDocs`: array of ids to erase.
-====
 
 .Clojure
 [%collapsible]
@@ -143,21 +99,24 @@ include::{examples}[tags=erase-docs-json,indent=0]
 
 Inserts documents into a table from the given link:./queries[query].
 
-.JSON
-[%collapsible%open]
-====
-
 [source,json]
 ----
 include::{examples}[tags=insert-into-json,indent=0]
 ----
 
-* `insertInto`: table to insert into.
-* `query` (link:./queries[Query]).
-** The query must return an `xt$id` column.
-** To specify a valid-time range, the query may return `xt$validFrom` and/or `xt$validTo` columns.
-   If not provided, these will default as per link:#_put[Put].
-====
+For example, for
+[source,sql]
+----
+INSERT INTO users
+SELECT xt$id, first_name AS given_name, last_name AS family_name FROM old_users
+----
+
+run:
+
+[source,json]
+----
+include::{examples}[tags=insert-into-json-ex1,indent=0]
+----
 
 .Clojure
 [%collapsible]
@@ -184,29 +143,39 @@ For example:
 === `update`
 
 Updates documents in a given table based on the provided query.
-It is an operation from timeline to timeline (now to end of time if not otherwise specified).
-
-.JSON
-[%collapsible%open]
-====
 
 [source,json]
 ----
 include::{examples}[tags=update-json,indent=0]
 ----
 
-* `update`: table to update.
-* `bind` (link:./queries#_binding_specs[Binding Specs], optional): select the documents to update using binding constraints.
-** If not provided, this will update every document in the table.
-** May also bind extra logic variables for use in the `set` clause or `unify-clauses`.
-* `set` (array of string -> link:./queries#_expressions[Expressions], optional): columns to update.
-** Altering any `xt$...` column in set results in an error.
-* `unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
-  See link:./queries#_unify[unify] for more details.
-* `forValidTime`(link:./queries#_temporal_filter[Temporal Filter], optional) : The valid time range to update the table for.
-* `argRows` (link:./queries#_argument_specs[Argument Specs], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The update operation will be run for every argument spec input.
-====
+Example:
 
+* Increment a version for a user account, by email:
++
+--
+[source,sql]
+----
+UPDATE users
+SET version = version + 1
+WHERE email = ?
+
+-- with argument 'james@example.com'
+----
+
+[source,json]
+----
+include::{examples}[tags=update-json-ex1,indent=0]
+----
+--
+
+See also:
+
+* link:./queries#_temporal_filter[Temporal filters]
+* link:./queries#_binding_specs[Binding specs]
+* link:./queries#_expressions[Expressions]
+* link:./queries#_unify[Unify]
+* link:./queries#_argument_specs[Argument specs]
 
 .Clojure
 [%collapsible]
@@ -253,25 +222,44 @@ with default behaviour as per link:#_put[Put], above.
 
 Deletes documents from the given table, based on the provided query.
 
-.JSON
-[%collapsible%open]
-====
-
 [source,json]
 ----
 include::{examples}[tags=delete-json,indent=0]
 ----
 
-* `deleteDocs`: table to delete from.
-* `bind` (link:./queries#_binding_specs[Binding Specs], optional): select the documents to delete using binding constraints.
-** If not provided, this will delete every document in the table.
-** May also bind extra logic variables for use in the `unify-clauses`.
-* `unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
-   See link:./queries#_unify[unify] for more details.
-* `argRows` (link:./queries#_argument_specs[Argument Specs], optional): arguments to be used in the `bind`,`set` or `unify` contexts. The delete operation will be run for every argument spec input.
-====
+See also:
 
+* link:./queries#_temporal_filter[Temporal filters]
+* link:./queries#_binding_specs[Binding specs]
+* link:./queries#_expressions[Expressions]
+* link:./queries#_unify[Unify]
+* link:./queries#_argument_specs[Argument specs]
 
+Examples:
+
+* `DELETE FROM users WHERE email = 'james@example.com'`
++
+--
+[source,json]
+----
+include::{examples}[tags=delete-json-ex1,indent=0]
+----
+--
++
+* Deleting using a sub-query
++
+--
+[source,sql]
+----
+DELETE FROM users
+WHERE author_id IN (SELECT author_id FROM authors WHERE email = 'james@example.com'
+----
+
+[source,json]
+----
+include::{examples}[tags=delete-json-ex2,indent=0]
+----
+--
 
 .Clojure
 [%collapsible]
@@ -302,7 +290,7 @@ For example:
 
 ;; equivalent to:
 ;; "DELETE FROM users
-;;  WHERE author_id IN (SELECT author_id FROM email = 'james@example.com'")
+;;  WHERE author_id IN (SELECT author_id FROM authors WHERE email = 'james@example.com'")
 ----
 
 To specify a valid-time range:
@@ -318,25 +306,45 @@ with default behaviour as per link:#_put[Put], above.
 
 === `erase`
 
-Irrevocably erase the document from the given table (including through system time), based on the provided query.
-
-.JSON
-[%collapsible%open]
-====
+Irrevocably erase the document from the given table (for all valid-time, for all system-time), based on the provided query.
 
 [source,json]
 ----
 include::{examples}[tags=erase-json,indent=0]
 ----
-* `eraseDocs`: table to erase from.
-* `bind` (link:./queries#_binding_specs[Binding Specs], optional): select the documents to erase using binding constraints.
-** If not provided, this will delete every document in the table.
-** May also bind extra logic variables for use in the `unify-clauses`.
-* `unify` (link:./queries#_unify_clauses[Unify clauses], optional): extra clauses to unify with (e.g. to join against another table).
-   See link:./queries#_unify[unify] for more details.
-* `argRows` (link:./queries#_argument_specs[Argument Specs], optional): arguments to be used in the `bind` or `unify` contexts. The erase operation will be run for every argument spec input.
 
-====
+See also:
+
+* link:./queries#_binding_specs[Binding specs]
+* link:./queries#_expressions[Expressions]
+* link:./queries#_unify[Unify]
+* link:./queries#_argument_specs[Argument specs]
+
+Examples:
+
+* `ERASE FROM users WHERE email = 'james@example.com'`
++
+--
+[source,json]
+----
+include::{examples}[tags=erase-json-ex1,indent=0]
+----
+--
++
+* Erasing using a sub-query
++
+--
+[source,sql]
+----
+ERASE FROM users
+WHERE author_id IN (SELECT author_id FROM authors WHERE email = 'james@example.com'
+----
+
+[source,json]
+----
+include::{examples}[tags=erase-json-ex2,indent=0]
+----
+--
 
 .Clojure
 [%collapsible]
@@ -368,35 +376,20 @@ For example:
 
 ;; equivalent to:
 ;; "ERASE FROM users
-;;  WHERE author_id IN (SELECT author_id FROM email = ?)
+;;  WHERE author_id IN (SELECT author_id FROM authors WHERE email = ?)
 ----
 ====
 
-Notes:
-
-* Erase operations apply for all valid-time.
 
 [#asserts]
 === Asserts: `assert-exists`, `assert-not-exists`
 
-Within a transaction, `assertExists`/`assertNotExists` (potentiall `snake_case` or `kebab-case`,
-depending on your client library) operations assert that the given query returns at least one row/no rows
-respectively - if not, the transaction will roll back.
-
-.JSON
-[%collapsible%open]
-====
+Within a transaction, `assertExists`/`assertNotExists` operations assert that the given query returns at least one row/no rows respectively - if not, the transaction will roll back.
 
 [source,json]
 ----
-include::{walkthrough}[tags=DML-Assert-Not-json,indent=0]
+include::{examples}[tags=assert-json,indent=0]
 ----
-* `assertExists`/`assertNotExists` (link:./queries[Query]): query to evaluate.
-** For `assertExists` the query needs to return at least one row so that the transaction gets committed.
-** For `assertNotExists` the query needs to return no row so that the transaction gets committed.
-* `argRows` (link:./queries#_argument_specs[Argument Spec], optional): arguments to be used in the `query`.
-
-====
 
 .Clojure
 [%collapsible]
@@ -421,6 +414,21 @@ This can be used to enforce consistency constraints - for example, to assert tha
 === `call`
 
 Call a transaction function.
+
+[source,json]
+----
+{
+  // -- required
+  // function to call
+  fnId: "fn-id",
+
+  // -- optional
+  // list of arguments to the function
+  // args: [ ... ]
+}
+----
+
+Transaction functions can currently only be defined in link:/config/clojure/txs.adoc#_call[Clojure].
 
 .Clojure
 [%collapsible%open ]
@@ -449,10 +457,23 @@ There are a few functions available in scope during the transaction function:
 
 == Transaction options
 
-XT submit options are an optional map of the following keys:
+Transaction options are an optional map of the following keys:
 
-N.B.: options here are specified with `camelCase` - depending on your client library, these may be `snake_case` or `kebab-case`.
+[source,json]
+----
+{
+  // -- optional
 
-* `systemTime`: overrides system time for the transaction, mustn't be earlier than any previous system time.
-* `defaultTz`: overrides the default time zone for the transaction.
-* `defaultAllValidTime` (boolean, default false): whether to default to all valid time if not explicitly specified in the query.
+  // overrides system-time for the transaction
+  // * mustn't be earlier than any previous system time
+  "systemTime": "2024-01-01T00:00:00Z",
+
+  // overrides the default time zone for operations in the transaction.
+  // default: "UTC"
+  "defaultTz": "America/Los_Angeles",
+
+  // whether to default to "all valid-time" if not explicitly specified in the query
+  // default: false
+  "defaultAllValidTime": false,
+}
+----
