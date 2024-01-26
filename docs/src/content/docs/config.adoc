@@ -1,0 +1,22 @@
+---
+title: Configuration
+---
+
+== Components 
+
+An XTDB node consists of a number of components. 
+
+For information on how to configure these and switch out implementations, see their reference documents:
+
+* link:config/tx-log[Transaction Log]
+* link:config/storage[Storage]
+// TODO: when modules section added
+// * link:config/modules[Optional Modules]
+
+== Starting a node in process
+
+To start a node in-process within the various SDKs, see the following:
+
+* link:/drivers/clojure/getting-started#_in_process[Clojure]
+* link:/drivers/kotlin/getting-started.html#_in_process[Kotlin]
+* link:/drivers/java/getting-started.html#_in_process[Java]

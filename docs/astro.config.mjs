@@ -72,8 +72,7 @@ export default defineConfig({
           label: 'Configuration',
           collapsed: true,
           items: [
-            // TODO could probably use an architectural overview at some point.
-            // { label: 'Overview', link: '/config' },
+            { label: 'Overview', link: '/config' },
 
             {
               label: 'Transaction Log',
