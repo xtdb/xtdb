@@ -10,21 +10,18 @@ components:
       type: object
       properties:
         aggregate:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     ArgRows:
       description: rows to be passed to a prepared SQL statement
       type: array
       items:
         type: array
         items:
-          schema:
-            $ref: '#/components/schemas/TypedAny'
-    Args:
-      type: array
-      items:
-        schema:
           $ref: '#/components/schemas/TypedAny'
     AssertExists:
+      description: assert that a query yields at least one row
       type: object
       properties:
         assertExists:
@@ -33,7 +30,10 @@ components:
           type: array
           items:
             type: object
+            additionalProperties:
+              $ref: '#/components/schemas/TypedAny'
     AssertNotExists:
+      description: assert that a query doesn't yield any rows
       type: object
       properties:
         assertNotExists:
@@ -51,45 +51,46 @@ components:
           $ref: '#/components/schemas/Instant'
         afterTx:
           description: requires that the node has indexed at least the specified transaction
-          schema:
-            $ref: '#/components/schemas/TransactionKey'
+          $ref: '#/components/schemas/TransactionKey'
     Binding:
+      description: Binding
       oneOf:
         - type: string
         - type: object
           properties:
             binding:
-              - type: string
+              type: string
             expr:
               $ref: '#/components/schemas/Expr'
-    Bindings:
-      type: array
-      items:
-        $ref: '#/components/schemas/Binding'
     Call:
       type: object
       properties:
         call:
           type: string
         args:
-          $ref: '#/components/schemas/ExprList'
+          type: array
+          items:
+            $ref: '#/components/schemas/Expr'
         bind:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     CallOp:
-      description: a transaction function call
+      description: call a transaction function
       type: object
       properties:
         fnId:
-          schema:
-            $ref: '#/components/schemas/Id'
+          $ref: '#/components/schemas/Id'
         args:
-          schema:
-            $ref: '#/components/schemas/Args'
+          type: array
+          items:
+            $ref: '#/components/schemas/TypedAny'
     DefaultTz:
       type: string
       example: "America/Los_Angeles"
     Delete:
+      description: delete documents by query
       type: object
       properties:
         deleteFrom:
@@ -99,7 +100,9 @@ components:
           $ref: '#/components/schemas/TemporalExtents'
         bind:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         unify:
           nullable: true
           type: array
@@ -110,40 +113,41 @@ components:
           items:
             type: object
     DeleteDocs:
-      description: delete transaction operation
+      description: delete documents by document-id
       type: object
       properties:
         deleteDocs:
           type: array
           items:
-            schema:
-              $ref: '#/components/schemas/Id'
+            $ref: '#/components/schemas/Id'
         from:
-          schema:
-            $ref: '#/components/schemas/TableName'
+          $ref: '#/components/schemas/TableName'
         validFrom:
-          schema:
-            $ref: '#/components/schemas/Instant'
+          $ref: '#/components/schemas/Instant'
         validTo:
-          schema:
-            $ref: '#/components/schemas/Instant'
+          $ref: '#/components/schemas/Instant'
     Document:
-      description: a document to be added to the db
+      description: Document
       type: object
+      properties:
+        xt$id:
+          $ref: '#/components/schemas/Id'
       additionalProperties:
-        schema:
-          $ref: '#/components/schemas/TypedAny'
+        $ref: '#/components/schemas/TypedAny'
     Duration:
-      description: duration in milliseconds
-      type: integer
+      description: Duration (ISO8601)
+      type: string
     Erase:
+      description: erase documents by query
       type: object
       properties:
         eraseFrom:
           $ref: '#/components/schemas/TableName'
         bind:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         unify:
           nullable: true
           type: array
@@ -154,17 +158,15 @@ components:
           items:
             type: object
     EraseDocs:
-      description: erase transaction operation
+      description: erase documents by document-id
       type: object
       properties:
         eraseDocs:
           type: array
           items:
-            schema:
-              $ref: '#/components/schemas/Id'
+            $ref: '#/components/schemas/Id'
         from:
-          schema:
-            $ref: '#/components/schemas/TableName'
+          $ref: '#/components/schemas/TableName'
     Error:
       type: object
       properties:
@@ -178,12 +180,17 @@ components:
           type: string
           example: "Illegal argument: ':xtql/malformed-table'"
     Expr:
+      description: expression
       oneOf:
         - type: boolean
         - type: string
         - type: number
         - type: object
+          description: map expression
+          additionalProperties:
+            $ref: '#/components/schemas/Expr'
         - type: array
+          description: array expression
           items:
             $ref: '#/components/schemas/Expr'
         - $ref: '#/components/schemas/ExprCall'
@@ -196,70 +203,86 @@ components:
         - $ref: '#/components/schemas/Param'
         - $ref: '#/components/schemas/ExprSet'
     ExprCall:
+      description: call expression
       type: object
       properties:
         'xt:call':
           type: string
+          description: function to call
         args:
+          description: function arguments
           type: array
           items:
             $ref: '#/components/schemas/Expr'
     ExprExists:
+      description: exists sub-query expression
       type: object
       properties:
         'xt:exist':
           $ref: '#/components/schemas/Query'
         args:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     ExprGet:
+      description: get-field expression
       type: object
       properties:
         'xt:get':
           $ref: '#/components/schemas/Expr'
         fields:
           type: string
-    ExprList:
-      type: array
-      items:
-        $ref: '#/components/schemas/Expr'
     ExprPull:
+      description: pull-one expression
       type: object
       properties:
         'xt:pull':
           $ref: '#/components/schemas/Query'
         args:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     ExprPullMany:
+      description: pull-many expression
       type: object
       properties:
         'xt:pullMany':
           $ref: '#/components/schemas/Query'
         args:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     ExprQuery:
+      description: scalar sub-query expression
       type: object
       properties:
         q:
           $ref: '#/components/schemas/Query'
         args:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     ExprSet:
+      description: set expression
       type: object
       properties:
         '@type':
           type: string
-          enum: [xt:set]
+          const: xt:set
         '@value':
           type: array
           items:
             $ref: '#/components/schemas/Expr'
     From:
+      description: "from operator"
       type: object
       properties:
         from:
           $ref: '#/components/schemas/TableName'
         bind:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         forValidTime:
           $ref: '#/components/schemas/TemporalFilter'
         forSystemTime:
@@ -267,13 +290,14 @@ components:
         projectAllColumns:
           type: boolean
     Id:
-      description: A XTDB entity id
+      description: entity id
       oneOf:
+        - $ref: '#/components/schemas/UUID'
         - type: string
         - type: integer
-        - schema:
-            $ref: '#/components/schemas/UUID'
+        - $ref: '#/components/schemas/Keyword'
     Insert:
+      description: insert documents by query
       type: object
       properties:
         insertInto:
@@ -289,46 +313,60 @@ components:
       example: "2024-01-01T00:00Z"
       format: date-time
     Join:
+      description: join operator
       type: object
       properties:
         join:
           $ref: '#/components/schemas/Query'
         args:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         bind:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     Limit:
+      description: limit operator
       type: object
       properties:
         limit:
           type: integer
     LeftJoin:
+      description: left-join operator
       type: object
       properties:
         join:
           $ref: '#/components/schemas/Query'
         args:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         bind:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     LogicVar:
+      description: logical variable
       type: object
       properties:
         '@type':
           type: string
-          enum: [xt:lvar]
+          const: xt:lvar
         '@value':
           type: string
     Offset:
+      description: offset operator
       type: object
       properties:
-        limit:
+        offset:
           type: integer
     OrderBy:
+      description: order-by operator
       type: object
       properties:
         orderBy:
@@ -336,6 +374,7 @@ components:
           items:
             $ref: '#/components/schemas/OrderSpec'
     OrderDirection:
+      description: order direction
       type: string
       enum: [asc, desc]
     OrderNulls:
@@ -345,20 +384,24 @@ components:
       type: object
       properties:
         expr:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         direction:
           $ref: '#/components/schemas/OrderDirection'
         nulls:
           $ref: '#/components/schemas/OrderNulls'
     Param:
+      description: param expression
       type: object
       properties:
         '@type':
           type: string
-          enum: [xt:param]
+          const: xt:param
         '@value':
           type: string
     Pipeline:
+      description: pipeline operator
       type: array
       items:
         # TODO positional array types
@@ -366,13 +409,12 @@ components:
           - $ref: '#/components/schemas/Query'
           - $ref: '#/components/schemas/QueryTail'
     PutDocs:
-      description: put transaction operation
+      description: put documents
       type: object
       properties:
         putDocs:
           type: array
           items:
-            schema:
             $ref: '#/components/schemas/Document'
         from:
           $ref: '#/components/schemas/TableName'
@@ -381,12 +423,11 @@ components:
         validTo:
           $ref: '#/components/schemas/Instant'
     Query:
-      description: A XTQL query
+      description: An XTQL query
       oneOf:
         - $ref: '#/components/schemas/From'
         - $ref: '#/components/schemas/Pipeline'
         - $ref: '#/components/schemas/Relation'
-        - $ref: '#/components/schemas/SqlQuery'
         - $ref: '#/components/schemas/Unify'
         - $ref: '#/components/schemas/UnionAll'
     QueryOpts:
@@ -398,7 +439,13 @@ components:
       properties:
         args:
           description: a map of arguments to pass to the query.
-          $ref: '#/components/schemas/Args'
+          oneOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/TypedAny'
+            - type: object
+              additionalProperties:
+                $ref: '#/components/schemas/TypedAny'
         basis:
           $ref: '#/components/schemas/Basis'
         afterTx:
@@ -413,8 +460,11 @@ components:
           type: boolean
         keyFn:
           description: specifies how keys are returned in query results.
-          example: "SQL_STR"
           type: string
+          enum:
+            - "CAMEL_CASE_STRING"
+            - "SNAKE_CASE_STRING"
+            - "KEBAB_CASE_STRING"
         txTimeout:
           description: duration to wait for the requested transactions (atTx, afterTx) to be indexed before timing out (default unlimited).
           $ref: '#/components/schemas/Duration'
@@ -425,7 +475,9 @@ components:
       type: object
       properties:
         query:
-          $ref: '#/components/schemas/Query'
+          oneOf:
+            - $ref: '#/components/schemas/Query'
+            - $ref: '#/components/schemas/SqlQuery'
         queryOpts:
           $ref: '#/components/schemas/QueryOpts'
     QueryTail:
@@ -440,21 +492,28 @@ components:
         - $ref: '#/components/schemas/With'
         - $ref: '#/components/schemas/Without'
     Relation:
+      description: relation operator
       type: object
       properties:
         rel:
           oneOf:
             - $ref: '#/components/schemas/Param'
-            - type: array
+            - description: literal relation
+              type: array
               items:
                 $ref: '#/components/schemas/Document'
         bind:
-          - $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     Return:
+      description: return operator
       type: object
       properties:
         return:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     Sql:
       description: sql transaction operation
       type: object
@@ -464,9 +523,9 @@ components:
           description: A SQL operation
           example: "INSERT INTO docs(xt$id, name) VALUES (1, 'Turing')"
         argRows:
-          schema:
-            $ref: '#/components/schemas/ArgRows'
+          $ref: '#/components/schemas/ArgRows'
     SqlQuery:
+      description: An SQL query
       type: object
       properties:
         sql:
@@ -481,7 +540,7 @@ components:
     TableName:
       type: string
       example: "docs"
-      description: tabel name
+      description: table name
     TransactionKey:
       type: object
       properties:
@@ -492,7 +551,7 @@ components:
     TemporalExtents:
       oneOf:
         - type: string
-          enum: [allTime]
+          const: allTime
         - type: object
           properties:
             from:
@@ -504,7 +563,7 @@ components:
     TemporalFilter:
       oneOf:
         - type: string
-          enum: [allTime]
+          const: allTime
         - type: object
           properties:
             at:
@@ -518,7 +577,7 @@ components:
               nullable: true
               $ref: '#/components/schemas/Instant'
     TxOp:
-      description: an abstract transaction operation
+      description: transaction operations
       oneOf:
         - $ref: '#/components/schemas/PutDocs'
         - $ref: '#/components/schemas/DeleteDocs'
@@ -535,11 +594,9 @@ components:
       title: transaction options
       properties:
         systemTime:
-          schema:
-            $ref: '#/components/schemas/Instant'
+          $ref: '#/components/schemas/Instant'
         defaultTz:
-          schema:
-            $ref: '#/components/schemas/DefaultTz'
+          $ref: '#/components/schemas/DefaultTz'
         default-all-valid-time?:
           type: boolean
     TxRequest:
@@ -555,6 +612,8 @@ components:
           $ref: '#/components/schemas/TxOptions'
     TypedAny:
       description: |
+        JSON-LD object
+
         Due to the inherent limitations in the native type system of JSON, our implementation leverages the JSON-LD
         format to encode a broader range of types. This approach primarily involves two key components:
         
@@ -579,20 +638,18 @@ components:
         - type: object
           description: a nested map
           additionalProperties:
-            schema:
-              $ref: '#/components/schemas/TypedAny'
+            $ref: '#/components/schemas/TypedAny'
         - type: array
           description: an array/list type of XT
           items:
-            schema:
-              $ref: '#/components/schemas/TypedAny'
+            $ref: '#/components/schemas/TypedAny'
     TypedDuration:
       description: A time-based amount of time, such as '34.5 seconds'.
       type: object
       properties:
         '@type':
           type: string
-          enum: [xt:duration]
+          const: xt:duration
         '@value':
           type: string
           example: "PT3H1M35.23S"
@@ -602,7 +659,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:instant]
+          const: xt:instant
         '@value':
           type: string
           example: "2024-01-01T00:00Z"
@@ -613,7 +670,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:keyword]
+          const: xt:keyword
         '@value':
           type: string
     TypedLocalDate:
@@ -621,7 +678,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:date]
+          const: xt:date
         '@value':
           type: string
           example: "2024-01-01"
@@ -631,7 +688,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:timestamp]
+          const: xt:timestamp
         '@value':
           type: string
           example: "2020-01-01T12:34:56.789"
@@ -640,7 +697,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:period]
+          const: xt:period
         '@value':
           type: string
           example: "P18Y12D"
@@ -650,7 +707,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:set]
+          const: xt:set
         '@value':
           type: array
           items:
@@ -661,7 +718,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:symbol]
+          const: xt:symbol
         '@value':
           type: string
     TypedTimeZone:
@@ -670,7 +727,7 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:timeZone]
+          const: xt:timeZone
         '@value':
           type: string
           example: "2020-01-01T12:34:56.789[Europe/Paris]"
@@ -680,11 +737,12 @@ components:
       properties:
         '@type':
           type: string
-          enum: [xt:timestamptz]
+          const: xt:timestamptz
         '@value':
           type: string
           example: "2020-01-01T12:34:56.789[Europe/Paris]"
     Unify:
+      description: unify operator
       type: object
       properties:
         unify:
@@ -692,6 +750,7 @@ components:
           items:
             $ref: '#/components/schemas/UnifyClause'
     UnifyClause:
+      description: unify clause
       oneOf:
         - $ref: '#/components/schemas/Call'
         - $ref: '#/components/schemas/From'
@@ -702,6 +761,7 @@ components:
         - $ref: '#/components/schemas/Where'
         - $ref: '#/components/schemas/With'
     UnionAll:
+      description: union-all operator
       type: object
       properties:
         unionAll:
@@ -709,23 +769,29 @@ components:
           items:
             $ref: '#/components/schemas/Query'
     Unnest:
+      description: unnest operator
       type: object
       properties:
         var:
           $ref: '#/components/schemas/Binding'
     Update:
+      description: update documents by query
       type: object
       properties:
         update:
           $ref: '#/components/schemas/TableName'
         set:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         forValidTime:
           nullable: true
           $ref: '#/components/schemas/TemporalExtents'
         bind:
           nullable: true
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
         unify:
           nullable: true
           type: array
@@ -739,6 +805,7 @@ components:
       type: string
       format: uuid
     Where:
+      description: where clause
       type: object
       properties:
         where:
@@ -746,11 +813,15 @@ components:
           items:
             $ref: '#/components/schemas/Expr'
     With:
+      description: with clause
       type: object
       properties:
         with:
-          $ref: '#/components/schemas/Bindings'
+          type: array
+          items:
+            $ref: '#/components/schemas/Binding'
     Without:
+      description: without operator
       type: object
       properties:
         with:
@@ -769,9 +840,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Status'
-            application/transit+json:
-              schema:
-                $ref: '#/components/schemas/Status'
   /tx:
     post:
       summary: Transaction
@@ -786,35 +854,23 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TxRequest'
-          application/transit+json:
-            schema:
-              $ref: '#/components/schemas/TxRequest'
         required: true
       responses:
         200:
           description: Ok
           content:
-            application/transit+json:
-              schema:
-                $ref: '#/components/schemas/TransactionKey'
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionKey'
         400:
           description: A validation error, parsing error or runtime error occurred.
           content:
-            application/transit+json:
-              schema:
-                $ref: '#/components/schemas/Error'
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         500:
           description: Server error. An unknown error occurred server side.
           content:
-            application/transit+json:
-              schema:
-                $ref: '#/components/schemas/Error'
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
@@ -833,9 +889,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/QueryRequest'
-          application/transit+json:
-            schema:
-              $ref: '#/components/schemas/QueryRequest'
         required: true
       responses:
         200:
@@ -844,24 +897,15 @@ paths:
             application/jsonl:
               schema:
                 $ref: '#/components/schemas/Document'
-            application/transit+json:
-              schema:
-                $ref: '#/components/schemas/Document'
         400:
           description: A validation error, parsing error or runtime error occurred.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-            application/transit+json:
-              schema:
-                $ref: '#/components/schemas/Error'
         500:
           description: Server error. An unknown error occurred server side.
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-            application/transit+json:
               schema:
                 $ref: '#/components/schemas/Error'
