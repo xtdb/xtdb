@@ -5,6 +5,19 @@ import kotlinx.serialization.Serializable
 import xtdb.util.requiringResolve
 import xtdb.api.module.XtdbModule
 
+/**
+ * Used to set configuration options for an optional HTTP Server module.
+ * 
+ * Example usage, as part of a node config:
+ * ```kotlin
+ * Xtdb.openNode {
+ *    httpServer() {
+ *       port = 3001
+ *    },
+ *    ...
+ * }
+ * ```
+ */
 object HttpServer {
     @JvmStatic
     fun httpServer() = Factory()

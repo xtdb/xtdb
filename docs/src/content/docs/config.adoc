@@ -10,8 +10,7 @@ For information on how to configure these and switch out implementations, see th
 
 * link:config/tx-log[Transaction Log]
 * link:config/storage[Storage]
-// TODO: when modules section added
-// * link:config/modules[Optional Modules]
+* link:config/modules[Optional Modules]
 
 == Starting a node in process
 

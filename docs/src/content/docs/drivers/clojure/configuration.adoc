@@ -183,3 +183,17 @@ Main article: link:/config/storage/google-cloud[Google Cloud Storage]
                            }]}]}
 ----
 
+== Optional Modules
+
+[#http-server]
+=== HTTP Server
+
+Main article: link:/config/modules/http-server[HTTP Server]
+
+[source,clojure]
+----
+{:http-server {;; -- optional
+
+               ;; :port 3000
+              }}
+----

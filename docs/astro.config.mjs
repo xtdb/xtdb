@@ -91,6 +91,14 @@ export default defineConfig({
                 { label: 'Google Cloud Storage', link: '/config/storage/google-cloud' }
               ]
             },
+
+            {
+              label: 'Optional Modules',
+              items: [
+                { label: 'Overview', link: '/config/modules' },
+                { label: 'HTTP Server', link: '/config/modules/http-server' }
+              ]
+            },
           ]
         },
 

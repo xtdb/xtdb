@@ -1,0 +1,9 @@
+---
+title: Optional Modules
+---
+
+When configuring an XTDB node, you can specify and configure a list of optional modules for the system. These modules are loaded on node startup.
+
+Currently offered optional modules - see the individual documentation for more information:
+
+* link:modules/http-server[HTTP Server]
