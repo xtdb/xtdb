@@ -1,0 +1,105 @@
+---
+title: Google Cloud Storage
+---
+
+Google Cloud Storage can be used as a shared object-store for XTDB's remote storage module.
+
+[NOTE]
+====
+The Google Cloud Storage module uses a Pub/Sub topic to maintain a local copy of the file listings on Google Cloud, saving on expensive/lengthy operations to list objects on Google Cloud Storage.
+
+If not using the link:#deployment-manager[Cloud Deployment Manager template], ensure that you have a similar setup to track file changes on whichever storage bucket you are using, and that XTDB has relevant permissions to use all of the services. 
+====
+
+== Setup
+
+First, ensure the `com.xtdb/xtdb-google-cloud` Maven dependency is added to your XTDB node.
+
+=== Infrastructure
+
+Prior to deploying any infrastructure, you will need to ensure that the following APIs are active within your Google Cloud Project:
+
+* Cloud Storage API
+* Pub/Sub API
+* IAM API
+* Cloud Deployment Manager API (if using our template)
+
+[#deployment-manager]
+[NOTE]
+.Cloud Deployment Manager template
+====
+We provide a https://github.com/xtdb/xtdb/tree/2.x/modules/google-cloud/cloud-deployment-manager[parameterized 'Cloud Deployment Manager' template] to help set up everything that you need.
+====
+
+To use Google Cloud Storage as the object store, the following infrastructure is required:
+
+* A **Cloud Storage bucket**
+* A **Pub/Sub topic**, subscribed to notifications from the Cloud Storage bucket.
+* A **custom role** for all of the necessary permissions for XTDB to use the above (see below for example role from the template):
+** Using the bucket (get, create, delete, list, and update storage objects)
+** Creating, consuming, and deleting subscriptions on PubSub topics.
++
+[source,yaml]
+----
+type: gcp-types/iam-v1:projects.roles
+name: custom-role-name
+properties:
+  parent: projects/project-name
+  roleId: custom-role-name
+  role:
+    title: XTDB Custom role
+    stage: GA
+    description: Custom role for XTDB - allows usage of containers and pubsub for reading container notifications.
+    includedPermissions:
+      - storage.objects.create
+      - storage.objects.delete
+      - storage.objects.get
+      - storage.objects.list
+      - storage.objects.update
+      - storage.buckets.get 
+      - pubsub.subscriptions.create
+      - pubsub.subscriptions.delete
+      - pubsub.subscriptions.get
+      - pubsub.subscriptions.consume
+      - pubsub.snapshots.seek
+      - pubsub.topics.attachSubscription
+----
+
+=== Authentication
+
+
+Authentication is done via Google’s "Application Default Credentials" - see the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[Google Cloud documentation] for setup instructions.
+
+== Configuration
+
+To use the Google Cloud module, include the following in your node configuration:
+
+[source,yaml]
+----
+storage: !Remote
+  objectStore: !GoogleCloud
+    # -- required
+
+    # The name of the GCP project that the bucket is contained within
+    projectId: xtdb-project
+
+    # The Cloud Storage bucket which the documents will be stored within
+    bucket: xtdb-bucket
+
+    # The name of the Pub/Sub topic which is collecting notifications from the Cloud Storage bucket
+    pubSubTopic: xtdb-bucket-topic
+
+    # -- optional
+    # A file path to prefix all of your files with
+    # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+    # prefix: my-xtdb-node
+
+  localDiskCache: /var/cache/xtdb/object-store
+----
+
+=== Examples
+
+For examples on how to enable/configure the Google Cloud module as part of your node, for each client library, see the individual SDK documentation:
+
+* link:/drivers/clojure/configuration#google-cloud[Clojure]
+* link:/drivers/kotlin/kdoc/modules/xtdb-google-cloud/xtdb.api.storage/-google-cloud-storage/index.html[Kotlin]

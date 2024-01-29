@@ -22,6 +22,23 @@ import java.nio.file.Path
  *
  * For more info on setting up the necessary infrastructure on Google Cloud to be able to use Google Cloud Storage as an XTDB object store, see the section on setting up
  * the [Google Cloud Deployment Manager Configuration](https://github.com/xtdb/xtdb/tree/2.x/modules/google-cloud#google-cloud-deployment-manager-configuration) within our Google Cloud docs.
+ * 
+ * Example usage, as part of a node config:
+ * ```kotlin
+ * Xtdb.openNode {
+ *    remoteStorage(
+ *       objectStore = googleCloudStorage(
+ *          projectId = "xtdb-project",
+ *          bucket ="xtdb-bucket",
+ *          pubSubTopic = "xtdb-bucket-topic"
+ *       ) {
+ *          prefix = Path.of("my/custom/prefix")
+ *       },
+ *       localDiskCache = Paths.get("test-path")
+ *    ),
+ *    ...
+ * }
+ * ```
  */
 object GoogleCloudStorage {
     /**

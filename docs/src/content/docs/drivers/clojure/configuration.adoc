@@ -161,3 +161,25 @@ Main article: link:/config/storage/azure[Azure Blob Storage]
                             ;; :prefix "my-xtdb-node"
                            }]}]}
 ----
+
+
+[#google-cloud]
+=== Google Cloud Storage
+
+Main article: link:/config/storage/google-cloud[Google Cloud Storage]
+
+[source,clojure]
+----
+{:storage [:remote
+           {:object-store [:google-cloud
+                           {;; -- required
+                            :project-id "xtdb-project"
+                            :bucket "xtdb-bucket"
+                            :pubsub-topic "xtdb-bucket-topic"
+
+                            ;; -- optional
+
+                            ;; :prefix "my-xtdb-node"
+                           }]}]}
+----
+
