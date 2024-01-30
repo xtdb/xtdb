@@ -841,8 +841,28 @@
     (= expected (plan-expr sql))
     "DATE '3000-03-15'" #time/date "3000-03-15"))
 
-(deftest test-system-time-queries
+(deftest test-date-trunc-plan
+  (t/testing "TIMESTAMP behaviour"
+    (t/are
+     [sql expected]
+     (= expected (plan-expr sql))
+      "DATE_TRUNC('MICROSECOND', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MICROSECOND" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MILLISECOND', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLISECOND" #time/date-time "2021-10-21T12:34:56")
+      "date_trunc('second', timestamp '2021-10-21T12:34:56')" '(date_trunc "SECOND" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MINUTE', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MINUTE" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('HOUR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "HOUR" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('DAY', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DAY" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MONTH', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MONTH" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('YEAR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "YEAR" #time/date-time "2021-10-21T12:34:56"))))
 
+(deftest test-date-trunc-query
+  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00"}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('MINUTE', TIMESTAMP '2021-10-21T12:34:56') as timestamp FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:00:00"}]
+           (xt/q tu/*node* "select date_trunc('hour', timestamp '2021-10-21T12:34:56') as timestamp from (VALUES 1) as x"))))
+
+(deftest test-system-time-queries
   (t/testing "AS OF"
     (t/is
       (=plan-file

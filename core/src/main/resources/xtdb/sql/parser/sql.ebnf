@@ -1180,6 +1180,7 @@ datetime_factor
     | current_local_timestamp_value_function
     | current_local_time_value_function
     | end_of_time_value_function
+    | date_trunc_datetime_function
     ;
 
 current_date_value_function
@@ -1243,6 +1244,7 @@ interval_primary
 
 <interval_value_function>
     : interval_absolute_value_function
+    | date_trunc_interval_function
     ;
 
 interval_absolute_value_function
@@ -2494,6 +2496,41 @@ object_name
 end_of_time_value_function
     : 'END_OF_TIME' [ <left_paren> <right_paren> ]
     ;
+
+(* DATE_TRUNC function *)
+date_trunc_datetime_function
+    : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_datetime_source [ <comma> date_trunc_time_zone ] <right_paren>
+    
+date_trunc_interval_function
+    : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_interval_source <right_paren>
+
+<date_trunc_precision_string>
+    : <quote> date_trunc_precision <quote>
+
+date_trunc_precision
+    : 'MICROSECOND' 
+    | 'MILLISECOND' 
+    | 'SECOND' 
+    | 'MINUTE'
+    | 'HOUR'
+    | 'DAY'
+    | 'WEEK'
+    | 'MONTH'
+    | 'QUARTER'
+    | 'YEAR'
+    | 'DECADE'
+    | 'CENTURY'
+    | 'MILLENNIUM'
+    ;
+
+date_trunc_datetime_source
+    : datetime_value_expression
+
+date_trunc_interval_source
+    : interval_value_expression
+
+<date_trunc_time_zone>
+    : <quote> time_zone_region <quote>
 
 (* ARROW_TABLE <table primary>, based on SQL:2016 JSON_TABLE *)
 
