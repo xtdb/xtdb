@@ -1,6 +1,10 @@
 ---
 title: Getting started
 ---
+:icon: /images/icons
+:clojure: /drivers/clojure/getting-started.html
+:java: /drivers/java/getting-started.html
+:kotlin: /drivers/kotlin/getting-started.html
 
 XTDB can run in-process (in a JVM), or through traditional client-server connections.
 
@@ -42,20 +46,21 @@ From here, check out the link:/drivers/openapi/index.html[HTTP OpenAPI docs] to 
 
 If you're running on the JVM, you can use the JVM client library to connect to this node.
 
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}#_connecting_through_http]
+image:{icon}/java.svg[Clojure,link={java}#_connecting_through_http]
+image:{icon}/kotlin.svg[Clojure,link={kotlin}#_connecting_through_http]
+
 For more details, check out the relevant instructions for your language:
-
-* link:/drivers/clojure/getting-started.html#_connecting_through_http[Clojure]
-* link:/drivers/java/getting-started.html#_connecting_through_http[Java]
-* link:/drivers/kotlin/getting-started.html#_connecting_through_http[Kotlin]
-
 
 == In process (JVM)
 
 If you're running a JVM (17+), you can also use XTDB directly, in-process, using the same API interface as the remote client.
 In-process XTDB is particularly useful for testing and interactive development - you can start an in-memory node quickly and with little hassle, which makes it a great tool for unit tests and REPL experimentation.
 
-For more details, check out the relevant instructions for your language:
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}#_in_process]
+image:{icon}/java.svg[Clojure,link={java}#_in_process]
+image:{icon}/kotlin.svg[Clojure,link={kotlin}#_in_process]
 
-* link:/drivers/clojure/getting-started.html#_in_process[Clojure]
-* link:/drivers/java/getting-started.html#_in_process[Java]
-* link:/drivers/kotlin/getting-started.html#_in_process[Kotlin]
+For more details, check out the relevant instructions for your language:
