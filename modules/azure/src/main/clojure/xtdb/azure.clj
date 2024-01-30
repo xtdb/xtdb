@@ -17,7 +17,7 @@
            [com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs]
            [com.azure.storage.blob BlobServiceClientBuilder]
            [java.util.concurrent ConcurrentSkipListSet]
-           [xtdb.api AConfig ]
+           [xtdb.api AConfig]
            [xtdb.api.log AzureEventHub AzureEventHub$Factory]
            [xtdb.api.storage AzureBlobStorage AzureBlobStorage$Factory]))
 
@@ -32,8 +32,8 @@
   (let [credential (.build (DefaultAzureCredentialBuilder.))
         storage-account (.getStorageAccount factory)
         container (.getContainer factory)
-        servicebus-namespace (.getServicebusNamespace factory)
-        servicebus-topic-name (.getServicebusTopicName factory)
+        servicebus-namespace (.getServiceBusNamespace factory)
+        servicebus-topic-name (.getServiceBusTopicName factory)
         prefix (.getPrefix factory)
         blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
                                         (.endpoint (str "https://" storage-account ".blob.core.windows.net"))
@@ -97,7 +97,7 @@
         poll-sleep-duration (.getPollSleepDuration factory)
         create-event-hub? (.getAutoCreateEventHub factory)
         retention-period-in-days (.getRetentionPeriodInDays factory)
-        resource-group-name (.getResourceGroupName factory) 
+        resource-group-name (.getResourceGroupName factory)
         fully-qualified-namespace (format "%s.servicebus.windows.net" namespace)
         credential (.build (DefaultAzureCredentialBuilder.))
         event-hub-client-builder (-> (EventHubClientBuilder.)

@@ -14,7 +14,7 @@
 (defn open-object-store ^ObjectStore [^GoogleCloudStorage$Factory factory]
   (let [project-id (.getProjectId factory)
         bucket (.getBucket factory)
-        pubsub-topic (.getPubsubTopic factory)
+        pubsub-topic (.getPubSubTopic factory)
         prefix (.getPrefix factory)
         storage-service (-> (StorageOptions/newBuilder)
                             ^StorageOptions$Builder (.setProjectId project-id)
@@ -26,6 +26,6 @@
                                                                      :bucket bucket
                                                                      :pubsub-topic pubsub-topic
                                                                      :prefix prefix
-                                                                     :storage-service storage-service} 
+                                                                     :storage-service storage-service}
                                                                     file-name-cache)]
     (os/->GoogleCloudStorageObjectStore storage-service bucket prefix file-name-cache file-list-watcher)))
