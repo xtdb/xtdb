@@ -318,7 +318,7 @@
         ^Server server (j/run-jetty (http/ring-handler router
                                                        (r.ring/create-default-handler)
                                                        {:executor r.sieppari/executor
-                                                        :interceptors [[with-opts {:node node, :read-only? (.getReadOnly module)}]]})
+                                                        :interceptors [[with-opts {:node node}]]})
 
                                     (merge {:port port, :h2c? true, :h2? true}
                                            #_jetty-opts
@@ -329,7 +329,6 @@
         (.stop server)
         (log/info "HTTP server stopped.")))))
 
-(defmethod xtn/apply-config! :xtdb/server [^Xtdb$Config config, _ {:keys [port read-only?]}]
+(defmethod xtn/apply-config! :xtdb/server [^Xtdb$Config config, _ {:keys [port]}]
   (.module config (cond-> (HttpServer$Factory.)
-                    (some? port) (.port port)
-                    (some? read-only?) (.readOnly read-only?))))
+                    (some? port) (.port port))))

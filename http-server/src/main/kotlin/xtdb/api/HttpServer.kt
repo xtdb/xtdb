@@ -27,13 +27,11 @@ object HttpServer {
     @Serializable
     @SerialName("!HttpServer")
     data class Factory(
-        var port: Int = 3000,
-        var readOnly: Boolean = false,
+        var port: Int = 3000
     ) : XtdbModule.Factory {
         override val moduleKey = "xtdb.http-server"
 
         fun port(port: Int) = apply { this.port = port }
-        fun readOnly(readOnly: Boolean) = apply { this.readOnly = readOnly }
 
         override fun openModule(xtdb: IXtdb) = OPEN_SERVER(xtdb, this) as XtdbModule
     }
