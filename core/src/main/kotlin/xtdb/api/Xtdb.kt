@@ -49,6 +49,10 @@ object Xtdb {
     @JvmOverloads
     fun openNode(config: Config = Config()) = config.open()
 
+    /**
+     * Opens a node using a YAML configuration file - will throw an exception if the specified path does not exist
+     * or is not a valid `.yaml` extension file.
+     */
     @JvmStatic
     fun openNode(path: Path): IXtdb {
         if (path.extension != "yaml") {

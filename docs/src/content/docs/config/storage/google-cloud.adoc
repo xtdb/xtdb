@@ -81,17 +81,21 @@ storage: !Remote
     # -- required
 
     # The name of the GCP project that the bucket is contained within
+    # (Can be set as an !Env value)
     projectId: xtdb-project
 
     # The Cloud Storage bucket which the documents will be stored within
+    # (Can be set as an !Env value)
     bucket: xtdb-bucket
 
     # The name of the Pub/Sub topic which is collecting notifications from the Cloud Storage bucket
+    # (Can be set as an !Env value)
     pubSubTopic: xtdb-bucket-topic
 
     # -- optional
     # A file path to prefix all of your files with
     # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+    # (Can be set as an !Env value)
     # prefix: my-xtdb-node
 
   localDiskCache: /var/cache/xtdb/object-store

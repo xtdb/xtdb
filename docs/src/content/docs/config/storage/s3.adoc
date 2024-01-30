@@ -116,14 +116,17 @@ storage: !Remote
     # -- required
 
     # The name of the S3 bucket to use for the object store
-    bucket: "my-s3-bucket"
+    # (Can be set as an !Env value)
+    bucket: "my-s3-bucket" 
 
     # The ARN of the SNS topic which is collecting notifications from the S3 bucket.
+    # (Can be set as an !Env value)
     snsTopicArn: "arn:aws:sns:region:account-id:my-sns-topic"
 
     # -- optional
     # A file path to prefix all of your files with
     # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+    # (Can be set as an !Env value)
     # prefix: my-xtdb-node
 
   localDiskCache: /var/cache/xtdb/object-store

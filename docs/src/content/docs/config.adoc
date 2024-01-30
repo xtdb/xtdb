@@ -1,6 +1,7 @@
 ---
 title: Configuration
 ---
+:icon: /images/icons
 
 == Components 
 
@@ -14,8 +15,34 @@ For information on how to configure these and switch out implementations, see th
 
 == Starting a node in process
 
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link=/drivers/clojure/getting-started#_in_process]
+image:{icon}/kotlin.svg[Kotlin,link=/drivers/kotlin/getting-started.html#_in_process]
+image:{icon}/java.svg[Java,link=/drivers/java/getting-started.html#_in_process]
+
 To start a node in-process within the various SDKs, see the following:
 
-* link:/drivers/clojure/getting-started#_in_process[Clojure]
-* link:/drivers/kotlin/getting-started.html#_in_process[Kotlin]
-* link:/drivers/java/getting-started.html#_in_process[Java]
+
+== Configuring using YAML
+
+Currently, all of the examples within the reference docs are in YAML. Config for the components is done at the top level of the file, i.e. you can specify the following keys, not nested under anything else: `storage`, `txLog`, `modules`.
+
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link=/drivers/clojure/codox/xtdb.node.html#var-start-node]
+image:{icon}/kotlin.svg[Kotlin,link=/drivers/kotlin/kdoc/xtdb-core/xtdb.api/-xtdb/open-node.html]
+
+Within the SDKs, we offer the ability to provide and configure the node by passing the path to a YAML config file:
+
+=== Using `!Env`
+
+For certain keys, we allow the use of environment variables - typically, the keys where we allow this are things that may change *location* across environments. Generally, they are either "paths" or "strings". 
+
+When specifying a key, you can use the `!Env` tag to reference an environment variable. As an example:
+
+[source,yaml]
+----
+storage: !Local
+  path: !Env XTDB_STORAGE_PATH
+----
+
+Any key that we allow the use of `!Env` will be documented as such.

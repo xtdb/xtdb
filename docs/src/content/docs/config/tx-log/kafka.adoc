@@ -28,9 +28,11 @@ txLog: !Kafka
 
   # A comma-separated list of host:port pairs to use for establishing the
   # initial connection to the Kafka cluster.
+  # (Can be set as an !Env value)
   bootstrapServers: "localhost:9092"
 
   # Name of the Kafka topic to use for the transaction log.
+  # (Can be set as an !Env value)
   topicName: "xtdb-log"
 
   # -- optional
@@ -43,6 +45,7 @@ txLog: !Kafka
 
   # Path to a Java properties file containing Kafka connection properties,
   # supplied directly to the Kafka client.
+  # (Can be set as an !Env value)
   # propertiesFile: "kafka.properties"
 
   # A map of Kafka connection properties, supplied directly to the Kafka client.

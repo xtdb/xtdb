@@ -41,6 +41,7 @@ txLog: !Local
   # -- required
 
   # The path to the local directory to store the transaction log in.
+  # (Can be set as an !Env value)
   path: /var/lib/xtdb/log
 
   # -- optional
