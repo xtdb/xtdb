@@ -1,6 +1,9 @@
 ---
 title: Transaction Log
 ---
+:icon: /images/icons
+:clojure: /drivers/clojure/configuration
+:kotlin: /drivers/kotlin/kdoc/xtdb-core/xtdb.api.log
 
 One of the key components of an XTDB node is the transaction log - this is a totally ordered log of all transaction operations that have been applied to the database, generally persistent & shared between nodes.
 
@@ -26,10 +29,11 @@ By default, the transaction log is a transient, in-memory log:
 
 If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.
 
-For examples on how to enable/configure the in-memory transaction log as part of your node, see the individual client library documentation:
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}#in-memory-log]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-in-memory-log-factory/index.html]
 
-* link:/drivers/clojure/configuration#in-memory-log[Clojure]
-* link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-in-memory-log-factory/index.html[Kotlin]
+For examples on how to enable/configure the in-memory transaction log as part of your node, see the individual client library documentation:
 
 == Local disk
 
@@ -55,7 +59,8 @@ txLog: !Local
 
 If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.
 
-For examples on how to enable/configure the local-disk transaction log as part of your node, see the individual client library documentation:
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}#local-log]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-local-log-factory/index.html]
 
-* link:/drivers/clojure/configuration#local-log[Clojure]
-* link:/drivers/kotlin/kdoc/xtdb-core/xtdb.api.log/-local-log-factory/index.html[Kotlin]
+For examples on how to enable/configure the local-disk transaction log as part of your node, see the individual client library documentation:

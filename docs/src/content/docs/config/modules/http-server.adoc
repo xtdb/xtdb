@@ -1,6 +1,9 @@
 ---
 title: HTTP Server
 ---
+:icon: /images/icons
+:clojure: /drivers/clojure/configuration#http-server
+:kotlin: /drivers/kotlin/kdoc/xtdb-http-server/xtdb.api/-http-server/index.html
 
 NOTE: For more information on making calls to the HTTP server, see the link:/drivers/http/openapi/index.html[HTTP API]
 
@@ -28,8 +31,10 @@ If you do not configure a `port`, the HTTP server will be started on port `3000`
 
 === Examples
 
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
+
 For examples on how to enable/configure the HTTP Server module as part of your node, for each client library, see the individual SDK documentation:
 
-* link:/drivers/clojure/configuration#http-server[Clojure]
-* link:/drivers/kotlin/kdoc/xtdb-http-server/xtdb.api/-http-server/index.html[Kotlin]
 

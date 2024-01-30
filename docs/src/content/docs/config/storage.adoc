@@ -49,7 +49,7 @@ storage: !Local
 
 [.lang-icons.right]
 image:{icon}/clojure.svg[Clojure,link={clojure}#local-storage]
-image:{icon}/kotlin.svg[Clojure,link={kotlin}/-local-storage-factory/index.html]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-local-storage-factory/index.html]
 
 For examples on how to enable/configure the local-disk storage module as part of your node, see the individual client library documentation:
 

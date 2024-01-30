@@ -2,6 +2,12 @@
 title: Configuration
 ---
 :icon: /images/icons
+:clojure: /drivers/clojure/getting-started#_in_process
+:kotlin: /drivers/kotlin/getting-started.html#_in_process
+:java: /drivers/java/getting-started.html#_in_process
+:clojure-file-config: /drivers/clojure/codox/xtdb.node.html#var-start-node
+:kotlin-file-config: /drivers/kotlin/kdoc/xtdb-core/xtdb.api/-xtdb/open-node.html
+
 
 == Components 
 
@@ -16,20 +22,19 @@ For information on how to configure these and switch out implementations, see th
 == Starting a node in process
 
 [.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link=/drivers/clojure/getting-started#_in_process]
-image:{icon}/kotlin.svg[Kotlin,link=/drivers/kotlin/getting-started.html#_in_process]
-image:{icon}/java.svg[Java,link=/drivers/java/getting-started.html#_in_process]
+image:{icon}/clojure.svg[Clojure,link={clojure}]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
+image:{icon}/java.svg[Java,link={java}]
 
 To start a node in-process within the various SDKs, see the following:
-
 
 == Configuring using YAML
 
 Currently, all of the examples within the reference docs are in YAML. Config for the components is done at the top level of the file, i.e. you can specify the following keys, not nested under anything else: `storage`, `txLog`, `modules`.
 
 [.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link=/drivers/clojure/codox/xtdb.node.html#var-start-node]
-image:{icon}/kotlin.svg[Kotlin,link=/drivers/kotlin/kdoc/xtdb-core/xtdb.api/-xtdb/open-node.html]
+image:{icon}/clojure.svg[Clojure,link={clojure-file-config}]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin-file-config}]
 
 Within the SDKs, we offer the ability to provide and configure the node by passing the path to a YAML config file:
 

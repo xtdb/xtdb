@@ -46,6 +46,7 @@ Main article: link:/config/tx-log#_local_disk[local-disk transaction log]
         }]}
 ----
 
+[#kafka]
 === Kafka
 
 Main article: link:/config/tx-log/kafka[Kafka]
@@ -121,6 +122,7 @@ Main article: link:/config/storage#remote[remote storage]
                     }]}
 ----
 
+[#s3]
 === S3
 
 Main article: link:/config/storage/s3[S3]
