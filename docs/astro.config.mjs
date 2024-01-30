@@ -86,7 +86,7 @@ export default defineConfig({
               label: 'Storage',
               items: [
                 { label: 'Overview', link: '/config/storage' },
-                { label: 'S3', link: '/config/storage/s3' },
+                { label: 'AWS S3', link: '/config/storage/s3' },
                 { label: 'Azure Blob Storage', link: '/config/storage/azure' },
                 { label: 'Google Cloud Storage', link: '/config/storage/google-cloud' }
               ]
