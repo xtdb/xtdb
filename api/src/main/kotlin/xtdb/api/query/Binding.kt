@@ -8,6 +8,7 @@ import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
+import xtdb.api.query.Exprs.expr
 import xtdb.api.query.Exprs.lVar
 import xtdb.jsonIAE
 
@@ -79,6 +80,11 @@ data class Binding(val binding: String, val expr: Expr) {
 
         @JvmSynthetic
         infix fun String.boundTo(expr: Expr) = bind(this, expr)
+
+        @JvmSynthetic
+        infix fun String.boundTo(buildExpr: Exprs.Builder.() -> Expr) {
+            bind(this, expr(buildExpr))
+        }
 
         @JvmSynthetic
         infix fun String.boundTo(varName: String) = bind(this, lVar(varName))

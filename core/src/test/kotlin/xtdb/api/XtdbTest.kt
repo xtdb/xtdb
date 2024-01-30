@@ -5,14 +5,13 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.api.query.*
+import xtdb.api.query.Basis
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_STRING
-import xtdb.api.query.Exprs.call
-import xtdb.api.query.Exprs.param
 import xtdb.api.query.Queries.from
 import xtdb.api.query.Queries.pipeline
 import xtdb.api.query.Queries.relation
 import xtdb.api.query.Queries.with
+import xtdb.api.query.QueryOptions
 import xtdb.api.tx.TxOps.putDocs
 import java.time.Instant
 import java.time.LocalDate
@@ -84,7 +83,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("foo" to "bar")),
             node.openQuery(
-                from("docs2") { "xt\$id" boundTo param("\$id"); +"foo" },
+                from("docs2") { "xt\$id" boundTo { "\$id".param }; +"foo" },
                 QueryOptions(args = mapOf("id" to 1))
             ).doall(),
 
@@ -97,7 +96,7 @@ internal class XtdbTest {
             node.openQuery(
                 pipeline(
                     emptyRel,
-                    with { "currentTime" boundTo call("current-date") }
+                    with { "currentTime" boundTo { "currentDate"() } }
                 ),
 
                 QueryOptions(basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")))
@@ -112,7 +111,7 @@ internal class XtdbTest {
             node.openQuery(
                 pipeline(
                     emptyRel,
-                    with { "timestamp" boundTo call("current-timestamp") }
+                    with { "timestamp" boundTo { "currentTimestamp"() } }
                 ),
 
                 QueryOptions(

@@ -10,6 +10,8 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import xtdb.AnySerde
+import xtdb.api.query.Expr.Null
+import xtdb.api.query.Exprs.expr
 import xtdb.jsonIAE
 import kotlin.Double as KDouble
 import kotlin.Long as KLong
@@ -23,7 +25,7 @@ private fun JsonObject.requireValue(errorType: String) = this["@value"] ?: throw
 
 internal object ExprSerde : JsonContentPolymorphicSerializer<Expr>(Expr::class) {
     override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Expr> = when (element) {
-        JsonNull -> Expr.Null.serializer()
+        JsonNull -> Null.serializer()
         is JsonPrimitive -> when {
             element.booleanOrNull != null -> Expr.Bool.serializer()
             element.longOrNull != null -> Expr.Long.serializer()
@@ -298,4 +300,21 @@ object Exprs {
 
     @JvmSynthetic
     fun map(vararg elements: Pair<String, Expr>) = map(elements.toMap())
+
+    class Builder internal constructor(){
+        operator fun String.invoke(vararg args: Expr) = call(this, *args)
+
+        val `null` = Null
+        val Int.const get() = `val`(this.toLong())
+        val KLong.const get() = `val`(this)
+        val Float.const get() = `val`(this.toDouble())
+        val KDouble.const get() = `val`(this)
+        val Any.const get() = `val`(this)
+        val String.sym get() = lVar(this)
+        val String.param get() = param(this)
+        operator fun Expr.get(field: String) = get(this, field)
+    }
+
+    @JvmSynthetic
+    fun expr(build: Builder.() -> Expr) = Builder().build()
 }
