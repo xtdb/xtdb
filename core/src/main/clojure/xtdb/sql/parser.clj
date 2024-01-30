@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.string :as str]
+            [instaparse.cfg :as insta-cfg]
             [xtdb.error :as err]
             [xtdb.util :as util])
   (:import (java.util ArrayDeque HashSet Map Set)
@@ -215,9 +216,6 @@
                                :errs [failure-str]})))
     res))
 
-(def sql-cfg
-  (read-string (slurp (io/resource "xtdb/sql/parser/SQL2011.edn"))))
-
 (def sql-regular-ws-pattern
   #"\s+")
 
@@ -256,13 +254,13 @@
 ;; API
 
 (def sql-parser
-  (build-ebnf-parser sql-cfg
-                     sql-ws-pattern
-                     (fn [rule-name]
-                       (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
-                                (re-find #"(^|_)(term|factor|primary|expression|query_expression_body|boolean_test)$" (name rule-name)))
-                         Parser/SINGLE_CHILD
-                         Parser/NEVER_RAW))))
+  (-> (insta-cfg/ebnf (slurp (io/resource "xtdb/sql/parser/sql.ebnf")))
+      (build-ebnf-parser sql-ws-pattern
+                         (fn [rule-name]
+                           (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
+                                    (re-find #"(^|_)(term|factor|primary|expression|query_expression_body|boolean_test)$" (name rule-name)))
+                             Parser/SINGLE_CHILD
+                             Parser/NEVER_RAW)))))
 
 (def parse
   (-> (fn self

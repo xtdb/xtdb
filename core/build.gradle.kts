@@ -41,6 +41,7 @@ dependencies {
     api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
     api("clj-commons", "clj-yaml", "1.0.27")
 
+    api("instaparse", "instaparse", "1.4.11")
     api("org.babashka", "sci", "0.6.37")
     api("commons-codec", "commons-codec", "1.15")
     api("com.carrotsearch", "hppc", "0.9.1")
