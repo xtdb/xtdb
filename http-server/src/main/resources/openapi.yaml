@@ -56,6 +56,7 @@ components:
       description: Binding
       oneOf:
         - type: string
+          example: "customerId"
         - type: object
           properties:
             binding:
@@ -112,6 +113,8 @@ components:
           type: array
           items:
             type: object
+      example:
+        $ref: '#/components/examples/DeleteExample'
     DeleteDocs:
       description: delete documents by document-id
       type: object
@@ -135,32 +138,7 @@ components:
       additionalProperties:
         $ref: '#/components/schemas/TypedAny'
       example:
-        xt$id: "my-id"
-        an-integer: 12
-        my-duration:
-          '@type': "xt:duration"
-          '@value': "PT3H1M35.23S"
-        my-instant:
-          '@type': "xt:instant"
-          '@value': "2024-01-01T00:00Z"
-        my-local-date:
-           '@type': "xt:date"
-           '@value': "2024-01-01"
-        my-local-date-time:
-           '@type': "xt:timestamp"
-           '@value': "2020-01-01T12:34:56.789"
-        my-period:
-          '@type': "xt:period"
-          '@value': "P18Y12D"
-        my-set:
-          '@type': "xt:set"
-          '@value': [1, 2, 3]
-        my-time-zone:
-          '@type': "xt:timeZone"
-          '@value': "America/Los_Angeles"
-        my-zoned-date-time:
-          '@type': "xt:timestamptz"
-          '@value': "2020-01-01T12:34:56.789[Europe/Paris]"
+        $ref: '#/components/examples/DocumentLargeExample'
     Duration:
       description: Duration (ISO8601)
       type: string
@@ -184,6 +162,8 @@ components:
           type: array
           items:
             type: object
+      example:
+        $ref: '#/components/examples/EraseExample'
     EraseDocs:
       description: erase documents by document-id
       type: object
@@ -316,6 +296,8 @@ components:
           $ref: '#/components/schemas/TemporalFilter'
         projectAllColumns:
           type: boolean
+      example:
+        $ref: '#/components/examples/FromExample'
     Id:
       description: entity id
       oneOf:
@@ -335,6 +317,8 @@ components:
           type: array
           items:
             type: object
+      example:
+        $ref: '#/components/examples/InsertIntoExample'
     Instant:
       type: string
       example: "2024-01-01T00:00Z"
@@ -439,12 +423,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Document'
-        from:
+        into:
           $ref: '#/components/schemas/TableName'
         validFrom:
           $ref: '#/components/schemas/Instant'
         validTo:
           $ref: '#/components/schemas/Instant'
+      example:
+        $ref: '#/components/examples/PutDocsExample'
     Query:
       description: An XTQL query
       oneOf:
@@ -824,6 +810,8 @@ components:
           type: array
           items:
             type: object
+      example:
+        $ref: '#/components/examples/UpdateExample'
     UUID:
       type: string
       format: uuid
@@ -851,6 +839,89 @@ components:
           type: array
           items:
             type: string
+  examples:
+    DeleteExample:
+      deleteFrom: "docs"
+      bind:
+        - "xt$id"
+        - customerId:
+            'xt:param': "$cid"
+      argRows:
+        cid: "your-special-customer-id"
+    DocumentSmallExample:
+      xt$id: "my-id"
+      an-int: 12
+    DocumentLargeExample:
+      xt$id: "my-id"
+      an-integer: 12
+      my-duration:
+        '@type': "xt:duration"
+        '@value': "PT3H1M35.23S"
+      my-instant:
+        '@type': "xt:instant"
+        '@value': "2024-01-01T00:00Z"
+      my-local-date:
+        '@type': "xt:date"
+        '@value': "2024-01-01"
+      my-local-date-time:
+        '@type': "xt:timestamp"
+        '@value': "2020-01-01T12:34:56.789"
+      my-period:
+        '@type': "xt:period"
+        '@value': "P18Y12D"
+      my-set:
+        '@type': "xt:set"
+        '@value': [1, 2, 3]
+      my-time-zone:
+        '@type': "xt:timeZone"
+        '@value': "America/Los_Angeles"
+      my-zoned-date-time:
+        '@type': "xt:timestamptz"
+        '@value': "2020-01-01T12:34:56.789[Europe/Paris]"
+    EraseExample:
+      eraseFrom: "docs"
+      bind:
+        - "xt$id"
+        - customerId:
+            'xt:param': "$cid"
+      argRows:
+        cid: "your-special-customer-id"
+    FromExample:
+      from: "docs"
+      bind:
+        - "xt$id"
+        - customerId:
+            'xt:param': "$cid"
+      forValidTime:
+        at:
+          '@type': "xt:date"
+          '@value': "2024-01-01"
+    InsertIntoExample:
+      insertInto: "docs"
+      query:
+        $ref: '#/components/examples/FromExample'
+      argRows:
+        cid: "your-special-customer-id"
+    PutDocsExample:
+      putDocs:
+        - $ref: '#/components/examples/DocumentSmallExample'
+      into: "docs"
+      validFrom: "2023-01-01T00:00Z"
+      validTo: "2024-01-01T00:00Z"
+    UpdateExample:
+      update: "users"
+      bind:
+        - email:
+            'xt:param': "$email"
+        - "version"
+      set:
+        - version:
+            'xt:call': "+"
+            args:
+              - 'xt:lvar': "version"
+              - 1
+      argRows:
+        - email: "james@example.com"
 paths:
   /status:
     get:
