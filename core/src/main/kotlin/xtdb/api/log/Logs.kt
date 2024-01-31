@@ -34,15 +34,14 @@ object Logs {
      *
      * Example usage, as part of a node config:
      * ```kotlin
-     * Xtdb.Config(
-     *    log = LocalLogFactory(
-     *              path = Paths.get("test-path"),
-     *              instantSource = InstantSource.system(),
-     *              bufferSize = 4096,
-     *              pollSleepDuration = Duration.ofMillis(100)
-     *          ),
+     * Xtdb.openNode {
+     *    txLog = localLog(Path("test-path")) {
+     *      instantSource = InstantSource.system()
+     *      bufferSize = 4096
+     *      pollSleepDuration = Duration.ofMillis(100)
+     *    }
      *    ...
-     * )
+     * }
      * ```
      */
     @SerialName("!Local")

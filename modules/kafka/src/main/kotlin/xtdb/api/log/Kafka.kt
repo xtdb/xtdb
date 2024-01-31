@@ -26,16 +26,16 @@ object Kafka {
      *
      * Example usage, as part of a node config:
      * ```kotlin
-     * Xtdb.Config(
-     *    log = KafkaLogFactory(
+     * Xtdb.openNode {
+     *    txLog = KafkaLogFactory(
      *              bootstrapServers = "localhost:9092",
      *              topicName = "xtdb_topic",
      *              autoCreateTopic = true,
      *              replicationFactor = 1,
      *              pollDuration = Duration.ofSeconds(1)
-     *          ),
+     *            ),
      *    ...
-     * )
+     * }
      * ```
      *
      * @property bootstrapServers A comma-separated list of host:port pairs to use for establishing the initial connection to the Kafka cluster.
