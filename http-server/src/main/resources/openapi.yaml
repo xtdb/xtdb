@@ -295,7 +295,7 @@ components:
         - $ref: '#/components/schemas/UUID'
         - type: string
         - type: integer
-        - $ref: '#/components/schemas/Keyword'
+        - $ref: '#/components/schemas/TypedKeyword'
     Insert:
       description: insert documents by query
       type: object
