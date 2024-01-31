@@ -134,6 +134,33 @@ components:
           $ref: '#/components/schemas/Id'
       additionalProperties:
         $ref: '#/components/schemas/TypedAny'
+      example:
+        xt$id: "my-id"
+        an-integer: 12
+        my-duration:
+          '@type': "xt:duration"
+          '@value': "PT3H1M35.23S"
+        my-instant:
+          '@type': "xt:instant"
+          '@value': "2024-01-01T00:00Z"
+        my-local-date:
+           '@type': "xt:date"
+           '@value': "2024-01-01"
+        my-local-date-time:
+           '@type': "xt:timestamp"
+           '@value': "2020-01-01T12:34:56.789"
+        my-period:
+          '@type': "xt:period"
+          '@value': "P18Y12D"
+        my-set:
+          '@type': "xt:set"
+          '@value': [1, 2, 3]
+        my-time-zone:
+          '@type': "xt:timeZone"
+          '@value': "America/Los_Angeles"
+        my-zoned-date-time:
+          '@type': "xt:timestamptz"
+          '@value': "2020-01-01T12:34:56.789[Europe/Paris]"
     Duration:
       description: Duration (ISO8601)
       type: string
