@@ -354,11 +354,9 @@ components:
       description: logical variable
       type: object
       properties:
-        '@type':
+        'xt:lvar':
           type: string
-          const: xt:lvar
-        '@value':
-          type: string
+          example: "xt$id"
     Offset:
       description: offset operator
       type: object
@@ -395,11 +393,9 @@ components:
       description: param expression
       type: object
       properties:
-        '@type':
+        'xt:param':
           type: string
-          const: xt:param
-        '@value':
-          type: string
+          example: "$myXtId"
     Pipeline:
       description: pipeline operator
       type: array
