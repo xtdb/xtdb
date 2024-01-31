@@ -2,7 +2,6 @@
 title: XTQL Transactions
 ---
 :examples: ../src/test/resources/docs/xtql_dml_json_examples.yaml
-:openapi: /drivers/http/openapi/index.html
 :clojure: /drivers/clojure/txs
 :kotlin: /drivers/kotlin/kdoc/xtdb-api/xtdb.api.tx
 :icon: /images/icons

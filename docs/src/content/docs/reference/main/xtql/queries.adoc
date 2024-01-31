@@ -121,8 +121,7 @@ The available aggregate functions are documented link:../stdlib/aggregates[here]
 .JSON
 [%collapsible%open]
 ====
-
-link:{openapi}#model-Aggregate[JSON Aggregate spec]
+link:{openapi}#/schemas/Aggregate[JSON Aggregate spec]
 
 [source,json]
 ----
@@ -169,7 +168,7 @@ For example:
 [%collapsible%open]
 ====
 
-link:{openapi}#model-From[JSON From spec]
+link:{openapi}#/schemas/From[JSON From spec]
 
 [source,json]
 ----
@@ -280,7 +279,7 @@ Unless otherwise specified, queries will see the current version of the row, `at
 [%collapsible%open]
 ====
 
-link:{openapi}#model-TemporalFilter[JSON TemporalFilter spec]
+link:{openapi}#/schemas/TemporalFilter[JSON TemporalFilter spec]
 
 [source,json]
 ----
@@ -330,8 +329,8 @@ Parameters in the sub-query can be fulfilled with the `:args` option - see the l
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Join[JSON Join spec] +
-link:{openapi}#model-LeftJoin[JSON LeftJoin spec]
+link:{openapi}#/schemas/Join[JSON Join spec] +
+link:{openapi}#/schemas/LeftJoin[JSON LeftJoin spec]
 
 [source,json]
 ----
@@ -376,7 +375,7 @@ Without an explicit preceding link:#_order_by[order by], the rows selected for r
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Limit[JSON Limit spec]
+link:{openapi}#/schemas/Limit[JSON Limit spec]
 
 [source,json]
 ----
@@ -415,7 +414,7 @@ For example:
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Offset[JSON Offset spec]
+link:{openapi}#/schemas/Offset[JSON Offset spec]
 
 [source,json]
 ----
@@ -453,8 +452,8 @@ spec are supplied priority is given from left to right.
 [%collapsible%open]
 ====
 
-link:{openapi}#model-OrderBy[JSON OrderBy spec] +
-link:{openapi}#model-OrderSpec[JSON OrderSpec spec]
+link:{openapi}#/schemas/OrderBy[JSON OrderBy spec] +
+link:{openapi}#/schemas/OrderSpec[JSON OrderSpec spec]
 
 [source,json]
 ----
@@ -504,7 +503,7 @@ If you want to introduce a projected column while keeping the existing columns s
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Return[JSON Return spec]
+link:{openapi}#/schemas/Return[JSON Return spec]
 
 [source,json]
 ----
@@ -549,7 +548,7 @@ The 'rel' operator yields each element as a row, with the values in the map link
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Rel[JSON Rel(ation) spec]
+link:{openapi}#/schemas/Rel[JSON Rel(ation) spec]
 
 [source,json]
 ----
@@ -604,7 +603,7 @@ This has the effect of imposing 'join conditions' over the inputs.
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Unify[JSON Unify spec]
+link:{openapi}#/schemas/Unify[JSON Unify spec]
 
 [source,json]
 ----
@@ -660,7 +659,7 @@ The other columns in the query are duplicated for each row.
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Unnest[JSON Unnest spec]
+link:{openapi}#/schemas/Unnest[JSON Unnest spec]
 
 [source,json]
 ----
@@ -720,7 +719,7 @@ It expects (optionally) many link:../stdlib/predicates[predicates] - rows that m
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Where[JSON Where spec]
+link:{openapi}#/schemas/Where[JSON Where spec]
 
 [source,json]
 ----
@@ -763,7 +762,7 @@ an link:#_expressions[expression] to bind that column/logic var to.
 [%collapsible%open]
 ====
 
-link:{openapi}#model-With[JSON With spec]
+link:{openapi}#/schemas/With[JSON With spec]
 
 [source,json]
 ----
@@ -820,7 +819,7 @@ For example, in this query, we only want the `customer-id` to join on - we don't
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Without[JSON Without spec]
+link:{openapi}#/schemas/Without[JSON Without spec]
 
 [source,json]
 ----
@@ -869,17 +868,17 @@ The columns in the returned row will be nested into a map in the outer expressio
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Expr[JSON Expr spec] +
-link:{openapi}#model-LogicVar[JSON LogicVar spec] +
-link:{openapi}#model-Param[JSON Param spec] +
-link:{openapi}#model-Call[JSON Expr Call spec] +
-link:{openapi}#model-ExprGet[JSON Expr Get spec] +
-link:{openapi}#model-ExprQuery[JSON Subquery spec] +
-link:{openapi}#model-ExprExists[JSON Exists spec] +
-link:{openapi}#model-ExprPull[JSON Pull spec] +
-link:{openapi}#model-ExprPullMany[JSON PullMany spec] +
-link:{openapi}#model-ExprSet[JSON Expr set spec] +
-link:{openapi}#model-ExprList[JSON Expr List spec]
+link:{openapi}#/schemas/Expr[JSON Expr spec] +
+link:{openapi}#/schemas/LogicVar[JSON LogicVar spec] +
+link:{openapi}#/schemas/Param[JSON Param spec] +
+link:{openapi}#/schemas/Call[JSON Expr Call spec] +
+link:{openapi}#/schemas/ExprGet[JSON Expr Get spec] +
+link:{openapi}#/schemas/ExprQuery[JSON Subquery spec] +
+link:{openapi}#/schemas/ExprExists[JSON Exists spec] +
+link:{openapi}#/schemas/ExprPull[JSON Pull spec] +
+link:{openapi}#/schemas/ExprPullMany[JSON PullMany spec] +
+link:{openapi}#/schemas/ExprSet[JSON Expr set spec] +
+link:{openapi}#/schemas/ExprList[JSON Expr List spec]
 
 The following example retrieves a post together with their author and comments:
 
@@ -964,7 +963,7 @@ Binding specs define which columns are retrieved from a relation, and specify co
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Binding[JSON Binding spec]
+link:{openapi}#/schemas/Binding[JSON Binding spec]
 
 * We can retrieve columns by listing them. The simple (unnested) string type has the meaning of a logic var/column name in this case.
 +
@@ -1048,7 +1047,7 @@ This is commonly used in 'pull' queries and all other link:#_subqueries[Subqueri
 [%collapsible%open]
 ====
 
-link:{openapi}#model-Binding[JSON Argument spec]. +
+link:{openapi}#/schemas/Binding[JSON Argument spec]. +
 Arguments and Bindings share thier schema.
 
 [source,json]
