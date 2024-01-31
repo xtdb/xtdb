@@ -492,7 +492,7 @@ components:
           description: duration to wait for the requested transactions (atTx, afterTx) to be indexed before timing out (default unlimited).
           $ref: '#/components/schemas/Duration'
     QueryRequest:
-      title: query request
+      description: query request
       required:
         - query
       type: object
@@ -614,7 +614,7 @@ components:
         - $ref: '#/components/schemas/AssertExists'
         - $ref: '#/components/schemas/AssertNotExists'
     TxOptions:
-      title: transaction options
+      description: transaction options
       properties:
         systemTime:
           $ref: '#/components/schemas/Instant'
