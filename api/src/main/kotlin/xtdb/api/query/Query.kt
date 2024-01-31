@@ -160,7 +160,7 @@ sealed interface XtqlQuery : Query {
             @JvmOverloads
             fun projectAllCols(projectAllCols: Boolean = true) = this.apply { this.projectAllCols = projectAllCols }
 
-            override fun build() = From(table, buildBindings(), forValidTime, forSystemTime, projectAllCols)
+            override fun build() = From(table, getBindings(), forValidTime, forSystemTime, projectAllCols)
         }
     }
 
@@ -170,7 +170,7 @@ sealed interface XtqlQuery : Query {
     @Serializable
     data class With(@JvmField @SerialName("with") val bindings: List<Binding>) : QueryTail, UnifyClause {
         class Builder : Binding.ABuilder<Builder, With>() {
-            override fun build() = With(buildBindings())
+            override fun build() = With(getBindings())
         }
     }
 
@@ -180,7 +180,7 @@ sealed interface XtqlQuery : Query {
     @Serializable
     data class Return(@JvmField @SerialName("return") val cols: List<Binding>) : QueryTail {
         class Builder : Binding.ABuilder<Builder, Return>() {
-            override fun build() = Return(buildBindings())
+            override fun build() = Return(getBindings())
         }
     }
 
@@ -220,7 +220,7 @@ sealed interface XtqlQuery : Query {
     @Serializable
     data class Aggregate(@JvmField @SerialName("aggregate") val cols: List<Binding>) : QueryTail {
         class Builder : Binding.ABuilder<Builder, Aggregate>() {
-            override fun build() = Aggregate(buildBindings())
+            override fun build() = Aggregate(getBindings())
         }
     }
 

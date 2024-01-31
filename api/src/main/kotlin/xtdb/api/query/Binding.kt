@@ -8,7 +8,6 @@ import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
-import xtdb.api.query.Exprs.expr
 import xtdb.api.query.Exprs.lVar
 import xtdb.jsonIAE
 
@@ -58,6 +57,7 @@ internal object BindingSerde : KSerializer<Binding> {
 data class Binding(val binding: String, val expr: Expr) {
     @JvmOverloads
     constructor(binding: String, bindVar: String = binding) : this(binding, lVar(bindVar))
+    constructor(binding: Pair<String, Expr>) : this(binding.first, binding.second)
 
     /**
      * @suppress
@@ -65,53 +65,38 @@ data class Binding(val binding: String, val expr: Expr) {
     abstract class ABuilder<B : ABuilder<B, O>, O> {
         private val bindings: MutableList<Binding> = mutableListOf()
 
-        fun setBindings(bindings: Collection<Binding>) = this.apply {
+        @Suppress("UNCHECKED_CAST")
+        fun setBindings(bindings: Collection<Binding>) = (this as B).apply {
             this.bindings.clear()
-            this.bindings.addAll(bindings)
+            this.bindings += bindings
         }
 
         @Suppress("UNCHECKED_CAST")
-        fun bind(binding: String, expr: Expr): B = this.apply { bind(Binding(binding, expr)) } as B
+        fun bind(binding: String, expr: Expr): B = (this as B).apply { bindings += Binding(binding, expr) }
 
-        fun bind(binding: String, varName: String): B = bind(binding, lVar(varName))
+        @JvmOverloads
+        fun bind(binding: String, varName: String = binding) = bind(binding, lVar(varName))
+
+        @JvmSynthetic
+        @JvmName("bindAll_str_str")
+        fun bindAll(vararg bindings: Pair<String, String>) =
+            this.apply { bindings.mapTo(this.bindings) { Binding(it.first, it.second) } }
+
+        @JvmSynthetic
+        fun bindAll(vararg bindings: Pair<String, Expr>) =
+            this.apply { bindings.mapTo(this.bindings, ::Binding) }
 
         @Suppress("UNCHECKED_CAST")
-        fun bind(binding: Binding): B = this.apply { bindings += binding } as B
-
-        @JvmSynthetic
-        infix fun String.boundTo(expr: Expr) = bind(this, expr)
-
-        @JvmSynthetic
-        infix fun String.boundTo(buildExpr: Exprs.Builder.() -> Expr) {
-            bind(this, expr(buildExpr))
+        fun bindAll(vararg cols: String): B = (this as B).apply {
+            cols.mapTo(bindings) { Binding(it, lVar(it)) }
         }
 
-        @JvmSynthetic
-        infix fun String.boundTo(varName: String) = bind(this, lVar(varName))
-
-        @JvmSynthetic
-        operator fun String.unaryPlus() = this boundTo this
-
-        @JvmSynthetic
-        @JvmName("bindCols")
-        operator fun Collection<String>.unaryPlus() = this.apply { +map { Binding(it, lVar(it)) } }
-
-        @JvmSynthetic
-        @JvmName("bind")
-        operator fun Collection<Binding>.unaryPlus() = this.apply { bindings += this }
-
-        @JvmSynthetic
-        operator fun Binding.unaryPlus() = this.apply { bindings += this }
-
-        @Suppress("UNCHECKED_CAST")
-        fun bindCols(vararg cols: String): B = this.apply { +cols.toList() } as B
-
-        protected fun buildBindings(): List<Binding> = bindings
+        protected fun getBindings(): List<Binding> = bindings
 
         abstract fun build(): O
     }
 
     class Builder : ABuilder<Builder, List<Binding>>() {
-        override fun build() = buildBindings()
+        override fun build() = getBindings()
     }
 }

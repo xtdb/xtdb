@@ -33,7 +33,7 @@ class IXtdbJavaTest {
             putDocs("docs", Map.of("xt$id", 1, "foo", "bar")));
 
         try (var res = node.openQuery(
-            from("docs").bindCols("xt$id", "xt$system_from").build())) {
+            from("docs").bindAll("xt$id", "xt$system_from").build())) {
 
             assertEquals(
                 List.of(Map.of(

@@ -9,7 +9,9 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import xtdb.IllegalArgumentException
+import xtdb.api.query.Exprs.`val`
 import xtdb.jsonIAE
+import java.time.Instant
 
 internal object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalExtents> {
     override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.query.TemporalFilter")
@@ -72,8 +74,8 @@ internal object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalE
                         element
                     )
                     TemporalFilters.`in`(
-                        decoder.json.decodeFromJsonElement(inElement[0]),
-                        decoder.json.decodeFromJsonElement(inElement[1])
+                        decoder.json.decodeFromJsonElement<Expr>(inElement[0]),
+                        decoder.json.decodeFromJsonElement<Expr>(inElement[1])
                     )
                 }
 
@@ -155,11 +157,23 @@ object TemporalFilters {
     fun at(atExpr: Expr) = TemporalFilter.At(atExpr)
 
     @JvmStatic
+    fun at(at: Instant) = at(`val`(at))
+
+    @JvmStatic
     fun `in`(fromExpr: Expr?, toExpr: Expr?) = TemporalFilter.In(fromExpr, toExpr)
 
     @JvmStatic
-    fun from(fromExpr: Expr?) = TemporalFilter.In(fromExpr, null)
+    fun `in`(from: Instant?, to: Instant?) = `in`(from?.let(::`val`), to?.let(::`val`))
+
+    @JvmStatic
+    fun from(fromExpr: Expr) = TemporalFilter.In(fromExpr, null)
+
+    @JvmStatic
+    fun from(from: Instant) = from(`val`(from))
 
     @JvmStatic
     fun to(toExpr: Expr?) = TemporalFilter.In(null, toExpr)
+
+    @JvmStatic
+    fun to(to: Instant) = to(`val`(to))
 }

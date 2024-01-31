@@ -43,7 +43,9 @@ internal class XtdbFileTest {
             listOf(mapOf("id" to "jms")),
 
             node.openQuery(
-                from("foo") { "xt\$id" boundTo "id" }
+                from("foo") {
+                    bindAll("xt\$id" to "id")
+                }
             ).toList()
         )
 

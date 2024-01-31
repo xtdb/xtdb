@@ -18,7 +18,9 @@ internal class XtdbClientTest {
                     listOf(mapOf("id" to "jms")),
 
                     client.openQuery(
-                        from("foo") { "xt/id" boundTo "id" }
+                        from("foo") {
+                            bindAll("xt/id" to "id")
+                        }
                     ).use { it.toList() }
                 )
 

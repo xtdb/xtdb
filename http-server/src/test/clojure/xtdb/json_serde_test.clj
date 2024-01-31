@@ -310,8 +310,8 @@
 
 (deftest deserialize-query-test
   (let [query (-> (Queries/from "docs")
-                  (.bind (Binding. "xt/id" (Exprs/lVar "xt/id")))
-                  (.bind (Binding. "a" (Exprs/lVar "b")))
+                  (.bind "xt/id")
+                  (.bind "a" "b")
                   (.build))]
     (t/is (= query (roundtrip-query query)))
 
