@@ -1,10 +1,9 @@
-// Shadowing Test Sources and Dependencies
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import xtdb.DataReaderTransformer
 
 plugins {
     java
     application
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.github.johnrengelman.shadow")
 }
 
 dependencies {
@@ -26,4 +25,5 @@ tasks.shadowJar {
     archiveVersion.set("")
     archiveClassifier.set("aws")
     mergeServiceFiles()
+    transform(DataReaderTransformer())
 }
