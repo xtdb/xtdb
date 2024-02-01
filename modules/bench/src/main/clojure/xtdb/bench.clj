@@ -2,10 +2,8 @@
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [xtdb.indexer.live-index :as li]
-            [xtdb.kafka :as k]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
-            [xtdb.s3 :as s3]
             [xtdb.util :as util])
   (:import [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
@@ -37,7 +35,7 @@
                       (/ (- (System/nanoTime) start-ns#) 1e6)))))))
 
 (defn finish-chunk! [node]
-  (li/finish-chunk! (util/component node :xtdb/indexer)))
+  (li/finish-chunk! (util/component node :xtdb.indexer/live-index)))
 
 (defn start-node
   (^java.lang.AutoCloseable [] (start-node {}))

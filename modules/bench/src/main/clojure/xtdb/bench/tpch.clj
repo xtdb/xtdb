@@ -1,48 +1,15 @@
 (ns xtdb.bench.tpch
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [xtdb.bench :as bench]
+            [xtdb.bench2 :as b2]
+            [xtdb.bench2.xtdb2 :as b2-xt]
             [xtdb.buffer-pool :as bp]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
-            [xtdb.test-util :as tu]
-            [xtdb.query-ra :as ra])
-  (:import java.time.Duration))
-
-(defn ingest-tpch [node {:keys [scale-factor]}]
-  (bench/with-timing :submit-docs
-    (tpch/submit-docs! node scale-factor))
-
-  (bench/with-timing :sync
-    (bench/sync-node node (Duration/ofHours 5)))
-
-  (bench/with-timing :finish-chunk
-    (bench/finish-chunk! node)))
-
-(defn query-tpch [node]
-  (tu/with-allocator
-    (fn []
-      (doseq [q tpch-ra/queries]
-        (bench/with-timing (str "query " (:name (meta q)))
-          (let [q @q
-                {::tpch-ra/keys [params table-args]} (meta q)]
-            (try
-              (count (ra/query-ra q {:node node
-                                     :params params
-                                     :table-args table-args}))
-              (catch Exception e
-                (.printStackTrace e)))))))))
-
-(comment
-  (with-open [node (bench/start-node)]
-    (bench/with-timing :ingest
-      (ingest-tpch node {:scale-factor 0.01}))
-
-    (bench/with-timing :cold-queries
-      (query-tpch node))
-
-    (bench/with-timing :hot-queries
-      (query-tpch node))))
+            [xtdb.query-ra :as query-ra]
+            [xtdb.util :as util])
+  (:import (java.time Duration InstantSource)
+           (java.util AbstractMap)))
 
 (defn bp-stats
   "Returns string reflecting buffer pool stats over a given test run"
@@ -84,47 +51,97 @@
          (map (fn [[label s]] (str label ": " s)))
          (str/join ", "))))
 
-(defn run-bench [node]
-  (let [start (System/currentTimeMillis)]
-    (bp/clear-cache-counters)
-    (bench/with-timing :cold-queries
-      (query-tpch node))
-    (log/info "cold buffer pool -" (bp-stats (- (System/currentTimeMillis) start))))
+(defn query-tpch [stage-name i]
+  (let [q (nth tpch-ra/queries i)
+        stage (keyword (str (name stage-name) "-" (:name (meta q))))
+        q @q
+        {::tpch-ra/keys [params table-args]} (meta q)]
+    {:t :do
+     :stage stage
+     :tasks [{:t :call :f (fn [{:keys [sut]}]
+                            (try
+                              (count (query-ra/query-ra q {:node sut
+                                                           :params params
+                                                           :table-args table-args}))
+                              (catch Exception e
+                                (.printStackTrace e))))}]}))
 
-  (let [start (System/currentTimeMillis)]
-    (bp/clear-cache-counters)
-    (bench/with-timing :hot-queries
-      (query-tpch node))
-    (log/info "hot buffer pool -" (bp-stats (- (System/currentTimeMillis) start)))))
 
-(defn bench [opts]
-  (tu/with-tmp-dirs #{node-tmp-dir}
-    (with-open [node (bench/start-node (into opts {:node-tmp-dir node-tmp-dir}))]
-      (bench/with-timing :ingest (ingest-tpch node opts))
-      (run-bench node))))
+(defn queries-stage [stage-name]
+  {:t :do
+   :stage stage-name
+   :tasks (vec (concat [{:t :call :f (fn [{:keys [^AbstractMap custom-state]}]
+                                       (bp/clear-cache-counters)
+                                       (.put custom-state :start (System/currentTimeMillis)))}]
 
-(comment
+                       (for [i (range (count tpch-ra/queries))]
+                         (query-tpch stage-name i))
 
-  (bench {:node-type :local-fs, :scale-factor 0.01})
-  (bench {:node-type :local-fs, :scale-factor 0.05})
-  (bench {:node-type :local-fs, :scale-factor 0.15})
+                       [{:t :call :f (fn [{:keys [custom-state] :as worker}]
+                                       (let [report-name (str (name stage-name) " buffer pool stats")
+                                             start-ms (get custom-state :start)
+                                             end-ms (System/currentTimeMillis)
+                                             bf-stats (bp-stats (- end-ms start-ms))]
+                                         (b2/add-report worker {:stage report-name
+                                                                :buffer-pool-stats bf-stats
+                                                                :start-ms start-ms
+                                                                :end-ms end-ms})
+                                         (log/info report-name " - " bf-stats)))}]))})
 
-  )
+(defn benchmark [{:keys [scale-factor seed] :or {scale-factor 0.01 seed 0}}]
+  (log/info {:scale-factor scale-factor})
+  {:title "Auction Mark OLTP"
+   :seed seed
+   :tasks
+   [{:t :do
+     :stage :ingest
+     :tasks [{:t :do
+              :stage :submit-docs
+              :tasks [{:t :call :f (fn [{:keys [sut]}] (tpch/submit-docs! sut scale-factor))}]}
+             {:t :do
+              :stage :sync
+              :tasks [{:t :call :f (fn [{:keys [sut]}] (b2-xt/sync-node sut (Duration/ofHours 5)))}]}
+             {:t :do
+              :stage :finish-chunk
+              :tasks [{:t :call :f (fn [{:keys [sut]}] (b2-xt/finish-chunk! sut))}]}]}
+
+    (queries-stage :cold-queries)
+
+    (queries-stage :hot-queries)]})
 
 (defn -main [& args]
   (try
-    (let [opts (or (bench/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
-                                       :id :scale-factor
-                                       :default 0.01
-                                       :parse-fn #(Double/parseDouble %)]
-                                      bench/node-type-arg]
-                                     args)
+    (let [opts (or (b2/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
+                                    :id :scale-factor
+                                    :default 0.01
+                                    :parse-fn #(Double/parseDouble %)]]
+                                  args)
                    (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
-      (bench opts))
+      (util/with-tmp-dirs #{node-tmp-dir}
+        (b2-xt/run-benchmark
+         {:node-opts {:node-dir node-tmp-dir
+                      :instant-src (InstantSource/system)}
+          :benchmark-type :tpch
+          :benchmark-opts {:scale-factor 0.01}})))
     (catch Exception e
       (.printStackTrace e)
       (System/exit 1))
 
     (finally
       (shutdown-agents))))
+
+(comment
+
+  (util/with-tmp-dirs #{node-tmp-dir}
+    (def report-tpch
+      (b2-xt/run-benchmark
+       {:node-opts {:node-dir node-tmp-dir
+                    :instant-src (InstantSource/system)}
+        :benchmark-type :tpch
+        :benchmark-opts {:scale-factor 0.01}})))
+
+  (xtdb.bench2.report/show-html-report
+   (xtdb.bench2.report/vs
+    "core2-tpch"
+    report-tpch)))

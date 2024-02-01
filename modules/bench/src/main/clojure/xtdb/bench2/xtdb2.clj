@@ -5,6 +5,7 @@
             [xtdb.api :as xt]
             [xtdb.bench2 :as b]
             [xtdb.bench2.measurement :as bm]
+            [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
@@ -15,9 +16,22 @@
            (java.nio.file Path)
            (java.time Duration InstantSource)
            (java.util.concurrent.atomic AtomicLong)
-           (xtdb.api IXtdb TransactionKey)))
+           (xtdb.api IXtdb TransactionKey)
+           (xtdb.indexer IIndexer)))
 
 (set! *warn-on-reflection* false)
+
+(defn finish-chunk! [node]
+  (li/finish-chunk! (util/component node :xtdb.indexer/live-index)))
+
+(defn sync-node
+  ([node]
+   (sync-node node nil))
+
+  ([node ^Duration timeout]
+   @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer)
+                   (xtp/latest-submitted-tx node)
+                   timeout)))
 
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
@@ -128,13 +142,13 @@
   (let [benchmark (case benchmark-type
                     :auctionmark
                     ((requiring-resolve 'xtdb.bench2.auctionmark/benchmark) benchmark-opts)
-                    #_#_:tpch
-                    ((requiring-resolve 'xtdb.bench2.tpch/benchmark) benchmark-opts)
+                    :tpch
+                    ((requiring-resolve 'xtdb.bench.tpch/benchmark) benchmark-opts)
                     #_#_:trace (trace benchmark-opts))
         benchmark-fn (b/compile-benchmark
                       benchmark
-                      ;; @(requiring-resolve `xtdb.bench.measurement/wrap-task)
-                      (fn [task f] (wrap-task task f)))]
+                      bm/wrap-task
+                      #_(fn [task f] (wrap-task task f)))]
     (with-open [node (tu/->local-node node-opts)]
       (benchmark-fn node))))
 

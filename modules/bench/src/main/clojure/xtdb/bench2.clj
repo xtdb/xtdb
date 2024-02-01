@@ -1,5 +1,6 @@
 (ns xtdb.bench2
-  (:require [clojure.string :as str]
+  (:require [clojure.tools.cli :as cli]
+            [clojure.string :as str]
             [xtdb.util :as util])
   (:import (java.util.concurrent.atomic AtomicLong)
            (java.util.concurrent ConcurrentHashMap Executors TimeUnit)
@@ -9,6 +10,17 @@
            (java.time Instant Duration Clock)
            (oshi SystemInfo)
            (java.lang.management ManagementFactory)))
+
+(defn parse-args [arg-spec args]
+  (let [{:keys [options summary errors]}
+        (cli/parse-opts args arg-spec)]
+    (if errors
+      (binding [*out* *err*]
+        (run! println errors)
+        (println summary))
+
+      options)))
+
 
 (defrecord Worker [sut random domain-state custom-state clock reports])
 
