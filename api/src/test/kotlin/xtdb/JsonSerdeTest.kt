@@ -324,7 +324,6 @@ class JsonSerdeTest {
                }
             """.trimJson()
             )
-        val from2 = from("docs")
         pipeline(
             from("docs").bind("xt/id").build(),
             where(TRUE)
@@ -337,8 +336,6 @@ class JsonSerdeTest {
                ]
             """.trimJson()
         )
-        val from3 = from("docs")
-        val from4 = from("docs")
         unify(
             from("docs").bind("xt/id").build(),
             from("docs").bind("xt/id").build()
@@ -450,7 +447,6 @@ class JsonSerdeTest {
     @Test
     fun shouldDeserializeQueryRequest() {
         val txKey = TransactionKey(1, Instant.EPOCH)
-        val from = from("docs")
         QueryRequest(
             from("docs").bind("xt/id").build(),
             queryOpts()
