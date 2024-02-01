@@ -1,6 +1,7 @@
 (ns xtdb.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            [xtdb.indexer]
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]

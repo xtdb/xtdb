@@ -90,7 +90,7 @@
 
 (defn benchmark [{:keys [scale-factor seed] :or {scale-factor 0.01 seed 0}}]
   (log/info {:scale-factor scale-factor})
-  {:title "Auction Mark OLTP"
+  {:title "TPC-H (OLAP)"
    :seed seed
    :tasks
    [{:t :do

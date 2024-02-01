@@ -1,15 +1,22 @@
 (ns xtdb.bench2
-  (:require [clojure.tools.cli :as cli]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
+            [clojure.tools.cli :as cli]
             [xtdb.util :as util])
-  (:import (java.util.concurrent.atomic AtomicLong)
-           (java.util.concurrent ConcurrentHashMap Executors TimeUnit)
-           (java.util Random Comparator)
-           (com.google.common.collect MinMaxPriorityQueue)
-           (java.util.function Function)
+  (:import (com.google.common.collect MinMaxPriorityQueue)
+           (java.lang.management ManagementFactory)
+           [java.nio.file Path Files]
+           java.nio.file.attribute.FileAttribute
            (java.time Instant Duration Clock)
+           java.time.Duration
+           (java.util Random Comparator)
+           (java.util.concurrent ConcurrentHashMap Executors TimeUnit)
+           (java.util.concurrent.atomic AtomicLong)
+           (java.util.function Function)
            (oshi SystemInfo)
-           (java.lang.management ManagementFactory)))
+           software.amazon.awssdk.services.s3.S3Client
+           software.amazon.awssdk.services.s3.model.GetObjectRequest))
+
+;; general utility
 
 (defn parse-args [arg-spec args]
   (let [{:keys [options summary errors]}
@@ -21,6 +28,22 @@
 
       options)))
 
+(defn tmp-file-path ^java.nio.file.Path [prefix suffix]
+  (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
+    (Files/delete)))
+
+(def !s3-client (delay (S3Client/create)))
+
+(defn download-s3-dataset-file [s3-key ^Path tmp-path]
+  (.getObject ^S3Client @!s3-client
+              (-> (GetObjectRequest/builder)
+                  (.bucket "xtdb-datasets")
+                  (.key s3-key)
+                  ^GetObjectRequest (.build))
+              tmp-path)
+  tmp-path)
+
+;;; bench2
 
 (defrecord Worker [sut random domain-state custom-state clock reports])
 

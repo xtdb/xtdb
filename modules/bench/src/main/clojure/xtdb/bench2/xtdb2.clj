@@ -144,6 +144,8 @@
                     ((requiring-resolve 'xtdb.bench2.auctionmark/benchmark) benchmark-opts)
                     :tpch
                     ((requiring-resolve 'xtdb.bench.tpch/benchmark) benchmark-opts)
+                    :ts-devices
+                    ((requiring-resolve 'xtdb.bench.ts-devices/benchmark) benchmark-opts)
                     #_#_:trace (trace benchmark-opts))
         benchmark-fn (b/compile-benchmark
                       benchmark
