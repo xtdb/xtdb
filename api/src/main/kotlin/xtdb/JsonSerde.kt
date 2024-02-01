@@ -280,7 +280,7 @@ fun <T : Any> encode(value: T, outputStream: OutputStream, clazz: Class<T>) {
  * @suppress
  */
 @Suppress("unused")
-fun encodeStatus(value: Map<String, TransactionKey>): String {
+fun encodeStatus(value: Map<String, TransactionKey?>): String {
     return JSON_SERDE.encodeToString(value.mapKeys { it.key.kebabToCamelCase()})
 }
 
