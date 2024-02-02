@@ -5,18 +5,17 @@
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
+            [xtdb.log :as log]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
-            [xtdb.query :as q]
+            [xtdb.query-ra :as ra]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.serde :as serde]
-            [xtdb.log :as log])
+            [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            java.net.ServerSocket
@@ -32,13 +31,12 @@
            org.slf4j.LoggerFactory
            (xtdb ICursor)
            (xtdb.api IXtdb TransactionKey)
-           xtdb.api.query.IKeyFn
            xtdb.api.log.Logs
+           xtdb.api.query.IKeyFn
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
-           (xtdb.query IRaQuerySource PreparedQuery)
            xtdb.util.RowCounter
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector IVectorReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -219,31 +217,7 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [node params preserve-blocks? with-col-types? key-fn] :as query-opts
-           :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
-   (let [^IIndexer indexer (util/component node :xtdb/indexer)
-         query-opts (cond-> query-opts
-                      node (-> (time/after-latest-submitted-tx node)
-                               (update :after-tx time/max-tx (get-in query-opts [:basis :at-tx]))
-                               (doto (-> :after-tx (then-await-tx node)))))]
-
-     (with-open [^RelationReader
-                 params-rel (if params
-                              (vw/open-params *allocator* params)
-                              vw/empty-params)]
-       (let [^PreparedQuery pq (if node
-                                 (let [^IRaQuerySource ra-src (util/component node ::q/ra-query-source)]
-                                   (.prepareRaQuery ra-src query))
-                                 (q/prepare-ra query))
-             bq (.bind pq indexer
-                       (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz :default-all-valid-time?])
-                           (assoc :params params-rel)))]
-         (util/with-open [res (.openCursor bq)]
-           (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
-                          (cond->> (not preserve-blocks?) (into [] cat)))]
-             (if with-col-types?
-               {:res rows, :col-types (update-vals (.columnFields bq) types/field->col-type)}
-               rows))))))))
+  ([query opts] (ra/query-ra query (assoc opts :allocator *allocator*))))
 
 (t/deftest round-trip-cursor
   (with-allocator

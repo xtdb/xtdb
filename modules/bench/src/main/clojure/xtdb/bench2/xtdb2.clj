@@ -8,7 +8,8 @@
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.query-ra :as ra])
   (:import (io.micrometer.core.instrument MeterRegistry Timer)
            (java.io Closeable File)
            (java.nio.file Path)
@@ -262,7 +263,7 @@
                      (map :i)))
 
   (def q  (fn [open-id]
-            (tu/query-ra ra-query {:node node
+            (ra/query-ra ra-query {:node node
                                    :params {'?i_id open-id}})))
   ;; ra query
   (time
