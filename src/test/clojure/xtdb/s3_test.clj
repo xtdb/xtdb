@@ -50,17 +50,17 @@
       (os-test/put-edn os (util/->path "alice") :alice)
       (os-test/put-edn os (util/->path "alan") :alan)
       (t/is (= (mapv util/->path ["alan" "alice"])
-               (.listObjects ^ObjectStore os))))
+               (.listAllObjects ^ObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
         (t/is (= (mapv util/->path ["alan" "alice"])
-                 (.listObjects ^ObjectStore os))))
+                 (.listAllObjects ^ObjectStore os))))
 
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
         @(.deleteObject ^ObjectStore os (util/->path "alice"))
         (t/is (= (mapv util/->path ["alan"])
-                 (.listObjects ^ObjectStore os)))))))
+                 (.listAllObjects ^ObjectStore os)))))))
 
 (t/deftest ^:s3 multiple-object-store-list-test
   (let [prefix (random-uuid)
@@ -72,10 +72,10 @@
       (Thread/sleep wait-time-ms)
 
       (t/is (= (mapv util/->path ["alan" "alice"])
-               (.listObjects ^ObjectStore os-1)))
+               (.listAllObjects ^ObjectStore os-1)))
 
       (t/is (= (mapv util/->path ["alan" "alice"])
-               (.listObjects ^ObjectStore os-2))))))
+               (.listAllObjects ^ObjectStore os-2))))))
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
@@ -122,7 +122,7 @@
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= (mapv util/->path ["test-multi-put"])
-                 (.listObjects ^ObjectStore os)))
+                 (.listAllObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
@@ -130,47 +130,47 @@
 
 (t/deftest ^:s3 node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
-    (util/with-open [node (xtn/start-node
+                      (util/with-open [node (xtn/start-node
                            {:storage [:remote
                                       {:object-store [:s3 {:bucket bucket
                                                            :prefix (util/->path (str (random-uuid)))
                                                            :sns-topic-arn sns-topic-arn}]
                                        :local-disk-cache local-disk-cache}]})]
-      
-      ;; Submit some documents to the node
-      (t/is (xt/submit-tx node [[:put-docs :bar {:xt/id "bar1"}]
+
+                                      ;; Submit some documents to the node
+                                      (t/is (xt/submit-tx node [[:put-docs :bar {:xt/id "bar1"}]
                                 [:put-docs :bar {:xt/id "bar2"}]
                                 [:put-docs :bar {:xt/id "bar3"}]]))
 
-      ;; Ensure finish-chunk! works
-      (t/is (nil? (tu/finish-chunk! node)))
+                                      ;; Ensure finish-chunk! works
+                                      (t/is (nil? (tu/finish-chunk! node)))
 
-      ;; Ensure can query back out results
-      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+                                      ;; Ensure can query back out results
+                                      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
                (xtdb.api/q node '(from :bar [{:xt/id e}]))))
-      
-      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
-        (t/is (instance? ObjectStore object-store))
-        ;; Ensure some files are written
-        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+
+                                      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+                                        (t/is (instance? ObjectStore object-store))
+                                        ;; Ensure some files are written
+                                        (t/is (not-empty (.listAllObjects ^ObjectStore object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (t/deftest ^:s3 tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
-    (util/with-open [node (xtn/start-node
+                      (util/with-open [node (xtn/start-node
                            {:storage [:remote
                                       {:object-store [:s3 {:bucket bucket
                                                            :prefix (util/->path (str (random-uuid)))
                                                            :sns-topic-arn sns-topic-arn}]
                                        :local-disk-cache local-disk-cache}]})]
-      ;; Submit tpch docs
-      (-> (tpch/submit-docs! node 0.05)
+                                      ;; Submit tpch docs
+                                      (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))
 
-      ;; Ensure finish-chunk! works
-      (t/is (nil? (tu/finish-chunk! node))) 
-      
-      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
-        (t/is (instance? ObjectStore object-store))
-        ;; Ensure files have been written
-        (t/is (not-empty (.listObjects ^ObjectStore object-store)))))))
+                                      ;; Ensure finish-chunk! works
+                                      (t/is (nil? (tu/finish-chunk! node)))
+
+                                      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
+                                        (t/is (instance? ObjectStore object-store))
+                                        ;; Ensure files have been written
+                                        (t/is (not-empty (.listAllObjects ^ObjectStore object-store)))))))

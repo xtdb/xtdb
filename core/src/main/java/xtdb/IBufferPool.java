@@ -12,7 +12,7 @@ public interface IBufferPool extends AutoCloseable {
 
     CompletableFuture<?> putObject(Path k, ByteBuffer buffer);
 
-    Iterable<Path> listObjects();
+    Iterable<Path> listAllObjects();
 
     Iterable<Path> listObjects(Path dir);
 

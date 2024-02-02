@@ -154,7 +154,7 @@
                            ;; fails, shouldnt add filename to the cache)
                              (.add file-name-cache k))))))
 
-  (listObjects [_this]
+  (listAllObjects [_this]
     (into [] file-name-cache))
 
   (listObjects [_this dir]

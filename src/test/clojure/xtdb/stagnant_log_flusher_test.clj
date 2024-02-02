@@ -163,7 +163,7 @@
 
 (defn chunk-path-seq [node]
   (let [pool (tu/component node :xtdb/buffer-pool)]
-    (filter #(re-matches #"tables/foo/meta/log-(.*)" (str %)) (.listObjects ^IBufferPool pool))))
+    (filter #(re-matches #"tables/foo/meta/log-(.*)" (str %)) (.listAllObjects ^IBufferPool pool))))
 
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
   (with-open [node (start-node #time/duration "PT0.001S")]

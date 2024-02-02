@@ -2,7 +2,6 @@ package xtdb.types
 
 import java.time.Duration
 import java.time.Period
-import java.util.*
 
 data class IntervalMonthDayNano(
     @JvmField val period: Period,

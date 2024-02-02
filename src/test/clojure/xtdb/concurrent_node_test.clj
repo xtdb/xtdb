@@ -42,7 +42,7 @@
                    :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))}
                   (fn []
                     (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
-            objs (.listObjects buffer-pool)
+            objs (.listAllObjects buffer-pool)
             get-item #(with-open [^ArrowBuf _buf (deref (.getBuffer buffer-pool (rand-nth objs)))]
                         (Thread/sleep 10))
             f-call #(future

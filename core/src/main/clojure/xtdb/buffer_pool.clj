@@ -25,8 +25,14 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defprotocol EvictBufferTest
+  (evict-cached-buffer! [bp ^Path k]))
+
 (def ^:private min-multipart-part-size (* 5 1024 1024))
 (def ^:private max-multipart-per-upload-concurrency 4)
+
+(def ^:private ^java.nio.file.Path storage-root
+  (util/->path (str "v" (util/->lex-hex-string 0))))
 
 (defn- free-memory [^Map memory-store]
   (locking memory-store
@@ -87,7 +93,7 @@
      (locking memory-store
        (.put memory-store k (util/->arrow-buf-view allocator buffer)))))
 
-  (listObjects [_]
+  (listAllObjects [_]
     (locking memory-store (vec (.keySet ^NavigableMap memory-store))))
 
   (listObjects [_ dir]
@@ -121,6 +127,11 @@
           (when (.isOpen write-ch)
             (.close write-ch))))))
 
+  EvictBufferTest
+  (evict-cached-buffer! [_ _k]
+    ;; no-op,
+    )
+
   Closeable
   (close [_]
     (free-memory memory-store)
@@ -149,7 +160,7 @@
             (CompletableFuture/completedFuture cached-buffer))
 
         :else
-        (let [buffer-cache-path (.resolve disk-store (str k))]
+        (let [buffer-cache-path (.resolve disk-store k)]
           (-> (if (util/path-exists buffer-cache-path)
                 ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
                 (CompletableFuture/completedFuture buffer-cache-path)
@@ -170,7 +181,7 @@
          (util/create-parents file-path)
          (util/atomic-move tmp-path file-path)))))
 
-  (listObjects [_]
+  (listAllObjects [_]
     (with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
       (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
                        :when (Files/isRegularFile path (make-array LinkOption 0))]
@@ -204,6 +215,11 @@
           (when (.isOpen file-ch)
             (.close file-ch))))))
 
+  EvictBufferTest
+  (evict-cached-buffer! [_ k]
+    (doto (.remove memory-store k)
+      util/close))
+
   Closeable
   (close [_]
     (free-memory memory-store)
@@ -213,7 +229,8 @@
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory]
   (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                      (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
-                     (.getPath factory)))
+                     (-> (.getPath factory)
+                         (.resolve storage-root))))
 
 (defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
   (.storage config (cond-> (Storage/localStorage (util/->path path))
@@ -272,23 +289,24 @@
       (let [final-part (.nioBuffer arrow-buf prev-cut (- (.capacity arrow-buf) prev-cut))]
         (conj part-buffers final-part)))))
 
-(defn- upload-arrow-file [^BufferAllocator allocator, ^ObjectStore remote-store, ^Path k, ^Path tmp-path]
+(defn- upload-arrow-file [^BufferAllocator allocator, ^ObjectStore object-store, ^Path k, ^Path tmp-path]
   (let [mmap-buffer (util/->mmap-path tmp-path)]
-    (if (or (not (instance? SupportsMultipart remote-store))
+    (if (or (not (instance? SupportsMultipart object-store))
             (<= (.remaining mmap-buffer) (int min-multipart-part-size)))
-      @(.putObject remote-store k mmap-buffer)
+      @(.putObject object-store k mmap-buffer)
 
       (with-open [arrow-buf (util/->arrow-buf-view allocator mmap-buffer)]
-        (upload-multipart-buffers remote-store k (arrow-buf->parts arrow-buf))
+        (upload-multipart-buffers object-store k (arrow-buf->parts arrow-buf))
         nil))))
 
 (defrecord RemoteBufferPool [allocator
                              ^ArrowBufLRU memory-store
                              ^Path local-disk-cache
-                             ^ObjectStore remote-store]
+                             ^ObjectStore object-store]
   IBufferPool
   (getBuffer [_ k]
-    (let [cached-buffer (cache-get memory-store k)]
+    (let [k (.resolve storage-root k)
+          cached-buffer (cache-get memory-store k)]
       (cond
         (nil? k)
         (CompletableFuture/completedFuture nil)
@@ -304,7 +322,7 @@
                 ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
                 (CompletableFuture/completedFuture buffer-cache-path)
                 (do (util/create-parents buffer-cache-path)
-                    (-> (.getObject remote-store k buffer-cache-path)
+                    (-> (.getObject object-store k buffer-cache-path)
                         (util/then-apply (fn [path] (record-io-wait start-ns) path)))))
               (util/then-apply
                 (fn [path]
@@ -314,12 +332,13 @@
                         [_ buf] (cache-compute memory-store k create-arrow-buf)]
                     buf))))))))
 
-  (listObjects [_] (.listObjects remote-store))
+  (listAllObjects [_] (.listAllObjects object-store))
 
-  (listObjects [_ dir] (.listObjects remote-store dir))
+  (listObjects [_ dir] (.listObjects object-store (.resolve storage-root dir)))
 
   (openArrowWriter [_ k vsr]
-    (let [tmp-path (create-tmp-path local-disk-cache)
+    (let [k (.resolve storage-root k)
+          tmp-path (create-tmp-path local-disk-cache)
           file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
           aw (ArrowFileWriter. vsr nil file-ch)]
 
@@ -332,7 +351,7 @@
           (.end aw)
           (.close file-ch)
 
-          (upload-arrow-file allocator remote-store k tmp-path)
+          (upload-arrow-file allocator object-store k tmp-path)
 
           (let [file-path (.resolve local-disk-cache k)]
             (util/create-parents file-path)
@@ -346,33 +365,39 @@
             (.close file-ch))))))
 
   (putObject [_ k buffer]
-    (if (or (not (instance? SupportsMultipart remote-store))
-            (<= (.remaining buffer) (int min-multipart-part-size)))
-      (.putObject remote-store k buffer)
+    (let [k (.resolve storage-root k)]
+      (if (or (not (instance? SupportsMultipart object-store))
+              (<= (.remaining buffer) (int min-multipart-part-size)))
+        (.putObject object-store k buffer)
 
-      (let [buffers (->> (range (.position buffer) (.limit buffer) min-multipart-part-size)
-                         (map (fn [n] (.slice buffer
-                                              (int n)
-                                              (min (int min-multipart-part-size)
-                                                   (- (.limit buffer) (int n)))))))]
-        (-> (CompletableFuture/runAsync
-             (fn []
-               (upload-multipart-buffers remote-store k buffers)))
+        (let [buffers (->> (range (.position buffer) (.limit buffer) min-multipart-part-size)
+                           (map (fn [n] (.slice buffer
+                                                (int n)
+                                                (min (int min-multipart-part-size)
+                                                     (- (.limit buffer) (int n)))))))]
+          (-> (CompletableFuture/runAsync
+               (fn []
+                 (upload-multipart-buffers object-store k buffers)))
 
-            (.thenRun (fn []
-                        (let [tmp-path (create-tmp-path local-disk-cache)]
-                          (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
-                            (.write file-ch buffer))
+              (.thenRun (fn []
+                          (let [tmp-path (create-tmp-path local-disk-cache)]
+                            (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
+                              (.write file-ch buffer))
 
-                          (let [file-path (.resolve local-disk-cache k)]
-                            (util/create-parents file-path)
-                            ;; see #2847
-                            (util/atomic-move tmp-path file-path)))))))))
+                            (let [file-path (.resolve local-disk-cache k)]
+                              (util/create-parents file-path)
+                              ;; see #2847
+                              (util/atomic-move tmp-path file-path))))))))))
+
+  EvictBufferTest
+  (evict-cached-buffer! [_ k]
+    (doto (.remove memory-store k)
+      (util/close)))
 
   Closeable
   (close [_]
     (free-memory memory-store)
-    (util/close remote-store)
+    (util/close object-store)
     (util/close allocator)))
 
 (set! *unchecked-math* :warn-on-boxed)

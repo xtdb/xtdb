@@ -77,7 +77,7 @@
     (.putIfAbsent os k (.slice buf))
     (CompletableFuture/completedFuture nil))
 
-  (listObjects [_this]
+  (listAllObjects [_this]
     (vec (.keySet os)))
 
   (listObjects [_this prefix]
@@ -129,7 +129,7 @@
   (put-edn obj-store (util/->path "bar/baza/james") :james)
 
   (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"])
-           (.listObjects obj-store)))
+           (.listAllObjects obj-store)))
 
   (t/is (= (mapv util/->path ["foo/alan"])
            (.listObjects obj-store (util/->path "foo"))))

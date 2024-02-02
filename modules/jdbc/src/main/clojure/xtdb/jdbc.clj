@@ -91,7 +91,7 @@
                            (.get buf ba)
                            ba))]))))
 
-  (listObjects [_]
+  (listAllObjects [_]
     (->> (jdbc/execute! pool
                         ["SELECT key FROM objects"]
                         {:builder-fn jdbcr/as-unqualified-kebab-maps})

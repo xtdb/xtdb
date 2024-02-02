@@ -122,7 +122,7 @@
          (put-blob blob-container-client (str prefixed-key) buf)
          (.add file-name-cache k)))))
 
-  (listObjects [_this]
+  (listAllObjects [_this]
     (into [] file-name-cache))
 
   (listObjects [_this dir]

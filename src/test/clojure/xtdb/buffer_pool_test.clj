@@ -6,21 +6,19 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
-            [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
-           (java.util Map TreeMap)
            (java.util.concurrent CompletableFuture)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector IntVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
-           xtdb.IBufferPool
            xtdb.buffer_pool.RemoteBufferPool
+           xtdb.IBufferPool
            (xtdb.multipart IMultipartUpload SupportsMultipart)
            (xtdb.util ArrowBufLRU)))
 
@@ -49,41 +47,40 @@
       (t/is (= [{:xt/id :foo}]
                (xt/q node '(from :foo [xt/id]))))
 
-      (tu/finish-chunk! node)
+                                      (tu/finish-chunk! node)
 
-      (let [{:keys [^ObjectStore remote-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
-        (t/is (instance? RemoteBufferPool buffer-pool))
+                                      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
+                                        (t/is (instance? RemoteBufferPool buffer-pool))
 
-        (t/is (seq (.listObjects remote-store)))))))
+                                        (t/is (seq (.listAllObjects object-store)))))))
 
 (t/deftest cache-counter-test
   (util/with-open [bp (bp/open-remote-storage tu/*allocator*
                                               (Storage/remoteStorage (bp/->object-store-factory :in-memory {})
                                                                      (create-tmp-dir)))]
-    (let [{^ObjectStore os :remote-store} bp]
-      (bp/clear-cache-counters)
-      (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-      (t/is (= 0 (.get bp/cache-miss-byte-counter)))
-      (t/is (= 0N @bp/io-wait-nanos-counter))
+    (bp/clear-cache-counters)
+    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+    (t/is (= 0 (.get bp/cache-miss-byte-counter)))
+    (t/is (= 0N @bp/io-wait-nanos-counter))
 
-      @(.putObject ^ObjectStore os (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
+    @(.putObject bp (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
 
-      (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
+    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
 
-      (t/is (pos? (.get bp/cache-miss-byte-counter)))
-      (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-      (t/is (pos? @bp/io-wait-nanos-counter))
+    (t/is (pos? (.get bp/cache-miss-byte-counter)))
+    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+    (t/is (pos? @bp/io-wait-nanos-counter))
 
-      (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
+    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
 
-      (t/is (pos? (.get bp/cache-hit-byte-counter)))
-      (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
+    (t/is (pos? (.get bp/cache-hit-byte-counter)))
+    (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
 
-      (bp/clear-cache-counters)
+    (bp/clear-cache-counters)
 
-      (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-      (t/is (= 0 (.get bp/cache-miss-byte-counter)))
-      (t/is (= 0N @bp/io-wait-nanos-counter)))))
+    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+    (t/is (= 0 (.get bp/cache-miss-byte-counter)))
+    (t/is (= 0N @bp/io-wait-nanos-counter))))
 
 (t/deftest arrow-buf-lru-test
   (t/testing "max size restriction"
@@ -136,10 +133,6 @@
   ;; todo get .nioByteBuffer to work
   (ByteBuffer/wrap (arrow-buf-bytes arrow-buf)))
 
-(defn evict-buffer [bp k]
-  (doto ^ArrowBuf (.remove ^Map (:memory-store bp) k)
-    .close))
-
 (defn test-get-object [^IBufferPool bp, ^Path k, ^ByteBuffer expected]
   (let [{:keys [^Path disk-store, object-store]} bp]
 
@@ -153,14 +146,15 @@
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.resolve disk-store k))))))
 
       (t/testing "if the buffer is evicted, it is loaded from disk"
-        (evict-buffer bp k)
+        (bp/evict-cached-buffer! bp k)
         (util/with-open [buf @(.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))
 
     (when object-store
       (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
-        (evict-buffer bp k)
-        (util/delete-file (.resolve disk-store k))
+        (bp/evict-cached-buffer! bp k)
+        (when disk-store
+          (util/delete-file (.resolve disk-store k)))
         (util/with-open [buf @(.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
 
@@ -210,7 +204,7 @@
                           (Storage/remoteStorage simulated-obj-store-factory (create-tmp-dir))))
 
 (defn get-remote-calls [test-bp]
-  @(:calls (:remote-store test-bp)))
+  @(:calls (:object-store test-bp)))
 
 (t/deftest below-min-size-put-test
   (with-open [bp (remote-test-buffer-pool)]
