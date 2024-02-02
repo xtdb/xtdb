@@ -103,15 +103,15 @@
   (if (= ts-unit :second)
     `(.toEpochSecond ~form)
     `(let [form# ~form]
-       (Math/addExact (Math/multiplyExact (.toEpochSecond form#) ~(types/ts-units-per-second ts-unit))
-                      (quot (.getNano form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
+       (Math/addExact (Math/multiplyExact (long (.toEpochSecond form#)) ~(types/ts-units-per-second ts-unit))
+                      (quot (long (.getNano form#)) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
 
 (defn- ldt->ts [form ts-unit]
   (if (= ts-unit :second)
     `(.toEpochSecond ~form ZoneOffset/UTC)
     `(let [form# ~form]
-       (Math/addExact (Math/multiplyExact (.toEpochSecond form# ZoneOffset/UTC) ~(types/ts-units-per-second ts-unit))
-                      (quot (.getNano form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
+       (Math/addExact (Math/multiplyExact (long (.toEpochSecond form# ZoneOffset/UTC)) ~(types/ts-units-per-second ts-unit))
+                      (quot (long (.getNano form#)) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
 
 (defn- ts->ldt [form ts-unit]
   `(let [form# ~form]
