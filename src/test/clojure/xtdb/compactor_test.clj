@@ -108,7 +108,7 @@
         (t/is (= (range 200) (q)))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e")))
-                       (.resolve node-dir "objects/v00/tables/foo") #"log-l01-(.+)\.arrow")
+                       (.resolve node-dir "objects/v01/tables/foo") #"log-l01-(.+)\.arrow")
 
         (t/testing "second level"
           (submit! (range 200 500))
@@ -118,5 +118,5 @@
           (t/is (= (range 500) (q)))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e-level-2")))
-                         (.resolve node-dir "objects/v00/tables/foo")
+                         (.resolve node-dir "objects/v01/tables/foo")
                          #"log-l0(?:1|2)-(.+)\.arrow"))))))
