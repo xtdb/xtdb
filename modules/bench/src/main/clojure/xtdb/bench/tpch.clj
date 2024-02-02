@@ -5,7 +5,8 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
-            [xtdb.test-util :as tu])
+            [xtdb.test-util :as tu]
+            [xtdb.query-ra :as ra])
   (:import java.time.Duration))
 
 (defn ingest-tpch [node {:keys [scale-factor]}]
@@ -26,7 +27,7 @@
           (let [q @q
                 {::tpch-ra/keys [params table-args]} (meta q)]
             (try
-              (count (tu/query-ra q {:node node
+              (count (ra/query-ra q {:node node
                                      :params params
                                      :table-args table-args}))
               (catch Exception e

@@ -6,7 +6,8 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.query-ra :as ra])
   (:import java.lang.AutoCloseable
            java.nio.file.attribute.FileAttribute
            java.nio.file.Files
@@ -39,7 +40,7 @@
                           (log/info "awaiting" k "node")
                           (tu/then-await-tx last-tx node (Duration/ofHours 1))
                           (log/info "rows:"
-                                    (count (tu/query-ra query {:node node, :params (::tpch/params (meta query))}))))]
+                                    (count (ra/query-ra query {:node node, :params (::tpch/params (meta query))}))))]
                   (doseq [[k node] {:primary primary-node
                                     :secondary1 secondary-node1
                                     :secondary2 secondary-node2
