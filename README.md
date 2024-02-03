@@ -1,7 +1,7 @@
 <img alt="XTDB" role="img" aria-label="XTDB" src="./docs/xtdb-logo-banner.svg">
 
 
-[XTDB](https://xtdb.com) is a general purpose database with graph-oriented bitemporal indexes.
+[XTDB](https://xtdb.com) is a general purpose database with bitemporal indexes.
 Datalog, SQL & EQL queries are supported, and Java, HTTP & Clojure APIs are
 provided.
 
@@ -111,7 +111,7 @@ useful to avoid being caught out by mutation), can be browsed
 ## Copyright & License
 The MIT License (MIT)
 
-Copyright © 2018-2023 JUXT LTD.
+Copyright © 2018-2024 JUXT LTD.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
