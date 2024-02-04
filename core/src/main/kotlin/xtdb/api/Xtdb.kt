@@ -22,11 +22,11 @@ object Xtdb {
 
     @Serializable
     data class Config(
-        override var txLog: Log.Factory = inMemoryLog(),
+        var txLog: Log.Factory = inMemoryLog(),
         var storage: Storage.Factory = inMemoryStorage(),
-        override var defaultTz: ZoneId = ZoneOffset.UTC,
+        var defaultTz: ZoneId = ZoneOffset.UTC,
         @JvmField val indexer: IndexerConfig = IndexerConfig()
-    ) : AConfig() {
+    ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
         fun storage(storage: Storage.Factory) = apply { this.storage = storage }
@@ -39,7 +39,9 @@ object Xtdb {
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
 
-        override fun open() = OPEN_NODE.invoke(this) as IXtdb
+        fun open() = OPEN_NODE.invoke(this) as IXtdb
+        fun txLog(txLog: Log.Factory) = apply { this.txLog = txLog }
+        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
     }
 
     @JvmStatic

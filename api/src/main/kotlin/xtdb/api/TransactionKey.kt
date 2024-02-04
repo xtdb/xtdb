@@ -14,7 +14,7 @@ private val SYSTEM_TIME_KEY: Keyword = Keyword.intern("system-time")
 /**
  * A key representing a single transaction on the log.
  *
- * @see IXtdbSubmitClient.submitTx
+ * @see IXtdb.submitTx
  * @see xtdb.api.query.QueryOptions.basis
  * @see xtdb.api.query.QueryOptions.afterTx
  */

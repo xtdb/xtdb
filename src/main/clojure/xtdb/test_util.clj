@@ -15,7 +15,8 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.serde :as serde])
+            [xtdb.serde :as serde]
+            [xtdb.log :as log])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            java.net.ServerSocket
@@ -30,8 +31,9 @@
            (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
            (xtdb ICursor)
-           (xtdb.api TransactionKey)
+           (xtdb.api IXtdb TransactionKey)
            xtdb.api.query.IKeyFn
+           xtdb.api.log.Logs
            xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            (xtdb.query IRaQuerySource PreparedQuery)
@@ -255,18 +257,29 @@
 
           (t/is (= blocks (<-cursor cursor))))))))
 
-(defn ->local-node ^java.lang.AutoCloseable [{:keys [^Path node-dir ^String buffers-dir
-                                                     rows-per-chunk log-limit page-limit instant-src]
-                                              :or {buffers-dir "objects"}}]
+(defn ->local-node ^xtdb.api.IXtdb [{:keys [^Path node-dir ^String buffers-dir
+                                            rows-per-chunk log-limit page-limit instant-src]
+                                     :or {buffers-dir "objects"}}]
   (let [instant-src (or instant-src (->mock-clock))]
     (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                    (into {} (filter val)))})))
 
-(defn ->local-submit-client ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
-  (xtn/start-submit-client {:log [:local {:path (.resolve node-dir "log")
-                                          :instant-src (->mock-clock)}]}))
+(defn ->local-submit-client ^xtdb.api.IXtdb [{:keys [^Path node-dir]}]
+  (let [sys (-> {:xtdb/allocator {}
+                 :xtdb/log (Logs/localLog (.resolve node-dir "log"))
+                 :xtdb/default-tz #time/zone "UTC"}
+                (ig/prep)
+                (ig/init))]
+    (reify IXtdb
+      (submitTxAsync [_ tx-opts tx-ops]
+        (log/submit-tx& {:allocator (:xtdb/allocator sys)
+                         :log (:xtdb/log sys)
+                         :default-tz (:xtdb/default-tz sys)}
+                        (vec tx-ops) tx-opts))
+      (close [_]
+        (ig/halt! sys)))))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

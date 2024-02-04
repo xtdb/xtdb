@@ -14,7 +14,7 @@
            (java.nio.file Path)
            (java.time Duration InstantSource)
            (java.util.concurrent.atomic AtomicLong)
-           (xtdb.api IXtdbSubmitClient TransactionKey)))
+           (xtdb.api IXtdb TransactionKey)))
 
 (set! *warn-on-reflection* false)
 
@@ -101,7 +101,7 @@
           (reset! last-completed latest-completed-tx)
           res))
 
-      IXtdbSubmitClient
+      IXtdb
       (submitTxAsync [_ tx-ops opts]
         (let [ret (.submitTxAsync node tx-ops opts)]
           (reset! last-submitted [ret (System/currentTimeMillis)])

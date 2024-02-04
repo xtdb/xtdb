@@ -6,7 +6,7 @@
   (:import [java.io File]
            [java.nio.file Path]
            [java.time ZoneId]
-           [xtdb.api Xtdb Xtdb$Config XtdbSubmitClient XtdbSubmitClient$Config]))
+           [xtdb.api Xtdb Xtdb$Config]))
 
 (defmulti ^:no-doc apply-config!
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -75,26 +75,3 @@
                                                           config
                                                           opts)))))))
 
-(defn start-submit-client
-  "Starts a submit-only client with the given configuration.
-
-  Accepts various parameter types:
-  - An 'edn' map containing configuration options for the node.
-  - An instance of 'xtdb.api.Xtdb$Config'.
-  - An instance of 'java.io.File' pointing to an existing '.yaml' configuration file.
-  - An instance of 'java.nio.file.Path' pointing to an existing '.yaml' configuration file.
-
-  This client *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
-
-  For more information on the configuration options, see the relevant module pages in the [Clojure docs](https://docs.xtdb.com/drivers/clojure/codox/index.html)"
-  ^xtdb.api.IXtdbSubmitClient [opts]
-  (cond
-    (instance? XtdbSubmitClient$Config opts) (XtdbSubmitClient/openSubmitClient ^XtdbSubmitClient$Config opts)
-    (instance? Path opts) (XtdbSubmitClient/openSubmitClient ^Path opts)
-    (instance? File opts) (XtdbSubmitClient/openSubmitClient (.toPath ^File opts))
-    (map? opts) (XtdbSubmitClient/openSubmitClient (doto (XtdbSubmitClient$Config.)
-                                                     (as-> config (reduce-kv (fn [config k v]
-                                                                               (doto config
-                                                                                 (apply-config! k v)))
-                                                                             config
-                                                                             opts))))))

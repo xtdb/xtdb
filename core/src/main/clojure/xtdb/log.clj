@@ -14,13 +14,13 @@
            (java.time Instant)
            java.time.Duration
            (java.util ArrayList HashMap)
-           java.util.concurrent.Semaphore
+           (java.util.concurrent CompletableFuture Semaphore)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.log Log Log$Factory Log$Record Log$Subscriber)
-           (xtdb.api.tx TxOp$Abort TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$SqlByteArgs TxOp$XtqlAndArgs TxOp$XtqlOp)
+           (xtdb.api.tx TxOp$Abort TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$SqlByteArgs TxOp$XtqlAndArgs TxOp$XtqlOp TxOptions)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -382,3 +382,21 @@
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
+
+(defn- validate-tx-ops [tx-ops]
+  (try
+    (doseq [tx-op tx-ops
+            :when (instance? TxOp$Sql tx-op)]
+      (sql/parse-query (.sql ^TxOp$Sql tx-op)))
+    (catch Throwable e
+      (CompletableFuture/failedFuture e))))
+
+(defn submit-tx& ^java.util.concurrent.CompletableFuture
+  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops ^TxOptions opts]
+
+  (or (validate-tx-ops tx-ops)
+      (let [system-time (some-> opts .getSystemTime)]
+        (.appendRecord log (serialize-tx-ops allocator tx-ops
+                                             {:default-tz (or (some-> opts .getDefaultTz) default-tz)
+                                              :system-time system-time
+                                              :default-all-valid-time? (some-> opts .getDefaultAllValidTime)})))))
