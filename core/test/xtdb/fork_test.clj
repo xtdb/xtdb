@@ -24,7 +24,7 @@
 
 (t/deftest test-valid-time-capping-for-tx-fn
   (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2020"} #inst "2020"]])
-  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2025"} #inst "2025"]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2035"} #inst "2035"]])
 
   (assert (true? (xt/tx-committed? *api*
                                    (fix/submit+await-tx [[::xt/put {:xt/id :update-fn
@@ -35,7 +35,7 @@
 
   (t/is (= [#:xtdb.api{:tx-id 0, :doc {:version "2020", :xt/id :ivan}}
             #:xtdb.api{:tx-id 3, :doc {:version "2020", :updated? true, :xt/id :ivan}}]
-           (->> (xt/entity-history (xt/db *api*  #inst "2024")
+           (->> (xt/entity-history (xt/db *api*  #inst "2034")
                                    :ivan
                                    :asc
                                    {:with-docs? true
@@ -44,8 +44,8 @@
 
   (t/is (= [#:xtdb.api{:tx-id 0, :doc {:version "2020", :xt/id :ivan}}
             #:xtdb.api{:tx-id 3, :doc {:version "2020", :updated? true, :xt/id :ivan}}
-            #:xtdb.api{:tx-id 1, :doc {:version "2025", :xt/id :ivan}}]
-           (->> (xt/entity-history (xt/db *api* #inst "2026")
+            #:xtdb.api{:tx-id 1, :doc {:version "2035", :xt/id :ivan}}]
+           (->> (xt/entity-history (xt/db *api* #inst "2036")
                                    :ivan
                                    :asc
                                    {:with-docs? true
