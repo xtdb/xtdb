@@ -17,7 +17,7 @@
            [com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs]
            [com.azure.storage.blob BlobServiceClientBuilder]
            [java.util.concurrent ConcurrentSkipListSet]
-           [xtdb.api AConfig]
+           [xtdb.api Xtdb$Config]
            [xtdb.api.log AzureEventHub AzureEventHub$Factory]
            [xtdb.api.storage AzureBlobStorage AzureBlobStorage$Factory]))
 
@@ -57,8 +57,8 @@
                                file-list-watcher)))
 
 (defmethod xtn/apply-config! ::event-hub-log
-  [^AConfig config _ {:keys [namespace event-hub-name max-wait-time poll-sleep-duration
-                             create-event-hub? retention-period-in-days resource-group-name]}]
+  [^Xtdb$Config config _ {:keys [namespace event-hub-name max-wait-time poll-sleep-duration
+                                 create-event-hub? retention-period-in-days resource-group-name]}]
   (doto config
     (.setTxLog (cond-> (AzureEventHub/azureEventHub namespace event-hub-name)
                  max-wait-time (.maxWaitTime (time/->duration max-wait-time))

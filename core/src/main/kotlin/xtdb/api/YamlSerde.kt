@@ -121,9 +121,3 @@ val YAML_SERDE = Yaml(
  */
 fun nodeConfig(yamlString: String): Xtdb.Config =
     YAML_SERDE.decodeFromString<Xtdb.Config>(yamlString)
-
-/**
- * @suppress
- */
-fun submitClient(yamlString: String): XtdbSubmitClient.Config =
-    YAML_SERDE.decodeFromString<XtdbSubmitClient.Config>(yamlString)

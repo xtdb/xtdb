@@ -52,16 +52,4 @@ internal class XtdbFileTest {
         File("/tmp/test-storage").deleteRecursively()
         File("/tmp/test-log").deleteRecursively()
     }
-
-    @Test
-    fun validConfigSubmitClient() {
-        val resourcePath = XtdbFileTest::class.java.classLoader.getResource("submit-client-config.yaml")!!.path
-        val submitClient = assertDoesNotThrow { XtdbSubmitClient.openSubmitClient(path = Path(resourcePath)) }
-
-        assertDoesNotThrow {
-            submitClient.submitTx(putDocs("foo", mapOf("xt\$id" to "jms")))
-        }
-
-        File("/tmp/test-log").deleteRecursively()
-    }
 }

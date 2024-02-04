@@ -11,16 +11,14 @@
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
   (:import (java.io Closeable Writer)
-           (java.lang AutoCloseable)
            (java.util.concurrent CompletableFuture)
            java.util.HashMap
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb IXtdbSubmitClient TransactionKey Xtdb$Config XtdbSubmitClient$Config)
+           (xtdb.api IXtdb TransactionKey Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis IKeyFn QueryOptions XtqlQuery)
-           (xtdb.api.tx TxOp$Sql TxOptions)
            xtdb.indexer.IIndexer
            (xtdb.query IRaQuerySource)))
 
@@ -32,27 +30,9 @@
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
-(defn- validate-tx-ops [tx-ops]
-  (try
-    (doseq [tx-op tx-ops
-            :when (instance? TxOp$Sql tx-op)]
-      (sql/parse-query (.sql ^TxOp$Sql tx-op)))
-    (catch Throwable e
-      (CompletableFuture/failedFuture e))))
-
 (defn- with-after-tx-default [opts]
   (-> opts
       (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
-
-(defn- submit-tx& ^java.util.concurrent.CompletableFuture
-  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops ^TxOptions opts]
-
-  (or (validate-tx-ops tx-ops)
-      (let [system-time (some-> opts .getSystemTime)]
-        (.appendRecord log (log/serialize-tx-ops allocator tx-ops
-                                                 {:default-tz (or (some-> opts .getDefaultTz) default-tz)
-                                                  :system-time system-time
-                                                  :default-all-valid-time? (some-> opts .getDefaultAllValidTime)})))))
 
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
@@ -64,7 +44,7 @@
   IXtdb
   (submitTxAsync [this opts tx-ops]
     (let [system-time (some-> opts .getSystemTime)]
-      (-> (submit-tx& this (vec tx-ops) opts)
+      (-> (log/submit-tx& this (vec tx-ops) opts)
           (util/then-apply
             (fn [^TransactionKey tx-key]
               (let [tx-key (cond-> tx-key
@@ -188,47 +168,3 @@
                :close-fn #(when (compare-and-set! !closing false true)
                             (ig/halt! system)
                             #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
-
-(defrecord SubmitClient [^BufferAllocator allocator, ^Log log, default-tz
-                         !system, close-fn]
-  IXtdbSubmitClient
-  (submitTxAsync [this opts tx-ops]
-    (submit-tx& this (vec tx-ops) opts))
-
-  AutoCloseable
-  (close [_]
-    (when close-fn
-      (close-fn))))
-
-(defmethod print-method SubmitClient [_node ^Writer w] (.write w "#<XtdbSubmitClient>"))
-(defmethod pp/simple-dispatch SubmitClient [it] (print-method it *out*))
-
-(defmethod ig/prep-key ::submit-client [_ opts]
-  (merge {:allocator (ig/ref :xtdb/allocator)
-          :log (ig/ref :xtdb/log)
-          :default-tz (ig/ref :xtdb/default-tz)}
-         opts))
-
-(defmethod ig/init-key ::submit-client [_ deps]
-  (map->SubmitClient (-> deps (assoc :!system (atom nil)))))
-
-(defmethod ig/halt-key! ::submit-client [_ ^SubmitClient node]
-  (.close node))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-submit-client ^xtdb.api.IXtdbSubmitClient [^XtdbSubmitClient$Config config]
-  (let [!closing (atom false)
-        system (-> {::submit-client {}
-                    :xtdb/allocator {}
-                    :xtdb/log (.getTxLog config)
-                    :xtdb/default-tz (.getDefaultTz config)}
-
-                   (doto ig/load-namespaces)
-
-                   ig/prep
-                   ig/init)]
-
-    (-> (::submit-client system)
-        (doto (-> :!system (reset! system)))
-        (assoc :close-fn #(when-not (compare-and-set! !closing false true)
-                            (ig/halt! system))))))

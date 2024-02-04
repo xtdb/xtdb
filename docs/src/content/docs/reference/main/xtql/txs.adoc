@@ -11,7 +11,7 @@ They each consist of an array of link:#tx-ops[operations].
 
 [.lang-icons.right]
 image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link=/drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb-submit-client/submit-tx.html]
+image:{icon}/kotlin.svg[Kotlin,link=/drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/submit-tx.html]
 
 For details about how transactions are submitted, see your individual client language documentation:
 
