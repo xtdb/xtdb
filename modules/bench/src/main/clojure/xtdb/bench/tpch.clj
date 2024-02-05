@@ -119,13 +119,16 @@
                                                        args)
                                         (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
-      (spit report
-            (util/with-tmp-dirs #{node-tmp-dir}
-              (b2-xt/run-benchmark
-               {:node-opts {:node-dir node-tmp-dir
-                            :instant-src (InstantSource/system)}
-                :benchmark-type :tpch
-                :benchmark-opts {:scale-factor 0.01}}))))
+      (util/with-tmp-dirs #{node-tmp-dir}
+        (let [tmp-report-file (.resolve node-tmp-dir "report.edn")]
+          (spit (.toFile tmp-report-file)
+                (b2-xt/run-benchmark
+                 {:node-opts {:node-dir node-tmp-dir
+                              :instant-src (InstantSource/system)}
+                  :benchmark-type :tpch
+                  :benchmark-opts {:scale-factor 0.01}}))
+          (b2/push-s3-report-file (b2/report-key :TPC-H report)
+                                  tmp-report-file))))
     (catch Exception e
       (.printStackTrace e)
       (System/exit 1))

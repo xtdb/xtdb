@@ -55,13 +55,16 @@
     (let [{:keys [report size] :as opts} (or (bench2/parse-args cli-arg-spec args)
                                              (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
-      (spit report
-            (util/with-tmp-dirs #{node-tmp-dir}
-              (b2-xt/run-benchmark
-               {:node-opts {:node-dir node-tmp-dir
-                            :instant-src (InstantSource/system)}
-                :benchmark-type :ts-devices
-                :benchmark-opts {:size size}}))))
+      (util/with-tmp-dirs #{node-tmp-dir}
+        (let [tmp-report-file (.resolve node-tmp-dir "report.edn")]
+          (spit (.toFile tmp-report-file)
+                (b2-xt/run-benchmark
+                 {:node-opts {:node-dir node-tmp-dir
+                              :instant-src (InstantSource/system)}
+                  :benchmark-type :ts-devices
+                  :benchmark-opts {:size size}}))
+          (bench2/push-s3-report-file (bench2/report-key :TPC-H report)
+                                      tmp-report-file))))
     (catch Exception e
       (.printStackTrace e)
       (System/exit 1))

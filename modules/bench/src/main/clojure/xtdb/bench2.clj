@@ -14,7 +14,7 @@
            (java.util.function Function)
            (oshi SystemInfo)
            software.amazon.awssdk.services.s3.S3Client
-           software.amazon.awssdk.services.s3.model.GetObjectRequest))
+           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)))
 
 ;; general utility
 
@@ -47,6 +47,16 @@
               tmp-path)
   tmp-path)
 
+(defn report-key [benchmark report]
+  (str (name benchmark) "-" (str (java.time.LocalDateTime/now) "-" report)))
+
+(defn push-s3-report-file [s3-key ^Path tmp-path]
+  (.putObject ^S3Client @!s3-client
+              (-> (PutObjectRequest/builder)
+                  (.bucket "xtdb2-bench")
+                  (.key s3-key)
+                  ^PutObjectRequest (.build))
+              tmp-path))
 ;;; bench2
 
 (defrecord Worker [sut random domain-state custom-state clock reports])
