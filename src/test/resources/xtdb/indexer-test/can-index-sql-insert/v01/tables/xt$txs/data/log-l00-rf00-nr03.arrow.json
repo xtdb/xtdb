@@ -18,37 +18,23 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_times",
+      "name" : "xt$valid_from",
       "nullable" : false,
       "type" : {
-        "name" : "list"
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
       },
-      "children" : [{
-        "name" : "$data$",
-        "nullable" : false,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MICROSECOND",
-          "timezone" : "UTC"
-        },
-        "children" : [ ]
-      }]
+      "children" : [ ]
     },{
-      "name" : "xt$system_time_ceilings",
+      "name" : "xt$valid_to",
       "nullable" : false,
       "type" : {
-        "name" : "list"
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
       },
-      "children" : [{
-        "name" : "$data$",
-        "nullable" : false,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MICROSECOND",
-          "timezone" : "UTC"
-        },
-        "children" : [ ]
-      }]
+      "children" : [ ]
     },{
       "name" : "op",
       "nullable" : false,
@@ -133,27 +119,15 @@
       "VALIDITY" : [1],
       "DATA" : [1577836800000000]
     },{
-      "name" : "xt$valid_times",
+      "name" : "xt$valid_from",
       "count" : 1,
       "VALIDITY" : [1],
-      "OFFSET" : [0,2],
-      "children" : [{
-        "name" : "$data$",
-        "count" : 2,
-        "VALIDITY" : [1,1],
-        "DATA" : [1577836800000000,9223372036854775807]
-      }]
+      "DATA" : [1577836800000000]
     },{
-      "name" : "xt$system_time_ceilings",
+      "name" : "xt$valid_to",
       "count" : 1,
       "VALIDITY" : [1],
-      "OFFSET" : [0,1],
-      "children" : [{
-        "name" : "$data$",
-        "count" : 1,
-        "VALIDITY" : [1],
-        "DATA" : [9223372036854775807]
-      }]
+      "DATA" : [9223372036854775807]
     },{
       "name" : "op",
       "count" : 1,

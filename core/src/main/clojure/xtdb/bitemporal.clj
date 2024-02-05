@@ -32,9 +32,10 @@
               (duplicate-ptr skip-iid-ptr current-iid-ptr)
               nil)
 
-            (let [system-from (.getSystemFrom ev-ptr)]
+            (let [system-from (.getSystemFrom ev-ptr)
+                  valid-from (.getValidFrom ev-ptr)
+                  valid-to (.getValidTo ev-ptr)]
               (when (.inRange (.getSystemFrom temporal-bounds) system-from)
-                (.calculateFor polygon ceiling ev-ptr)
-                (.applyLog ceiling system-from
-                           (.getValidFrom ev-ptr 0) (.getValidTo ev-ptr (dec (.getValidTimeRangeCount ev-ptr))))
+                (.calculateFor polygon ceiling valid-from valid-to)
+                (.applyLog ceiling system-from valid-from valid-to)
                 polygon))))))))

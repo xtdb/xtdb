@@ -93,12 +93,8 @@
 
 (deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
-                    ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr
-                    ^IVectorWriter valid-times-wtr, ^IVectorWriter valid-time-wtr
-                    ^IVectorWriter sys-time-ceilings-wtr, ^IVectorWriter sys-time-ceiling-wtr
-                    ^IVectorWriter put-wtr
-                    ^IVectorWriter delete-wtr
-                    ^IVectorWriter erase-wtr]
+                    ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr, ^IVectorWriter valid-from-wtr, ^IVectorWriter valid-to-wtr
+                    ^IVectorWriter put-wtr, ^IVectorWriter delete-wtr, ^IVectorWriter erase-wtr]
   ILiveTable
   (startTx [this-table tx-key new-live-table?]
     (let [!transient-trie (atom live-trie)
@@ -110,16 +106,10 @@
           (.startRow live-rel)
 
           (.writeBytes iid-wtr iid)
+
           (.writeLong system-from-wtr system-from-µs)
-
-          (.startList valid-times-wtr)
-          (.writeLong valid-time-wtr valid-from)
-          (.writeLong valid-time-wtr valid-to)
-          (.endList valid-times-wtr)
-
-          (.startList sys-time-ceilings-wtr)
-          (.writeLong sys-time-ceiling-wtr Long/MAX_VALUE)
-          (.endList sys-time-ceilings-wtr)
+          (.writeLong valid-from-wtr valid-from)
+          (.writeLong valid-to-wtr valid-to)
 
           (write-doc!)
 
@@ -130,16 +120,10 @@
 
         (logDelete [_ iid valid-from valid-to]
           (.writeBytes iid-wtr iid)
+
           (.writeLong system-from-wtr system-from-µs)
-
-          (.startList valid-times-wtr)
-          (.writeLong valid-time-wtr valid-from)
-          (.writeLong valid-time-wtr valid-to)
-          (.endList valid-times-wtr)
-
-          (.startList sys-time-ceilings-wtr)
-          (.writeLong sys-time-ceiling-wtr Long/MAX_VALUE)
-          (.endList sys-time-ceilings-wtr)
+          (.writeLong valid-from-wtr valid-from)
+          (.writeLong valid-to-wtr valid-to)
 
           (.writeNull delete-wtr)
 
@@ -150,16 +134,10 @@
 
         (logErase [_ iid]
           (.writeBytes iid-wtr iid)
+
           (.writeLong system-from-wtr system-from-µs)
-
-          (.startList valid-times-wtr)
-          (.writeLong valid-time-wtr Long/MIN_VALUE)
-          (.writeLong valid-time-wtr Long/MAX_VALUE)
-          (.endList valid-times-wtr)
-
-          (.startList sys-time-ceilings-wtr)
-          (.writeLong sys-time-ceiling-wtr Long/MAX_VALUE)
-          (.endList sys-time-ceilings-wtr)
+          (.writeLong valid-from-wtr Long/MIN_VALUE)
+          (.writeLong valid-to-wtr Long/MAX_VALUE)
 
           (.writeNull erase-wtr)
 
@@ -234,14 +212,11 @@
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
    (util/with-close-on-catch [rel (trie/open-log-data-root allocator)]
      (let [iid-wtr (.colWriter rel "xt$iid")
-           op-wtr (.colWriter rel "op")
-           vts-wtr (.colWriter rel "xt$valid_times")
-           stcs-wtr (.colWriter rel "xt$system_time_ceilings")]
+           op-wtr (.colWriter rel "op")]
        (->LiveTable allocator buffer-pool row-counter table-name rel
                     (->live-trie (vw/vec-wtr->rdr iid-wtr))
                     iid-wtr (.colWriter rel "xt$system_from")
-                    vts-wtr (.listElementWriter vts-wtr)
-                    stcs-wtr (.listElementWriter stcs-wtr)
+                    (.colWriter rel "xt$valid_from") (.colWriter rel "xt$valid_to")
                     (.legWriter op-wtr :put) (.legWriter op-wtr :delete) (.legWriter op-wtr :erase))))))
 
 (defn ->live-trie [log-limit page-limit iid-rdr]

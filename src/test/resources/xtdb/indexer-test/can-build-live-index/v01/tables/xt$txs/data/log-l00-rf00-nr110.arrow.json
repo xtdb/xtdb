@@ -18,37 +18,23 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_times",
+      "name" : "xt$valid_from",
       "nullable" : false,
       "type" : {
-        "name" : "list"
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
       },
-      "children" : [{
-        "name" : "$data$",
-        "nullable" : false,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MICROSECOND",
-          "timezone" : "UTC"
-        },
-        "children" : [ ]
-      }]
+      "children" : [ ]
     },{
-      "name" : "xt$system_time_ceilings",
+      "name" : "xt$valid_to",
       "nullable" : false,
       "type" : {
-        "name" : "list"
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
       },
-      "children" : [{
-        "name" : "$data$",
-        "nullable" : false,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MICROSECOND",
-          "timezone" : "UTC"
-        },
-        "children" : [ ]
-      }]
+      "children" : [ ]
     },{
       "name" : "op",
       "nullable" : false,
@@ -133,27 +119,15 @@
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [1577923200000000,1578182400000000,1578096000000000,1577836800000000,1578009600000000,1578268800000000]
     },{
-      "name" : "xt$valid_times",
+      "name" : "xt$valid_from",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
-      "OFFSET" : [0,2,4,6,8,10,12],
-      "children" : [{
-        "name" : "$data$",
-        "count" : 12,
-        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1],
-        "DATA" : [1577923200000000,9223372036854775807,1578182400000000,9223372036854775807,1578096000000000,9223372036854775807,1577836800000000,9223372036854775807,1578009600000000,9223372036854775807,1578268800000000,9223372036854775807]
-      }]
+      "DATA" : [1577923200000000,1578182400000000,1578096000000000,1577836800000000,1578009600000000,1578268800000000]
     },{
-      "name" : "xt$system_time_ceilings",
+      "name" : "xt$valid_to",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
-      "OFFSET" : [0,1,2,3,4,5,6],
-      "children" : [{
-        "name" : "$data$",
-        "count" : 6,
-        "VALIDITY" : [1,1,1,1,1,1],
-        "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
-      }]
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
     },{
       "name" : "op",
       "count" : 6,

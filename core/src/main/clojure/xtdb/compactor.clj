@@ -1,7 +1,6 @@
 (ns xtdb.compactor
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.bitemporal :as bitemp]
             xtdb.buffer-pool
             xtdb.object-store
             [xtdb.trie :as trie]
@@ -16,10 +15,8 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.bitemporal.Polygon
            xtdb.IBufferPool
            (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
-           xtdb.util.TemporalBounds
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.RelationReader))
@@ -36,49 +33,25 @@
                                    types/field->col-type))
                              (apply types/merge-col-types))))
 
-(defn- ->polygon-writer [^IRelationWriter data-wtr]
-  (let [valid-times-wtr (.colWriter data-wtr "xt$valid_times")
-        valid-time-wtr (.listElementWriter valid-times-wtr)
-        sys-time-ceils-wtr (.colWriter data-wtr "xt$system_time_ceilings")
-        sys-time-ceil-wtr (.listElementWriter sys-time-ceils-wtr)]
-
-    (fn write-polygon! [^Polygon polygon]
-      (if polygon
-        (let [range-count (.getValidTimeRangeCount polygon)]
-          (.startList valid-times-wtr)
-          (.startList sys-time-ceils-wtr)
-          (dotimes [i range-count]
-            (.writeLong valid-time-wtr (.getValidFrom polygon i))
-            (.writeLong sys-time-ceil-wtr (.getSystemTo polygon i)))
-
-          (.writeLong valid-time-wtr (.getValidTo polygon (dec range-count)))
-
-          (.endList sys-time-ceils-wtr)
-          (.endList valid-times-wtr))
-
-        (do
-          (.writeNull valid-times-wtr)
-          (.writeNull sys-time-ceils-wtr))))))
-
 (defn- ->reader->copier [^IRelationWriter data-wtr]
   (let [iid-wtr (.colWriter data-wtr "xt$iid")
         sf-wtr (.colWriter data-wtr "xt$system_from")
-        calculate-polygon (bitemp/polygon-calculator (TemporalBounds.))
-        write-polygon! (->polygon-writer data-wtr)
+        vf-wtr (.colWriter data-wtr "xt$valid_from")
+        vt-wtr (.colWriter data-wtr "xt$valid_to")
         op-wtr (.colWriter data-wtr "op")]
-    (fn reader->copier [^RelationReader data-rdr, ^EventRowPointer ev-ptr]
+    (fn reader->copier [^RelationReader data-rdr]
       (let [iid-copier (-> (.readerForName data-rdr "xt$iid") (.rowCopier iid-wtr))
             sf-copier (-> (.readerForName data-rdr "xt$system_from") (.rowCopier sf-wtr))
+            vf-copier (-> (.readerForName data-rdr "xt$valid_from") (.rowCopier vf-wtr))
+            vt-copier (-> (.readerForName data-rdr "xt$valid_to") (.rowCopier vt-wtr))
             op-copier (-> (.readerForName data-rdr "op") (.rowCopier op-wtr))]
         (reify IRowCopier
           (copyRow [_ ev-idx]
             (.startRow data-wtr)
             (let [pos (.copyRow iid-copier ev-idx)]
               (.copyRow sf-copier ev-idx)
-
-              (doto (calculate-polygon ev-ptr)
-                (write-polygon!))
-
+              (.copyRow vf-copier ev-idx)
+              (.copyRow vt-copier ev-idx)
               (.copyRow op-copier ev-idx)
               (.endRow data-wtr)
 
@@ -104,7 +77,7 @@
                             (doseq [^RelationReader data-rdr data-rdrs
                                     :when data-rdr
                                     :let [ev-ptr (EventRowPointer. data-rdr (byte-array 0))
-                                          row-copier (reader->copier data-rdr ev-ptr)]]
+                                          row-copier (reader->copier data-rdr)]]
                               (when (.isValid ev-ptr is-valid-ptr path)
                                 (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
 
