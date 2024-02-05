@@ -1,12 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: A stack for running core2 Benchmarks
+Description: A stack for running xtdb Benchmarks
 
 Resources:
   # ECS Resources
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: 'core2-bench'
+      ClusterName: 'xtdb2-bench'
       ClusterSettings:
         - Name: 'containerInsights'
           Value: 'enabled'
@@ -14,65 +14,30 @@ Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: 'core2-bench'
+      LogGroupName: 'xtdb2-bench'
       RetentionInDays: 365
 
   LogGroupDev:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: 'core2-bench-dev'
+      LogGroupName: 'xtdb2-bench-dev'
       RetentionInDays: 14
 
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: 'core2-bench'
+      RepositoryName: 'xtdb2-bench'
       LifecyclePolicy:
         LifecyclePolicyText: |
           {
           "rules": [
           {
             "rulePriority": 1,
-            "description": "Only keep latest five images of master",
+            "description": "Only keep latest five images",
             "selection": {
-              "tagStatus": "tagged",
-              "tagPrefixList": ["master"],
+              "tagStatus": "any",
               "countType": "imageCountMoreThan",
               "countNumber": 5
-            },
-            "action": { "type": "expire" }
-          },
-          {
-            "rulePriority": 2,
-            "description": "Only keep master-images for 14 days",
-            "selection": {
-              "tagStatus": "tagged",
-              "tagPrefixList": ["master-"],
-              "countType": "sinceImagePushed",
-              "countNumber": 14,
-              "countUnit": "days"
-            },
-            "action": { "type": "expire" }
-          },
-          {
-            "rulePriority": 3,
-            "description": "Only keep commit-sha images for 5 days",
-            "selection": {
-              "tagStatus": "tagged",
-              "tagPrefixList": ["commit-"],
-              "countType": "sinceImagePushed",
-              "countNumber": 5,
-              "countUnit": "days"
-            },
-            "action": { "type": "expire" }
-          },
-          {
-            "rulePriority": 4,
-            "description": "Delete untagged images",
-            "selection": {
-              "tagStatus": "untagged",
-              "countType": "imageCountMoreThan",
-              "countNumber": 1
             },
             "action": { "type": "expire" }
           }]
@@ -142,7 +107,7 @@ Resources:
   BenchBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: 'core2-bench'
+      BucketName: 'xtdb2-bench'
       LifecycleConfiguration:
         Rules:
           - Id: expire-after-three-days
@@ -157,7 +122,7 @@ Resources:
     Properties:
       Cpu: '4 vCPU'
       Memory: '12GB'
-      Family: 'core2-bench'
+      Family: 'xtdb2-bench'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
       TaskRoleArn:
@@ -209,10 +174,10 @@ Resources:
               awslogs-region: 'eu-west-1'
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: core2
-        - Name: 'core2-bench'
+        - Name: 'bench'
           Cpu: 2048
           Memory: 8192
-          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/core2-bench:latest'
+          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/xtdb-bench:latest'
           Essential: true
           LogConfiguration:
             LogDriver: awslogs
