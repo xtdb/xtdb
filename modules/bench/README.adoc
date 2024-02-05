@@ -15,9 +15,9 @@ The following script will first run a C1 auctionmark on your machine followed by
 For subsequent runs one can potentially skip the load-phase.
 
 
-= (Deprecated) Bench
+= Bench
 
-A rudimentary bench adapted from XTDB 1.x. It currently only runs TPC-H, and only runs it ad-hoc (on Fargate) - it doesn't have any of the daily scheduling.
+A rudimentary bench adapted from XTDB 1.x. It currently only runs TPC-H and TS-Devices ingest. It runs it ad-hoc (on Fargate) - it doesn't have any of the daily scheduling.
 
 Dependencies:
 
@@ -29,7 +29,10 @@ All run through scripts in `./bin`:
 - `ecr-login.sh` - logs you in to ECR so that you can push the Docker image
 - `build-docker.sh` - builds the bench Docker image
 - `push-docker.sh` - pushes the bench Docker image
-- `run-bench.sh tpch [--scale-factor 0.01] [--count 1]` - kicks off an ECS job.
-- `run-bench.sh ts-devices [--size <small|med|big>] [--count 1]` - kicks off an ECS job.
+- `run-bench.sh tpch [--scale-factor 0.01]` - kicks off an ECS job.
+- `run-bench.sh ts-devices [--size <small|med|big>]` - kicks off an ECS job.
 
-You can also run it locally with (e.g.) `clojure -Mxtdb:4gb:bench-tpch --scale-factor 0.05` from the top-level of the core2 repo.
+You can also run it locally with (e.g.) `../../gradlew shadowJar` to create a fat jar under `build/libs` and run it with
+```sh
+java -cp bench-dev-SNAPSHOT-all.jar -Dclojure.main.report=stderr -Xms3g -Xmx3g --add-opens=java.base/java.nio=ALL-UNNAMED clojure.main -m xtdb.bench.tpch
+```
