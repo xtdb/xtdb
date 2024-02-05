@@ -28,6 +28,10 @@
 
       options)))
 
+(def report-file
+  [nil "--report REPORT_FILE (default report.edn)" nil
+   :default "report.edn"])
+
 (defn tmp-file-path ^java.nio.file.Path [prefix suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (Files/delete)))

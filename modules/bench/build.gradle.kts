@@ -1,6 +1,9 @@
+import xtdb.DataReaderTransformer
+
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
+    id("com.github.johnrengelman.shadow")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
@@ -20,4 +23,9 @@ dependencies {
     api("io.micrometer", "micrometer-core", "1.9.5")
     api("com.github.oshi", "oshi-core", "6.3.0")
     api("pro.juxt.clojars-mirrors.hiccup", "hiccup", "2.0.0-alpha2")
+}
+
+
+tasks.shadowJar {
+    transform(DataReaderTransformer())
 }

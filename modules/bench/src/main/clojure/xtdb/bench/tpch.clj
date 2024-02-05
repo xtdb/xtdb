@@ -111,19 +111,21 @@
 
 (defn -main [& args]
   (try
-    (let [opts (or (b2/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
-                                    :id :scale-factor
-                                    :default 0.01
-                                    :parse-fn #(Double/parseDouble %)]]
-                                  args)
-                   (System/exit 1))]
+    (let [{:keys [report] :as opts} (or (b2/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
+                                                         :id :scale-factor
+                                                         :default 0.01
+                                                         :parse-fn #(Double/parseDouble %)]
+                                                        b2/report-file]
+                                                       args)
+                                        (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
-      (util/with-tmp-dirs #{node-tmp-dir}
-        (b2-xt/run-benchmark
-         {:node-opts {:node-dir node-tmp-dir
-                      :instant-src (InstantSource/system)}
-          :benchmark-type :tpch
-          :benchmark-opts {:scale-factor 0.01}})))
+      (spit report
+            (util/with-tmp-dirs #{node-tmp-dir}
+              (b2-xt/run-benchmark
+               {:node-opts {:node-dir node-tmp-dir
+                            :instant-src (InstantSource/system)}
+                :benchmark-type :tpch
+                :benchmark-opts {:scale-factor 0.01}}))))
     (catch Exception e
       (.printStackTrace e)
       (System/exit 1))

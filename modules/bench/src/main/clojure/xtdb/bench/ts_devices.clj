@@ -3,7 +3,7 @@
             [xtdb.bench2 :as bench2]
             [xtdb.bench2.xtdb2 :as b2-xt]
             [xtdb.ts-devices :as tsd]
-            [xtdb.test-util :as tu])
+            [xtdb.util :as util])
   (:import (java.time Duration InstantSource)
            (java.util AbstractMap)))
 
@@ -12,7 +12,8 @@
     :id :size
     :default :small
     :parse-fn keyword
-    :validate-fn (comp boolean #{:small :med :big})]])
+    :validate-fn (comp boolean #{:small :med :big})]
+   bench2/report-file])
 
 (defn download-file [size file-name]
   (let [tmp-file (bench2/tmp-file-path (str "ts-devices." file-name) ".csv.gz")]
@@ -51,15 +52,16 @@
 
 (defn -main [& args]
   (try
-    (let [{:keys [size] :as opts} (or (bench2/parse-args cli-arg-spec args)
-                                      (System/exit 1))]
+    (let [{:keys [report size] :as opts} (or (bench2/parse-args cli-arg-spec args)
+                                             (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
-      (tu/with-tmp-dirs #{node-tmp-dir}
-        (b2-xt/run-benchmark
-         {:node-opts {:node-dir node-tmp-dir
-                      :instant-src (InstantSource/system)}
-          :benchmark-type :ts-devices
-          :benchmark-opts {:size size}})))
+      (spit report
+            (util/with-tmp-dirs #{node-tmp-dir}
+              (b2-xt/run-benchmark
+               {:node-opts {:node-dir node-tmp-dir
+                            :instant-src (InstantSource/system)}
+                :benchmark-type :ts-devices
+                :benchmark-opts {:size size}}))))
     (catch Exception e
       (.printStackTrace e)
       (System/exit 1))
@@ -68,7 +70,7 @@
       (shutdown-agents))))
 
 (comment
-  (tu/with-tmp-dirs #{node-tmp-dir}
+  (util/with-tmp-dirs #{node-tmp-dir}
     (def report-ts-devices
       (b2-xt/run-benchmark
        {:node-opts {:node-dir node-tmp-dir

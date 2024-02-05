@@ -5,10 +5,10 @@
             [xtdb.api :as xt]
             [xtdb.bench2 :as b]
             [xtdb.bench2.measurement :as bm]
+            [xtdb.indexer]
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
-            [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.query-ra :as ra])
   (:import (io.micrometer.core.instrument MeterRegistry Timer)
@@ -32,6 +32,14 @@
    @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer)
                    (xtp/latest-submitted-tx node)
                    timeout)))
+
+(defn ->local-node ^xtdb.api.IXtdb [{:keys [^Path node-dir ^String buffers-dir
+                                            rows-per-chunk log-limit page-limit instant-src]
+                                     :or {buffers-dir "objects"}}]
+  (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
+                   :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                   :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
+                                 (into {} (filter val)))}))
 
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
@@ -151,7 +159,7 @@
                       benchmark
                       bm/wrap-task
                       #_(fn [task f] (wrap-task task f)))]
-    (with-open [node (tu/->local-node node-opts)]
+    (with-open [node (->local-node node-opts)]
       (benchmark-fn node))))
 
 (defn delete-directory-recursive
@@ -283,9 +291,8 @@
                                    :params {'?i_id open-id}})))
   ;; ra query
   (time
-   (tu/with-allocator
-     #(doseq [id (take 1000 (shuffle open-ids))]
-        (q id))))
+   #(doseq [id (take 1000 (shuffle open-ids))]
+      (q id)))
 
   ;; datalog query
   (time
