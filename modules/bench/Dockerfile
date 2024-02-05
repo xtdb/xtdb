@@ -1,12 +1,13 @@
-FROM clojure:openjdk-11-lein-2.9.3
+FROM clojure:openjdk-17-tools-deps-bullseye
 
 WORKDIR /opt/xtdb
 ENTRYPOINT [ \
-    "java","-cp","xtdb-bench.jar", \
+    "java","-cp","bench-dev-SNAPSHOT-all.jar", \
     "-Dclojure.main.report=stderr", \
     "-Xms3g", "-Xmx3g", \
+    "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "clojure.main", "-m"]
 
-CMD ["xtdb.bench"]
+CMD ["xtdb.bench.tpch"]
 
-ADD target/xtdb-bench.jar .
+ADD build/libs/bench-dev-SNAPSHOT-all.jar .
