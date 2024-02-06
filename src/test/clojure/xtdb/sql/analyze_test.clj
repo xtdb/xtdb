@@ -542,10 +542,11 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT x.a FROM y AS x (a, b)")
   (valid? "SELECT x.a FROM y, UNNEST(y.a) AS x (a)")
 
-  (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["x" "b"]}]]
-           (->> (valid? "SELECT * FROM x WHERE x.a = x.b")
-                (map :projected-columns))))
+  (binding [sem/*table-info* {"x" #{"a" "b"}}]
+    (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+              [{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["x" "b"]}]]
+             (->> (valid? "SELECT * FROM x WHERE x.a = x.b")
+                  (map :projected-columns)))))
 
   (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
@@ -561,12 +562,13 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "SELECT * FROM (SELECT y.a, y.b FROM y) AS x (c, d)")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["z" "b"]}]
-            [{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]]
-           (->> (valid? "SELECT * FROM (SELECT y.a FROM y WHERE y.z = FALSE) AS x, z WHERE z.b = TRUE")
-                (map :projected-columns))))
+  (binding [sem/*table-info* {"y" #{"a" "d"} "z" #{"b"}}]
+    (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+              [{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["z" "b"]}]
+              [{:index 0 :identifier "a"}]
+              [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]]
+             (->> (valid? "SELECT * FROM (SELECT y.a FROM y WHERE y.z = FALSE) AS x, z WHERE z.b = TRUE")
+                  (map :projected-columns)))))
 
   (t/is (= [[{:identifier "b", :index 0}
              {:identifier "b", :index 1, :outer-name 'b:1}]
@@ -599,10 +601,12 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "SELECT x.*, z.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]]
-           (->> (valid? "SELECT * FROM x WHERE x.a = x.b GROUP BY x.a")
-                (map :projected-columns))))
+  (binding [sem/*table-info* {"x" #{"a" "b"}}]
+    (t/is (= [[{:identifier "a", :index 0} {:identifier "b", :index 1}]
+              [{:index 0, :identifier "a", :qualified-column ["x" "a"]}
+               {:index 1, :identifier "b", :qualified-column ["x" "b"]}]]
+             (->> (valid? "SELECT * FROM x WHERE x.a = x.b GROUP BY x.a, x.b")
+                  (map :projected-columns)))))
 
   (t/is (= [[{:index 0 :identifier "a"}
              {:index 1 :identifier "c"}
@@ -610,20 +614,19 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
              {:index 1 :identifier "c" :qualified-column ["x" "c"]}
              {:index 2}]]
-           (->> (valid? "SELECT x.*, COUNT(x.b) FROM x WHERE x.a = x.b GROUP BY x.a, x.c")
+           (->> (valid? "SELECT x.a, x.c, COUNT(x.b) FROM x WHERE x.a = x.b GROUP BY x.a, x.c")
                 (map :projected-columns))))
 
-  (invalid? [#"Query does not select any columns"]
-            "SELECT * FROM foo")
   (invalid? [#"Table not in scope: baz"]
             "SELECT foo.x, baz.* FROM foo")
 
-  (t/is (= [[{:identifier "a", :index 0}
-             {:identifier "a", :index 1, :outer-name 'a:1}]
-            [{:identifier "a", :qualified-column ["x" "a"], :index 0}
-             {:index 1, :identifier "a", :qualified-column ["x" "a"], :outer-name 'a:1}]]
-           (->> (valid? "SELECT x.a, x.* FROM x WHERE x.a IS NOT NULL")
-                (map :projected-columns))))
+  (binding [sem/*table-info* {"x" #{"a"}}]
+    (t/is (= [[{:identifier "a", :index 0}
+               {:identifier "a", :index 1, :outer-name 'a:1}]
+              [{:identifier "a", :qualified-column ["x" "a"], :index 0}
+               {:index 1, :identifier "a", :qualified-column ["x" "a"], :outer-name 'a:1}]]
+             (->> (valid? "SELECT x.a, x.* FROM x WHERE x.a IS NOT NULL")
+                  (map :projected-columns)))))
 
   (t/is (= [[{:index 0 :identifier "a"}
              {:index 1 :identifier "a" :outer-name 'a:1}]
@@ -632,23 +635,26 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "SELECT x.a, x.a FROM x WHERE x.a IS NOT NULL")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0 :identifier "a"}
-             {:index 1 :identifier "a" :outer-name 'a:1}]
-            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
-             {:index 1 :identifier "a" :qualified-column ["y" "a"] :outer-name 'a:1}]]
-           (->> (valid? "SELECT * FROM x, y WHERE x.a = y.a")
-                (map :projected-columns))))
 
-  (t/is (= [[{:index 0 :identifier "a"}
-             {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "a"}
-             {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
-             {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
-            [{:index 0 :identifier "a" :qualified-column ["foo" "a"]}
-             {:index 1 :identifier "b" :qualified-column ["foo" "b"]}]]
-           (->> (valid? "WITH foo AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
-                (map :projected-columns))))
+  (binding [sem/*table-info* {"x" #{"a"}}]
+    (t/is (= [[{:index 0 :identifier "a"}
+               {:index 1 :identifier "a" :outer-name 'a:1}]
+              [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+               {:index 1 :identifier "a" :qualified-column ["y" "a"] :outer-name 'a:1}]]
+             (->> (valid? "SELECT * FROM x, y AS y(a) WHERE x.a = y.a")
+                  (map :projected-columns)))))
+
+  (binding [sem/*table-info* {"x" #{"a" "b"}}]
+    (t/is (= [[{:index 0 :identifier "a"}
+               {:index 1 :identifier "b"}]
+              [{:index 0 :identifier "a"}
+               {:index 1 :identifier "b"}]
+              [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+               {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
+              [{:index 0 :identifier "a" :qualified-column ["foo" "a"]}
+               {:index 1 :identifier "b" :qualified-column ["foo" "b"]}]]
+             (->> (valid? "WITH foo AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
+                  (map :projected-columns)))))
 
   (t/is (= [[{:index 0 :identifier "c"}
              {:index 1 :identifier "d"}]
@@ -658,7 +664,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
              {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
             [{:index 0 :identifier "c" :qualified-column ["foo" "c"]}
              {:index 1 :identifier "d" :qualified-column ["foo" "d"]}]]
-           (->> (valid? "WITH foo (c, d) AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
+           (->> (valid? "WITH foo (c, d) AS (SELECT * FROM x AS x(a, b) WHERE x.a = x.b) SELECT * FROM foo")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "b"}]
@@ -672,7 +678,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
              {:identifier "a", :index 1 :outer-name 'a:1}]
             [{:identifier "a", :qualified-column ["x" "a"], :index 0}
              {:identifier "a", :qualified-column ["foo" "a"], :index 1 :outer-name 'a:1}]]
-           (->> (valid? "SELECT * FROM x, UNNEST(x.a) AS foo (a)")
+           (->> (valid? "SELECT * FROM x AS x(a), UNNEST(x.a) AS foo (a)")
                 (map :projected-columns))))
 
   (t/is (= [[{:identifier "a", :index 0}
@@ -782,6 +788,18 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
               "SELECT baz.a FROM (SELECT * FROM foo, bar) AS baz")
 
     (valid? "SELECT * FROM (SELECT * FROM foo, bar) AS baz")))
+
+(deftest test-select-star-qualified-join
+  (binding [sem/*table-info* {"foo" #{"a" "b"} "bar" #{"a" "b" "c"}}]
+
+    (valid? "SELECT * FROM foo JOIN bar ON true")))
+
+(deftest test-select-star-group-by
+  (binding [sem/*table-info* {"foo" #{"a" "b" "c"}}]
+    (invalid?
+     [#"Column foo.b must appear in GROUP BY clause or be used in aggregate function: at line 1, column 8"
+      #"Column foo.c must appear in GROUP BY clause or be used in aggregate function: at line 1, column 8"]
+     "SELECT * FROM foo GROUP BY foo.a")))
 
 (deftest test-check-period-specification-count-2260
   (invalid?

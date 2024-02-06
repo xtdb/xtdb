@@ -1290,7 +1290,7 @@
 (deftest analyzer-error-returned-test
   (testing "Query"
     (with-open [conn (jdbc-conn)]
-      (is (thrown-with-msg? PSQLException #"Query does not select any columns" (q conn ["SELECT * FROM foo"])))))
+      (is (thrown-with-msg? PSQLException #"Table variable duplicated: baz" (q conn ["SELECT 1 FROM foo AS baz, baz"])))))
   (testing "DML"
     (with-open [conn (jdbc-conn)]
       (q conn ["BEGIN READ WRITE"])
@@ -1301,10 +1301,10 @@
   (deftest psql-analyzer-error-test
     (psql-session
      (fn [send read]
-       (send "SELECT * FROM foo;\n")
+       (send "SELECT 1 FROM foo AS baz, baz;\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (re-find #"Query does not select any columns" s)))
+         (is (re-find #"Table variable duplicated: baz" s)))
 
        (send "BEGIN READ WRITE;\n")
        (read)
