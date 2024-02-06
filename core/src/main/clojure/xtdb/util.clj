@@ -10,7 +10,7 @@
            (java.io ByteArrayOutputStream File)
            java.lang.AutoCloseable
            java.lang.reflect.Method
-           (java.net MalformedURLException URI URL)
+           (java.net MalformedURLException URI URL ServerSocket)
            java.nio.ByteBuffer
            (java.nio.channels Channels ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
            java.nio.charset.StandardCharsets
@@ -570,3 +570,14 @@
          (with-tmp-dirs #{~@more-bindings}
            ~@body)))
     `(do ~@body)))
+
+(defn port-free? [^long port]
+  (try
+    (.close (ServerSocket. port))
+    true
+    (catch java.net.BindException _e
+      false)))
+
+(defn free-port ^long []
+  (with-open [s (ServerSocket. 0)]
+    (.getLocalPort s)))

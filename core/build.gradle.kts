@@ -46,6 +46,10 @@ dependencies {
     api("commons-codec", "commons-codec", "1.15")
     api("com.carrotsearch", "hppc", "0.9.1")
 
+    // monitoring
+    api("io.micrometer", "micrometer-core", "1.12.2")
+    api("io.micrometer", "micrometer-registry-prometheus", "1.12.2")
+
     api(kotlin("stdlib-jdk8"))
     api("com.charleskorn.kaml","kaml","0.56.0")
 
