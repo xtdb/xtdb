@@ -1,2 +1,1 @@
-(ns main.clojure.xtdb.operator)
-
+(ns xtdb.operator)
