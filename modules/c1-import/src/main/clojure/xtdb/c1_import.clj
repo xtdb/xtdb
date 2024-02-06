@@ -129,7 +129,7 @@
 
       help (println help)
 
-      :else (with-open [_submit-client (xtn/start-submit-client sys-opts)]
+      :else (with-open [_submit-client (xtn/start-node sys-opts)]
               (log/info "Importer started")
               @(shutdown-hook-promise)))
 
