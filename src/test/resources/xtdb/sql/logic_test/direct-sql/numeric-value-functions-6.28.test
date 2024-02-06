@@ -55,8 +55,9 @@ SELECT CARDINALITY(t.arr) FROM (VALUES (ARRAY[1, 2, 3])) t (arr)
 ----
 3
 
-query II nosort
-SELECT LEAST(5, t1.xt$id, 12, 8), GREATEST(5, t1.id, 12, 8) FROM t1
+query III nosort
+SELECT LEAST(5, t1.xt$id, 12, 8), GREATEST(5, t1.xt$id, 12, 8), GREATEST(5, t1.missing, 12, 8) FROM t1
 ----
 1
 12
+NULL

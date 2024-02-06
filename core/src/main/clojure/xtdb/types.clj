@@ -260,7 +260,7 @@
 
 (def col-type-hierarchy
   (-> (make-hierarchy)
-      (derive :null :any) (derive :absent :null)
+      (derive :null :any) (derive :absent :any)
       (derive :bool :any)
 
       (derive :f32 :float) (derive :f64 :float)

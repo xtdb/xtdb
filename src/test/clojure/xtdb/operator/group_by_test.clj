@@ -1,10 +1,12 @@
 (ns xtdb.operator.group-by-test
   (:require [clojure.test :as t]
+            [xtdb.api :as xt]
             [xtdb.operator.group-by :as group-by]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]))
+            [xtdb.vector.reader :as vr]
+            [xtdb.node :as xtn]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -437,3 +439,30 @@
   (t/is (thrown-with-msg? RuntimeException #"Unsupported types in min/max aggregate"
                           (tu/query-ra '[:group-by [{min (min a)}]
                                          [:table [{:a 32} {:a "foo"}]]]))))
+
+(t/deftest test-handles-absent-3057
+  (with-open [node (xtn/start-node)]
+    (let [data [{:id 1 :a 1}
+                {:id 1} ; NOTE: Absent :a
+                {:id 2 :a 2}
+                {:id 2 :a 3}]]
+
+      (t/is (= [{:id 1, :a 1} {:id 2, :a 5}]
+               (xt/q node '(-> (rel $data [id a])
+                               (aggregate id {:a (sum a)}))
+                     {:args {:data data}}))
+            "no default provided")
+
+      (t/is (= [{:id 1, :a 3} {:id 2, :a 5}]
+               (xt/q node '(-> (rel $data [id a])
+                               (with {:a (coalesce a 2)})
+                               (aggregate id {:a (sum a)}))
+                     {:args {:data data}}))
+            "default provided with `coalesce`")
+
+      (t/is (= [{:id 1, :a 6} {:id 2, :a 5}]
+               (xt/q node '(-> (rel $data [id a])
+                               (with {:a (if a a 5)})
+                               (aggregate id {:a (sum a)}))
+                     {:args {:data data}}))
+            "default provided with `if` (which mentions `absent` values)"))))

@@ -187,7 +187,7 @@
         (t/is (= [3 2 4] (extract-all "MONTH" dates)))
         (t/is (= [2022 2021 2020] (extract-all "YEAR" dates)))))))
 
-(defn- run-projection [rel form]
+(defn run-projection [rel form]
   (let [col-types (->> rel
                        (into {} (map (juxt #(symbol (.getName ^IVectorReader %))
                                            #(types/field->col-type (.getField ^IVectorReader %))))))
@@ -1620,7 +1620,6 @@
              (run-projection rel '(. x a))))))
 
 (t/deftest test-mixing-composite-types
-  #_ ; FIXME #2905
   (with-open [rel (tu/open-rel [(tu/open-vec "x"
                                              [{:a 42}
                                               {:a 12.0, :b 5, :c [1 2 3]}
@@ -1630,15 +1629,27 @@
 
     (t/is (= {:res [{:a 42, :sums [nil nil]}
                     {:a 12.0, :sums [17.0 7]}
-                    {:a nil, :sums [nil 11.5]}
+                    {:sums [nil 11.5]}
                     {:a 15, :sums [40 nil]}
                     {:a nil, :sums [nil nil]}],
               :res-type '[:struct
-                          {a [:union #{:f64 :null :i64}],
+                          {a [:union #{:f64 :null :absent :i64}],
                            sums [:list [:union #{:f64 :null :i64}]]}]}
              (run-projection rel '{:a (. x a),
                                    :sums [(+ (. x a) (. x b))
                                           (+ (. x b) (nth (. x c) 1))]})))))
+
+(t/deftest absent-handling-2944
+  (with-open [rel (tu/open-rel [(-> (types/col-type->field "x" [:struct '{maybe-float [:union #{:f64 :absent}]
+                                                                          maybe-str [:union #{:utf8 :absent}]}])
+                                    (tu/open-vec [{}]))])]
+
+    (t/is (= {:res [nil], :res-type [:union #{:f64 :null}]}
+             (run-projection rel '(+ 42.0 (. x maybe-float)))))
+    (t/is (= {:res [nil], :res-type [:union #{:utf8 :null}]}
+             (run-projection rel '(lower (. x maybe-str)))))
+    (t/is (= {:res [nil], :res-type [:union #{:utf8 :null}]}
+             (run-projection rel '(upper (. x maybe-str)))))))
 
 (t/deftest test-current-times-111
   (let [inst (Instant/parse "2022-01-01T01:23:45.678912345Z")
