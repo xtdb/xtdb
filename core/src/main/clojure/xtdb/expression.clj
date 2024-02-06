@@ -236,7 +236,9 @@
     :list Object, :set Object, :struct Object :transit Object})
 
 (defmethod read-value-code :null [_ & _args] nil)
+(defmethod read-value-code :absent [_ & _args] nil)
 (defmethod write-value-code :null [_ w & _args] `(.writeNull ~w))
+(defmethod write-value-code :absent [_ w & _args] `(.writeNull ~w))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
            :timestamp-tz :timestamp-local :time-local :duration
@@ -457,7 +459,7 @@
 
         expr-rets (types/flatten-union-types expr-ret)
 
-        emitted-thens (->> (for [local-type (disj expr-rets :null)]
+        emitted-thens (->> (for [local-type (disj expr-rets :null :absent)]
                              (MapEntry/create local-type
                                               (codegen-expr then (assoc-in opts [:local-types local] local-type))))
                            (into {}))
@@ -466,7 +468,7 @@
 
         children (cons emitted-expr (vals emitted-thens))]
 
-    (-> (if-not (contains? expr-rets :null)
+    (-> (if-not (or (contains? expr-rets :null) (contains? expr-rets :absent))
           {:return-type then-ret
            :children children
            :continue (fn [f]
@@ -480,7 +482,7 @@
              :children (cons emitted-else children)
              :continue (fn [f]
                          (continue-expr (fn [local-type code]
-                                          (if (= local-type :null)
+                                          (if (or (= local-type :null) (= local-type :absent))
                                             (e-cont f)
                                             `(let [~local ~code]
                                                ~((:continue (get emitted-thens local-type)) f))))))}))
@@ -512,8 +514,14 @@
   :hierarchy #'types/col-type-hierarchy)
 
 (def ^:private shortcut-null-args?
-  (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean :null_eq
-                      :compare_nulls_first :compare_nulls_last
+  (complement (comp #{:is_true :is_false :is_null :is_absent :true? :false? :nil? :absent? :boolean
+                      :null_eq :compare_nulls_first :compare_nulls_last
+                      :period}
+                    normalise-fn-name)))
+
+(def ^:private shortcut-absent-args?
+  (complement (comp #{:is_true :is_false :is_null :is_absent :true? :false? :nil? :absent? :boolean
+                      :null_eq :compare :compare_nulls_first :compare_nulls_last := :<> :< :> :<= :>=
                       :period}
                     normalise-fn-name)))
 
@@ -567,6 +575,7 @@
 
 (defn- codegen-call* [{:keys [f emitted-args] :as expr}]
   (let [shortcut-null? (shortcut-null-args? f)
+        shortcut-absent? (shortcut-absent-args? f)
 
         all-arg-types (reduce (fn [acc {:keys [return-type]}]
                                 (for [el acc
@@ -575,20 +584,20 @@
                               [[]]
                               emitted-args)
 
-        emitted-calls (->> (for [arg-types all-arg-types
-                                 :when (or (not shortcut-null?)
-                                           (every? #(not= :null %) arg-types))]
+        emitted-calls (->> (for [arg-types all-arg-types]
                              (MapEntry/create arg-types
-                                              (codegen-call (assoc expr
-                                                                   :args emitted-args
-                                                                   :arg-types arg-types))))
+                                              (if (and (or (not shortcut-null?)
+                                                           (every? #(not= :null %) arg-types))
+                                                       (or (not shortcut-absent?)
+                                                           (every? #(not= :absent %) arg-types)))
+                                                (codegen-call (assoc expr
+                                                                     :args emitted-args
+                                                                     :arg-types arg-types))
+                                                {:return-type :null, :->call-code (constantly nil)})))
                            (into {}))
 
-        return-type (->> (cond-> (into #{} (map :return-type) (vals emitted-calls))
-                           (and shortcut-null?
-                                (some #(= :null %)
-                                      (sequence cat all-arg-types)))
-                           (conj :null))
+        return-type (->> (vals emitted-calls)
+                         (into #{} (map :return-type))
                          (apply types/merge-col-types))]
 
     {:return-type return-type
@@ -599,7 +608,8 @@
                                  ;; step: emit this arg, and pass it through to the inner build-fn
                                  (fn continue-building-args [arg-types emitted-args]
                                    (continue-this-arg (fn [arg-type emitted-arg]
-                                                        (if (and shortcut-null? (= arg-type :null))
+                                                        (if (or (and shortcut-null? (= :null arg-type))
+                                                                (and shortcut-absent? (= :absent arg-type)))
                                                           (handle-emitted-expr :null nil)
                                                           (build-next-arg (conj arg-types arg-type)
                                                                           (conj emitted-args emitted-arg)))))))
@@ -663,26 +673,6 @@
     {:return-type :bool,
      :->call-code #(do `(.equals ~@%))}))
 
-;; null-eq is an internal function used in situations where two nulls should compare equal,
-;; e.g when grouping rows in group-by.
-(defmethod codegen-call [:null_eq :any :any] [call]
-  (codegen-call (assoc call :f :=)))
-
-(defmethod codegen-call [:null_eq :null :any] [_]
-  {:return-type :bool, :->call-code (constantly false)})
-
-(defmethod codegen-call [:null_eq :any :null] [_]
-  {:return-type :bool, :->call-code (constantly false)})
-
-(defmethod codegen-call [:null_eq :null :null] [_]
-  {:return-type :bool, :->call-code (constantly true)})
-
-(defmethod codegen-call [:<> :num :num] [_]
-  {:return-type :bool, :->call-code #(do `(not (== ~@%)))})
-
-(defmethod codegen-call [:<> :any :any] [_]
-  {:return-type :bool, :->call-code #(do `(not= ~@%))})
-
 (defmethod codegen-call [:not :bool] [_]
   {:return-type :bool, :->call-code #(do `(not ~@%))})
 
@@ -695,15 +685,22 @@
 (defmethod codegen-call [:nil? :null] [_]
   {:return-type :bool, :->call-code (constantly true)})
 
-(doseq [f #{:true? :false? :nil?}]
+(defmethod codegen-call [:absent? :absent] [_]
+  {:return-type :bool, :->call-code (constantly true)})
+
+(doseq [f #{:true? :false? :nil? :absent?}]
   (defmethod codegen-call [f :any] [_]
     {:return-type :bool, :->call-code (constantly false)}))
 
 (defmethod codegen-call [:is_true :any] [expr] (codegen-call (assoc expr :f :true?)))
 (defmethod codegen-call [:is_false :any] [expr] (codegen-call (assoc expr :f :false?)))
 (defmethod codegen-call [:is_null :any] [expr] (codegen-call (assoc expr :f :nil?)))
+(defmethod codegen-call [:is_absent :any] [expr] (codegen-call (assoc expr :f :absent?)))
 
 (defmethod codegen-call [:boolean :null] [_]
+  {:return-type :bool, :->call-code (constantly false)})
+
+(defmethod codegen-call [:boolean :absent] [_]
   {:return-type :bool, :->call-code (constantly false)})
 
 (defmethod codegen-call [:boolean :bool] [_]

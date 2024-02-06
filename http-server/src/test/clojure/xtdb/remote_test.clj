@@ -206,11 +206,11 @@
                                                          :throw-exceptions? false})
           body (decode-json body)]
       (t/is (= 500 status))
-      (t/is (= "No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"
+      (t/is (= "No method in multimethod 'codegen-call' for dispatch value: [:upper :i64]"
                (ex-message body)))
       (t/is (= {:xtdb.error/error-type :unknown-runtime-error,
                 :class "java.lang.IllegalArgumentException",
-                :stringified "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :absent]"}
+                :stringified "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :i64]"}
                (ex-data body))))))
 
 (defn- inst->str [^java.util.Date d] (str (.toInstant d)))
