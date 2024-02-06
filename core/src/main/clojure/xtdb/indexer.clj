@@ -7,6 +7,7 @@
             [xtdb.error :as err]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
+            [xtdb.metrics :as metrics]
             [xtdb.operator.scan :as scan]
             [xtdb.query :as q]
             [xtdb.rewrite :refer [zmatch]]
@@ -20,7 +21,8 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql])
-  (:import clojure.lang.MapEntry
+  (:import (clojure.lang MapEntry PersistentHashMap)
+           (io.micrometer.core.instrument Timer)
            (java.io ByteArrayInputStream Closeable)
            java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
@@ -525,8 +527,8 @@
 
                   ^:volatile-mutable indexer-error
 
-                  ^PriorityBlockingQueue awaiters]
-
+                  ^PriorityBlockingQueue awaiters
+                  metrics]
   IIndexer
   (indexTx [this tx-key tx-root]
     (let [system-time (some-> tx-key (.getSystemTime))]
@@ -571,14 +573,16 @@
                               !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
                               !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
                           (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
-                            (when-let [more-tx-ops (case (.getLeg tx-ops-rdr tx-op-idx)
-                                                     :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
-                                                     :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                     :put-docs (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
-                                                     :delete-docs (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
-                                                     :erase-docs (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                     :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
-                                                     :abort (throw abort-exn))]
+                            (when-let [more-tx-ops
+                                       (.recordCallable ^Timer (:tx-timer metrics)
+                                                        #(case (.getLeg tx-ops-rdr tx-op-idx)
+                                                           :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
+                                                           :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                           :put-docs (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                           :delete-docs (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                           :erase-docs (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
+                                                           :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
+                                                           :abort (throw abort-exn)))]
                               (try
                                 (index-tx-ops more-tx-ops)
                                 (finally
@@ -644,17 +648,19 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :live-index (ig/ref :xtdb.indexer/live-index)
-          :ra-src (ig/ref ::q/ra-query-source)}
+          :ra-src (ig/ref ::q/ra-query-source)
+          :registry (ig/ref :xtdb/meter-registry)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator scan-emitter, ra-src, live-index]}]
-
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator scan-emitter, ra-src, live-index registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
     (->Indexer allocator scan-emitter ra-src live-index
 
                nil ;; indexer-error
 
-               (PriorityBlockingQueue.))))
+               (PriorityBlockingQueue.)
+               {:tx-timer (metrics/add-timer registry "tx.op.timer"
+                                             {:description "indicates the timing and number of transactions"})})))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))

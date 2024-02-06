@@ -3,6 +3,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             xtdb.indexer
             [xtdb.log :as log]
+            [xtdb.metrics :as metrics]
             [xtdb.operator.scan :as scan]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
@@ -10,9 +11,11 @@
             [xtdb.time :as time]
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
-  (:import (java.io Closeable Writer)
-           (java.util.concurrent CompletableFuture)
+  (:import (clojure.lang PersistentHashMap)
+           (io.micrometer.core.instrument Timer)
+           (java.io Closeable Writer)
            java.util.HashMap
+           (java.util.concurrent CompletableFuture)
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb TransactionKey Xtdb$Config)
@@ -40,7 +43,8 @@
                  ^IRaQuerySource ra-src, wm-src, scan-emitter
                  default-tz
                  !latest-submitted-tx
-                 system, close-fn]
+                 system, close-fn
+                 ^PersistentHashMap metrics]
   IXtdb
   (submitTxAsync [this opts tx-ops]
     (let [system-time (some-> opts .getSystemTime)]
@@ -70,8 +74,7 @@
                    plan (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
                (if (:explain? query-opts)
                  (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
-
-                 (q/open-query allocator ra-src wm-src plan query-opts))))))))
+                 (.recordCallable ^Timer (:query-timer metrics) #(q/open-query allocator ra-src wm-src plan query-opts)))))))))
 
   (^CompletableFuture openQueryAsync [_ ^XtqlQuery query, ^QueryOptions query-opts]
    (let [query-opts (-> (into {:default-tz default-tz,
@@ -90,8 +93,7 @@
                    plan (xtql/compile-query query table-info)]
                (if (:explain? query-opts)
                  (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
-
-                 (q/open-query allocator ra-src wm-src plan query-opts))))))))
+                 (.recordCallable ^Timer (:query-timer metrics) #(q/open-query allocator ra-src wm-src plan query-opts)))))))))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)
@@ -114,12 +116,16 @@
           :log (ig/ref :xtdb/log)
           :default-tz (ig/ref :xtdb/default-tz)
           :ra-src (ig/ref :xtdb.query/ra-query-source)
-          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)}
+          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
+          :registry (ig/ref :xtdb/meter-registry)}
          opts))
 
-(defmethod ig/init-key :xtdb/node [_ deps]
+(defmethod ig/init-key :xtdb/node [_ {:keys [registry] :as deps}]
   (map->Node (-> deps
-                 (assoc :!latest-submitted-tx (atom nil)))))
+                 (assoc :!latest-submitted-tx (atom nil))
+
+                 (assoc :metrics {:query-timer (metrics/add-timer registry "query.timer"
+                                                                  {:description "indicates the timings for queries"})}))))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))
@@ -147,6 +153,8 @@
        :xtdb.operator.scan/scan-emitter {}
        :xtdb.query/ra-query-source {}
        :xtdb/compactor {}
+       :xtdb/meter-registry {}
+       :xtdb/metrics-server {}
 
        :xtdb/buffer-pool (.getStorage opts)
        :xtdb.indexer/live-index (.indexer opts)
