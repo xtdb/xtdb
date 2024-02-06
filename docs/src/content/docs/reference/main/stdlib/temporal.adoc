@@ -260,7 +260,14 @@ a| Returns true iff `p1` starts after `p2` ends
 |===
 | XTQL | SQL |
 | `(date-trunc "unit" date-time)` | `DATE_TRUNC('unit', date_time)`
-| Truncates the date-time to the given time-unit, which must be one of `YEAR`, `MONTH`, `DAY`, 'HOUR', `MINUTE`, `SECOND`, `MILLISECOND`, `MICROSECOND.`
+| Truncates the date-time to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`
+
+| `(date-trunc "unit" date-time time-zone)` | `DATE_TRUNC('unit', date_time, 'time_zone')`
+| Truncates a **timezone aware** date-time to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`, and then converts it to the specified time-zone. The specified time-zone must be a valid time-zone identifier (see link:https://en.wikipedia.org/wiki/List_of_tz_database_time_zones[here])
+
+| `(date-trunc "unit" interval)` | `DATE_TRUNC('unit', interval)`
+| Truncates the given interval to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`
+
 | `(extract "field" date-time)` | `EXTRACT('field', date_time)`
 | Extracts the given field from the date-time, which must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE`.
 
