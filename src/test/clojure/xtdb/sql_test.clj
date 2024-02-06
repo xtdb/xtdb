@@ -96,8 +96,8 @@
           (plan-sql "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)")))
 
   (t/is (=plan-file
-          "basic-query-13"
-           (plan-sql "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname")))
+         "basic-query-13"
+         (plan-sql "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname" {:table-info {"stars_in" #{"name" "lastname"}}})))
 
   (t/is (=plan-file
           "basic-query-14"
@@ -165,11 +165,11 @@
 
   (t/is (=plan-file
           "basic-query-30"
-          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film")))
+          (plan-sql "SELECT * FROM StarsIn AS si(films), UNNEST(si.films) AS film")))
 
   (t/is (=plan-file
           "basic-query-31"
-          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film")))
+          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film" {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-32"
@@ -187,11 +187,11 @@
 
   (t/is (=plan-file
           "basic-query-35"
-          (plan-sql "SELECT * FROM t1 WHERE t1.a IS NULL")))
+          (plan-sql "SELECT * FROM t1 AS t1(a) WHERE t1.a IS NULL")))
 
   (t/is (=plan-file
           "basic-query-36"
-          (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL")))
+          (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL" {:table-info {"t1" #{"a"}}})))
 
   (t/is (=plan-file
           "basic-query-37"
@@ -280,9 +280,9 @@
     ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
     (t/is (=plan-file
             "decorrelation-2"
-            (plan-sql "SELECT * FROM customers
+            (plan-sql "SELECT * FROM customers AS customers(country, custno)
                       WHERE customers.country = 'Mexico' AND
-                      EXISTS (SELECT * FROM orders WHERE customers.custno = orders.custno)")))
+                      EXISTS (SELECT * FROM orders AS orders(custno) WHERE customers.custno = orders.custno)")))
 
     ;; NOTE: these below simply check what's currently being produced,
     ;; not necessarily what should be produced.
@@ -1258,3 +1258,70 @@
   ;; Postgres doesn't allow deliminated col refs in order-by exprs but mysql/sqlite do
   #_(t/is (= [{:b 1} {:b 2} {:b 3}]
            (xt/q tu/*node* "SELECT docs.x AS b FROM docs ORDER BY (b + 2)"))))
+
+(deftest test-select-star-projections
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3 :y "a"}]
+                           [:put-docs :docs {:xt/id 2 :x 2 :y "b"}]
+                           [:put-docs :docs {:xt/id 3 :x 1 :y "c"}]])
+
+  (t/is (= [{:y "b"} {:y "a"} {:y "c"}]
+           (xt/q tu/*node* "SELECT docs.y FROM docs")))
+
+  (t/is (= #{{:x 2, :bar "b", :xt/id 2}
+             {:x 3, :bar "a", :xt/id 1}
+             {:x 1, :bar "c", :xt/id 3}}
+           (set (xt/q tu/*node* "SELECT docs.*, docs.y AS bar FROM docs"))))
+
+  (t/is (= #{{:x 2, :y:1 "b", :xt/id 2}
+             {:x 3, :y:1 "a", :xt/id 1}
+             {:x 1, :y:1 "c", :xt/id 3}}
+           (set (xt/q tu/*node* "SELECT docs.*, docs.y FROM docs"))))
+
+  (t/is (= #{{:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+              :x 2,
+              :y "b",
+              :xt/id 2}
+             {:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+              :x 3,
+              :y "a",
+              :xt/id 1}
+             {:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+              :x 1,
+              :y "c",
+              :xt/id 3}}
+           (set (xt/q tu/*node* "SELECT docs.*, docs.xt$valid_from FROM docs"))))
+
+  (t/is (= #{{:x 2,
+              :y "b",
+              :xt/id 2,
+              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+             {:x 3,
+              :y "a",
+              :xt/id 1,
+              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+             {:x 1,
+              :y "c",
+              :xt/id 3,
+              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
+             (set (xt/q tu/*node* "SELECT docs.*, docs.xt$valid_from FROM docs WHERE docs.xt$system_to = docs.xt$valid_to")))))
+
+(deftest test-select-star-qualified-join
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]
+                           [:put-docs :bar {:xt/id 2 :a "one"}]])
+
+  (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
+           (xt/q tu/*node* "SELECT * FROM foo JOIN bar ON true"))))
+
+(deftest test-select-star-lateral-join
+  (xt/submit-tx tu/*node* [[:put-docs :y {:xt/id 1 :b "one"}]])
+
+  (t/is (= [{:b "one", :b:1 "one"}]
+           (xt/q tu/*node*
+                 "SELECT * FROM (SELECT y.b FROM y) AS x, LATERAL (SELECT y.b FROM y) AS z"))))
+
+(deftest test-select-star-subquery
+  (xt/submit-tx tu/*node* [[:put-docs :y {:xt/id 1 :b "one" :a 2}]])
+
+  (t/is (= [{:b "one"}]
+           (xt/q tu/*node*
+                 "SELECT * FROM (SELECT y.b FROM y) AS x"))))
