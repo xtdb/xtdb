@@ -75,8 +75,8 @@
                          {:xt/id "bar", :v 2}])
 
           (c/merge-tries! tu/*allocator* bp
-                          [(.compactLogs (li/live-trie lt0)) (.compactLogs (li/live-trie lt1))]
-                          [(tu/->live-data-rel lt0) (tu/->live-data-rel lt1)]
+                          [{:trie (.compactLogs (li/live-trie lt0)), :data-rel (tu/->live-data-rel lt0)}
+                           {:trie (.compactLogs (li/live-trie lt1)), :data-rel (tu/->live-data-rel lt1)}]
                           (util/->path "my-table") "my-trie"))
 
         (tj/check-json expected-dir data-dir)))))

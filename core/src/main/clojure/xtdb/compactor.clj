@@ -85,19 +85,20 @@
               pos)))))))
 
 (defn merge-tries! [^BufferAllocator allocator, ^IBufferPool buffer-pool
-                    tries data-rels table-path trie-key]
-  (let [data-rel-schema (->log-data-rel-schema data-rels)]
+                    segments table-path trie-key]
+  (let [data-rel-schema (->log-data-rel-schema (map :data-rel segments))]
     (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool data-rel-schema table-path trie-key)
                      data-root (VectorSchemaRoot/create data-rel-schema allocator)]
       (let [data-wtr (vw/root->writer data-root)
             reader->copier (->reader->copier data-wtr)
             is-valid-ptr (ArrowBufPointer.)]
 
-        (letfn [(merge-nodes! [path [mn-tag mn-arg]]
+        (letfn [(merge-nodes! [path [mn-tag & mn-args]]
                   (case mn-tag
-                    :branch (.writeBranch trie-wtr (int-array mn-arg))
+                    :branch (.writeBranch trie-wtr (int-array (first mn-args)))
 
-                    :leaf (let [data-rdrs (trie/load-data-pages data-rels mn-arg)
+                    :leaf (let [[segments nodes] mn-args
+                                data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
                                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]
 
                             (doseq [^RelationReader data-rdr data-rdrs
@@ -125,7 +126,7 @@
                                   (.clear data-wtr)
                                   pos))))))]
 
-          (trie/postwalk-merge-plan tries merge-nodes!)
+          (trie/postwalk-merge-plan segments merge-nodes!)
           (.end trie-wtr))))))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
@@ -137,7 +138,12 @@
       (doseq [trie-key trie-keys]
         (.add meta-files (trie/open-meta-file buffer-pool (trie/->table-meta-file-path table-path trie-key))))
 
-      (merge-tries! allocator buffer-pool (mapv :trie meta-files) data-rels table-path out-trie-key))
+      (merge-tries! allocator buffer-pool
+                    (mapv (fn [{:keys [trie] :as meta-file} data-rel]
+                            {:trie trie, :meta-file meta-file, :data-rel data-rel})
+                          meta-files
+                          data-rels)
+                    table-path out-trie-key))
 
     (log/infof "compacted '%s' -> '%s'." table-path out-trie-key)
 

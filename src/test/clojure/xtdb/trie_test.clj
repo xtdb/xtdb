@@ -28,15 +28,16 @@
                         {:path [1], :node [:leaf [nil {:page-idx 2} {:page-idx 0} nil]]}
                         {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
                         {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
-               (trie/postwalk-merge-plan [nil (->arrow-hash-trie t1-root) (->arrow-hash-trie log-root) (->arrow-hash-trie log2-root)]
-                                         (fn [path [mn-tag mn-arg :as merge-node]]
+               (trie/postwalk-merge-plan [nil {:trie (->arrow-hash-trie t1-root)} {:trie (->arrow-hash-trie log-root)} {:trie (->arrow-hash-trie log2-root)}]
+                                         (fn [path [mn-tag & mn-args :as merge-node]]
                                            {:path (vec path)
                                             :node (case mn-tag
                                                     :branch merge-node
-                                                    :leaf [:leaf (mapv (fn [^ArrowHashTrie$Leaf leaf]
-                                                                         (when leaf
-                                                                           {:page-idx (.getDataPageIndex leaf)}))
-                                                                       mn-arg)])})))))))
+                                                    :leaf (let [[_segments nodes] mn-args]
+                                                            [:leaf (mapv (fn [^ArrowHashTrie$Leaf leaf]
+                                                                           (when leaf
+                                                                             {:page-idx (.getDataPageIndex leaf)}))
+                                                                         nodes)]))})))))))
 
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]

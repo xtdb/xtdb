@@ -202,10 +202,10 @@
                       (fn [trie-leaf-file]
                         (bp/open-vsr buffer-pool trie-leaf-file allocator)))))
 
-(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache ^Path table-path [leaf-tag leaf-arg]]
+(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache ^Path table-path [leaf-tag & leaf-args]]
   (case leaf-tag
     :arrow
-    (let [{:keys [page-idx trie-key]} leaf-arg
+    (let [[{:keys [trie-key]} page-idx] leaf-args
           data-file-path (trie/->table-data-file-path table-path trie-key)]
       (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
         (let [vsr (cache-vsr vsr-cache data-file-path)
@@ -213,7 +213,7 @@
           (.load loader rb)
           (vr/<-root vsr))))
 
-    :live (:rel-rdr leaf-arg)))
+    :live (first leaf-args)))
 
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
                      ^Path table-path, col-names, ^Map col-preds,
@@ -315,27 +315,28 @@
     (constantly true)))
 
 (defn- ->merge-tasks
-  "scan-tries :: [{:keys [meta-file trie-key table-metadata page-idx-pred]}]"
-  [scan-tries, ^ILiveTableWatermark live-table-wm, path-pred]
+  "segments :: [Segment]
+    Segment :: {:keys [meta-file trie-key table-metadata page-idx-pred]} ;; for Arrow tries
+             | {:keys [trie live-rel]} ;; for live tries"
+  [segments path-pred]
 
-  (letfn [(merge-tasks* [path [mn-tag mn-arg]]
+  (letfn [(merge-tasks* [path [mn-tag & mn-args]]
             (when (path-pred path)
               (case mn-tag
-                :branch (into [] cat mn-arg)
-                :leaf (let [trie-nodes mn-arg
+                :branch (into [] cat (first mn-args))
+                :leaf (let [[segments trie-nodes] mn-args
                             ^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)
                             trie-nodes-it (.iterator ^Iterable trie-nodes)
-                            scan-tries-it (.iterator ^Iterable scan-tries)]
+                            segments-it (.iterator ^Iterable segments)]
                         (loop [node-taken? false, leaves []]
                           (if (.hasNext trie-nodes-it)
-                            (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata trie-key]}
-                                  (when (.hasNext scan-tries-it)
-                                    (.next scan-tries-it))]
-
+                            (let [segment (when (.hasNext segments-it)
+                                            (.next segments-it))]
                               (if-let [trie-node (.next trie-nodes-it)]
                                 (condp = (class trie-node)
                                   ArrowHashTrie$Leaf
-                                  (let [page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
+                                  (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata]} segment
+                                        page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
                                         take-node? (.test page-idx-pred page-idx)]
                                     (when take-node?
                                       (.or cumulative-iid-bitmap (.iidBloomBitmap table-metadata page-idx)))
@@ -346,14 +347,14 @@
                                                  (when node-taken?
                                                    (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
                                                      (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
-                                             (conj [:arrow {:page-idx page-idx
-                                                            :trie-key trie-key}]))))
+                                             (conj [:arrow segment page-idx]))))
 
                                   LiveHashTrie$Leaf
-                                  (recur true (conj leaves
-                                                    [:live {:rel-rdr
-                                                            (.select (.liveRelation live-table-wm)
-                                                                     (.mergeSort ^LiveHashTrie$Leaf trie-node (.liveTrie live-table-wm)))}])))
+                                  (let [^LiveHashTrie$Leaf trie-node trie-node
+                                        {:keys [^RelationReader live-rel, trie]} segment]
+                                    (recur true (conj leaves
+                                                      [:live (-> live-rel
+                                                                 (.select (.mergeSort trie-node trie)))]))))
 
                                 (recur node-taken? leaves)))
 
@@ -361,9 +362,7 @@
                               [{:path path
                                 :leaves leaves}])))))))]
 
-    (trie/postwalk-merge-plan (cond-> (mapv (comp :trie :meta-file) scan-tries)
-                                live-table-wm (conj (.liveTrie live-table-wm)))
-                              merge-tasks*)))
+    (trie/postwalk-merge-plan segments merge-tasks*)))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -464,21 +463,25 @@
 
                        (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                          (let [merge-tasks (util/with-open [meta-files (LinkedList.)]
-                                             (or (->merge-tasks (mapv (fn [meta-file-path]
-                                                                        (let [{meta-rdr :rdr, :as meta-file} (trie/open-meta-file buffer-pool meta-file-path)]
-                                                                          (.add meta-files meta-file)
-                                                                          (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr meta-rdr meta-file-path)]
-                                                                            {:meta-file meta-file
-                                                                             :trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
-                                                                             :table-metadata table-metadata
-                                                                             :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                      (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                                        (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                        page-idx-pred))
-                                                                                                    (.build metadata-pred table-metadata)
-                                                                                                    col-names)})))
-                                                                      current-meta-files)
-                                                                live-table-wm
+                                             (or (->merge-tasks (cond-> (mapv (fn [meta-file-path]
+                                                                                (let [{:keys [trie], meta-rdr :rdr, :as meta-file} (trie/open-meta-file buffer-pool meta-file-path)]
+                                                                                  (.add meta-files meta-file)
+                                                                                  (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr meta-rdr meta-file-path)]
+                                                                                    {:meta-file meta-file
+                                                                                     :trie trie
+                                                                                     :trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
+                                                                                     :table-metadata table-metadata
+                                                                                     :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                              (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                                (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                                page-idx-pred))
+                                                                                                            (.build metadata-pred table-metadata)
+                                                                                                            col-names)})))
+                                                                              current-meta-files)
+
+                                                                  live-table-wm (conj {:trie (.liveTrie live-table-wm)
+                                                                                       :live-rel (.liveRelation live-table-wm)}))
+
                                                                 (->path-pred iid-arrow-buf))
                                                  []))]
 

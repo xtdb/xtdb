@@ -239,17 +239,16 @@
 
    Returns the value returned from the postwalk fn for the root node.
 
-
-
-   tries :: [HashTrie]
+   segments :: [Segment]
+     Segment :: {:keys [trie]} ;; and anything else you need - you'll get this back in `:leaf`
+       trie :: HashTrie
 
    f :: path, merge-node -> ret
-     where
      merge-node :: [:branch [ret]]
-                 | [:leaf [HashTrie$Node]]"
-  [tries f]
+                 | [:leaf [Segment] [HashTrie$Node]]"
+  [segments f]
 
-  (letfn [(postwalk* [nodes path-vec]
+  (letfn [(postwalk* [segments nodes path-vec]
             (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)
                   path (byte-array path-vec)]
               (f path
@@ -257,18 +256,20 @@
                    [:branch (lazy-seq
                              (->> (range (alength first-children))
                                   (mapv (fn [bucket-idx]
-                                          (postwalk* (mapv (fn [node ^objects node-children]
+                                          (postwalk* segments
+                                                     (mapv (fn [node ^objects node-children]
                                                              (if node-children
                                                                (aget node-children bucket-idx)
                                                                node))
                                                            nodes trie-children)
                                                      (conj path-vec bucket-idx))))))]
 
-                   [:leaf nodes]))))]
+                   [:leaf segments nodes]))))]
 
-    (postwalk* (mapv (fn [^HashTrie trie]
+    (postwalk* segments
+               (mapv (fn [{:keys [^HashTrie trie]}]
                        (some-> trie .rootNode))
-                     tries)
+                     segments)
                [])))
 
 (defrecord MetaFile [^HashTrie trie, ^ArrowBuf buf, ^RelationReader rdr]
