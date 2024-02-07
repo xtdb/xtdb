@@ -19,7 +19,7 @@ XT2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-modu
 You do not need to install Gradle to develop XT2 - there is a Gradle https://docs.gradle.org/current/userguide/gradle_wrapper.html[wrapper] in the repo.
 
 * Java classes are (re-)compiled automatically when you (re-)start a REPL or run tests
-* Start a REPL with `./gradlew :clojureRepl`
+* Start a REPL with `./gradlew :clojureRepl` (potentially requiring `./gradlew clean :clojureRepl`)
 * Once you've connected to the REPL, in the `user` namespace, run:
 ** `(dev)` to require and go to the `dev` namespace.
 ** `(go)` to start up the dev node
