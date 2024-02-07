@@ -1,0 +1,9 @@
+global:
+  scrape_interval:     2s # How frequently to scrape targets by default
+  evaluation_interval: 2s # How frequently to evaluate rules by default
+
+scrape_configs:
+  - job_name: 'xtdb_v2_node'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: /metrics
