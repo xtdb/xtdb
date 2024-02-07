@@ -121,7 +121,7 @@
                                     (.add merge-q q-obj))
                                   (recur (.add trie pos)))
 
-                                (let [pos (trie/write-live-trie-node trie-wtr (.rootNode (.compactLogs trie)) (vw/rel-wtr->rdr data-wtr))]
+                                (let [pos (trie/write-live-trie-node trie-wtr (.getRootNode (.compactLogs trie)) (vw/rel-wtr->rdr data-wtr))]
                                   (.clear data-root)
                                   (.clear data-wtr)
                                   pos))))))]

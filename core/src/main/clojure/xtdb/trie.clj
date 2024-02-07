@@ -17,7 +17,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf ITrieWriter)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -76,14 +76,6 @@
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
      (vw/root->writer root))))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ITrieWriter
-  (^xtdb.vector.IRelationWriter getDataWriter [])
-  (^int writeLeaf [])
-  (^int writeBranch [^ints idxs])
-  (^void end [])
-  (^void close []))
 
 (defn open-trie-writer ^xtdb.trie.ITrieWriter [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                                                ^Schema data-schema, ^Path table-path, trie-key]
@@ -168,7 +160,7 @@
 (defn write-live-trie-node [^ITrieWriter trie-wtr, ^HashTrie$Node node, ^RelationReader data-rel]
   (let [copier (vw/->rel-copier (.getDataWriter trie-wtr) data-rel)]
     (letfn [(write-node! [^HashTrie$Node node]
-              (if-let [children (.children node)]
+              (if-let [children (.getChildren node)]
                 (let [child-count (alength children)
                       !idxs (int-array child-count)]
                   (dotimes [n child-count]
@@ -181,7 +173,7 @@
                   (.writeBranch trie-wtr !idxs))
 
                 (let [^LiveHashTrie$Leaf leaf node]
-                  (-> (Arrays/stream (.data leaf))
+                  (-> (Arrays/stream (.getData leaf))
                       (.forEach (reify IntConsumer
                                   (accept [_ idx]
                                     (.copyRow copier idx)))))
@@ -199,7 +191,7 @@
                                               table-path trie-key)]
 
     (let [trie (.compactLogs trie)]
-      (write-live-trie-node trie-wtr (.rootNode trie) data-rel)
+      (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)
 
       (.end trie-wtr))))
 
@@ -249,7 +241,7 @@
   [segments f]
 
   (letfn [(postwalk* [segments nodes path-vec]
-            (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)
+            (let [trie-children (mapv #(some-> ^HashTrie$Node % (.getChildren)) nodes)
                   path (byte-array path-vec)]
               (f path
                  (if-let [^objects first-children (some identity trie-children)]
@@ -268,7 +260,7 @@
 
     (postwalk* segments
                (mapv (fn [{:keys [^HashTrie trie]}]
-                       (some-> trie .rootNode))
+                       (some-> trie .getRootNode))
                      segments)
                [])))
 
@@ -284,7 +276,7 @@
           nodes-vec (.getVector root "nodes")]
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
-        (->MetaFile (ArrowHashTrie/from nodes-vec (dec (.getValueCount nodes-vec))) buf (vr/<-root root))))))
+        (->MetaFile (ArrowHashTrie. nodes-vec) buf (vr/<-root root))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel
@@ -321,7 +313,7 @@
                (.getField rdr))))
 
   (loadPage [_ leaf]
-    (.select live-rel (.data ^LiveHashTrie$Leaf leaf)))
+    (.select live-rel (.getData ^LiveHashTrie$Leaf leaf)))
 
   AutoCloseable
   (close [_]))

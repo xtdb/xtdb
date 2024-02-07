@@ -50,20 +50,15 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.leaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
+            (let [leaves (.getLeaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
                   leaf ^LiveHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
 
-              (t/is
-               (uuid-equal-to-path?
-                uuid
-                (.path leaf)))
+              (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
 
               (t/is (= (reverse (range n))
-                       (->> leaf
-                            (.data)
-                            (vec)))))
+                       (vec (.getData leaf)))))
 
             @(.finishChunk live-table "c00")
 
@@ -87,7 +82,7 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.leaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
+            (let [leaves (.getLeaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
                   leaf ^LiveHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
@@ -95,12 +90,10 @@
               (t/is
                (uuid-equal-to-path?
                 uuid
-                (.path leaf)))
+                (.getPath leaf)))
 
               (t/is (= (reverse (range n))
-                       (->> leaf
-                            (.data)
-                            (vec)))))
+                       (vec (.getData leaf)))))
 
             @(.finishChunk live-table "c00")
 
@@ -113,14 +106,11 @@
   (let [live-rel-data (vr/rel->rows (.liveRelation live-table-wm))
         live-trie (.compactLogs (.liveTrie live-table-wm))
         live-trie-leaf-data (->> live-trie
-                                 (.leaves)
-                                 (mapcat #(.data ^LiveHashTrie$Leaf %))
+                                 (.getLeaves)
+                                 (mapcat #(.getData ^LiveHashTrie$Leaf %))
                                  (vec))
-        live-trie-iids (map
-                         #(util/byte-buffer->uuid
-                            (.getBytes
-                              (.iidReader live-trie) %))
-                         live-trie-leaf-data)]
+        live-trie-iids (map #(util/byte-buffer->uuid (.getBytes (.getIidReader live-trie) %))
+                            live-trie-leaf-data)]
     {:live-rel-data live-rel-data
      :live-trie-leaf-data live-trie-leaf-data
      :live-trie-iids live-trie-iids}))

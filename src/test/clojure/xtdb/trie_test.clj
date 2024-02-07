@@ -9,8 +9,7 @@
 
 (deftest test-merge-plan-with-nil-nodes-2700
   (letfn [(->arrow-hash-trie [^VectorSchemaRoot meta-root]
-            (let [nodes-vec (.getVector meta-root "nodes")]
-              (ArrowHashTrie/from nodes-vec (dec (.getValueCount nodes-vec)))))]
+            (ArrowHashTrie. (.getVector meta-root "nodes")))]
 
     (with-open [al (RootAllocator.)
                 t1-root (tu/open-arrow-hash-trie-root al [[nil 0 nil 1] 2 nil 3])

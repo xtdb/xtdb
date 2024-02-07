@@ -61,9 +61,9 @@
               ^LiveHashTrie trie (li/live-trie live-table)]
 
           (t/is (= iid-bytes
-                   (->> (.leaves (.compactLogs trie))
+                   (->> (.getLeaves (.compactLogs trie))
                         (mapcat (fn [^LiveHashTrie$Leaf leaf]
-                                  (mapv #(vec (.getObject iid-vec %)) (.data leaf))))))))))
+                                  (mapv #(vec (.getObject iid-vec %)) (.getData leaf))))))))))
 
     (t/testing "finish chunk"
       (li/finish-chunk! live-index)
@@ -77,7 +77,7 @@
               iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
           (.loadNextBatch trie-rdr)
           (t/is (= iid-bytes
-                   (->> (.leaves (ArrowHashTrie/from nodes-vec (dec (.getValueCount nodes-vec))))
+                   (->> (.getLeaves (ArrowHashTrie. nodes-vec))
                         (mapcat (fn [^ArrowHashTrie$Leaf leaf]
                                   ;; would be good if ArrowFileReader accepted a page-idx...
                                   (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))
