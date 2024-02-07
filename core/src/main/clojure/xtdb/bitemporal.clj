@@ -33,8 +33,7 @@
               nil)
 
             (let [system-from (.getSystemFrom ev-ptr)]
-              (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
-                         (<= system-from (.upper (.systemFrom temporal-bounds))))
+              (when (.inRange (.getSystemFrom temporal-bounds) system-from)
                 (.calculateFor polygon ceiling ev-ptr)
                 (.applyLog ceiling system-from
                            (.getValidFrom ev-ptr 0) (.getValidTo ev-ptr (dec (.getValidTimeRangeCount ev-ptr))))

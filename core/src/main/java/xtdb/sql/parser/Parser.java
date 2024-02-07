@@ -28,17 +28,17 @@ public final class Parser {
     }
 
     public static final IParseErrors NULL_PARSE_ERRORS = new IParseErrors() {
-            public void addError(final IPersistentVector error, final int idx) {
-            }
+        public void addError(final IPersistentVector error, final int idx) {
+        }
 
-            public int getIndex () {
-                return -1;
-            }
+        public int getIndex() {
+            return -1;
+        }
 
-            public Set<IPersistentVector> getErrors() {
-                return null;
-            }
-        };
+        public Set<IPersistentVector> getErrors() {
+            return null;
+        }
+    };
 
     public static final class ParseErrors implements IParseErrors {
         private final Set<IPersistentVector> errs;
@@ -120,22 +120,22 @@ public final class Parser {
     }
 
     public static final Predicate<IPersistentVector> ALWAYS_RAW = new Predicate<IPersistentVector>() {
-            public boolean test(final IPersistentVector ast) {
-                return true;
-            }
-        };
+        public boolean test(final IPersistentVector ast) {
+            return true;
+        }
+    };
 
     public static final Predicate<IPersistentVector> NEVER_RAW = new Predicate<IPersistentVector>() {
-            public boolean test(final IPersistentVector ast) {
-                return false;
-            }
-        };
+        public boolean test(final IPersistentVector ast) {
+            return false;
+        }
+    };
 
     public static final Predicate<IPersistentVector> SINGLE_CHILD = new Predicate<IPersistentVector>() {
-            public boolean test(final IPersistentVector ast) {
-                return 1 == ast.count();
-            }
-        };
+        public boolean test(final IPersistentVector ast) {
+            return 1 == ast.count();
+        }
+    };
 
     public static final class CatPersistentVector extends APersistentVector implements IObj {
         private static final long serialVersionUID = -1;

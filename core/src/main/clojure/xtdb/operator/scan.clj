@@ -80,10 +80,10 @@
                          (time/instant->micros))))]
 
       (when-let [system-time (some-> at-tx (.getSystemTime) time/instant->micros)]
-        (.lte (.systemFrom bounds) system-time)
+        (.lte (.getSystemFrom bounds) system-time)
 
         (when-not for-system-time
-          (.gt (.systemTo bounds) system-time)))
+          (.gt (.getSystemTo bounds) system-time)))
 
       (letfn [(apply-constraint [constraint ^TemporalBounds$TemporalColumn start-col, ^TemporalBounds$TemporalColumn end-col]
                 (when-let [[tag & args] constraint]
@@ -106,8 +106,8 @@
 
                     :all-time nil)))]
 
-        (apply-constraint for-valid-time (.validFrom bounds) (.validTo bounds))
-        (apply-constraint for-system-time (.systemFrom bounds) (.systemTo bounds))))
+        (apply-constraint for-valid-time (.getValidFrom bounds) (.getValidTo bounds))
+        (apply-constraint for-system-time (.getSystemFrom bounds) (.getSystemTo bounds))))
     bounds))
 
 (defn tables-with-cols [{:keys [basis after-tx]} ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]

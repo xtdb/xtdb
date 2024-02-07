@@ -1,21 +1,21 @@
-package xtdb.multipart;
+package xtdb.multipart
 
-import java.nio.ByteBuffer;
-import java.util.concurrent.CompletableFuture;
+import java.nio.ByteBuffer
+import java.util.concurrent.CompletableFuture
 
-public interface IMultipartUpload {
+interface IMultipartUpload {
     /**
      * Asynchronously uploads a part to the multipart request and adds it to the internal list of completed parts.
      */
-    CompletableFuture<Void> uploadPart(ByteBuffer buf);
+    fun uploadPart(buf: ByteBuffer): CompletableFuture<*>
 
     /**
      * Asynchronously completes the multipart request.
      */
-    CompletableFuture<Void> complete();
+    fun complete(): CompletableFuture<*>
 
     /**
      * Asynchronously cancels the multipart request, useful for cleaning up any parts of the multipart upload in case of an error.
      */
-    CompletableFuture<?> abort();
+    fun abort(): CompletableFuture<*>
 }
