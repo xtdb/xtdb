@@ -40,6 +40,17 @@ For example, to check its status:
 curl http://localhost:3000/status
 ----
 
+To run your first query:
+
+[source,shell]
+----
+sql="SELECT t1.doc.foo[1]
+     FROM (VALUES ({'foo':['Hello', 'world!']})) AS t1(doc)"; \
+curl -X POST localhost:3000/query \
+     -H "Content-Type: application/json" -H "Accept: application/jsonl" \
+     -d "{\"query\": {\"sql\": \"${sql}\"}}"
+----
+
 From here, check out the link:/drivers/openapi/index.html[HTTP OpenAPI docs] to see what else is available.
 
 === Connecting from a client library
