@@ -5,7 +5,7 @@ title: XTQL Walkthrough
 :example: ../src/test/resources/docs/xtql_tutorial_examples.yaml
 
 XTDB supports two query languages: link:../reference/main/sql/queries.html[SQL], and link:../reference/main/xtql/queries.html[XTQL] - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
-XTQL can be written in JSON, Java/Scala/Kotlin (full DSL coming soon) and Clojure's EDN.
+XTQL is described using JSON and is supported by various client language drivers that make writing XTQL ergonomic. Drivers are currently available for Java, Kotlin, and Clojure (with more to come soon!).
 
 XTQL queries are structured pipeline of operations - e.g. scanning a table, joining multiple tables/queries, grouping/aggregations and sorting/limiting.
 

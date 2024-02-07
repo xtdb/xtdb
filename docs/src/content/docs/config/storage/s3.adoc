@@ -143,4 +143,4 @@ If configured as an in-process node, you can also specify an `S3Configurator` in
 image:{icon}/clojure.svg[Clojure,link={clojure}]
 image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
 
-For examples on how to enable/configure the S3 module as part of your node, for each client library, see the individual SDK documentation:
+For examples on how to enable/configure the S3 module as part of your node, for each client library, see the individual driver documentation:

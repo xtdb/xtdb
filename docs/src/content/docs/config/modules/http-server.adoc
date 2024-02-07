@@ -35,6 +35,6 @@ If you do not configure a `port`, the HTTP server will be started on port `3000`
 image:{icon}/clojure.svg[Clojure,link={clojure}]
 image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
 
-For examples on how to enable/configure the HTTP Server module as part of your node, for each client library, see the individual SDK documentation:
+For examples on how to enable/configure the HTTP Server module as part of your node, for each client library, see the individual driver documentation:
 
 

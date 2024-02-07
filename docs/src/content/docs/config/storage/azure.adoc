@@ -115,4 +115,4 @@ storage: !Remote
 image:{icon}/clojure.svg[Clojure,link={clojure}]
 image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
 
-For examples on how to enable/configure the Azure module as part of your node, for each client library, see the individual SDK documentation:
+For examples on how to enable/configure the Azure module as part of your node, for each client library, see the individual driver documentation:

@@ -26,7 +26,7 @@ image:{icon}/clojure.svg[Clojure,link={clojure}]
 image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
 image:{icon}/java.svg[Java,link={java}]
 
-To start a node in-process within the various SDKs, see the following:
+To start a node in-process within the various drivers, see the following:
 
 == Configuring using YAML
 
@@ -36,7 +36,7 @@ Currently, all of the examples within the reference docs are in YAML. Config for
 image:{icon}/clojure.svg[Clojure,link={clojure-file-config}]
 image:{icon}/kotlin.svg[Kotlin,link={kotlin-file-config}]
 
-Within the SDKs, we offer the ability to provide and configure the node by passing the path to a YAML config file:
+Within the drivers, we offer the ability to provide and configure the node by passing the path to a YAML config file:
 
 === Using `!Env`
 
