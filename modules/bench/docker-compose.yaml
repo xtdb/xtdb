@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  grafana:
+    image: 'grafana/grafana-oss:9.4.7'
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./config/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml
+      - ./config/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./config/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    restart: always
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yaml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitoring
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+networks:
+  monitoring:

@@ -33,3 +33,13 @@ All run through scripts in `./bin`:
 - `run-bench.sh ts-devices [--size <small|med|big>] [--count 1]` - kicks off an ECS job.
 
 You can also run it locally with (e.g.) `clojure -Mxtdb:4gb:bench-tpch --scale-factor 0.05` from the top-level of the core2 repo.
+
+
+=== Prometheus and grafana
+For local node monitoring bring up a prometheus and grafana instance via `docker-compose up`.
+By default the node serves prometheus metrics under `localhost:8080/metrics` which the prometheus scrapes every 2 seconds.
+If the metrics are not exposed under `localhost:8080` you need to tweak the `.config/prometheus.yaml` config accordingly.
+
+Under `localhost:3001` you are able to access the grafana UI (`admin` for user and password).
+The XTDB node datasource should be setup and there should be a dashboard available with some basic metrics.
+In case you tweak the dashboard or add a new one you need to save the changes in the corresponding file in `.config/dashboards/dashboard_name.json`.
