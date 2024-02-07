@@ -6,10 +6,11 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
+            [xtdb.time :as time]
             [xtdb.trie :as trie]
-            [xtdb.buffer-pool :as bp])
-  (:import xtdb.api.storage.Storage))
+            [xtdb.util :as util]
+            [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -50,36 +51,65 @@
                  [1 0 2] [1 2 4] [1 4 6] [1 6 8]
                  [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))))
 
-(t/deftest test-merges-tries
-  (let [data-dir (doto (util/->path "target/compactor/test-merges-tries")
-                   util/delete-dir
-                   util/mkdirs)]
-    (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage data-dir))]
-      (let [expected-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-merges-tries")))]
+(t/deftest test-merges-segments
+  (util/with-open [lt0 (tu/open-live-table "foo")
+                   lt1 (tu/open-live-table "foo")]
 
-        (util/with-open [lt0 (tu/open-live-table "foo")
-                         lt1 (tu/open-live-table "foo")]
+    (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}
+                  [{:xt/id "foo", :v 0}
+                   {:xt/id "bar", :v 0}])
 
-          (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}
-                        [{:xt/id "foo", :v 0}
-                         {:xt/id "bar", :v 0}])
+    (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #time/instant "2021-01-01T00:00:00Z"}
+                  [{:xt/id "bar", :v 1}])
 
-          (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #time/instant "2021-01-01T00:00:00Z"}
-                        [{:xt/id "bar", :v 1}])
+    (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #time/instant "2022-01-01T00:00:00Z"}
+                  [{:xt/id "foo", :v 1}])
 
-          (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #time/instant "2022-01-01T00:00:00Z"}
-                        [{:xt/id "foo", :v 1}])
+    (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #time/instant "2023-01-01T00:00:00Z"}
+                  [{:xt/id "foo", :v 2}
+                   {:xt/id "bar", :v 2}])
 
-          (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #time/instant "2023-01-01T00:00:00Z"}
-                        [{:xt/id "foo", :v 2}
-                         {:xt/id "bar", :v 2}])
+    (let [segments [{:trie (.compactLogs (li/live-trie lt0)), :data-rel (tu/->live-data-rel lt0)}
+                    {:trie (.compactLogs (li/live-trie lt1)), :data-rel (tu/->live-data-rel lt1)}]]
 
-          (c/merge-tries! tu/*allocator* bp
-                          [{:trie (.compactLogs (li/live-trie lt0)), :data-rel (tu/->live-data-rel lt0)}
-                           {:trie (.compactLogs (li/live-trie lt1)), :data-rel (tu/->live-data-rel lt1)}]
-                          (util/->path "my-table") "my-trie"))
+      (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))]
 
-        (tj/check-json expected-dir data-dir)))))
+        (c/merge-segments-into data-rel-wtr segments)
+
+        (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                   :xt/system-from (time/->zdt #inst "2023")
+                   :xt/valid-from (time/->zdt #inst "2023")
+                   :xt/valid-to nil,
+                   :op {:v 2, :xt/id "bar"}}
+                  {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                   :xt/system-from (time/->zdt #inst "2021")
+                   :xt/valid-from (time/->zdt #inst "2021")
+                   :xt/valid-to nil,
+                   :op {:v 1, :xt/id "bar"}}
+                  {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                   :xt/system-from (time/->zdt #inst "2020")
+                   :xt/valid-from (time/->zdt #inst "2020")
+                   :xt/valid-to nil,
+                   :op {:v 0, :xt/id "bar"}}
+                  {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                   :xt/system-from (time/->zdt #inst "2023")
+                   :xt/valid-from (time/->zdt #inst "2023")
+                   :xt/valid-to nil,
+                   :op {:v 2, :xt/id "foo"}}
+                  {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                   :xt/system-from (time/->zdt #inst "2022")
+                   :xt/valid-from (time/->zdt #inst "2022")
+                   :xt/valid-to nil,
+                   :op {:v 1, :xt/id "foo"}}
+                  {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                   :xt/system-from (time/->zdt #inst "2020")
+                   :xt/valid-from (time/->zdt #inst "2020")
+                   :xt/valid-to nil,
+                   :op {:v 0, :xt/id "foo"}}]
+
+                 (-> (vw/rel-wtr->rdr data-rel-wtr)
+                     (vr/rel->rows)
+                     (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))))))
 
 (t/deftest test-e2e
   (let [node-dir (util/->path "target/compactor/test-e2e")]

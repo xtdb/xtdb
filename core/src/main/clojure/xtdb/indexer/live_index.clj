@@ -210,7 +210,7 @@
                                         {:keys [->live-trie]
                                          :or {->live-trie (fn [iid-rdr]
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
-   (util/with-close-on-catch [rel (trie/open-log-data-root allocator)]
+   (util/with-close-on-catch [rel (trie/open-log-data-wtr allocator)]
      (let [iid-wtr (.colWriter rel "xt$iid")
            op-wtr (.colWriter rel "op")]
        (->LiveTable allocator buffer-pool row-counter table-name rel

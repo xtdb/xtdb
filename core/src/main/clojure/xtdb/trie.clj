@@ -69,9 +69,9 @@
                            (types/col-type->field "delete" :null)
                            (types/col-type->field "erase" :null))]))
 
-(defn open-log-data-root
+(defn open-log-data-wtr
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-   (open-log-data-root allocator (data-rel-schema [:struct {}])))
+   (open-log-data-wtr allocator (data-rel-schema [:struct {}])))
 
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]

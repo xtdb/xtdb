@@ -6,15 +6,13 @@
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
            [java.util Comparator LinkedList PriorityQueue]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
-           org.apache.arrow.vector.types.pojo.Field
-           org.apache.arrow.vector.VectorSchemaRoot
+           (org.apache.arrow.vector.types.pojo Field)
            xtdb.IBufferPool
            (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
            xtdb.vector.IRelationWriter
@@ -24,14 +22,6 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ICompactor
   (^void compactAll []))
-
-(defn- ->log-data-rel-schema [data-rels]
-  (trie/data-rel-schema (->> (for [^IDataRel data-rel data-rels]
-                               (-> (.getSchema data-rel)
-                                   (.findField "op")
-                                   (.getChildren) ^Field first
-                                   types/field->col-type))
-                             (apply types/merge-col-types))))
 
 (defn- ->reader->copier [^IRelationWriter data-wtr]
   (let [iid-wtr (.colWriter data-wtr "xt$iid")
@@ -57,66 +47,72 @@
 
               pos)))))))
 
-(defn merge-tries! [^BufferAllocator allocator, ^IBufferPool buffer-pool
-                    segments table-path trie-key]
-  (let [data-rel-schema (->log-data-rel-schema (map :data-rel segments))]
-    (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool data-rel-schema table-path trie-key)
-                     data-root (VectorSchemaRoot/create data-rel-schema allocator)]
-      (let [data-wtr (vw/root->writer data-root)
-            reader->copier (->reader->copier data-wtr)
-            is-valid-ptr (ArrowBufPointer.)]
+(defn merge-segments-into [^IRelationWriter data-rel-wtr, segments]
+  (let [reader->copier (->reader->copier data-rel-wtr)
+        is-valid-ptr (ArrowBufPointer.)]
 
-        (letfn [(merge-nodes! [path [mn-tag & mn-args]]
-                  (case mn-tag
-                    :branch (.writeBranch trie-wtr (int-array (first mn-args)))
+    (letfn [(merge-nodes! [path [mn-tag & mn-args]]
+              (case mn-tag
+                :branch (dorun (first mn-args)) ; runs the side-effects in the nested nodes
 
-                    :leaf (let [[segments nodes] mn-args
-                                data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
-                                merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]
+                :leaf (let [[segments nodes] mn-args
+                            data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
+                            merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]
 
-                            (doseq [^RelationReader data-rdr data-rdrs
-                                    :when data-rdr
-                                    :let [ev-ptr (EventRowPointer. data-rdr (byte-array 0))
-                                          row-copier (reader->copier data-rdr)]]
-                              (when (.isValid ev-ptr is-valid-ptr path)
-                                (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
+                        (doseq [^RelationReader data-rdr data-rdrs
+                                :when data-rdr
+                                :let [ev-ptr (EventRowPointer. data-rdr (byte-array 0))
+                                      row-copier (reader->copier data-rdr)]]
+                          (when (.isValid ev-ptr is-valid-ptr path)
+                            (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
 
-                            (loop [trie (-> (doto (LiveHashTrie/builder (vr/vec->reader (.getVector data-root "xt$iid")))
-                                              (.setRootPath path))
-                                            (.build))]
+                        (loop []
+                          (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
+                            (.copyRow row-copier (.getIndex ev-ptr))
 
-                              (if-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
-                                (let [ev-idx (.getIndex ev-ptr)
-                                      pos (.copyRow row-copier ev-idx)]
+                            (.nextIndex ev-ptr)
+                            (when (.isValid ev-ptr is-valid-ptr path)
+                              (.add merge-q q-obj))
+                            (recur))))))]
 
-                                  (.nextIndex ev-ptr)
-                                  (when (.isValid ev-ptr is-valid-ptr path)
-                                    (.add merge-q q-obj))
-                                  (recur (.add trie pos)))
+      (trie/postwalk-merge-plan segments merge-nodes!)
 
-                                (let [pos (trie/write-live-trie-node trie-wtr (.getRootNode (.compactLogs trie)) (vw/rel-wtr->rdr data-wtr))]
-                                  (.clear data-root)
-                                  (.clear data-wtr)
-                                  pos))))))]
+      (.syncRowCount data-rel-wtr)
+      nil)))
 
-          (trie/postwalk-merge-plan segments merge-nodes!)
-          (.end trie-wtr))))))
+(defn ->log-data-rel-schema [data-rels]
+  (trie/data-rel-schema (->> (for [^IDataRel data-rel data-rels]
+                               (-> (.getSchema data-rel)
+                                   (.findField "op")
+                                   (.getChildren) ^Field first
+                                   types/field->col-type))
+                             (apply types/merge-col-types))))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                             {:keys [^Path table-path trie-keys out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
+
     (util/with-open [meta-files (LinkedList.)
                      data-rels (trie/open-data-rels buffer-pool table-path trie-keys nil)]
       (doseq [trie-key trie-keys]
         (.add meta-files (trie/open-meta-file buffer-pool (trie/->table-meta-file-path table-path trie-key))))
 
-      (merge-tries! allocator buffer-pool
-                    (mapv (fn [{:keys [trie] :as meta-file} data-rel]
-                            {:trie trie, :meta-file meta-file, :data-rel data-rel})
-                          meta-files
-                          data-rels)
-                    table-path out-trie-key))
+      (let [segments (mapv (fn [{:keys [trie] :as meta-file} data-rel]
+                             {:trie trie, :meta-file meta-file, :data-rel data-rel})
+                           meta-files
+                           data-rels)]
+        (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator (->log-data-rel-schema (map :data-rel segments)))]
+
+          (merge-segments-into data-rel-wtr segments)
+
+          (let [data-rel (vw/rel-wtr->rdr data-rel-wtr)
+                trie (reduce (fn [^LiveHashTrie trie idx]
+                               (.add trie idx))
+                             (LiveHashTrie/emptyTrie (.readerForName data-rel "xt$iid"))
+                             (range (.rowCount data-rel)))]
+
+            (trie/write-live-trie! allocator buffer-pool table-path out-trie-key trie data-rel)))))
 
     (log/infof "compacted '%s' -> '%s'." table-path out-trie-key)
 
