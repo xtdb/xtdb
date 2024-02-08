@@ -162,6 +162,16 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
+    public IVectorReader mapKeyReader() {
+        return reader.mapKeyReader();
+    }
+
+    @Override
+    public IVectorReader mapValueReader() {
+        return reader.mapValueReader();
+    }
+
+    @Override
     public Keyword getLeg(int idx) {
         return reader.getLeg(indirection.getIndex(idx));
     }

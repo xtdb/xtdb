@@ -361,3 +361,31 @@
            10.0]]
     (with-open [rel (tu/open-rel [(tu/open-vec "x" x)])]
       (t/is (= x (mapv :x (vr/rel->rows rel)))))))
+
+(deftest writes-map-vector
+  (let [maps [{}
+              {"mal" "Malcolm", "jdt" "Jeremy"}
+              {"jms" "James"}]]
+    (with-open [map-vec (-> (types/->field "x" #xt.arrow/type [:map {:sorted? true}] false
+                                           (types/->field "entries" #xt.arrow/type :struct false
+                                                          (types/col-type->field "username" :utf8)
+                                                          (types/col-type->field "first-name" :utf8)))
+                            (.createVector tu/*allocator*))]
+
+      ;; with maps, we write them as [:list [:struct #{k v}]]
+      (let [map-wtr (vw/->writer map-vec)
+            entry-wtr (.listElementWriter map-wtr)
+            k-wtr (.structKeyWriter entry-wtr "username")
+            v-wtr (.structKeyWriter entry-wtr "first-name")]
+        (doseq [m maps]
+          (.startList map-wtr)
+
+          (doseq [[k v] (sort-by key m)]
+            (.startStruct entry-wtr)
+            (vw/write-value! k k-wtr)
+            (vw/write-value! v v-wtr)
+            (.endStruct entry-wtr))
+
+          (.endList map-wtr))
+
+        (t/is (= maps (tu/vec->vals (vw/vec-wtr->rdr map-wtr))))))))

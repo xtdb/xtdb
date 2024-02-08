@@ -5,7 +5,7 @@
   (:import clojure.lang.MapEntry
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector VarBinaryVector VarCharVector VectorSchemaRoot)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector MapVector StructVector)
            xtdb.api.query.IKeyFn
            (xtdb.vector IVectorReader RelationReader ValueVectorReader)
            (xtdb.vector.extensions AbsentVector KeywordVector SetVector TransitVector UriVector UuidVector)))
@@ -58,6 +58,7 @@
 
   StructVector (vec->reader [arrow-vec] (ValueVectorReader/structVector arrow-vec))
   ListVector (vec->reader [arrow-vec] (ValueVectorReader/listVector arrow-vec))
+  MapVector (vec->reader [arrow-vec] (ValueVectorReader/mapVector arrow-vec))
   SetVector (vec->reader [arrow-vec] (ValueVectorReader/setVector arrow-vec))
   DenseUnionVector (vec->reader [arrow-vec] (ValueVectorReader/denseUnionVector arrow-vec))
 

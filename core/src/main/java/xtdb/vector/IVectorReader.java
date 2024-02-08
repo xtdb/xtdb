@@ -62,6 +62,10 @@ public interface IVectorReader extends AutoCloseable {
 
     int getListCount(int idx);
 
+    IVectorReader mapKeyReader();
+
+    IVectorReader mapValueReader();
+
     Keyword getLeg(int idx);
 
     IVectorReader legReader(Keyword legKey);

@@ -7,6 +7,7 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.DenseUnionVector;
 import org.apache.arrow.vector.complex.ListVector;
+import org.apache.arrow.vector.complex.MapVector;
 import org.apache.arrow.vector.complex.StructVector;
 import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
@@ -181,6 +182,16 @@ public class ValueVectorReader implements IVectorReader {
 
     @Override
     public int getListCount(int idx) {
+        throw unsupported();
+    }
+
+    @Override
+    public IVectorReader mapKeyReader() {
+        throw unsupported();
+    }
+
+    @Override
+    public IVectorReader mapValueReader() {
         throw unsupported();
     }
 
@@ -809,9 +820,9 @@ public class ValueVectorReader implements IVectorReader {
         Object getObject0(int idx, IKeyFn<?> keyFn) {
             var startIdx = getListStartIndex(idx);
             return PersistentVector.create(
-                    IntStream.range(0, getListCount(idx))
-                            .mapToObj(elIdx -> elReader.getObject(startIdx + elIdx, keyFn))
-                            .toList());
+                IntStream.range(0, getListCount(idx))
+                    .mapToObj(elIdx -> elReader.getObject(startIdx + elIdx, keyFn))
+                    .toList());
         }
 
         @Override
@@ -887,12 +898,61 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public IValueReader valueReader(IVectorPosition pos) {
-                return new BaseValueReader(pos){
+                return new BaseValueReader(pos) {
                     @Override
                     public Object readObject() {
                         return PersistentHashSet.create((List<?>) listReader.getObject(pos.getPosition()));
                     }
                 };
+            }
+        };
+    }
+
+    public static IVectorReader mapVector(MapVector v) {
+        var listReader = listVector(v);
+
+        StructVector dataVector = (StructVector) v.getDataVector();
+        var keyReader = from(dataVector.getVectorById(0));
+        var valueReader = from(dataVector.getVectorById(1));
+
+        return new ValueVectorReader(v) {
+            @Override
+            Object getObject0(int idx, IKeyFn<?> keyFn) {
+                var startIdx = listReader.getListStartIndex(idx);
+                int entryCount = listReader.getListCount(idx);
+
+                Map<Object, Object> acc = new HashMap<>();
+                for (int entryIdx = 0; entryIdx < entryCount; entryIdx++) {
+                    acc.put(
+                        keyReader.getObject(startIdx + entryIdx, keyFn),
+                        valueReader.getObject(startIdx + entryIdx, keyFn));
+                }
+                return PersistentHashMap.create(acc);
+            }
+
+            @Override
+            public IVectorReader mapKeyReader() {
+                return keyReader;
+            }
+
+            @Override
+            public IVectorReader mapValueReader() {
+                return valueReader;
+            }
+
+            @Override
+            public IVectorReader listElementReader() {
+                return listReader.listElementReader();
+            }
+
+            @Override
+            public int getListStartIndex(int idx) {
+                return listReader.getListStartIndex(idx);
+            }
+
+            @Override
+            public int getListCount(int idx) {
+                return listReader.getListCount(idx);
             }
         };
     }
