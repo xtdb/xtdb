@@ -53,18 +53,19 @@
 
 (defn query-tpch [stage-name i]
   (let [q (nth tpch-ra/queries i)
-        stage (keyword (str (name stage-name) "-" (:name (meta q))))
+        stage-name (keyword (str (name stage-name) "-" (:name (meta q))))
         q @q
         {::tpch-ra/keys [params table-args]} (meta q)]
     {:t :do
-     :stage stage
-     :tasks [{:t :call :f (fn [{:keys [sut]}]
-                            (try
-                              (count (query-ra/query-ra q {:node sut
-                                                           :params params
-                                                           :table-args table-args}))
-                              (catch Exception e
-                                (.printStackTrace e))))}]}))
+     :stage stage-name
+     :tasks [{:t :call
+              :f (fn [{:keys [sut]}]
+                   (try
+                     (count (query-ra/query-ra q {:node sut
+                                                  :params params
+                                                  :table-args table-args}))
+                     (catch Exception e
+                       (.printStackTrace e))))}]}))
 
 
 (defn queries-stage [stage-name]
@@ -83,9 +84,9 @@
                                              end-ms (System/currentTimeMillis)
                                              bf-stats (bp-stats (- end-ms start-ms))]
                                          (b/add-report worker {:stage report-name
-                                                               :buffer-pool-stats bf-stats
                                                                :start-ms start-ms
-                                                               :end-ms end-ms})
+                                                               :end-ms end-ms
+                                                               :extra {:buffer-pool-stats bf-stats}})
                                          (log/info report-name " - " bf-stats)))}]))})
 
 (defn benchmark [{:keys [scale-factor seed] :or {scale-factor 0.01 seed 0}}]
@@ -141,7 +142,7 @@
        {:node-opts {:node-dir node-tmp-dir
                     :instant-src (InstantSource/system)}
         :benchmark-type :tpch
-        :benchmark-opts {:scale-factor 0.01}})))
+        :benchmark-opts {:scale-factor 0.05}})))
 
   (xtdb.bench.report/show-html-report
    (xtdb.bench.report/vs

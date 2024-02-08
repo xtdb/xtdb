@@ -11,6 +11,7 @@
            (java.util.function Supplier)
            (io.micrometer.core.instrument.binder MeterBinder)))
 
+(def ^:dynamic *registry* nil)
 (def ^:dynamic *stage-reg* nil)
 
 (defn meter-reg ^MeterRegistry []
@@ -124,6 +125,32 @@
       transaction (wrap-transaction transaction f)
       :else f)))
 
+
+(defn wrap-stage-toplevel-reg [task f]
+  (let [stage (:stage task)
+        ^Duration duration (:duration task)
+        sample-freq
+        (if duration
+          (long (max 1000 (/ (* (.toMillis duration)) 120)))
+          1000)]
+    (fn instrumented-stage [worker]
+      (let [reg (meter-reg)
+            sampler (meter-sampler reg)
+            executor (Executors/newSingleThreadScheduledExecutor)]
+        (.scheduleAtFixedRate executor ^Runnable sampler 0 (long sample-freq) TimeUnit/MILLISECONDS)
+        (try
+          (let [start-ms (System/currentTimeMillis)]
+            (f worker)
+            (.shutdownNow executor)
+            (when-not (.awaitTermination executor 1000 TimeUnit/MILLISECONDS)
+              (throw (ex-info "Could not shut down sampler executor in time" {:stage stage})))
+            (b/add-report worker {:stage stage,
+                                  :start-ms start-ms
+                                  :end-ms (System/currentTimeMillis)
+                                  :metrics (sampler :summarize)}))
+          (finally
+            (.shutdownNow executor)))))))
+
 (defn wrap-transaction-toplevel-reg [{:keys [transaction labels] :as _task} f]
   (let [timer-delay
         (delay
@@ -144,5 +171,6 @@
 (defn wrap-task-toplevel-reg [task f]
   (let [{:keys [stage, transaction]} task]
     (cond
+      stage (wrap-stage-toplevel-reg task f)
       transaction (wrap-transaction-toplevel-reg task f)
       :else f)))

@@ -171,6 +171,37 @@
      :memory (format "%sGB" (quot (.getTotal ram) gb))
      :cpu (format "%s, %s cores, %.2fGHZ max" cpu-name cpu-core-count (double (/ cpu-max-freq 1e9)))}))
 
+(comment
+  ;; possible task types
+  {:t :do
+   :tasks [....]}
+
+  {:t :call
+   :f '(fn [worker]) ;; or [fn & remaining-args]
+   }
+
+  {:t :pool
+   :duration (Duration/ZERO)
+   :think (Duration/ZERO)
+   :join-wait (Duration/ZERO)
+   :thread-count 1
+   :pooled-task 'some-task}
+
+  {:t :concurrently
+   :duration 'duration
+   :join-wait 'time-to-wait-for-joining
+   :thread-tasks '[task1 task2]}
+
+  {:t :pick-weighted
+   :choices [['task-1 12.0]
+             ['task-2 1.0]]}
+
+  {:t :freq-job
+   :duration 'how-long-to-wait-until-next-run
+   :freq 'sleep-time-for-checking
+   :job-task 'task}
+  )
+
 (defn compile-benchmark [benchmark hook]
   (let [seed (:seed benchmark 0)
         lift-f (fn [f] (if (vector? f) #(apply (first f) % (rest f)) f))
@@ -182,11 +213,11 @@
              nil (constantly nil)
 
              :do
-             (let [{:keys [tasks]} task]
-               (let [fns (mapv compile-task tasks)]
-                 (fn run-do [worker]
-                   (doseq [f fns]
-                     (f worker)))))
+             (let [{:keys [tasks]} task
+                   fns (mapv compile-task tasks)]
+               (fn run-do [worker]
+                 (doseq [f fns]
+                   (f worker))))
 
              :call
              (let [{:keys [f]} task]
@@ -215,7 +246,7 @@
                          (recur wait-until))))
 
                    start-thread
-                   (fn [root-worker i]
+                   (fn [root-worker _i]
                      (let [bindings (get-thread-bindings)
                            worker (assoc root-worker :random (Random. (.nextLong (rng root-worker))))]
                        (.submit executor ^Runnable (fn [] (push-thread-bindings bindings) (thread-loop worker)))))]
@@ -237,7 +268,7 @@
                    executor (Executors/newFixedThreadPool (count thread-tasks) (util/->prefix-thread-factory "core2-benchmark"))
 
                    start-thread
-                   (fn [root-worker i f]
+                   (fn [root-worker _i f]
                      (let [bindings (get-thread-bindings)
                            worker (assoc root-worker :random (Random. (.nextLong (rng root-worker))))]
                        (.submit executor ^Runnable (fn [] (push-thread-bindings bindings) (f worker)))))]
@@ -284,10 +315,12 @@
           (f worker))
 
         (let [system (get-system-info)]
-          {:stages (vec (for [[stage reports] (group-by :stage @reports)]
-                          {:stage stage
-                           :start-ms (apply min (map :start-ms reports))
-                           :end-ms (apply max (map :end-ms reports))}))
+          {:stages (vec (for [[stage reports] (group-by :stage @reports)
+                              :let [extra (apply merge (map :extra reports))]]
+                          (cond-> {:stage stage
+                                   :start-ms (apply min (map :start-ms reports))
+                                   :end-ms (apply max (map :end-ms reports))}
+                            extra (assoc :extra extra))))
            :metrics (vec (for [{:keys [stage, metrics]} @reports
                                metric metrics]
                            (assoc metric :stage stage)))

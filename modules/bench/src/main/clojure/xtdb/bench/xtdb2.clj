@@ -158,17 +158,12 @@
                     #_#_:trace (trace benchmark-opts))
         benchmark-fn (b/compile-benchmark
                       benchmark
-                      bm/wrap-task
+                      #_bm/wrap-task
+                      bm/wrap-task-toplevel-reg
                       #_(fn [task f] (wrap-task task f)))]
     (with-open [node (->local-node node-opts)]
-      (benchmark-fn node))))
-
-(defn delete-directory-recursive
-  "Recursively delete a directory."
-  [^java.io.File file]
-  (when (.isDirectory file)
-    (run! delete-directory-recursive (.listFiles file)))
-  (io/delete-file file))
+      (binding [bm/*registry* (:registry node)]
+        (benchmark-fn node)))))
 
 (defn node-dir->config [^File node-dir]
   (let [^Path path (.toPath node-dir)]
@@ -228,7 +223,7 @@
   (def run-duration "PT10M")
 
   (def node-dir (io/file "dev/dev-node"))
-  (delete-directory-recursive node-dir)
+  (util/delete-dir (.toPath node-dir))
 
   ;; The load-phase is essentially required once to setup some initial data,
   ;; but can be ignored on subsequent runs.

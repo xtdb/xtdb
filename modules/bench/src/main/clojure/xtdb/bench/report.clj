@@ -6,7 +6,89 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [juxt.clojars-mirrors.hiccup.v2v0v0-alpha2.hiccup2.core :as hiccup2])
-  (:import (java.io File)))
+  (:import (java.io File)
+           (java.time Duration)))
+
+(defn format-duration [^Duration d]
+  (String/format "%02d:%02d:%02d:%03d" (object-array [(.toHours d) (.toMinutesPart d) (.toSecondsPart d) (.toMillisPart d)])))
+
+(defn print-stage-times [& reports]
+  (let [stages-by-name (->> (map (comp (partial group-by (comp name :stage)) :stages) reports)
+                            (map #(update-vals % first)))
+        stage-names (keys (first stages-by-name))]
+    (doseq [stage-name (sort stage-names)]
+      (println (str "Timings for " stage-name))
+      (doseq [[i report-stages] (map-indexed vector stages-by-name)]
+        (when-let [{:keys [start-ms end-ms]} (get report-stages stage-name)]
+          (println (str "Report " i " " (format-duration (Duration/ofMillis (- end-ms start-ms))))))))))
+
+(defn- tpc-h-stage->query [stage]
+  (nth (str/split (name stage) #"-") 2))
+
+(defn- tpc-h-stage->general-stage [stage]
+  (if (str/starts-with? (name stage) "cold-queries") "cold-queries" "hot-queries"))
+
+(defn tpc-h-hiccup [{:keys [stages]}]
+  (let [cold-queries (first (filter #(= :cold-queries (:stage %)) stages))
+        hot-queries (first (filter #(= :hot-queries (:stage %)) stages))
+        cold-queries-separate (filter (fn [{:keys [stage]}]
+                                        (let [stage (name stage)]
+                                          (and (< (count "cold-queries") (count stage))
+                                               (str/starts-with? stage "cold-queries-")))) stages)
+        hot-queries-separate (filter (fn [{:keys [stage]}]
+                                       (let [stage (name stage)]
+                                         (and (< (count "hot-queries") (count stage))
+                                              (str/starts-with? stage "hot-queries-")))) stages)]
+    [:html
+     [:head
+      [:title "TPC-H report"]
+      [:meta {:charset "utf-8"}]
+      [:script {:src "https://cdn.jsdelivr.net/npm/vega@5.22.1"}]
+      [:script {:src "https://cdn.jsdelivr.net/npm/vega-lite@5.6.0"}]
+      [:script {:src "https://cdn.jsdelivr.net/npm/vega-embed@6.21.0"}]
+      [:style {:media "screen"}
+       ".vega-actions a {
+          margin-right: 5px;
+        }"]]
+     [:body
+      [:h1 "TPC-H report"]
+      [:div {:id "cold-vs-hot"}]
+      [:div {:id "query-comparisons"}]
+
+
+
+      [:script
+       (->>
+        [["cold-vs-hot"
+          {:data {:values (vec (for [{:keys [stage, end-ms, start-ms]} [cold-queries hot-queries]]
+                                 {:stage (name stage)
+                                  :time (double (/ (- end-ms start-ms) 1e3))}))}
+           :mark "bar"
+           :encoding {:y {:field "stage", :type "nominal"}
+                      :x {:field "time", :type "quantitative"}
+                      #_#_:color {:field "config", :type "nominal"}}}]
+         ["query-comparisons"
+          {:data {:values (vec (for [{:keys [stage, end-ms, start-ms]} (concat cold-queries-separate hot-queries-separate)]
+                                 {:q (tpc-h-stage->query stage)
+                                  :general-stage (tpc-h-stage->general-stage stage)
+                                  :time (double (/ (- end-ms start-ms) 1e3))}))}
+           :mark "bar"
+           :encoding {:x {:field "q", :type "nominal"}
+                      :y {:field "time", :type "quantitative"}
+                      :xOffset {:field "general-stage"}
+                      :color {:field "general-stage"}
+                      :sort {:field "q"}}}]]
+
+        (map (fn [[id json]] (format "vegaEmbed('#%s', %s);" id (json/write-str json))))
+
+        (str/join "\n")
+        hiccup2/raw)]]]))
+
+(defn tpc-h-report [report]
+  (let [f (File/createTempFile "xtdb-benchmark-tpch" ".html")]
+    (spit f (hiccup2/html {} (tpc-h-hiccup report)))
+    (browse/browse-url (io/as-url f))))
+
 
 ;; use vega to plot metrics for now
 ;; works at repl, no servers needed
