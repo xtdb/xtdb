@@ -874,6 +874,15 @@
   (t/is (= [{:timestamp #time/date-time "2021-10-21T12:00:00"}]
            (xt/q tu/*node* "select date_trunc('hour', timestamp '2021-10-21T12:34:56') as timestamp from (VALUES 1) as x"))))
 
+(deftest test-date-trunc-with-timezone-query
+  (t/is (= [{:timestamp #time/zoned-date-time "2001-02-16T08:00-05:00"}]
+           (xt/q tu/*node* "select date_trunc('day', TIMESTAMP '2001-02-16 15:38:11-05:00', 'Australia/Sydney') as timestamp from (VALUES 1) as x")))
+  
+  (t/is (thrown-with-msg?
+         ZoneRulesException
+         #"Unknown time-zone ID: NotRealRegion"
+         (xt/q tu/*node* "select date_trunc('hour', TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as timestamp from (VALUES 1) as x"))))
+
 (deftest test-system-time-queries
   (t/testing "AS OF"
     (t/is

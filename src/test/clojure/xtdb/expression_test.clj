@@ -11,10 +11,10 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
-           (java.time Clock Duration Instant LocalDate LocalDateTime ZoneId ZonedDateTime)
+           (java.time Clock Duration Instant LocalDate LocalDateTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
-           (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
+           (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp) 
            org.apache.arrow.vector.types.TimeUnit
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
@@ -129,9 +129,9 @@
       (t/is (= (time/->zdt #inst "2021-10-21T12:34:56") (simple-trunc "SECOND")))
       (t/is (= (time/->zdt #inst "2021-10-21T12:34") (simple-trunc "MINUTE")))
       (t/is (= (time/->zdt #inst "2021-10-21T12:00") (simple-trunc "HOUR")))
-      (t/is (= (time/->zdt #inst "2021-10-21") (simple-trunc "DAY"))) 
+      (t/is (= (time/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
       (t/is (= (time/->zdt #inst "2021-10-18") (simple-trunc "WEEK")))
-      (t/is (= (time/->zdt #inst "2021-10-01") (simple-trunc "MONTH"))) 
+      (t/is (= (time/->zdt #inst "2021-10-01") (simple-trunc "MONTH")))
       (t/is (= (time/->zdt #inst "2021-10-01") (simple-trunc "QUARTER")))
       (t/is (= (time/->zdt #inst "2021-01-01") (simple-trunc "YEAR")))
       (t/is (= (time/->zdt #inst "2020-01-01") (simple-trunc "DECADE")))
@@ -183,6 +183,14 @@
       (t/is (= (LocalDate/of 2020 1 1) (trunc "DECADE")))
       (t/is (= (LocalDate/of 2022 1 1) (trunc "QUARTER")))
       (t/is (= (LocalDate/of 2022 3 28) (trunc "WEEK"))))))
+
+(t/deftest test-date-trunc-with-timezone-opt
+  (let [test-doc {:xt$id :foo,
+                  :date (-> (time/->zdt #inst "2001-02-16T20:38:40Z")
+                            (.withZoneSameInstant (ZoneId/of "America/New_York")))}]
+
+    (t/is (= #time/zoned-date-time "2001-02-16T08:00-05:00[America/New_York]"
+             (project1 (list 'date-trunc "DAY" 'date "Australia/Sydney") test-doc)))))
 
 (t/deftest test-date-extract
   ;; TODO units below minute are not yet implemented for any type
