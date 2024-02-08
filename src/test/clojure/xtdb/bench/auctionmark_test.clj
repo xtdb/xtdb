@@ -1,8 +1,8 @@
-(ns xtdb.bench2.auctionmark-test
+(ns xtdb.bench.auctionmark-test
   (:require [clojure.test :as t]
-            [xtdb.bench2 :as b]
-            [xtdb.bench2.auctionmark :as am]
-            [xtdb.bench2.xtdb2 :as bxt2]
+            [xtdb.bench :as b]
+            [xtdb.bench.auctionmark :as am]
+            [xtdb.bench.xtdb2 :as bxt2]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu :refer [*node*]])
   (:import (java.time Clock)

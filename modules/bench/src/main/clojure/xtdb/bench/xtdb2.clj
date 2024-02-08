@@ -1,10 +1,10 @@
-(ns xtdb.bench2.xtdb2
+(ns xtdb.bench.xtdb2
   (:require [clojure.java.io :as io]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.bench2 :as b]
-            [xtdb.bench2.measurement :as bm]
+            [xtdb.bench :as b]
+            [xtdb.bench.measurement :as bm]
             [xtdb.indexer]
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
@@ -149,7 +149,7 @@
 (defn run-benchmark [{:keys [node-opts benchmark-type benchmark-opts]}]
   (let [benchmark (case benchmark-type
                     :auctionmark
-                    ((requiring-resolve 'xtdb.bench2.auctionmark/benchmark) benchmark-opts)
+                    ((requiring-resolve 'xtdb.bench.auctionmark/benchmark) benchmark-opts)
                     :tpch
                     ((requiring-resolve 'xtdb.bench.tpch/benchmark) benchmark-opts)
                     :ts-devices
@@ -249,52 +249,52 @@
   (spit (io/file "core2-30s.edn") report-core2)
   (def report-core2 (clojure.edn/read-string (slurp (io/file "core2-30s.edn"))))
 
-  (require 'xtdb.bench2.report)
-  (xtdb.bench2.report/show-html-report
-   (xtdb.bench2.report/vs
-    "core2"
-    report-core2))
+  (require 'xtdb.bench.report
+           (xtdb.bench.report/show-html-report
+            (xtdb.bench.report/vs
+             "core2"
+             report-core2))
 
-  (def report-rocks (clojure.edn/read-string (slurp (io/file "../xtdb/core1-rocks-30s.edn"))))
+           (def report-rocks (clojure.edn/read-string (slurp (io/file "../xtdb/core1-rocks-30s.edn"))))
 
-  (xtdb.bench2.report/show-html-report
-   (xtdb.bench2.report/vs
-    "core2"
-    report-core2
-    "rocks"
-    report-rocks))
+           (xtdb.bench.report/show-html-report
+            (xtdb.bench.report/vs
+             "core2"
+             report-core2
+             "rocks"
+             report-rocks))
 
   ;;;;;;;;;;;;;
-  ;; testing single point queries
+           ;; testing single point queries
   ;;;;;;;;;;;;;
 
-  (def node (xtn/start-node (node-dir->config node-dir)))
+           (def node (xtn/start-node (node-dir->config node-dir)))
 
-  (def get-item-query '(from :item [{:xt/id i_id, :i_status :open}
-                                    i_u_id i_initial_price i_current_price]) )
-  ;; ra for the above
-  (def ra-query
-    '[:scan
-      {:table item :for-valid-time [:at :now], :for-system-time nil}
-      [{i_status (= i_status :open)}
-       i_u_id
-       i_current_price
-       i_initial_price
-       {xt/id (= xt/id ?i_id)}
-       id]])
+           (def get-item-query '(from :item [{:xt/id i_id, :i_status :open}
+                                             i_u_id i_initial_price i_current_price]) )
+           ;; ra for the above
+           (def ra-query
+             '[:scan
+               {:table item :for-valid-time [:at :now], :for-system-time nil}
+               [{i_status (= i_status :open)}
+                i_u_id
+                i_current_price
+                i_initial_price
+                {xt/id (= xt/id ?i_id)}
+                id]])
 
-  (def open-ids (->> (xt/q node '(from :item [{:xt/id i :i_status :open}]))
-                     (map :i)))
+           (def open-ids (->> (xt/q node '(from :item [{:xt/id i :i_status :open}]))
+                              (map :i)))
 
-  (def q  (fn [open-id]
-            (ra/query-ra ra-query {:node node
-                                   :params {'?i_id open-id}})))
-  ;; ra query
-  (time
-   #(doseq [id (take 1000 (shuffle open-ids))]
-      (q id)))
+           (def q  (fn [open-id]
+                     (ra/query-ra ra-query {:node node
+                                            :params {'?i_id open-id}})))
+           ;; ra query
+           (time
+            #(doseq [id (take 1000 (shuffle open-ids))]
+               (q id)))
 
-  ;; datalog query
-  (time
-   (doseq [id (take 1000 (shuffle open-ids))]
-     (xt/q node [get-item-query id]))))
+           ;; datalog query
+           (time
+            (doseq [id (take 1000 (shuffle open-ids))]
+              (xt/q node [get-item-query id])))))

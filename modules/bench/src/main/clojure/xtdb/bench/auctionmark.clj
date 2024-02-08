@@ -1,16 +1,16 @@
-(ns xtdb.bench2.auctionmark
+(ns xtdb.bench.auctionmark
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.bench2 :as b2]
-            [xtdb.bench2.xtdb2 :as bxt2]
+            [xtdb.bench :as b]
+            [xtdb.bench.xtdb2 :as bxt]
             [xtdb.test-util :as tu])
   (:import (java.time Duration Instant)
            (java.util ArrayList Random)
            (java.util.concurrent ConcurrentHashMap)))
 
-(defn random-price [worker] (.nextDouble (b2/rng worker)))
+(defn random-price [worker] (.nextDouble (b/rng worker)))
 
 (def user-id (partial str "u_"))
 (def region-id (partial str "r_"))
@@ -25,21 +25,21 @@
 (def user-attribute-id (partial str "ua_"))
 
 (defn generate-user [worker]
-  (let [u_id (b2/increment worker user-id)]
+  (let [u_id (b/increment worker user-id)]
     {:xt/id u_id
      :u_id u_id
-     :u_r_id (b2/sample-flat worker region-id)
+     :u_r_id (b/sample-flat worker region-id)
      :u_rating 0
      :u_balance 0.0
-     :u_created (b2/current-timestamp worker)
-     :u_sattr0 (b2/random-str worker)
-     :u_sattr1 (b2/random-str worker)
-     :u_sattr2 (b2/random-str worker)
-     :u_sattr3 (b2/random-str worker)
-     :u_sattr4 (b2/random-str worker)
-     :u_sattr5 (b2/random-str worker)
-     :u_sattr6 (b2/random-str worker)
-     :u_sattr7 (b2/random-str worker)}))
+     :u_created (b/current-timestamp worker)
+     :u_sattr0 (b/random-str worker)
+     :u_sattr1 (b/random-str worker)
+     :u_sattr2 (b/random-str worker)
+     :u_sattr3 (b/random-str worker)
+     :u_sattr4 (b/random-str worker)
+     :u_sattr5 (b/random-str worker)
+     :u_sattr6 (b/random-str worker)
+     :u_sattr7 (b/random-str worker)}))
 
 (defn proc-new-user
   "Creates a new USER record. The rating and balance are both set to zero.
@@ -143,11 +143,11 @@
 
 (defn- sample-category-id [worker]
   (if-some [weighting (::category-weighting (:custom-state worker))]
-    (weighting (b2/rng worker))
-    (b2/sample-gaussian worker category-id)))
+    (weighting (b/rng worker))
+    (b/sample-gaussian worker category-id)))
 
 (defn sample-status [worker]
-  (nth [:open :waiting-for-purchase :closed] (mod (.nextInt ^Random (b2/rng worker)) 3)))
+  (nth [:open :waiting-for-purchase :closed] (mod (.nextInt ^Random (b/rng worker)) 3)))
 
 (defn proc-new-item
   "Insert a new ITEM record for a user.
@@ -159,20 +159,20 @@
 
   The benchmark randomly selects id from a pool of users as an input for u_id parameter using Gaussian distribution. A c_id parameter is randomly selected using a flat histogram from the real auction site’s item category statistic."
   [worker]
-  (let [i_id-raw (.getAndIncrement (b2/counter worker item-id))
+  (let [i_id-raw (.getAndIncrement (b/counter worker item-id))
         i_id (item-id i_id-raw)
-        u_id (b2/sample-gaussian worker user-id)
+        u_id (b/sample-gaussian worker user-id)
         c_id (sample-category-id worker)
-        name (b2/random-str worker)
-        description (b2/random-str worker)
+        name (b/random-str worker)
+        description (b/random-str worker)
         initial-price (random-price worker)
-        attributes (b2/random-str worker)
-        gag-ids (remove nil? (b2/random-seq worker {:min 0, :max 16, :unique true} b2/sample-flat global-attribute-group-id))
-        gav-ids (remove nil? (b2/random-seq worker {:min 0, :max 16, :unique true} b2/sample-flat global-attribute-value-id))
-        images (b2/random-seq worker {:min 0, :max 16, :unique true} b2/random-str)
-        start-date (b2/current-timestamp worker)
+        attributes (b/random-str worker)
+        gag-ids (remove nil? (b/random-seq worker {:min 0, :max 16, :unique true} b/sample-flat global-attribute-group-id))
+        gav-ids (remove nil? (b/random-seq worker {:min 0, :max 16, :unique true} b/sample-flat global-attribute-value-id))
+        images (b/random-seq worker {:min 0, :max 16, :unique true} b/random-str)
+        start-date (b/current-timestamp worker)
         ;; up to 42 days
-        end-date (.plusSeconds ^Instant start-date (* 60 60 24 (* (inc (.nextInt (b2/rng worker) 42)))))
+        end-date (.plusSeconds ^Instant start-date (* 60 60 24 (* (inc (.nextInt (b/rng worker) 42)))))
         ;; append attribute names to desc
         description-with-attributes
         (->> (xt/q (:sut worker)
@@ -271,32 +271,32 @@
 (defn load-stats-into-worker [{:keys [sut] :as worker}]
   (index-item-status-groups worker)
   (log/info "query for user")
-  (b2/set-domain worker user-id (or (largest-id sut :user 2) 0))
+  (b/set-domain worker user-id (or (largest-id sut :user 2) 0))
   (log/info "query for region")
-  (b2/set-domain worker region-id (or (largest-id sut :region 2) 0))
+  (b/set-domain worker region-id (or (largest-id sut :region 2) 0))
   (log/info "query for item")
-  (b2/set-domain worker item-id (or (largest-id sut :item 2) 0))
+  (b/set-domain worker item-id (or (largest-id sut :item 2) 0))
   (log/info "query for item-bid")
-  (b2/set-domain worker item-bid-id (or (largest-id sut :item-bid 3) 0))
+  (b/set-domain worker item-bid-id (or (largest-id sut :item-bid 3) 0))
   (log/info "query for category")
-  (b2/set-domain worker category-id (or (largest-id sut :category 2) 0))
+  (b/set-domain worker category-id (or (largest-id sut :category 2) 0))
   (log/info "query for gag")
-  (b2/set-domain worker gag-id (or (largest-id sut :gag 4) 0))
+  (b/set-domain worker gag-id (or (largest-id sut :gag 4) 0))
   (log/info "query for gav")
-  (b2/set-domain worker gav-id (or (largest-id sut :gav 4) 0)))
+  (b/set-domain worker gav-id (or (largest-id sut :gav 4) 0)))
 
 (defn log-stats [worker]
-  (log/info "#user " (.get (b2/counter worker user-id)))
-  (log/info "#region " (.get (b2/counter worker region-id)))
-  (log/info "#item " (.get (b2/counter worker item-id)))
-  (log/info "#item-bid " (.get (b2/counter worker item-bid-id)))
-  (log/info "#category " (.get (b2/counter worker category-id)))
-  (log/info "#gag " (.get (b2/counter worker gag-id)))
-  (log/info "#gav " (.get (b2/counter worker gav-id))))
+  (log/info "#user " (.get (b/counter worker user-id)))
+  (log/info "#region " (.get (b/counter worker region-id)))
+  (log/info "#item " (.get (b/counter worker item-id)))
+  (log/info "#item-bid " (.get (b/counter worker item-bid-id)))
+  (log/info "#category " (.get (b/counter worker category-id)))
+  (log/info "#gag " (.get (b/counter worker gag-id)))
+  (log/info "#gav " (.get (b/counter worker gav-id))))
 
 (defn random-item [worker & {:keys [status] :or {status :all}}]
   (let [isg (-> worker :custom-state :item-status-groups (get status) vec)
-        item (b2/random-nth worker isg)]
+        item (b/random-nth worker isg)]
     item))
 
 (defn add-item-status [{:keys [^ConcurrentHashMap custom-state]}
@@ -307,7 +307,7 @@
 
 (defn generate-new-bid-params [worker]
   (let [{:keys [i_id, i_u_id]} (random-item worker :status :open)
-        i_buyer_id (b2/sample-gaussian worker user-id)]
+        i_buyer_id (b/sample-gaussian worker user-id)]
     (if (and i_buyer_id (= i_buyer_id i_u_id))
       (generate-new-bid-params worker)
       {:i_id i_id,
@@ -315,8 +315,8 @@
        :i_buyer_id i_buyer_id
        :bid (random-price worker)
        :max_bid (random-price worker)
-       :new_bid_id (b2/increment worker item-bid-id)
-       :now (b2/current-timestamp worker)})))
+       :new_bid_id (b/increment worker item-bid-id)
+       :now (b/current-timestamp worker)})))
 
 (defn proc-new-bid [worker]
   (let [params (generate-new-bid-params worker)]
@@ -373,53 +373,53 @@
         {:keys [^ConcurrentHashMap custom-state]} worker]
     ;; squirrel these data-structures away for later (see category-generator, sample-category-id)
     (.putAll custom-state {::categories cats
-                           ::category-weighting (b2/weighted-sample-fn (map (juxt :xt/id :item-count) (vals cats)))})))
+                           ::category-weighting (b/weighted-sample-fn (map (juxt :xt/id :item-count) (vals cats)))})))
 
 (defn generate-region [worker]
-  (let [r-id (b2/increment worker region-id)]
+  (let [r-id (b/increment worker region-id)]
     {:xt/id r-id
      :r_id r-id
-     :r_name (b2/random-str worker 6 32)}))
+     :r_name (b/random-str worker 6 32)}))
 
 (defn generate-global-attribute-group [worker]
-  (let [gag-id (b2/increment worker gag-id)
-        category-id (b2/sample-flat worker category-id)]
+  (let [gag-id (b/increment worker gag-id)
+        category-id (b/sample-flat worker category-id)]
     {:xt/id gag-id
      :gag_c_id category-id
-     :gag_name (b2/random-str worker 6 32)}))
+     :gag_name (b/random-str worker 6 32)}))
 
 (defn generate-global-attribute-value [worker]
-  (let [gav-id (b2/increment worker gav-id)
-        gag-id (b2/sample-flat worker gag-id)]
+  (let [gav-id (b/increment worker gav-id)
+        gag-id (b/sample-flat worker gag-id)]
     {:xt/id gav-id
      :gav_gag_id gag-id
-     :gav_name (b2/random-str worker 6 32)}))
+     :gav_name (b/random-str worker 6 32)}))
 
 (defn generate-category [worker]
   (let [{::keys [categories]} (:custom-state worker)
-        c-id (b2/increment worker category-id)
+        c-id (b/increment worker category-id)
         {:keys [category-name, parent]} (categories c-id)]
     {:xt/id c-id
      :c_id c-id
      :c_parent_id (when (seq parent) (:xt/id (categories parent)))
-     :c_name (or category-name (b2/random-str worker 6 32))}))
+     :c_name (or category-name (b/random-str worker 6 32))}))
 
 (defn generate-user-attributes [worker]
-  (let [u_id (b2/sample-flat worker user-id)
-        ua-id (b2/increment worker user-attribute-id)]
+  (let [u_id (b/sample-flat worker user-id)
+        ua-id (b/increment worker user-attribute-id)]
     (when u_id
       {:xt/id ua-id
        :ua_u_id u_id
-       :ua_name (b2/random-str worker 5 32)
-       :ua_value (b2/random-str worker 5 32)
-       :u_created (b2/current-timestamp worker)})))
+       :ua_name (b/random-str worker 5 32)
+       :ua_value (b/random-str worker 5 32)
+       :u_created (b/current-timestamp worker)})))
 
 (defn generate-item [worker]
-  (let [i_id (b2/increment worker item-id)
-        i_u_id (b2/sample-flat worker user-id)
+  (let [i_id (b/increment worker item-id)
+        i_u_id (b/sample-flat worker user-id)
         i_c_id (sample-category-id worker)
-        i_start_date (b2/current-timestamp worker)
-        i_end_date (.plus ^Instant (b2/current-timestamp worker) (Duration/ofDays 32))
+        i_start_date (b/current-timestamp worker)
+        i_end_date (.plus ^Instant (b/current-timestamp worker) (Duration/ofDays 32))
         i_status (sample-status worker)]
     (add-item-status worker (->ItemSample i_id i_u_id i_status i_end_date 0))
     (when i_u_id
@@ -427,9 +427,9 @@
        :i_id i_id
        :i_u_id i_u_id
        :i_c_id i_c_id
-       :i_name (b2/random-str worker 6 32)
-       :i_description (b2/random-str worker 50 255)
-       :i_user_attributes (b2/random-str worker 20 255)
+       :i_name (b/random-str worker 6 32)
+       :i_description (b/random-str worker 50 255)
+       :i_user_attributes (b/random-str worker 20 255)
        :i_initial_price (random-price worker)
        :i_current_price (random-price worker)
        :i_num_bids 0
@@ -479,15 +479,15 @@
              [{:t :do
                :stage :load
                :tasks [{:t :call, :f (fn [_] (log/info "start load stage"))}
-                       {:t :call, :f [bxt2/install-tx-fns {:new-bid tx-fn-new-bid}]}
+                       {:t :call, :f [bxt/install-tx-fns {:new-bid tx-fn-new-bid}]}
                        {:t :call, :f load-categories-tsv}
-                       {:t :call, :f [bxt2/generate :region generate-region 75]}
-                       {:t :call, :f [bxt2/generate :category generate-category 16908]}
-                       {:t :call, :f [bxt2/generate :user generate-user (* sf 1e6)]}
-                       {:t :call, :f [bxt2/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
-                       {:t :call, :f [bxt2/generate :item generate-item (* sf 1e6 10)]}
-                       {:t :call, :f [bxt2/generate :gag generate-global-attribute-group 100]}
-                       {:t :call, :f [bxt2/generate :gav generate-global-attribute-value 1000]}
+                       {:t :call, :f [bxt/generate :region generate-region 75]}
+                       {:t :call, :f [bxt/generate :category generate-category 16908]}
+                       {:t :call, :f [bxt/generate :user generate-user (* sf 1e6)]}
+                       {:t :call, :f [bxt/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
+                       {:t :call, :f [bxt/generate :item generate-item (* sf 1e6 10)]}
+                       {:t :call, :f [bxt/generate :gag generate-global-attribute-group 100]}
+                       {:t :call, :f [bxt/generate :gav generate-global-attribute-value 1000]}
                        {:t :call, :f (fn [_] (log/info "finished load stage"))}]}]
 
              [])

@@ -1,4 +1,4 @@
-(ns xtdb.bench2
+(ns xtdb.bench
   (:require [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [xtdb.util :as util])
@@ -47,7 +47,7 @@
               tmp-path)
   tmp-path)
 
-;;; bench2
+;;; bench
 
 (defrecord Worker [sut random domain-state custom-state clock reports])
 

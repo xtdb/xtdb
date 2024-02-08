@@ -1,4 +1,4 @@
-(ns xtdb.bench2.report
+(ns xtdb.bench.report
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.java.browse :as browse]

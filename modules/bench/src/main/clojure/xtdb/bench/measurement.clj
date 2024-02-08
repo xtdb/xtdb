@@ -1,6 +1,6 @@
-(ns xtdb.bench2.measurement
+(ns xtdb.bench.measurement
   (:require [clojure.string :as str]
-            [xtdb.bench2 :as b])
+            [xtdb.bench :as b])
   (:import (java.time Duration)
            (io.micrometer.core.instrument MeterRegistry Meter Measurement Timer Gauge Tag)
            (io.micrometer.core.instrument.simple SimpleMeterRegistry)

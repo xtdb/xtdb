@@ -257,7 +257,7 @@ tasks.create("run-auctionmark", JavaExec::class) {
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
     val args = mutableListOf(
-        "-m", "xtdb.bench2.xtdb2"
+        "-m", "xtdb.bench.xtdb2"
     )
 
     addToArgsIfExistent("output-file", args)
@@ -286,7 +286,7 @@ tasks.create("create-reports", JavaExec::class) {
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs)
     val args = mutableListOf(
-        "-m", "xtdb.bench2.report"
+        "-m", "xtdb.bench.report"
     )
 
     if (project.hasProperty("report0")) {

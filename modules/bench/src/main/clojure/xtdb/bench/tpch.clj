@@ -1,8 +1,8 @@
 (ns xtdb.bench.tpch
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [xtdb.bench2 :as b2]
-            [xtdb.bench2.xtdb2 :as b2-xt]
+            [xtdb.bench :as b]
+            [xtdb.bench.xtdb2 :as bxt]
             [xtdb.buffer-pool :as bp]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
@@ -82,10 +82,10 @@
                                              start-ms (get custom-state :start)
                                              end-ms (System/currentTimeMillis)
                                              bf-stats (bp-stats (- end-ms start-ms))]
-                                         (b2/add-report worker {:stage report-name
-                                                                :buffer-pool-stats bf-stats
-                                                                :start-ms start-ms
-                                                                :end-ms end-ms})
+                                         (b/add-report worker {:stage report-name
+                                                               :buffer-pool-stats bf-stats
+                                                               :start-ms start-ms
+                                                               :end-ms end-ms})
                                          (log/info report-name " - " bf-stats)))}]))})
 
 (defn benchmark [{:keys [scale-factor seed] :or {scale-factor 0.01 seed 0}}]
@@ -100,10 +100,10 @@
               :tasks [{:t :call :f (fn [{:keys [sut]}] (tpch/submit-docs! sut scale-factor))}]}
              {:t :do
               :stage :sync
-              :tasks [{:t :call :f (fn [{:keys [sut]}] (b2-xt/sync-node sut (Duration/ofHours 5)))}]}
+              :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofHours 5)))}]}
              {:t :do
               :stage :finish-chunk
-              :tasks [{:t :call :f (fn [{:keys [sut]}] (b2-xt/finish-chunk! sut))}]}]}
+              :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/finish-chunk! sut))}]}]}
 
     (queries-stage :cold-queries)
 
@@ -111,17 +111,17 @@
 
 (defn -main [& args]
   (try
-    (let [{:keys [report] :as opts} (or (b2/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
-                                                         :id :scale-factor
-                                                         :default 0.01
-                                                         :parse-fn #(Double/parseDouble %)]
-                                                        b2/report-file]
-                                                       args)
+    (let [{:keys [report] :as opts} (or (b/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
+                                                        :id :scale-factor
+                                                        :default 0.01
+                                                        :parse-fn #(Double/parseDouble %)]
+                                                       b/report-file]
+                                                      args)
                                         (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
       (spit report
             (util/with-tmp-dirs #{node-tmp-dir}
-              (b2-xt/run-benchmark
+              (bxt/run-benchmark
                {:node-opts {:node-dir node-tmp-dir
                             :instant-src (InstantSource/system)}
                 :benchmark-type :tpch
@@ -137,13 +137,13 @@
 
   (util/with-tmp-dirs #{node-tmp-dir}
     (def report-tpch
-      (b2-xt/run-benchmark
+      (bxt/run-benchmark
        {:node-opts {:node-dir node-tmp-dir
                     :instant-src (InstantSource/system)}
         :benchmark-type :tpch
         :benchmark-opts {:scale-factor 0.01}})))
 
-  (xtdb.bench2.report/show-html-report
-   (xtdb.bench2.report/vs
+  (xtdb.bench.report/show-html-report
+   (xtdb.bench.report/vs
     "core2-tpch"
     report-tpch)))

@@ -1,7 +1,7 @@
 (ns xtdb.bench.ts-devices
   (:require [clojure.tools.logging :as log]
-            [xtdb.bench2 :as bench2]
-            [xtdb.bench2.xtdb2 :as b2-xt]
+            [xtdb.bench :as b]
+            [xtdb.bench.xtdb2 :as bxt]
             [xtdb.ts-devices :as tsd]
             [xtdb.util :as util])
   (:import (java.time Duration InstantSource)
@@ -13,18 +13,18 @@
     :default :small
     :parse-fn keyword
     :validate-fn (comp boolean #{:small :med :big})]
-   bench2/report-file])
+   b/report-file])
 
 (defn download-file [size file-name]
-  (let [tmp-file (bench2/tmp-file-path (str "ts-devices." file-name) ".csv.gz")]
-    (bench2/download-s3-dataset-file (format "ts-devices/%s/devices_%s_%s.csv.gz"
-                                             (name size) (name size) file-name)
-                                     tmp-file)
+  (let [tmp-file (b/tmp-file-path (str "ts-devices." file-name) ".csv.gz")]
+    (b/download-s3-dataset-file (format "ts-devices/%s/devices_%s_%s.csv.gz"
+                                        (name size) (name size) file-name)
+                                tmp-file)
     (.toFile tmp-file)))
 
 (comment
-  (def tmp-file (bench2/tmp-file-path "ts-devices-test" "device_info"))
-  (bench2/download-s3-dataset-file "ts-devices/small/devices_small_device_info.csv.gz" tmp-file))
+  (def tmp-file (b/tmp-file-path "ts-devices-test" "device_info"))
+  (b/download-s3-dataset-file "ts-devices/small/devices_small_device_info.csv.gz" tmp-file))
 
 
 (defn benchmark [{:keys [size seed] :or {seed 0}}]
@@ -45,19 +45,19 @@
                                                                  :readings-file (get custom-state :readings-file)}))}]}
              {:t :do
               :stage :sync
-              :tasks [{:t :call :f (fn [{:keys [sut]}] (b2-xt/sync-node sut (Duration/ofHours 5)))}]}
+              :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofHours 5)))}]}
              {:t :do
               :stage :finish-chunk
-              :tasks [{:t :call :f (fn [{:keys [sut]}] (b2-xt/finish-chunk! sut))}]}]}]})
+              :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/finish-chunk! sut))}]}]}]})
 
 (defn -main [& args]
   (try
-    (let [{:keys [report size] :as opts} (or (bench2/parse-args cli-arg-spec args)
+    (let [{:keys [report size] :as opts} (or (b/parse-args cli-arg-spec args)
                                              (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
       (spit report
             (util/with-tmp-dirs #{node-tmp-dir}
-              (b2-xt/run-benchmark
+              (bxt/run-benchmark
                {:node-opts {:node-dir node-tmp-dir
                             :instant-src (InstantSource/system)}
                 :benchmark-type :ts-devices
@@ -72,13 +72,13 @@
 (comment
   (util/with-tmp-dirs #{node-tmp-dir}
     (def report-ts-devices
-      (b2-xt/run-benchmark
+      (bxt/run-benchmark
        {:node-opts {:node-dir node-tmp-dir
                     :instant-src (InstantSource/system)}
         :benchmark-type :ts-devices
         :benchmark-opts {:size :med}})))
 
-  (xtdb.bench2.report/show-html-report
-   (xtdb.bench2.report/vs
+  (xtdb.bench.report/show-html-report
+   (xtdb.bench.report/vs
     "core2-tpch"
-    report-tpch)))
+    report-ts-devices)))
