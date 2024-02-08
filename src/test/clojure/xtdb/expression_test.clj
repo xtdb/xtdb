@@ -11,10 +11,10 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
-           (java.time Clock Duration Instant LocalDate ZoneId ZonedDateTime)
+           (java.time Clock Duration Instant LocalDate LocalDateTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
-           (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
+           (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp) 
            org.apache.arrow.vector.types.TimeUnit
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
@@ -118,17 +118,25 @@
                      {:x true, :y false, :z false}
                      {:x false, :y false, :z true}]))))
 
-(t/deftest test-date-trunc
+(t/deftest test-date-trunc-zoned-date-time
   (let [test-doc {:xt$id :foo,
-                  :date (time/->instant #inst "2021-10-21T12:34:56Z")
+                  :date (time/->instant #inst "2021-10-21T12:34:56.111111Z")
                   :zdt (-> (time/->zdt #inst "2021-08-21T12:34:56Z")
                            (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
     (letfn [(simple-trunc [time-unit] (project1 (list 'date-trunc time-unit 'date) test-doc))]
-
-      (t/is (= (time/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
+      (t/is (= (time/->zdt #inst "2021-10-21T12:34:56.111111") (simple-trunc "MICROSECOND")))
+      (t/is (= (time/->zdt #inst "2021-10-21T12:34:56.111") (simple-trunc "MILLISECOND")))
+      (t/is (= (time/->zdt #inst "2021-10-21T12:34:56") (simple-trunc "SECOND")))
       (t/is (= (time/->zdt #inst "2021-10-21T12:34") (simple-trunc "MINUTE")))
+      (t/is (= (time/->zdt #inst "2021-10-21T12:00") (simple-trunc "HOUR")))
+      (t/is (= (time/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
+      (t/is (= (time/->zdt #inst "2021-10-18") (simple-trunc "WEEK")))
       (t/is (= (time/->zdt #inst "2021-10-01") (simple-trunc "MONTH")))
-      (t/is (= (time/->zdt #inst "2021-01-01") (simple-trunc "YEAR"))))
+      (t/is (= (time/->zdt #inst "2021-10-01") (simple-trunc "QUARTER")))
+      (t/is (= (time/->zdt #inst "2021-01-01") (simple-trunc "YEAR")))
+      (t/is (= (time/->zdt #inst "2020-01-01") (simple-trunc "DECADE")))
+      (t/is (= (time/->zdt #inst "2000-01-01") (simple-trunc "CENTURY")))
+      (t/is (= (time/->zdt #inst "2000-01-01") (simple-trunc "MILLENNIUM"))))
 
     (t/is (= (-> (time/->zdt #inst "2021-08-21")
                  (.withZoneSameLocal (ZoneId/of "Europe/London")))
@@ -137,15 +145,74 @@
 
     (t/is (= (time/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" date) test-doc)))
 
-    (t/is (= (time/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" (date-trunc "MINUTE" date)) test-doc)))
+    (t/is (= (time/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" (date-trunc "MINUTE" date)) test-doc)))))
 
-    (t/testing "java.time.LocalDate"
-      (let [ld (LocalDate/of 2022 3 29)
-            trunc #(project1 (list 'date-trunc % 'date) {:date ld})]
-        (t/is (= (LocalDate/of 2022 3 29) (trunc "DAY")))
-        (t/is (= (LocalDate/of 2022 3 1) (trunc "MONTH")))
-        (t/is (= (LocalDate/of 2022 1 1) (trunc "YEAR")))
-        (t/is (= (LocalDate/of 2022 1 1) (project1 '(date-trunc "YEAR" (date-trunc "MONTH" date)) {:date ld})))))))
+(t/deftest test-date-trunc-local-date-time
+  (t/testing "java.time.LocalDateTime"
+    (let [ld (LocalDateTime/of 2022 4 3 12 34 56 789456999)
+          trunc #(project1 (list 'date-trunc % 'date) {:date ld})]
+      (t/is (= (LocalDateTime/of 2022 4 3 12 34 56 789456000) (trunc "MICROSECOND")))
+      (t/is (= (LocalDateTime/of 2022 4 3 12 34 56 789000000) (trunc "MILLISECOND")))
+      (t/is (= (LocalDateTime/of 2022 4 3 12 34 56) (trunc "SECOND")))
+      (t/is (= (LocalDateTime/of 2022 4 3 12 34) (trunc "MINUTE")))
+      (t/is (= (LocalDateTime/of 2022 4 3 12 0) (trunc "HOUR")))
+      (t/is (= (LocalDateTime/of 2022 4 3 0 0) (trunc "DAY")))
+      (t/is (= (LocalDateTime/of 2022 4 1 0 0) (trunc "MONTH")))
+      (t/is (= (LocalDateTime/of 2022 1 1 0 0) (trunc "YEAR")))
+      (t/is (= (LocalDateTime/of 2000 1 1 0 0) (trunc "MILLENNIUM")))
+      (t/is (= (LocalDateTime/of 2000 1 1 0 0) (trunc "CENTURY")))
+      (t/is (= (LocalDateTime/of 2020 1 1 0 0) (trunc "DECADE")))
+      (t/is (= (LocalDateTime/of 2022 4 1 0 0) (trunc "QUARTER")))
+      (t/is (= (LocalDateTime/of 2022 3 28 0 0) (trunc "WEEK"))))))
+
+(t/deftest test-date-trunc-local-date
+  (t/testing "java.time.LocalDate"
+    (let [ld (LocalDate/of 2022 3 29)
+          trunc #(project1 (list 'date-trunc % 'date) {:date ld})]
+      (t/is (= (LocalDate/of 2022 3 29) (trunc "MICROSECOND")))
+      (t/is (= (LocalDate/of 2022 3 29) (trunc "MILLISECOND")))
+      (t/is (= (LocalDate/of 2022 3 29) (trunc "SECOND")))
+      (t/is (= (LocalDate/of 2022 3 29) (trunc "MINUTE")))
+      (t/is (= (LocalDate/of 2022 3 29) (trunc "HOUR")))
+      (t/is (= (LocalDate/of 2022 3 29) (trunc "DAY")))
+      (t/is (= (LocalDate/of 2022 3 1) (trunc "MONTH")))
+      (t/is (= (LocalDate/of 2022 1 1) (trunc "YEAR")))
+      (t/is (= (LocalDate/of 2022 1 1) (project1 '(date-trunc "YEAR" (date-trunc "MONTH" date)) {:date ld})))
+      (t/is (= (LocalDate/of 2000 1 1) (trunc "MILLENNIUM")))
+      (t/is (= (LocalDate/of 2000 1 1) (trunc "CENTURY")))
+      (t/is (= (LocalDate/of 2020 1 1) (trunc "DECADE")))
+      (t/is (= (LocalDate/of 2022 1 1) (trunc "QUARTER")))
+      (t/is (= (LocalDate/of 2022 3 28) (trunc "WEEK"))))))
+
+(t/deftest test-date-trunc-with-timezone-opt
+  (let [test-doc {:xt$id :foo,
+                  :date (-> (time/->zdt #inst "2001-02-16T20:38:40Z")
+                            (.withZoneSameInstant (ZoneId/of "America/New_York")))}]
+
+    (t/is (= #time/zoned-date-time "2001-02-16T08:00-05:00[America/New_York]"
+             (project1 (list 'date-trunc "DAY" 'date "Australia/Sydney") test-doc)))))
+
+(t/deftest test-date-trunc-interval
+  (let [test-doc {:xt$id :foo,
+                  :year-interval (PeriodDuration. (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S")) 
+                  :interval (PeriodDuration. (Period/of 0 4 8) (Duration/parse "PT1H1M1.111111S"))}]
+
+    (letfn [(trunc [time-unit] (project1 (list 'date-trunc time-unit 'interval) test-doc))]
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M1.111111S"] (trunc "MICROSECOND")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M1.111S"] (trunc "MILLISECOND")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M1S"] (trunc "SECOND")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M"] (trunc "MINUTE")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H"] (trunc "HOUR")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT0S"] (trunc "DAY")))
+      (t/is (= #xt/interval-mdn ["P4M7D" "PT0S"] (trunc "WEEK")))
+      (t/is (= #xt/interval-mdn ["P4M" "PT0S"] (trunc "MONTH")))
+      (t/is (= #xt/interval-mdn ["P3M" "PT0S"] (trunc "QUARTER"))))
+    
+    (letfn [(trunc [time-unit] (project1 (list 'date-trunc time-unit 'year-interval) test-doc))] 
+      (t/is (= #xt/interval-mdn ["P13332M" "PT0S"] (trunc "YEAR")))
+      (t/is (= #xt/interval-mdn ["P13320M" "PT0S"] (trunc "DECADE")))
+      (t/is (= #xt/interval-mdn ["P13200M" "PT0S"] (trunc "CENTURY")))
+      (t/is (= #xt/interval-mdn ["P12000M" "PT0S"] (trunc "MILLENNIUM"))))))
 
 (t/deftest test-date-extract
   ;; TODO units below minute are not yet implemented for any type

@@ -859,6 +859,18 @@
     ;;=>
     (expr bve)
 
+    [:date_trunc_datetime_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_datetime_source ^:z dte]] 
+    ;;=>
+    (list 'date_trunc dtps (expr dte))
+
+    [:date_trunc_datetime_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_datetime_source ^:z dte] [:time_zone_region tzr]]
+    ;;=>
+    (list 'date_trunc dtps (expr dte) tzr)
+
+    [:date_trunc_interval_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_interval_source ^:z dte]]
+    ;;=>
+    (list 'date_trunc dtps (expr dte))
+
     (expr-varargs z)))
 
 ;; Logical plan.
@@ -1834,8 +1846,8 @@
     (build-values-list rvel)
 
     [:contextually_typed_table_value_constructor _ ^:z cttvl]
-    (build-values-list cttvl)
-
+    (build-values-list cttvl) 
+    
     (r/zcase z
       :query_expression (plan-query-expr z)
       :in_value_list (build-values-list z)

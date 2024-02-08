@@ -6,7 +6,8 @@
             [xtdb.sql :as sql]
             [xtdb.test-util :as tu])
 
-  (:import (java.time LocalDateTime)))
+  (:import (java.time LocalDateTime)
+           (java.time.zone ZoneRulesException)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -841,8 +842,68 @@
     (= expected (plan-expr sql))
     "DATE '3000-03-15'" #time/date "3000-03-15"))
 
-(deftest test-system-time-queries
+(deftest test-date-trunc-plan
+  (t/testing "TIMESTAMP behaviour"
+    (t/are
+     [sql expected]
+     (= expected (plan-expr sql))
+      "DATE_TRUNC('MICROSECOND', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MICROSECOND" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MILLISECOND', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLISECOND" #time/date-time "2021-10-21T12:34:56")
+      "date_trunc('second', timestamp '2021-10-21T12:34:56')" '(date_trunc "SECOND" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MINUTE', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MINUTE" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('HOUR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "HOUR" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('DAY', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DAY" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('WEEK', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "WEEK" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('QUARTER', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "QUARTER" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MONTH', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MONTH" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('YEAR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "YEAR" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('DECADE', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DECADE" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('CENTURY', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "CENTURY" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MILLENNIUM', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLENNIUM" #time/date-time "2021-10-21T12:34:56")))
+  
+  (t/testing "INTERVAL behaviour"
+    (t/are
+     [sql expected]
+     (= expected (plan-expr sql))
+      "DATE_TRUNC('DAY', INTERVAL '5' DAY)" '(date_trunc "DAY" (single-field-interval "5" "DAY" 2 0))
+      "date_trunc('hour', interval '3 02:47:33' day to second)" '(date_trunc "HOUR" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6)))))
 
+(deftest test-date-trunc-query
+  (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:34:00Z"}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('MINUTE', TIMESTAMP '2021-10-21T12:34:56Z') as timestamp FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:00:00Z"}]
+           (xt/q tu/*node* "select date_trunc('hour', timestamp '2021-10-21T12:34:56Z') as timestamp from (VALUES 1) as x")))
+  
+  (t/is (= [{:timestamp #time/date "2001-01-01"}]
+           (xt/q tu/*node* "select date_trunc('year', DATE '2001-11-27') as timestamp from (VALUES 1) as x")))
+  
+  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:00:00"}]
+           (xt/q tu/*node* "select date_trunc('hour', timestamp '2021-10-21T12:34:56') as timestamp from (VALUES 1) as x"))))
+
+(deftest test-date-trunc-with-timezone-query
+  (t/is (= [{:timestamp #time/zoned-date-time "2001-02-16T08:00-05:00"}]
+           (xt/q tu/*node* "select date_trunc('day', TIMESTAMP '2001-02-16 15:38:11-05:00', 'Australia/Sydney') as timestamp from (VALUES 1) as x")))
+  
+  (t/is (thrown-with-msg?
+         ZoneRulesException
+         #"Unknown time-zone ID: NotRealRegion"
+         (xt/q tu/*node* "select date_trunc('hour', TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as timestamp from (VALUES 1) as x"))))
+
+(deftest test-date-trunc-with-interval-query 
+  (t/is (= [{:interval #xt/interval-ym "P36M"}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('YEAR', 3 YEAR + 3 MONTH) as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT2S"]}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('SECOND', 3 MONTH + 4 DAY + 2 SECOND) as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT0S"]}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('DAY', 3 MONTH + 4 DAY + 2 SECOND) as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P3M" "PT0S"]}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('MONTH', 3 MONTH + 4 DAY + 2 SECOND) as interval FROM (VALUES 1) AS x"))))
+
+(deftest test-system-time-queries
   (t/testing "AS OF"
     (t/is
       (=plan-file
