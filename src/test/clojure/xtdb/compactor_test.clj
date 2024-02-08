@@ -115,38 +115,39 @@
   (let [node-dir (util/->path "target/compactor/test-e2e")]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
-      (letfn [(submit! [xs]
-                (doseq [batch (partition-all 8 xs)]
-                  (xt/submit-tx node (for [x batch]
-                                       [:put-docs :foo {:xt/id x}]))))
+    (binding [c/*page-size* 32]
+      (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+        (letfn [(submit! [xs]
+                  (doseq [batch (partition-all 8 xs)]
+                    (xt/submit-tx node (for [x batch]
+                                         [:put-docs :foo {:xt/id x}]))))
 
-              (q []
-                (->> (xt/q node
-                           '(-> (from :foo [{:xt/id id}])
-                                (order-by id)))
-                     (map :id)))]
+                (q []
+                  (->> (xt/q node
+                             '(-> (from :foo [{:xt/id id}])
+                                  (order-by id)))
+                       (map :id)))]
 
-        (submit! (range 100))
-        (tu/then-await-tx node)
-        (c/compact-all! node)
-        (t/is (= (range 100) (q)))
-
-        (submit! (range 100 200))
-        (tu/then-await-tx node)
-        (c/compact-all! node)
-        (t/is (= (range 200) (q)))
-
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e")))
-                       (.resolve node-dir "objects/v01/tables/foo") #"log-l01-(.+)\.arrow")
-
-        (t/testing "second level"
-          (submit! (range 200 500))
+          (submit! (range 100))
           (tu/then-await-tx node)
           (c/compact-all! node)
+          (t/is (= (range 100) (q)))
 
-          (t/is (= (range 500) (q)))
+          (submit! (range 100 200))
+          (tu/then-await-tx node)
+          (c/compact-all! node)
+          (t/is (= (range 200) (q)))
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e-level-2")))
-                         (.resolve node-dir "objects/v01/tables/foo")
-                         #"log-l0(?:1|2)-(.+)\.arrow"))))))
+          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e")))
+                         (.resolve node-dir "objects/v01/tables/foo") #"log-l01-(.+)\.arrow")
+
+          (t/testing "second level"
+            (submit! (range 200 500))
+            (tu/then-await-tx node)
+            (c/compact-all! node)
+
+            (t/is (= (range 500) (q)))
+
+            (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e-level-2")))
+                           (.resolve node-dir "objects/v01/tables/foo")
+                           #"log-l0(?:1|2)-(.+)\.arrow")))))))

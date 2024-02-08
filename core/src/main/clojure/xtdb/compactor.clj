@@ -12,9 +12,10 @@
            [java.util Comparator LinkedList PriorityQueue]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
-           (org.apache.arrow.vector.types.pojo Field)
-           xtdb.IBufferPool
-           (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
+           (org.apache.arrow.vector.types.pojo Field FieldType)
+           (xtdb Compactor IBufferPool)
+           xtdb.bitemporal.IPolygonReader
+           (xtdb.trie EventRowPointer IDataRel)
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.RelationReader))
@@ -88,7 +89,7 @@
                                    types/field->col-type))
                              (apply types/merge-col-types))))
 
-(defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+(defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, {:keys [page-size]}
                             {:keys [^Path table-path trie-keys out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
@@ -101,18 +102,16 @@
       (let [segments (mapv (fn [{:keys [trie] :as meta-file} data-rel]
                              {:trie trie, :meta-file meta-file, :data-rel data-rel})
                            meta-files
-                           data-rels)]
-        (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator (->log-data-rel-schema (map :data-rel segments)))]
+                           data-rels)
+            schema (->log-data-rel-schema (map :data-rel segments))]
 
+        (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator schema)]
           (merge-segments-into data-rel-wtr segments)
 
-          (let [data-rel (vw/rel-wtr->rdr data-rel-wtr)
-                trie (reduce (fn [^LiveHashTrie trie idx]
-                               (.add trie idx))
-                             (LiveHashTrie/emptyTrie (.readerForName data-rel "xt$iid"))
-                             (range (.rowCount data-rel)))]
+          (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
+                                                           schema table-path out-trie-key)]
 
-            (trie/write-live-trie! allocator buffer-pool table-path out-trie-key trie data-rel)))))
+            (Compactor/writeRelation trie-wtr (vw/rel-wtr->rdr data-rel-wtr) page-size)))))
 
     (log/infof "compacted '%s' -> '%s'." table-path out-trie-key)
 
@@ -136,25 +135,28 @@
          :buffer-pool (ig/ref :xtdb/buffer-pool)}
         opts))
 
+(def ^:dynamic *page-size* 256)
+
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^IBufferPool buffer-pool]}]
-  (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
-    (reify ICompactor
-      (compactAll [_]
-        (log/info "compact-all")
-        (loop []
-          (let [jobs (for [table-path (.listObjects buffer-pool util/tables-dir)
-                           job (compaction-jobs table-path (trie/list-meta-files buffer-pool table-path))]
-                       job)
-                jobs? (boolean (seq jobs))]
+  (let [page-size *page-size*]
+    (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
+      (reify ICompactor
+        (compactAll [_]
+          (log/info "compact-all")
+          (loop []
+            (let [jobs (for [table-path (.listObjects buffer-pool util/tables-dir)
+                             job (compaction-jobs table-path (trie/list-meta-files buffer-pool table-path))]
+                         job)
+                  jobs? (boolean (seq jobs))]
 
-            (doseq [job jobs]
-              (exec-compaction-job! allocator buffer-pool job))
+              (doseq [job jobs]
+                (exec-compaction-job! allocator buffer-pool {:page-size page-size} job))
 
-            (when jobs?
-              (recur)))))
-      AutoCloseable
-      (close [_]
-        (util/close allocator)))))
+              (when jobs?
+                (recur)))))
+        AutoCloseable
+        (close [_]
+          (util/close allocator))))))
 
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))

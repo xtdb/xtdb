@@ -121,7 +121,6 @@
             (.endStruct leaf-wtr)
             (.endRow meta-rel-wtr)
 
-
             (.writeBatch data-file-wtr)
             (.clear data-rel-wtr)
             (.clear data-vsr)
