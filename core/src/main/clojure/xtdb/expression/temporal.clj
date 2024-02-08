@@ -976,6 +976,60 @@
                          "MICROSECOND" `(identity))
                        (.toEpochDay)))})
 
+(defn ->period-duration
+  ([^Period p]
+   (->period-duration p (Duration/ofSeconds 0)))
+  ([^Period p ^Duration d]
+   (PeriodDuration. p d)))
+
+(defn truncated-millennium [^Period period]
+  (let [months (.toTotalMonths period)]
+    (Period/ofMonths (- months (rem months 12000)))))
+
+(defn truncated-century [^Period period]
+  (let [months (.toTotalMonths period)]
+    (Period/ofMonths (- months (rem months 1200)))))
+
+(defn truncated-decade [^Period period]
+  (let [months (.toTotalMonths period)]
+    (Period/ofMonths (- months (rem months 120)))))
+
+(defn truncated-year [^Period period]
+  (let [months (.toTotalMonths period)]
+    (Period/ofMonths (- months (rem months 12)))))
+
+(defn truncated-quarter [^Period period]
+  (let [months (.toTotalMonths period)]
+    (Period/ofMonths (- months (rem months 3)))))
+
+(defn truncated-month [^Period period]
+  (let [months (.toTotalMonths period)]
+    (Period/ofMonths months)))
+
+(defn truncated-week [^Period period]
+  (let [day (.getDays period)]
+    (Period/of (.getYears period) (.getMonths period) (- day (rem day 7)))))
+
+(defmethod expr/codegen-call [:date_trunc :utf8 :interval] [{[{field :literal} _] :args, [_ [_interval _interval-unit :as interval-type]] :arg-types}]
+  {:return-type interval-type
+   :->call-code (fn [[_ pd]]
+                  (let [period `(.getPeriod ^PeriodDuration ~pd)
+                        duration `(.getDuration ^PeriodDuration ~pd)]
+                    (case field
+                      "MILLENNIUM" `(->period-duration (truncated-millennium ~period))
+                      "CENTURY" `(->period-duration (truncated-century ~period))
+                      "DECADE" `(->period-duration (truncated-decade ~period))
+                      "YEAR" `(->period-duration (truncated-year ~period))
+                      "QUARTER" `(->period-duration (truncated-quarter ~period))
+                      "MONTH" `(->period-duration (truncated-month ~period))
+                      "WEEK" `(->period-duration (truncated-week ~period))
+                      "DAY" `(->period-duration ~period)
+                      "HOUR" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/HOURS))
+                      "MINUTE" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MINUTES))
+                      "SECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/SECONDS))
+                      "MILLISECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MILLIS))
+                      "MICROSECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MICROS)))))})
+
 (defn- bound-precision ^long [^long precision]
   (-> precision (max 0) (min 9)))
 

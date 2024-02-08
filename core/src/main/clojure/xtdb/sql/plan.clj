@@ -867,6 +867,10 @@
     ;;=>
     (list 'date_trunc dtps (expr dte) tzr)
 
+    [:date_trunc_interval_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_interval_source ^:z dte]]
+    ;;=>
+    (list 'date_trunc dtps (expr dte))
+
     (expr-varargs z)))
 
 ;; Logical plan.

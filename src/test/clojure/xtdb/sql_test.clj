@@ -859,7 +859,14 @@
       "DATE_TRUNC('YEAR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "YEAR" #time/date-time "2021-10-21T12:34:56")
       "DATE_TRUNC('DECADE', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DECADE" #time/date-time "2021-10-21T12:34:56")
       "DATE_TRUNC('CENTURY', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "CENTURY" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC('MILLENNIUM', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLENNIUM" #time/date-time "2021-10-21T12:34:56"))))
+      "DATE_TRUNC('MILLENNIUM', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLENNIUM" #time/date-time "2021-10-21T12:34:56")))
+  
+  (t/testing "INTERVAL behaviour"
+    (t/are
+     [sql expected]
+     (= expected (plan-expr sql))
+      "DATE_TRUNC('DAY', INTERVAL '5' DAY)" '(date_trunc "DAY" (single-field-interval "5" "DAY" 2 0))
+      "date_trunc('hour', interval '3 02:47:33' day to second)" '(date_trunc "HOUR" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6)))))
 
 (deftest test-date-trunc-query
   (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:34:00Z"}]
@@ -882,6 +889,19 @@
          ZoneRulesException
          #"Unknown time-zone ID: NotRealRegion"
          (xt/q tu/*node* "select date_trunc('hour', TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as timestamp from (VALUES 1) as x"))))
+
+(deftest test-date-trunc-with-interval-query 
+  (t/is (= [{:interval #xt/interval-ym "P36M"}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('YEAR', 3 YEAR + 3 MONTH) as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT2S"]}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('SECOND', 3 MONTH + 4 DAY + 2 SECOND) as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT0S"]}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('DAY', 3 MONTH + 4 DAY + 2 SECOND) as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P3M" "PT0S"]}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('MONTH', 3 MONTH + 4 DAY + 2 SECOND) as interval FROM (VALUES 1) AS x"))))
 
 (deftest test-system-time-queries
   (t/testing "AS OF"
