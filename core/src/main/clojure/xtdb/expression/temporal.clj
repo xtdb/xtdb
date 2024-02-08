@@ -939,6 +939,22 @@
                              ~(field->truncate-fn field))
                         (ldt->ts ts-unit)))})
 
+;; 1. We pass in the arrow timestamp - essentially a Long with some units (ts-unit) and a timezone (tz), and we have a provided time_zone argument
+;; 2. Convert the time_zone to ZoneId
+;; 3. We take the long and the units, and use these to create an Instant
+;; 4. We convert the instant to a ZonedDateTime with the time_zone ZoneId
+;; 5. We truncate the ZonedDateTime, to the equivalent `field` value
+;; 6. We convert the ZonedDateTime back to a Long with the same units as the input
+;; 7. The generated code returns the Long, with the original tz from the args.
+(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz :utf8] [{[{field :literal} _ {trunc-tz :literal}] :args, [_ [_tstz ts-unit _tz :as ts-type] _] :arg-types}]
+  (let [trunc-zone-id-sym (gensym 'zone-id)]
+    {:return-type ts-type
+     :batch-bindings [[trunc-zone-id-sym (ZoneId/of trunc-tz)]]
+     :->call-code (fn [[_ x]]
+                    (-> `(-> ~(ts->zdt x ts-unit trunc-zone-id-sym)
+                             ~(field->truncate-fn field))
+                        (zdt->ts ts-unit)))}))
+
 (defmethod expr/codegen-call [:date_trunc :utf8 :date] [{[{field :literal} _] :args, [_ [_date _date-unit :as date-type]] :arg-types}]
   ;; FIXME this assumes epoch-day
   {:return-type date-type

@@ -863,6 +863,10 @@
     ;;=>
     (list 'date_trunc dtps (expr dte))
 
+    [:date_trunc_datetime_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_datetime_source ^:z dte] [:time_zone_region tzr]]
+    ;;=>
+    (list 'date_trunc dtps (expr dte) tzr)
+
     (expr-varargs z)))
 
 ;; Logical plan.
