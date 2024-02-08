@@ -6,7 +6,8 @@
             [xtdb.sql :as sql]
             [xtdb.test-util :as tu])
 
-  (:import (java.time LocalDateTime)))
+  (:import (java.time LocalDateTime)
+           (java.time.zone ZoneRulesException)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -852,12 +853,23 @@
       "DATE_TRUNC('MINUTE', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MINUTE" #time/date-time "2021-10-21T12:34:56")
       "DATE_TRUNC('HOUR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "HOUR" #time/date-time "2021-10-21T12:34:56")
       "DATE_TRUNC('DAY', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DAY" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('WEEK', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "WEEK" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('QUARTER', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "QUARTER" #time/date-time "2021-10-21T12:34:56")
       "DATE_TRUNC('MONTH', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MONTH" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC('YEAR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "YEAR" #time/date-time "2021-10-21T12:34:56"))))
+      "DATE_TRUNC('YEAR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "YEAR" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('DECADE', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DECADE" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('CENTURY', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "CENTURY" #time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('MILLENNIUM', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLENNIUM" #time/date-time "2021-10-21T12:34:56"))))
 
 (deftest test-date-trunc-query
-  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00"}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC('MINUTE', TIMESTAMP '2021-10-21T12:34:56') as timestamp FROM (VALUES 1) AS x")))
+  (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:34:00Z"}]
+           (xt/q tu/*node* "SELECT DATE_TRUNC('MINUTE', TIMESTAMP '2021-10-21T12:34:56Z') as timestamp FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:00:00Z"}]
+           (xt/q tu/*node* "select date_trunc('hour', timestamp '2021-10-21T12:34:56Z') as timestamp from (VALUES 1) as x")))
+  
+  (t/is (= [{:timestamp #time/date "2001-01-01"}]
+           (xt/q tu/*node* "select date_trunc('year', DATE '2001-11-27') as timestamp from (VALUES 1) as x")))
   
   (t/is (= [{:timestamp #time/date-time "2021-10-21T12:00:00"}]
            (xt/q tu/*node* "select date_trunc('hour', timestamp '2021-10-21T12:34:56') as timestamp from (VALUES 1) as x"))))
