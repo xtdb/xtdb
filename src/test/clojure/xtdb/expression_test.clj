@@ -192,6 +192,28 @@
     (t/is (= #time/zoned-date-time "2001-02-16T08:00-05:00[America/New_York]"
              (project1 (list 'date-trunc "DAY" 'date "Australia/Sydney") test-doc)))))
 
+(t/deftest test-date-trunc-interval
+  (let [test-doc {:xt$id :foo,
+                  :year-interval (PeriodDuration. (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S")) 
+                  :interval (PeriodDuration. (Period/of 0 4 8) (Duration/parse "PT1H1M1.111111S"))}]
+
+    (letfn [(trunc [time-unit] (project1 (list 'date-trunc time-unit 'interval) test-doc))]
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M1.111111S"] (trunc "MICROSECOND")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M1.111S"] (trunc "MILLISECOND")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M1S"] (trunc "SECOND")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H1M"] (trunc "MINUTE")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT1H"] (trunc "HOUR")))
+      (t/is (= #xt/interval-mdn ["P4M8D" "PT0S"] (trunc "DAY")))
+      (t/is (= #xt/interval-mdn ["P4M7D" "PT0S"] (trunc "WEEK")))
+      (t/is (= #xt/interval-mdn ["P4M" "PT0S"] (trunc "MONTH")))
+      (t/is (= #xt/interval-mdn ["P3M" "PT0S"] (trunc "QUARTER"))))
+    
+    (letfn [(trunc [time-unit] (project1 (list 'date-trunc time-unit 'year-interval) test-doc))] 
+      (t/is (= #xt/interval-mdn ["P13332M" "PT0S"] (trunc "YEAR")))
+      (t/is (= #xt/interval-mdn ["P13320M" "PT0S"] (trunc "DECADE")))
+      (t/is (= #xt/interval-mdn ["P13200M" "PT0S"] (trunc "CENTURY")))
+      (t/is (= #xt/interval-mdn ["P12000M" "PT0S"] (trunc "MILLENNIUM"))))))
+
 (t/deftest test-date-extract
   ;; TODO units below minute are not yet implemented for any type
   (letfn [(extract [part date-like] (project1 (list 'extract part 'date) {:date date-like}))
