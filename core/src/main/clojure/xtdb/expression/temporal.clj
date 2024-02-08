@@ -8,6 +8,7 @@
            (java.time.temporal ChronoField ChronoUnit)
            [java.util Map]
            (org.apache.arrow.vector PeriodDuration)
+           [xtdb DateTruncator]
            [xtdb.vector IValueReader ValueBox]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -897,50 +898,67 @@
                     "HOUR" `(int 0)
                     "MINUTE" `(int 0)))})
 
-(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ [_ts ts-unit :as ts-type]] :arg-types}]
-  {:return-type ts-type
-   :->call-code (fn [[_ x]]
-                  (-> `(-> ~(ts->ldt x ts-unit)
-                           ~(case field
-                              "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
-                              "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
-                              `(.truncatedTo ~(case field
-                                                "DAY" `ChronoUnit/DAYS
-                                                "HOUR" `ChronoUnit/HOURS
-                                                "MINUTE" `ChronoUnit/MINUTES
-                                                "SECOND" `ChronoUnit/SECONDS
-                                                "MILLISECOND" `ChronoUnit/MILLIS
-                                                "MICROSECOND" `ChronoUnit/MICROS))))
-                      (ldt->ts ts-unit)))})
+(defn field->truncate-fn
+  [field]
+  (case field
+     "MILLENNIUM" `(DateTruncator/truncateYear 1000)
+     "CENTURY" `(DateTruncator/truncateYear 100)
+     "DECADE" `(DateTruncator/truncateYear 10)
+     "YEAR" `(DateTruncator/truncateYear)
+     "QUARTER" `(DateTruncator/truncateQuarter)
+     "MONTH" `(DateTruncator/truncateMonth)
+     "WEEK" `(DateTruncator/truncateWeek)
+     `(.truncatedTo ~(case field
+                       "DAY" `ChronoUnit/DAYS
+                       "HOUR" `ChronoUnit/HOURS
+                       "MINUTE" `ChronoUnit/MINUTES
+                       "SECOND" `ChronoUnit/SECONDS
+                       "MILLISECOND" `ChronoUnit/MILLIS
+                       "MICROSECOND" `ChronoUnit/MICROS))))
 
+;; 1. We pass in the arrow timestamp - essentially a Long with some units (ts-unit) and a timezone (tz)
+;; 2. Convert the tz to a ZoneId
+;; 3. We take the long and the units, and use these to create an Instant
+;; 4. We convert the instant to a ZonedDateTime with the ZoneId
+;; 5. We truncate the ZonedDateTime, to the equivalent `field` value
+;; 6. We convert the ZonedDateTime back to a Long with the same units as the input
+;; 7. The generated code returns the Long.
 (defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_tstz ts-unit tz :as ts-type]] :arg-types}]
   (let [zone-id-sym (gensym 'zone-id)]
     {:return-type ts-type
-     :batch-bindings [[zone-id-sym `(ZoneId/of ~tz)]]
+     :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
      :->call-code (fn [[_ x]]
                     (-> `(-> ~(ts->zdt x ts-unit zone-id-sym)
-                             ~(case field
-                                "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
-                                "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
-                                `(.truncatedTo ~(case field
-                                                  "DAY" `ChronoUnit/DAYS
-                                                  "HOUR" `ChronoUnit/HOURS
-                                                  "MINUTE" `ChronoUnit/MINUTES
-                                                  "SECOND" `ChronoUnit/SECONDS
-                                                  "MILLISECOND" `ChronoUnit/MILLIS
-                                                  "MICROSECOND" `ChronoUnit/MICROS))))
+                             ~(field->truncate-fn field))
                         (zdt->ts ts-unit)))}))
+
+(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ [_ts ts-unit :as ts-type]] :arg-types}]
+    {:return-type ts-type
+     :->call-code (fn [[_ x]]
+                    (-> `(-> ~(ts->ldt x ts-unit)
+                             ~(field->truncate-fn field))
+                        (ldt->ts ts-unit)))})
 
 (defmethod expr/codegen-call [:date_trunc :utf8 :date] [{[{field :literal} _] :args, [_ [_date _date-unit :as date-type]] :arg-types}]
   ;; FIXME this assumes epoch-day
   {:return-type date-type
    :->call-code (fn [[_ epoch-day-code]]
-                  (case field
-                    "YEAR" `(-> ~epoch-day-code LocalDate/ofEpochDay (.withDayOfYear 1) .toEpochDay)
-                    "MONTH" `(-> ~epoch-day-code LocalDate/ofEpochDay (.withDayOfMonth 1) .toEpochDay)
-                    "DAY" epoch-day-code
-                    "HOUR" epoch-day-code
-                    "MINUTE" epoch-day-code))})
+                  `(-> (LocalDate/ofEpochDay ~epoch-day-code)
+                       ~(case field
+                         "MILLENNIUM" `(DateTruncator/truncateYear 1000)
+                         "CENTURY" `(DateTruncator/truncateYear 100)
+                         "DECADE" `(DateTruncator/truncateYear 10)
+                         "YEAR" `(DateTruncator/truncateYear)
+                         "QUARTER" `(DateTruncator/truncateQuarter)
+                         "MONTH" `(DateTruncator/truncateMonth)
+                         "WEEK" `(DateTruncator/truncateWeek)
+                         "DAY" `(identity)
+                         "HOUR" `(identity)
+                         "MINUTE" `(identity)
+                         "SECOND" `(identity)
+                         "MILLISECOND" `(identity)
+                         "MICROSECOND" `(identity))
+                       (.toEpochDay)))})
 
 (defn- bound-precision ^long [^long precision]
   (-> precision (max 0) (min 9)))
