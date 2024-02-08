@@ -10,7 +10,8 @@
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.util :as util]
-            [xtdb.query-ra :as ra])
+            [xtdb.query-ra :as ra]
+            [xtdb.metrics :as metrics])
   (:import (io.micrometer.core.instrument MeterRegistry Timer)
            (java.io Closeable File)
            (java.nio.file Path)
@@ -76,7 +77,7 @@
           #_(.gauge "node.tx" ^Iterable [(Tag/of "event" "indexed")] indexed-counter))
 
 
-        fn-gauge (partial bm/new-fn-gauge meter-reg)
+        fn-gauge (partial metrics/add-gauge meter-reg)
 
         ;; on-indexed
         ;; (fn [{:keys [submitted-tx, doc-ids, av-count, bytes-indexed] :as event}]

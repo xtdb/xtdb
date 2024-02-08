@@ -71,8 +71,7 @@
                    ^Measurement measurement (.measure meter)]
              (.add sample-list (->MeterSample meter time-ms (.getTagValueRepresentation (.getStatistic measurement)) (.getValue measurement))))))))))
 
-(def percentiles
-  [0.75 0.85 0.95 0.98 0.99 0.999])
+(def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
 
 (defn wrap-stage [task f]
   (let [stage (:stage task)
@@ -125,12 +124,25 @@
       transaction (wrap-transaction transaction f)
       :else f)))
 
-(defn new-fn-gauge
-  ([reg meter-name f] (new-fn-gauge reg meter-name f {}))
-  ([^MeterRegistry reg meter-name f opts]
-   (-> (Gauge/builder
-        meter-name
-        (reify Supplier
-          (get [_] (f))))
-       (cond-> (:unit opts) (.baseUnit (str (:unit opts))))
-       (.register reg))))
+(defn wrap-transaction-toplevel-reg [{:keys [transaction labels] :as _task} f]
+  (let [timer-delay
+        (delay
+          (when *registry*
+            (let [timer (Timer/builder (name transaction))]
+              (doseq [[^String k ^String v] labels]
+                (.tag timer k v))
+              (-> timer
+                  (.publishPercentiles (double-array percentiles))
+                  (.maximumExpectedValue (Duration/ofHours 8))
+                  (.minimumExpectedValue (Duration/ofNanos 1))
+                  (.register *registry*)))))]
+    (fn instrumented-transaction [worker]
+      (if-some [^Timer timer @timer-delay]
+        (.recordCallable timer ^Callable (fn [] (f worker)))
+        (f worker)))))
+
+(defn wrap-task-toplevel-reg [task f]
+  (let [{:keys [stage, transaction]} task]
+    (cond
+      transaction (wrap-transaction-toplevel-reg task f)
+      :else f)))

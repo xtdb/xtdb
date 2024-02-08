@@ -11,8 +11,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
-  (:import (clojure.lang PersistentHashMap)
-           (io.micrometer.core.instrument Timer)
+  (:import (io.micrometer.core.instrument Timer)
            (java.io Closeable Writer)
            java.util.HashMap
            (java.util.concurrent CompletableFuture)
@@ -43,8 +42,8 @@
                  ^IRaQuerySource ra-src, wm-src, scan-emitter
                  default-tz
                  !latest-submitted-tx
-                 system, close-fn
-                 ^PersistentHashMap metrics]
+                 system, close-fn, registry
+                 metrics]
   IXtdb
   (submitTxAsync [this opts tx-ops]
     (let [system-time (some-> opts .getSystemTime)]
@@ -120,12 +119,24 @@
           :registry (ig/ref :xtdb/meter-registry)}
          opts))
 
-(defmethod ig/init-key :xtdb/node [_ {:keys [registry] :as deps}]
-  (map->Node (-> deps
-                 (assoc :!latest-submitted-tx (atom nil))
+(defn gauge-lag-secs-fn [node]
+  (fn []
+    (let [{:keys [^TransactionKey latest-completed-tx
+                  ^TransactionKey latest-submitted-tx]} (xtp/status node)]
+      (if (and latest-completed-tx latest-submitted-tx)
+        (let [completed-tx-time (.getSystemTime latest-completed-tx)
+              submitted-tx-time (.getSystemTime latest-submitted-tx)]
+          (/ (- ^long (inst-ms submitted-tx-time) ^long (inst-ms completed-tx-time)) (long 1e3)))
+        0.0))))
 
-                 (assoc :metrics {:query-timer (metrics/add-timer registry "query.timer"
-                                                                  {:description "indicates the timings for queries"})}))))
+(defmethod ig/init-key :xtdb/node [_ {:keys [registry] :as deps}]
+  (let [node (map->Node (-> deps
+                            (assoc :!latest-submitted-tx (atom nil))
+                            (assoc :metrics {:query-timer (metrics/add-timer registry "query.timer"
+                                                                             {:description "indicates the timings for queries"})})))]
+    (metrics/add-gauge registry "node.tx.lag.seconds"
+                       (gauge-lag-secs-fn node))
+    node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))

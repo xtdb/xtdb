@@ -5,6 +5,7 @@
             [xtdb.util :as util])
   (:import (com.sun.net.httpserver HttpServer HttpHandler)
            (java.net InetSocketAddress)
+           (java.util.function Supplier)
            (io.micrometer.core.instrument MeterRegistry Meter Measurement Timer Gauge Tag Counter)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmMemoryMetrics JvmHeapPressureMetrics JvmGcMetrics JvmThreadMetrics)
@@ -38,6 +39,17 @@
               (publishPercentiles (double-array percentiles)))
     description (.description description)
     :always (.register reg)))
+
+(defn add-gauge
+  ([reg meter-name f] (add-gauge reg meter-name f {}))
+  ([^MeterRegistry reg meter-name f opts]
+   (-> (Gauge/builder
+        meter-name
+        (reify Supplier
+          (get [_] (f))))
+       (cond-> (:unit opts) (.baseUnit (str (:unit opts))))
+       (.register reg))))
+
 
 (defmethod ig/prep-key :xtdb/metrics-server [_ opts]
   (merge {:registry (ig/ref :xtdb/meter-registry)}
