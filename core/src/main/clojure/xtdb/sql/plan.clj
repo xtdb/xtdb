@@ -585,8 +585,15 @@
               "ASYMMETRIC" 'between)]
       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))))
 
-    [:extract_expression "EXTRACT"
-     [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
+    [:extract_expression "EXTRACT" [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
+    ;;=>
+    (list 'extract extract-field (expr es))
+
+    [:extract_expression "EXTRACT" [:primary_datetime_field "SECOND"] "FROM" ^:z es]
+    ;;=>
+    (list 'extract "SECOND" (expr es))
+
+    [:extract_expression "EXTRACT" [:time_zone_field extract-field] "FROM" ^:z es]
     ;;=>
     (list 'extract extract-field (expr es))
 
