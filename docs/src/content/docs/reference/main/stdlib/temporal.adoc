@@ -269,6 +269,14 @@ a| Returns true iff `p1` starts after `p2` ends
 | Truncates the given interval to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`
 
 | `(extract "field" date-time)` | `EXTRACT('field', date_time)`
-| Extracts the given field from the date-time, which must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE`.
+| Extracts the given field from the date-time. Field must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE` or `SECOND`. Datetimes with timezones additionally support field values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE`.
 
+| `(extract "field" date)` | `EXTRACT('field', date)`
+| Extracts the given field from the date. Field must be one of `YEAR`, `MONTH` or `DAY`.
+
+| `(extract "field" time)` | `EXTRACT('field', time)`
+| Extracts the given field from the time. Field must be one of `HOUR`, `MINUTE` or `SECOND`.
+
+| `(extract "field" interval)` | `EXTRACT('field', interval)`
+| Extracts the given field from the interval. Field must be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` or `SECOND`.
 |===
