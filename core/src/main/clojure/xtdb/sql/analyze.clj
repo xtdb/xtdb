@@ -528,6 +528,25 @@
          ag)
        (mapcat expand-underlying-column-references)))
 
+(defn all-select-asterisk-references [ag]
+  (r/collect-stop
+   (fn [ag]
+     (r/zcase ag
+       :select_list
+       (r/collect-stop
+        (fn [ag]
+          (r/zcase ag
+            :qualified_asterisk
+            (identifiers (r/$ ag 1))
+            :asterisk
+            ["*"]
+            :subquery []
+            nil))
+        ag)
+       :subquery []
+       nil))
+   ag))
+
 (defn generate-unique-column-names [projections]
   (->> projections
        (reduce
@@ -556,33 +575,31 @@
 (defn expand-asterisk [ag]
   (r/zcase ag
     :table_primary
-    (do
-      (let [{:keys [known-columns correlation-name derived-columns] :as table} (table ag)]
-        (let [projections
-              (if-let [derived-columns (not-empty derived-columns)]
-                (for [identifier derived-columns]
-                  {:identifier identifier})
-                (if-let [subquery-ref (:subquery-ref (meta table))]
-                  (first (projected-columns subquery-ref))
-                  (map #(hash-map :identifier %) known-columns)))
-              grouping-columns (:grouping-columns (local-env (group-env ag)))
-               grouping-columns-set (set grouping-columns)]
-             (->>
-              projections
-              (map-indexed
-               (fn [idx {:keys [identifier index outer-name]}]
-                 (cond-> (with-meta {:index idx} {:table table})
-                   identifier (assoc :identifier identifier)
-                   (and index (nil? identifier)) (assoc :original-index index)
-                   correlation-name (assoc :qualified-column [correlation-name identifier])
-                   outer-name (assoc :inner-name outer-name))))
-              (map #(if (and grouping-columns
-                             (not (contains? grouping-columns-set (:qualified-column %))))
-                      ;; TODO to be spec compliant this should really be as test for functional
-                      ;; dependency given our current lack of schema/index/unique constraints
-                      ;; this could prove hard, but we could explicitly look for xt/id
-                      (assoc % :invalid-ref-to-non-grouping-col true)
-                      %))))))
+    (let [{:keys [known-columns correlation-name derived-columns] :as table} (table ag)
+          projections (if-let [derived-columns (not-empty derived-columns)]
+                        (for [identifier derived-columns]
+                          {:identifier identifier})
+                        (if-let [subquery-ref (:subquery-ref (meta table))]
+                          (first (projected-columns subquery-ref))
+                          (map #(hash-map :identifier %) known-columns)))
+          grouping-columns (:grouping-columns (local-env (group-env ag)))
+          grouping-columns-set (set grouping-columns)]
+      (->>
+       projections
+       (map-indexed
+        (fn [idx {:keys [identifier index outer-name]}]
+          (cond-> (with-meta {:index idx} {:table table})
+            identifier (assoc :identifier identifier)
+            (and index (nil? identifier)) (assoc :original-index index)
+            correlation-name (assoc :qualified-column [correlation-name identifier])
+            outer-name (assoc :inner-name outer-name))))
+       (map #(if (and grouping-columns
+                      (not (contains? grouping-columns-set (:qualified-column %))))
+               ;; TODO to be spec compliant this should really be as test for functional
+               ;; dependency given our current lack of schema/index/unique constraints
+               ;; this could prove hard, but we could explicitly look for xt/id
+               (assoc % :invalid-ref-to-non-grouping-col true)
+               %))))
 
     :subquery
     []
@@ -609,7 +626,11 @@
                                   named-join-columns (for [identifier (named-columns-join-columns (r/parent ag))]
                                                        {:identifier identifier})
                                   column-references (all-column-references query-expression)
-                                  columns-from-asterisk (map #(select-keys % [:identifier]) (expand-asterisk ag)) #_(map #(hash-map :identifier %) known-columns)]
+                                  select-asterisk-references (set (all-select-asterisk-references query-specification))
+                                  columns-from-asterisk (if (or (contains? select-asterisk-references "*")
+                                                                (contains? select-asterisk-references correlation-name))
+                                                          (map #(select-keys % [:identifier]) (expand-asterisk ag))
+                                                          [])]
                               (->> (for [{:keys [identifiers] column-table-id :table-id} column-references
                                          :when (= table-id column-table-id)]
                                      {:identifier (last identifiers)})

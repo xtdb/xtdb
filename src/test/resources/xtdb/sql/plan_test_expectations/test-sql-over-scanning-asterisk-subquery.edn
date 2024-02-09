@@ -1,0 +1,11 @@
+[:rename
+ {x1 lastname, x2 name, x5 frame}
+ [:single-join
+  []
+  [:mega-join
+   []
+   [[:rename
+     {lastname x1, name x2}
+     [:scan {:table foo} [lastname name]]]
+    [:rename {} [:scan {:table bar} []]]]]
+  [:rename {frame x5} [:scan {:table baz} [frame]]]]]

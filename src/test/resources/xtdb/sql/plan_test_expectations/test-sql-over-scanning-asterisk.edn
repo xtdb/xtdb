@@ -1,0 +1,10 @@
+[:rename
+ {x1 lastname, x2 name, x4 jame, x5 lastjame}
+ [:mega-join
+  []
+  [[:rename
+    {lastname x1, name x2}
+    [:scan {:table foo} [lastname name]]]
+   [:rename
+    {jame x4, lastjame x5}
+    [:scan {:table bar} [jame lastjame]]]]]]
