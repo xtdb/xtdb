@@ -417,19 +417,35 @@
 
         nil))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode]
-  (let [^IntPredicate valid-query-pred (case mode
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode ^IRaQuerySource ra-src, wm-src
+                                                     query, {:keys [basis default-tz default-all-valid-time?]}]
+  (let [^PreparedQuery pq (.prepareRaQuery ra-src query)
+        ^IntPredicate valid-query-pred (case mode
                                          :assert-exists (reify IntPredicate
                                                           (test [_ i] (pos? i)))
                                          :assert-not-exists (reify IntPredicate
                                                               (test [_ i] (zero? i))))]
-    (reify RelationIndexer
-      (indexOp [_ in-rel _]
-        (let [row-count (.rowCount in-rel)]
-          (when-not (.test valid-query-pred row-count)
-            (throw (err/runtime-err :xtdb/assert-failed
-                                    {::err/message (format "Precondition failed: %s" (name mode))
-                                     :row-count row-count}))))))))
+    (fn eval-query [^RelationReader args]
+      (with-open [res (-> (.bind pq wm-src {:params args, :basis basis, :default-tz default-tz
+                                            :default-all-valid-time? default-all-valid-time?})
+                          (.openCursor))]
+
+        (doto (.tryAdvance res
+                           (reify Consumer
+                             (accept [_ in-rel]
+                               (let [^RelationReader in-rel in-rel]
+                                 (assert (= 1 (.rowCount in-rel)))
+                                 (assert (= 1 (count (seq in-rel))))
+
+                                 (let [row-count (.getLong ^IVectorReader (first in-rel) 0)]
+                                   (when-not (.test valid-query-pred row-count)
+                                     (throw (err/runtime-err :xtdb/assert-failed
+                                                             {::err/message (format "Precondition failed: %s" (name mode))
+                                                              :row-count row-count}))))))))
+          (assert "expecting a batch in assert"))
+
+        (assert (not (.tryAdvance res nil))
+                "only expecting one batch in assert")))))
 
 (defn- wrap-xtql-args [f]
   (fn [^RelationReader args]
@@ -445,9 +461,7 @@
         args-rdr (.structKeyReader xtql-leg "args")
         upsert-idxer (->upsert-rel-indexer live-idx-tx tx-opts)
         delete-idxer (->delete-rel-indexer live-idx-tx)
-        erase-idxer (->erase-rel-indexer live-idx-tx)
-        assert-exists-idxer (->assert-idxer :assert-exists)
-        assert-not-exists-idxer (->assert-idxer :assert-not-exists)]
+        erase-idxer (->erase-rel-indexer live-idx-tx)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [xtql-op (.form ^ClojureForm (.getObject op-rdr tx-op-idx))
@@ -476,14 +490,14 @@
                              (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts query-opts)
                                  (wrap-xtql-args)))
 
-            [:assert-not-exists query-opts inner-query]
+            [:assert-not-exists _query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src assert-not-exists-idxer inner-query tx-opts query-opts)
+                             (-> (->assert-idxer :assert-not-exists ra-src wm-src inner-query tx-opts)
                                  (wrap-xtql-args)))
 
-            [:assert-exists query-opts inner-query]
+            [:assert-exists _query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src assert-exists-idxer inner-query tx-opts query-opts)
+                             (-> (->assert-idxer :assert-exists ra-src wm-src inner-query tx-opts)
                                  (wrap-xtql-args)))
 
             (throw (UnsupportedOperationException. "xtql query"))))

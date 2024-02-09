@@ -995,11 +995,17 @@
 
   TxOp$AssertNotExists
   (plan-dml [query _tx-opts]
-    [:assert-not-exists {} (:ra-plan (plan-query (.query query)))])
+    [:assert-not-exists {}
+     [:group-by '[{n (row-count)}]
+      [:top {:limit 1}
+       (:ra-plan (plan-query (.query query)))]]])
 
   TxOp$AssertExists
   (plan-dml [query _tx-opts]
-    [:assert-exists {} (:ra-plan (plan-query (.query query)))]))
+    [:assert-exists {}
+     [:group-by '[{n (row-count)}]
+      [:top {:limit 1}
+       (:ra-plan (plan-query (.query query)))]]]))
 
 (defn compile-dml [query {:keys [table-info] :as tx-opts}]
   (let [ra-plan (binding [*gensym* (seeded-gensym "_" 0)

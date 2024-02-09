@@ -593,3 +593,28 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
       (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
       (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
                (xt/q node '(from :docs [{:xt/id e} inst])))))))
+
+(deftest assert-exists-on-empty-tables-3061
+  (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:xt/id :john}])]])
+
+  (t/is (= [{:xt/id 0,
+             :xt/committed? false,
+             :xt/error #xt/runtime-err [:xtdb/assert-failed
+                                        "Precondition failed: assert-exists"
+                                        {:row-count 0}]}]
+           (xt/q tu/*node*
+                 '(from :xt/txs [xt/id xt/committed? xt/error])))
+
+        "assert fails on empty table")
+
+  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :not-john}]
+                           [:assert-exists '(from :users [{:xt/id :john}])]])
+
+  (t/is (= [{:xt/id 1,
+             :xt/committed? false,
+             :xt/error #xt/runtime-err [:xtdb/assert-failed
+                                        "Precondition failed: assert-exists"
+                                        {:row-count 0}]}]
+           (xt/q tu/*node*
+                 '(from :xt/txs [{:xt/id 1} xt/id xt/committed? xt/error])))
+        "when the table has an (non-matching) entry the assert also fails"))
