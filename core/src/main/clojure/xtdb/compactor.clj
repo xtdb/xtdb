@@ -1,8 +1,7 @@
 (ns xtdb.compactor
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            xtdb.buffer-pool
-            xtdb.object-store
+            [xtdb.bitemporal :as bitemp]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -18,6 +17,7 @@
            (xtdb.trie EventRowPointer IDataRel)
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
+           xtdb.vector.IVectorWriter
            xtdb.vector.RelationReader))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -48,13 +48,15 @@
 
               pos)))))))
 
-(defn merge-segments-into [^IRelationWriter data-rel-wtr, segments]
+(defn merge-segments-into [^IRelationWriter data-rel-wtr, ^IVectorWriter recency-wtr, segments]
   (let [reader->copier (->reader->copier data-rel-wtr)
+        calculate-polygon (bitemp/polygon-calculator)
+
         is-valid-ptr (ArrowBufPointer.)]
 
     (letfn [(merge-nodes! [path [mn-tag & mn-args]]
               (case mn-tag
-                :branch (dorun (first mn-args)) ; runs the side-effects in the nested nodes
+                :branch-iid (dorun (first mn-args)) ; runs the side-effects in the nested nodes
 
                 :leaf (let [[segments nodes] mn-args
                             data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
@@ -71,6 +73,9 @@
                           (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
                             (.copyRow row-copier (.getIndex ev-ptr))
 
+                            (.writeLong recency-wtr
+                                        (.getRecency ^IPolygonReader (calculate-polygon ev-ptr)))
+
                             (.nextIndex ev-ptr)
                             (when (.isValid ev-ptr is-valid-ptr path)
                               (.add merge-q q-obj))
@@ -79,6 +84,7 @@
       (trie/postwalk-merge-plan segments merge-nodes!)
 
       (.syncRowCount data-rel-wtr)
+      (.syncValueCount recency-wtr)
       nil)))
 
 (defn ->log-data-rel-schema [data-rels]
@@ -88,6 +94,10 @@
                                    (.getChildren) ^Field first
                                    types/field->col-type))
                              (apply types/merge-col-types))))
+
+(defn open-recency-wtr [allocator]
+  (vw/->vec-writer allocator "xt$recency"
+                   (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, {:keys [page-size]}
                             {:keys [^Path table-path trie-keys out-trie-key]}]
@@ -105,13 +115,14 @@
                            data-rels)
             schema (->log-data-rel-schema (map :data-rel segments))]
 
-        (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator schema)]
-          (merge-segments-into data-rel-wtr segments)
+        (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator schema)
+                         recency-wtr (open-recency-wtr allocator)]
+          (merge-segments-into data-rel-wtr recency-wtr segments)
 
           (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
                                                            schema table-path out-trie-key)]
 
-            (Compactor/writeRelation trie-wtr (vw/rel-wtr->rdr data-rel-wtr) page-size)))))
+            (Compactor/writeRelation trie-wtr (vw/rel-wtr->rdr data-rel-wtr) (vw/vec-wtr->rdr recency-wtr) page-size)))))
 
     (log/infof "compacted '%s' -> '%s'." table-path out-trie-key)
 

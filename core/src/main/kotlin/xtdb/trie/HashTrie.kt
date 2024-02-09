@@ -4,9 +4,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import java.util.*
 import java.util.stream.Stream
 
-internal const val LEVEL_BITS: Int = 2
-internal const val LEVEL_WIDTH: Int = 1 shl LEVEL_BITS
-internal const val LEVEL_MASK: Int = LEVEL_WIDTH - 1
+internal typealias RecencyArray = LongArray
 
 interface HashTrie<N : HashTrie.Node<N>> {
     val rootNode: N?
@@ -16,18 +14,27 @@ interface HashTrie<N : HashTrie.Node<N>> {
     interface Node<N : Node<N>> {
         val path: ByteArray
 
-        val children: Array<N?>?
+        val iidChildren: Array<N?>?
+
+        val recencies: RecencyArray?
+        fun recencyNode(idx: Int): N
 
         fun leafStream(): Stream<out Node<N>> =
-            if (children == null)
+            if (iidChildren == null)
                 Stream.of(this)
             else
-                Arrays.stream(children).flatMap { child -> child?.leafStream() }
+                Arrays.stream(iidChildren).flatMap { child -> child?.leafStream() }
 
         val leaves: List<Node<N>> get() = leafStream().toList()
     }
 
+    @Suppress("MemberVisibilityCanBePrivate")
     companion object {
+
+        const val LEVEL_BITS: Int = 2
+        const val LEVEL_WIDTH: Int = 1 shl LEVEL_BITS
+        const val LEVEL_MASK: Int = LEVEL_WIDTH - 1
+
         @JvmStatic
         fun bucketFor(pointer: ArrowBufPointer, level: Int): Byte {
             val bitIdx = level * LEVEL_BITS

@@ -6,7 +6,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "typeIds" : [0,1,2,3]
       },
       "children" : [{
         "name" : "nil",
@@ -16,7 +16,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "branch",
+        "name" : "branch-iid",
         "nullable" : false,
         "type" : {
           "name" : "list"
@@ -30,6 +30,39 @@
             "isSigned" : true
           },
           "children" : [ ]
+        }]
+      },{
+        "name" : "branch-recency",
+        "nullable" : false,
+        "type" : {
+          "name" : "map",
+          "keysSorted" : true
+        },
+        "children" : [{
+          "name" : "entries",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "recency",
+            "nullable" : false,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "idx",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 32,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
         }]
       },{
         "name" : "leaf",
@@ -159,17 +192,17 @@
     }]
   },
   "batches" : [{
-    "count" : 5,
+    "count" : 6,
     "columns" : [{
       "name" : "nodes",
-      "count" : 5,
-      "TYPE_ID" : [2,2,2,2,1],
-      "OFFSET" : [0,1,2,3,0],
+      "count" : 6,
+      "TYPE_ID" : [3,3,3,3,1,2],
+      "OFFSET" : [0,1,2,3,0,0],
       "children" : [{
         "name" : "nil",
         "count" : 0
       },{
-        "name" : "branch",
+        "name" : "branch-iid",
         "count" : 1,
         "VALIDITY" : [1],
         "OFFSET" : [0,4],
@@ -178,6 +211,27 @@
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
           "DATA" : [0,1,2,3]
+        }]
+      },{
+        "name" : "branch-recency",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "entries",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "children" : [{
+            "name" : "recency",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [9223372036854775807]
+          },{
+            "name" : "idx",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [4]
+          }]
         }]
       },{
         "name" : "leaf",

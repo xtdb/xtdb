@@ -22,7 +22,7 @@
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource Period)
-           (java.util LinkedList)
+           (java.util LinkedList TreeMap)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -308,8 +308,13 @@
           meta-wp (.writerPosition meta-wtr)
           nodes-wtr (.colWriter meta-wtr "nodes")
           nil-wtr (.legWriter nodes-wtr :nil)
-          branch-wtr (.legWriter nodes-wtr :branch)
-          branch-el-wtr (.listElementWriter branch-wtr)
+          iid-branch-wtr (.legWriter nodes-wtr :branch-iid)
+          iid-branch-el-wtr (.listElementWriter iid-branch-wtr)
+          recency-branch-wtr (.legWriter nodes-wtr :branch-recency)
+          recency-branch-el-wtr (.listElementWriter recency-branch-wtr)
+          recency-wtr (.structKeyWriter recency-branch-el-wtr "recency")
+          recency-idx-wtr (.structKeyWriter recency-branch-el-wtr "idx")
+
           data-wtr (.legWriter nodes-wtr :leaf)
           data-page-idx-wtr (.structKeyWriter data-wtr "data-page-idx")
           metadata-wtr (.structKeyWriter data-wtr "columns")]
@@ -331,14 +336,30 @@
                                                            (write-paths child)
                                                            (dec (.getPosition meta-wp)))
                                                          -1)))
-                                    (.startList branch-wtr)
+                                    (.startList iid-branch-wtr)
                                     (.forEach (.build !page-idxs)
                                               (reify IntConsumer
                                                 (accept [_ idx]
                                                   (if (= idx -1)
-                                                    (.writeNull branch-el-wtr)
-                                                    (.writeInt branch-el-wtr idx)))))
-                                    (.endList branch-wtr)))
+                                                    (.writeNull iid-branch-el-wtr)
+                                                    (.writeInt iid-branch-el-wtr idx)))))
+                                    (.endList iid-branch-wtr))
+
+                  (map? paths) (let [!page-idxs (TreeMap.)]
+                                 (doseq [[recency child] paths]
+                                   (write-paths child)
+                                   (.put !page-idxs recency (dec (.getPosition meta-wp))))
+
+                                 (.startList recency-branch-wtr)
+
+                                 (doseq [[^long recency, ^long idx] !page-idxs]
+                                   (.startStruct recency-branch-el-wtr)
+                                   (.writeLong recency-wtr recency)
+                                   (.writeInt recency-idx-wtr idx)
+                                   (.endStruct recency-branch-el-wtr))
+
+                                 (.endList recency-branch-wtr)))
+
                 (.endRow meta-wtr))]
         (write-paths paths))
 

@@ -6,7 +6,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "typeIds" : [0,1,2,3]
       },
       "children" : [{
         "name" : "nil",
@@ -16,7 +16,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "branch",
+        "name" : "branch-iid",
         "nullable" : false,
         "type" : {
           "name" : "list"
@@ -30,6 +30,39 @@
             "isSigned" : true
           },
           "children" : [ ]
+        }]
+      },{
+        "name" : "branch-recency",
+        "nullable" : false,
+        "type" : {
+          "name" : "map",
+          "keysSorted" : true
+        },
+        "children" : [{
+          "name" : "entries",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "recency",
+            "nullable" : false,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "idx",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 32,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
         }]
       },{
         "name" : "leaf",
@@ -177,13 +210,13 @@
     "columns" : [{
       "name" : "nodes",
       "count" : 1,
-      "TYPE_ID" : [2],
+      "TYPE_ID" : [3],
       "OFFSET" : [0],
       "children" : [{
         "name" : "nil",
         "count" : 0
       },{
-        "name" : "branch",
+        "name" : "branch-iid",
         "count" : 0,
         "VALIDITY" : [ ],
         "OFFSET" : [0],
@@ -192,6 +225,27 @@
           "count" : 0,
           "VALIDITY" : [ ],
           "DATA" : [ ]
+        }]
+      },{
+        "name" : "branch-recency",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "children" : [{
+          "name" : "entries",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "recency",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "idx",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
         }]
       },{
         "name" : "leaf",

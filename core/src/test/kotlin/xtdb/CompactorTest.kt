@@ -66,7 +66,7 @@ internal class CompactorTest {
         usingIidReader(allocator, emptyList()) { iidReader ->
             assertArrayEquals(
                 arrayOfNulls(4),
-                IntArray(0) { it }.partitionSelection(iidReader, 0),
+                IntArray(0) { it }.iidPartitions(iidReader, 0),
                 "empty selection"
             )
         }
@@ -90,7 +90,7 @@ internal class CompactorTest {
         )
 
         usingIidReader(allocator, iids) { iidReader ->
-            val l0Selection = IntArray(9) { it }.partitionSelection(iidReader, 0)
+            val l0Selection = IntArray(9) { it }.iidPartitions(iidReader, 0)
 
             assertArrayEquals(
                 arrayOf(intArrayOf(0, 1), intArrayOf(2, 3, 4, 5), null, intArrayOf(6, 7, 8)),
@@ -100,19 +100,19 @@ internal class CompactorTest {
 
             assertArrayEquals(
                 arrayOf(intArrayOf(2), intArrayOf(3), null, intArrayOf(4, 5)),
-                l0Selection[1]!!.partitionSelection(iidReader, 1),
+                l0Selection[1]!!.iidPartitions(iidReader, 1),
                 "second level, idx 1"
             )
 
             assertArrayEquals(
                 arrayOf(null, intArrayOf(6, 7), intArrayOf(8), null),
-                l0Selection[3]!!.partitionSelection(iidReader, 1),
+                l0Selection[3]!!.iidPartitions(iidReader, 1),
                 "second level, idx 3"
             )
 
             assertArrayEquals(
                 arrayOf(null, IntArray(9) { it }, null, null),
-                IntArray(9) { it }.partitionSelection(iidReader, 3),
+                IntArray(9) { it }.iidPartitions(iidReader, 3),
                 "nothing in first or last partitions"
             )
         }

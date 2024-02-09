@@ -72,9 +72,10 @@
     (let [segments [{:trie (.compactLogs (li/live-trie lt0)), :data-rel (tu/->live-data-rel lt0)}
                     {:trie (.compactLogs (li/live-trie lt1)), :data-rel (tu/->live-data-rel lt1)}]]
 
-      (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))]
+      (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
+                       recency-wtr (c/open-recency-wtr tu/*allocator*)]
 
-        (c/merge-segments-into data-rel-wtr segments)
+        (c/merge-segments-into data-rel-wtr recency-wtr segments)
 
         (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                    :xt/system-from (time/->zdt #inst "2023")
@@ -109,14 +110,18 @@
 
                  (-> (vw/rel-wtr->rdr data-rel-wtr)
                      (vr/rel->rows)
-                     (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))))))
+                     (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))
+
+        (t/is (= [nil (time/->zdt #inst "2023") (time/->zdt #inst "2021")
+                  nil (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
+                 (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals)))))))
 
 (t/deftest test-e2e
   (let [node-dir (util/->path "target/compactor/test-e2e")]
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 32]
-      (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
                     (xt/submit-tx node (for [x batch]
@@ -131,11 +136,13 @@
           (submit! (range 100))
           (tu/then-await-tx node)
           (c/compact-all! node)
+
           (t/is (= (range 100) (q)))
 
           (submit! (range 100 200))
           (tu/then-await-tx node)
           (c/compact-all! node)
+
           (t/is (= (range 200) (q)))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e")))

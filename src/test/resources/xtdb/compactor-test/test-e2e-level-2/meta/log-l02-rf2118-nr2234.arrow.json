@@ -6,7 +6,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "typeIds" : [0,1,2,3]
       },
       "children" : [{
         "name" : "nil",
@@ -16,7 +16,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "branch",
+        "name" : "branch-iid",
         "nullable" : false,
         "type" : {
           "name" : "list"
@@ -30,6 +30,39 @@
             "isSigned" : true
           },
           "children" : [ ]
+        }]
+      },{
+        "name" : "branch-recency",
+        "nullable" : false,
+        "type" : {
+          "name" : "map",
+          "keysSorted" : true
+        },
+        "children" : [{
+          "name" : "entries",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "recency",
+            "nullable" : false,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "idx",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 32,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
         }]
       },{
         "name" : "leaf",
@@ -159,17 +192,17 @@
     }]
   },
   "batches" : [{
-    "count" : 21,
+    "count" : 26,
     "columns" : [{
       "name" : "nodes",
-      "count" : 21,
-      "TYPE_ID" : [2,2,2,2,1,2,2,2,2,1,2,2,2,2,1,2,2,2,2,1,1],
-      "OFFSET" : [0,1,2,3,0,4,5,6,7,1,8,9,10,11,2,12,13,14,15,3,4],
+      "count" : 26,
+      "TYPE_ID" : [3,3,3,3,1,2,3,3,3,3,1,2,3,3,3,3,1,2,3,3,3,3,1,2,1,2],
+      "OFFSET" : [0,1,2,3,0,0,4,5,6,7,1,1,8,9,10,11,2,2,12,13,14,15,3,3,4,4],
       "children" : [{
         "name" : "nil",
         "count" : 0
       },{
-        "name" : "branch",
+        "name" : "branch-iid",
         "count" : 5,
         "VALIDITY" : [1,1,1,1,1],
         "OFFSET" : [0,4,8,12,16,20],
@@ -177,7 +210,28 @@
           "name" : "$data$",
           "count" : 20,
           "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-          "DATA" : [0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,4,9,14,19]
+          "DATA" : [0,1,2,3,6,7,8,9,12,13,14,15,18,19,20,21,5,11,17,23]
+        }]
+      },{
+        "name" : "branch-recency",
+        "count" : 5,
+        "VALIDITY" : [1,1,1,1,1],
+        "OFFSET" : [0,1,2,3,4,5],
+        "children" : [{
+          "name" : "entries",
+          "count" : 5,
+          "VALIDITY" : [1,1,1,1,1],
+          "children" : [{
+            "name" : "recency",
+            "count" : 5,
+            "VALIDITY" : [1,1,1,1,1],
+            "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+          },{
+            "name" : "idx",
+            "count" : 5,
+            "VALIDITY" : [1,1,1,1,1],
+            "DATA" : [4,10,16,22,24]
+          }]
         }]
       },{
         "name" : "leaf",
