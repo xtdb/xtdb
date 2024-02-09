@@ -523,14 +523,14 @@
                     (t/is (= :utf8
                              (types/field->col-type (.columnField mm "device_info" "xt$id")))))
 
-                  (doseq [^Node node [new-node node]]
+                  (doseq [node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
                                                     (tu/then-await-tx node (Duration/ofSeconds 15)))))
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
                   (Thread/sleep 250) ; wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                  (doseq [^Node node [new-node node]
+                  (doseq [node [new-node node]
                           :let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 

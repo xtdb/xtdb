@@ -11,30 +11,35 @@
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
 
-(defn polygon-calculator ^xtdb.bitemporal.Polygon [^TemporalBounds temporal-bounds]
-  (let [skip-iid-ptr (ArrowBufPointer.)
-        prev-iid-ptr (ArrowBufPointer.)
-        current-iid-ptr (ArrowBufPointer.)
+(defn polygon-calculator
+  (^xtdb.bitemporal.Polygon [] (polygon-calculator nil))
 
-        ceiling (Ceiling.)
-        polygon (Polygon.)]
+  (^xtdb.bitemporal.Polygon [^TemporalBounds temporal-bounds]
+   (let [skip-iid-ptr (ArrowBufPointer.)
+         prev-iid-ptr (ArrowBufPointer.)
+         current-iid-ptr (ArrowBufPointer.)
 
-    (fn calculate-polygon [^EventRowPointer ev-ptr]
-      (when-not (= skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
-        (when-not (= prev-iid-ptr current-iid-ptr)
-          (.reset ceiling)
-          (duplicate-ptr prev-iid-ptr current-iid-ptr))
+         ceiling (Ceiling.)
+         polygon (Polygon.)]
 
-        (let [leg (.getOp ev-ptr)]
-          (if (= :erase leg)
-            (do
-              (.reset ceiling)
-              (duplicate-ptr skip-iid-ptr current-iid-ptr)
-              nil)
+     (fn calculate-polygon [^EventRowPointer ev-ptr]
+       (when-not (= skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
+         (when-not (= prev-iid-ptr current-iid-ptr)
+           (.reset ceiling)
+           (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-            (let [system-from (.getSystemFrom ev-ptr)]
-              (when (.inRange (.getSystemFrom temporal-bounds) system-from)
-                (.calculateFor polygon ceiling ev-ptr)
-                (.applyLog ceiling system-from
-                           (.getValidFrom ev-ptr 0) (.getValidTo ev-ptr (dec (.getValidTimeRangeCount ev-ptr))))
-                polygon))))))))
+         (let [leg (.getOp ev-ptr)]
+           (if (= :erase leg)
+             (do
+               (.reset ceiling)
+               (duplicate-ptr skip-iid-ptr current-iid-ptr)
+               nil)
+
+             (let [system-from (.getSystemFrom ev-ptr)
+                   valid-from (.getValidFrom ev-ptr)
+                   valid-to (.getValidTo ev-ptr)]
+               (when (or (nil? temporal-bounds)
+                         (.inRange (.getSystemFrom temporal-bounds) system-from))
+                 (.calculateFor polygon ceiling valid-from valid-to)
+                 (.applyLog ceiling system-from valid-from valid-to)
+                 polygon)))))))))

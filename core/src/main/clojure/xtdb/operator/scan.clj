@@ -323,7 +323,7 @@
   (letfn [(merge-tasks* [path [mn-tag & mn-args]]
             (when (path-pred path)
               (case mn-tag
-                :branch (into [] cat (first mn-args))
+                :branch-iid (into [] cat (first mn-args))
                 :leaf (let [[segments trie-nodes] mn-args
                             ^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)
                             trie-nodes-it (.iterator ^Iterable trie-nodes)

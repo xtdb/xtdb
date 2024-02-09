@@ -36,8 +36,6 @@ import static java.time.temporal.ChronoUnit.MICROS;
 public class ValueVectorReader implements IVectorReader {
     private static final IFn VEC_TO_READER = Clojure.var("xtdb.vector.reader", "vec->reader");
 
-    private static final Keyword ABSENT_KEYWORD = Keyword.intern("xtdb", "absent");
-
     public static IVectorReader from(ValueVector v) {
         return (IVectorReader) VEC_TO_READER.invoke(v);
     }

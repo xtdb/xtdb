@@ -4,40 +4,75 @@ import org.apache.arrow.vector.IntVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.StructVector
+import xtdb.vector.ValueVectorReader.from
 
-private const val BRANCH_TYPE_ID: Byte = 1
-private const val LEAF_TYPE_ID: Byte = 2
+private const val BRANCH_IID_TYPE_ID: Byte = 1
+private const val BRANCH_RECENCY_TYPE_ID: Byte = 2
+private const val LEAF_TYPE_ID: Byte = 3
 
 class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
     HashTrie<ArrowHashTrie.Node> {
 
-    private val branchVec: ListVector = nodesVec.getVectorByType(BRANCH_TYPE_ID) as ListVector
-    private val branchElVec: IntVector = branchVec.dataVector as IntVector
+    private val iidBranchVec: ListVector = nodesVec.getVectorByType(BRANCH_IID_TYPE_ID) as ListVector
+    private val iidBranchElVec: IntVector = iidBranchVec.dataVector as IntVector
+
+    private val recencyBranchVec = from(nodesVec.getVectorByType(BRANCH_RECENCY_TYPE_ID))
+    private val recencyVec = recencyBranchVec.mapKeyReader()
+    private val recencyIdxVec = recencyBranchVec.mapValueReader()
+
     private val dataPageIdxVec: IntVector =
         (nodesVec.getVectorByType(LEAF_TYPE_ID) as StructVector)
             .getChild("data-page-idx", IntVector::class.java)
 
     interface Node : HashTrie.Node<Node>
 
-    inner class Branch(override val path: ByteArray, private val branchVecIdx: Int) : Node {
-        override val children: Array<Node?>
-            get() {
-                val startIdx = branchVec.getElementStartIndex(branchVecIdx)
+    inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node {
+        private val startIdx = iidBranchVec.getElementStartIndex(branchVecIdx)
+        private val count = iidBranchVec.getElementEndIndex(branchVecIdx) - startIdx
 
-                return Array(branchVec.getElementEndIndex(branchVecIdx) - startIdx) { childBucket ->
+        override val iidChildren: Array<Node?>
+            get() {
+                val startIdx = startIdx
+
+                return Array(count) { childBucket ->
                     val childIdx = childBucket + startIdx
-                    if (branchElVec.isNull(childIdx))
+                    if (iidBranchElVec.isNull(childIdx))
                         null
                     else
-                        forIndex(conjPath(path, childBucket.toByte()), branchElVec[childIdx])
+                        forIndex(conjPath(path, childBucket.toByte()), iidBranchElVec[childIdx])
                 }
             }
+
+        override val recencies = null
+        override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
+    }
+
+    inner class RecencyBranch(override val path: ByteArray, branchVecIdx: Int) : Node {
+
+        override val iidChildren = null
+
+        private val startIdx = recencyBranchVec.getListStartIndex(branchVecIdx)
+        private val count = recencyBranchVec.getListCount(branchVecIdx)
+
+        override val recencies: RecencyArray
+            get() {
+                val startIdx = startIdx
+                return RecencyArray(count) { idx ->
+                    recencyVec.getLong(idx + startIdx)
+                }
+            }
+
+        override fun recencyNode(idx: Int) =
+            checkNotNull(forIndex(path, recencyIdxVec.getInt(startIdx + idx)))
+
     }
 
     inner class Leaf(override val path: ByteArray, private val leafOffset: Int) : Node {
         val dataPageIndex: Int get() = dataPageIdxVec[leafOffset]
 
-        override val children = null
+        override val iidChildren = null
+        override val recencies = null
+        override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
     }
 
     private fun forIndex(path: ByteArray, idx: Int): Node? {
@@ -45,7 +80,8 @@ class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
 
         return when (nodesVec.getTypeId(idx)) {
             0.toByte() -> null
-            BRANCH_TYPE_ID -> Branch(path, nodeOffset)
+            BRANCH_IID_TYPE_ID -> IidBranch(path, nodeOffset)
+            BRANCH_RECENCY_TYPE_ID -> RecencyBranch(path, nodeOffset)
             LEAF_TYPE_ID -> Leaf(path, nodeOffset)
             else -> throw UnsupportedOperationException()
         }

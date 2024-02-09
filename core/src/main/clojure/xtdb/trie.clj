@@ -11,13 +11,14 @@
            java.security.MessageDigest
            (java.util ArrayList Arrays List)
            (java.util.concurrent.atomic AtomicInteger)
-           (java.util.function IntConsumer Supplier)
+           (java.util.function IntConsumer IntFunction Supplier)
+           [java.util.stream IntStream]
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf ITrieWriter)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -55,23 +56,28 @@
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            (types/col-type->field "nil" :null)
-                           (types/col-type->field "branch" [:list [:union #{:null :i32}]])
+                           (types/col-type->field "branch-iid" [:list [:union #{:null :i32}]])
+                           (types/->field "branch-recency" #xt.arrow/type [:map {:sorted? true}] false
+                                          (types/->field "recency-el" #xt.arrow/type :struct false
+                                                         (types/col-type->field "recency" types/temporal-col-type)
+                                                         (types/col-type->field "idx" [:union #{:null :i32}])))
+
                            (types/col-type->field "leaf" [:struct {'data-page-idx :i32
                                                                    'columns meta/metadata-col-type}]))]))
 
 (defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [put-doc-col-type]
   (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
             (types/col-type->field "xt$system_from" types/temporal-col-type)
-            (types/col-type->field "xt$valid_times" [:list types/temporal-col-type])
-            (types/col-type->field "xt$system_time_ceilings" [:list types/temporal-col-type])
+            (types/col-type->field "xt$valid_from" types/temporal-col-type)
+            (types/col-type->field "xt$valid_to" types/temporal-col-type)
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            (types/col-type->field "put" put-doc-col-type)
                            (types/col-type->field "delete" :null)
                            (types/col-type->field "erase" :null))]))
 
-(defn open-log-data-root
+(defn open-log-data-wtr
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-   (open-log-data-root allocator (data-rel-schema [:struct {}])))
+   (open-log-data-wtr allocator (data-rel-schema [:struct {}])))
 
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
@@ -89,8 +95,13 @@
           node-wtr (.colWriter meta-rel-wtr "nodes")
           node-wp (.writerPosition node-wtr)
 
-          branch-wtr (.legWriter node-wtr :branch)
-          branch-el-wtr (.listElementWriter branch-wtr)
+          iid-branch-wtr (.legWriter node-wtr :branch-iid)
+          iid-branch-el-wtr (.listElementWriter iid-branch-wtr)
+
+          recency-branch-wtr (.legWriter node-wtr :branch-recency)
+          recency-el-wtr (.listElementWriter recency-branch-wtr)
+          recency-wtr (.structKeyWriter recency-el-wtr "recency")
+          recency-idx-wtr (.structKeyWriter recency-el-wtr "idx")
 
           leaf-wtr (.legWriter node-wtr :leaf)
           page-idx-wtr (.structKeyWriter leaf-wtr "data-page-idx")
@@ -121,24 +132,38 @@
             (.endStruct leaf-wtr)
             (.endRow meta-rel-wtr)
 
-
             (.writeBatch data-file-wtr)
             (.clear data-rel-wtr)
             (.clear data-vsr)
 
             meta-pos))
 
-        (writeBranch [_ idxs]
+        (writeRecencyBranch [_ buckets]
           (let [pos (.getPosition node-wp)]
-            (.startList branch-wtr)
+            (.startList recency-branch-wtr)
+
+            (doseq [[^long recency, ^long idx] buckets]
+              (.startStruct recency-el-wtr)
+              (.writeLong recency-wtr recency)
+              (.writeInt recency-idx-wtr idx)
+              (.endStruct recency-el-wtr))
+
+            (.endList recency-branch-wtr)
+            (.endRow meta-rel-wtr)
+
+            pos))
+
+        (writeIidBranch [_ idxs]
+          (let [pos (.getPosition node-wp)]
+            (.startList iid-branch-wtr)
 
             (dotimes [n (alength idxs)]
               (let [idx (aget idxs n)]
                 (if (= idx -1)
-                  (.writeNull branch-el-wtr)
-                  (.writeInt branch-el-wtr idx))))
+                  (.writeNull iid-branch-el-wtr)
+                  (.writeInt iid-branch-el-wtr idx))))
 
-            (.endList branch-wtr)
+            (.endList iid-branch-wtr)
             (.endRow meta-rel-wtr)
 
             pos))
@@ -160,7 +185,7 @@
 (defn write-live-trie-node [^ITrieWriter trie-wtr, ^HashTrie$Node node, ^RelationReader data-rel]
   (let [copier (vw/->rel-copier (.getDataWriter trie-wtr) data-rel)]
     (letfn [(write-node! [^HashTrie$Node node]
-              (if-let [children (.getChildren node)]
+              (if-let [children (.getIidChildren node)]
                 (let [child-count (alength children)
                       !idxs (int-array child-count)]
                   (dotimes [n child-count]
@@ -170,7 +195,7 @@
                              (write-node! child)
                              -1))))
 
-                  (.writeBranch trie-wtr !idxs))
+                  (.writeIidBranch trie-wtr !idxs))
 
                 (let [^LiveHashTrie$Leaf leaf node]
                   (-> (Arrays/stream (.getData leaf))
@@ -236,27 +261,47 @@
        trie :: HashTrie
 
    f :: path, merge-node -> ret
-     merge-node :: [:branch [ret]]
+     merge-node :: [:branch-iid [ret]]
                  | [:leaf [Segment] [HashTrie$Node]]"
   [segments f]
 
   (letfn [(postwalk* [segments nodes path-vec]
-            (let [trie-children (mapv #(some-> ^HashTrie$Node % (.getChildren)) nodes)
-                  path (byte-array path-vec)]
-              (f path
-                 (if-let [^objects first-children (some identity trie-children)]
-                   [:branch (lazy-seq
-                             (->> (range (alength first-children))
-                                  (mapv (fn [bucket-idx]
-                                          (postwalk* segments
-                                                     (mapv (fn [node ^objects node-children]
-                                                             (if node-children
-                                                               (aget node-children bucket-idx)
-                                                               node))
-                                                           nodes trie-children)
-                                                     (conj path-vec bucket-idx))))))]
+            (let [recencies (mapv #(some-> ^HashTrie$Node % (.getRecencies)) nodes)]
+              (if (some some? recencies)
+                ;; TODO apply recency filter
+                ;; TODO probably loads of garbage and boxing in this `recur`
+                (recur (mapcat (fn [segment ^longs recencies]
+                                 (if (nil? recencies)
+                                   [segment]
+                                   (repeat (alength recencies) segment)))
+                               segments recencies)
+                       (mapcat (fn [^HashTrie$Node node ^longs recencies]
+                                 (if (nil? recencies)
+                                   [node]
+                                   (-> (IntStream/range 0 (alength recencies))
+                                       (.mapToObj (reify IntFunction
+                                                    (apply [_ idx]
+                                                      (.recencyNode node idx))))
+                                       (.toList))))
+                               nodes recencies)
+                       path-vec)
 
-                   [:leaf segments nodes]))))]
+                (let [trie-children (mapv #(some-> ^HashTrie$Node % (.getIidChildren)) nodes)
+                      path (byte-array path-vec)]
+                  (f path
+                     (if (some some? trie-children)
+                       [:branch-iid (lazy-seq
+                                     (->> (range HashTrie/LEVEL_WIDTH)
+                                          (mapv (fn [bucket-idx]
+                                                  (postwalk* segments
+                                                             (mapv (fn [node ^objects node-children]
+                                                                     (if node-children
+                                                                       (aget node-children bucket-idx)
+                                                                       node))
+                                                                   nodes trie-children)
+                                                             (conj path-vec bucket-idx))))))]
+
+                       [:leaf segments nodes]))))))]
 
     (postwalk* segments
                (mapv (fn [{:keys [^HashTrie trie]}]

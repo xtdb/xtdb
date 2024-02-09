@@ -2,7 +2,8 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.time :as time])
   (:import (org.apache.arrow.memory RootAllocator)
            org.apache.arrow.vector.VectorSchemaRoot
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
@@ -12,31 +13,40 @@
             (ArrowHashTrie. (.getVector meta-root "nodes")))]
 
     (with-open [al (RootAllocator.)
-                t1-root (tu/open-arrow-hash-trie-root al [[nil 0 nil 1] 2 nil 3])
+                t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
+                                                          {Long/MAX_VALUE 3, (time/instant->micros (time/->instant #inst "2023-01-01")) 4}])
                 log-root (tu/open-arrow-hash-trie-root al 0)
                 log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
 
       (t/is (= {:path [],
-                :node [:branch
+                :node [:branch-iid
                        [{:path [0],
-                         :node [:branch
-                                [{:path [0 0], :node [:leaf [nil nil {:page-idx 0} nil]]}
-                                 {:path [0 1], :node [:leaf [nil {:page-idx 0} {:page-idx 0} nil]]}
-                                 {:path [0 2], :node [:leaf [nil nil {:page-idx 0} nil]]}
-                                 {:path [0 3], :node [:leaf [nil {:page-idx 1} {:page-idx 0} nil]]}]]}
-                        {:path [1], :node [:leaf [nil {:page-idx 2} {:page-idx 0} nil]]}
-                        {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
-                        {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
-               (trie/postwalk-merge-plan [nil {:trie (->arrow-hash-trie t1-root)} {:trie (->arrow-hash-trie log-root)} {:trie (->arrow-hash-trie log2-root)}]
+                         :node [:branch-iid
+                                [{:path [0 0], :node [:leaf [nil nil {:seg :log, :page-idx 0} nil]]}
+                                 {:path [0 1], :node [:leaf [nil {:seg :t1, :page-idx 0} {:seg :log, :page-idx 0} nil]]}
+                                 {:path [0 2], :node [:leaf [nil nil {:seg :log, :page-idx 0} nil]]}
+                                 {:path [0 3], :node [:leaf [nil {:seg :t1, :page-idx 1} {:seg :log, :page-idx 0} nil]]}]]}
+                        {:path [1],
+                         :node [:leaf [nil {:seg :t1, :page-idx 2} {:seg :log, :page-idx 0} nil]]}
+                        {:path [2],
+                         :node [:leaf [nil nil {:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]]}
+                        {:path [3],
+                         :node [:leaf
+                                [nil {:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]]}]]}
+
+               (trie/postwalk-merge-plan [nil
+                                          {:seg :t1, :trie (->arrow-hash-trie t1-root)}
+                                          {:seg :log, :trie (->arrow-hash-trie log-root)}
+                                          {:seg :log2, :trie (->arrow-hash-trie log2-root)}]
                                          (fn [path [mn-tag & mn-args :as merge-node]]
                                            {:path (vec path)
                                             :node (case mn-tag
-                                                    :branch merge-node
-                                                    :leaf (let [[_segments nodes] mn-args]
-                                                            [:leaf (mapv (fn [^ArrowHashTrie$Leaf leaf]
+                                                    :branch-iid merge-node
+                                                    :leaf (let [[segments nodes] mn-args]
+                                                            [:leaf (mapv (fn [{:keys [seg]} ^ArrowHashTrie$Leaf leaf]
                                                                            (when leaf
-                                                                             {:page-idx (.getDataPageIndex leaf)}))
-                                                                         nodes)]))})))))))
+                                                                             {:seg seg, :page-idx (.getDataPageIndex leaf)}))
+                                                                         segments nodes)]))})))))))
 
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]

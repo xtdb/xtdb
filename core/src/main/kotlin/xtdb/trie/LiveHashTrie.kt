@@ -2,6 +2,7 @@ package xtdb.trie
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.util.ArrowBufPointer
+import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.HashTrie.Companion.bucketFor
 import xtdb.vector.IVectorReader
 
@@ -50,14 +51,17 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         private val logLimit: Int,
         private val pageLimit: Int,
         override val path: ByteArray,
-        override val children: Array<Node?>,
+        override val iidChildren: Array<Node?>,
     ) : Node {
+        override val recencies = null
+        override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
+
         override fun add(trie: LiveHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size)
 
-            val newChildren = children.indices
+            val newChildren = iidChildren.indices
                 .map { childIdx ->
-                    var child = children[childIdx]
+                    var child = iidChildren[childIdx]
                     if (bucket == childIdx) {
                         child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
                         child = child.add(trie, newIdx)
@@ -69,7 +73,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         }
 
         override fun compactLogs(trie: LiveHashTrie) =
-            Branch(logLimit, pageLimit, path, children.map { child -> child?.compactLogs(trie) }.toTypedArray())
+            Branch(logLimit, pageLimit, path, iidChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
     }
 
     class Leaf(
@@ -81,7 +85,10 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         private val logCount: Int = 0,
     ) : Node {
 
-        override val children = null
+        override val iidChildren = null
+
+        override val recencies = null
+        override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
 
         fun mergeSort(trie: LiveHashTrie): IntArray =
             mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
