@@ -1325,3 +1325,39 @@
   (t/is (= [{:b "one"}]
            (xt/q tu/*node*
                  "SELECT * FROM (SELECT y.b FROM y) AS x"))))
+
+(deftest test-sql-over-scanning
+  (t/is
+   (=plan-file
+    "test-sql-over-scanning-col-ref"
+    (plan-sql
+     "SELECT foo.name FROM foo" {:table-info {"foo" #{"name" "lastname"}}})))
+  "Tests only those columns required by the query are scanned for,
+   rather than all those present on the base table"
+
+  (t/is
+   (=plan-file
+    "test-sql-over-scanning-qualified-asterisk"
+    (plan-sql
+     "SELECT foo.*, bar.jame FROM foo, bar" {:table-info {"foo" #{"name" "lastname"}
+                                                          "bar" #{"jame" "lastjame"}}})))
+
+  (t/is
+   (=plan-file
+    "test-sql-over-scanning-asterisk"
+    (plan-sql
+     "SELECT * FROM foo, bar" {:table-info {"foo" #{"name" "lastname"}
+                                            "bar" #{"jame" "lastjame"}}})))
+
+  (t/is
+   (=plan-file
+    "test-sql-over-scanning-asterisk-subquery"
+    (plan-sql
+     "SELECT foo.*, (SELECT * FROM baz) FROM foo, bar" {:table-info {"foo" #{"name" "lastname"}
+                                                                          "bar" #{"jame" "lastjame"}
+                                                                          "baz" #{"frame"}}})))
+  (t/is
+   (=plan-file
+    "test-sql-over-scanning-asterisk-from-subquery"
+    (plan-sql
+     "SELECT bar.* FROM (SELECT foo.a, foo.b FROM foo) AS bar"))))
