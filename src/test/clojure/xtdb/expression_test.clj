@@ -14,7 +14,7 @@
            (java.time Clock Duration Instant LocalDate LocalDateTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp) 
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
@@ -215,11 +215,11 @@
       (t/is (= #xt/interval-mdn ["P12000M" "PT0S"] (trunc "MILLENNIUM"))))))
 
 (t/deftest test-date-extract
-  ;; TODO units below minute are not yet implemented for any type
   (letfn [(extract [part date-like] (project1 (list 'extract part 'date) {:date date-like}))
           (extract-all [part date-likes] (project (list 'extract part 'date) (map (partial array-map :date) date-likes)))]
     (t/testing "java.time.Instant"
-      (let [inst (time/->instant #inst "2022-03-21T13:44:52.344")]
+      (let [inst (time/->instant #inst "2022-03-21T13:44:52.344")] 
+        (t/is (= 52 (extract "SECOND" inst)))
         (t/is (= 44 (extract "MINUTE" inst)))
         (t/is (= 13 (extract "HOUR" inst)))
         (t/is (= 21 (extract "DAY" inst)))
@@ -228,15 +228,26 @@
 
     (t/testing "java.time.ZonedDateTime"
       (let [zdt (-> (time/->zdt #inst "2022-03-21T13:44:52.344")
-                    (.withZoneSameLocal (ZoneId/of "Europe/London")))]
+                    (.withZoneSameLocal (ZoneId/of "Asia/Calcutta")))] 
+        (t/is (= 52 (extract "SECOND" zdt)))
         (t/is (= 44 (extract "MINUTE" zdt)))
         (t/is (= 13 (extract "HOUR" zdt)))
         (t/is (= 21 (extract "DAY" zdt)))
         (t/is (= 3 (extract "MONTH" zdt)))
         (t/is (= 2022 (extract "YEAR" zdt)))))
+    
+    (t/testing "java.time.LocalDateTime"
+      (let [ldt (LocalDateTime/of 2022 4 3 12 34 56 789456999)]
+        (t/is (= 56 (extract "SECOND" ldt)))
+        (t/is (= 34 (extract "MINUTE" ldt)))
+        (t/is (= 12 (extract "HOUR" ldt)))
+        (t/is (= 3 (extract "DAY" ldt)))
+        (t/is (= 4 (extract "MONTH" ldt)))
+        (t/is (= 2022 (extract "YEAR" ldt)))))
 
     (t/testing "java.time.LocalDate"
       (let [ld (LocalDate/of 2022 03 21)]
+        (t/is (= 0 (extract "SECOND" ld)))
         (t/is (= 0 (extract "MINUTE" ld)))
         (t/is (= 0 (extract "HOUR" ld)))
         (t/is (= 21 (extract "DAY" ld)))
@@ -246,13 +257,49 @@
     (t/testing "mixed types"
       (let [dates [(time/->instant #inst "2022-03-22T13:44:52.344")
                    (-> (time/->zdt #inst "2021-02-23T21:19:10.692")
-                       (.withZoneSameLocal (ZoneId/of "Europe/London")))
+                       (.withZoneSameLocal (ZoneId/of "Asia/Calcutta")))
                    (LocalDate/of 2020 04 18)]]
+        (t/is (= [52 10 0] (extract-all "SECOND" dates)))
         (t/is (= [44 19 0] (extract-all "MINUTE" dates)))
         (t/is (= [13 21 0] (extract-all "HOUR" dates)))
         (t/is (= [22 23 18] (extract-all "DAY" dates)))
         (t/is (= [3 2 4] (extract-all "MONTH" dates)))
-        (t/is (= [2022 2021 2020] (extract-all "YEAR" dates)))))))
+        (t/is (= [2022 2021 2020] (extract-all "YEAR" dates))))))) 
+
+(t/deftest test-timezone-extract
+  (letfn [(extract [part value] (project1 (list 'extract part 'value) {:value value}))]
+    (t/testing "java.time.ZonedDateTime"
+      (let [zdt (-> (time/->zdt #inst "2022-03-21T13:44:52.344")
+                    (.withZoneSameLocal (ZoneId/of "Asia/Calcutta")))]
+        (t/is (= 5 (extract "TIMEZONE_HOUR" zdt)))
+        (t/is (= 30 (extract "TIMEZONE_MINUTE" zdt)))))
+    
+    (t/testing "java.time.Instant"
+      (let [inst (time/->instant #inst "2022-03-21T13:44:52.344")]
+        (t/is (= 0 (extract "TIMEZONE_HOUR" inst)))
+        (t/is (= 0 (extract "TIMEZONE_MINUTE" inst))))) 
+    
+    (t/testing "java.time.LocalDateTime"
+      (let [ldt (LocalDateTime/of 2022 4 3 12 34 56 789456999)]
+        (t/is (thrown-with-msg?
+               UnsupportedOperationException
+               #"Extract \"timezone_hour\" not supported for type timestamp without timezone"
+               (extract "TIMEZONE_HOUR" ldt)))
+        (t/is (thrown-with-msg?
+               UnsupportedOperationException
+               #"Extract \"timezone_minute\" not supported for type timestamp without timezone"
+               (extract "TIMEZONE_MINUTE" ldt)))))
+  
+    (t/testing "java.time.LocalDate"
+      (let [ld (LocalDate/of 2022 03 21)]
+        (t/is (thrown-with-msg?
+               UnsupportedOperationException
+               #"Extract \"timezone_hour\" not supported for type date"
+               (extract "TIMEZONE_HOUR" ld)))
+        (t/is (thrown-with-msg?
+               UnsupportedOperationException
+               #"Extract \"timezone_minute\" not supported for type date"
+               (extract "TIMEZONE_MINUTE" ld)))))))
 
 (defn run-projection [rel form]
   (let [col-types (->> rel

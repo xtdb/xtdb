@@ -875,16 +875,36 @@
      :->call-code (fn [[s & _]]
                     `(parse-multi-field-interval (expr/resolve-string ~s) ~unit1 ~unit2))}))
 
-(defmethod expr/codegen-call [:extract :utf8 :timestamp-tz] [{[{field :literal} _] :args}]
-  {:return-type :i32
-   :->call-code (fn [[_ ts-code]]
-                  `(.get (.atOffset ^Instant (time/micros->instant ~ts-code) ZoneOffset/UTC)
+
+(defn time-field->ChronoField
+  [field]
+  (case field
+    "YEAR" `ChronoField/YEAR
+    "MONTH" `ChronoField/MONTH_OF_YEAR
+    "DAY" `ChronoField/DAY_OF_MONTH
+    "HOUR" `ChronoField/HOUR_OF_DAY
+    "MINUTE" `ChronoField/MINUTE_OF_HOUR
+    "SECOND" `ChronoField/SECOND_OF_MINUTE)) 
+
+(defmethod expr/codegen-call [:extract :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_ts ts-unit tz]] :arg-types}]
+  (let [zone-id-sym (gensym 'zone-id)]
+    {:return-type :i32
+     :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
+     :->call-code (fn [[_ x]]
+                    `(-> ~(ts->zdt x ts-unit zone-id-sym)
                          ~(case field
-                            "YEAR" `ChronoField/YEAR
-                            "MONTH" `ChronoField/MONTH_OF_YEAR
-                            "DAY" `ChronoField/DAY_OF_MONTH
-                            "HOUR" `ChronoField/HOUR_OF_DAY
-                            "MINUTE" `ChronoField/MINUTE_OF_HOUR)))})
+                            "TIMEZONE_HOUR" `(-> (.getOffset) (.getTotalSeconds) (/ 3600) (int))
+                            "TIMEZONE_MINUTE" `(-> (.getOffset) (.getTotalSeconds) (/ 60) (rem 60) (int))
+                            `(.get ~(time-field->ChronoField field)))))}))
+
+(defmethod expr/codegen-call [:extract :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ [_ts ts-unit]] :arg-types}]
+  {:return-type :i32
+   :->call-code (fn [[_ x]]
+                  `(-> ~(ts->ldt x ts-unit)
+                       ~(case field
+                          "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"timezone_hour\" not supported for type timestamp without timezone"))
+                          "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"timezone_minute\" not supported for type timestamp without timezone"))
+                          `(.get ~(time-field->ChronoField field)))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args}]
   ;; FIXME this assumes date-unit :day
@@ -892,11 +912,15 @@
    :->call-code (fn [[_ epoch-day-code]]
                   (case field
                     ;; we could inline the math here, but looking at sources, there is some nuance.
+                    "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"timezone_hour\" not supported for type date"))
+                    "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"timezone_minute\" not supported for type date"))
                     "YEAR" `(.getYear (LocalDate/ofEpochDay ~epoch-day-code))
                     "MONTH" `(.getMonthValue (LocalDate/ofEpochDay ~epoch-day-code))
                     "DAY" `(.getDayOfMonth (LocalDate/ofEpochDay ~epoch-day-code))
                     "HOUR" `(int 0)
-                    "MINUTE" `(int 0)))})
+                    "MINUTE" `(int 0)
+                    "SECOND" `(int 0)))})
+
 
 (defn field->truncate-fn
   [field]
