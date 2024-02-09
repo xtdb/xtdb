@@ -98,7 +98,7 @@ try (var client = XtdbClient.openClient(new URL("http://localhost:3000"))) {
 ----
 --
 
-From here, check out the link:/drivers/kotlin/xtdb-api/xtdb.api/-i-xtdb/index.html[`IXtdb` API docs^] to submit data and run queries.
+From here, check out the link:/drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/index.html[`IXtdb` API docs^] to submit data and run queries.
 
 == In process
 
@@ -125,4 +125,4 @@ try(var xtdb = Xtdb.openNode()) {
 ----
 --
 
-This node uses exactly the same API as the thin client - so, again, from here, check out the link:/drivers/kotlin/xtdb-api/xtdb.api/-i-xtdb/index.html[`IXtdb` API docs^] to submit data and run queries.
+This node uses exactly the same API as the thin client - so, again, from here, check out the link:/drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/index.html[`IXtdb` API docs^] to submit data and run queries.
