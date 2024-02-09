@@ -266,6 +266,16 @@
         (t/is (= [3 2 4] (extract-all "MONTH" dates)))
         (t/is (= [2022 2021 2020] (extract-all "YEAR" dates))))))) 
 
+(t/deftest test-interval-extract
+  (letfn [(extract [part interval-val] (project1 (list 'extract part 'interval) {:interval interval-val}))]
+    (let [itvl (PeriodDuration. (Period/of 1 4 8) (Duration/parse "PT3H10M12.1S"))]
+      (t/is (= 12 (extract "SECOND" itvl)))
+      (t/is (= 10 (extract "MINUTE" itvl)))
+      (t/is (= 3 (extract "HOUR" itvl)))
+      (t/is (= 8 (extract "DAY" itvl)))
+      (t/is (= 4 (extract "MONTH" itvl)))
+      (t/is (= 1 (extract "YEAR" itvl))))))
+
 (t/deftest test-timezone-extract
   (letfn [(extract [part value] (project1 (list 'extract part 'value) {:value value}))]
     (t/testing "java.time.ZonedDateTime"
@@ -299,7 +309,18 @@
         (t/is (thrown-with-msg?
                UnsupportedOperationException
                #"Extract \"timezone_minute\" not supported for type date"
-               (extract "TIMEZONE_MINUTE" ld)))))))
+               (extract "TIMEZONE_MINUTE" ld)))))
+  
+    (t/testing "interval"
+      (let [itvl (PeriodDuration. (Period/of 1 4 8) (Duration/parse "PT3H10M12.1S"))]
+        (t/is (thrown-with-msg?
+               UnsupportedOperationException
+               #"Extract \"timezone_hour\" not supported for type interval"
+               (extract "TIMEZONE_HOUR" itvl)))
+        (t/is (thrown-with-msg?
+               UnsupportedOperationException
+               #"Extract \"timezone_minute\" not supported for type interval"
+               (extract "TIMEZONE_MINUTE" itvl)))))))
 
 (defn run-projection [rel form]
   (let [col-types (->> rel

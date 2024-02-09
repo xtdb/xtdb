@@ -951,7 +951,19 @@
     (t/is (thrown-with-msg?
            UnsupportedOperationException
            #"Extract \"timezone_hour\" not supported for type date"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x FROM (VALUES 1) AS z")))))
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x FROM (VALUES 1) AS z"))))
+  
+  (t/testing "interval behavior"
+    (t/is (= [{:x 3}]
+             (xt/q tu/*node* "SELECT EXTRACT(DAY FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))
+    
+    (t/is (= [{:x 47}]
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))
+  
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"Extract \"timezone_hour\" not supported for type interval"
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))))
 
 (deftest test-system-time-queries
   (t/testing "AS OF"

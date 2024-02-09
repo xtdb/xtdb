@@ -921,6 +921,20 @@
                     "MINUTE" `(int 0)
                     "SECOND" `(int 0)))})
 
+(defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
+  {:return-type :i32
+   :->call-code (fn [[_ pd]]
+                  (let [period `(.getPeriod ^PeriodDuration ~pd)
+                        duration `(.getDuration ^PeriodDuration ~pd)]
+                    (case field
+                      "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"timezone_hour\" not supported for type interval"))
+                      "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"timezone_minute\" not supported for type interval"))
+                      "YEAR" `(-> (.toTotalMonths ~period) (/ 12) (int))
+                      "MONTH" `(-> (.toTotalMonths ~period) (rem 12) (int))
+                      "DAY" `(.getDays ~period)
+                      "HOUR" `(-> (.toHours ~duration) (int))
+                      "MINUTE" `(-> (.toMinutes ~duration) (rem 60) (int))
+                      "SECOND" `(-> (.toSeconds ~duration) (rem 60) (int)))))})
 
 (defn field->truncate-fn
   [field]
