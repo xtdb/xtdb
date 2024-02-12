@@ -261,12 +261,12 @@
                   (.add merge-q q-obj))
                 (recur)))
 
-            (.accept c (loop [^RelationReader rel (-> (vw/rel-wtr->rdr out-rel)
-                                                      (vr/with-absent-cols allocator col-names))
-                              [^IRelationSelector col-pred & col-preds] (vals (dissoc col-preds "xt$iid"))]
-                         (if col-pred
-                           (recur (.select rel (.select col-pred allocator rel params)) col-preds)
-                           rel)))))
+            (let [^RelationReader rel (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
+                                                (.select rel (.select col-pred allocator rel params)))
+                                              (-> (vw/rel-wtr->rdr out-rel)
+                                                  (vr/with-absent-cols allocator col-names))
+                                              (vals (dissoc col-preds "xt$iid")))]
+              (.accept c rel))))
         true)
 
       false))
