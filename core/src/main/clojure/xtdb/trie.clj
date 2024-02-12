@@ -313,7 +313,6 @@
   (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
     (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf buf)
           nodes-vec (.getVector root "nodes")]
-      (println (.contentToTSVString root))
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
         (->MetaFile (ArrowHashTrie. nodes-vec) buf (vr/<-root root))))))
