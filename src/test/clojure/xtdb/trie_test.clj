@@ -18,35 +18,25 @@
                 log-root (tu/open-arrow-hash-trie-root al 0)
                 log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
 
-      (t/is (= {:path [],
-                :node [:branch-iid
-                       [{:path [0],
-                         :node [:branch-iid
-                                [{:path [0 0], :node [:leaf [nil nil {:seg :log, :page-idx 0} nil]]}
-                                 {:path [0 1], :node [:leaf [nil {:seg :t1, :page-idx 0} {:seg :log, :page-idx 0} nil]]}
-                                 {:path [0 2], :node [:leaf [nil nil {:seg :log, :page-idx 0} nil]]}
-                                 {:path [0 3], :node [:leaf [nil {:seg :t1, :page-idx 1} {:seg :log, :page-idx 0} nil]]}]]}
-                        {:path [1],
-                         :node [:leaf [nil {:seg :t1, :page-idx 2} {:seg :log, :page-idx 0} nil]]}
-                        {:path [2],
-                         :node [:leaf [nil nil {:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]]}
-                        {:path [3],
-                         :node [:leaf
-                                [nil {:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]]}]]}
+      (t/is (= [{:path [0 0], :pages [nil nil {:seg :log, :page-idx 0} nil]}
+                {:path [0 1], :pages [nil {:seg :t1, :page-idx 0} {:seg :log, :page-idx 0} nil]}
+                {:path [0 2], :pages [nil nil {:seg :log, :page-idx 0} nil]}
+                {:path [0 3], :pages [nil {:seg :t1, :page-idx 1} {:seg :log, :page-idx 0} nil]}
+                {:path [1], :pages [nil {:seg :t1, :page-idx 2} {:seg :log, :page-idx 0} nil]}
+                {:path [2], :pages [nil nil {:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
+                {:path [3], :pages [nil {:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]}]
 
-               (trie/postwalk-merge-plan [nil
-                                          {:seg :t1, :trie (->arrow-hash-trie t1-root)}
-                                          {:seg :log, :trie (->arrow-hash-trie log-root)}
-                                          {:seg :log2, :trie (->arrow-hash-trie log2-root)}]
-                                         (fn [path [mn-tag & mn-args :as merge-node]]
-                                           {:path (vec path)
-                                            :node (case mn-tag
-                                                    :branch-iid merge-node
-                                                    :leaf (let [[segments nodes] mn-args]
-                                                            [:leaf (mapv (fn [{:keys [seg]} ^ArrowHashTrie$Leaf leaf]
-                                                                           (when leaf
-                                                                             {:seg seg, :page-idx (.getDataPageIndex leaf)}))
-                                                                         segments nodes)]))})))))))
+               (->> (trie/->merge-plan [nil
+                                        {:seg :t1, :trie (->arrow-hash-trie t1-root)}
+                                        {:seg :log, :trie (->arrow-hash-trie log-root)}
+                                        {:seg :log2, :trie (->arrow-hash-trie log2-root)}]
+                                       {})
+                    (map (fn [{:keys [path segments nodes]}]
+                           {:path (vec path)
+                            :pages (mapv (fn [{:keys [seg]} ^ArrowHashTrie$Leaf leaf]
+                                           (when leaf
+                                             {:seg seg, :page-idx (.getDataPageIndex leaf)}))
+                                         segments nodes)}))))))))
 
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]

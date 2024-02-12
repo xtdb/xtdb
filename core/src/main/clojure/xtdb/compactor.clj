@@ -54,34 +54,28 @@
 
         is-valid-ptr (ArrowBufPointer.)]
 
-    (letfn [(merge-nodes! [path [mn-tag & mn-args]]
-              (case mn-tag
-                :branch-iid (dorun (first mn-args)) ; runs the side-effects in the nested nodes
+    (doseq [{:keys [path segments nodes]} (trie/->merge-plan segments)
+            :let [data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
+                  merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]]
 
-                :leaf (let [[segments nodes] mn-args
-                            data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
-                            merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]
+      (doseq [^RelationReader data-rdr data-rdrs
+              :when data-rdr
+              :let [ev-ptr (EventRowPointer. data-rdr (byte-array 0))
+                    row-copier (reader->copier data-rdr)]]
+        (when (.isValid ev-ptr is-valid-ptr path)
+          (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
 
-                        (doseq [^RelationReader data-rdr data-rdrs
-                                :when data-rdr
-                                :let [ev-ptr (EventRowPointer. data-rdr (byte-array 0))
-                                      row-copier (reader->copier data-rdr)]]
-                          (when (.isValid ev-ptr is-valid-ptr path)
-                            (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
+      (loop []
+        (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
+          (.copyRow row-copier (.getIndex ev-ptr))
 
-                        (loop []
-                          (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
-                            (.copyRow row-copier (.getIndex ev-ptr))
+          (.writeLong recency-wtr
+                      (.getRecency ^IPolygonReader (calculate-polygon ev-ptr)))
 
-                            (.writeLong recency-wtr
-                                        (.getRecency ^IPolygonReader (calculate-polygon ev-ptr)))
-
-                            (.nextIndex ev-ptr)
-                            (when (.isValid ev-ptr is-valid-ptr path)
-                              (.add merge-q q-obj))
-                            (recur))))))]
-
-      (trie/postwalk-merge-plan segments merge-nodes!)
+          (.nextIndex ev-ptr)
+          (when (.isValid ev-ptr is-valid-ptr path)
+            (.add merge-q q-obj))
+          (recur)))
 
       (.syncRowCount data-rel-wtr)
       (.syncValueCount recency-wtr)

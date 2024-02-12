@@ -320,19 +320,17 @@
              | {:keys [trie live-rel]} ;; for live tries"
   [segments path-pred]
 
-  (letfn [(merge-tasks* [path [mn-tag & mn-args]]
-            (when (path-pred path)
-              (case mn-tag
-                :branch-iid (into [] cat (first mn-args))
-                :leaf (let [[segments trie-nodes] mn-args
-                            ^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)
-                            trie-nodes-it (.iterator ^Iterable trie-nodes)
-                            segments-it (.iterator ^Iterable segments)]
-                        (loop [node-taken? false, leaves []]
-                          (if (.hasNext trie-nodes-it)
-                            (let [segment (when (.hasNext segments-it)
-                                            (.next segments-it))]
-                              (if-let [trie-node (.next trie-nodes-it)]
+  (->> (trie/->merge-plan segments {:path-pred path-pred})
+       (into [] (keep (fn [{:keys [path segments nodes]}]
+                        (let [^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)]
+                          (loop [[trie-node & more-nodes] nodes
+                                 [segment & more-segs] segments
+                                 node-taken? false,
+                                 leaves []]
+                            (if segment
+                              (if-not trie-node
+                                (recur more-nodes more-segs node-taken? leaves)
+
                                 (condp = (class trie-node)
                                   ArrowHashTrie$Leaf
                                   (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata]} segment
@@ -341,7 +339,7 @@
                                     (when take-node?
                                       (.or cumulative-iid-bitmap (.iidBloomBitmap table-metadata page-idx)))
 
-                                    (recur (or node-taken? take-node?)
+                                    (recur more-nodes more-segs (or node-taken? take-node?)
                                            (cond-> leaves
                                              (or take-node?
                                                  (when node-taken?
@@ -352,17 +350,13 @@
                                   LiveHashTrie$Leaf
                                   (let [^LiveHashTrie$Leaf trie-node trie-node
                                         {:keys [^RelationReader live-rel, trie]} segment]
-                                    (recur true (conj leaves
-                                                      [:live (-> live-rel
-                                                                 (.select (.mergeSort trie-node trie)))]))))
+                                    (recur more-nodes more-segs true
+                                           (conj leaves
+                                                 [:live (-> live-rel
+                                                            (.select (.mergeSort trie-node trie)))])))))
 
-                                (recur node-taken? leaves)))
-
-                            (when node-taken?
-                              [{:path path
-                                :leaves leaves}])))))))]
-
-    (trie/postwalk-merge-plan segments merge-tasks*)))
+                              (when node-taken?
+                                {:path path, :leaves leaves})))))))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts

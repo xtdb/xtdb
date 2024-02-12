@@ -88,14 +88,5 @@ class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
     }
 
     override val rootNode get() = forIndex(ByteArray(0), nodesVec.valueCount - 1)
-
-    companion object {
-        private fun conjPath(path: ByteArray, idx: Byte): ByteArray {
-            val currentPathLength = path.size
-            val childPath = ByteArray(currentPathLength + 1)
-            System.arraycopy(path, 0, childPath, 0, currentPathLength)
-            childPath[currentPathLength] = idx
-            return childPath
-        }
-    }
 }
+

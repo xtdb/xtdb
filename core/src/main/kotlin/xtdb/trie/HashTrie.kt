@@ -6,6 +6,14 @@ import java.util.stream.Stream
 
 internal typealias RecencyArray = LongArray
 
+fun conjPath(path: ByteArray, idx: Byte): ByteArray {
+    val currentPathLength = path.size
+    val childPath = ByteArray(currentPathLength + 1)
+    System.arraycopy(path, 0, childPath, 0, currentPathLength)
+    childPath[currentPathLength] = idx
+    return childPath
+}
+
 interface HashTrie<N : HashTrie.Node<N>> {
     val rootNode: N?
 

@@ -18,7 +18,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrieKt HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -247,66 +247,61 @@
                (into res (map :file-path) tries))
         (recur next-row more-levels res)))))
 
-(defn postwalk-merge-plan
-  "Post-walks the merged tries, passing the nodes from each of the tries to the given fn.
-   e.g. for a leaf: passes the trie-nodes to the fn, returns the result.
-        for a branch: passes a vector the return values of the postwalk fn
-                      for the inner nodes, for the fn to combine
-
-   Returns the value returned from the postwalk fn for the root node.
-
-   segments :: [Segment]
+(defn ->merge-plan
+  "segments :: [Segment]
      Segment :: {:keys [trie]} ;; and anything else you need - you'll get this back in `:leaf`
        trie :: HashTrie
 
-   f :: path, merge-node -> ret
-     merge-node :: [:branch-iid [ret]]
-                 | [:leaf [Segment] [HashTrie$Node]]"
-  [segments f]
+  return :: (LazySeq {:keys [path segments nodes]})"
+  ([segments] (->merge-plan segments {}))
 
-  (letfn [(postwalk* [segments nodes path-vec]
-            (let [recencies (mapv #(some-> ^HashTrie$Node % (.getRecencies)) nodes)]
-              (if (some some? recencies)
-                ;; TODO apply recency filter
-                ;; TODO probably loads of garbage and boxing in this `recur`
-                (recur (mapcat (fn [segment ^longs recencies]
-                                 (if (nil? recencies)
-                                   [segment]
-                                   (repeat (alength recencies) segment)))
-                               segments recencies)
-                       (mapcat (fn [^HashTrie$Node node ^longs recencies]
-                                 (if (nil? recencies)
-                                   [node]
-                                   (-> (IntStream/range 0 (alength recencies))
-                                       (.mapToObj (reify IntFunction
-                                                    (apply [_ idx]
-                                                      (.recencyNode node idx))))
-                                       (.toList))))
-                               nodes recencies)
-                       path-vec)
+  ([segments {:keys [path-pred]}]
+   (letfn [(mp-seq* [segments nodes ^bytes path]
+             (let [recencies (mapv #(some-> ^HashTrie$Node % (.getRecencies)) nodes)]
+               (cond
+                 (some some? recencies)
+                 ;; TODO apply recency filter
+                 ;; TODO probably loads of garbage and boxing in this `recur`
+                 (recur (mapcat (fn [segment ^longs recencies]
+                                  (if (nil? recencies)
+                                    [segment]
+                                    (repeat (alength recencies) segment)))
+                                segments recencies)
 
-                (let [trie-children (mapv #(some-> ^HashTrie$Node % (.getIidChildren)) nodes)
-                      path (byte-array path-vec)]
-                  (f path
-                     (if (some some? trie-children)
-                       [:branch-iid (lazy-seq
-                                     (->> (range HashTrie/LEVEL_WIDTH)
-                                          (mapv (fn [bucket-idx]
-                                                  (postwalk* segments
-                                                             (mapv (fn [node ^objects node-children]
-                                                                     (if node-children
-                                                                       (aget node-children bucket-idx)
-                                                                       node))
-                                                                   nodes trie-children)
-                                                             (conj path-vec bucket-idx))))))]
+                        (mapcat (fn [^HashTrie$Node node ^longs recencies]
+                                  (if (nil? recencies)
+                                    [node]
+                                    (-> (IntStream/range 0 (alength recencies))
+                                        (.mapToObj (reify IntFunction
+                                                     (apply [_ idx]
+                                                       (.recencyNode node idx))))
+                                        (.toList))))
+                                nodes recencies)
 
-                       [:leaf segments nodes]))))))]
+                        path)
 
-    (postwalk* segments
-               (mapv (fn [{:keys [^HashTrie trie]}]
-                       (some-> trie .getRootNode))
-                     segments)
-               [])))
+                 (and path-pred (not (path-pred path))) nil
+
+                 :else
+                 (let [trie-children (mapv #(some-> ^HashTrie$Node % (.getIidChildren)) nodes)]
+                   (if (some some? trie-children)
+                     (->> (range HashTrie/LEVEL_WIDTH)
+                          (mapcat (fn [bucket-idx]
+                                    (mp-seq* segments
+                                             (mapv (fn [node ^objects node-children]
+                                                     (if node-children
+                                                       (aget node-children bucket-idx)
+                                                       node))
+                                                   nodes trie-children)
+                                             (HashTrieKt/conjPath path bucket-idx)))))
+
+                     [{:path path, :segments segments, :nodes nodes}])))))]
+
+     (mp-seq* segments
+              (mapv (fn [{:keys [^HashTrie trie]}]
+                      (some-> trie .getRootNode))
+                    segments)
+              (byte-array 0)))))
 
 (defrecord MetaFile [^HashTrie trie, ^ArrowBuf buf, ^RelationReader rdr]
   AutoCloseable
@@ -318,6 +313,7 @@
   (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
     (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf buf)
           nodes-vec (.getVector root "nodes")]
+      (println (.contentToTSVString root))
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
         (->MetaFile (ArrowHashTrie. nodes-vec) buf (vr/<-root root))))))
