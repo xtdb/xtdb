@@ -51,12 +51,12 @@
             (t/testing "only needs to scan chunk 1, page 1"
               (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})
                     param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
-                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 0 2))
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 2))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (false? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (false? (.test (.build param-sel table-metadata) 0)))))
 
-                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 2 8))
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 8))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (true? (.test (.build param-sel table-metadata) 0))))))))
@@ -93,12 +93,12 @@
         (util/with-open [params (tu/open-params {'?name "Ivan"})]
           (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})
                 param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params)]
-            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 0 4))
+            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 4))
               (fn [^ITableMetadata table-metadata]
                 (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                 (t/is (true? (.test (.build param-sel table-metadata) 0)))))
 
-            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 4 7))
+            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 7))
               (fn [^ITableMetadata table-metadata]
                 (t/is (false? (.test (.build lit-sel table-metadata) 0)))
                 (t/is (false? (.test (.build param-sel table-metadata) 0))))))))

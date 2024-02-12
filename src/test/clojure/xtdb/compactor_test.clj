@@ -17,39 +17,39 @@
 (t/deftest test-compaction-jobs
   (letfn [(f [tries]
             (c/compaction-jobs (util/->path "tables/foo")
-                               (for [[level rf nr] tries]
+                               (for [[level nr] tries]
                                  (trie/->table-meta-file-path (util/->path "tables/foo") 
-                                                              (trie/->log-trie-key level rf nr)))))]
+                                                              (trie/->log-trie-key level nr)))))]
     (t/is (= [] (f [])))
 
     (t/is (= []
-             (f [[0 0 1] [0 1 2] [0 2 3]])))
+             (f [[0 1] [0 2] [0 3]])))
 
     (t/is (= [{:table-path (util/->path "tables/foo"),
-               :trie-keys ["log-l00-rf00-nr01"
-                           "log-l00-rf01-nr02"
-                           "log-l00-rf02-nr03"
-                           "log-l00-rf03-nr04"],
-               :out-trie-key "log-l01-rf00-nr04"}]
-             (f [[0 0 1] [0 1 2] [0 2 3] [0 3 4]])))
+               :trie-keys ["log-l00-nr01"
+                           "log-l00-nr02"
+                           "log-l00-nr03"
+                           "log-l00-nr04"],
+               :out-trie-key "log-l01-nr04"}]
+             (f [[0 1] [0 2] [0 3] [0 4]])))
 
     (t/is (= []
-             (f [[1 0 2] [1 2 4] [1 4 6]
-                 [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))
+             (f [[1 2] [1 4] [1 6]
+                 [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))
 
     (t/is (= [{:table-path (util/->path "tables/foo"),
-               :trie-keys ["log-l01-rf00-nr02"
-                           "log-l01-rf02-nr04"
-                           "log-l01-rf04-nr06"
-                           "log-l01-rf06-nr08"],
-               :out-trie-key "log-l02-rf00-nr08"}]
-             (f [[1 0 2] [1 2 4] [1 4 6] [1 6 8]
-                 [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))
+               :trie-keys ["log-l01-nr02"
+                           "log-l01-nr04"
+                           "log-l01-nr06"
+                           "log-l01-nr08"],
+               :out-trie-key "log-l02-nr08"}]
+             (f [[1 2] [1 4] [1 6] [1 8]
+                 [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))
 
     (t/is (= []
-             (f [[2 0 4]
-                 [1 0 2] [1 2 4] [1 4 6] [1 6 8]
-                 [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))))
+             (f [[2 4]
+                 [1 2] [1 4] [1 6] [1 8]
+                 [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))))
 
 (t/deftest test-merges-segments
   (util/with-open [lt0 (tu/open-live-table "foo")

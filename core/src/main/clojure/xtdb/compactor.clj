@@ -138,7 +138,6 @@
     {:table-path table-path
      :trie-keys (mapv :trie-key job)
      :out-trie-key (trie/->log-trie-key (inc level)
-                                        (:row-from (first job))
                                         (:next-row (last job)))}))
 
 (defmethod ig/prep-key :xtdb/compactor [_ opts]

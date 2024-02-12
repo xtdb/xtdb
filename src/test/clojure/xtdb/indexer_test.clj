@@ -402,10 +402,10 @@
           (let [objs (mapv str (.listAllObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))))))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -443,10 +443,10 @@
             (let [objs (mapv str (.listAllObjects bp))]
               (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
               (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
 
             (t/is (= :utf8 (types/field->col-type (.columnField mm "device_readings" "xt$id"))))))))))
 
@@ -493,10 +493,10 @@
                 (let [objs (mapv str (.listAllObjects bp))]
                   (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                   (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))))
 
               (t/is (= :utf8
                        (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
@@ -537,10 +537,10 @@
                     (let [objs (mapv str (.listAllObjects bp))]
                       (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                       (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
 
                     (t/is (= :utf8
                              (types/field->col-type (.columnField mm "device_info" "xt$id"))))))))))))))

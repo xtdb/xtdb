@@ -50,18 +50,18 @@
 
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]
-            (->> (trie/current-trie-files (for [[level rf nr] trie-keys]
-                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key level rf nr))))
-                 (mapv (comp (juxt :level :row-from :next-row) trie/parse-trie-file-path))))]
+            (->> (trie/current-trie-files (for [[level nr] trie-keys]
+                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key level nr))))
+                 (mapv (comp (juxt :level :next-row) trie/parse-trie-file-path))))]
     (t/is (= [] (f [])))
 
-    (t/is (= [[0 0 1] [0 1 2] [0 2 3]]
-             (f [[0 0 1] [0 1 2] [0 2 3]])))
+    (t/is (= [[0 1] [0 2] [0 3]]
+             (f [[0 1] [0 2] [0 3]])))
 
-    (t/is (= [[1 0 2] [0 2 3]]
-             (f [[1 0 2] [0 0 1] [0 1 2] [0 2 3]])))
+    (t/is (= [[1 2] [0 3]]
+             (f [[1 2] [0 1] [0 2] [0 3]])))
 
-    (t/is (= [[2 0 4] [1 4 6] [0 6 7] [0 7 8]]
-             (f [[2 0 4]
-                 [1 0 2] [1 2 4] [1 4 6]
-                 [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))))
+    (t/is (= [[2 4] [1 6] [0 7] [0 8]]
+             (f [[2 4]
+                 [1 2] [1 4] [1 6]
+                 [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))))

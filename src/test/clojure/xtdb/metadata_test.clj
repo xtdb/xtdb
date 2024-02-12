@@ -127,7 +127,7 @@
 
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
-          meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 0 21))]
+          meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 21))]
       (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
         (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)
               page-idx-pred (.build literal-selector table-metadata)]
@@ -145,7 +145,7 @@
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         ^IBufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
-        meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 0 2))]
+        meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key 0 2))]
 
     (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
       (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)

@@ -354,7 +354,7 @@
     (let [chunk-idx (.getChunkIdx row-counter)
           next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))
 
-          trie-key (trie/->log-trie-key 0 chunk-idx next-chunk-idx)
+          trie-key (trie/->log-trie-key 0 next-chunk-idx)
           futs (->> (for [^ILiveTable table (.values tables)]
                       (.finishChunk table trie-key))
 
