@@ -8,7 +8,8 @@
             [xtdb.datasets.tpch.ra :as tpch-ra]
             xtdb.sql-test
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.compactor :as c])
   (:import (java.nio.file Path)))
 
 (def ^:dynamic *node* nil)
@@ -27,6 +28,8 @@
                         :dml (tpch/submit-dml! node scale-factor))]
           (tu/then-await-tx last-tx node)
           (tu/finish-chunk! node)
+
+          (c/compact-all! node)
 
           (binding [*node* node]
             (f)))))))

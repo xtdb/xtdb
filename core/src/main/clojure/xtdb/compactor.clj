@@ -158,7 +158,7 @@
          :buffer-pool (ig/ref :xtdb/buffer-pool)}
         opts))
 
-(def ^:dynamic *page-size* 256)
+(def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^IBufferPool buffer-pool]}]

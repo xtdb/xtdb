@@ -8,7 +8,8 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.compactor :as c])
   (:import [java.nio.file Path]
            java.time.Duration
            [org.apache.arrow.memory RootAllocator]
@@ -91,7 +92,8 @@
       (let [last-tx (time
                      (tpch/submit-docs! node 0.05))]
         (time (tu/then-await-tx last-tx node (Duration/ofHours 1)))
-        (time (tu/finish-chunk! node)))))
+        (time (tu/finish-chunk! node))
+        (time (c/compact-all! node)))))
 
   (do
     (newline)
