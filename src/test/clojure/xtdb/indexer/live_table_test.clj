@@ -60,7 +60,7 @@
               (t/is (= (reverse (range n))
                        (vec (.getData leaf)))))
 
-            @(.finishChunk live-table "c00")
+            @(.finishChunk live-table n)
 
             (tu/with-allocator
               #(tj/check-json
@@ -95,7 +95,7 @@
               (t/is (= (reverse (range n))
                        (vec (.getData leaf)))))
 
-            @(.finishChunk live-table "c00")
+            @(.finishChunk live-table n)
 
             (tu/with-allocator
               #(tj/check-json
@@ -116,11 +116,12 @@
      :live-trie-iids live-trie-iids}))
 
 (deftest test-live-table-watermarks-are-immutable
-  (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]]
+  (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
+        rc (RowCounter. 0)]
     (with-open [node (xtn/start-node {})
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
-                live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
+                live-table (live-index/->live-table allocator bp rc "foo")]
       (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
 
         (let [wp (IVectorPosition/build)]
@@ -134,7 +135,7 @@
         (with-open [live-table-wm (.openWatermark live-table true)]
           (let [live-table-before (live-table-wm->data live-table-wm)]
 
-            @(.finishChunk live-table "c00")
+            @(.finishChunk live-table (.getChunkRowCount rc))
             (.close live-table)
 
             (let [live-table-after (live-table-wm->data live-table-wm)]

@@ -41,7 +41,7 @@
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]
             (->> (trie/current-trie-files (for [[level nr] trie-keys]
-                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key level nr))))
+                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key level nr 0))))
                  (mapv (comp (juxt :level :next-row) trie/parse-trie-file-path))))]
     (t/is (= [] (f [])))
 

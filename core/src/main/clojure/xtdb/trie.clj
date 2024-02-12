@@ -41,8 +41,11 @@
            (.digest eid-bytes)
            (Arrays/copyOfRange 0 16))))))
 
-(defn ->log-trie-key [^long level, ^long next-row]
-  (format "log-l%s-nr%s" (util/->lex-hex-string level) (util/->lex-hex-string next-row)))
+(defn ->log-trie-key [^long level, ^long next-row, ^long row-count]
+  (format "log-l%s-nr%s-rs%s"
+          (util/->lex-hex-string level)
+          (util/->lex-hex-string next-row)
+          (Long/toString row-count 16)))
 
 (defn ->table-data-file-path [^Path table-path trie-key]
   (.resolve table-path (format "data/%s.arrow" trie-key)))
@@ -222,11 +225,12 @@
 
 (defn parse-trie-file-path [^Path file-path]
   (let [trie-key (str (.getFileName file-path))] 
-    (when-let [[_ trie-key level-str next-row-str] (re-find #"(log-l(\p{XDigit}+)-nr(\p{XDigit}+)+?)\.arrow$" trie-key)]
+    (when-let [[_ trie-key level-str next-row-str rows-str] (re-find #"(log-l(\p{XDigit}+)-nr(\p{XDigit}+)-rs(\p{XDigit}+))\.arrow$" trie-key)]
       {:file-path file-path
        :trie-key trie-key
        :level (util/<-lex-hex-string level-str)
-       :next-row (util/<-lex-hex-string next-row-str)})))
+       :next-row (util/<-lex-hex-string next-row-str)
+       :rows (Long/parseLong rows-str 16)})))
 
 (defn current-trie-files [file-names]
   (loop [next-row 0

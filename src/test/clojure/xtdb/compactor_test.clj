@@ -19,18 +19,18 @@
             (c/compaction-jobs (util/->path "tables/foo")
                                (for [[level nr] tries]
                                  (trie/->table-meta-file-path (util/->path "tables/foo") 
-                                                              (trie/->log-trie-key level nr)))))]
+                                                              (trie/->log-trie-key level nr 2)))))]
     (t/is (= [] (f [])))
 
     (t/is (= []
              (f [[0 1] [0 2] [0 3]])))
 
     (t/is (= [{:table-path (util/->path "tables/foo"),
-               :trie-keys ["log-l00-nr01"
-                           "log-l00-nr02"
-                           "log-l00-nr03"
-                           "log-l00-nr04"],
-               :out-trie-key "log-l01-nr04"}]
+               :trie-keys ["log-l00-nr01-rs2"
+                           "log-l00-nr02-rs2"
+                           "log-l00-nr03-rs2"
+                           "log-l00-nr04-rs2"],
+               :out-trie-key "log-l01-nr04-rs8"}]
              (f [[0 1] [0 2] [0 3] [0 4]])))
 
     (t/is (= []
@@ -38,11 +38,11 @@
                  [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))
 
     (t/is (= [{:table-path (util/->path "tables/foo"),
-               :trie-keys ["log-l01-nr02"
-                           "log-l01-nr04"
-                           "log-l01-nr06"
-                           "log-l01-nr08"],
-               :out-trie-key "log-l02-nr08"}]
+               :trie-keys ["log-l01-nr02-rs2"
+                           "log-l01-nr04-rs2"
+                           "log-l01-nr06-rs2"
+                           "log-l01-nr08-rs2"],
+               :out-trie-key "log-l02-nr08-rs8"}]
              (f [[1 2] [1 4] [1 6] [1 8]
                  [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))
 
@@ -124,8 +124,9 @@
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
-                    (xt/submit-tx node (for [x batch]
-                                         [:put-docs :foo {:xt/id x}]))))
+                    (xt/submit-tx node [(into [:put-docs :foo]
+                                              (for [x batch]
+                                                {:xt/id x}))])))
 
                 (q []
                   (->> (xt/q node
