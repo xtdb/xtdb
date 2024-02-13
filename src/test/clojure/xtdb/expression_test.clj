@@ -247,9 +247,10 @@
 
     (t/testing "java.time.LocalDate"
       (let [ld (LocalDate/of 2022 03 21)]
-        (t/is (= 0 (extract "SECOND" ld)))
-        (t/is (= 0 (extract "MINUTE" ld)))
-        (t/is (= 0 (extract "HOUR" ld)))
+        (t/is (thrown-with-msg?
+               UnsupportedOperationException
+               #"Extract \"SECOND\" not supported for type date"
+               (extract "SECOND" ld))) 
         (t/is (= 21 (extract "DAY" ld)))
         (t/is (= 3 (extract "MONTH" ld)))
         (t/is (= 2022 (extract "YEAR" ld)))))
@@ -258,10 +259,7 @@
       (let [dates [(time/->instant #inst "2022-03-22T13:44:52.344")
                    (-> (time/->zdt #inst "2021-02-23T21:19:10.692")
                        (.withZoneSameLocal (ZoneId/of "Asia/Calcutta")))
-                   (LocalDate/of 2020 04 18)]]
-        (t/is (= [52 10 0] (extract-all "SECOND" dates)))
-        (t/is (= [44 19 0] (extract-all "MINUTE" dates)))
-        (t/is (= [13 21 0] (extract-all "HOUR" dates)))
+                   (LocalDate/of 2020 04 18)]] 
         (t/is (= [22 23 18] (extract-all "DAY" dates)))
         (t/is (= [3 2 4] (extract-all "MONTH" dates)))
         (t/is (= [2022 2021 2020] (extract-all "YEAR" dates))))))) 
@@ -288,39 +286,17 @@
       (let [inst (time/->instant #inst "2022-03-21T13:44:52.344")]
         (t/is (= 0 (extract "TIMEZONE_HOUR" inst)))
         (t/is (= 0 (extract "TIMEZONE_MINUTE" inst))))) 
-    
-    (t/testing "java.time.LocalDateTime"
-      (let [ldt (LocalDateTime/of 2022 4 3 12 34 56 789456999)]
-        (t/is (thrown-with-msg?
-               UnsupportedOperationException
-               #"Extract \"timezone_hour\" not supported for type timestamp without timezone"
-               (extract "TIMEZONE_HOUR" ldt)))
-        (t/is (thrown-with-msg?
-               UnsupportedOperationException
-               #"Extract \"timezone_minute\" not supported for type timestamp without timezone"
-               (extract "TIMEZONE_MINUTE" ldt)))))
   
-    (t/testing "java.time.LocalDate"
+    (t/testing "type that doesn't support timezone fields"
       (let [ld (LocalDate/of 2022 03 21)]
         (t/is (thrown-with-msg?
                UnsupportedOperationException
-               #"Extract \"timezone_hour\" not supported for type date"
+               #"Extract \"TIMEZONE_HOUR\" not supported for type date"
                (extract "TIMEZONE_HOUR" ld)))
         (t/is (thrown-with-msg?
                UnsupportedOperationException
-               #"Extract \"timezone_minute\" not supported for type date"
-               (extract "TIMEZONE_MINUTE" ld)))))
-  
-    (t/testing "interval"
-      (let [itvl (PeriodDuration. (Period/of 1 4 8) (Duration/parse "PT3H10M12.1S"))]
-        (t/is (thrown-with-msg?
-               UnsupportedOperationException
-               #"Extract \"timezone_hour\" not supported for type interval"
-               (extract "TIMEZONE_HOUR" itvl)))
-        (t/is (thrown-with-msg?
-               UnsupportedOperationException
-               #"Extract \"timezone_minute\" not supported for type interval"
-               (extract "TIMEZONE_MINUTE" itvl)))))))
+               #"Extract \"TIMEZONE_MINUTE\" not supported for type date"
+               (extract "TIMEZONE_MINUTE" ld)))))))
 
 (defn run-projection [rel form]
   (let [col-types (->> rel

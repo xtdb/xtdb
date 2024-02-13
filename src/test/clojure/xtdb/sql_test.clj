@@ -934,7 +934,7 @@
     
     (t/is (thrown-with-msg? 
            UnsupportedOperationException
-           #"Extract \"timezone_hour\" not supported for type timestamp without timezone"
+           #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
            (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z"))))
   
   (t/testing "timestamp with timezone behavior"
@@ -950,7 +950,7 @@
 
     (t/is (thrown-with-msg?
            UnsupportedOperationException
-           #"Extract \"timezone_hour\" not supported for type date"
+           #"Extract \"TIMEZONE_HOUR\" not supported for type date"
            (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x FROM (VALUES 1) AS z"))))
   
   (t/testing "interval behavior"
@@ -962,7 +962,7 @@
   
     (t/is (thrown-with-msg?
            UnsupportedOperationException
-           #"Extract \"timezone_hour\" not supported for type interval"
+           #"Extract \"TIMEZONE_HOUR\" not supported for type interval"
            (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))))
 
 (deftest test-system-time-queries
