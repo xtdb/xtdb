@@ -903,6 +903,87 @@
   (t/is (= [{:interval #xt/interval-mdn ["P3M" "PT0S"]}]
            (xt/q tu/*node* "SELECT DATE_TRUNC('MONTH', 3 MONTH + 4 DAY + 2 SECOND) as interval FROM (VALUES 1) AS x"))))
 
+(deftest test-extract-plan
+  (t/testing "TIMESTAMP behaviour"
+    (t/are
+     [sql expected]
+     (= expected (plan-expr sql))
+      "extract(second from timestamp '2021-10-21T12:34:56')" '(extract "SECOND" #time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MINUTE" #time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "HOUR" #time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(DAY FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "DAY" #time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(MONTH FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MONTH" #time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "YEAR" #time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(TIMEZONE_MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "TIMEZONE_MINUTE" #time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "TIMEZONE_HOUR" #time/date-time "2021-10-21T12:34:56")))
+
+  (t/testing "INTERVAL behaviour"
+    (t/are
+     [sql expected]
+     (= expected (plan-expr sql))
+      "EXTRACT(second from interval '3 02:47:33' day to second)" '(extract "SECOND" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6))
+      "EXTRACT(MINUTE FROM INTERVAL '5' DAY)" '(extract "MINUTE" (single-field-interval "5" "DAY" 2 0))))
+  
+  (t/testing "TIME behaviour"
+    (t/are
+     [sql expected]
+     (= expected (plan-expr sql))
+      "EXTRACT(second from time '11:11:11')" '(extract "SECOND" #time/time "11:11:11")
+      "EXTRACT(MINUTE FROM TIME '11:11:11')" '(extract "MINUTE" #time/time "11:11:11"))))
+
+(deftest test-extract-query
+  (t/testing "timestamp behavior"
+    (t/is (= [{:x 34}]
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z")))
+
+    (t/is (= [{:x 2021}]
+             (xt/q tu/*node* "SELECT EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z")))
+
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z"))))
+
+  (t/testing "timestamp with timezone behavior"
+    (t/is (= [{:x 34}]
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56+05:00') as x FROM (VALUES 1) AS z")))
+
+    (t/is (= [{:x 5}]
+             (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56+05:00') as x FROM (VALUES 1) AS z"))))
+
+  (t/testing "date behavior"
+    (t/is (= [{:x 3}]
+             (xt/q tu/*node* "SELECT EXTRACT(MONTH FROM DATE '2001-03-11') as x FROM (VALUES 1) AS z")))
+
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"Extract \"TIMEZONE_HOUR\" not supported for type date"
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x FROM (VALUES 1) AS z"))))
+
+  (t/testing "time behavior"
+    (t/is (= [{:x 34}]
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIME '12:34:56') as x FROM (VALUES 1) AS z")))
+
+    (t/is (= [{:x 12}]
+             (xt/q tu/*node* "SELECT EXTRACT(HOUR FROM TIME '12:34:56') as x FROM (VALUES 1) AS z")))
+
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z"))))
+
+  (t/testing "interval behavior"
+    (t/is (= [{:x 3}]
+             (xt/q tu/*node* "SELECT EXTRACT(DAY FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))
+
+    (t/is (= [{:x 47}]
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))
+
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"Extract \"TIMEZONE_HOUR\" not supported for type interval"
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))))
+
 (deftest test-system-time-queries
   (t/testing "AS OF"
     (t/is
