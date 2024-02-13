@@ -11,7 +11,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
-           (java.time Clock Duration Instant LocalDate LocalDateTime Period ZoneId ZonedDateTime)
+           (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
@@ -273,6 +273,23 @@
       (t/is (= 8 (extract "DAY" itvl)))
       (t/is (= 4 (extract "MONTH" itvl)))
       (t/is (= 1 (extract "YEAR" itvl))))))
+
+(t/deftest test-time-extract
+  (letfn [(extract [part time-val] (project1 (list 'extract part 'time) {:time time-val}))]
+    (let [tm (LocalTime/of 3 23 20)]
+      (t/is (= 20 (extract "SECOND" tm)))
+      (t/is (= 23 (extract "MINUTE" tm)))
+      (t/is (= 3 (extract "HOUR" tm)))
+
+      (t/is (thrown-with-msg?
+             UnsupportedOperationException
+             #"Extract \"DAY\" not supported for type time without timezone"
+             (extract "DAY" tm)))
+      
+      (t/is (thrown-with-msg?
+             UnsupportedOperationException
+             #"Extract \"TIMEZONE_HOUR\" not supported for type time without timezone"
+             (extract "TIMEZONE_HOUR" tm))))))
 
 (t/deftest test-timezone-extract
   (letfn [(extract [part value] (project1 (list 'extract part 'value) {:value value}))]

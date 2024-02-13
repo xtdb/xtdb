@@ -930,6 +930,16 @@
                       "SECOND" `(-> (.toSeconds ~duration) (rem 60) (int))
                       (throw (UnsupportedOperationException. (format "Extract \"%s\" not supported for type interval" field))))))})
 
+(defmethod expr/codegen-call [:extract :utf8 :time-local] [{[{field :literal} _] :args [_ [_tm tm-unit]] :arg-types}]
+  {:return-type :i32
+   :->call-code (fn [[_ tm]]
+                  (let [local-time `(LocalTime/ofNanoOfDay ~(with-conversion tm tm-unit :nano))]
+                    (case field
+                      "HOUR" `(.getHour ~local-time)
+                      "MINUTE" `(.getMinute ~local-time)
+                      "SECOND" `(.getSecond ~local-time)
+                      (throw (UnsupportedOperationException. (format "Extract \"%s\" not supported for type time without timezone" field))))))})
+
 (defn field->truncate-fn
   [field]
   (case field
