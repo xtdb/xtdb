@@ -902,8 +902,8 @@
    :->call-code (fn [[_ x]]
                   `(-> ~(ts->ldt x ts-unit)
                        ~(case field
-                          "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"timezone_hour\" not supported for type timestamp without timezone"))
-                          "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"timezone_minute\" not supported for type timestamp without timezone"))
+                          "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"))
+                          "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"TIMEZONE_MINUTE\" not supported for type timestamp without timezone"))
                           `(.get ~(time-field->ChronoField field)))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args}]
@@ -911,15 +911,10 @@
   {:return-type :i32
    :->call-code (fn [[_ epoch-day-code]]
                   (case field
-                    ;; we could inline the math here, but looking at sources, there is some nuance.
-                    "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"timezone_hour\" not supported for type date"))
-                    "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"timezone_minute\" not supported for type date"))
                     "YEAR" `(.getYear (LocalDate/ofEpochDay ~epoch-day-code))
                     "MONTH" `(.getMonthValue (LocalDate/ofEpochDay ~epoch-day-code))
                     "DAY" `(.getDayOfMonth (LocalDate/ofEpochDay ~epoch-day-code))
-                    "HOUR" `(int 0)
-                    "MINUTE" `(int 0)
-                    "SECOND" `(int 0)))})
+                    (throw (UnsupportedOperationException. (format "Extract \"%s\" not supported for type date" field)))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type :i32
@@ -927,14 +922,13 @@
                   (let [period `(.getPeriod ^PeriodDuration ~pd)
                         duration `(.getDuration ^PeriodDuration ~pd)]
                     (case field
-                      "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"timezone_hour\" not supported for type interval"))
-                      "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"timezone_minute\" not supported for type interval"))
                       "YEAR" `(-> (.toTotalMonths ~period) (/ 12) (int))
                       "MONTH" `(-> (.toTotalMonths ~period) (rem 12) (int))
                       "DAY" `(.getDays ~period)
                       "HOUR" `(-> (.toHours ~duration) (int))
                       "MINUTE" `(-> (.toMinutes ~duration) (rem 60) (int))
-                      "SECOND" `(-> (.toSeconds ~duration) (rem 60) (int)))))})
+                      "SECOND" `(-> (.toSeconds ~duration) (rem 60) (int))
+                      (throw (UnsupportedOperationException. (format "Extract \"%s\" not supported for type interval" field))))))})
 
 (defn field->truncate-fn
   [field]
