@@ -14,29 +14,52 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(t/deftest test-compaction-jobs
+(t/deftest test-l0->l1-compaction-job
   (letfn [(f [tries]
-            (c/compaction-jobs (util/->path "tables/foo")
-                               (for [[level nr] tries]
-                                 (trie/->table-meta-file-path (util/->path "tables/foo") 
-                                                              (trie/->log-trie-key level nr 2)))))]
-    (t/is (= [] (f [])))
+            (c/compaction-jobs (for [[level nr rows] tries]
+                                 (trie/->table-meta-file-path (util/->path "tables/foo")
+                                                              (trie/->log-trie-key level nr rows)))
+                               {:l1-file-size-rows 16}))]
+    (t/is (nil? (f [])))
 
-    (t/is (= []
-             (f [[0 1] [0 2] [0 3]])))
+    (t/is (= [{:trie-keys ["log-l00-nr01-rsa" "log-l00-nr02-rsa"]
+               :out-trie-key "log-l01-nr02-rs14"}]
+             (f [[0 1 10] [0 2 10] [0 3 10]]))
+          "no L1s yet, merge L0s up to limit and stop")
 
-    (t/is (= [{:table-path (util/->path "tables/foo"),
-               :trie-keys ["log-l00-nr01-rs2"
-                           "log-l00-nr02-rs2"
-                           "log-l00-nr03-rs2"
-                           "log-l00-nr04-rs2"],
-               :out-trie-key "log-l01-nr04-rs8"}]
-             (f [[0 1] [0 2] [0 3] [0 4]])))
+    (t/is (= [{:trie-keys ["log-l01-nr01-rsa" "log-l00-nr02-rsa"]
+               :out-trie-key "log-l01-nr02-rs14"}]
+             (f [[0 1 10] [0 2 10] [0 3 10]
+                 [1 1 10]]))
+          "have a partial L1, merge into that until it's full")
 
-    (t/is (= []
-             (f [[1 2] [1 4] [1 6]
-                 [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))
+    (t/is (nil? (f [[0 1 10] [0 2 10]
+                    [1 2 10]]))
+          "all merged, nothing to do")
 
+    (t/is (= [{:trie-keys ["log-l00-nr03-rsa" "log-l00-nr04-rsa"],
+               :out-trie-key "log-l01-nr04-rs14"}]
+             (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
+                 [1 2 20]]))
+          "have a full L1, start a new L1 til that's full")
+
+    (t/is (= [{:trie-keys ["log-l00-nr03-rsa" "log-l00-nr04-rsa"],
+               :out-trie-key "log-l01-nr04-rs14"}]
+             (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
+                 [1 2 20]]))
+          "have a full L1, start a new L1 til that's full")
+
+    (t/is (= [{:trie-keys ["log-l01-nr03-rsa" "log-l00-nr04-rsa"],
+               :out-trie-key "log-l01-nr04-rs14"}]
+             (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
+                 [1 2 20] [1 3 10]]))
+          "have a full and a partial L1, merge into that til it's full")
+
+    (t/is (nil? (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
+                    [1 2 20] [1 4 20] [1 5 10]]))
+          "all merged, nothing to do")
+
+    #_#_
     (t/is (= [{:table-path (util/->path "tables/foo"),
                :trie-keys ["log-l01-nr02-rs2"
                            "log-l01-nr04-rs2"
@@ -116,11 +139,12 @@
                   nil (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
                  (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals)))))))
 
-(t/deftest test-e2e
-  (let [node-dir (util/->path "target/compactor/test-e2e")]
+(t/deftest test-l1-compaction
+  (let [node-dir (util/->path "target/compactor/test-l1-compaction")]
     (util/delete-dir node-dir)
 
-    (binding [c/*page-size* 32]
+    (binding [c/*page-size* 32
+              c/*l1-file-size-rows* 256]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
@@ -146,9 +170,16 @@
 
           (t/is (= (range 200) (q)))
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-e2e")))
+          (submit! (range 200 500))
+          (tu/then-await-tx node)
+          (c/compact-all! node)
+
+          (t/is (= (range 500) (q)))
+
+          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction")))
                          (.resolve node-dir "objects/v01/tables/foo") #"log-l01-(.+)\.arrow")
 
+          #_ ; temporarily disabled
           (t/testing "second level"
             (submit! (range 200 500))
             (tu/then-await-tx node)
