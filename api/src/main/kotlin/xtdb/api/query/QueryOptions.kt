@@ -54,7 +54,7 @@ data class QueryOptions(
         override fun deserialize(decoder: Decoder): Map<String, *> {
             require(decoder is JsonDecoder)
             return when (val element = decoder.decodeJsonElement()) {
-                is JsonArray -> element.map { it.toValue() } .mapIndexed{ idx, arg -> "_$idx" to arg }?.toMap()
+                is JsonArray -> element.map { it.toValue() } .mapIndexed{ idx, arg -> "_$idx" to arg }.toMap()
                 is JsonObject -> element.toValue()
                 else -> throw jsonIAE("unknown-args-json-type", element)
             } as Map<String, *>
