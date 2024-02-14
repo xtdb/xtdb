@@ -235,11 +235,13 @@
 
                            (assoc-in [:formats "application/json" :decoder] (json-query-decoder))))
 
-   :post {:handler (fn [{:keys [node parameters]}]
+   :post {:handler (fn [{:keys [node parameters] :as req}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
                        (-> (xtp/open-query& node query (dissoc query-opts :query))
                            (util/then-apply (fn [res]
-                                              {:status 200, :body res})))))
+                                              (cond-> {:status 200, :body res}
+                                                (= (-> req :muuntaja/response :format) "application/json")
+                                                (assoc :muuntaja/content-type "application/jsonl")))))))
 
           :parameters {:body ::query-body}}})
 
