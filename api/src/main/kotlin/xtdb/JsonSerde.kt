@@ -47,7 +47,7 @@ object AnySerde : KSerializer<Any> {
         }
     }
 
-    private fun JsonElement.toValue(): Any = when (this) {
+    fun JsonElement.toValue(): Any = when (this) {
         is JsonArray -> map { it.toValue() }
         is JsonObject -> {
             val type = (this["@type"] as? JsonPrimitive)?.takeIf { it.isString }?.content

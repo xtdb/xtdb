@@ -501,3 +501,10 @@
   (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
                           (-> {"explain" true} encode decode-query-request))
         "query map without query"))
+
+(defn- decode-query-options [^String v]
+  (JsonSerde/decode v QueryOptions))
+
+(deftest desrialize-list-args-test
+  (t/is (= (-> (QueryOptions/queryOpts) (.args [1 2]) (.build))
+           (-> {"args" [1 2]} encode decode-query-options))))

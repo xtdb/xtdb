@@ -440,7 +440,7 @@
                               :request-method :post
                               :content-type :json
                               :form-params {:query {"sql" "SELECT LEAST(?,2), LEAST(3,4) FROM (VALUES (1)) x"}
-                                            :queryOpts {:args {"_0" 1}}}
+                                            :queryOpts {:args [1]}}
                               :url (http-url "query")})
                :body
                decode-json*))
