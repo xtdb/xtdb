@@ -1,5 +1,6 @@
 (ns xtdb.bench
-  (:require [clojure.string :as str]
+  (:require [clojure.data.json :as json]
+            [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
@@ -49,7 +50,7 @@
 
 ;;; bench
 
-(defrecord Worker [sut random domain-state custom-state clock reports])
+(defrecord Worker [sut random domain-state custom-state clock reports bench-id jvm-id])
 
 (defn current-timestamp ^Instant [worker]
   (.instant ^Clock (:clock worker)))
@@ -202,7 +203,10 @@
    :job-task 'task}
   )
 
-(defn compile-benchmark [benchmark hook]
+(defn log-report [{:keys [bench-id jvm-id] :as _worker} report]
+  (println (json/write-str (assoc report :bench-id bench-id :jvm-id jvm-id))))
+
+(defn compile-benchmark [{:keys [title] :as benchmark} hook]
   (let [seed (:seed benchmark 0)
         lift-f (fn [f] (if (vector? f) #(apply (first f) % (rest f)) f))
         compile-task
@@ -303,30 +307,22 @@
                      (sleep)
                      (recur wait-until))))))))
         fns (mapv compile-task (:tasks benchmark))]
+
     (fn run-benchmark [sut]
       (let [clock (Clock/systemUTC)
             domain-state (ConcurrentHashMap.)
             custom-state (ConcurrentHashMap.)
             root-random (Random. seed)
             reports (atom [])
-            worker (->Worker sut root-random domain-state custom-state clock reports)
+            worker (->Worker sut root-random domain-state custom-state clock reports (random-uuid) (System/getProperty "user.name"))
             start-ms (System/currentTimeMillis)]
         (doseq [f fns]
           (f worker))
 
-        (let [system (get-system-info)]
-          {:stages (vec (for [[stage reports] (group-by :stage @reports)
-                              :let [extra (apply merge (map :extra reports))]]
-                          (cond-> {:stage stage
-                                   :start-ms (apply min (map :start-ms reports))
-                                   :end-ms (apply max (map :end-ms reports))}
-                            extra (assoc :extra extra))))
-           :metrics (vec (for [{:keys [stage, metrics]} @reports
-                               metric metrics]
-                           (assoc metric :stage stage)))
-           :system system
-           :start-ms start-ms
-           :end-ms (System/currentTimeMillis)})))))
+        (log-report worker {:benchmark title
+                            :system (get-system-info)
+                            :start-ms start-ms
+                            :end-ms (System/currentTimeMillis)})))))
 
 (defn add-report [worker report]
   (swap! (:reports worker) conj report))
