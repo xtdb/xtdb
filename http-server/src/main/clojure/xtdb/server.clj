@@ -26,6 +26,7 @@
             [xtdb.util :as util])
   (:import (java.io InputStream OutputStream)
            (java.time Duration ZoneId)
+           (java.util Map)
            [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
@@ -204,7 +205,7 @@
 
 (s/def ::query (some-fn string? seq? #(instance? Query %)))
 
-(s/def ::args (s/nilable (s/coll-of any?)))
+(s/def ::args (s/nilable #(instance? Map %)))
 
 (s/def ::query-body
   (s/keys :req-un [::query],

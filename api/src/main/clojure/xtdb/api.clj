@@ -166,7 +166,7 @@
   IXtdb
   (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
     (let [query-opts (-> (QueryOptions/queryOpts)
-                         (cond-> (map? args) (.args ^Map args)
+                         (cond-> (instance? Map args) (.args ^Map args)
                                  (sequential? args) (.args ^List args)
                                  after-tx (.afterTx after-tx)
                                  basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
