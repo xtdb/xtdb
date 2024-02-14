@@ -38,10 +38,7 @@
   ;; running benchmarks
   (run-bench {:type :ts-devices :opts {:size :small}})
 
-  (def tpch-report (run-bench {:type :tpch :opts {:scale-factor 0.05}}))
-  (report/print-stage-times tpch-report tpch-report)
-  (report/tpc-h-report tpch-report)
-
+  (run-bench {:type :tpch :opts {:scale-factor 0.01}})
 
 
   ;; auctionmark

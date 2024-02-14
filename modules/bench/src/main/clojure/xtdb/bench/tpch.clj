@@ -43,13 +43,10 @@
 
         cache-ratio (/ hit-bytes (max 1 (+ hit-bytes miss-bytes)))
         stall-nanos @bp/io-wait-nanos-counter]
-    (->> ["hit" (format "%s (%.2f)" (humanize-bytes hit-bytes) (double cache-ratio))
-          "miss" (humanize-bytes miss-bytes)
-          "io" (format "%s/sec" (humanize-bytes (/ miss-bytes (max 1 (/ ms 1000)))))
-          "io-wait" (humanize-nanos stall-nanos)]
-         (partition 2)
-         (map (fn [[label s]] (str label ": " s)))
-         (str/join ", "))))
+    {"hit" (format "%s (%.2f)" (humanize-bytes hit-bytes) (double cache-ratio))
+     "miss" (humanize-bytes miss-bytes)
+     "io" (format "%s/sec" (humanize-bytes (/ miss-bytes (max 1 (/ ms 1000)))))
+     "io-wait" (humanize-nanos stall-nanos)}))
 
 (defn query-tpch [stage-name i]
   (let [q (nth tpch-ra/queries i)
@@ -73,21 +70,20 @@
    :stage stage-name
    :tasks (vec (concat [{:t :call :f (fn [{:keys [^AbstractMap custom-state]}]
                                        (bp/clear-cache-counters)
-                                       (.put custom-state :start (System/currentTimeMillis)))}]
+                                       (.put custom-state :bf-stats-start (System/currentTimeMillis)))}]
 
                        (for [i (range (count tpch-ra/queries))]
                          (query-tpch stage-name i))
 
                        [{:t :call :f (fn [{:keys [custom-state] :as worker}]
                                        (let [report-name (str (name stage-name) " buffer pool stats")
-                                             start-ms (get custom-state :start)
+                                             start-ms (get custom-state :bf-stats-start)
                                              end-ms (System/currentTimeMillis)
                                              bf-stats (bp-stats (- end-ms start-ms))]
-                                         (b/add-report worker {:stage report-name
+                                         (b/log-report worker {:stage report-name
                                                                :start-ms start-ms
                                                                :end-ms end-ms
-                                                               :extra {:buffer-pool-stats bf-stats}})
-                                         (log/info report-name " - " bf-stats)))}]))})
+                                                               :buffer-pool-stats bf-stats})))}]))})
 
 (defn benchmark [{:keys [scale-factor seed] :or {scale-factor 0.01 seed 0}}]
   (log/info {:scale-factor scale-factor})
