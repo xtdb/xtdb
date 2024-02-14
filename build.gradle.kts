@@ -243,30 +243,6 @@ if (hasProperty("fin")) {
     }
 }
 
-fun addToArgsIfExistent(propertyName: String, args: MutableList<String>) {
-    if (project.hasProperty(propertyName)) {
-        project.property(propertyName)?.toString()?.let { property ->
-            args.add("--" + propertyName)
-            args.add(property)
-        }
-    }
-}
-
-tasks.create("run-auctionmark", JavaExec::class) {
-    classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("clojure.main")
-    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val args = mutableListOf(
-        "-m", "xtdb.bench.xtdb2"
-    )
-
-    addToArgsIfExistent("output-file", args)
-    addToArgsIfExistent("load-phase", args)
-    addToArgsIfExistent("duration", args)
-
-    this.args = args
-}
-
 val codoxOpts = File("${projectDir}/codox.edn").readText()
 
 tasks.create("build-codox", JavaExec::class) {
