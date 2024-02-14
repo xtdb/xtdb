@@ -2,8 +2,7 @@
   "A namespace for running benchmarks at the repl."
   (:require [clojure.java.io :as io]
             [xtdb.bench.xtdb2 :as bxt]
-            [xtdb.util :as util]
-            [xtdb.bench.report :as report])
+            [xtdb.util :as util])
   (:import (java.time InstantSource)))
 
 (comment
@@ -42,8 +41,8 @@
 
 
   ;; auctionmark
-  (def node-dir (io/file "dev/dev-node"))
-  (util/delete-dir (.toPath node-dir))
+  (def node-dir (.toPath (io/file "dev/dev-node")))
+  (util/delete-dir node-dir)
 
   (run-bench {:type :auctionmark
               :opts {:duration "PT2M"

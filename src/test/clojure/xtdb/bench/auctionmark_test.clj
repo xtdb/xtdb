@@ -16,8 +16,7 @@
         domain-state (ConcurrentHashMap.)
         custom-state (ConcurrentHashMap.)
         root-random (Random. 112)
-        reports (atom [])
-        worker (b/->Worker node root-random domain-state custom-state clock reports)]
+        worker (b/->Worker node root-random domain-state custom-state clock (random-uuid) (System/getProperty "user.name"))]
     worker))
 
 (t/deftest generate-user-test
