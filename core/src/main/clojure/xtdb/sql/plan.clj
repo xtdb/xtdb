@@ -254,21 +254,33 @@
   (LocalTime/of (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
                 (seconds-fraction->nanos seconds-fraction)))
 
-(defn- plan-period-predicand [period-predicand]
-  (r/zmatch
-    period-predicand
-    [:period_predicand ^:z col]
-    ;;=>
-    (let [[from to] (sem/expand-underlying-column-references (sem/column-reference col))]
-      {:from (column-reference-symbol from)
-       :to (column-reference-symbol to)})
+(defn- plan-period-predicand
+  ([period-predicand]
+   (plan-period-predicand period-predicand false))
+  ([period-predicand allow-point-in-time?]
+   (r/zmatch period-predicand
+     [:period_predicand ^:z col]
+     ;;=>
+     (let [[from to] (sem/expand-underlying-column-references (sem/column-reference col))]
+       (if to
+         {:from (column-reference-symbol from)
+          :to (column-reference-symbol to)}
+         (if allow-point-in-time?
+           {:from (column-reference-symbol from)
+            :to (column-reference-symbol from)}
+           (throw (err/illegal-arg :xtdb.sql/parse-error
+                                   {::err/message (str (str/join "." (:identifiers from)) " is not a Period")})))))
 
-    [:period_predicand "PERIOD" ^:z from ^:z to]
-    ;;=>
-    {:from (expr from) :to (expr to)}
+     [:period_predicand "PERIOD" ^:z from ^:z to]
+     ;;=>
+     {:from (expr from) :to (expr to)}
 
-    ;; handles CONTAINS period_or_point_in_time_predicand
-    (expr period-predicand)))
+     (if allow-point-in-time?
+       (let [ts (expr period-predicand)]
+         {:from ts
+          :to ts})
+       ;; should never be reached
+       (throw (err/illegal-arg :xtdb.sql/parse-error {::err/message "Invalid Period Predicand"}))))))
 
 (defn expr [z]
   (r/zmatch z
@@ -819,8 +831,8 @@
     [:period_contains_predicate ^:z p1_predicand [:period_contains_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
-          p2 (plan-period-predicand p2_predicand)]
-      (list 'and (list '<= (:from p1) (or (:from p2) p2)) (list '>= (:to p1) (or (:to p2) p2))))
+          p2 (plan-period-predicand p2_predicand true)]
+      (list 'and (list '<= (:from p1) (:from p2)) (list '>= (:to p1) (:to p2))))
 
     [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>

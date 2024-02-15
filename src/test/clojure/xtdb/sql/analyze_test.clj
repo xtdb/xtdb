@@ -390,16 +390,6 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "SELECT 1 FROM t1 OFFSET 'foo'")
   (valid? "SELECT 1 FROM t1 OFFSET 1"))
 
-(t/deftest test-check-period-predicand
-  (invalid? [#"Please use a qualified reference to valid_time"]
-    "SELECT foo.name, bar.also_name
-    FROM foo, bar
-    WHERE foo.random_col OVERLAPS bar.VALID_TIME")
-  (invalid? [#"Please use a qualified reference to valid_time"]
-    "SELECT foo.name, bar.also_name
-    FROM foo, bar
-    WHERE foo.systemTime OVERLAPS bar.fooble"))
-
 (t/deftest test-invalid-table-names
   (invalid? [#"Unexpected:\nVALID_TIME"]
             "SELECT VALID_TIME.foo FROM VALID_TIME")
