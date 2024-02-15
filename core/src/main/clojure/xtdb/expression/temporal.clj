@@ -374,33 +374,56 @@
   (defmethod expr/codegen-call [:+ t1 t2] [expr]
     (recall-with-flipped-args expr)))
 
-;;; subtract
+;; Subtraction
 
-(defmethod expr/codegen-call [:- :timestamp-tz :timestamp-tz] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
-  (-> (with-arg-unit-conversion x-unit y-unit
-        #(do [:duration %]) #(do `(Math/subtractExact ~@%)))
-      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+;; Calculate difference between two timestamps, returning the result as an Interval. 
+;; When subtracting two datetime values, we also provide an 'interval qualifier' (passed as a string). We use this to:
+;; - Determine the type of the resultant interval (either :year-month or :month-day-nano)
+;; - Decide the precision we truncate the result to (e.g. if the interval qualifier is "YEAR", we truncate the result to the nearest year)
+(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8] [{[_ _ {interval-qualifier :literal}] :args [[_ x-unit] [_ y-unit] _] :arg-types}]
+  (if (or (str/starts-with? interval-qualifier "YEAR")
+          (str/starts-with? interval-qualifier "MONTH"))
 
-(defmethod expr/codegen-call [:- :timestamp-local :timestamp-local] [{[[_ x-unit], [_ y-unit]] :arg-types}]
-  (-> (with-arg-unit-conversion x-unit y-unit
-        #(do [:duration %]) #(do `(Math/subtractExact ~@%)))
-      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+    ;; NOTE: As we are using `between` from ChronoUnit, we swap positions of x and y, as between caluclates (between start end) 
+    {:return-type [:interval :year-month]
+     :->call-code (fn [[x y]]
+                    `(PeriodDuration. ~(case interval-qualifier
+                                         "YEAR" `(Period/ofYears (.between ChronoUnit/YEARS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
+                                         "YEAR TO MONTH" `(Period/ofMonths (.between ChronoUnit/MONTHS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
+                                         "MONTH" `(Period/ofMonths (.between ChronoUnit/MONTHS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))))
+                                      Duration/ZERO))}
 
-(defmethod expr/codegen-call [:- :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast x [:timestamp-local y-unit])))
+    {:return-type [:interval :month-day-nano]
+     :->call-code (fn [[x y]]
+                    `(PeriodDuration. (Period/ofDays (.between ChronoUnit/DAYS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
+                                      ~(case interval-qualifier
+                                         "DAY" `Duration/ZERO
+                                         "DAY TO HOUR" `(Duration/ofHours (rem (.between ChronoUnit/HOURS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 24))
+                                         "DAY TO MINUTE" `(Duration/ofMinutes (rem (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 1440))
+                                         "DAY TO SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400))
+                                         "HOUR" `(Duration/ofHours (rem (.between ChronoUnit/HOURS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 24))
+                                         "HOUR TO MINUTE" `(Duration/ofMinutes (rem (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 1440))
+                                         "HOUR TO SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400))
+                                         "MINUTE" `(Duration/ofMinutes (rem (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 1440))
+                                         "MINUTE TO SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400))
+                                         "SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400)))))}))
 
-(defmethod expr/codegen-call [:- :timestamp-tz :timestamp-local] [{[[_ x-unit] y] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:timestamp-local x-unit] y)))
+(defn- date-diff-cast
+  [{[_ _ {interval-qualifier :literal}] :args [t1 t2 _] :arg-types, :as expr}]
+  (let [{ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code} (expr/codegen-cast {:source-type t1, :target-type [:timestamp-local :micro]})
+        {ret2 :return-type, bb2 :batch-bindings, ->cc2 :->call-code} (expr/codegen-cast {:source-type t2, :target-type [:timestamp-local :micro]})
+        {ret :return-type, bb :batch-bindings, ->cc :->call-code} (expr/codegen-call (assoc expr :arg-types [ret1 ret2 :utf8]))]
+    {:return-type ret
+     :batch-bindings (concat bb1 bb2 bb)
+     :->call-code (fn [[a1 a2]]
+                    (->cc [(->cc1 [a1]) (->cc2 [a2]) interval-qualifier]))}))
 
-(defmethod expr/codegen-call [:- :date :date] [expr]
-  (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
-
-(doseq [t [:timestamp-tz :timestamp-local]]
-  (defmethod expr/codegen-call [:- :date t] [{[_ t2] :arg-types, :as expr}]
-    (-> expr (recall-with-cast [:timestamp-local :micro] t2)))
-
-  (defmethod expr/codegen-call [:- t :date] [{[t1 _] :arg-types, :as expr}]
-    (-> expr (recall-with-cast t1 [:timestamp-local :micro]))))
+;; Register non (timestamp-local - timestamp-local) & mixed type temporal subtractions, using the 'date-diff-cast' function
+(doseq [t1 [:date :timestamp-local :timestamp-tz]
+        t2 [:date :timestamp-local :timestamp-tz]]
+  (when-not (= :timestamp-local t1 t2)
+    (defmethod expr/codegen-call [:date_diff t1 t2 :utf8] [expr]
+      (date-diff-cast expr))))
 
 (defmethod expr/codegen-call [:- :time-local :time-local] [{[[_ time-unit1] [_ time-unit2]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))

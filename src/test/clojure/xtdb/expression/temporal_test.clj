@@ -368,33 +368,7 @@
                (test-arithmetic '- #time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-mdn ["P2D" "PT1H"] ))
             "clock change")
 
-      (t/is (nil? (test-arithmetic '- time/end-of-time #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
-
-    (t/testing "(- datetime datetime)"
-      (t/is (= #time/duration "PT24H"
-               (test-arithmetic '- #time/date "2022-08-01" #time/date "2022-07-31")))
-
-      (t/is (= #time/duration "PT1H15M43.342S"
-               (test-arithmetic '- #time/date "2022-08-01" #time/date-time "2022-07-31T22:44:16.658")))
-
-      (t/is (= #time/duration "PT1H15M43.342S"
-               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #time/date-time "2022-08-01T01:15:43.342")))
-
-      (t/is (= #time/duration "PT1H15M43.342S"
-               (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
-
-      (t/is (= #time/duration "PT6H44M16.658S"
-               (test-arithmetic '- #time/date "2022-08-01" #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
-
-      (t/is (= #time/duration "PT-9H-15M-43.342S"
-               (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/date-time "2022-08-01T02:31:26.684")))
-
-      (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- time/end-of-time  #time/date-time "2022-08-01T02:31:26.684")))
-      (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" time/end-of-time)))
-      (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- time/end-of-time time/end-of-time))))))
+      (t/is (nil? (test-arithmetic '- time/end-of-time #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))))
 
 (tct/defspec test-lt
   (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
