@@ -1081,6 +1081,36 @@
     '(= x1 #time/zoned-date-time "2001-01-01T00:00Z")
     "foo.VALID_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
 
+(deftest test-period-predicates-point-in-time
+  (t/are [expected sql] (= expected (plan-expr sql))
+
+    '(and (<= x1 x3) (>= x2 x3))
+    "foo.valid_time CONTAINS foo.other_column"
+
+    '(and
+      (<= x1 #time/zoned-date-time "2010-01-01T11:10:11Z")
+      (>= x2 #time/zoned-date-time "2010-01-01T11:10:11Z"))
+    "foo.valid_time CONTAINS TIMESTAMP '2010-01-01T11:10:11Z'"
+
+    '(and (<= x1 x3) (>= x2 x3))
+    "foo.valid_time CONTAINS PERIOD(foo.baz, foo.baz)"
+
+    '(and (<= x1 x3) (>= x2 x3))
+    "foo.valid_time CONTAINS foo.xt$system_from"))
+
+(deftest test-period-predicates-point-in-time-erros
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Error Planning SQL: f.other_column is not a Period"
+         (plan-sql "SELECT f.foo FROM foo f WHERE f.valid_time OVERLAPS f.other_column")))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Invalid SQL query: Parse error at line 1, column 63:"
+         (plan-sql
+          "SELECT f.foo FROM foo f WHERE f.valid_time OVERLAPS TIMESTAMP '2010-01-01T11:10:11Z'"))))
+
 (deftest test-min-long-value-275
   (t/is (= Long/MIN_VALUE (plan-expr "-9223372036854775808"))))
 

@@ -1140,26 +1140,6 @@
                            label (->src-str ag) (->line-info-str ag)))))
          (reduce into))))
 
-(defn- check-period-predicand [ag]
-  []
-  (if-not (r/zmatch
-              ag
-            [:period_predicand "PERIOD" _ _]
-            ;;=>
-            true
-
-            [:period_predicand ^:z col-ref]
-            ;;=>
-            (let [identifiers (identifiers col-ref)]
-              (and
-               (= 2 (count identifiers))
-               (#{"valid_time" "system_time"} (second identifiers)))))
-
-    [(format "%s is not a valid period. Please use a qualified reference to valid_time or system_time: %s"
-             (->src-str ag)
-             (->line-info-str ag))]
-    []))
-
 (defn- check-dml-non-determinism [ag]
   (r/zcase ag
     :arrow_table
@@ -1262,9 +1242,6 @@
 
          :named_columns_join
          (check-named-columns-join ag)
-
-         :period_predicand
-         (check-period-predicand ag)
 
          :from_subquery
          (check-from-subquery ag)
