@@ -599,7 +599,9 @@
                ;; dependency given our current lack of schema/index/unique constraints
                ;; this could prove hard, but we could explicitly look for xt/id
                (assoc % :invalid-ref-to-non-grouping-col true)
-               %))))
+               %))
+       (seq))) ;;an empty projection should only happen in cases of nested table primaries,
+               ;; such as parenthesized-joined-tables.
 
     :subquery
     []
