@@ -1943,3 +1943,8 @@
   (t/is (= :true (project1 '(if true :true :false) {})))
   (t/is (= :false (project1 '(if false :true :false) {})))
   (t/is (= :false (project1 '(if nil :true :false) {}))))
+
+(t/deftest test-type-mismatch-throws-xtdb-error-3183
+  (t/is (thrown-with-msg? xtdb.IllegalArgumentException
+                          #"\+ not applicable to types i64 and utf8"
+                          (project1 '(+ 1 "2") {}))))

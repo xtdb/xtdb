@@ -511,7 +511,16 @@
     (vec (cons (normalise-fn-name f)
                (map types/col-type-head arg-types))))
 
-  :hierarchy #'types/col-type-hierarchy)
+  :hierarchy #'types/col-type-hierarchy
+  :default ::default)
+
+(defmethod codegen-call ::default [{:keys [f arg-types]}]
+  (throw (err/illegal-arg :xtdb.expression/function-type-mismatch
+                          {::err/message (apply str (name (normalise-fn-name f)) " not applicable to types "
+                                                (let [types (map (comp name types/col-type-head) arg-types)]
+                                                  (concat (interpose ", " (butlast types))
+                                                          (when (seq (butlast types)) [" and "])
+                                                          [(last types)])))})))
 
 (def ^:private shortcut-null-args?
   (complement (comp #{:is_true :is_false :is_null :is_absent :true? :false? :nil? :absent? :boolean

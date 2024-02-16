@@ -193,6 +193,8 @@
       (t/is (= {:xtdb.error/error-key :xtdb.expression/division-by-zero}
                (ex-data body)))))
 
+  ;; We shouldn't be able to produce deterministically an unknown runtime error.
+  #_
   (t/testing "unknown runtime error"
     (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :name 2}]])
           {:keys [status body] :as _resp} (http/request {:accept "application/jsonl"

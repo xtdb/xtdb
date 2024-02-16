@@ -642,8 +642,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
   ;; Might need to get updated if this kind of error gets handled differently.
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :name 2}]])
-  (t/is (thrown-with-msg? Exception ;; Exception as type is different for local/remote
-                          #"No method in multimethod 'codegen-call' for dispatch value"
+  (t/is (thrown-with-msg? xtdb.IllegalArgumentException
+                          #"upper not applicable to types i64"
                           (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
 
 (def ivan+petr
