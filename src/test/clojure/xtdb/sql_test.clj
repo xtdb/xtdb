@@ -1423,6 +1423,20 @@
   (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
            (xt/q tu/*node* "SELECT * FROM foo JOIN bar ON true"))))
 
+(deftest test-expand-asterisk-parenthesized-joined-table
+  ;;Parens in the place of a table primary creates a parenthesized_joined_table
+  ;;which is a qualified join, but nested inside a table primary. This test checks
+  ;;that the expand asterisk attribute continues to traverse through the outer table
+  ;;primary to find the nested table primaries.
+
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]
+                           [:put-docs :bar {:xt/id 2 :a "one"}]])
+
+  (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
+
+           (xt/q tu/*node*
+                 "SELECT * FROM ( foo LEFT JOIN bar ON true )"))))
+
 (deftest test-select-star-lateral-join
   (xt/submit-tx tu/*node* [[:put-docs :y {:xt/id 1 :b "one"}]])
 
