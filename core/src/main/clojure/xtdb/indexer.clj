@@ -297,6 +297,10 @@
               live-idx-table-copier (-> (.docWriter live-idx-table)
                                         (vw/struct-writer->rel-copier content-rel))]
 
+          (when-not id-col
+            (throw (err/runtime-err :xtdb.indexer/missing-xt-id-column
+                                    {:column-names (vec (for [^IVectorReader col in-rel] (.getName col)))})))
+
           (dotimes [idx row-count]
             (let [eid (.getObject id-col idx)
                   valid-from (if (and valid-from-rdr (not (.isNull valid-from-rdr idx)))

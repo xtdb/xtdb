@@ -752,3 +752,21 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                           (xt/q tu/*node*
                                 '(unify (from :album [*])
                                         (from :album [*]))))))
+
+(t/deftest test-xtql-dml-without-xt-id-3183
+  (t/testing "insert-into without xt/id"
+    (xt/submit-tx tu/*node* [[:put-docs :start {:xt/id 1 :foo "bar"}]])
+    (xt/submit-tx tu/*node* [[:insert-into :failing '(from :start [foo])]])
+
+    (t/is (= [{:xt/committed? false
+               :xt/error #xt/runtime-err [:xtdb.indexer/missing-xt-id-column "Runtime error: 'xtdb.indexer/missing-xt-id-column'"
+                                          {:column-names ["foo"]}]}]
+             (xt/q tu/*node* '(from :xt/txs [{:xt/id 1} xt/committed? xt/error])))))
+
+  (t/testing "insert-into with failing query"
+    (xt/submit-tx tu/*node* [[:insert-into :failing '(-> (rel [{}] [])
+                                                         (with {:xt/id (+ 1 "2")}))]])
+
+    (t/is (= [{:xt/committed? false,
+               :xt/error #xt/illegal-arg [:xtdb.expression/function-type-mismatch "+ not applicable to types i64 and utf8" {}]}]
+             (xt/q tu/*node* '(from :xt/txs [{:xt/id 2} xt/committed? xt/error]))))))
