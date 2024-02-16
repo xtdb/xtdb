@@ -1,9 +1,11 @@
 (ns xtdb.metadata-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
+            [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
@@ -154,3 +156,26 @@
                  (.columnNames table-metadata)))
 
         (t/is (true? (.test page-idx-pred 0)))))))
+
+(t/deftest test-set-metadata
+  (let [node-dir (util/->path "target/test-set-metadata")]
+    (util/delete-dir node-dir)
+    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+
+      (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
+
+      (tu/finish-chunk! node)
+
+      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+            ^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
+            meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs/") (trie/->log-trie-key 0 2 1))]
+
+        (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
+          (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)]
+
+            (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
+
+                           (.resolve node-dir "objects/v01/tables/"))
+
+            (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "colours" "$data$"}
+                     (.columnNames table-metadata)))))))))
