@@ -880,18 +880,20 @@
     {:ra-plan [:top {:skip (.length this)} ra-plan]
      :provided-vars provided-vars}))
 
-(defn compile-query [query table-info]
-  (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)
-                                    *table-info* table-info]
-                            (plan-query query))]
+(def compile-query
+  (-> (fn [query table-info]
+        (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)
+                                          *table-info* table-info]
+                                  (plan-query query))]
 
-    (-> ra-plan
-        #_(doto clojure.pprint/pprint)
-        #_(->> (binding [*print-meta* true]))
-        (lp/rewrite-plan {})
-        #_(doto clojure.pprint/pprint)
-        #_(->> (binding [*print-meta* true]))
-        (doto (lp/validate-plan)))))
+          (-> ra-plan
+              #_(doto clojure.pprint/pprint)
+              #_(->> (binding [*print-meta* true]))
+              (lp/rewrite-plan {})
+              #_(doto clojure.pprint/pprint)
+              #_(->> (binding [*print-meta* true]))
+              (doto (lp/validate-plan)))))
+      util/lru-memoize))
 
 (def ^:private extra-dml-bind-specs
   [(Binding. "xt$iid" (Exprs/lVar "xt$dml$iid"))
