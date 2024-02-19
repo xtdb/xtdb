@@ -18,7 +18,7 @@
   (letfn [(f [tries]
             (c/compaction-jobs (for [[level nr rows] tries]
                                  (trie/->table-meta-file-path (util/->path "tables/foo")
-                                                              (trie/->log-trie-key level nr rows)))
+                                                              (trie/->log-l0-l1-trie-key level nr rows)))
                                {:l1-file-size-rows 16}))]
     (t/is (nil? (f [])))
 

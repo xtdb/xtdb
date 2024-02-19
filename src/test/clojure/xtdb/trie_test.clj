@@ -41,7 +41,7 @@
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]
             (->> (trie/current-trie-files (for [[level nr] trie-keys]
-                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key level nr 0))))
+                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key level nr 0))))
                  (mapv (comp (juxt :level :next-row) trie/parse-trie-file-path))))]
     (t/is (= [] (f [])))
 
@@ -51,6 +51,7 @@
     (t/is (= [[1 2] [0 3]]
              (f [[1 2] [0 1] [0 2] [0 3]])))
 
+    #_ ; L2 to be reinstated
     (t/is (= [[2 4] [1 6] [0 7] [0 8]]
              (f [[2 4]
                  [1 2] [1 4] [1 6]
