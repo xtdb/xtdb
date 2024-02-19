@@ -2383,3 +2383,63 @@
                                                                    {:args [friends]})})
                                                   (return id friends))
                                               {:args [friends]})}))))))
+
+(deftest test-expression-in-join-args
+  (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id :a1, :a 2 :b 1}]
+                           [:put-docs :a {:xt/id :a2, :a 2 :b 3}]
+                           [:put-docs :a {:xt/id :a3, :a 2 :b 0}]])
+
+  (t/is (= [{:aid :a2 :a 2 :b 3 :c 4}]
+           (xt/q tu/*node*
+                 '(unify (from :a [{:xt/id aid} a b])
+                         (join (rel [{:b $a :c $c}] [b c])
+                               {:args [{:a (+ a 1) :c (+ 1 3)}]
+                                :bind [b c]}))))
+        "simple expression in arg (join)")
+
+  (t/is (= [{:aid :a3, :a 2, :b nil} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2, :b nil}]
+           (xt/q tu/*node*
+                 '(unify (from :a [{:xt/id aid} a b])
+                         (left-join (rel [{:b $a}] [b])
+                                    {:args [{:a (+ a 1)}]
+                                     :bind [b]}))))
+        "simple expression in arg (left-join)")
+
+  (t/is (= [{:aid :a2 :a 2 :b 3}]
+           (xt/q tu/*node*
+                 '(unify (from :a [{:xt/id aid} a b])
+                         (join (rel [{:b $a}] [b])
+                               {:args [{:a (+ a (q (rel [{:c 1}] [c])))}]
+                                :bind [b]}))))
+        "expression with subquery (join)")
+
+  (t/is (= [{:aid :a3, :a 2, :b nil} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2, :b nil}]
+           (xt/q tu/*node*
+                 '(unify (from :a [{:xt/id aid} a b])
+                         (left-join (rel [{:b $a}] [b])
+                                    {:args [{:a (+ a (q (rel [{:c 1}] [c])))}]
+                                     :bind [b]}))))
+        "expression with subquery (left-join)"))
+
+(deftest test-nested-subquery-parameters-3181
+  (t/is (= [{:foo 1}] (xt/q tu/*node* '(-> (rel [{}] [])
+                                           (with {:foo (q (rel [{:inner $inner}] [inner])
+                                                          {:args [{:inner 1}]})}))))
+        "inner literal parameter")
+
+  (t/is (= [{:foo 1}]
+           (xt/q tu/*node* '(-> (rel [{}] [])
+                                (with {:foo (q (-> (rel [{}] [])
+                                                   (with {:foo $inner}))
+                                               {:args [{:inner $outer}]})}))
+                 {:args {:outer 1}}))
+        "inner outer parameter")
+
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :bar 1}]])
+
+  (t/is (= [{:foo 2}]
+           (xt/q tu/*node* '(-> (rel [{}] [])
+                                (with {:foo (q (-> (rel [{}] [])
+                                                   (with {:foo $inner}))
+                                               {:args [{:inner (+ 1 (q (rel [{:bar 1}] [bar])))}]})}))))
+        "inner paramter with subquery"))

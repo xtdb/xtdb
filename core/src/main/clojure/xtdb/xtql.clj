@@ -72,13 +72,6 @@
        util/symbol->normal-form-symbol
        (with-meta {:correlated-column? true}))))
 
-(defn- args->apply-params [args]
-  (->> args
-       (mapv (fn [{:keys [l r _required-vars]}]
-               (MapEntry/create (apply-param-sym l) r)))
-       (into {})
-       (set/map-invert)))
-
 (defn- unifying-vars->apply-param-mapping [unifying-vars]
   ;; creates a param for each var that needs to unify, so that we can place the
   ;; equality predicate on the dependant side, within the left join.
@@ -95,9 +88,9 @@
   (col-sym
    (str "xt$_" (*gensym* "sqp"))))
 
-(defn gen-col []
-  (col-sym
-   (str "xt$_" (*gensym* "gc"))))
+(defn gen-col
+  ([] (col-sym (str "xt$_" (*gensym* "gc"))))
+  ([prefix] (col-sym prefix (str "xt$_" (*gensym* "gc")))))
 
 (declare plan-arg-spec)
 
@@ -115,6 +108,13 @@
              (keys)
              (set))
         expr/normalise-fn-name))
+
+(defn- plan-arg-bindings [args]
+  (let [arg-bindings (mapv plan-arg-spec args)
+        temporary-expr-symbols (map (comp #(gen-col %) :l) arg-bindings)]
+    {:arg-subqueries (mapcat (comp :subqueries :r) arg-bindings)
+     :tmp-expr-sym->apply-param-sym (zipmap temporary-expr-symbols (map (comp apply-param-sym :l) arg-bindings))
+     :tmp-expr-sym->expr-vec (mapv hash-map temporary-expr-symbols (map (comp :expr :r) arg-bindings))}))
 
 (extend-protocol ExprPlan
   Expr$Null
@@ -181,12 +181,14 @@
   (plan-expr [this]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
-    (let [placeholder (expr-subquery-placeholder)]
+    (let [placeholder (expr-subquery-placeholder)
+          {:keys [ra-plan provided-vars]} (plan-query (.query this))]
       (swap! *subqueries* conj
-             {:type :exists
-              :placeholder placeholder
-              :subquery (plan-query (.query this))
-              :args (mapv plan-arg-spec (.args this))})
+             (merge {:type :exists
+                     :placeholder placeholder
+                     :provided-vars provided-vars
+                     :subquery ra-plan}
+                    (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
   Expr$Subquery
@@ -201,22 +203,27 @@
                 {:subquery (str (.query this)) :provided-vars provided-vars
                  ::err/message "Scalar subquery must only return a single column"})))
       (swap! *subqueries* conj
-             {:type :scalar
-              :subquery [:project [{placeholder (first provided-vars)}]
-                         ra-plan]
-              :args (mapv plan-arg-spec (.args this))})
+             (merge {:type :scalar
+                     :placeholder placeholder
+                     :provided-vars provided-vars
+                     :subquery [:project [{placeholder (first provided-vars)}]
+                                ra-plan]}
+                    (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
   Expr$Pull
   (plan-expr [this]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
-    (let [placeholder (expr-subquery-placeholder)]
+    (let [placeholder (expr-subquery-placeholder)
+          {:keys [ra-plan provided-vars]} (plan-query (.query this))]
       (swap! *subqueries* conj
-             {:type :scalar
-              :subquery [:project [{placeholder '*}]
-                         (:ra-plan (plan-query (.query this)))]
-              :args (mapv plan-arg-spec (.args this))})
+             (merge {:type :scalar
+                     :placeholder placeholder
+                     :provided-vars provided-vars
+                     :subquery [:project [{placeholder '*}]
+                                ra-plan]}
+                    (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
   Expr$PullMany
@@ -224,13 +231,16 @@
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
     (let [placeholder (expr-subquery-placeholder)
-          struct-col (expr-subquery-placeholder)]
+          struct-col (expr-subquery-placeholder)
+          {:keys [ra-plan provided-vars]} (plan-query (.query this))]
       (swap! *subqueries* conj
-             {:type :scalar
-              :subquery [:group-by [{placeholder (list 'array-agg struct-col)}]
-                         [:project [{struct-col '*}]
-                          (:ra-plan (plan-query (.query this)))]]
-              :args (mapv plan-arg-spec (.args this))})
+             (merge {:type :scalar
+                     :placeholder placeholder
+                     :provided-vars provided-vars
+                     :subquery [:group-by [{placeholder (list 'array-agg struct-col)}]
+                                [:project [{struct-col '*}]
+                                 ra-plan]]}
+                    (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
   nil
@@ -325,7 +335,7 @@
   ;;use a different spec. Delaying decision here for now.
   (let [var (col-sym (.getBinding bind-spec))
         expr (.getExpr bind-spec)]
-    {:l var :r (plan-expr expr) :required-vars (required-vars expr)}))
+    {:l var :r (plan-expr-with-subqueries expr) :required-vars (required-vars expr)}))
 
 (def app-time-period-sym 'xt$valid_time)
 (def app-time-from-sym 'xt$valid_from)
@@ -476,29 +486,32 @@
     (plan-rel (plan-expr (.param rel))
               (mapv plan-out-spec (.bindings rel)))))
 
-(defn- wrap-expr-subquery [plan {:keys [placeholder subquery args type]}]
+(declare wrap-expr-subqueries*)
+
+(defn- wrap-expr-subquery [plan {:keys [type placeholder subquery arg-subqueries
+                                        tmp-expr-sym->expr-vec tmp-expr-sym->apply-param-sym]}]
   (case type
     :scalar
-    (if (seq args)
-      [:apply
-       :single-join
-       (args->apply-params args)
-       plan
+    (if (seq tmp-expr-sym->expr-vec)
+      [:apply :single-join tmp-expr-sym->apply-param-sym
+       [:map tmp-expr-sym->expr-vec
+        (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
       [:single-join [true]
        plan
        subquery])
     :exists
-    (if (seq args)
+    (if (seq tmp-expr-sym->expr-vec)
       [:apply {:mark-join {placeholder true}}
-       (args->apply-params args)
-       plan
-       (:ra-plan subquery)]
+       tmp-expr-sym->apply-param-sym
+       [:map tmp-expr-sym->expr-vec
+        (wrap-expr-subqueries* plan arg-subqueries)]
+       subquery]
       [:mark-join {placeholder [true]}
        plan
-       (:ra-plan subquery)])))
+       subquery])))
 
-(defn- wrap-expr-subqueries [plan subqueries]
+(defn- wrap-expr-subqueries* [plan subqueries]
   (reduce
    (fn [plan sq]
      (wrap-expr-subquery plan sq))
@@ -507,6 +520,11 @@
 
 (defn- wrap-project [plan projection]
   [:project projection plan])
+
+(defn- wrap-expr-subqueries [plan provided-vars subqueries]
+  (-> (wrap-expr-subqueries* plan subqueries)
+      ;; here the provided vars are the ones from the plan + the placeholder from the subquery
+      (wrap-project (into provided-vars (map :placeholder subqueries)))))
 
 (defn- plan-col-spec [^Binding col-spec provided-vars]
   (let [col (col-sym (.getBinding col-spec))
@@ -529,14 +547,14 @@
 
 (extend-protocol PlanQueryTail
   XtqlQuery$Where
-  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+  (plan-query-tail [this {:keys [ra-plan provided-vars] :as _acc-plan}]
 
     (doseq [pred (.preds this)]
       (required-vars-available? pred provided-vars))
 
     (let [planned-where-exprs (plan-where this)]
       {:ra-plan (-> ra-plan
-                    (wrap-expr-subqueries (mapcat :subqueries planned-where-exprs))
+                    (wrap-expr-subqueries provided-vars (mapcat :subqueries planned-where-exprs))
                     (wrap-select (map :expr planned-where-exprs))
                     (wrap-project (vec provided-vars)))
        :provided-vars provided-vars}))
@@ -551,7 +569,7 @@
        [:project (vec return-vars)
         [:map (mapv (fn [{:keys [l r]}] {l r}) projections)
          (-> ra-plan
-             (wrap-expr-subqueries (mapcat :subqueries projections)))]]
+             (wrap-expr-subqueries provided-vars (mapcat :subqueries projections)))]]
        :provided-vars return-vars}))
 
   XtqlQuery$Without
@@ -582,20 +600,21 @@
        [:project (vec return-vars)
         [:unnest {l pre-col}
          [:map [{pre-col r}]
-          (wrap-expr-subqueries ra-plan subqueries)]]]
+          (wrap-expr-subqueries ra-plan provided-vars subqueries)]]]
        :provided-vars return-vars})))
 
 (defn plan-join [join-type query args binding]
   (let [out-bindings (mapv plan-out-spec binding) ;;TODO refelection (interface here?)
         arg-bindings (mapv plan-arg-spec args)
-        subquery (plan-query query)]
+        subquery (plan-query query)
+        provided-vars (set (map :r out-bindings))]
     (when (some :literal? out-bindings)
       (throw (UnsupportedOperationException. "TODO what should literals in out specs do outside of scan")))
-    [[:join {:ra-plan (wrap-out-binding-projection subquery out-bindings)
-             :args (args->apply-params arg-bindings)
-             :join-type join-type
-             :provided-vars (set (map :r out-bindings))
-             :required-vars (apply set/union (map :required-vars arg-bindings))}]]))
+    [[:join (merge {:ra-plan (wrap-out-binding-projection subquery out-bindings)
+                    :join-type join-type
+                    :provided-vars provided-vars
+                    :required-vars (apply set/union (map :required-vars arg-bindings))}
+                   (plan-arg-bindings args))]]))
 
 (extend-protocol PlanUnifyClause
   XtqlQuery$From
@@ -650,7 +669,7 @@
 
 (defn wrap-wheres [{:keys [ra-plan provided-vars]} wheres]
   {:ra-plan (-> ra-plan
-                (wrap-expr-subqueries (mapcat :subqueries wheres))
+                (wrap-expr-subqueries provided-vars (mapcat :subqueries wheres))
                 (wrap-select (map :expr wheres))
                 (wrap-project (vec provided-vars)))
    :provided-vars provided-vars})
@@ -672,10 +691,10 @@
     (-> {:ra-plan [:map (vec (for [{:keys [expr renamed-provided-var]} renamed-withs]
                                {renamed-provided-var expr}))
                    (-> ra-plan
-                       (wrap-expr-subqueries (mapcat :subqueries renamed-withs)))]}
+                       (wrap-expr-subqueries provided-vars (mapcat :subqueries renamed-withs)))]}
         (wrap-unify var->cols))))
 
-(defn wrap-unnest [acc-plan {:keys [provided-vars expr subqueries] :as _unnest}]
+(defn wrap-unnest [{acc-provided-vars :provided-vars :as acc-plan} {:keys [provided-vars expr subqueries] :as _unnest}]
   (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan]) ;;doesn't rename any cols, but creates var->cols
         [{acc-plan :ra-plan}] rels
         original-unnested-col (first provided-vars)
@@ -685,47 +704,52 @@
      {:ra-plan
       [:unnest {unnested-col pre-col}
        [:map [{pre-col expr}]
-        (wrap-expr-subqueries acc-plan subqueries)]]}
+        (wrap-expr-subqueries acc-plan acc-provided-vars subqueries)]]}
      (update var->cols original-unnested-col (fnil conj #{}) unnested-col))))
 
 (defn wrap-unnests [acc-plan unnests]
   (reduce wrap-unnest acc-plan unnests))
 
-(defn wrap-inner-join [acc-plan {:keys [args] :as join-plan}]
-  (if (seq args)
+(defn wrap-inner-join [{acc-provided-vars :provided-vars :as acc-plan}
+                       {:keys [arg-subqueries tmp-expr-sym->apply-param-sym tmp-expr-sym->expr-vec] :as join-plan}]
+  (if (seq tmp-expr-sym->expr-vec)
     (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan join-plan])
           [{acc-plan-with-unique-cols :ra-plan}
            {join-subquery-plan-with-unique-cols :ra-plan}] rels]
       (wrap-unify
-       {:ra-plan [:apply :cross-join args
-                  acc-plan-with-unique-cols
+       {:ra-plan [:apply :cross-join tmp-expr-sym->apply-param-sym
+                  [:map tmp-expr-sym->expr-vec
+                   (wrap-expr-subqueries acc-plan-with-unique-cols acc-provided-vars arg-subqueries)]
                   join-subquery-plan-with-unique-cols]}
        var->cols))
     (mega-join [acc-plan join-plan])))
 
-(defn wrap-left-join [acc-plan {:keys [args provided-vars ra-plan]}]
+(defn wrap-left-join [{acc-provided-vars :provided-vars :as acc-plan}
+                      {:keys [provided-vars arg-subqueries tmp-expr-sym->apply-param-sym
+                              tmp-expr-sym->expr-vec ra-plan] :as _join-plan}]
   ;; the join clause or select placed on the dependant side
   ;; is what provides the unification of the :bind vars with the outer plan
-  (let [unifying-vars (->> provided-vars (filter (:provided-vars acc-plan)))]
+  (let [unifying-vars (->> provided-vars (filter acc-provided-vars))]
     {:ra-plan
-     (if (seq args)
+     (if (seq tmp-expr-sym->expr-vec)
        (let [unifying-vars-apply-param-mapping (unifying-vars->apply-param-mapping unifying-vars)]
-         [:apply
-          :left-outer-join
-          (merge
-           args
-           unifying-vars-apply-param-mapping)
-          (:ra-plan acc-plan)
-          (->> unifying-vars-apply-param-mapping
-               (map (fn [[var param-for-var]]
-                      (list '= var param-for-var)))
-               (wrap-select ra-plan))])
+         (->
+          [:apply :left-outer-join (merge
+                                    tmp-expr-sym->apply-param-sym
+                                    unifying-vars-apply-param-mapping)
+           [:map tmp-expr-sym->expr-vec
+            (wrap-expr-subqueries (:ra-plan acc-plan) acc-provided-vars arg-subqueries)]
+           (->> unifying-vars-apply-param-mapping
+                (map (fn [[var param-for-var]]
+                       (list '= var param-for-var)))
+                (wrap-select ra-plan))]
+          (wrap-project (vec (into acc-provided-vars provided-vars)))))
        [:left-outer-join
         (->> unifying-vars
              (mapv (fn [v] {v v})))
         (:ra-plan acc-plan)
         ra-plan])
-     :provided-vars (set/union (:provided-vars acc-plan) provided-vars)}))
+     :provided-vars (set/union acc-provided-vars provided-vars)}))
 
 (defn- wrap-joins [plan joins]
   (->> joins
