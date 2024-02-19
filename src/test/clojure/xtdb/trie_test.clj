@@ -46,17 +46,20 @@
                                              {:seg seg, :page-idx (.getDataPageIndex leaf)}))
                                          segments nodes)}))))))))
 
+(defn ->trie-file-name
+  " L0/L1 keys are submitted as [level next-row rows]; L2+ as [level part-vec next-row]"
+  [[level & args]]
+
+  (case (long level)
+    (0 1) (let [[next-row rows] args]
+            (util/->path (str (trie/->log-l0-l1-trie-key level next-row (or rows 0)) ".arrow")))
+
+    (let [[part next-row] args]
+      (util/->path (str (trie/->log-l2+-trie-key level (byte-array part) next-row) ".arrow")))))
+
 (t/deftest test-selects-current-tries
-  ;; L0/L1 keys are submitted as [level next-row rows]; L2+ as [level part-vec next-row]
   (letfn [(f [trie-keys]
-            (->> (trie/current-trie-files (for [[level & args] trie-keys]
-                                            (case (long level)
-                                              (0 1) (let [[next-row rows] args]
-                                                      (util/->path (str (trie/->log-l0-l1-trie-key level next-row (or rows 0)) ".arrow")))
-
-                                              (let [[part next-row] args]
-                                                (util/->path (str (trie/->log-l2+-trie-key level (byte-array part) next-row) ".arrow"))))))
-
+            (->> (trie/current-trie-files (map ->trie-file-name trie-keys))
                  (mapv (comp (juxt :level (comp #(some-> % vec) :part) :next-row)
                              trie/parse-trie-file-path))))]
 
