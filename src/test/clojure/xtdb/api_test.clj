@@ -770,3 +770,19 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
     (t/is (= [{:xt/committed? false,
                :xt/error #xt/illegal-arg [:xtdb.expression/function-type-mismatch "+ not applicable to types i64 and utf8" {}]}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id 2} xt/committed? xt/error]))))))
+
+(deftest test-xt-id-not-allowed-in-update-3188
+  (t/testing "update with xt/id in set"
+    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Invalid set column for update"
+                            (xt/submit-tx tu/*node* [[:update {:table :docs
+                                                               :binding [{:xt/id 1}]
+                                                               :set {:xt/id 2}}]])))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Invalid set column for update"
+                            (xt/submit-tx tu/*node* '[[:update {:table :docs
+                                                                :binding [{:xt/id 1}]
+                                                                :set {:xt/valid-from #inst "2000"
+                                                                      :xt/valid-to #inst "2001"}}]])))))

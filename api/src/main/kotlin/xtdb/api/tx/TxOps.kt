@@ -2,11 +2,13 @@
 
 package xtdb.api.tx
 
+import clojure.lang.Keyword
 import kotlinx.serialization.*
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import xtdb.AnySerde
+import xtdb.IllegalArgumentException
 import xtdb.InstantSerde
 import xtdb.api.query.Binding
 import xtdb.api.query.TemporalFilter.TemporalExtents
@@ -14,6 +16,7 @@ import xtdb.api.query.XtqlQuery
 import xtdb.api.query.XtqlQuery.UnifyClause
 import xtdb.jsonIAE
 import xtdb.types.ClojureForm
+import xtdb.util.normalForm
 import java.nio.ByteBuffer
 import java.time.Instant
 
@@ -199,6 +202,8 @@ sealed interface TxOp {
 }
 
 object TxOps {
+    private val forbiddenSetColumns = setOf("xt\$id", "xt\$valid_from", "xt\$valid_to", "xt\$system_from", "xt\$system_to")
+
     @JvmStatic
     fun putDocs(tableName: String, docs: List<Map<String, *>>) = TxOp.PutDocs(tableName, docs)
 
@@ -231,7 +236,13 @@ object TxOps {
     fun insert(table: String, query: XtqlQuery) = TxOp.Insert(table, query)
 
     @JvmStatic
-    fun update(table: String, setSpecs: List<Binding>) = TxOp.Update(table, setSpecs = setSpecs)
+    fun update(table: String, setSpecs: List<Binding>): TxOp.Update {
+        if (forbiddenSetColumns.intersect(setSpecs.map { normalForm(it.binding) }.toSet()).isNotEmpty()) {
+            throw IllegalArgumentException.createNoKey("Invalid set column for update", mapOf(Keyword.intern("set") to setSpecs))
+        } else {
+            return TxOp.Update(table, setSpecs = setSpecs)
+        }
+    }
 
     @JvmStatic
     fun delete(table: String) = TxOp.Delete(table)
