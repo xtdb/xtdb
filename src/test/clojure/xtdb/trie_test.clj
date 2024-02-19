@@ -8,6 +8,14 @@
            org.apache.arrow.vector.VectorSchemaRoot
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
 
+(deftest parses-trie-paths
+  (letfn [(parse [trie-key]
+            (-> (trie/parse-trie-file-path (util/->path (str trie-key ".arrow")))
+                (update :part #(some-> % vec))
+                (mapv [:level :part :next-row :rows])))]
+    (t/is (= [0 nil 46 32] (parse (trie/->log-l0-l1-trie-key 0 46 32))))
+    (t/is (= [2 [0 0 1 3] 120 nil] (parse (trie/->log-l2+-trie-key 2 (byte-array [0 0 1 3]) 120))))))
+
 (deftest test-merge-plan-with-nil-nodes-2700
   (letfn [(->arrow-hash-trie [^VectorSchemaRoot meta-root]
             (ArrowHashTrie. (.getVector meta-root "nodes")))]
@@ -39,20 +47,101 @@
                                          segments nodes)}))))))))
 
 (t/deftest test-selects-current-tries
+  ;; L0/L1 keys are submitted as [level next-row rows]; L2+ as [level part-vec next-row]
   (letfn [(f [trie-keys]
-            (->> (trie/current-trie-files (for [[level nr] trie-keys]
-                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key level nr 0))))
-                 (mapv (comp (juxt :level :next-row) trie/parse-trie-file-path))))]
+            (->> (trie/current-trie-files (for [[level & args] trie-keys]
+                                            (case (long level)
+                                              (0 1) (let [[next-row rows] args]
+                                                      (util/->path (str (trie/->log-l0-l1-trie-key level next-row (or rows 0)) ".arrow")))
+
+                                              (let [[part next-row] args]
+                                                (util/->path (str (trie/->log-l2+-trie-key level (byte-array part) next-row) ".arrow"))))))
+
+                 (mapv (comp (juxt :level (comp #(some-> % vec) :part) :next-row)
+                             trie/parse-trie-file-path))))]
+
     (t/is (= [] (f [])))
 
-    (t/is (= [[0 1] [0 2] [0 3]]
-             (f [[0 1] [0 2] [0 3]])))
+    (t/testing "L0/L1 only"
+      (t/is (= [[0 nil 1] [0 nil 2] [0 nil 3]]
+               (f [[0 1] [0 2] [0 3]])))
 
-    (t/is (= [[1 2] [0 3]]
-             (f [[1 2] [0 1] [0 2] [0 3]])))
+      (t/is (= [[1 nil 2] [0 nil 3]]
+               (f [[1 2] [0 1] [0 2] [0 3]]))
+            "L1 file supersedes two L0 files"))
 
-    #_ ; L2 to be reinstated
-    (t/is (= [[2 4] [1 6] [0 7] [0 8]]
-             (f [[2 4]
-                 [1 2] [1 4] [1 6]
-                 [0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8]])))))
+    (t/testing "L2"
+      (t/is (= [[1 nil 2]]
+               (f [[2 [0] 2] [2 [3] 2] [1 2]]))
+            "L2 file doesn't supersede because not all parts complete")
+
+      (t/is (= [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]]
+               (f [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]
+                   [1 2]]))
+            "now the L2 file is complete")
+
+      (t/is (= [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2] [0 nil 3]]
+               (f [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]
+                   [1 2]
+                   [0 1] [0 2] [0 3]]))
+            "L2 file supersedes L1, L1 supersedes L0, left with a single L0 file"))
+
+    (t/testing "L3+"
+      (t/is (= [[3 [0 0] 2] [3 [0 1] 2] [3 [0 2] 2] [3 [0 3] 2]
+                [2 [1] 2] [2 [2] 2] [2 [3] 2] ; L2 path 0 covered
+                [0 nil 3]]
+               (f [[3 [0 0] 2] [3 [0 1] 2] [3 [0 2] 2] [3 [0 3] 2]
+                   [3 [1 0] 2] [3 [1 2] 2] [3 [1 3] 2] ; L2 path 1 not covered yet, missing [1 1]
+                   [2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]
+                   [1 2]
+                   [0 1] [0 2] [0 3]]))
+            "L3 covered idx 0 but not 1")
+
+      (t/is (= [[4 [0 1 0] 2] [4 [0 1 1] 2] [4 [0 1 2] 2] [4 [0 1 3] 2]
+                [3 [0 0] 2] [3 [0 2] 2] [3 [0 3] 2] ; L3 path [0 1] covered
+                [2 [1] 2] [2 [2] 2] [2 [3] 2] ; L2 path 0 covered
+                [0 nil 3]]
+
+               (f [[4 [0 1 0] 2] [4 [0 1 1] 2] [4 [0 1 2] 2] [4 [0 1 3] 2]
+                   [3 [0 0] 2] [3 [0 1] 2] [3 [0 2] 2] [3 [0 3] 2]
+                   [3 [1 0] 2] [3 [1 2] 2] [3 [1 3] 2] ; L2 path 1 not covered yet, missing [1 1]
+                   [2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]
+                   [1 2]
+                   [0 1] [0 2] [0 3]]))
+            "L4 covers L3 path [0 1]")
+
+      (t/is (= [[4 [0 1 0] 2] [4 [0 1 1] 2] [4 [0 1 2] 2] [4 [0 1 3] 2]
+                [3 [0 0] 2] [3 [0 2] 2] [3 [0 3] 2] ; L3 path [0 1] covered
+                [2 [1] 2] [2 [2] 2] [2 [3] 2] ; L2 path 0 covered even though [0 1] GC'd
+                [0 nil 3]]
+
+               (f [[4 [0 1 0] 2] [4 [0 1 1] 2] [4 [0 1 2] 2] [4 [0 1 3] 2]
+                   [3 [0 0] 2] [3 [0 2] 2] [3 [0 3] 2]
+                   [3 [1 0] 2] [3 [1 2] 2] [3 [1 3] 2] ; L2 path 1 not covered yet, missing [1 1]
+                   [2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]
+                   [1 2]
+                   [0 1] [0 2] [0 3]]))
+            "L4 covers L3 path [0 1], L3 [0 1] GC'd, still correctly covered"))
+
+    (t/testing "empty levels"
+      (t/is (= [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2] [0 nil 3]]
+               (f [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]
+                   [0 1] [0 2] [0 3]]))
+            "L1 empty")
+
+      (t/is (= [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]]
+               (f [[2 [0] 2] [2 [1] 2] [2 [2] 2] [2 [3] 2]]))
+            "L1 and L0 empty")
+
+      (t/is (= [[3 [0 0] 2] [3 [0 1] 2] [3 [0 2] 2] [3 [0 3] 2]
+                [3 [1 0] 2] [3 [1 1] 2] [3 [1 2] 2] [3 [1 3] 2]
+                [3 [2 0] 2] [3 [2 1] 2] [3 [2 2] 2] [3 [2 3] 2]
+                [3 [3 0] 2] [3 [3 1] 2] [3 [3 2] 2] [3 [3 3] 2]
+                [0 nil 3]]
+               (f [[3 [0 0] 2] [3 [0 1] 2] [3 [0 2] 2] [3 [0 3] 2]
+                   [3 [1 0] 2] [3 [1 1] 2] [3 [1 2] 2] [3 [1 3] 2]
+                   [3 [2 0] 2] [3 [2 1] 2] [3 [2 2] 2] [3 [2 3] 2]
+                   [3 [3 0] 2] [3 [3 1] 2] [3 [3 2] 2] [3 [3 3] 2]
+                   [1 2]
+                   [0 1] [0 2] [0 3]]))
+            "L2 missing, still covers L1"))))
