@@ -259,7 +259,7 @@
   (doto (long-array (bit-shift-left 1 (* 2 (dec level))))
     (Arrays/fill -1)))
 
-(defn- path-array-idx
+(defn path-array-idx
   "returns the idx for the given path in the flattened path array.
    in effect, returns the path as a base-4 number"
   (^long [^bytes path] (path-array-idx path (alength path)))

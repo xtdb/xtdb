@@ -8,13 +8,13 @@
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
-           [java.util Comparator LinkedList PriorityQueue]
+           [java.util ArrayList Arrays Comparator LinkedList PriorityQueue]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb Compactor IBufferPool)
            xtdb.bitemporal.IPolygonReader
-           (xtdb.trie EventRowPointer IDataRel)
+           (xtdb.trie EventRowPointer HashTrieKt IDataRel)
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.IVectorWriter
@@ -48,15 +48,26 @@
 
               pos)))))))
 
-(defn merge-segments-into [^IRelationWriter data-rel-wtr, ^IVectorWriter recency-wtr, segments]
+(defn merge-segments-into [^IRelationWriter data-rel-wtr, ^IVectorWriter recency-wtr, segments, ^bytes path-filter]
   (let [reader->copier (->reader->copier data-rel-wtr)
         calculate-polygon (bitemp/polygon-calculator)
 
         is-valid-ptr (ArrowBufPointer.)]
 
-    (doseq [{:keys [path segments nodes]} (trie/->merge-plan segments)
+    (doseq [{:keys [^bytes path segments nodes]} (trie/->merge-plan segments
+                                                                    {:path-pred (when path-filter
+                                                                                  (let [path-len (alength path-filter)]
+                                                                                    (fn [^bytes page-path]
+                                                                                      (let [len (min path-len (alength page-path))]
+                                                                                        (Arrays/equals path-filter 0 len
+                                                                                                       page-path 0 len)))))})
+
             :let [data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
-                  merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]]
+                  merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
+                  path (if (or (nil? path-filter)
+                               (> (alength path) (alength path-filter)))
+                         path
+                         path-filter)]]
 
       (doseq [^RelationReader data-rdr data-rdrs
               :when data-rdr
@@ -92,7 +103,7 @@
                    (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, {:keys [page-size]}
-                            {:keys [^Path table-path trie-keys out-trie-key]}]
+                            {:keys [^Path table-path path trie-keys out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
 
@@ -109,7 +120,7 @@
 
         (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator schema)
                          recency-wtr (open-recency-wtr allocator)]
-          (merge-segments-into data-rel-wtr recency-wtr segments)
+          (merge-segments-into data-rel-wtr recency-wtr segments path)
 
           (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
                                                            schema table-path out-trie-key)]
@@ -122,36 +133,89 @@
       (log/error t "Error running compaction job.")
       (throw t))))
 
-(defn- l0->l1-compaction-job [l0-files l1-files {:keys [^long l1-file-size-rows]}]
-  ;; if there are current L0 files, merge them into the latest l1 file until it's full
-  (when l0-files
-    (let [{:keys [trie-keys next-row rows]}
-          (reduce (fn [{:keys [rows trie-keys]}
-                       {l0-rows :rows, l0-trie-key :trie-key, :keys [next-row]}]
-                    (let [new-rows (+ rows l0-rows)]
-                      (cond-> {:rows new-rows
-                               :trie-keys (conj trie-keys l0-trie-key)
-                               :next-row next-row}
-                        (>= new-rows l1-file-size-rows) reduced)))
+(defn- l0->l1-compaction-job [{l0-trie-keys 0, l1-trie-keys 1} {:keys [^long l1-file-size-rows]}]
+  (let [last-l1-file (last l1-trie-keys)
+        l1-compacted-row (long (if-let [{:keys [^long next-row]} last-l1-file]
+                                 next-row
+                                 -1))]
 
-                  (let [{:keys [rows trie-key] :as last-l1} (last l1-files)]
-                    (if (or (nil? last-l1)
-                            (>= rows l1-file-size-rows))
-                      {:rows 0, :trie-keys []}
-                      {:rows rows, :trie-keys [trie-key]}))
+    (when-let [current-l0-trie-keys (seq (->> l0-trie-keys
+                                              (drop-while (fn [{:keys [^long next-row]}]
+                                                            (<= next-row l1-compacted-row)))))]
 
-                  l0-files)]
+      ;; if there are current L0 files, merge them into the latest l1 file until it's full
+      (let [{:keys [trie-keys ^long next-row ^long rows]}
+            (reduce (fn [{:keys [^long rows trie-keys]}
+                         {^long l0-rows :rows, l0-trie-key :trie-key, :keys [^long next-row]}]
+                      (let [new-rows (+ rows l0-rows)]
+                        (cond-> {:rows new-rows
+                                 :trie-keys (conj trie-keys l0-trie-key)
+                                 :next-row next-row}
+                          (>= new-rows l1-file-size-rows) reduced)))
 
-      {:trie-keys trie-keys
-       :out-trie-key (trie/->log-l0-l1-trie-key 1 next-row rows)})))
+                    (or (when-let [{:keys [^long rows trie-key]} last-l1-file]
+                          (when (< rows l1-file-size-rows)
+                            {:rows rows, :trie-keys [trie-key]}))
 
-(defn compaction-jobs [meta-file-names opts]
-  (let [{l0-files 0, l1-files 1} (->> (trie/current-trie-files meta-file-names)
-                                      (map trie/parse-trie-file-path)
-                                      (group-by :level))]
+                        {:rows 0, :trie-keys []})
 
-    (when l0-files
-      [(l0->l1-compaction-job l0-files l1-files opts)])))
+                    current-l0-trie-keys)]
+
+        {:trie-keys trie-keys
+         :out-trie-key (trie/->log-l0-l1-trie-key 1 next-row rows)}))))
+
+(defn compaction-jobs [meta-file-names {:keys [^long l1-file-size-rows] :as opts}]
+  (when (seq meta-file-names)
+    (let [!compaction-jobs (ArrayList.)
+
+          level-grouped-file-names (->> meta-file-names
+                                        (keep trie/parse-trie-file-path)
+                                        (group-by :level))]
+
+      (loop [level (long (last (sort (keys level-grouped-file-names))))
+             ^longs !compacted-rows-above (trie/path-array (inc level))]
+        (if (zero? level)
+          (when-let [job (l0->l1-compaction-job level-grouped-file-names opts)]
+            (.add !compaction-jobs job)
+            ;; exit `loop`
+            )
+
+          (let [!compacted-rows (trie/rows-covered-below !compacted-rows-above)
+                lvl-trie-keys (cond->> (get level-grouped-file-names level)
+                                (= level 1) (filter (fn [{:keys [^long rows]}]
+                                                      (>= rows l1-file-size-rows))))]
+
+            (doseq [[^long path-idx trie-keys] (->> lvl-trie-keys
+                                                    (group-by (if (= level 1)
+                                                                (constantly 0)
+                                                                (comp trie/path-array-idx :part))))
+
+                    :let [min-compacted-row (aget !compacted-rows path-idx)
+                          trie-keys (->> trie-keys
+                                         (drop-while (fn [{:keys [^long next-row]}]
+                                                       (<= next-row min-compacted-row))))]
+                    :when (seq trie-keys)]
+
+              (aset !compacted-rows path-idx (max min-compacted-row ^long (:next-row (last trie-keys))))
+
+              (when (= 4 (count (take 4 trie-keys)))
+                (dotimes [path-suffix 4]
+                  (let [compacted-row (aget !compacted-rows-above (+ (* path-idx 4) path-suffix))
+                        trie-keys (->> trie-keys
+                                       (drop-while (fn [{:keys [^long next-row]}]
+                                                     (<= next-row compacted-row)))
+                                       (take 4))]
+                    (when (= 4 (count trie-keys))
+                      (let [{:keys [part ^long next-row]} (last trie-keys)
+                            compaction-part (HashTrieKt/conjPath (or part (byte-array 0)) path-suffix)]
+                        (.add !compaction-jobs
+                              {:trie-keys (mapv :trie-key trie-keys)
+                               :path compaction-part
+                               :out-trie-key (trie/->log-l2+-trie-key (inc level) compaction-part next-row)})))))))
+
+            (recur (dec level) !compacted-rows))))
+
+      (vec !compaction-jobs))))
 
 (defmethod ig/prep-key :xtdb/compactor [_ opts]
   (into {:allocator (ig/ref :xtdb/allocator)
