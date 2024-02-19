@@ -41,7 +41,9 @@
            (.digest eid-bytes)
            (Arrays/copyOfRange 0 16))))))
 
-(defn ->log-trie-key [^long level, ^long next-row, ^long row-count]
+(defn ->log-l0-l1-trie-key [^long level, ^long next-row, ^long row-count]
+  (assert (<= 0 level 1))
+
   (format "log-l%s-nr%s-rs%s"
           (util/->lex-hex-string level)
           (util/->lex-hex-string next-row)

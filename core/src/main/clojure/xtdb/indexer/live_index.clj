@@ -175,7 +175,7 @@
                     (fn []
                       (trie/write-live-trie! allocator buffer-pool
                                              (util/table-name->table-path table-name)
-                                             (trie/->log-trie-key 0 next-chunk-idx row-count)
+                                             (trie/->log-l0-l1-trie-key 0 next-chunk-idx row-count)
                                              live-trie live-rel-rdr)))
               table-metadata (MapEntry/create table-name
                                               {:fields (live-rel->fields live-rel)

@@ -143,7 +143,7 @@
                   l0-files)]
 
       {:trie-keys trie-keys
-       :out-trie-key (trie/->log-trie-key 1 next-row rows)})))
+       :out-trie-key (trie/->log-l0-l1-trie-key 1 next-row rows)})))
 
 (defn compaction-jobs [meta-file-names opts]
   (let [{l0-files 0, l1-files 1} (->> (trie/current-trie-files meta-file-names)
