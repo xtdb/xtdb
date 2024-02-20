@@ -458,7 +458,7 @@
     (t/is
      (thrown-with-msg?
       IllegalArgumentException
-      #"The maximum fractional seconds precision is 9."
+      #"The minimum fractional seconds precision is 0."
       (project1 (list 'date-diff 'ldt1 'ldt2 "SECOND" -1) test-doc)))
 
     (t/is
@@ -477,7 +477,32 @@
      (thrown-with-msg?
       IllegalArgumentException
       #"The maximum fractional seconds precision is 9."
-      (project1 (list 'date-diff 'zdt1 'ldt1 "SECOND" -1) test-doc)))))
+      (project1 (list 'date-diff 'zdt1 'ldt1 "SECOND" 11) test-doc)))))
+
+
+(t/deftest test-date-diff-infinite-timestamp-throws
+  (let [test-doc {:xt$id :foo,
+                  :ldt1 time/end-of-time
+                  :ldt2 (LocalDateTime/of 2021 1 3 11 20 26 678345888)
+                  :zdt1 (ZonedDateTime/of 2021 1 1 11 20 10 0 (ZoneId/of "America/Chicago"))}]
+
+    (t/is
+     (thrown-with-msg?
+      RuntimeException
+      #"cannot subtract infinite timestamps"
+      (project1 (list 'date-diff 'ldt1 'ldt2 "SECOND") test-doc)))
+
+    (t/is
+     (thrown-with-msg?
+      RuntimeException
+      #"cannot subtract infinite timestamps"
+      (project1 (list 'date-diff 'ldt1 'ldt1 "SECOND") test-doc)))
+
+    (t/is
+     (thrown-with-msg?
+      RuntimeException
+      #"cannot subtract infinite timestamps"
+      (project1 (list 'date-diff 'zdt1 'ldt1 "SECOND") test-doc)))))
 
 (defn run-projection [rel form]
   (let [col-types (->> rel

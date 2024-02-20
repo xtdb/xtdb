@@ -447,11 +447,13 @@
 ;; With start-field, end-field and precision provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8 :int] [{[_ _ {start-field :literal} {end-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _ _] :arg-types}] 
   (ensure-interval-fractional-precision-valid precision)
-  (date-diff-start-end-fields x-unit y-unit start-field end-field precision))
+  (-> (date-diff-start-end-fields x-unit y-unit start-field end-field precision)
+      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
 ;; With start-field, end-field provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8] [{[_ _ {start-field :literal} {end-field :literal}] :args [[_ x-unit] [_ y-unit] _ _] :arg-types}]
-  (date-diff-start-end-fields x-unit y-unit start-field end-field nil))
+  (-> (date-diff-start-end-fields x-unit y-unit start-field end-field nil)
+      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
 (defn date-diff-start-field [x-unit y-unit start-field precision]
   {:return-type (if (#{"YEAR" "MONTH"} start-field)
@@ -471,11 +473,13 @@
 ;; With start-field, precision provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :int] [{[_ _ {start-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _] :arg-types}]
   (ensure-interval-fractional-precision-valid precision)
-  (date-diff-start-field x-unit y-unit start-field precision))
+  (-> (date-diff-start-field x-unit y-unit start-field precision)
+      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
 ;; With only start-field provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8] [{[_ _ {start-field :literal}] :args [[_ x-unit] [_ y-unit] _] :arg-types}]
-  (date-diff-start-field x-unit y-unit start-field nil))
+  (-> (date-diff-start-field x-unit y-unit start-field nil)
+      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
 (defn date-diff-cast [expr]
   (let [[t1 t2] (take 2 (:arg-types expr))
