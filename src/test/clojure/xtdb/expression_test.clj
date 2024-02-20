@@ -318,67 +318,136 @@
 (t/deftest test-date-diff-local-date-time
   (let [test-doc {:xt$id :foo,
                   :ldt1 (LocalDateTime/of 2022 4 3 12 34 56 789456999)
-                  :ldt2 (LocalDateTime/of 2021 1 3 11 20 26 789456999)}]
-    (letfn [(date-diff [interval-qualifier] (project1 (list 'date-diff 'ldt1 'ldt2 interval-qualifier) test-doc))]
-      (t/is (= #xt/interval-ym "P12M" (date-diff "YEAR")))
-      (t/is (= #xt/interval-ym "P15M" (date-diff "YEAR TO MONTH")))
-      (t/is (= #xt/interval-ym "P15M" (date-diff "MONTH")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT0S"] (date-diff "DAY")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H"] (date-diff "DAY TO HOUR")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H14M"] (date-diff "DAY TO MINUTE")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H14M30S"] (date-diff "DAY TO SECOND")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H"] (date-diff "HOUR")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H14M"] (date-diff "HOUR TO MINUTE")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H14M30S"] (date-diff "HOUR TO SECOND")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H14M"] (date-diff "MINUTE")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H14M30S"] (date-diff "MINUTE TO SECOND")))
-      (t/is (= #xt/interval-mdn ["P455D" "PT1H14M30S"] (date-diff "SECOND"))))))
+                  :ldt2 (LocalDateTime/of 2021 1 3 11 20 26 678345888)}]
+    (t/testing "with only start-field"
+      (letfn [(date-diff [start] (project1 (list 'date-diff 'ldt1 'ldt2 start) test-doc))]
+        (t/is (= #xt/interval-ym "P12M" (date-diff "YEAR")))
+        (t/is (= #xt/interval-ym "P15M" (date-diff "MONTH")))
+        (t/is (= #xt/interval-mdn ["P455D" "PT0S"] (date-diff "DAY")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H"] (date-diff "HOUR")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M"] (date-diff "MINUTE")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30S"] (date-diff "SECOND")))))
+    
+    (t/testing "with start-field and precision"
+      (letfn [(date-diff [start precision] (project1 (list 'date-diff 'ldt1 'ldt2 start precision) test-doc))] 
+        ;; TODO - this fails because we're passing dates around with MICROSECOND precision
+        ;; (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30.111111111S"] (date-diff "SECOND" 9)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30.111111S"] (date-diff "SECOND" 6)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30.111S"] (date-diff "SECOND" 3)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30.11S"] (date-diff "SECOND" 2)))))
+    
+    (t/testing "with start and end field"
+        (letfn [(date-diff [start end] (project1 (list 'date-diff 'ldt1 'ldt2 start end) test-doc))]
+          (t/is (= #xt/interval-ym "P15M" (date-diff "YEAR" "MONTH"))) 
+          (t/is (= #xt/interval-mdn ["P455D" "PT1H"] (date-diff "DAY" "HOUR")))
+          (t/is (= #xt/interval-mdn ["P455D" "PT1H14M"] (date-diff "DAY" "MINUTE")))
+          (t/is (= #xt/interval-mdn ["P455D" "PT1H14M30S"] (date-diff "DAY" "SECOND"))) 
+          (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M"] (date-diff "HOUR" "MINUTE")))
+          (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30S"] (date-diff "HOUR" "SECOND"))) 
+          (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30S"] (date-diff "MINUTE" "SECOND")))))
+    
+    (t/testing "with start, end field and precision"
+      (letfn [(date-diff [start end precision] (project1 (list 'date-diff 'ldt1 'ldt2 start end precision) test-doc))] 
+        (t/is (= #xt/interval-mdn ["P455D" "PT1H14M30.1S"] (date-diff "DAY" "SECOND" 1)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30.111S"] (date-diff "HOUR" "SECOND" 3))) 
+        (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30.111111S"] (date-diff "MINUTE" "SECOND" 6)))))))
 
 (t/deftest test-date-diff-zoned-date-time
   (let [test-doc {:xt$id :foo,
-                  :zdt1 (-> (time/->zdt #inst "2022-03-12T13:44:52.344")
-                            (.withZoneSameLocal (ZoneId/of "America/Coral_Harbour")))
-                  :zdt2 (-> (time/->zdt #inst "2021-01-11T13:40:26.344")
-                            (.withZoneSameLocal (ZoneId/of "America/Cordoba")))}]
-    (letfn [(date-diff [interval-qualifier] (project1 (list 'date-diff 'zdt1 'zdt2 interval-qualifier) test-doc))]
-      (t/is (= #xt/interval-ym "P12M" (date-diff "YEAR")))
-      (t/is (= #xt/interval-ym "P14M" (date-diff "YEAR TO MONTH")))
-      (t/is (= #xt/interval-ym "P14M" (date-diff "MONTH")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT0S"] (date-diff "DAY")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H"] (date-diff "DAY TO HOUR")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H4M"] (date-diff "DAY TO MINUTE")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H4M26S"] (date-diff "DAY TO SECOND")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H"] (date-diff "HOUR")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H4M"] (date-diff "HOUR TO MINUTE")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H4M26S"] (date-diff "HOUR TO SECOND")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H4M"] (date-diff "MINUTE")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H4M26S"] (date-diff "MINUTE TO SECOND")))
-      (t/is (= #xt/interval-mdn ["P425D" "PT2H4M26S"] (date-diff "SECOND"))))))
+                  :zdt1 (ZonedDateTime/of 2022 3 12 13 44 52 222222222 (ZoneId/of "America/Coral_Harbour"))
+                  :zdt2 (ZonedDateTime/of 2021 1 11 13 40 26 111111111 (ZoneId/of "America/Cordoba")) }]
+
+    (t/testing "with only start-field"
+      (letfn [(date-diff [start] (project1 (list 'date-diff 'zdt1 'zdt2 start) test-doc))]
+        (t/is (= #xt/interval-ym "P12M" (date-diff "YEAR")))
+        (t/is (= #xt/interval-ym "P14M" (date-diff "MONTH")))
+        (t/is (= #xt/interval-mdn ["P425D" "PT0S"] (date-diff "DAY")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H"] (date-diff "HOUR")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M"] (date-diff "MINUTE")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26S"] (date-diff "SECOND")))))
+
+    (t/testing "with start-field and precision"
+      (letfn [(date-diff [start precision] (project1 (list 'date-diff 'zdt1 'zdt2 start precision) test-doc))]
+        ;; TODO - this fails because we're passing dates around with MICROSECOND precision
+        ;; (t/is (= #xt/interval-mdn ["P0D" "PT10921H14M30.111111111S"] (date-diff "SECOND" 9)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26.111111S"] (date-diff "SECOND" 6)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26.111S"] (date-diff "SECOND" 3)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26.11S"] (date-diff "SECOND" 2)))))
+
+    (t/testing "with start and end field"
+      (letfn [(date-diff [start end] (project1 (list 'date-diff 'zdt1 'zdt2 start end) test-doc))]
+        (t/is (= #xt/interval-ym "P14M" (date-diff "YEAR" "MONTH")))
+        (t/is (= #xt/interval-mdn ["P425D" "PT2H"] (date-diff "DAY" "HOUR")))
+        (t/is (= #xt/interval-mdn ["P425D" "PT2H4M"] (date-diff "DAY" "MINUTE")))
+        (t/is (= #xt/interval-mdn ["P425D" "PT2H4M26S"] (date-diff "DAY" "SECOND")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M"] (date-diff "HOUR" "MINUTE")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26S"] (date-diff "HOUR" "SECOND")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26S"] (date-diff "MINUTE" "SECOND")))))
+    
+    (t/testing "with start, end field and precision"
+      (letfn [(date-diff [start end precision] (project1 (list 'date-diff 'zdt1 'zdt2 start end precision) test-doc))]
+        (t/is (= #xt/interval-mdn ["P425D" "PT2H4M26.1S"] (date-diff "DAY" "SECOND" 1)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26.111S"] (date-diff "HOUR" "SECOND" 3)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10202H4M26.111111S"] (date-diff "MINUTE" "SECOND" 6)))))))
 
 (t/deftest test-date-diff-date
   (let [test-doc {:xt$id :foo,
                   :ld1 (LocalDate/of 2022 03 21) 
                   :ld2 (LocalDate/of 2021 01 11)}]
-    (letfn [(date-diff [interval-qualifier] (project1 (list 'date-diff 'ld1 'ld2 interval-qualifier) test-doc))]
-      (t/is (= #xt/interval-ym "P12M" (date-diff "YEAR")))
-      (t/is (= #xt/interval-ym "P14M" (date-diff "YEAR TO MONTH")))
-      (t/is (= #xt/interval-ym "P14M" (date-diff "MONTH")))
-      (t/is (= #xt/interval-mdn ["P434D" "PT0S"] (date-diff "DAY")))
-      (t/is (= #xt/interval-mdn ["P434D" "PT0S"] (date-diff "HOUR")))
-      (t/is (= #xt/interval-mdn ["P434D" "PT0S"] (date-diff "MINUTE"))))))
+    
+    (t/testing "with only start-field"
+      (letfn [(date-diff [start] (project1 (list 'date-diff 'ld1 'ld2 start) test-doc))]
+        (t/is (= #xt/interval-ym "P12M" (date-diff "YEAR"))) 
+        (t/is (= #xt/interval-ym "P14M" (date-diff "MONTH")))
+        (t/is (= #xt/interval-mdn ["P434D" "PT0S"] (date-diff "DAY")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10416H"] (date-diff "HOUR")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10416H"] (date-diff "MINUTE")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10416H"] (date-diff "SECOND")))))
+    
+    (t/testing "with start-field and precision"
+      (letfn [(date-diff [start precision] (project1 (list 'date-diff 'ld1 'ld2 start precision) test-doc))]
+        (t/is (= #xt/interval-mdn ["P0D" "PT10416H"] (date-diff "SECOND" 1)))))
+    
+    (t/testing "with start and end field"
+      (letfn [(date-diff [start end] (project1 (list 'date-diff 'ld1 'ld2 start end) test-doc))]
+        (t/is (= #xt/interval-ym "P14M" (date-diff "YEAR" "MONTH")))
+        (t/is (= #xt/interval-mdn ["P434D" "PT0H"] (date-diff "DAY" "HOUR")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT10416H"] (date-diff "HOUR" "SECOND")))))
+        
+    (t/testing "with start, end field and precision"
+      (letfn [(date-diff [start end precision] (project1 (list 'date-diff 'ld1 'ld2 start end precision) test-doc))] 
+        (t/is (= #xt/interval-mdn ["P434D" "PT0H"] (date-diff "DAY" "SECOND" 2)))))))
 
 (t/deftest test-date-diff-mixed-types
   (let [test-doc {:xt$id :foo,
                   :ld (LocalDate/of 2023 05 21)
-                  :ldt (LocalDateTime/of 2020 4 3 12 34 56 0)
-                  :zdt (time/->zdt #inst "2021-03-12T12:34:56")}]
-    (letfn [(date-diff [x y interval-qualifier ] (project1 (list 'date-diff x y interval-qualifier) test-doc))]
-      (t/is (= #xt/interval-ym "P36M" (date-diff 'ld 'ldt "YEAR")))
-      (t/is (= #xt/interval-mdn ["P799D" "PT0S"] (date-diff 'ld 'zdt "DAY")))
-      (t/is (= #xt/interval-ym "P-37M" (date-diff 'ldt 'ld "MONTH"))) 
-      (t/is (= #xt/interval-mdn ["-P343D" "PT0S"] (date-diff 'ldt 'zdt "SECOND"))) 
-      (t/is (= #xt/interval-mdn ["P343D" "PT0S"] (date-diff 'zdt 'ldt "DAY TO SECOND")))
-      (t/is (= #xt/interval-ym "P-24M" (date-diff 'zdt 'ld "YEAR"))))))
+                  :ldt (LocalDateTime/of 2020 4 3 12 34 56 111111111)
+                  :zdt (ZonedDateTime/of 2021 3 12 13 35 57 222222222 (ZoneId/of "Etc/UTC"))}]
+    (t/testing "with only start-field"
+      (letfn [(date-diff [x y start] (project1 (list 'date-diff x y start) test-doc))]
+        (t/is (= #xt/interval-ym "P36M" (date-diff 'ld 'ldt "YEAR")))
+        (t/is (= #xt/interval-mdn ["P799D" "PT0S"] (date-diff 'ld 'zdt "DAY")))
+        (t/is (= #xt/interval-ym "P-37M" (date-diff 'ldt 'ld "MONTH")))
+        (t/is (= #xt/interval-mdn ["P0D" "PT-8233H-1M-1S"] (date-diff 'ldt 'zdt "SECOND")))
+        (t/is (= #xt/interval-ym "P-24M" (date-diff 'zdt 'ld "YEAR")))))
+
+    (t/testing "with start-field and precision"
+      (letfn [(date-diff [x y start precision] (project1 (list 'date-diff x y start precision) test-doc))]
+        (t/is (= #xt/interval-mdn ["P0D" "PT-8233H-1M-1.11S"] (date-diff 'ldt 'zdt "SECOND" 2)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT-19186H-24M-2.7777S"] (date-diff 'zdt 'ld "SECOND" 4)))
+        (t/is (= #xt/interval-mdn ["P0D" "PT8233H1M1.11111S"] (date-diff 'zdt 'ldt "SECOND" 5)))))
+
+    (t/testing "with start-field and end-field"
+      (letfn [(date-diff [x y start end] (project1 (list 'date-diff x y start end) test-doc))]
+        (t/is (= #xt/interval-ym "P-11M" (date-diff 'ldt 'zdt "YEAR" "MONTH")))
+        (t/is (= #xt/interval-mdn ["P-799D" "PT-10H"] (date-diff 'zdt 'ld "DAY" "HOUR")))
+        (t/is (= #xt/interval-mdn ["P343D" "PT1H1M1S"] (date-diff 'zdt 'ldt "DAY" "SECOND")))))
+
+    (t/testing "with start-field, end-field and precision"
+      (letfn [(date-diff [x y start end precision] (project1 (list 'date-diff x y start end precision) test-doc))]
+        (t/is (= #xt/interval-mdn ["P343D" "PT1H1M1.1S"] (date-diff 'zdt 'ldt "DAY" "SECOND" 1)))
+        (t/is (= #xt/interval-mdn ["P799D" "PT10H24M2.777S"] (date-diff 'ld 'zdt   "DAY" "SECOND" 3)))
+        (t/is (= #xt/interval-mdn ["P1142D" "PT11H25M3.888888S"] (date-diff 'ld 'ldt "DAY" "SECOND" 6)))))))
 
 (defn run-projection [rel form]
   (let [col-types (->> rel

@@ -376,54 +376,113 @@
 
 ;; Subtraction
 
-;; Calculate difference between two timestamps, returning the result as an Interval. 
-;; When subtracting two datetime values, we also provide an 'interval qualifier' (passed as a string). We use this to:
-;; - Determine the type of the resultant interval (either :year-month or :month-day-nano)
-;; - Decide the precision we truncate the result to (e.g. if the interval qualifier is "YEAR", we truncate the result to the nearest year)
-(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8] [{[_ _ {interval-qualifier :literal}] :args [[_ x-unit] [_ y-unit] _] :arg-types}]
-  (if (or (str/starts-with? interval-qualifier "YEAR")
-          (str/starts-with? interval-qualifier "MONTH"))
+;; DATE_DIFF implemented below - takes two datetimes (timestamp-local) with variable number of extra arguments:
+;; - 'start-field' - calculate difference in start-field and convert to truncated interval based on start-field 
+;;   ie, called for (DATEDIFF dt1 dt2 "HOUR")
+;; - 'start-field' & 'precision' - calculate difference in start-field, with an extra precision provided for seconds. 
+;;   Convert to truncated interval based on start-field with appropriate second precision.
+;;   ie, called for (DATEDIFF dt1 dt2 "SECOND (1, 3)")
+;; - 'start-field' & 'end-field' - calculate difference between the two in end-field and convert to truncated interval
+;;   with least significant field being end-field and most significant field being start-field.
+;;   ie, called for (DATEDIFF dt1 dt2 "DAY TO SECOND")
+;; - 'start-field', 'end-field' & precision - calculate difference between the two in end-field and convert to truncated interval, with
+;;   appropriate provided precision for seconds
+;;  ie, called for (DATEDIFF dt1 dt2 "DAY TO SECOND (6)")
+;; Some notes on how we behave based on values passed in:
+;; - We change return type of output based on fields passed in - if we start with YEAR or MONTH, return a `year-month`, otherwise a `month-day-nano`
+;; - When only time based fields entered (ie, HOUR, SECOND), we return everything in the Duration, calculated by our least significant field in the interval
+;;    - As we use `Duration` - we will always display in terms of HOURS, MINUTES and SECONDS
+(defn nanos-precision->duration [nanos precision] 
+  (let [second-nanos (bigdec (/ (long nanos) 1e9))
+        seconds (.setScale second-nanos 0 BigDecimal/ROUND_DOWN)
+        nanos (.longValueExact (.setScale (.multiply (.subtract second-nanos seconds) 1e9M) (- (long precision) 9) BigDecimal/ROUND_DOWN))]
+    (Duration/ofSeconds seconds nanos)))
 
-    ;; NOTE: As we are using `between` from ChronoUnit, we swap positions of x and y, as between caluclates (between start end) 
-    {:return-type [:interval :year-month]
-     :->call-code (fn [[x y]]
-                    `(PeriodDuration. ~(case interval-qualifier
-                                         "YEAR" `(Period/ofYears (.between ChronoUnit/YEARS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
-                                         "YEAR TO MONTH" `(Period/ofMonths (.between ChronoUnit/MONTHS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
-                                         "MONTH" `(Period/ofMonths (.between ChronoUnit/MONTHS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))))
-                                      Duration/ZERO))}
+(defn date-diff-start-end-fields [x-unit y-unit start-field end-field precision]
+  {:return-type (if (= ["YEAR" "MONTH"] [start-field end-field])
+                  [:interval :year-month]
+                  [:interval :month-day-nano])
+   :->call-code (fn [[x y]]
+                  (case [start-field end-field]
+                    ["YEAR" "MONTH"] `(PeriodDuration. (Period/of (.between ChronoUnit/YEARS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))
+                                                                  (rem (.between ChronoUnit/MONTHS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 12)
+                                                                  0)
+                                                       Duration/ZERO)
+  
+                    ["DAY" "HOUR"] `(PeriodDuration. (Period/ofDays (.between ChronoUnit/DAYS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
+                                                     (Duration/ofHours (rem (.between ChronoUnit/HOURS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 24)))
+  
+                    ["DAY" "MINUTE"] `(PeriodDuration. (Period/ofDays (.between ChronoUnit/DAYS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
+                                                       (Duration/ofMinutes (rem (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 1440)))
+  
+                    ["DAY" "SECOND"] (if precision
+                                       `(PeriodDuration. (Period/ofDays (.between ChronoUnit/DAYS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
+                                                         (nanos-precision->duration (rem (.between ChronoUnit/NANOS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 8.64E13) ~precision))
+                                       
+                                       `(PeriodDuration. (Period/ofDays (.between ChronoUnit/DAYS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
+                                                         (Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400))))
+  
+                    ["HOUR" "MINUTE"] `(PeriodDuration. Period/ZERO (Duration/ofMinutes (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))))
+  
+                    ["HOUR" "SECOND"] (if precision
+                                        `(PeriodDuration. Period/ZERO (nanos-precision->duration (.between ChronoUnit/NANOS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) ~precision))
+                                        `(PeriodDuration. Period/ZERO (Duration/ofSeconds (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))))
+  
+                    ["MINUTE" "SECOND"] (if precision
+                                          `(PeriodDuration. Period/ZERO (nanos-precision->duration (.between ChronoUnit/NANOS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) ~precision))
+                                          `(PeriodDuration. Period/ZERO (Duration/ofSeconds (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))))))})
 
-    {:return-type [:interval :month-day-nano]
-     :->call-code (fn [[x y]]
-                    `(PeriodDuration. (Period/ofDays (.between ChronoUnit/DAYS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))
-                                      ~(case interval-qualifier
-                                         "DAY" `Duration/ZERO
-                                         "DAY TO HOUR" `(Duration/ofHours (rem (.between ChronoUnit/HOURS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 24))
-                                         "DAY TO MINUTE" `(Duration/ofMinutes (rem (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 1440))
-                                         "DAY TO SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400))
-                                         "HOUR" `(Duration/ofHours (rem (.between ChronoUnit/HOURS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 24))
-                                         "HOUR TO MINUTE" `(Duration/ofMinutes (rem (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 1440))
-                                         "HOUR TO SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400))
-                                         "MINUTE" `(Duration/ofMinutes (rem (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 1440))
-                                         "MINUTE TO SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400))
-                                         "SECOND" `(Duration/ofSeconds (rem (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) 86400)))))}))
+;; With start-field, end-field and precision provided
+(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8 :int] [{[_ _ {start-field :literal} {end-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _ _] :arg-types}] 
+  (date-diff-start-end-fields x-unit y-unit start-field end-field precision))
 
-(defn- date-diff-cast
-  [{[_ _ {interval-qualifier :literal}] :args [t1 t2 _] :arg-types, :as expr}]
-  (let [{ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code} (expr/codegen-cast {:source-type t1, :target-type [:timestamp-local :micro]})
+;; With start-field, end-field provided
+(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8] [{[_ _ {start-field :literal} {end-field :literal}] :args [[_ x-unit] [_ y-unit] _ _] :arg-types}]
+  (date-diff-start-end-fields x-unit y-unit start-field end-field nil))
+
+(defn date-diff-start-field [x-unit y-unit start-field precision]
+  {:return-type (if (#{"YEAR" "MONTH"} start-field)
+                  [:interval :year-month]
+                  [:interval :month-day-nano])
+   :->call-code (fn [[x y]]
+                  (case start-field
+                    "YEAR" `(PeriodDuration. (Period/ofYears (.between ChronoUnit/YEARS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))) Duration/ZERO)
+                    "MONTH" `(PeriodDuration. (Period/ofMonths (.between ChronoUnit/MONTHS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))) Duration/ZERO)
+                    "DAY" `(PeriodDuration. (Period/ofDays (.between ChronoUnit/DAYS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))) Duration/ZERO)
+                    "HOUR" `(PeriodDuration. Period/ZERO (Duration/ofHours (.between ChronoUnit/HOURS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))))
+                    "MINUTE" `(PeriodDuration. Period/ZERO (Duration/ofMinutes (.between ChronoUnit/MINUTES ~(ts->ldt y y-unit) ~(ts->ldt x x-unit))))
+                    "SECOND" (if precision 
+                               `(PeriodDuration. Period/ZERO (nanos-precision->duration (.between ChronoUnit/NANOS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)) ~precision))
+                               `(PeriodDuration. Period/ZERO (Duration/ofSeconds (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))))))})
+
+;; With start-field, precision provided
+(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :int] [{[_ _ {start-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _] :arg-types}]
+  (date-diff-start-field x-unit y-unit start-field precision))
+
+;; With only start-field provided
+(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8] [{[_ _ {start-field :literal}] :args [[_ x-unit] [_ y-unit] _] :arg-types}]
+  (date-diff-start-field x-unit y-unit start-field nil))
+
+(defn date-diff-cast [expr]
+  (let [[t1 t2] (take 2 (:arg-types expr))
+        extra-arg-types (drop 2 (:arg-types expr))
+        extra-args (mapv :literal (drop 2 (:args expr))) 
+        {ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code} (expr/codegen-cast {:source-type t1, :target-type [:timestamp-local :micro]})
         {ret2 :return-type, bb2 :batch-bindings, ->cc2 :->call-code} (expr/codegen-cast {:source-type t2, :target-type [:timestamp-local :micro]})
-        {ret :return-type, bb :batch-bindings, ->cc :->call-code} (expr/codegen-call (assoc expr :arg-types [ret1 ret2 :utf8]))]
+        {ret :return-type, bb :batch-bindings, ->cc :->call-code} (expr/codegen-call (assoc expr :arg-types (into [ret1 ret2] extra-arg-types)))]
     {:return-type ret
      :batch-bindings (concat bb1 bb2 bb)
      :->call-code (fn [[a1 a2]]
-                    (->cc [(->cc1 [a1]) (->cc2 [a2]) interval-qualifier]))}))
+                    (->cc (into [(->cc1 [a1]) (->cc2 [a2])] extra-args)))}))
 
 ;; Register non (timestamp-local - timestamp-local) & mixed type temporal subtractions, using the 'date-diff-cast' function
 (doseq [t1 [:date :timestamp-local :timestamp-tz]
         t2 [:date :timestamp-local :timestamp-tz]]
   (when-not (= :timestamp-local t1 t2)
-    (defmethod expr/codegen-call [:date_diff t1 t2 :utf8] [expr]
-      (date-diff-cast expr))))
+    (defmethod expr/codegen-call [:date_diff t1 t2 :utf8] [expr] (date-diff-cast expr)) 
+    (defmethod expr/codegen-call [:date_diff t1 t2 :utf8 :int] [expr] (date-diff-cast expr))
+    (defmethod expr/codegen-call [:date_diff t1 t2 :utf8 :utf8] [expr] (date-diff-cast expr))
+    (defmethod expr/codegen-call [:date_diff t1 t2 :utf8 :utf8 :int] [expr] (date-diff-cast expr))))
 
 (defmethod expr/codegen-call [:- :time-local :time-local] [{[[_ time-unit1] [_ time-unit2]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))
