@@ -354,7 +354,7 @@ SELECT *
                xt$valid_to,
                xt$system_from,
                xt$system_to)
- WHERE (x.xt$valid_to - x.xt$valid_from) = (DATE '1970-01-08' - DATE '1970-01-01')
+ WHERE DATE_DIFF(x.xt$valid_to, x.xt$valid_from, DAY) = DATE_DIFF(DATE '1970-01-08', DATE '1970-01-01', DAY)
 ----
 1
 145
@@ -368,7 +368,7 @@ statement ok
 DELETE
 FROM Prop_Owner
 FOR ALL VALID_TIME AS x
-WHERE (x.xt$valid_to - x.xt$valid_from) = (DATE '1970-01-08' - DATE '1970-01-01')
+WHERE DATE_DIFF(x.xt$valid_to, x.xt$valid_from, DAY) = DATE_DIFF(DATE '1970-01-08', DATE '1970-01-01', DAY)
 
 query IIITTTT rowsort
 SELECT *

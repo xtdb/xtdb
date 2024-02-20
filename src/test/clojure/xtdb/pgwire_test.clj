@@ -265,9 +265,9 @@
       :clj "P1M"}
 
      ;; HACK to return durations, see #431
-     {:sql "DATE '2021-12-24' - DATE '2021-12-23'"
+     {:sql "DATE_DIFF(DATE '2021-12-24', DATE '2021-12-23', HOUR)"
       :json-type JsonNodeType/STRING
-      :clj "PT24H"}
+      :clj "P0DT24H"}
 
      ;; arrays
 
