@@ -78,6 +78,18 @@
               (throw (RuntimeException. "cannot subtract infinite timestamps"))
               ~inner)))))))
 
+(defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
+  (cond
+    (< fractional-precision 0)
+    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
+                            {::err/message "The minimum fractional seconds precision is 0."
+                             :fractional-precision fractional-precision}))
+
+    (< 9 fractional-precision)
+    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
+                            {::err/message "The maximum fractional seconds precision is 9."
+                             :fractional-precision fractional-precision}))))
+
 (defn- time-unit->eot-v [time-unit]
   (case time-unit
     (:second :milli) Integer/MAX_VALUE
@@ -398,7 +410,7 @@
         nanos (.longValueExact (.setScale (.multiply (.subtract second-nanos seconds) 1e9M) (- (long precision) 9) BigDecimal/ROUND_DOWN))]
     (Duration/ofSeconds seconds nanos)))
 
-(defn date-diff-start-end-fields [x-unit y-unit start-field end-field precision]
+(defn date-diff-start-end-fields [x-unit y-unit start-field end-field precision] 
   {:return-type (if (= ["YEAR" "MONTH"] [start-field end-field])
                   [:interval :year-month]
                   [:interval :month-day-nano])
@@ -434,6 +446,7 @@
 
 ;; With start-field, end-field and precision provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8 :int] [{[_ _ {start-field :literal} {end-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _ _] :arg-types}] 
+  (ensure-interval-fractional-precision-valid precision)
   (date-diff-start-end-fields x-unit y-unit start-field end-field precision))
 
 ;; With start-field, end-field provided
@@ -457,6 +470,7 @@
 
 ;; With start-field, precision provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :int] [{[_ _ {start-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _] :arg-types}]
+  (ensure-interval-fractional-precision-valid precision)
   (date-diff-start-field x-unit y-unit start-field precision))
 
 ;; With only start-field provided
@@ -742,18 +756,6 @@
     (throw (err/illegal-arg :xtdb.expression/invalid-interval-precision
                             {::err/message "The maximum leading field precision is 8."
                              :precision precision}))))
-
-(defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
-  (cond
-    (< fractional-precision 0)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
-                            {::err/message "The minimum fractional seconds precision is 0."
-                             :fractional-precision fractional-precision}))
-
-    (< 9 fractional-precision)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
-                            {::err/message "The maximum fractional seconds precision is 9."
-                             :fractional-precision fractional-precision}))))
 
 (defmethod expr/codegen-call [:single_field_interval :int :utf8 :int :int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]

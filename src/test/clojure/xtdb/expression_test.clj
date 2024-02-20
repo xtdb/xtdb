@@ -449,6 +449,36 @@
         (t/is (= #xt/interval-mdn ["P799D" "PT10H24M2.777S"] (date-diff 'ld 'zdt   "DAY" "SECOND" 3)))
         (t/is (= #xt/interval-mdn ["P1142D" "PT11H25M3.888888S"] (date-diff 'ld 'ldt "DAY" "SECOND" 6)))))))
 
+(t/deftest test-date-diff-invalid-fractional-precision-throws
+  (let [test-doc {:xt$id :foo,
+                  :ldt1 (LocalDateTime/of 2022 4 3 12 34 56 789456999)
+                  :ldt2 (LocalDateTime/of 2021 1 3 11 20 26 678345888)
+                  :zdt1 (ZonedDateTime/of 2021 1 1 11 20 10 0 (ZoneId/of "America/Chicago"))}]
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"The maximum fractional seconds precision is 9."
+      (project1 (list 'date-diff 'ldt1 'ldt2 "SECOND" -1) test-doc)))
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"The maximum fractional seconds precision is 9."
+      (project1 (list 'date-diff 'ldt1 'ldt2 "SECOND" 10) test-doc)))
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"The maximum fractional seconds precision is 9."
+      (project1 (list 'date-diff 'ldt1 'ldt2 "DAY" "SECOND" 10) test-doc)))
+    
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"The maximum fractional seconds precision is 9."
+      (project1 (list 'date-diff 'zdt1 'ldt1 "SECOND" -1) test-doc)))))
+
 (defn run-projection [rel form]
   (let [col-types (->> rel
                        (into {} (map (juxt #(symbol (.getName ^IVectorReader %))
