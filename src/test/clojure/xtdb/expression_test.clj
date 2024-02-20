@@ -504,6 +504,43 @@
       #"cannot subtract infinite timestamps"
       (project1 (list 'date-diff 'zdt1 'ldt1 "SECOND") test-doc)))))
 
+(t/deftest test-date-diff-invalid-interval-qualifier
+  (let [test-doc {:xt$id :foo
+                  :ldt1 (LocalDateTime/of 2021 1 3 11 20 26 678345888)}]
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"If YEAR specified as the interval start field, MONTH must be the end field."
+      (project1 (list 'date-diff 'ldt1 'ldt1 "YEAR" "DAY") test-doc)))
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"MONTH is not permitted as the interval start field."
+      (project1 (list 'date-diff 'ldt1 'ldt1 "MONTH" "DAY") test-doc)))
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"Interval end field must have less significance than the start field."
+      (project1 (list 'date-diff 'ldt1 'ldt1 "HOUR" "DAY") test-doc)))
+
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"Interval end field must have less significance than the start field."
+      (project1 (list 'date-diff 'ldt1 'ldt1 "MINUTE" "HOUR") test-doc)))
+
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"Interval end field must have less significance than the start field."
+      (project1 (list 'date-diff 'ldt1 'ldt1 "SECOND" "MINUTE") test-doc)))))
+
+
 (defn run-projection [rel form]
   (let [col-types (->> rel
                        (into {} (map (juxt #(symbol (.getName ^IVectorReader %))

@@ -90,6 +90,25 @@
                             {::err/message "The maximum fractional seconds precision is 9."
                              :fractional-precision fractional-precision}))))
 
+(defn- validate-interval-units [unit1 unit2]
+  (letfn [(->iae [msg]
+            (err/illegal-arg :xtdb.expression/invalid-interval-units
+                             {::err/message msg
+                              :start-unit unit1
+                              :end-unit unit2}))]
+    (when (and (= unit1 "YEAR") (not= unit2 "MONTH"))
+      (throw (->iae "If YEAR specified as the interval start field, MONTH must be the end field.")))
+    
+    (when (= unit1 "MONTH")
+      (throw (->iae "MONTH is not permitted as the interval start field.")))
+    
+      ;; less significance rule.
+    (when-not (or (= unit1 "YEAR")
+                  (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
+      (throw (->iae "Interval end field must have less significance than the start field.")))))
+
 (defn- time-unit->eot-v [time-unit]
   (case time-unit
     (:second :milli) Integer/MAX_VALUE
@@ -445,13 +464,18 @@
                                           `(PeriodDuration. Period/ZERO (Duration/ofSeconds (.between ChronoUnit/SECONDS ~(ts->ldt y y-unit) ~(ts->ldt x x-unit)))))))})
 
 ;; With start-field, end-field and precision provided
-(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8 :int] [{[_ _ {start-field :literal} {end-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _ _] :arg-types}] 
+(defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8 :int] [{[_ _ {start-field :literal} {end-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _ _] :arg-types}]
+  ;; Validate correct multi field interval qualifier against set of rules
+  (validate-interval-units start-field end-field)
+  ;; Validate fractional precision is allowed
   (ensure-interval-fractional-precision-valid precision)
   (-> (date-diff-start-end-fields x-unit y-unit start-field end-field precision)
       (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
 ;; With start-field, end-field provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :utf8] [{[_ _ {start-field :literal} {end-field :literal}] :args [[_ x-unit] [_ y-unit] _ _] :arg-types}]
+  ;; Validate correct multi field interval qualifier against set of rules
+  (validate-interval-units start-field end-field)
   (-> (date-diff-start-end-fields x-unit y-unit start-field end-field nil)
       (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
@@ -472,6 +496,7 @@
 
 ;; With start-field, precision provided
 (defmethod expr/codegen-call [:date_diff :timestamp-local :timestamp-local :utf8 :int] [{[_ _ {start-field :literal} {precision :literal}] :args [[_ x-unit] [_ y-unit] _ _] :arg-types}]
+  ;; Validate fractional precision is allowed
   (ensure-interval-fractional-precision-valid precision)
   (-> (date-diff-start-field x-unit y-unit start-field precision)
       (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
@@ -925,29 +950,15 @@
   ^PeriodDuration [s unit1 unit2]
   ;; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
   ;; these rules are not strictly necessary but are specified by SQL2011
+  (validate-interval-units unit1 unit2)
 
-  (letfn [(->iae [msg]
-            (err/illegal-arg :xtdb.expression/invalid-interval-units
-                             {::err/message msg
-                              :start-unit unit1
-                              :end-unit unit2}))]
-    (when (and (= unit1 "YEAR") (not= unit2 "MONTH"))
-      (throw (->iae "If YEAR specified as the interval start field, MONTH must be the end field.")))
-
-    (when (= unit1 "MONTH")
-      (throw (->iae "MONTH is not permitted as the interval start field.")))
-
-    ;; less significance rule.
-    (when-not (or (= unit1 "YEAR")
-                  (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
-                  (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
-                  (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
-      (throw (->iae "Interval end field must have less significance than the start field.")))
-
-    (or (if (= "YEAR" unit1)
-          (parse-year-month-literal s)
-          (parse-day-to-second-literal s unit1 unit2))
-        (throw (->iae "Cannot parse interval, incorrect format.")))))
+  (or (if (= "YEAR" unit1)
+        (parse-year-month-literal s)
+        (parse-day-to-second-literal s unit1 unit2))
+      (throw (err/illegal-arg :xtdb.expression/invalid-interval-units
+                              {::err/message "Cannot parse interval, incorrect format."
+                               :start-unit unit1
+                               :end-unit unit2}))))
 
 (defmethod expr/codegen-call [:multi_field_interval :utf8 :utf8 :int :utf8 :int] [{:keys [args]}]
   (let [[_ unit1 precision unit2 fractional-precision] (map :literal args)]
