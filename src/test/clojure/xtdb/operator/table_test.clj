@@ -112,9 +112,9 @@
                         {:params {'?x53 "RAIL"}}))))
 
 (t/deftest test-date-subtraction-bug-435
-  (t/is (= [{:a #time/duration "PT24H"}] ; it returned PT24000000H :/
+  (t/is (= [{:a #xt/interval-mdn ["P0D" "PT24H"]}] ; it returned PT24000000H :/
            (tu/query-ra
-            '[:table [a] [{a (- #time/date "2021-12-24" #time/date "2021-12-23")}]]))))
+            '[:table [a] [{a (date-diff #time/date "2021-12-24" #time/date "2021-12-23" "HOUR")}]]))))
 
 (t/deftest test-incorrect-relation-params
   (t/is

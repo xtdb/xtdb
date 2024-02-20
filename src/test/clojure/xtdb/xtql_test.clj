@@ -1453,8 +1453,8 @@
                                                                    :xt/valid-from app-from
                                                                    :xt/valid-to app-to}]
                                                            :for-valid-time :all-time})
-                                              (where (= (- #inst "1970-01-08" #inst "1970-01-01")
-                                                        (- app-to app-from)))))
+                                              (where (= (date-diff #inst "1970-01-08" #inst "1970-01-01" "DAY")
+                                                        (date-diff app-to app-from "DAY")))))
                                       (map (fn [{:keys [id app-from app-to]}]
                                              [:delete-docs {:from :docs, :valid-from app-from, :valid-to app-to}
                                               id]))))]

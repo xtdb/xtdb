@@ -1599,12 +1599,6 @@
                                 #(->ts-vec "x" TimeUnit/MICROSECOND (time/instant->micros (time/->instant #inst "2021")))
                                 #(->dur-vec "y" TimeUnit/MILLISECOND 2)))))
 
-    (t/is (t/is (= {:res [(Duration/parse "PT23H59M59.999S")]
-                    :res-type [:duration :milli]}
-                   (test-projection '-
-                                    #(->ts-vec "x" TimeUnit/MILLISECOND (.toEpochMilli (time/->instant #inst "2021-01-02")))
-                                    #(->ts-vec "y" TimeUnit/MILLISECOND (.toEpochMilli (time/->instant #inst "2021-01-01T00:00:00.001Z")))))))
-
     (t/testing "durations"
       (letfn [(->bigint-vec [^String col-name, ^long value]
                 (tu/open-vec col-name [value]))
