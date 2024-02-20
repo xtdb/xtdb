@@ -138,6 +138,79 @@
                             {::err/message (str "Cannot build interval for: "  (pr-str qualifier))
                              :qualifier qualifier}))))
 
+(defn ->date-diff-call [t1 t2 qualifier]
+  (r/zmatch qualifier
+            [:interval_qualifier
+             [:single_datetime_field [:non_second_primary_datetime_field start-field]]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field)
+  
+            [:interval_qualifier
+             [:single_datetime_field [:non_second_primary_datetime_field start-field] [:unsigned_integer _leading-precision]]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field)
+  
+            [:interval_qualifier
+             [:single_datetime_field "SECOND"]]
+            ;; =>
+            (list 'date_diff t1 t2 "SECOND")
+  
+            [:interval_qualifier
+             [:single_datetime_field "SECOND" [:unsigned_integer _leading-precision]]]
+            ;; =>
+            (list 'date_diff t1 t2 "SECOND")
+  
+            [:interval_qualifier
+             [:single_datetime_field "SECOND" [:unsigned_integer _leading-precision] [:unsigned_integer fractional-precision]]]
+            ;; =>
+            (list 'date_diff t1 t2 "SECOND" (parse-long fractional-precision))
+  
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field start-field]]
+             "TO"
+             [:end_field [:non_second_primary_datetime_field end-field]]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field end-field)
+  
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field start-field] [:unsigned_integer _leading-precision]]
+             "TO"
+             [:end_field [:non_second_primary_datetime_field end-field]]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field end-field)
+  
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field start-field]]
+             "TO"
+             [:end_field "SECOND"]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field "SECOND")
+  
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field start-field] [:unsigned_integer _leading-precision]]
+             "TO"
+             [:end_field "SECOND"]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field "SECOND")
+  
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field start-field] [:unsigned_integer _leading-precision]]
+             "TO"
+             [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field "SECOND" (parse-long fractional-precision))
+  
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field start-field]]
+             "TO"
+             [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+            ;; =>
+            (list 'date_diff t1 t2 start-field "SECOND" (parse-long fractional-precision))
+
+            (throw (err/illegal-arg :xtdb.sql/parse-error
+                                    {::err/message (str "Cannot build interval qualifier map for: "  (pr-str qualifier))
+                                     :qualifier qualifier}))))
+
 (defn cast-expr [e cast-spec]
   (r/zmatch cast-spec
     [:exact_numeric_type "INTEGER"]
@@ -531,6 +604,10 @@
     [:interval_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
     ;; =>
     (list '- (expr i1) (expr i2))
+
+    [:interval_value_expression "DATE_DIFF" ^:z t1 ^:z t2 ^:z qualifier]
+    ;; =>
+    (->date-diff-call (expr t1) (expr t2) qualifier)
 
     [:datetime_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
     ;; =>

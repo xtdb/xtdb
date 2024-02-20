@@ -842,6 +842,72 @@
     (= expected (plan-expr sql))
     "DATE '3000-03-15'" #time/date "3000-03-15"))
 
+(deftest test-date-diff-plan
+  (t/are
+   [sql expected]
+   (= expected (plan-expr sql))
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-10-21T12:34:56', MONTH)" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date-time "2021-10-21T12:34:56" "MONTH")
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-10-21T12:34:56', DAY)" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date-time "2021-10-21T12:34:56" "DAY")
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-10-21T12:34:56', SECOND)" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date-time "2021-10-21T12:34:56" "SECOND")
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-10-21T12:34:56', DAY TO SECOND)" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date-time "2021-10-21T12:34:56" "DAY" "SECOND")
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-10-21T12:34:56', SECOND (1, 6))" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date-time "2021-10-21T12:34:56" "SECOND" 6)
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-10-21T12:34:56', DAY TO SECOND (6))" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date-time "2021-10-21T12:34:56" "DAY" "SECOND" 6)
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-10-21T12:34:56', MONTH (1))" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date-time "2021-10-21T12:34:56" "MONTH") 
+    "DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', DATE '2021-10-21', DAY TO SECOND)" '(date_diff #time/date-time "2022-10-21T12:34:56" #time/date "2021-10-21" "DAY" "SECOND")))
+
+(deftest test-date-diff-query
+  (t/testing "TIMESTAMPS"
+    (t/is (= [{:ivl #xt/interval-ym "P12M"}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-08-21T12:34:56', YEAR) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-ym "P14M"}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-08-21T12:34:56', MONTH) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P426D" "PT0S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-08-21T11:34:56', DAY) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P426D" "PT1H1M2S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56', TIMESTAMP '2021-08-21T11:33:54', DAY TO SECOND) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P0D" "PT10225H1M2.111S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56.333', TIMESTAMP '2021-08-21T11:33:54.222', HOUR TO SECOND(3)) AS ivl FROM (VALUES 1) AS x"))))
+
+  (t/testing "TIMESTAMP WITH TIMEZONES"
+    (t/is (= [{:ivl #xt/interval-mdn ["P0D" "PT1465H1M2.222S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56.333-05:00', TIMESTAMP '2022-08-21T11:33:54.111-05:00', HOUR TO SECOND(3)) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P0D" "PT0.555555S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-08-21T11:33:54.666666-05:00', TIMESTAMP '2022-08-21T11:33:54.111111-05:00', SECOND(1,6)) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P0D" "PT-1H"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-08-21T11:33:54-04:00', TIMESTAMP '2022-08-21T11:33:54-05:00', HOUR) AS ivl FROM (VALUES 1) AS x"))))
+
+  (t/testing "DATES"
+    (t/is (= [{:ivl #xt/interval-ym "P12M"}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(DATE '2023-08-21', DATE '2022-07-18', YEAR) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-ym "P13M"}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(DATE '2023-08-21', DATE '2022-07-18', YEAR TO MONTH) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P368D" "PT0S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(DATE '2023-08-21', DATE '2022-08-18', DAY) AS ivl FROM (VALUES 1) AS x"))))
+
+  (t/testing "MIXED TYPES"
+    (t/is (= [{:ivl #xt/interval-ym "P3M"}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56.333', DATE '2022-07-18', MONTH) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P0D" "PT3H"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-21T12:34:56.333', TIMESTAMP '2022-10-21T12:34:56.333+03:00', HOUR) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P0D" "PT-22H-25M-3S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-20T01:34:56.333Z', DATE '2022-10-21', DAY TO SECOND) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P-1D" "PT0S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-20T01:34:56.333+03:00', DATE '2022-10-21', DAY) AS ivl FROM (VALUES 1) AS x")))
+
+    (t/is (= [{:ivl #xt/interval-mdn ["P0D" "PT-22H-25M-3.667S"]}]
+             (xt/q tu/*node* "SELECT DATE_DIFF(TIMESTAMP '2022-10-20T01:34:56.333Z', DATE '2022-10-21', DAY TO SECOND(3)) AS ivl FROM (VALUES 1) AS x")))))
+
 (deftest test-date-trunc-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are
