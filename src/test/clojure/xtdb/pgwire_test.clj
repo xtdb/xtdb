@@ -264,10 +264,9 @@
       :json-type JsonNodeType/STRING
       :clj "P1M"}
 
-     ;; HACK to return durations, see #431
      {:sql "DATE '2021-12-24' - DATE '2021-12-23'"
-      :json-type JsonNodeType/STRING
-      :clj "PT24H"}
+      :json-type JsonNodeType/NUMBER
+      :clj 1}
 
      ;; arrays
 

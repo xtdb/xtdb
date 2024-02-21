@@ -392,8 +392,9 @@
 (defmethod expr/codegen-call [:- :timestamp-tz :timestamp-local] [{[[_ x-unit] y] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:timestamp-local x-unit] y)))
 
-(defmethod expr/codegen-call [:- :date :date] [expr]
-  (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
+(defmethod expr/codegen-call [:- :date :date] [_expr]
+  ;; FIXME this assumes date-unit :day
+  {:return-type :i32 :->call-code (fn [[x y]] `(Math/subtractExact ~x ~y))})
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:- :date t] [{[_ t2] :arg-types, :as expr}]

@@ -111,11 +111,6 @@
                            [:table [{x50 false}]]]]
                         {:params {'?x53 "RAIL"}}))))
 
-(t/deftest test-date-subtraction-bug-435
-  (t/is (= [{:a #time/duration "PT24H"}] ; it returned PT24000000H :/
-           (tu/query-ra
-            '[:table [a] [{a (- #time/date "2021-12-24" #time/date "2021-12-23")}]]))))
-
 (t/deftest test-incorrect-relation-params
   (t/is
    (thrown-with-msg? RuntimeException #"Table param must be of type struct list"
