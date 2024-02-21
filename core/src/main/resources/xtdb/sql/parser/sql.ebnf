@@ -1209,7 +1209,6 @@ interval_value_expression
     : interval_term
     | interval_value_expression_1 plus_sign interval_term_1
     | interval_value_expression_1 minus_sign interval_term_1
-    | <left_paren> datetime_value_expression minus_sign datetime_term <right_paren> interval_qualifier
     ;
 
 interval_term
