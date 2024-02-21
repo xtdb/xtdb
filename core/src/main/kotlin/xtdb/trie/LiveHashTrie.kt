@@ -39,10 +39,10 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
     private fun bucketFor(idx: Int, level: Int): Int =
         bucketFor(iidReader.getPointer(idx, BUCKET_BUF_PTR.get()), level).toInt()
 
-    private fun compare(leftIdx: Int, rightIdx: Int): Int {
+    private fun compare(leftIdx: Int, rightIdx: Int, leftPtr: ArrowBufPointer, rightPtr: ArrowBufPointer): Int {
         val cmp =
-            iidReader.getPointer(leftIdx, LEFT_BUF_PTR.get())
-                .compareTo(iidReader.getPointer(rightIdx, RIGHT_BUF_PTR.get()))
+            iidReader.getPointer(leftIdx, leftPtr)
+                .compareTo(iidReader.getPointer(rightIdx, rightPtr))
 
         return if (cmp != 0) cmp else rightIdx compareTo leftIdx
     }
@@ -94,6 +94,8 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
             mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
 
         private fun mergeSort(trie: LiveHashTrie, data: IntArray, log: IntArray, logCount: Int): IntArray {
+            val leftPtr = ArrowBufPointer()
+            val logPtr = ArrowBufPointer()
             val dataCount = data.size
 
             val res = IntArrayList(data.size + logCount)
@@ -114,7 +116,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
                 val dataKey = data[dataIdx]
                 val logKey = log[logIdx]
 
-                if (trie.compare(dataKey, logKey) < 0) {
+                if (trie.compare(dataKey, logKey, leftPtr, logPtr) < 0) {
                     res.add(dataKey)
                     dataIdx++
                 } else {
@@ -126,8 +128,19 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
             return res.toArray()
         }
 
-        private fun sortLog(trie: LiveHashTrie, log: IntArray, logCount: Int) =
-            log.take(logCount).sortedWith(trie::compare).toIntArray()
+        private fun sortLog(trie: LiveHashTrie, log: IntArray, logCount: Int): IntArray {
+            val leftPtr = ArrowBufPointer()
+            val rightPtr = ArrowBufPointer()
+            return log.take(logCount).sortedWith { leftKey: Int, rightKey: Int ->
+                trie.compare(
+                    leftKey,
+                    rightKey,
+                    leftPtr,
+                    rightPtr
+                )
+            }.toIntArray()
+        }
+
 
         private fun idxBuckets(trie: LiveHashTrie, idxs: IntArray, path: ByteArray): Array<IntArray?> {
             val entryGroups = arrayOfNulls<IntArrayList>(LEVEL_WIDTH)
@@ -181,8 +194,6 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         fun emptyTrie(iidReader: IVectorReader) = builder(iidReader).build()
 
         private val BUCKET_BUF_PTR: ThreadLocal<ArrowBufPointer> = ThreadLocal.withInitial(::ArrowBufPointer)
-        private val LEFT_BUF_PTR: ThreadLocal<ArrowBufPointer> = ThreadLocal.withInitial(::ArrowBufPointer)
-        private val RIGHT_BUF_PTR: ThreadLocal<ArrowBufPointer> = ThreadLocal.withInitial(::ArrowBufPointer)
 
         private fun conjPath(path: ByteArray, idx: Byte): ByteArray {
             val currentPathLength = path.size
