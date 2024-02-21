@@ -133,8 +133,9 @@
                             (assoc :!latest-submitted-tx (atom nil))
                             (assoc :metrics {:query-timer (metrics/add-timer registry "query.timer"
                                                                              {:description "indicates the timings for queries"})})))]
-    (metrics/add-gauge registry "node.tx.lag.seconds"
-                       (gauge-lag-secs-fn node))
+    ;; TODO seems to create heap memory pressure, disabled for now
+    #_(metrics/add-gauge registry "node.tx.lag.seconds"
+                         (gauge-lag-secs-fn node))
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
