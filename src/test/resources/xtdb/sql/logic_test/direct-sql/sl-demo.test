@@ -354,7 +354,7 @@ SELECT *
                xt$valid_to,
                xt$system_from,
                xt$system_to)
- WHERE (x.xt$valid_to - x.xt$valid_from) = (DATE '1970-01-08' - DATE '1970-01-01')
+ WHERE (x.xt$valid_to - x.xt$valid_from) = (TIMESTAMP '1970-01-08 00:00:00' - TIMESTAMP '1970-01-01 00:00:00')
 ----
 1
 145
@@ -368,7 +368,7 @@ statement ok
 DELETE
 FROM Prop_Owner
 FOR ALL VALID_TIME AS x
-WHERE (x.xt$valid_to - x.xt$valid_from) = (DATE '1970-01-08' - DATE '1970-01-01')
+WHERE (x.xt$valid_to - x.xt$valid_from) = (TIMESTAMP '1970-01-08 00:00:00' - TIMESTAMP '1970-01-01 00:00:00')
 
 query IIITTTT rowsort
 SELECT *

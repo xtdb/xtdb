@@ -72,6 +72,8 @@ Examples:
 
 | `(- duration duration)` | `duration - duration` | duration
 | `(- interval interval)` | `interval - interval` | interval
+| `(- date date)` | `date - date` | integer (number of days elapsed)
+
 
 | `(* duration num)`
 

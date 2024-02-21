@@ -370,10 +370,16 @@
 
       (t/is (nil? (test-arithmetic '- time/end-of-time #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
 
-    (t/testing "(- datetime datetime)"
-      (t/is (= #time/duration "PT24H"
-               (test-arithmetic '- #time/date "2022-08-01" #time/date "2022-07-31")))
+    (t/testing "(- date date)"
+      (t/is (= 1 (test-arithmetic '- #time/date "2022-08-01" #time/date "2022-07-31")))
 
+      (t/is (= 3 (test-arithmetic '- #time/date "2001-10-01" #time/date "2001-09-28")))
+
+      (t/is (= 1 (test-arithmetic '- #time/date "2001-03-01" #time/date "2001-02-28" )))
+
+      (t/is (= 2 (test-arithmetic '- #time/date "2000-03-01" #time/date "2000-02-28"))))
+
+    (t/testing "(- datetime datetime)" 
       (t/is (= #time/duration "PT1H15M43.342S"
                (test-arithmetic '- #time/date "2022-08-01" #time/date-time "2022-07-31T22:44:16.658")))
 
