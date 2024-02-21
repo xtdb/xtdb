@@ -94,6 +94,8 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
             mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
 
         private fun mergeSort(trie: LiveHashTrie, data: IntArray, log: IntArray, logCount: Int): IntArray {
+            if (log.size == 0) return data;
+
             val leftPtr = ArrowBufPointer()
             val logPtr = ArrowBufPointer()
             val dataCount = data.size
