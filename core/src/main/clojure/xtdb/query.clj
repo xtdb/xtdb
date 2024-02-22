@@ -199,7 +199,7 @@
                   (->> args
                        (into {} (map (fn [[k v]]
                                        (MapEntry/create (param-sym (str (symbol k)))
-                                                        (w/normalise-struct-keys v))))))))
+                                                        (w/update-nested-keys v util/->normal-form-str))))))))
 
 (defn- cache-key-fn [^IKeyFn key-fn]
   (let [cache (HashMap.)]

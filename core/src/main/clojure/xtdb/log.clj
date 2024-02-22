@@ -173,7 +173,7 @@
       (when-let [arg-rows (.argRows op+args)]
         (util/with-open [args-wtr (vw/->vec-writer allocator "args" (FieldType/notNullable #xt.arrow/type :struct))]
           (doseq [arg-row arg-rows]
-            (vw/write-value! (w/normalise-struct-keys arg-row) args-wtr))
+            (vw/write-value! (w/update-nested-keys arg-row util/->normal-form-str) args-wtr))
 
           (.syncValueCount args-wtr)
 
@@ -260,12 +260,13 @@
         table-doc-writers (HashMap.)]
     (fn write-put! [^TxOp$PutDocs op]
       (.startStruct put-writer)
-      (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/str->normal-form-str (.tableName op))
+      (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/->normal-form-str (.tableName op))
                                                (util/->jfn
                                                  (fn [table]
                                                    (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
                                                      (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct))))))
-            docs (-> (.docs op) w/normalise-struct-keys)]
+            docs (-> (.docs op)
+                     (w/update-nested-keys util/->normal-form-str))]
 
         (vw/write-value! docs table-doc-writer)
 

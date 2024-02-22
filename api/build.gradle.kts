@@ -34,6 +34,8 @@ dependencies {
     api("org.apache.arrow", "arrow-memory-netty", "14.0.0")
     api(kotlin("stdlib-jdk8"))
     api("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.0")
+
+    implementation("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))

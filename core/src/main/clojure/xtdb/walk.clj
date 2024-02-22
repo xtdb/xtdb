@@ -24,12 +24,10 @@
 
   (walk-java (partial postwalk-java f) f form))
 
-(defn normalise-struct-keys [obj]
+(defn update-nested-keys [obj f]
   (->> obj
        (postwalk-java
         (fn [v]
           (cond-> v
-            (instance? Map v) (update-keys (fn [k]
-                                             (-> k
-                                                 (cond-> (keyword? k) (-> symbol str))
-                                                 util/str->normal-form-str))))))))
+            (instance? Map v) (update-keys f))))))
+

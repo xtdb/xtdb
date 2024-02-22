@@ -545,6 +545,12 @@
 (defn str->normal-form-str ^String [^String s]
   (NormalForm/normalForm s))
 
+(defn ->normal-form-str ^String [k]
+  (-> k
+      (cond-> (keyword? k) (-> symbol str)
+              (symbol? k) str)
+      str->normal-form-str))
+
 (defn ->child-allocator [^BufferAllocator allocator name]
   (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))
 
