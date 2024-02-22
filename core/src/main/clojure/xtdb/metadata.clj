@@ -311,7 +311,7 @@
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache}))
 
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names ^HashMap page-idx-cache]}]
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names ^Map page-idx-cache]}]
   (reify ITableMetadata
     (metadataReader [_] metadata-reader)
     (columnNames [_] col-names)
