@@ -448,14 +448,6 @@
       (log/trace (str "Finish of " f))
       res)))
 
-(defn- wrap-in-catch [f]
-  (fn [& args]
-    (try
-      (apply f args)
-      (catch Throwable t
-        (log/error t (str "Error while executing " f))
-        (throw t)))))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn benchmark [{:keys [seed,
                          threads,
@@ -513,12 +505,12 @@
                              :thread-count threads
                              :think Duration/ZERO
                              :pooled-task {:t :pick-weighted
-                                           :choices [[{:t :call, :transaction :get-item, :f (wrap-in-catch proc-get-item)} 12.0]
-                                                     [{:t :call, :transaction :new-user, :f (wrap-in-catch proc-new-user)} 0.5]
-                                                     [{:t :call, :transaction :new-item, :f (wrap-in-catch proc-new-item)} 1.0]
-                                                     [{:t :call, :transaction :new-bid,  :f (wrap-in-catch proc-new-bid)} 2.0]]}}
+                                           :choices [[{:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)} 12.0]
+                                                     [{:t :call, :transaction :new-user, :f (b/wrap-in-catch proc-new-user)} 0.5]
+                                                     [{:t :call, :transaction :new-item, :f (b/wrap-in-catch proc-new-item)} 1.0]
+                                                     [{:t :call, :transaction :new-bid,  :f (b/wrap-in-catch proc-new-bid)} 2.0]]}}
                             {:t :freq-job
                              :duration duration
                              :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
-                             :job-task {:t :call, :transaction :index-item-status-groups, :f (wrap-in-catch index-item-status-groups)}}]}
+                             :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups)}}]}
             (when sync {:t :call, :f #(tu/then-await-tx (:sut %))})])}))

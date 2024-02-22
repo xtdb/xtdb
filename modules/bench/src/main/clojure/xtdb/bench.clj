@@ -1,5 +1,6 @@
 (ns xtdb.bench
-  (:require [clojure.data.json :as json]
+  (:require [clojure.tools.logging :as log]
+            [clojure.data.json :as json]
             [clojure.string :as str]
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
@@ -11,6 +12,14 @@
            (java.util.concurrent.atomic AtomicLong)
            (java.util.function Function)
            (oshi SystemInfo)))
+
+(defn wrap-in-catch [f]
+  (fn [& args]
+    (try
+      (apply f args)
+      (catch Throwable t
+        (log/error t (str "Error while executing " f))
+        (throw t)))))
 
 (defrecord Worker [sut random domain-state custom-state clock bench-id jvm-id])
 
