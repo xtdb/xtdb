@@ -12,7 +12,7 @@
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
-           (java.util Arrays Date List Map UUID)
+           (java.util Arrays Date List Map Set UUID)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
@@ -1374,6 +1374,30 @@
 (defmethod codegen-call [:cardinality :list] [_]
   {:return-type :i32
    :->call-code #(do `(.size ~@%))})
+
+(defmethod codegen-call [:length :utf8] [expr]
+  (codegen-call (assoc expr :f :character_length)))
+
+(defmethod codegen-call [:length :varbinary] [expr]
+  (codegen-call (assoc expr :f :octet_length)))
+
+(defmethod codegen-call [:length :list] [expr]
+  (codegen-call (assoc expr :f :cardinality)))
+
+(defmethod codegen-call [:length :set] [_] 
+  {:return-type :i32
+   :->call-code #(do `(count ~@%))})
+
+(defn count-non-empty [m]
+  (reduce
+   (fn [^Integer non-empty [_x ^IValueReader y]]
+     (if (.isNull y) non-empty (Math/addExact non-empty 1)))
+   0
+   m))
+
+(defmethod codegen-call [:length :struct] [_] 
+  {:return-type :i32
+   :->call-code #(do `(count-non-empty ~@%))})
 
 (defn trim-array-view ^xtdb.vector.IListValueReader [^long trimmed-value-count ^IListValueReader lst]
   (reify IListValueReader

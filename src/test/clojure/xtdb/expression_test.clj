@@ -418,6 +418,35 @@
       "😀")
     (t/is (= nil (len nil :null)))))
 
+(t/deftest test-length
+  (letfn [(length [test-val] (project1 (list 'length 'a) {:a test-val}))]
+    (t/testing "calling length on strings"
+      (t/is (= 5 (length "hello")))
+      (t/is (= 0 (length "")))
+      (t/is (= 1 (length "a")))
+      (t/is (= 1 (length "😀"))))
+    
+    (t/testing "calling length on varbinary"
+      (t/is (= 0 (length (byte-array []))))
+      (t/is (= 2 (length (byte-array [-33 -44]))))
+      (t/is (= 1 (length (byte-array [-33])))))
+    
+    (t/testing "calling length on lists"
+      (t/is (= 0 (length [])))
+      (t/is (= 1 (length [""])))
+      (t/is (= 4 (length ["a" 1 3 :5]))))
+    
+    (t/testing "calling length on sets"
+      (t/is (= (length #{}) 0))
+      (t/is (= (length #{:a}) 1))
+      (t/is (= (length #{"1" "2"}) 2)))
+    
+    (t/testing "calling length on structs"
+      (t/is (= 0 (length {})))
+      (t/is (= 1 (length {:a 1})))
+      (t/is (= 3 (length {:a 1 :b 2 :c 3})))
+      (t/is (= 2 (length {:a 1 :b 2 :c nil}))))))
+
 (t/deftest test-like
   (t/are [s ptn expected-result]
       (= expected-result (project1 '(like a b) {:a s, :b ptn}))
