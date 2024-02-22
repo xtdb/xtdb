@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.indexer :as idx]
+            [xtdb.log :as xt.log]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
@@ -71,7 +72,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  6741)
+  7021)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
@@ -626,3 +627,11 @@
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))
+
+(t/deftest test-indexes-legacy-no-iids-tx-log-3201
+  (with-open [node (xtn/start-node)]
+    (binding [xt.log/*legacy-no-iids* true]
+      (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :v 0}]])
+
+      (t/is (= [{:xt/id :foo, :v 0}]
+               (xt/q node '(from :docs [*])))))))

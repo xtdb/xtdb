@@ -21,21 +21,6 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "iids",
-            "nullable" : false,
-            "type" : {
-              "name" : "list"
-            },
-            "children" : [{
-              "name" : "$data$",
-              "nullable" : false,
-              "type" : {
-                "name" : "fixedsizebinary",
-                "byteWidth" : 16
-              },
-              "children" : [ ]
-            }]
-          },{
             "name" : "documents",
             "nullable" : false,
             "type" : {
@@ -449,17 +434,6 @@
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
           "children" : [{
-            "name" : "iids",
-            "count" : 4,
-            "VALIDITY" : [1,1,1,1],
-            "OFFSET" : [0,1,2,3,4],
-            "children" : [{
-              "name" : "$data$",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "DATA" : ["ef4f71005524e9af20ffaca545cde6e1","58941814a63f68d05acf4177ec17d3ba","248daaa010bf702848523e4fa63f996c","6bd5602dd9300d63410ca07b677f0041"]
-            }]
-          },{
             "name" : "documents",
             "count" : 4,
             "TYPE_ID" : [0,1,0,1],
