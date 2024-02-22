@@ -311,17 +311,17 @@
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache}))
 
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names page-idx-cache]}]
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names ^HashMap page-idx-cache]}]
   (reify ITableMetadata
     (metadataReader [_] metadata-reader)
     (columnNames [_] col-names)
-    (rowIndex [_ col-name page-idx] (get page-idx-cache [col-name page-idx]))
+    (rowIndex [_ col-name page-idx] (.get page-idx-cache [col-name page-idx]))
     (iidBloomBitmap [_ page-idx]
       (let [bloom-rdr (-> (.structKeyReader metadata-reader "columns")
                           (.listElementReader)
                           (.structKeyReader "bloom"))]
 
-        (when-let [bloom-vec-idx (get page-idx-cache ["xt$iid" page-idx])]
+        (when-let [bloom-vec-idx (.get page-idx-cache ["xt$iid" page-idx])]
           (when (.getObject bloom-rdr bloom-vec-idx)
             (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))))
 
