@@ -73,7 +73,8 @@
                    plan (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
                (if (:explain? query-opts)
                  (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
-                 (.recordCallable ^Timer (:query-timer metrics) #(q/open-query allocator ra-src wm-src plan query-opts)))))))))
+                 (-> (q/open-query allocator ra-src wm-src plan query-opts)
+                     (metrics/wrap-stream (:query-timer metrics) registry)))))))))
 
   (^CompletableFuture openQueryAsync [_ ^XtqlQuery query, ^QueryOptions query-opts]
    (let [query-opts (-> (into {:default-tz default-tz,
@@ -92,7 +93,8 @@
                    plan (xtql/compile-query query table-info)]
                (if (:explain? query-opts)
                  (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
-                 (.recordCallable ^Timer (:query-timer metrics) #(q/open-query allocator ra-src wm-src plan query-opts)))))))))
+                 (-> (q/open-query allocator ra-src wm-src plan query-opts)
+                     (metrics/wrap-stream (:query-timer metrics) registry)))))))))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)

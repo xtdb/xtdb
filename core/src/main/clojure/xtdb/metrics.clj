@@ -6,7 +6,8 @@
   (:import (com.sun.net.httpserver HttpServer HttpHandler)
            (java.net InetSocketAddress)
            (java.util.function Supplier)
-           (io.micrometer.core.instrument MeterRegistry Meter Measurement Timer Gauge Tag Counter)
+           (java.util.stream Stream)
+           (io.micrometer.core.instrument MeterRegistry Meter Measurement Timer Gauge Tag Counter Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmMemoryMetrics JvmHeapPressureMetrics JvmGcMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
@@ -39,6 +40,10 @@
               (publishPercentiles (double-array percentiles)))
     description (.description description)
     :always (.register reg)))
+
+(defn wrap-stream [^Stream stream ^Timer timer ^MeterRegistry registry]
+  (let [^Timer$Sample sample (Timer/start registry)]
+    (.onClose stream (fn [] (.stop sample timer)))))
 
 (defn add-gauge
   ([reg meter-name f] (add-gauge reg meter-name f {}))
