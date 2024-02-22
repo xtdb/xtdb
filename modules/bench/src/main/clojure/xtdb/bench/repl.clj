@@ -50,4 +50,9 @@
                      :scale-factor 0.1
                      :threads 1
                      :sync true}
-              :node-dir node-dir}))
+              :node-dir node-dir})
+
+  ;; test benchmark
+  (run-bench {:type :test-bm
+              :opts {:duration "PT1H"}})
+  )

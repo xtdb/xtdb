@@ -169,8 +169,8 @@
              ['task-2 1.0]]}
 
   {:t :freq-job
-   :duration 'how-long-to-wait-until-next-run
-   :freq 'sleep-time-for-checking
+   :duration 'how-long-this-freq-job-should-be-executed
+   :freq 'sleep-time-before-next-run
    :job-task 'task}
   )
 

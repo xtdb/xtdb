@@ -61,7 +61,9 @@
                     :tpch
                     ((requiring-resolve 'xtdb.bench.tpch/benchmark) benchmark-opts)
                     :ts-devices
-                    ((requiring-resolve 'xtdb.bench.ts-devices/benchmark) benchmark-opts))
+                    ((requiring-resolve 'xtdb.bench.ts-devices/benchmark) benchmark-opts)
+                    :test-bm
+                    ((requiring-resolve 'xtdb.bench.test-benchmark/benchmark) benchmark-opts))
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (with-open [node (->local-node node-opts)]
       (binding [bm/*registry* (:registry node)]
