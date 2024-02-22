@@ -41,9 +41,11 @@
     description (.description description)
     :always (.register reg)))
 
-(defn wrap-stream [^Stream stream ^Timer timer ^MeterRegistry registry]
-  (let [^Timer$Sample sample (Timer/start registry)]
-    (.onClose stream (fn [] (.stop sample timer)))))
+(defmacro wrap-query [q timer registry]
+  (let [registry (vary-meta registry assoc :tag `MeterRegistry)]
+    `(let [^Timer$Sample sample# (Timer/start ~registry)
+           ^Stream stream# ~q]
+       (.onClose stream# (fn [] (.stop sample# ~timer))))))
 
 (defn add-gauge
   ([reg meter-name f] (add-gauge reg meter-name f {}))

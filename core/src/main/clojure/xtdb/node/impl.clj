@@ -74,7 +74,7 @@
                (if (:explain? query-opts)
                  (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
                  (-> (q/open-query allocator ra-src wm-src plan query-opts)
-                     (metrics/wrap-stream (:query-timer metrics) registry)))))))))
+                     (metrics/wrap-query (:query-timer metrics) registry)))))))))
 
   (^CompletableFuture openQueryAsync [_ ^XtqlQuery query, ^QueryOptions query-opts]
    (let [query-opts (-> (into {:default-tz default-tz,
@@ -94,7 +94,7 @@
                (if (:explain? query-opts)
                  (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
                  (-> (q/open-query allocator ra-src wm-src plan query-opts)
-                     (metrics/wrap-stream (:query-timer metrics) registry)))))))))
+                     (metrics/wrap-query (:query-timer metrics) registry)))))))))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)
