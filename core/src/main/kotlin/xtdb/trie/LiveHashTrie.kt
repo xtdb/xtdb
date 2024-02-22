@@ -83,6 +83,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         val data: IntArray = IntArray(0),
         val log: IntArray = IntArray(logLimit),
         private val logCount: Int = 0,
+        private var sortedData: IntArray? = null
     ) : Node {
 
         override val iidChildren = null
@@ -90,12 +91,12 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         override val recencies = null
         override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
 
-        fun mergeSort(trie: LiveHashTrie): IntArray =
-            mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
+        fun mergeSort(trie: LiveHashTrie): IntArray {
+            if (log.isEmpty()) return data
+            return sortedData ?: mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
+        }
 
         private fun mergeSort(trie: LiveHashTrie, data: IntArray, log: IntArray, logCount: Int): IntArray {
-            if (log.size == 0) return data;
-
             val leftPtr = ArrowBufPointer()
             val logPtr = ArrowBufPointer()
             val dataCount = data.size
@@ -127,19 +128,14 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
                 }
             }
 
-            return res.toArray()
+            return res.toArray().also { sortedData = it }
         }
 
         private fun sortLog(trie: LiveHashTrie, log: IntArray, logCount: Int): IntArray {
             val leftPtr = ArrowBufPointer()
             val rightPtr = ArrowBufPointer()
             return log.take(logCount).sortedWith { leftKey: Int, rightKey: Int ->
-                trie.compare(
-                    leftKey,
-                    rightKey,
-                    leftPtr,
-                    rightPtr
-                )
+                trie.compare(leftKey, rightKey, leftPtr, rightPtr)
             }.toIntArray()
         }
 
@@ -159,7 +155,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         override fun compactLogs(trie: LiveHashTrie): Node {
             if (logCount == 0) return this
 
-            val data = mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
+            val data = if (sortedData != null) sortedData as IntArray else mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
             val log = IntArray(logLimit)
             val logCount = 0
 
