@@ -37,10 +37,10 @@
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 1000]
       (tu/with-tmp-dirs #{path}
-        (with-open [node (tu/->local-node {:node-dir path})
-                    ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
-                    allocator (RootAllocator.)
-                    live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
+        (util/with-open [node (tu/->local-node {:node-dir path})
+                         ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                         allocator (RootAllocator.)
+                         live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
 
           (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
             (let [wp (IVectorPosition/build)]
@@ -70,10 +70,10 @@
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 50000]
       (tu/with-tmp-dirs #{path}
-        (with-open [node (tu/->local-node {:node-dir path})
-                    ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
-                    allocator (RootAllocator.)
-                    live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
+        (util/with-open [node (tu/->local-node {:node-dir path})
+                         ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                         allocator (RootAllocator.)
+                         live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
           (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
 
             (let [wp (IVectorPosition/build)]

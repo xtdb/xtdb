@@ -36,7 +36,7 @@ dependencies {
     api("org.apache.arrow", "arrow-memory-netty", "14.0.0")
     api("io.netty", "netty-common", "4.1.82.Final")
 
-    api("org.roaringbitmap", "RoaringBitmap", "0.9.32")
+    api("org.roaringbitmap", "RoaringBitmap", "1.0.1")
 
     api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
     api("clj-commons", "clj-yaml", "1.0.27")

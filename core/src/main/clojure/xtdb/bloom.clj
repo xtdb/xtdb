@@ -3,13 +3,14 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import java.nio.ByteBuffer
+  (:import com.carrotsearch.hppc.IntArrayList
+           java.nio.ByteBuffer
            org.apache.arrow.memory.RootAllocator
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
-           [org.apache.arrow.vector ValueVector VarBinaryVector]
+           [org.apache.arrow.vector ValueVector]
+           (org.roaringbitmap RoaringBitmap)
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           org.roaringbitmap.RoaringBitmap
-           (xtdb.vector RelationReader IVectorReader IVectorWriter)))
+           (xtdb.vector IVectorReader IVectorWriter RelationReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -51,6 +52,25 @@
         (if (.contains bloom (aget hashes n))
           (recur (inc n))
           false)))))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface BloomBuilder
+  (^void add [^long idx])
+  (^org.roaringbitmap.RoaringBitmap build []))
+
+(defn- ->bloom-builder
+  (^xtdb.bloom.BloomBuilder [^IVectorReader col] (->bloom-builder col bloom-k bloom-bit-mask))
+  (^xtdb.bloom.BloomBuilder [^IVectorReader col, ^long k, ^long mask]
+   (let [buf (IntArrayList. (* (.valueCount col) k))]
+     (reify BloomBuilder
+       (add [_ idx]
+         (let [hash-1 (.hashCode col idx SimpleHasher/INSTANCE)
+               hash-2 (.hashCode col idx (MurmurHasher. hash-1))]
+           (dotimes [n k]
+             (.add buf (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))))
+
+       (build [_]
+         (RoaringBitmap/bitmapOfUnordered (.toArray buf)))))))
 
 ;; Cassandra-style hashes:
 ;; https://www.researchgate.net/publication/220770131_Less_Hashing_Same_Performance_Building_a_Better_Bloom_Filter
@@ -94,12 +114,12 @@
       (f params tmp-vec))))
 
 (defn write-bloom [^IVectorWriter bloom-wtr, ^IVectorReader col]
-  (let [bloom (RoaringBitmap.)]
+  (let [bloom-builder (->bloom-builder col)]
     (dotimes [in-idx (.valueCount col)]
       (when-not (.isNull col in-idx)
-        (let [^ints el-hashes (bloom-hashes col in-idx)]
-          (.add bloom el-hashes))))
+        (.add bloom-builder in-idx)))
 
-    (let [buf (ByteBuffer/allocate (.serializedSizeInBytes bloom))]
+    (let [bloom (.build bloom-builder)
+          buf (ByteBuffer/allocate (.serializedSizeInBytes bloom))]
       (.serialize bloom buf)
       (.writeBytes bloom-wtr (doto buf .clear)))))
