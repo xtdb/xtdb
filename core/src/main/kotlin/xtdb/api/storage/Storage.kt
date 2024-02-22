@@ -29,16 +29,14 @@ object Storage {
      */
     @Serializable
     @SerialName("!InMemory")
-    class InMemoryStorageFactory : Factory {
-        private companion object {
-            private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-in-memory-storage")
-        }
+    data object InMemoryStorageFactory : Factory {
 
-        override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator) as IBufferPool
+        override fun openStorage(allocator: BufferAllocator) =
+            requiringResolve("xtdb.buffer-pool/open-in-memory-storage").invoke(allocator) as IBufferPool
     }
 
     @JvmStatic
-    fun inMemoryStorage() = InMemoryStorageFactory()
+    fun inMemoryStorage() = InMemoryStorageFactory
 
     /**
      * Implementation for the storage module that persists data to the local file system, under the **path** directory.
@@ -63,14 +61,12 @@ object Storage {
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long = 536870912,
     ) : Factory {
-        private companion object {
-            private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-local-storage")
-        }
 
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
-        override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator, this) as IBufferPool
+        override fun openStorage(allocator: BufferAllocator) =
+            requiringResolve("xtdb.buffer-pool/open-local-storage").invoke(allocator, this) as IBufferPool
     }
 
     @JvmStatic
@@ -114,14 +110,12 @@ object Storage {
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long = 536870912,
     ) : Factory {
-        private companion object {
-            private val OPEN_STORAGE = requiringResolve("xtdb.buffer-pool", "open-remote-storage")
-        }
 
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
-        override fun openStorage(allocator: BufferAllocator) = OPEN_STORAGE.invoke(allocator, this) as IBufferPool
+        override fun openStorage(allocator: BufferAllocator) =
+            requiringResolve("xtdb.buffer-pool/open-remote-storage").invoke(allocator, this) as IBufferPool
     }
 
     @JvmStatic

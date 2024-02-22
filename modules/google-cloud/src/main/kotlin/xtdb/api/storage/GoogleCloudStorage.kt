@@ -98,16 +98,14 @@ object GoogleCloudStorage {
         val pubSubTopic: String,
         var prefix: Path? = null,
     ) : ObjectStoreFactory {
-        internal companion object {
-            private val OPEN_OBJECT_STORE = requiringResolve("xtdb.google-cloud", "open-object-store")
-        }
 
         /**
          * @param prefix A file path to prefix all of your files with - for example, if "foo" is provided all XTDB files will be located under a "foo" directory.
          */
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
-        override fun openObjectStore() = OPEN_OBJECT_STORE.invoke(this) as ObjectStore
+        override fun openObjectStore() =
+            requiringResolve("xtdb.google-cloud/open-object-store").invoke(this) as ObjectStore
     }
 
     /**

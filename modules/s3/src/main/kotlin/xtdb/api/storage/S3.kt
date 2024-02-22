@@ -76,9 +76,6 @@ object S3 {
         @Serializable(PathWithEnvVarSerde::class) var prefix: Path? = null,
         @Transient var s3Configurator: S3Configurator = DefaultS3Configurator,
     ) : ObjectStoreFactory {
-        internal companion object {
-            private val OPEN_OBJECT_STORE = requiringResolve("xtdb.s3", "open-object-store")
-        }
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
@@ -87,7 +84,7 @@ object S3 {
          */
         fun s3Configurator(s3Configurator: S3Configurator) = apply { this.s3Configurator = s3Configurator }
 
-        override fun openObjectStore() = OPEN_OBJECT_STORE.invoke(this) as ObjectStore
+        override fun openObjectStore() = requiringResolve("xtdb.s3/open-object-store")(this) as ObjectStore
     }
 
     /**

@@ -22,8 +22,6 @@ object HttpServer {
     @JvmStatic
     fun httpServer() = Factory()
 
-    private val OPEN_SERVER = requiringResolve("xtdb.server", "open-server")
-
     @Serializable
     @SerialName("!HttpServer")
     data class Factory(
@@ -33,7 +31,8 @@ object HttpServer {
 
         fun port(port: Int) = apply { this.port = port }
 
-        override fun openModule(xtdb: IXtdb) = OPEN_SERVER(xtdb, this) as XtdbModule
+        override fun openModule(xtdb: IXtdb) =
+            requiringResolve("xtdb.server/open-server")(xtdb, this) as XtdbModule
     }
 
     /**

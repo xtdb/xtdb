@@ -1,7 +1,6 @@
 @file:UseSerializers(ZoneIdSerde::class)
 package xtdb.api
 
-import clojure.lang.IFn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
@@ -18,7 +17,6 @@ import java.time.ZoneOffset
 import kotlin.io.path.extension
 
 object Xtdb {
-    private val OPEN_NODE: IFn = requiringResolve("xtdb.node.impl", "open-node")
 
     @Serializable
     data class Config(
@@ -39,7 +37,7 @@ object Xtdb {
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
 
-        fun open() = OPEN_NODE.invoke(this) as IXtdb
+        fun open() = requiringResolve("xtdb.node.impl/open-node").invoke(this) as IXtdb
         fun txLog(txLog: Log.Factory) = apply { this.txLog = txLog }
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
     }

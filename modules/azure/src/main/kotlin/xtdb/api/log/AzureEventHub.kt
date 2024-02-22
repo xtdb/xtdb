@@ -1,7 +1,6 @@
 @file:UseSerializers(DurationSerde::class)
 package xtdb.api.log
 
-import clojure.lang.IFn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
@@ -13,8 +12,6 @@ import java.time.Duration
 object AzureEventHub {
     @JvmStatic
     fun azureEventHub(namespace: String, eventHubName: String) = Factory(namespace, eventHubName)
-
-    private val OPEN_LOG: IFn = requiringResolve("xtdb.azure", "open-log")
 
     @Serializable
     data class Factory(
@@ -30,13 +27,15 @@ object AzureEventHub {
         fun maxWaitTime(maxWaitTime: Duration) = apply { this.maxWaitTime = maxWaitTime }
         fun pollSleepDuration(pollSleepDuration: Duration) = apply { this.pollSleepDuration = pollSleepDuration }
         fun autoCreateEventHub(autoCreateEventHub: Boolean) = apply { this.autoCreateEventHub = autoCreateEventHub }
-        fun retentionPeriodInDays(retentionPeriodInDays: Int) = apply { this.retentionPeriodInDays = retentionPeriodInDays }
+        fun retentionPeriodInDays(retentionPeriodInDays: Int) =
+            apply { this.retentionPeriodInDays = retentionPeriodInDays }
+
         fun resourceGroupName(resourceGroupName: String) = apply { this.resourceGroupName = resourceGroupName }
 
-        override fun openLog() = OPEN_LOG(this) as Log
+        override fun openLog() = requiringResolve("xtdb.azure/open-log")(this) as Log
     }
 
-    class Registration: XtdbModule.Registration {
+    class Registration : XtdbModule.Registration {
         override fun register(registry: XtdbModule.Registry) {
             registry.registerLogFactory(Factory::class)
         }

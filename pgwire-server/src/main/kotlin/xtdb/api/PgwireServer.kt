@@ -6,7 +6,6 @@ import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
 
 object PgwireServer {
-    private val OPEN_SERVER = requiringResolve("xtdb.pgwire", "open-server")
 
     @JvmStatic
     fun pgwireServer() = Factory()
@@ -22,8 +21,8 @@ object PgwireServer {
         fun port(port: Int) = apply { this.port = port }
         fun numThreads(numThreads: Int) = apply { this.numThreads = numThreads }
 
-        override fun openModule(xtdb: IXtdb) = OPEN_SERVER(xtdb, this) as XtdbModule
-
+        override fun openModule(xtdb: IXtdb): XtdbModule =
+            requiringResolve("xtdb.pgwire/open-server")(xtdb, this) as XtdbModule
     }
 
     /**

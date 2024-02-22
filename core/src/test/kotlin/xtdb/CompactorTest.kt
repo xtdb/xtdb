@@ -36,7 +36,7 @@ internal class CompactorTest {
 
     companion object {
         init {
-            requiringResolve("xtdb.vector.reader", "vec->reader")
+            requiringResolve("xtdb.vector.reader/vec->reader")
         }
     }
 

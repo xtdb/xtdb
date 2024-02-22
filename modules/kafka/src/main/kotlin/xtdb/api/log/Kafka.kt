@@ -1,7 +1,6 @@
 @file:UseSerializers(DurationSerde::class)
 package xtdb.api.log
 
-import clojure.lang.IFn
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -60,10 +59,6 @@ object Kafka {
         @Serializable(PathWithEnvVarSerde::class) var propertiesFile: Path? = null
     ) : Log.Factory {
 
-        internal companion object {
-            private val OPEN_LOG: IFn = requiringResolve("xtdb.kafka", "open-log")
-        }
-
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
         fun replicationFactor(replicationFactor: Int) = apply { this.replicationFactor = replicationFactor }
         fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
@@ -71,7 +66,7 @@ object Kafka {
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
 
-        override fun openLog() = OPEN_LOG(this) as Log
+        override fun openLog() = requiringResolve("xtdb.kafka/open-log")(this) as Log
 
     }
 
