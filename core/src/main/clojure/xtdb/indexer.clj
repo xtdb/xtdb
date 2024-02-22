@@ -67,6 +67,9 @@
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
                                                    ^IVectorReader tx-ops-rdr, ^Instant system-time]
   (let [put-leg (.legReader tx-ops-rdr :put-docs)
+        ;; TODO legacy - see #3204. non-nullable iids-rdr and remove docs-rdr
+        iids-rdr (.structKeyReader put-leg "iids")
+        iid-rdr (some-> iids-rdr (.listElementReader))
         docs-rdr (.structKeyReader put-leg "documents")
         valid-from-rdr (.structKeyReader put-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
@@ -106,19 +109,28 @@
                                     {:valid-from (time/micros->instant valid-from)
                                      :valid-to (time/micros->instant valid-to)})))
 
-          (let [doc-start-idx (.getListStartIndex docs-rdr tx-op-idx)]
-            (dotimes [doc-idx (.getListCount docs-rdr tx-op-idx)]
-              (let [doc-idx (+ doc-start-idx doc-idx)
-                    eid (.getObject id-rdr doc-idx)]
-                (.logPut live-table (trie/->iid eid) valid-from valid-to #(.copyRow doc-copier doc-idx))))))
+          (let [doc-start-idx (.getListStartIndex docs-rdr tx-op-idx)
+                ^long iid-start-idx (or (some-> iids-rdr (.getListStartIndex tx-op-idx))
+                                        Long/MIN_VALUE)]
+            (dotimes [row-idx (.getListCount docs-rdr tx-op-idx)]
+              (let [doc-idx (+ doc-start-idx row-idx)]
+                (.logPut live-table
+                         (if iid-rdr
+                           (.getBytes iid-rdr (+ iid-start-idx row-idx))
+                           (trie/->iid (.getObject id-rdr doc-idx)))
+                         valid-from valid-to
+                         #(.copyRow doc-copier doc-idx))))))
 
         nil))))
 
 (defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
   (let [delete-leg (.legReader tx-ops-rdr :delete-docs)
         table-rdr (.structKeyReader delete-leg "table")
+        ;; TODO legacy - see #3204. non-nullable iids-rdr and remove doc-ids-rdr
         doc-ids-rdr (.structKeyReader delete-leg "doc-ids")
-        eid-rdr (.listElementReader doc-ids-rdr)
+        eid-rdr (some-> doc-ids-rdr .listElementReader)
+        iids-rdr (.structKeyReader delete-leg "iids")
+        iid-rdr (some-> iids-rdr .listElementReader)
         valid-from-rdr (.structKeyReader delete-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader delete-leg "xt$valid_to")
         current-time-µs (time/instant->micros current-time)]
@@ -137,36 +149,53 @@
                                     {:valid-from (time/micros->instant valid-from)
                                      :valid-to (time/micros->instant valid-to)})))
 
-          (let [doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
-            (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
-              (let [eid-idx (+ doc-ids-start-idx eid-idx)
-                    eid (.getObject eid-rdr eid-idx)]
-                (.logDelete live-table (trie/->iid eid) valid-from valid-to)))))
+          (when doc-ids-rdr
+            (let [doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
+              (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
+                (let [eid-idx (+ doc-ids-start-idx eid-idx)
+                      eid (.getObject eid-rdr eid-idx)]
+                  (.logDelete live-table (trie/->iid eid) valid-from valid-to)))))
+
+          (when iids-rdr
+            (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
+              (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
+                (.logDelete live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))
+                            valid-from valid-to)))))
 
         nil))))
 
 (defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
   (let [erase-leg (.legReader tx-ops-rdr :erase-docs)
         table-rdr (.structKeyReader erase-leg "table")
+        ;; TODO legacy - see #3204. non-nullable iids-rdr and remove doc-ids-rdr
         doc-ids-rdr (.structKeyReader erase-leg "doc-ids")
-        eid-rdr (.listElementReader doc-ids-rdr)]
+        eid-rdr (some-> doc-ids-rdr .listElementReader)
+        iids-rdr (.structKeyReader erase-leg "iids")
+        iid-rdr (some-> iids-rdr .listElementReader)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
-              live-table (.liveTable live-idx-tx table)
-              doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
-          (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
-            (let [eid-idx (+ doc-ids-start-idx eid-idx)
-                  eid (.getObject eid-rdr eid-idx)]
-              (.logErase live-table (trie/->iid eid)))))
+              live-table (.liveTable live-idx-tx table)]
+
+          (when doc-ids-rdr
+            (let [doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
+              (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
+                (let [eid-idx (+ doc-ids-start-idx eid-idx)
+                      eid (.getObject eid-rdr eid-idx)]
+                  (.logErase live-table (trie/->iid eid))))))
+
+          (when iids-rdr
+            (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
+              (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
+                (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx)))))))
 
         nil))))
 
-(defn- find-fn [allocator ^IRaQuerySource ra-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-id]
-  (let [lp '[:scan {:table xt$tx_fns} [{xt$id (= xt$id ?id)} xt$fn]]
+(defn- find-fn [allocator ^IRaQuerySource ra-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-iid]
+  (let [lp '[:scan {:table xt$tx_fns} [{xt$iid (= xt$iid ?iid)} xt$id xt$fn]]
         ^xtdb.query.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
-                          {:params (vr/rel-reader [(-> (vw/open-vec allocator '?id [fn-id])
+                          {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
                                                        (vr/vec->reader))]
                                                   1)
                            :default-all-valid-time? false
@@ -181,16 +210,17 @@
                          (when (pos? (.rowCount ^RelationReader in-rel))
                            (aset !fn-doc 0 (first (vr/rel->rows in-rel)))))))
 
-        (let [fn-doc (or (aget !fn-doc 0)
-                         (throw (err/runtime-err :xtdb.call/no-such-tx-fn {:fn-id fn-id})))
-              fn-body (:xt/fn fn-doc)]
+        (let [{fn-id :xt/id, fn-body :xt/fn, :as fn-doc} (or (aget !fn-doc 0)
+                                                             (throw (err/runtime-err :xtdb.call/no-such-tx-fn
+                                                                                     {:fn-iid (util/byte-buffer->uuid fn-iid)})))]
 
           (when-not (instance? ClojureForm fn-body)
-            (throw (err/illegal-arg :xtdb.call/invalid-tx-fn {:fn-doc fn-doc})))
+            (throw (err/illegal-arg :xtdb.call/invalid-tx-fn {:fn-doc (dissoc fn-doc :xt/iid)})))
 
           (let [fn-form (.form ^ClojureForm fn-body)]
             (try
-              (sci/eval-form sci-ctx fn-form)
+              {:tx-fn (sci/eval-form sci-ctx fn-form)
+               :fn-id fn-id}
 
               (catch Throwable t
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
@@ -223,6 +253,7 @@
                                                ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
   (let [call-leg (.legReader tx-ops-rdr :call)
         fn-id-rdr (.structKeyReader call-leg "fn-id")
+        fn-iid-rdr (.structKeyReader call-leg "fn-iid")
         args-rdr (.structKeyReader call-leg "args")
 
         ;; TODO confirm/expand API that we expose to tx-fns
@@ -234,8 +265,10 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (try
-          (let [fn-id (.getObject fn-id-rdr tx-op-idx)
-                tx-fn (find-fn allocator ra-src wm-src (sci/fork sci-ctx) tx-opts fn-id)
+          (let [fn-iid (if fn-iid-rdr
+                         (.getBytes fn-iid-rdr tx-op-idx)
+                         (trie/->iid (.getObject fn-id-rdr tx-op-idx)))
+                {:keys [fn-id tx-fn]} (find-fn allocator ra-src wm-src (sci/fork sci-ctx) tx-opts fn-iid)
                 args (.form ^ClojureForm (.getObject args-rdr tx-op-idx))
 
                 res (try
