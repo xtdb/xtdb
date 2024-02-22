@@ -138,6 +138,7 @@ export default defineConfig({
                 { label: 'String functions', link: '/reference/main/stdlib/string' },
                 { label: 'Temporal functions', link: '/reference/main/stdlib/temporal' },
                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates' },
+                { label: 'Other functions', link: '/reference/main/stdlib/other'}
               ]
             },
           ]
