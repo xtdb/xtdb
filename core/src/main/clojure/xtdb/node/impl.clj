@@ -42,7 +42,8 @@
                  ^IRaQuerySource ra-src, wm-src, scan-emitter
                  default-tz
                  !latest-submitted-tx
-                 system, close-fn, metrics]
+                 system, close-fn, registry
+                 metrics]
   IXtdb
   (submitTxAsync [this opts tx-ops]
     (let [system-time (some-> opts .getSystemTime)]
@@ -129,7 +130,7 @@
         0.0))))
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [registry] :as deps}]
-  (let [node (map->Node (-> (dissoc deps :registry)
+  (let [node (map->Node (-> deps
                             (assoc :!latest-submitted-tx (atom nil))
                             (assoc :metrics {:query-timer (metrics/add-timer registry "query.timer"
                                                                              {:description "indicates the timings for queries"})})))]
