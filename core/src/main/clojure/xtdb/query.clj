@@ -26,7 +26,8 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql.edn :as xtql.edn]
+            [xtdb.walk :as w])
   (:import clojure.lang.MapEntry
            java.lang.AutoCloseable
            (java.time Clock Duration)
@@ -197,7 +198,8 @@
   (vw/open-params allocator
                   (->> args
                        (into {} (map (fn [[k v]]
-                                       (MapEntry/create (param-sym (str (symbol k))) v)))))))
+                                       (MapEntry/create (param-sym (str (symbol k)))
+                                                        (w/normalise-struct-keys v))))))))
 
 (defn- cache-key-fn [^IKeyFn key-fn]
   (let [cache (HashMap.)]

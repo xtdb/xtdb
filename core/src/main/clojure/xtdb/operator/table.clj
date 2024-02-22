@@ -8,7 +8,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.walk :as w])
   (:import clojure.lang.MapEntry
            (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
@@ -57,7 +58,7 @@
               (let [row (nth rows idx)]
                 (if (contains? row col-kw)
                   (let [v (-> (get row col-kw) (->v opts))]
-                    (vw/write-value! v (.legWriter out-writer (vw/value->arrow-type v))))
+                    (vw/write-value! (w/normalise-struct-keys v) (.legWriter out-writer (vw/value->arrow-type v))))
                   (vw/write-value! nil (.legWriter out-writer #xt.arrow/type :absent)))))
 
             (.syncValueCount out-writer)

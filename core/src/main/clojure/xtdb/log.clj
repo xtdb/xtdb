@@ -8,12 +8,13 @@
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.walk :as w])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
            java.time.Duration
-           (java.util ArrayList HashMap)
+           (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture Semaphore)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -171,7 +172,7 @@
       (when-let [arg-rows (.argRows op+args)]
         (util/with-open [args-wtr (vw/->vec-writer allocator "args" (FieldType/notNullable #xt.arrow/type :struct))]
           (doseq [arg-row arg-rows]
-            (vw/write-value! arg-row args-wtr))
+            (vw/write-value! (w/normalise-struct-keys arg-row) args-wtr))
 
           (.syncValueCount args-wtr)
 
@@ -257,7 +258,8 @@
                                                    (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
                                                      (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct))))))]
 
-        (vw/write-value! (.docs op) table-doc-writer))
+        (vw/write-value! (w/normalise-struct-keys (.docs op))
+                         table-doc-writer))
 
       (vw/write-value! (.validFrom op) valid-from-writer)
       (vw/write-value! (.validTo op) valid-to-writer)
