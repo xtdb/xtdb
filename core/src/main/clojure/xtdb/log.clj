@@ -9,7 +9,8 @@
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.vector.reader :as vr])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
@@ -271,8 +272,11 @@
         (when-not *legacy-no-iids*
           (.startList iids-writer)
           (doseq [doc docs
-                  :let [{eid "xt$id"} (-> doc
-                                          (update-keys util/->normal-form-str))]]
+                  :let [eid (->> doc
+                                 (some (fn [e]
+                                         (when (.equals "xt$id" (util/->normal-form-str (key e)))
+                                           e)))
+                                 val)]]
             (vw/write-value! (trie/->iid eid) iid-writer))
           (.endList iids-writer)))
 
