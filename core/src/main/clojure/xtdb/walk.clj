@@ -1,5 +1,4 @@
 (ns xtdb.walk
-  (:require [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            [java.util List Map Map$Entry Set]))
 

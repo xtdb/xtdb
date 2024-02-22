@@ -740,7 +740,7 @@
         (.startStruct writer)
 
         (doseq [[k v] m
-                :let [v-writer (-> (.structKeyWriter writer (str (symbol k)))
+                :let [v-writer (-> (.structKeyWriter writer (util/str->normal-form-str (str (symbol k))))
                                    (.legWriter (value->arrow-type v)))]]
           (write-value! v v-writer))
 

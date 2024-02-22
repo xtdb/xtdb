@@ -9,13 +9,12 @@
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.walk :as w])
+            [xtdb.vector.writer :as vw])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
            java.time.Duration
-           (java.util ArrayList HashMap Map)
+           (java.util ArrayList HashMap)
            (java.util.concurrent CompletableFuture Semaphore)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -173,7 +172,7 @@
       (when-let [arg-rows (.argRows op+args)]
         (util/with-open [args-wtr (vw/->vec-writer allocator "args" (FieldType/notNullable #xt.arrow/type :struct))]
           (doseq [arg-row arg-rows]
-            (vw/write-value! (w/update-nested-keys arg-row util/->normal-form-str) args-wtr))
+            (vw/write-value! arg-row args-wtr))
 
           (.syncValueCount args-wtr)
 
@@ -265,14 +264,15 @@
                                                  (fn [table]
                                                    (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
                                                      (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct))))))
-            docs (-> (.docs op)
-                     (w/update-nested-keys util/->normal-form-str))]
+            docs (.docs op)]
 
         (vw/write-value! docs table-doc-writer)
 
         (when-not *legacy-no-iids*
           (.startList iids-writer)
-          (doseq [{eid "xt$id"} docs]
+          (doseq [doc docs
+                  :let [{eid "xt$id"} (-> doc
+                                          (update-keys util/->normal-form-str))]]
             (vw/write-value! (trie/->iid eid) iid-writer))
           (.endList iids-writer)))
 
