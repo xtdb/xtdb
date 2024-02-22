@@ -739,10 +739,17 @@
       (do
         (.startStruct writer)
 
-        (doseq [[k v] m
-                :let [v-writer (-> (.structKeyWriter writer (util/str->normal-form-str (str (symbol k))))
-                                   (.legWriter (value->arrow-type v)))]]
-          (write-value! v v-writer))
+        (let [struct-pos (.getPosition (.writerPosition writer))]
+          (doseq [[k v] m
+                  :let [v-writer (.structKeyWriter writer (util/str->normal-form-str (str (symbol k))))
+                        v-leg-wtr (-> v-writer
+                                      (.legWriter (value->arrow-type v)))]]
+
+            (when-not (= (.getPosition (.writerPosition v-writer))
+                         struct-pos)
+              (throw (err/illegal-arg :xtdb/key-already-set {:k k, :ks (set (keys m))})))
+
+            (write-value! v v-leg-wtr)))
 
         (.endStruct writer))
 

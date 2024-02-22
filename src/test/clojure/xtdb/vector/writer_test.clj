@@ -1,13 +1,15 @@
 (ns xtdb.vector.writer-test
   (:require [clojure.test :as t :refer [deftest]]
+            [xtdb.api :as xt]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.vector.writer :as vw]
+            [xtdb.types :as types]
             [xtdb.vector.reader :as vr]
-            [xtdb.types :as types])
+            [xtdb.vector.writer :as vw])
   (:import (org.apache.arrow.vector VectorSchemaRoot)
-           [org.apache.arrow.vector.complex DenseUnionVector StructVector ListVector]
-           (org.apache.arrow.vector.types.pojo FieldType Schema)
-           (org.apache.arrow.vector.types Types$MinorType)))
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+           (org.apache.arrow.vector.types Types$MinorType)
+           (org.apache.arrow.vector.types.pojo FieldType Schema)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -389,3 +391,9 @@
           (.endList map-wtr))
 
         (t/is (= maps (tu/vec->vals (vw/vec-wtr->rdr map-wtr))))))))
+
+(t/deftest throws-on-equivalent-ks
+  (with-open [node (xtn/start-node)]
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"key-already-set"
+                            (xt/submit-tx node [[:put-docs :foo {:xt/id :foo, :xt$id :bar}]])))))
