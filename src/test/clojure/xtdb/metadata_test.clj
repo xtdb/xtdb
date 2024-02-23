@@ -111,8 +111,7 @@
 
     (tu/finish-chunk! node)
 
-    (let [^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
-          first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
+    (let [first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
           bucket->page-idx (->> (into (sorted-set) first-buckets)
                                 (map-indexed #(MapEntry/create %2 %1))
                                 (into {}))
@@ -130,9 +129,8 @@
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
           meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 21 20))]
-      (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
-        (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)
-              page-idx-pred (.build literal-selector table-metadata)]
+      (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+        (let [page-idx-pred (.build literal-selector table-metadata)]
 
           (t/is (= #{"xt$iid" "xt$id" "xt$system_from"}
                    (.columnNames table-metadata)))
@@ -145,13 +143,11 @@
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        ^IBufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
         meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 2 1))]
 
-    (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
-      (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)
-            page-idx-pred (.build true-selector table-metadata)]
+    (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+      (let [page-idx-pred (.build true-selector table-metadata)]
         (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "boolean_or_int"}
                  (.columnNames table-metadata)))
 
@@ -167,15 +163,12 @@
       (tu/finish-chunk! node)
 
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-            ^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
             meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs/") (trie/->log-l0-l1-trie-key 0 2 1))]
 
-        (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
-          (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-path)]
+        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-            (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
+                         (.resolve node-dir "objects/v01/tables/"))
 
-                           (.resolve node-dir "objects/v01/tables/"))
-
-            (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "colours" "$data$"}
-                     (.columnNames table-metadata)))))))))
+          (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "colours" "$data$"}
+                   (.columnNames table-metadata))))))))

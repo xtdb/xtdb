@@ -18,7 +18,8 @@
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.IVectorWriter
-           xtdb.vector.RelationReader))
+           xtdb.vector.RelationReader
+           (xtdb.metadata IMetadataManager)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ICompactor
@@ -102,19 +103,19 @@
   (vw/->vec-writer allocator "xt$recency"
                    (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])))
 
-(defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, {:keys [page-size]}
-                            {:keys [^Path table-path path trie-keys out-trie-key]}]
+(defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
+                            {:keys [page-size]} {:keys [^Path table-path path trie-keys out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
 
-    (util/with-open [meta-files (LinkedList.)
+    (util/with-open [table-metadatas (LinkedList.)
                      data-rels (trie/open-data-rels buffer-pool table-path trie-keys nil)]
       (doseq [trie-key trie-keys]
-        (.add meta-files (trie/open-meta-file buffer-pool (trie/->table-meta-file-path table-path trie-key))))
+        (.add table-metadatas (.openTableMetadata metadata-mgr (trie/->table-meta-file-path table-path trie-key))))
 
-      (let [segments (mapv (fn [{:keys [trie] :as meta-file} data-rel]
-                             {:trie trie, :meta-file meta-file, :data-rel data-rel})
-                           meta-files
+      (let [segments (mapv (fn [{:keys [trie] :as _table-metadata} data-rel]
+                             {:trie trie, :data-rel data-rel})
+                           table-metadatas
                            data-rels)
             schema (->log-data-rel-schema (map :data-rel segments))]
 
@@ -219,13 +220,14 @@
 
 (defmethod ig/prep-key :xtdb/compactor [_ opts]
   (into {:allocator (ig/ref :xtdb/allocator)
-         :buffer-pool (ig/ref :xtdb/buffer-pool)}
+         :buffer-pool (ig/ref :xtdb/buffer-pool)
+         :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)}
         opts))
 
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^IBufferPool buffer-pool]}]
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^IBufferPool buffer-pool metadata-mgr]}]
   (let [page-size *page-size*
         l1-file-size-rows *l1-file-size-rows*]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
@@ -241,7 +243,7 @@
                   jobs? (boolean (seq jobs))]
 
               (doseq [job jobs]
-                (exec-compaction-job! allocator buffer-pool {:page-size page-size} job))
+                (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job))
 
               (when jobs?
                 (recur)))))

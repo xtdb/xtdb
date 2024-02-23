@@ -16,8 +16,8 @@
            [java.util.stream IntStream]
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            xtdb.IBufferPool
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node HashTrieKt ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IVectorReader RelationReader)
@@ -239,7 +239,7 @@
   #"(log-l(\p{XDigit}+)(?:-p(\p{XDigit}+))?-nr(\p{XDigit}+)(?:-rs(\p{XDigit}+))?)\.arrow$")
 
 (defn parse-trie-file-path [^Path file-path]
-  (let [trie-key (str (.getFileName file-path))] 
+  (let [trie-key (str (.getFileName file-path))]
     (when-let [[_ trie-key level-str part-str next-row-str rows-str] (re-find trie-file-path-regex trie-key)]
       (cond-> {:file-path file-path
                :trie-key trie-key
@@ -402,20 +402,6 @@
                       (some-> trie .getRootNode))
                     segments)
               (byte-array 0)))))
-
-(defrecord MetaFile [^HashTrie trie, ^ArrowBuf buf, ^RelationReader rdr]
-  AutoCloseable
-  (close [_]
-    (util/close rdr)
-    (util/close buf)))
-
-(defn open-meta-file [^IBufferPool buffer-pool ^Path file-path]
-  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
-    (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf buf)
-          nodes-vec (.getVector root "nodes")]
-      (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
-        (.load loader record-batch)
-        (->MetaFile (ArrowHashTrie. nodes-vec) buf (vr/<-root root))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel
