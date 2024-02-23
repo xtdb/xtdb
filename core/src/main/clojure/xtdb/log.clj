@@ -9,8 +9,7 @@
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.writer :as vw])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)

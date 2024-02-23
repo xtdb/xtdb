@@ -5,10 +5,8 @@ import clojure.lang.*;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.*;
-import org.apache.arrow.vector.complex.DenseUnionVector;
-import org.apache.arrow.vector.complex.ListVector;
-import org.apache.arrow.vector.complex.MapVector;
-import org.apache.arrow.vector.complex.StructVector;
+import org.apache.arrow.vector.compare.VectorVisitor;
+import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -34,10 +32,9 @@ import java.util.stream.IntStream;
 import static java.time.temporal.ChronoUnit.MICROS;
 
 public class ValueVectorReader implements IVectorReader {
-    private static final IFn VEC_TO_READER = Clojure.var("xtdb.vector.reader", "vec->reader");
 
     public static IVectorReader from(ValueVector v) {
-        return (IVectorReader) VEC_TO_READER.invoke(v);
+        return ValueVectorReadersKt.from(v);
     }
 
     private final ValueVector vector;
@@ -763,7 +760,7 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader structVector(StructVector v) {
+    public static IVectorReader structVector(NonNullableStructVector v) {
         var childVecs = v.getChildrenFromFields();
         var rdrs = childVecs.stream().collect(Collectors.toMap(ValueVector::getName, ValueVectorReader::from));
 
