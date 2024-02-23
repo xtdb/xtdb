@@ -29,10 +29,10 @@
            (org.apache.arrow.vector VectorLoader)
            (org.apache.arrow.vector.types.pojo FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           xtdb.api.TransactionKey
-           (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
+           xtdb.api.TransactionKey
+           (xtdb.bitemporal IRowConsumer Polygon)
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie LiveHashTrie$Leaf)
@@ -316,7 +316,7 @@
 
 (defn- ->merge-tasks
   "segments :: [Segment]
-    Segment :: {:keys [meta-file trie-key table-metadata page-idx-pred]} ;; for Arrow tries
+    Segment :: {:keys [trie-key table-metadata page-idx-pred]} ;; for Arrow tries
              | {:keys [trie live-rel]} ;; for live tries"
   [segments path-pred]
 
@@ -456,21 +456,19 @@
                                                    (trie/current-trie-files))]
 
                        (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
-                         (let [merge-tasks (util/with-open [meta-files (LinkedList.)]
+                         (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
                                              (or (->merge-tasks (cond-> (mapv (fn [meta-file-path]
-                                                                                (let [{:keys [trie], meta-rdr :rdr, :as meta-file} (trie/open-meta-file buffer-pool meta-file-path)]
-                                                                                  (.add meta-files meta-file)
-                                                                                  (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr meta-rdr meta-file-path)]
-                                                                                    {:meta-file meta-file
-                                                                                     :trie trie
-                                                                                     :trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
-                                                                                     :table-metadata table-metadata
-                                                                                     :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                              (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                                                (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                                page-idx-pred))
-                                                                                                            (.build metadata-pred table-metadata)
-                                                                                                            col-names)})))
+                                                                                (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
+                                                                                  (.add table-metadatas table-metadata)
+                                                                                  {:trie trie
+                                                                                   :trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
+                                                                                   :table-metadata table-metadata
+                                                                                   :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                            (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                              (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                              page-idx-pred))
+                                                                                                          (.build metadata-pred table-metadata)
+                                                                                                          col-names)}))
                                                                               current-meta-files)
 
                                                                   live-table-wm (conj {:trie (.liveTrie live-table-wm)

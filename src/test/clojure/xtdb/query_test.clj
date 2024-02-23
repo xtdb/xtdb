@@ -8,16 +8,14 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (java.time LocalTime)
-           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager ITableMetadata)))
 
 (t/use-fixtures :once tu/with-allocator)
 
 (defn with-table-metadata [node meta-file-path f]
-  (let [^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
-        ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
-    (util/with-open [{meta-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-path)]
-      (f (.tableMetadata metadata-mgr meta-rdr meta-file-path)))))
+  (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+    (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+      (f table-metadata))))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 10}})]

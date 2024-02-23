@@ -8,21 +8,25 @@
             [xtdb.serde :as serde]
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (com.cognitect.transit TransitFactory)
+           (com.github.benmanes.caffeine.cache Cache Caffeine RemovalListener)
            (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.file Path)
            (java.util HashMap HashSet Map NavigableMap TreeMap)
-           (java.util.concurrent ConcurrentHashMap)
+           (java.util.concurrent.atomic AtomicInteger)
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
+           (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
            xtdb.IBufferPool
-           (xtdb.vector IVectorReader IVectorWriter)))
+           (xtdb.trie HashTrie ArrowHashTrie)
+           (xtdb.vector IVectorReader IVectorWriter RelationReader)))
 
 (def arrow-read-handlers
   {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
@@ -59,7 +63,7 @@
 (definterface IMetadataManager
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
-  (^xtdb.metadata.ITableMetadata tableMetadata [^xtdb.vector.RelationReader metaRelReader, ^java.nio.file.Path metaFilePath])
+  (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath])
   (columnFields [^String tableName])
   (columnField [^String tableName, ^String colName])
   (allColumnFields []))
@@ -311,23 +315,47 @@
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache}))
 
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names ^Map page-idx-cache]}]
-  (reify ITableMetadata
-    (metadataReader [_] metadata-reader)
-    (columnNames [_] col-names)
-    (rowIndex [_ col-name page-idx] (.get page-idx-cache [col-name page-idx]))
-    (iidBloomBitmap [_ page-idx]
-      (let [bloom-rdr (-> (.structKeyReader metadata-reader "columns")
-                          (.listElementReader)
-                          (.structKeyReader "bloom"))]
+(defrecord TableMetadata [^HashTrie trie
+                          ^RelationReader meta-rel-reader
+                          ^ArrowBuf buf
+                          ^IVectorReader metadata-leaf-rdr
+                          col-names
+                          ^Map page-idx-cache
+                          ^AtomicInteger ref-count]
+  ITableMetadata
+  (metadataReader [_] metadata-leaf-rdr)
+  (columnNames [_] col-names)
+  (rowIndex [_ col-name page-idx] (.get page-idx-cache [col-name page-idx]))
+  (iidBloomBitmap [_ page-idx]
+    (let [bloom-rdr (-> (.structKeyReader metadata-leaf-rdr "columns")
+                        (.listElementReader)
+                        (.structKeyReader "bloom"))]
 
-        (when-let [bloom-vec-idx (.get page-idx-cache ["xt$iid" page-idx])]
-          (when (.getObject bloom-rdr bloom-vec-idx)
-            (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))))
+      (when-let [bloom-vec-idx (.get page-idx-cache ["xt$iid" page-idx])]
+        (when (.getObject bloom-rdr bloom-vec-idx)
+          (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))
+
+  AutoCloseable
+  (close [_]
+    (when (zero? (.decrementAndGet ref-count))
+      (util/close meta-rel-reader)
+      (util/close buf))))
+
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path]
+  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
+    (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf buf)
+          nodes-vec (.getVector root "nodes")]
+      (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
+        (.load loader record-batch)
+        (let [rdr (vr/<-root root)
+              ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
+                                                 (.legReader :leaf))
+              {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]
+          (->TableMetadata (ArrowHashTrie. nodes-vec) rdr buf metadata-reader col-names page-idx-cache (AtomicInteger. 1)))))))
 
 (deftype MetadataManager [^IBufferPool buffer-pool
+                          ^Cache table-metadata-cache
                           ^NavigableMap chunks-metadata
-                          ^Map table-metadata-idxs
                           ^:volatile-mutable ^Map fields]
   IMetadataManager
   (finishChunk [this chunk-idx new-chunk-metadata]
@@ -336,15 +364,13 @@
     (set! (.fields this) (merge-fields fields new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
-  (tableMetadata [_ meta-rel-rdr file-path]
-    (let [^IVectorReader metadata-reader (-> (.readerForName meta-rel-rdr "nodes")
-                                             (.legReader :leaf))]
-      (->table-metadata metadata-reader
-                        (.computeIfAbsent table-metadata-idxs
-                                          file-path
-                                          (reify Function
-                                            (apply [_ _]
-                                              (->table-metadata-idxs metadata-reader)))))))
+  (openTableMetadata [_ file-path]
+    (let [{:keys [^AtomicInteger ref-count] :as table-metadata}
+          (.get table-metadata-cache file-path (reify Function
+                                                 (apply [_ _]
+                                                   (->table-metadata buffer-pool file-path))))]
+      (.incrementAndGet ref-count)
+      table-metadata))
 
   (chunksMetadata [_] chunks-metadata)
   (columnField [_ table-name col-name] (get-in fields [table-name col-name]))
@@ -353,7 +379,8 @@
 
   AutoCloseable
   (close [_]
-    (.clear chunks-metadata)))
+    (.clear chunks-metadata)
+    (util/close (.asMap table-metadata-cache))))
 
 (defn latest-chunk-metadata [^IMetadataManager metadata-mgr]
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
@@ -386,11 +413,17 @@
   (merge {:buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [^IBufferPool buffer-pool], :as deps}]
-  (let [chunks-metadata (load-chunks-metadata deps)]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [cache-size ^IBufferPool buffer-pool], :or {cache-size 128} :as deps}]
+  (let [chunks-metadata (load-chunks-metadata deps)
+        table-metadata-cache (-> (Caffeine/newBuilder)
+                                 (.maximumSize cache-size)
+                                 (.removalListener (reify RemovalListener
+                                                     (onRemoval [_ _path table-metadata _reason]
+                                                       (util/close table-metadata))))
+                                 (.build))]
     (MetadataManager. buffer-pool
+                      table-metadata-cache
                       chunks-metadata
-                      (ConcurrentHashMap.)
                       (->> (vals chunks-metadata) (reduce merge-fields {})))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]

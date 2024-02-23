@@ -35,7 +35,7 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
     api("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.0")
 
-    implementation("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
+    api("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
