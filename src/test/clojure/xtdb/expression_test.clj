@@ -445,7 +445,17 @@
       (t/is (= 0 (length {})))
       (t/is (= 1 (length {:a 1})))
       (t/is (= 3 (length {:a 1 :b 2 :c 3})))
-      (t/is (= 2 (length {:a 1 :b 2 :c nil}))))))
+      (t/is (= 3 (length {:a 1 :b 2 :c nil}))))))
+
+(t/deftest test-struct-length-handles-absents
+  (with-open [rel (tu/open-rel [(-> (types/col-type->field "x" [:struct '{xa [:union #{:i8 :absent :null}]
+                                                                          xb [:union #{:i8 :absent :null}]}])
+                                    (tu/open-vec [{:xa 42}
+                                                  {:xa 42 :xb 41}
+                                                  {:xb 41}
+                                                  {:xa nil :xb nil}]))])] 
+    (t/is (= {:res [1 2 1 2], :res-type :i32}
+             (run-projection rel '(length x))))))
 
 (t/deftest test-like
   (t/are [s ptn expected-result]

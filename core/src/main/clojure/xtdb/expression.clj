@@ -1388,12 +1388,13 @@
   {:return-type :i32
    :->call-code #(do `(count ~@%))})
 
-(defn count-non-empty [m]
-  (reduce
-   (fn [^Integer non-empty [_x ^IValueReader y]]
-     (if (.isNull y) non-empty (Math/addExact non-empty 1)))
-   0
-   m))
+(defn count-non-empty [m] 
+  (loop [n 0, xs (vals m)]
+    (if (seq xs)
+      (if (.isAbsent ^IValueReader (first xs))
+        (recur n (rest xs))
+        (recur (inc n) (rest xs)))
+      n)))
 
 (defmethod codegen-call [:length :struct] [_] 
   {:return-type :i32
