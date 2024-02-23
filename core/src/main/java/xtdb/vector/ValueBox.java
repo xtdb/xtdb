@@ -6,6 +6,7 @@ import java.nio.ByteBuffer;
 
 public class ValueBox implements IValueWriter, IValueReader {
     private static final Keyword NULL_LEG = Keyword.intern("null");
+    private static final Keyword ABSENT_LEG = Keyword.intern("absent");
 
     private Keyword leg;
 
@@ -20,6 +21,11 @@ public class ValueBox implements IValueWriter, IValueReader {
     @Override
     public boolean isNull() {
         return leg == NULL_LEG;
+    }
+
+    @Override
+    public boolean isAbsent() {
+        return leg == ABSENT_LEG;
     }
 
     @Override

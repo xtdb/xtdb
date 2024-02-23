@@ -8,6 +8,7 @@ public interface IValueReader {
     Keyword getLeg();
 
     boolean isNull();
+    boolean isAbsent();
 
     boolean readBoolean();
     byte readByte();

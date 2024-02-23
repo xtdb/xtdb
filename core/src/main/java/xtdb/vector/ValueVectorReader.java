@@ -242,6 +242,11 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
+        public boolean isAbsent() {
+            return ValueVectorReader.this.isAbsent(pos.getPosition());
+        }
+
+        @Override
         public boolean readBoolean() {
             return ValueVectorReader.this.getBoolean(pos.getPosition());
         }
@@ -1035,6 +1040,11 @@ public class ValueVectorReader implements IVectorReader {
                 @Override
                 public boolean isNull() {
                     return legReader().isNull();
+                }
+
+                @Override
+                public boolean isAbsent() {
+                    return legReader().isAbsent();
                 }
 
                 @Override
