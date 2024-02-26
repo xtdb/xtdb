@@ -1,11 +1,9 @@
 package xtdb.vector;
 
-import clojure.java.api.Clojure;
 import clojure.lang.*;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.*;
-import org.apache.arrow.vector.compare.VectorVisitor;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;

@@ -1,6 +1,5 @@
 package xtdb.vector;
 
-import clojure.lang.Keyword;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 

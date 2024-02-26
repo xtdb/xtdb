@@ -1,6 +1,7 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
+import org.jetbrains.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 
@@ -13,48 +14,48 @@ abstract class BoxWriter implements IValueWriter {
     }
 
     @Override
-    public void writeBoolean(boolean booleanValue) {
-        box().writeBoolean(booleanValue);
+    public void writeBoolean(boolean v) {
+        box().writeBoolean(v);
     }
 
     @Override
-    public void writeByte(byte byteValue) {
-        box().writeByte(byteValue);
+    public void writeByte(byte v) {
+        box().writeByte(v);
     }
 
     @Override
-    public void writeShort(short shortValue) {
-        box().writeShort(shortValue);
+    public void writeShort(short v) {
+        box().writeShort(v);
     }
 
     @Override
-    public void writeInt(int intValue) {
-        box().writeInt(intValue);
+    public void writeInt(int v) {
+        box().writeInt(v);
     }
 
     @Override
-    public void writeLong(long longValue) {
-        box().writeLong(longValue);
+    public void writeLong(long v) {
+        box().writeLong(v);
     }
 
     @Override
-    public void writeFloat(float floatValue) {
-        box().writeFloat(floatValue);
+    public void writeFloat(float v) {
+        box().writeFloat(v);
     }
 
     @Override
-    public void writeDouble(double doubleValue) {
-        box().writeDouble(doubleValue);
+    public void writeDouble(double v) {
+        box().writeDouble(v);
     }
 
     @Override
-    public void writeBytes(ByteBuffer bytesValue) {
-        box().writeBytes(bytesValue);
+    public void writeBytes(ByteBuffer v) {
+        box().writeBytes(v);
     }
 
     @Override
-    public void writeObject(Object objectValue) {
-        box().writeObject(objectValue);
+    public void writeObject(@Nullable Object v) {
+        box().writeObject(v);
     }
 
     @Override

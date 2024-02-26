@@ -1,6 +1,7 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
+import org.jetbrains.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 
@@ -79,48 +80,48 @@ public class ValueBox implements IValueWriter, IValueReader {
     }
 
     @Override
-    public void writeBoolean(boolean booleanValue) {
-        this.prim = booleanValue ? 1 : 0;
+    public void writeBoolean(boolean v) {
+        this.prim = v ? 1 : 0;
     }
 
     @Override
-    public void writeByte(byte byteValue) {
-        this.prim = byteValue;
+    public void writeByte(byte v) {
+        this.prim = v;
     }
 
     @Override
-    public void writeShort(short shortValue) {
-        this.prim = shortValue;
+    public void writeShort(short v) {
+        this.prim = v;
     }
 
     @Override
-    public void writeInt(int intValue) {
-        this.prim = intValue;
+    public void writeInt(int v) {
+        this.prim = v;
     }
 
     @Override
-    public void writeLong(long longValue) {
-        this.prim = longValue;
+    public void writeLong(long v) {
+        this.prim = v;
     }
 
     @Override
-    public void writeFloat(float floatValue) {
-        writeDouble(floatValue);
+    public void writeFloat(float v) {
+        writeDouble(v);
     }
 
     @Override
-    public void writeDouble(double doubleValue) {
-        this.prim = Double.doubleToLongBits(doubleValue);
+    public void writeDouble(double v) {
+        this.prim = Double.doubleToLongBits(v);
     }
 
     @Override
-    public void writeBytes(ByteBuffer bytesValue) {
-        this.obj = bytesValue;
+    public void writeBytes(ByteBuffer v) {
+        this.obj = v;
     }
 
     @Override
-    public void writeObject(Object objectValue) {
-        this.obj = objectValue;
+    public void writeObject(@Nullable Object v) {
+        this.obj = v;
     }
 
     @Override
