@@ -3,7 +3,7 @@
 Within our nightly test build, we run a number of tests:
 
 * Tests against various cloud providers - S3, Azure, Google Cloud
-* Tests involving kafka & tests involving postgres - setup via docker-compose
+* Tests involving kafka - setup via docker-compose
 
 When it comes to testing against the cloud providers, we require authentication for each of those handled on the CI. We will pass in everything we need to the environment variables/secrets of Github a
 Actions on the Repo. In the section below, I will go through what setup is required for each provider, but the overall list of env/secrets is the following:
