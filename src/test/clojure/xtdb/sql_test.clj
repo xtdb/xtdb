@@ -525,6 +525,27 @@
   (t/is (= '(position x1 x2) (plan-expr "POSITION(foo.a IN foo.b USING CHARACTERS)")))
   (t/is (= '(octet-position x1 x2) (plan-expr "POSITION(foo.a IN foo.b USING OCTETS)"))))
 
+(t/deftest test-length-expr
+  (t/is (= '(length x1) (plan-expr "LENGTH(foo.a)")))
+  (t/is (= '(length "abc") (plan-expr "LENGTH('abc')")))
+  (t/is (= '(length [1 2 3]) (plan-expr "LENGTH([1, 2, 3])"))))
+
+(t/deftest test-length-query
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 
+                                             :string "abcdef"
+                                             :list [1 2 3 4 5]
+                                             :map {:a 1 :b 2} 
+                                             :set #{1 2 3}
+                                             :varbinary (byte-array [11 22])}]])
+  
+  (t/is (= [{:len 3}] (xt/q tu/*node* "SELECT LENGTH('abc') as len FROM docs")))
+  (t/is (= [{:len 6}] (xt/q tu/*node* "SELECT LENGTH(docs.string) as len FROM docs")))
+  (t/is (= [{:len 4}] (xt/q tu/*node* "SELECT LENGTH([1,2,3,4]) as len FROM docs"))) 
+  (t/is (= [{:len 5}] (xt/q tu/*node* "SELECT LENGTH(docs.list) as len FROM docs")))
+  (t/is (= [{:len 2}] (xt/q tu/*node* "SELECT LENGTH(docs.map) as len FROM docs"))) 
+  (t/is (= [{:len 3}] (xt/q tu/*node* "SELECT LENGTH(docs.set) as len FROM docs"))) 
+  (t/is (= [{:len 2}] (xt/q tu/*node* "SELECT LENGTH(docs.varbinary) as len FROM docs"))))
+
 (t/deftest test-overlay-expr
   (t/are [sql expected]
     (= expected (plan-expr sql))

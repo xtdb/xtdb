@@ -704,6 +704,9 @@
     [:octet_length_expression _ ^:z nve]
     (list 'octet-length (expr nve))
 
+    [:generic_length_expression "LENGTH" ^:z nve]
+    (list 'length (expr nve)) 
+
     [:character_overlay_function _ ^:z target _ ^:z placing _ ^:z pos _ ^:z len]
     (list 'overlay (expr target) (expr placing) (expr pos) (expr len))
 

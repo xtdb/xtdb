@@ -935,6 +935,17 @@ binary_position_expression
 <length_expression>
     : char_length_expression
     | octet_length_expression
+    | generic_length_expression
+    ;
+
+generic_length_expression
+    : 'LENGTH' <left_paren> length_value_expression <right_paren>
+    ;
+
+<length_value_expression>
+    : character_value_expression
+    | string_value_expression
+    | array_value_expression
     ;
 
 char_length_expression
@@ -944,6 +955,8 @@ char_length_expression
 octet_length_expression
     : 'OCTET_LENGTH' <left_paren> string_value_expression <right_paren>
     ;
+
+
 
 extract_expression
     : 'EXTRACT' <left_paren> extract_field 'FROM' extract_source <right_paren>
