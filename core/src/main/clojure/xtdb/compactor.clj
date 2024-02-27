@@ -55,15 +55,15 @@
 
         is-valid-ptr (ArrowBufPointer.)]
 
-    (doseq [{:keys [^bytes path segments nodes]} (trie/->merge-plan segments
-                                                                    {:path-pred (when path-filter
-                                                                                  (let [path-len (alength path-filter)]
-                                                                                    (fn [^bytes page-path]
-                                                                                      (let [len (min path-len (alength page-path))]
-                                                                                        (Arrays/equals path-filter 0 len
-                                                                                                       page-path 0 len)))))})
+    (doseq [{:keys [^bytes path mp-nodes]} (trie/->merge-plan segments
+                                                              {:path-pred (when path-filter
+                                                                            (let [path-len (alength path-filter)]
+                                                                              (fn [^bytes page-path]
+                                                                                (let [len (min path-len (alength page-path))]
+                                                                                  (Arrays/equals path-filter 0 len
+                                                                                                 page-path 0 len)))))})
 
-            :let [data-rdrs (trie/load-data-pages (map :data-rel segments) nodes)
+            :let [data-rdrs (mapv trie/load-data-page mp-nodes)
                   merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
                   path (if (or (nil? path-filter)
                                (> (alength path) (alength path-filter)))

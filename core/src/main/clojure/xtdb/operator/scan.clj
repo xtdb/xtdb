@@ -21,7 +21,7 @@
            (java.io Closeable)
            java.nio.ByteBuffer
            (java.nio.file Path)
-           (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue)
+           (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue ArrayList)
            (java.util.function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -316,48 +316,49 @@
 
 (defn- ->merge-tasks
   "segments :: [Segment]
-    Segment :: {:keys [trie-key table-metadata page-idx-pred]} ;; for Arrow tries
-             | {:keys [trie live-rel]} ;; for live tries"
+    Segment :: {:keys [meta-file trie-key table-metadata page-idx-pred]} ;; for Arrow tries
+             | {:keys [trie live-rel]} ;; for live tries
+
+   return :: (seq {:keys [path leaves]})"
   [segments path-pred]
+  (let [result (ArrayList.)]
+    (->> (trie/->merge-plan segments {:path-pred path-pred})
+         (run! (fn [{:keys [path mp-nodes]}]
+                 (let [^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)
+                       leaves (ArrayList.)]
+                   (loop [[{:keys [segment] trie-node :node} & more-mp-nodes] mp-nodes
+                          node-taken? false]
+                     (if segment
+                       (if-not trie-node
+                         (recur more-mp-nodes node-taken?)
 
-  (->> (trie/->merge-plan segments {:path-pred path-pred})
-       (into [] (keep (fn [{:keys [path segments nodes]}]
-                        (let [^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)]
-                          (loop [[trie-node & more-nodes] nodes
-                                 [segment & more-segs] segments
-                                 node-taken? false,
-                                 leaves []]
-                            (if segment
-                              (if-not trie-node
-                                (recur more-nodes more-segs node-taken? leaves)
+                         (condp = (class trie-node)
+                           ArrowHashTrie$Leaf
+                           (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata]} segment
+                                 page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
+                                 take-node? (.test page-idx-pred page-idx)]
 
-                                (condp = (class trie-node)
-                                  ArrowHashTrie$Leaf
-                                  (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata]} segment
-                                        page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
-                                        take-node? (.test page-idx-pred page-idx)]
-                                    (when take-node?
-                                      (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
-                                        (.or cumulative-iid-bitmap iid-bitmap)))
+                             (when take-node?
+                               (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
+                                 (.or cumulative-iid-bitmap iid-bitmap)))
 
-                                    (recur more-nodes more-segs (or node-taken? take-node?)
-                                           (cond-> leaves
-                                             (or take-node?
-                                                 (when node-taken?
-                                                   (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
-                                                     (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
-                                             (conj [:arrow segment page-idx]))))
+                             (when (or take-node?
+                                       (when node-taken?
+                                         (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
+                                           (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
+                               (.add leaves [:arrow segment page-idx]))
 
-                                  LiveHashTrie$Leaf
-                                  (let [^LiveHashTrie$Leaf trie-node trie-node
-                                        {:keys [^RelationReader live-rel, trie]} segment]
-                                    (recur more-nodes more-segs true
-                                           (conj leaves
-                                                 [:live (-> live-rel
-                                                            (.select (.mergeSort trie-node trie)))])))))
+                             (recur more-mp-nodes (or node-taken? take-node?)))
 
-                              (when node-taken?
-                                {:path path, :leaves leaves})))))))))
+                           LiveHashTrie$Leaf
+                           (let [^LiveHashTrie$Leaf trie-node trie-node
+                                 {:keys [^RelationReader live-rel, trie]} segment]
+                             (.add leaves [:live (.select live-rel (.mergeSort trie-node trie))])
+                             (recur more-mp-nodes true))))
+
+                       (when node-taken?
+                         (.add result {:path path, :leaves (vec leaves)}))))))))
+    result))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
