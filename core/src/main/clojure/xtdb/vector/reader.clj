@@ -7,7 +7,7 @@
            xtdb.api.query.IKeyFn
            (xtdb.vector IVectorReader RelationReader ValueVectorReadersKt)))
 
-(defn vec->reader [^ValueVector v]
+(defn vec->reader ^IVectorReader [^ValueVector v]
   (ValueVectorReadersKt/from v))
 
 (defn rel-reader
