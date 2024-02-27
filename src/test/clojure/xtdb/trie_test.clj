@@ -26,25 +26,24 @@
                 log-root (tu/open-arrow-hash-trie-root al 0)
                 log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
 
-      (t/is (= [{:path [0 0], :pages [nil nil {:seg :log, :page-idx 0} nil]}
-                {:path [0 1], :pages [nil {:seg :t1, :page-idx 0} {:seg :log, :page-idx 0} nil]}
-                {:path [0 2], :pages [nil nil {:seg :log, :page-idx 0} nil]}
-                {:path [0 3], :pages [nil {:seg :t1, :page-idx 1} {:seg :log, :page-idx 0} nil]}
-                {:path [1], :pages [nil {:seg :t1, :page-idx 2} {:seg :log, :page-idx 0} nil]}
-                {:path [2], :pages [nil nil {:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
-                {:path [3], :pages [nil {:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]}]
-
+      (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
+                {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
+                {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]}
+                {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
+                {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
+                {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
+                {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
                (->> (trie/->merge-plan [nil
                                         {:seg :t1, :trie (->arrow-hash-trie t1-root)}
                                         {:seg :log, :trie (->arrow-hash-trie log-root)}
                                         {:seg :log2, :trie (->arrow-hash-trie log2-root)}]
                                        {})
-                    (map (fn [{:keys [path segments nodes]}]
+                    (map (fn [{:keys [path mp-nodes]}]
                            {:path (vec path)
-                            :pages (mapv (fn [{:keys [seg]} ^ArrowHashTrie$Leaf leaf]
-                                           (when leaf
-                                             {:seg seg, :page-idx (.getDataPageIndex leaf)}))
-                                         segments nodes)}))))))))
+                            :pages (mapv (fn [{:keys [segment ^ArrowHashTrie$Leaf node]}]
+                                           {:seg (:seg segment), :page-idx (.getDataPageIndex node)})
+                                         mp-nodes)}))
+                    (sort-by :path)))))))
 
 (defn ->trie-file-name
   " L0/L1 keys are submitted as [level next-row rows]; L2+ as [level part-vec next-row]"

@@ -31,16 +31,12 @@ class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
         private val count = iidBranchVec.getElementEndIndex(branchVecIdx) - startIdx
 
         override val iidChildren: Array<Node?>
-            get() {
-                val startIdx = startIdx
-
-                return Array(count) { childBucket ->
-                    val childIdx = childBucket + startIdx
-                    if (iidBranchElVec.isNull(childIdx))
-                        null
-                    else
-                        forIndex(conjPath(path, childBucket.toByte()), iidBranchElVec[childIdx])
-                }
+            get() = Array(count) { childBucket ->
+                val childIdx = childBucket + startIdx
+                if (iidBranchElVec.isNull(childIdx))
+                    null
+                else
+                    forIndex(conjPath(path, childBucket.toByte()), iidBranchElVec[childIdx])
             }
 
         override val recencies = null
