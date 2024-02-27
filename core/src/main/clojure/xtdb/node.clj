@@ -29,6 +29,12 @@
                          (instance? ZoneId default-tz) default-tz
                          (string? default-tz) (ZoneId/of default-tz)))))
 
+(defmethod apply-config! :log [config _ opts]
+  (apply-config! config :xtdb/log opts))
+
+(defmethod apply-config! :storage [config _ opts]
+  (apply-config! config :xtdb.buffer-pool/storage opts))
+
 (defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-chunk page-limit log-limit flush-duration]}]
   (cond-> (.indexer config)
     rows-per-chunk (.rowsPerChunk rows-per-chunk)

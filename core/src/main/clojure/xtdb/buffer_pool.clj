@@ -454,7 +454,7 @@
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
 
-(defmethod xtn/apply-config! :storage [config _ [tag opts]]
+(defmethod xtn/apply-config! ::storage [config _ [tag opts]]
   (xtn/apply-config! config
                      (case tag
                        :in-memory ::in-memory

@@ -416,7 +416,7 @@
 
       (util/root->arrow-ipc-byte-buffer root :stream))))
 
-(defmethod xtn/apply-config! :log [config _ foo]
+(defmethod xtn/apply-config! :xtdb/log [config _ foo]
   (let [[tag opts] foo]
     (xtn/apply-config! config
                        (case tag
