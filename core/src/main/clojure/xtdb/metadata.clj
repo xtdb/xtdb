@@ -289,6 +289,8 @@
             (write-col-meta! true col))
           (.endList cols-wtr))))))
 
+(defrecord PageIndexKey [col-name page-idx])
+
 (defn ->table-metadata-idxs [^IVectorReader metadata-rdr]
   (let [page-idx-cache (HashMap.)
         meta-row-count (.valueCount metadata-rdr)
@@ -310,7 +312,7 @@
                   col-name (str (.getObject column-name-rdr cols-data-idx))]
               (.add col-names col-name)
               (when (.getBoolean root-col-rdr cols-data-idx)
-                (.put page-idx-cache [col-name data-page-idx] cols-data-idx)))))))
+                (.put page-idx-cache (->PageIndexKey col-name data-page-idx) cols-data-idx)))))))
 
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache}))
@@ -325,13 +327,13 @@
   ITableMetadata
   (metadataReader [_] metadata-leaf-rdr)
   (columnNames [_] col-names)
-  (rowIndex [_ col-name page-idx] (.get page-idx-cache [col-name page-idx]))
+  (rowIndex [_ col-name page-idx] (.get page-idx-cache (->PageIndexKey col-name page-idx)))
   (iidBloomBitmap [_ page-idx]
     (let [bloom-rdr (-> (.structKeyReader metadata-leaf-rdr "columns")
                         (.listElementReader)
                         (.structKeyReader "bloom"))]
 
-      (when-let [bloom-vec-idx (.get page-idx-cache ["xt$iid" page-idx])]
+      (when-let [bloom-vec-idx (.get page-idx-cache (->PageIndexKey "xt$iid" page-idx))]
         (when (.getObject bloom-rdr bloom-vec-idx)
           (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))
 
