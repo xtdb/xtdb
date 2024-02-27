@@ -3,7 +3,8 @@
 package xtdb.vector
 
 import org.apache.arrow.vector.*
-import org.apache.arrow.vector.complex.DenseUnionVector
+import org.apache.arrow.vector.compare.VectorVisitor
+import org.apache.arrow.vector.complex.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.vector.extensions.*
@@ -206,38 +207,6 @@ private class FixedSizeBinaryVectorWriter(override val vector: FixedSizeBinaryVe
     override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
 }
 
-fun writerFor(vec: BaseFixedWidthVector): IVectorWriter = when (vec) {
-    is BitVector -> BitVectorWriter(vec)
-    is TinyIntVector -> TinyIntVectorWriter(vec)
-    is SmallIntVector -> SmallIntVectorWriter(vec)
-    is IntVector -> IntVectorWriter(vec)
-    is BigIntVector -> BigIntVectorWriter(vec)
-    is Float4Vector -> Float4VectorWriter(vec)
-    is Float8Vector -> Float8VectorWriter(vec)
-
-    is DecimalVector -> DecimalVectorWriter(vec)
-
-    is DateDayVector -> DateDayVectorWriter(vec)
-    is DateMilliVector -> DateMilliVectorWriter(vec)
-
-    is TimeStampVector -> TimestampVectorWriter(vec)
-
-    is TimeSecVector -> TimeSecVectorWriter(vec)
-    is TimeMilliVector -> TimeMilliVectorWriter(vec)
-    is TimeMicroVector -> TimeMicroVectorWriter(vec)
-    is TimeNanoVector -> TimeNanoVectorWriter(vec)
-
-    is DurationVector -> DurationVectorWriter(vec)
-
-    is IntervalYearVector -> IntervalYearVectorWriter(vec)
-    is IntervalDayVector -> IntervalDayVectorWriter(vec)
-    is IntervalMonthDayNanoVector -> IntervalMdnVectorWriter(vec)
-
-    is FixedSizeBinaryVector -> FixedSizeBinaryVectorWriter(vec)
-
-    else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
-}
-
 abstract class VariableWidthVectorWriter(vector: BaseVariableWidthVector) : ScalarVectorWriter(vector) {
     abstract override val vector: BaseVariableWidthVector
 
@@ -267,13 +236,6 @@ private class VarBinaryVectorWriter(override val vector: VarBinaryVector) : Vari
     override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
 }
 
-fun writerFor(vec: BaseVariableWidthVector): IVectorWriter = when (vec) {
-    is VarCharVector -> VarCharVectorWriter(vec)
-    is VarBinaryVector -> VarBinaryVectorWriter(vec)
-
-    else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
-}
-
 class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private val inner: IVectorWriter) :
     ScalarVectorWriter(vector) {
 
@@ -299,11 +261,65 @@ class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private v
     }
 }
 
-fun writerFor(vec: XtExtensionVector<*>): IVectorWriter = when (vec) {
-    is KeywordVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
-    is UuidVector -> ExtensionVectorWriter(vec, FixedSizeBinaryVectorWriter(vec.underlyingVector))
-    is UriVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
-    is TransitVector -> ExtensionVectorWriter(vec, VarBinaryVectorWriter(vec.underlyingVector))
-    is AbsentVector -> ExtensionVectorWriter(vec, NullVectorWriter(vec.underlyingVector))
-    else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
+object WriterForVectorVisitor : VectorVisitor<IVectorWriter, Nothing?> {
+    override fun visit(vec: BaseFixedWidthVector, value: Nothing?) = when (vec) {
+        is BitVector -> BitVectorWriter(vec)
+        is TinyIntVector -> TinyIntVectorWriter(vec)
+        is SmallIntVector -> SmallIntVectorWriter(vec)
+        is IntVector -> IntVectorWriter(vec)
+        is BigIntVector -> BigIntVectorWriter(vec)
+        is Float4Vector -> Float4VectorWriter(vec)
+        is Float8Vector -> Float8VectorWriter(vec)
+
+        is DecimalVector -> DecimalVectorWriter(vec)
+
+        is DateDayVector -> DateDayVectorWriter(vec)
+        is DateMilliVector -> DateMilliVectorWriter(vec)
+
+        is TimeStampVector -> TimestampVectorWriter(vec)
+
+        is TimeSecVector -> TimeSecVectorWriter(vec)
+        is TimeMilliVector -> TimeMilliVectorWriter(vec)
+        is TimeMicroVector -> TimeMicroVectorWriter(vec)
+        is TimeNanoVector -> TimeNanoVectorWriter(vec)
+
+        is DurationVector -> DurationVectorWriter(vec)
+
+        is IntervalYearVector -> IntervalYearVectorWriter(vec)
+        is IntervalDayVector -> IntervalDayVectorWriter(vec)
+        is IntervalMonthDayNanoVector -> IntervalMdnVectorWriter(vec)
+
+        is FixedSizeBinaryVector -> FixedSizeBinaryVectorWriter(vec)
+
+        else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
+    }
+
+    override fun visit(vec: BaseVariableWidthVector, value: Nothing?) = when (vec) {
+        is VarCharVector -> VarCharVectorWriter(vec)
+        is VarBinaryVector -> VarBinaryVectorWriter(vec)
+
+        else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
+    }
+
+    override fun visit(vec: BaseLargeVariableWidthVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: ListVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: FixedSizeListVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: LargeListVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: NonNullableStructVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: UnionVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: DenseUnionVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+
+    override fun visit(vec: NullVector, value: Nothing?) = NullVectorWriter(vec)
+
+    override fun visit(vec: ExtensionTypeVector<*>, value: Nothing?) = when (vec) {
+        is KeywordVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
+        is UuidVector -> ExtensionVectorWriter(vec, FixedSizeBinaryVectorWriter(vec.underlyingVector))
+        is UriVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
+        is TransitVector -> ExtensionVectorWriter(vec, VarBinaryVectorWriter(vec.underlyingVector))
+        is AbsentVector -> ExtensionVectorWriter(vec, NullVectorWriter(vec.underlyingVector))
+        else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
+    }
 }
+
+
+fun writerFor(vec: FieldVector): IVectorWriter = vec.accept(WriterForVectorVisitor, null)
