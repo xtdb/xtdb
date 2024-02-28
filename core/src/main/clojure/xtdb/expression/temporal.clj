@@ -656,6 +656,31 @@
   (with-arg-unit-conversion x-unit y-unit
     (constantly :i32) #(do `(Long/compare ~@%))))
 
+(defn compare-ym-intervals ^long [^PeriodDuration x ^PeriodDuration y]
+  (Long/compare (.toTotalMonths (.getPeriod x)) (.toTotalMonths (.getPeriod y))))
+
+(defn compare-mdn-intervals ^long [^PeriodDuration x ^PeriodDuration y]
+  (let [^Period x-period (.getPeriod x)
+        ^Period y-period (.getPeriod y)]
+    (if (or (> (.toTotalMonths x-period) 0) (> (.toTotalMonths y-period) 0))
+      (throw (err/runtime-err :xtdb.expression/cannot-compare-mdn-interval-with-months
+                              {::err/message "Cannot compare month-day-nano intervals when month component is non-zero."}))
+      (let [x-period-nanos (* (.getDays x-period) 86400000000000)
+            x-duration-nanos (.toNanos (.getDuration x))
+            y-period-nanos (* (.getDays y-period) 86400000000000)
+            y-duration-nanos (.toNanos (.getDuration y))]
+        (Long/compare (+ x-period-nanos x-duration-nanos) (+ y-period-nanos y-duration-nanos))))))
+
+(defmethod expr/codegen-call [:compare :interval :interval] [{[[_x x-unit :as xy] [_y y-unit :as yx]] :arg-types}]
+  (cond
+    (not= x-unit y-unit) (throw (UnsupportedOperationException. "Cannot compare intervals with different units"))
+    (= x-unit :day-time)  (throw (UnsupportedOperationException. "Cannot compare day-time intervals")))
+
+  {:return-type :i32
+   :->call-code (cond
+                  (= x-unit :year-month) (fn [[x y]] `(compare-ym-intervals ~x ~y))
+                  (= x-unit :month-day-nano) (fn [[x y]] `(compare-mdn-intervals ~x ~y)))})
+
 (doseq [[f cmp] [[:= #(do `(zero? ~%))]
                  [:< #(do `(neg? ~%))]
                  [:<= #(do `(not (pos? ~%)))]
@@ -669,7 +694,7 @@
          :batch-bindings batch-bindings
          :->call-code (comp cmp ->call-code)})))
 
-  (doseq [x [:time-local :duration]]
+  (doseq [x [:time-local :duration :interval]]
     (defmethod expr/codegen-call [f x x] [expr]
       (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
         {:return-type :bool,
@@ -793,20 +818,6 @@
                   :year-month #(do `(interval-abs-ym ~@%))
                   :day-time #(do `(interval-abs-dt ~@%))
                   (throw (UnsupportedOperationException. "Can only ABS YEAR_MONTH / DAY_TIME intervals")))})
-
-(defn interval-eq
-  "Override equality for intervals as we want 1 year to = 12 months, and this is not true by for Period.equals."
-  ;; we might be able to enforce this differently (e.g all constructs, reads and calcs only use the month component).
-  [^PeriodDuration pd1 ^PeriodDuration pd2]
-  (let [p1 (.getPeriod pd1)
-        p2 (.getPeriod pd2)]
-    (and (= (.toTotalMonths p1) (.toTotalMonths p2))
-         (= (.getDays p1) (.getDays p2))
-         (= (.getDuration pd1) (.getDuration pd2)))))
-
-;; interval equality specialisation, see interval-eq.
-(defmethod expr/codegen-call [:= :interval :interval] [_]
-  {:return-type :bool, :->call-code #(do `(boolean (interval-eq ~@%)))})
 
 (defn- ensure-interval-precision-valid [^long precision]
   (cond
