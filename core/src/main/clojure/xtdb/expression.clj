@@ -135,11 +135,12 @@
             (form->expr struct env)
             (rest args))))
 
-(defmethod parse-list-form 'cast [[_ expr target-type] env]
+(defmethod parse-list-form 'cast [[_ expr target-type cast-opts] env]
   {:op :call
    :f :cast
    :args [(form->expr expr env)]
-   :target-type target-type})
+   :target-type target-type
+   :cast-opts cast-opts})
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call
@@ -1203,8 +1204,8 @@
   (defmethod codegen-cast [:utf8 col-type] [_]
     {:return-type col-type, :->call-code #(do `(~parse-sym (buf->str ~@%)))}))
 
-(defmethod codegen-call [:cast :any] [{[source-type] :arg-types, :keys [target-type]}]
-  (codegen-cast {:source-type source-type, :target-type target-type}))
+(defmethod codegen-call [:cast :any] [{[source-type] :arg-types, :keys [target-type cast-opts]}]
+  (codegen-cast {:source-type source-type, :target-type target-type :cast-opts cast-opts}))
 
 (defmethod codegen-expr :struct [{:keys [entries]} opts]
   (let [emitted-vals (->> entries
