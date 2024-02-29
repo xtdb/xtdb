@@ -796,6 +796,52 @@
     "CAST(foo.a AS INT)" (list 'cast 'x1 :i32)
     "CAST(42.0 AS INT)" (list 'cast 42.0 :i32)))
 
+(t/deftest test-cast-string-to-temporal
+  (t/is (= [{:timestamp-tz #time/zoned-date-time "2021-10-21T12:34:00Z"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP) as timestamp FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:timestamp-tz #time/date-time "2021-10-21T12:34:00"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as timestamp_tz FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:date #time/date "2021-10-21"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as date FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:time #time/time "12:00:01"}]
+           (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as time FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:time #time/time "12:00:01.1234"}]
+           (xt/q tu/*node* "SELECT CAST('12:00:01.123456' AS TIME(4)) as time FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00.1234567"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123456789' AS TIMESTAMP(7)) as timestamp FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:timestamp-tz #time/zoned-date-time "2021-10-21T12:34:00.12Z"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123Z' AS TIMESTAMP(2) WITH TIME ZONE) as timestamp_tz FROM (VALUES 1) AS x")))
+
+  (t/is (thrown-with-msg?
+         RuntimeException
+         #"String '2021-10-21T12' has invalid format for type timestamp with timezone"
+         (xt/q tu/*node* "SELECT CAST('2021-10-21T12' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz FROM (VALUES 1) AS x"))))
+
+(t/deftest test-cast-temporal-to-string
+  (t/is (= [{:string "2021-10-21T12:34:01Z"}]
+           (xt/q tu/*node* "SELECT CAST(TIMESTAMP '2021-10-21T12:34:01Z' AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "2021-10-21T12:34:01"}]
+           (xt/q tu/*node* "SELECT CAST(TIMESTAMP '2021-10-21T12:34:01' AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "2021-10-21"}]
+           (xt/q tu/*node* "SELECT CAST(DATE '2021-10-21' AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "12:00:01"}]
+           (xt/q tu/*node* "SELECT CAST(TIME '12:00:01' AS VARCHAR) as string FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:string "2021"}]
+           (xt/q tu/*node* "SELECT CAST(TIMESTAMP '2021-10-21T12:34:01Z' AS VARCHAR(4)) as string FROM (VALUES 1) AS x"))))
+
 (t/deftest test-expr-in-equi-join
   (t/is
     (=plan-file

@@ -4,8 +4,11 @@
             [xtdb.expression :as expr]
             [xtdb.time :as time]
             [xtdb.types :as types])
-  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.time.temporal ChronoField ChronoUnit)
+  (:import (java.nio ByteBuffer)
+           (java.nio.charset StandardCharsets)
+           (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time.format DateTimeParseException)
+           (java.time.temporal ChronoField ChronoUnit Temporal)
            [java.util Map]
            (org.apache.arrow.vector PeriodDuration)
            [xtdb DateTruncator]
@@ -261,12 +264,125 @@
 (defmethod expr/codegen-cast [:time-local :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
 
-(defmethod expr/codegen-call [:cast_tstz :any] [expr]
-  (expr/codegen-call (assoc expr :f :cast, :target-type [:timestamp-tz :micro (str (.getZone expr/*clock*))])))
-
 (defmethod expr/codegen-cast [:interval :interval] [{:keys [source-type target-type]}]
   (assert (= source-type target-type) "TODO #478")
   {:return-type target-type, :->call-code first})
+
+(defn- ensure-fractional-precision-valid [^long fractional-precision]
+  (cond
+    (< fractional-precision 0)
+    (throw (err/illegal-arg :xtdb.expression/invalid-fractional-precision
+                            {::err/message "The minimum fractional seconds precision is 0."
+                             :fractional-precision fractional-precision}))
+
+    (< 9 fractional-precision)
+    (throw (err/illegal-arg :xtdb.expression/invalid-fractional-precision
+                            {::err/message "The maximum fractional seconds precision is 9."
+                             :fractional-precision fractional-precision}))))
+
+(defn parse-with-error-handling [date-type parse-fn s]
+  (try
+    (parse-fn s)
+    (catch DateTimeParseException _
+      (throw (err/runtime-err :xtdb.expression/invalid-temporal-string
+                              {::err/message (format "String '%s' has invalid format for type %s" s date-type)})))))
+
+(defn alter-precision [^long precision ^Temporal temporal]
+  (if (= precision 0)
+    (.with temporal ChronoField/NANO_OF_SECOND 0)
+    (.with temporal ChronoField/NANO_OF_SECOND (let [nanos (.get temporal ChronoField/NANO_OF_SECOND)
+                                                     factor (Math/pow 10 (- 9 precision))]
+                                                 (* (Math/floor (/ nanos factor)) factor)))))
+
+(defn gen-alter-precision [precision] 
+  (if precision (list `(alter-precision ~precision)) '()))
+
+(defmethod expr/codegen-cast [:utf8 :timestamp-local] [{[_ tgt-tsunit :as target-type] :target-type {:keys [precision]} :cast-opts}]
+  (when precision (ensure-fractional-precision-valid precision))
+  {:return-type target-type
+   :->call-code (fn [[s]]
+                  (-> `(->> (expr/resolve-string ~s)
+                            (parse-with-error-handling "timestamp without timezone" #(LocalDateTime/parse %))
+                            ~@(gen-alter-precision precision))
+                      (ldt->ts tgt-tsunit)))})
+
+(defmethod expr/codegen-cast [:utf8 :timestamp-tz] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
+  (when precision (ensure-fractional-precision-valid precision))
+  {:return-type target-type
+   :->call-code (fn [[s]] 
+                  (-> `(->> (expr/resolve-string ~s)
+                            (parse-with-error-handling "timestamp with timezone" #(ZonedDateTime/parse %))
+                            ~@(gen-alter-precision precision))
+                      (zdt->ts tgt-tsunit)))})
+
+(defn local-date->epoch-day ^long [^LocalDate d]
+  (.toEpochDay d))
+
+(defmethod expr/codegen-cast [:utf8 :date] [{:keys [target-type]}]
+  ;; FIXME this assumes date-unit :day
+  {:return-type target-type
+   :->call-code (fn [[s]]
+                  `(->> (expr/resolve-string ~s)
+                        (parse-with-error-handling "date" #(LocalDate/parse %))
+                        (local-date->epoch-day)))})
+
+(defn local-time->nano ^long [^LocalTime t]
+  (.toNanoOfDay t))
+
+(defmethod expr/codegen-cast [:utf8 :time-local] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
+  (when precision (ensure-fractional-precision-valid precision))
+  {:return-type target-type
+   :->call-code (fn [[s]] 
+                  (-> `(->> (expr/resolve-string ~s)
+                            (parse-with-error-handling "time without timezone" #(LocalTime/parse %))
+                            ~@(gen-alter-precision precision)
+                            (local-time->nano))
+                      (with-conversion :nano tgt-tsunit)))})
+
+(defn string->byte-buffer [^String s length]
+  (let [s (if length (subs s 0 length) s)]
+    (ByteBuffer/wrap (.getBytes s StandardCharsets/UTF_8))))
+
+(defmethod expr/codegen-cast [:timestamp-local :utf8] [{[_ts ts-unit] :source-type {:keys [length]} :cast-opts}]
+  {:return-type :utf8
+   :->call-code (fn [[ts]]
+                  `(-> ~(ts->ldt ts ts-unit)
+                       (.toString)
+                       (string->byte-buffer ~length)))})
+
+(defmethod expr/codegen-cast [:timestamp-tz :utf8] [{[_ts ts-unit tz] :source-type {:keys [length]} :cast-opts}]
+  (let [zone-id-sym (gensym 'zone-id)]
+    {:return-type :utf8
+     :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
+     :->call-code (fn [[ts]]
+                    `(-> ~(ts->zdt ts ts-unit zone-id-sym)
+                         (.toString)
+                         (string->byte-buffer ~length)))}))
+
+(defmethod expr/codegen-cast [:date :utf8] [{{:keys [length]} :cast-opts}]
+  ;; FIXME this assumes date-unit :day
+  {:return-type :utf8
+   :->call-code (fn [[x]]
+                  `(-> (LocalDate/ofEpochDay ~x)
+                       (.toString)
+                       (string->byte-buffer ~length)))})
+
+(defmethod expr/codegen-cast [:time-local :utf8] [{[_ t-unit] :source-type {:keys [length]} :cast-opts}]
+  {:return-type :utf8
+   :->call-code (fn [[t]]
+                  `(-> ~(with-conversion t t-unit :nano)
+                       (LocalTime/ofNanoOfDay)
+                       (.toString)
+                       (string->byte-buffer ~length)))})
+
+;; TODO - finish this
+(defmethod expr/parse-list-form  'cast-tstz [[_ expr opts] env]
+  (let [unit (or (:unit opts) :micro)]
+    {:op :call
+     :f :cast
+     :args [(expr/form->expr expr env)]
+     :target-type [:timestamp-tz unit (str (.getZone expr/*clock*))]
+     :cast-opts opts}))
 
 ;;;; SQL:2011 Operations involving datetimes and intervals
 
