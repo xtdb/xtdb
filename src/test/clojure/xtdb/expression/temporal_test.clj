@@ -8,6 +8,7 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time.format DateTimeParseException)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -184,6 +185,80 @@
                    (test-cast #time/time "12:34:56.789012345"
                               [:timestamp-tz :micro "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "Europe/London")}))))))))
+
+(t/deftest test-cast-string-and-temporal
+  (let [current-time #time/instant "2022-08-16T20:04:14.423452Z"]
+    (letfn [(test-cast
+              ([src-value tgt-type] (test-cast src-value tgt-type nil))
+              ([src-value tgt-type cast-opts]
+               (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+                                 [:table [{}]]]
+                                {:basis {:current-time current-time}})
+                   first :res)))]
+
+      (t/testing "string ->"
+        (t/testing "date"
+          (t/is (= #time/date "2022-08-01" (test-cast "2022-08-01" [:date :day])))
+          (t/is (thrown-with-msg? RuntimeException
+                                  #"'2022-08-01T00:00:00Z' has invalid format for type date"
+                                  (test-cast "2022-08-01T00:00:00Z" [:date :day]))))
+
+        (t/testing "time"
+          (t/is (= #time/time "12:00:01" (test-cast "12:00:01.111" [:time-local :second])))
+          (t/is (= #time/time "12:00:01.111" (test-cast "12:00:01.111" [:time-local :milli])))
+          (t/is (thrown-with-msg? RuntimeException
+                                  #"'2022-08-01T12:00:01' has invalid format for type time without timezone"
+                                  (test-cast "2022-08-01T12:00:01" [:time-local :second]))))
+
+        (t/testing "ts"
+          (t/is (= #time/date-time "2022-08-01T05:34:56.789" (test-cast "2022-08-01T05:34:56.789" [:timestamp-local :milli])))
+          (t/is (= #time/date-time "2022-08-01T05:34:56" (test-cast "2022-08-01T05:34:56.789" [:timestamp-local :second])))
+          (t/is (thrown-with-msg? RuntimeException
+                                  #"'2022-08-01T05:34:56.789Z' has invalid format for type timestamp without timezone"
+                                  (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-local :milli])))
+          (t/is (thrown-with-msg? RuntimeException
+                                  #"'2022-08-01 05:34:56.789' has invalid format for type timestamp without timezone"
+                                  (test-cast "2022-08-01 05:34:56.789" [:timestamp-local :milli]))))
+
+        (t/testing "tstz"
+          (t/is (= #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-tz :milli "UTC"])))
+          (t/is (= #time/zoned-date-time "2022-08-01T05:34:56Z[UTC]" (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-tz :second "UTC"])))
+          (t/is (= #time/zoned-date-time "2022-08-01T04:04:56Z[UTC]" (test-cast "2022-08-01T05:34:56.789+01:30" [:timestamp-tz :second "UTC"])))
+          (t/is (thrown-with-msg? RuntimeException
+                                  #"'2022-08-01 05:34:56.789' has invalid format for type timestamp with timezone"
+                                  (test-cast "2022-08-01 05:34:56.789" [:timestamp-tz :second "UTC"])))
+          (t/is (thrown-with-msg? RuntimeException
+                                  #"'2022-08-01T05:34:56.789' has invalid format for type timestamp with timezone"
+                                  (test-cast "2022-08-01T05:34:56.789" [:timestamp-tz :second "UTC"]))))
+
+        (t/testing "with precision"
+          (t/is (= #time/date-time "2022-08-01T05:34:56" (test-cast "2022-08-01T05:34:56.1234" [:timestamp-local :micro] {:precision 0})))
+          (t/is (= #time/date-time "2022-08-01T05:34:56.1234" (test-cast "2022-08-01T05:34:56.123456" [:timestamp-local :micro] {:precision 4})))
+          (t/is (= #time/zoned-date-time "2022-08-01T05:34:56.12Z[UTC]" (test-cast  "2022-08-01T05:34:56.123456Z" [:timestamp-tz :micro "UTC"] {:precision 2})))
+          (t/is (= #time/zoned-date-time "2022-08-01T04:04:56.12345678Z[UTC]" (test-cast "2022-08-01T05:34:56.123456789+01:30" [:timestamp-tz :nano "UTC"] {:precision 8})))
+          (t/is (= #time/time "05:34:56.1234567" (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 7})))
+          (t/is (thrown-with-msg? IllegalArgumentException
+                                  #"The minimum fractional seconds precision is 0."
+                                  (test-cast "05:34:56.123456789" [:time-local :nano] {:precision -1})))
+          (t/is (thrown-with-msg? IllegalArgumentException
+                                  #"The maximum fractional seconds precision is 9."
+                                  (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 11})))))
+
+      (t/testing "->string"
+        (t/testing "date"
+          (t/is (= "2022-08-01" (test-cast #time/date "2022-08-01" :utf8))))
+
+        (t/testing "time"
+          (t/is (= "12:00:01" (test-cast #time/time "12:00:01" :utf8))))
+
+        (t/testing "ts"
+          (t/is (= "2022-08-01T05:34:56.789" (test-cast #time/date-time "2022-08-01T05:34:56.789" :utf8))))
+
+        (t/testing "tstz"
+          (t/is (= "2022-08-01T05:34:56.789Z[UTC]" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8))))
+
+        (t/testing "with string length limit"
+          (t/is (= "2022" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8 {:length 4}))))))))
 
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")

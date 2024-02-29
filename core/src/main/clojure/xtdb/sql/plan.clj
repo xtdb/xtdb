@@ -138,6 +138,10 @@
                             {::err/message (str "Cannot build interval for: "  (pr-str qualifier))
                              :qualifier qualifier}))))
 
+(defn cast-temporal-with-precision [e type fractional-precision]
+  (let [fp (parse-long fractional-precision)]
+    (list 'cast e [type (if (<= fp 6) :micro :nano)] {:precision fp})))
+
 (defn cast-expr [e cast-spec]
   (r/zmatch cast-spec
     [:exact_numeric_type "INTEGER"]
@@ -155,9 +159,39 @@
     (list 'cast e :f32)
     [:approximate_numeric_type "DOUBLE" "PRECISION"]
     (list 'cast e :f64)
+            
+    [:datetime_type "DATE"]
+    (list 'cast e [:date :day])
+            
+    [:datetime_type "TIME"]
+    (list 'cast e [:time-local :micro])
+    [:datetime_type "TIME" [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
+    (list 'cast e [:time-local :micro])
+    [:datetime_type "TIME" [:unsigned_integer fractional-precision]]
+    (cast-temporal-with-precision e :time-local fractional-precision)
+    [:datetime_type "TIME" [:unsigned_integer fractional-precision] [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
+    (cast-temporal-with-precision e :time-local fractional-precision)
 
+    [:datetime_type "TIMESTAMP"]
+    (list 'cast e [:timestamp-local :micro])
+    [:datetime_type "TIMESTAMP" [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
+    (list 'cast e [:timestamp-local :micro])
+    [:datetime_type "TIMESTAMP" [:unsigned_integer fractional-precision]]
+    (cast-temporal-with-precision e :timestamp-local fractional-precision)
+    [:datetime_type "TIMESTAMP" [:unsigned_integer fractional-precision] [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
+    (cast-temporal-with-precision e :timestamp-local fractional-precision)
+    
     [:datetime_type "TIMESTAMP" [:with_or_without_time_zone "WITH" "TIME" "ZONE"]]
     (list 'cast-tstz e)
+    [:datetime_type "TIMESTAMP" [:unsigned_integer fractional-precision] [:with_or_without_time_zone "WITH" "TIME" "ZONE"]]
+     (let [fp (parse-long fractional-precision)]
+       (list 'cast-tstz e {:precision fp :unit (if (<= fp 6) :micro :nano)}))
+
+    [:character_string_type "VARCHAR"]
+    (list 'cast e :utf8)
+
+    [:character_string_type "VARCHAR" [:character_length [:unsigned_integer length]]]
+    (list 'cast e :utf8 {:length (parse-long length)})
 
     (throw (err/illegal-arg :xtdb.sql/parse-error
                             {::err/message (str "Cannot build cast for: " (pr-str cast-spec))

@@ -384,6 +384,7 @@ correlation_name
     | boolean_type
     | datetime_type
     | interval_type
+    | character_string_type
     ;
 
 character_string_type
@@ -391,7 +392,7 @@ character_string_type
     | 'CHAR' [ <left_paren> character_length <right_paren> ]
     | 'CHARACTER' 'VARYING' <left_paren> character_length <right_paren>
     | 'CHAR' 'VARYING' <left_paren> character_length <right_paren>
-    | 'VARCHAR' <left_paren> character_length <right_paren>
+    | 'VARCHAR' [ <left_paren> character_length <right_paren> ]
     | character_large_object_type
     ;
 
