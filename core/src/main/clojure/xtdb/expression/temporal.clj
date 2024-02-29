@@ -100,24 +100,39 @@
 (defn- ts->zdt [form ts-unit tz-sym]
   `(ZonedDateTime/ofInstant ~(ts->inst form ts-unit) ~tz-sym))
 
+(defn epoch-second-from-zdt ^long [^ZonedDateTime zdt]
+  (.toEpochSecond zdt))
+
+(defn nano-from-zdt ^long [^ZonedDateTime zdt]
+  (.getNano zdt))
+
 (defn- zdt->ts [form ts-unit]
   (if (= ts-unit :second)
-    `(.toEpochSecond ~form)
+    `(epoch-second-from-zdt ~form)
     `(let [form# ~form]
-       (Math/addExact (Math/multiplyExact (long (.toEpochSecond form#)) ~(types/ts-units-per-second ts-unit))
-                      (quot (long (.getNano form#)) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
+       (Math/addExact (Math/multiplyExact (epoch-second-from-zdt form#) ~(types/ts-units-per-second ts-unit))
+                      (quot (nano-from-zdt form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
+
+(defn epoch-second-from-ldt ^long [^LocalDateTime ldt]
+  (.toEpochSecond ldt ZoneOffset/UTC))
+
+(defn nano-from-ldt ^long [^LocalDateTime ldt]
+  (.getNano ldt))
 
 (defn- ldt->ts [form ts-unit]
   (if (= ts-unit :second)
-    `(.toEpochSecond ~form ZoneOffset/UTC)
-    `(let [form# ~form]
-       (Math/addExact (Math/multiplyExact (long (.toEpochSecond form# ZoneOffset/UTC)) ~(types/ts-units-per-second ts-unit))
-                      (quot (long (.getNano form#)) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
+    `(epoch-second-from-ldt ~form)
+    `(let [^LocalDateTime form# ~form]
+       (Math/addExact (Math/multiplyExact (epoch-second-from-ldt form#) ~(types/ts-units-per-second ts-unit))
+                      (quot (nano-from-ldt form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
+
+(defn calc-fractional-units ^long [^Long ts ^Long ts-units-per-second]
+  (mod ts ts-units-per-second))
 
 (defn- ts->ldt [form ts-unit]
   `(let [form# ~form]
      (LocalDateTime/ofEpochSecond (quot form# ~(types/ts-units-per-second ts-unit))
-                                  (* (mod form# ~(types/ts-units-per-second ts-unit))
+                                  (* (calc-fractional-units form# ~(types/ts-units-per-second ts-unit))
                                      ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))
                                   ZoneOffset/UTC)))
 
