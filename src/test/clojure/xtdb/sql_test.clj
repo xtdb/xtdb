@@ -812,6 +812,12 @@
   (t/is (= [{:time #time/time "12:00:01"}]
            (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as time FROM (VALUES 1) AS x")))
   
+  (t/is (= [{:duration #time/duration "PT13M56.123456S"}]
+           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION) as duration FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:duration #time/duration "PT13M56.123456789S"}]
+           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION(9)) as duration FROM (VALUES 1) AS x")))
+
   (t/is (= [{:time #time/time "12:00:01.1234"}]
            (xt/q tu/*node* "SELECT CAST('12:00:01.123456' AS TIME(4)) as time FROM (VALUES 1) AS x")))
   
@@ -837,7 +843,12 @@
            (xt/q tu/*node* "SELECT CAST(DATE '2021-10-21' AS VARCHAR) as string FROM (VALUES 1) AS x")))
 
   (t/is (= [{:string "12:00:01"}]
-           (xt/q tu/*node* "SELECT CAST(TIME '12:00:01' AS VARCHAR) as string FROM (VALUES 1) AS x"))))
+           (xt/q tu/*node* "SELECT CAST(TIME '12:00:01' AS VARCHAR) as string FROM (VALUES 1) AS x")))
+  
+  ;; We do not have a literal for Duration, so insert one into the table and query & cast it out
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :duration #time/duration "PT13M56.123S"}]])
+  (t/is (= [{:string "PT13M56.123S"}]
+           (xt/q tu/*node* "SELECT CAST(docs.duration AS VARCHAR) as string FROM docs"))))
 
 (t/deftest test-expr-in-equi-join
   (t/is

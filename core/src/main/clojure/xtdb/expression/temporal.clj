@@ -339,6 +339,26 @@
                             (local-time->nano))
                       (with-conversion :nano tgt-tsunit)))})
 
+(defn alter-duration-precision [^long precision ^Duration duration]
+  (if (= precision 0)
+    (.withNanos duration 0)
+    (.withNanos duration (let [nanos (.getNano duration)
+                               factor (Math/pow 10 (- 9 precision))]
+                           (* (Math/floor (/ nanos factor)) factor)))))
+
+(defn duration->nano ^long [^Duration d]
+  (.toNanos d))
+
+(defmethod expr/codegen-cast [:utf8 :duration] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
+  (when precision (ensure-fractional-precision-valid precision))
+  {:return-type target-type
+   :->call-code (fn [[s]]
+                  (-> `(->> (expr/resolve-string ~s)
+                            (parse-with-error-handling "duration" #(Duration/parse %))
+                            ~@(if precision (list `(alter-duration-precision ~precision)) '())
+                            (duration->nano))
+                      (with-conversion :nano tgt-tsunit)))})
+
 (defn string->byte-buffer [^String s]
   (ByteBuffer/wrap (.getBytes s StandardCharsets/UTF_8)))
 
@@ -371,6 +391,14 @@
    :->call-code (fn [[t]]
                   `(-> ~(with-conversion t t-unit :nano)
                        (LocalTime/ofNanoOfDay)
+                       (.toString)
+                       (string->byte-buffer)))})
+
+(defmethod expr/codegen-cast [:duration :utf8] [{[_ t-unit] :source-type}]
+  {:return-type :utf8
+   :->call-code (fn [[t]]
+                  `(-> ~(with-conversion t t-unit :nano)
+                       (Duration/ofNanos)
                        (.toString)
                        (string->byte-buffer)))})
 
