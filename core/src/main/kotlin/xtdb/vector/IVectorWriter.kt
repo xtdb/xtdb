@@ -18,7 +18,7 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
 
     val vector: FieldVector
 
-    val field: Field
+    val field: Field get() = vector.field
 
     /**
      * This method calls [ValueVector.setValueCount] on the underlying vector, so that all of the values written
@@ -46,7 +46,7 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
     override fun writeFloat(v: Float): Unit = unsupported("writeFloat")
     override fun writeDouble(v: Double): Unit = unsupported("writeDouble")
     override fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
-    override fun writeObject(v: Any?): Unit = unsupported("writeObject")
+    override fun writeObject(obj: Any?): Unit = unsupported("writeObject")
 
     fun writeValue(v: IValueReader) = if (v.isNull) writeNull() else writeValue0(v)
     fun writeValue0(v: IValueReader)

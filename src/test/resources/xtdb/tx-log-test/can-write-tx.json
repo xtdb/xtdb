@@ -150,7 +150,23 @@
                   "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "cpu_avg_1min",
+                  "name" : "battery_status",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
+                  },
+                  "children" : [{
+                    "name" : "utf8",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "utf8"
+                    },
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "mem_used",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -167,7 +183,7 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "cpu_avg_15min",
+                  "name" : "cpu_avg_1min",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -200,73 +216,6 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "battery_level",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "union",
-                    "mode" : "Dense",
-                    "typeIds" : [ ]
-                  },
-                  "children" : [{
-                    "name" : "f64",
-                    "nullable" : false,
-                    "type" : {
-                      "name" : "floatingpoint",
-                      "precision" : "DOUBLE"
-                    },
-                    "children" : [ ]
-                  }]
-                },{
-                  "name" : "mem_used",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "union",
-                    "mode" : "Dense",
-                    "typeIds" : [ ]
-                  },
-                  "children" : [{
-                    "name" : "f64",
-                    "nullable" : false,
-                    "type" : {
-                      "name" : "floatingpoint",
-                      "precision" : "DOUBLE"
-                    },
-                    "children" : [ ]
-                  }]
-                },{
-                  "name" : "battery_status",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "union",
-                    "mode" : "Dense",
-                    "typeIds" : [ ]
-                  },
-                  "children" : [{
-                    "name" : "utf8",
-                    "nullable" : false,
-                    "type" : {
-                      "name" : "utf8"
-                    },
-                    "children" : [ ]
-                  }]
-                },{
-                  "name" : "mem_free",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "union",
-                    "mode" : "Dense",
-                    "typeIds" : [ ]
-                  },
-                  "children" : [{
-                    "name" : "f64",
-                    "nullable" : false,
-                    "type" : {
-                      "name" : "floatingpoint",
-                      "precision" : "DOUBLE"
-                    },
-                    "children" : [ ]
-                  }]
-                },{
                   "name" : "time",
                   "nullable" : false,
                   "type" : {
@@ -285,23 +234,7 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "ssid",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "union",
-                    "mode" : "Dense",
-                    "typeIds" : [ ]
-                  },
-                  "children" : [{
-                    "name" : "utf8",
-                    "nullable" : false,
-                    "type" : {
-                      "name" : "utf8"
-                    },
-                    "children" : [ ]
-                  }]
-                },{
-                  "name" : "rssi",
+                  "name" : "battery_temperature",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -335,7 +268,23 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "battery_temperature",
+                  "name" : "ssid",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
+                  },
+                  "children" : [{
+                    "name" : "utf8",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "utf8"
+                    },
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "mem_free",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -352,7 +301,58 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "xt$id",
+                  "name" : "rssi",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
+                  },
+                  "children" : [{
+                    "name" : "f64",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "floatingpoint",
+                      "precision" : "DOUBLE"
+                    },
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "battery_level",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
+                  },
+                  "children" : [{
+                    "name" : "f64",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "floatingpoint",
+                      "precision" : "DOUBLE"
+                    },
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "cpu_avg_15min",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
+                  },
+                  "children" : [{
+                    "name" : "f64",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "floatingpoint",
+                      "precision" : "DOUBLE"
+                    },
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "bssid",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -368,7 +368,7 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "bssid",
+                  "name" : "xt$id",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -545,6 +545,29 @@
                 "count" : 2,
                 "VALIDITY" : [1,1],
                 "children" : [{
+                  "name" : "battery_status",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "utf8",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "OFFSET" : [0,11,22],
+                    "DATA" : ["discharging","discharging"]
+                  }]
+                },{
+                  "name" : "mem_used",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "f64",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "DATA" : [5.89988922E8,2.79257668E8]
+                  }]
+                },{
                   "name" : "cpu_avg_1min",
                   "count" : 2,
                   "TYPE_ID" : [0,0],
@@ -554,17 +577,6 @@
                     "count" : 2,
                     "VALIDITY" : [1,1],
                     "DATA" : [24.81,4.93]
-                  }]
-                },{
-                  "name" : "cpu_avg_15min",
-                  "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "f64",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "DATA" : [8.654,8.822]
                   }]
                 },{
                   "name" : "device_id",
@@ -579,51 +591,6 @@
                     "DATA" : ["device-info-demo000000","device-info-demo000001"]
                   }]
                 },{
-                  "name" : "battery_level",
-                  "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "f64",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "DATA" : [59.0,86.0]
-                  }]
-                },{
-                  "name" : "mem_used",
-                  "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "f64",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "DATA" : [5.89988922E8,2.79257668E8]
-                  }]
-                },{
-                  "name" : "battery_status",
-                  "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "utf8",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "OFFSET" : [0,11,22],
-                    "DATA" : ["discharging","discharging"]
-                  }]
-                },{
-                  "name" : "mem_free",
-                  "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "f64",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "DATA" : [4.10011078E8,7.20742332E8]
-                  }]
-                },{
                   "name" : "time",
                   "count" : 2,
                   "TYPE_ID" : [0,0],
@@ -633,6 +600,28 @@
                     "count" : 2,
                     "VALIDITY" : [1,1],
                     "DATA" : [1479211200000000,1479211200000000]
+                  }]
+                },{
+                  "name" : "battery_temperature",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "f64",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "DATA" : [89.5,93.7]
+                  }]
+                },{
+                  "name" : "cpu_avg_5min",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "f64",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "DATA" : [10.802,8.106]
                   }]
                 },{
                   "name" : "ssid",
@@ -647,6 +636,17 @@
                     "DATA" : ["demo-net","stealth-net"]
                   }]
                 },{
+                  "name" : "mem_free",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "f64",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "DATA" : [4.10011078E8,7.20742332E8]
+                  }]
+                },{
                   "name" : "rssi",
                   "count" : 2,
                   "TYPE_ID" : [0,0],
@@ -658,7 +658,7 @@
                     "DATA" : [-50.0,-61.0]
                   }]
                 },{
-                  "name" : "cpu_avg_5min",
+                  "name" : "battery_level",
                   "count" : 2,
                   "TYPE_ID" : [0,0],
                   "OFFSET" : [0,1],
@@ -666,10 +666,10 @@
                     "name" : "f64",
                     "count" : 2,
                     "VALIDITY" : [1,1],
-                    "DATA" : [10.802,8.106]
+                    "DATA" : [59.0,86.0]
                   }]
                 },{
-                  "name" : "battery_temperature",
+                  "name" : "cpu_avg_15min",
                   "count" : 2,
                   "TYPE_ID" : [0,0],
                   "OFFSET" : [0,1],
@@ -677,19 +677,7 @@
                     "name" : "f64",
                     "count" : 2,
                     "VALIDITY" : [1,1],
-                    "DATA" : [89.5,93.7]
-                  }]
-                },{
-                  "name" : "xt$id",
-                  "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "utf8",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "OFFSET" : [0,18,36],
-                    "DATA" : ["reading-demo000000","reading-demo000001"]
+                    "DATA" : [8.654,8.822]
                   }]
                 },{
                   "name" : "bssid",
@@ -702,6 +690,18 @@
                     "VALIDITY" : [1,1],
                     "OFFSET" : [0,17,34],
                     "DATA" : ["01:02:03:04:05:06","A0:B1:C5:D2:E0:F3"]
+                  }]
+                },{
+                  "name" : "xt$id",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "utf8",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "OFFSET" : [0,18,36],
+                    "DATA" : ["reading-demo000000","reading-demo000001"]
                   }]
                 }]
               }]

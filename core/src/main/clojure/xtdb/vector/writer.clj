@@ -13,59 +13,25 @@
            java.net.URI
            (java.nio ByteBuffer)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
-           (java.util Date HashMap LinkedHashMap List Map Set UUID)
+           (java.util Date LinkedHashMap List Map Set UUID)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BaseFixedWidthVector BaseVariableWidthVector ExtensionTypeVector NullVector PeriodDuration ValueVector VectorSchemaRoot)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType)
+           (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
+           (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            xtdb.types.ClojureForm
-           (xtdb.vector FieldVectorWriters IListValueReader IRelationWriter IRowCopier IValueReader IVectorPosition IVectorReader IVectorWriter NullVectorWriter RelationReader)
-           [xtdb.vector.extensions SetVector XtExtensionVector]))
+           (xtdb.vector FieldVectorWriters IRelationWriter IRowCopier IVectorPosition IVectorReader IVectorWriter RelationReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defprotocol WriterFactory
-  (^xtdb.vector.IVectorWriter ->writer* [arrow-vec notify!]
-   "->writer* will call `notify!` whenever its col-type changes"))
-
 (defn ->writer ^xtdb.vector.IVectorWriter [arrow-vec]
-  (->writer* arrow-vec (fn [_])))
+  (FieldVectorWriters/writerFor arrow-vec))
 
 (defprotocol ArrowWriteable
   (value->col-type [v])
 
   (^org.apache.arrow.vector.types.pojo.ArrowType value->arrow-type [v])
   (write-value! [v ^xtdb.vector.IVectorWriter writer]))
-
-(defn- null->vec-copier [^IVectorWriter dest-wtr]
-  (let [wp (.writerPosition dest-wtr)]
-    (reify IRowCopier
-      (copyRow [_ _src-idx]
-        (let [pos (.getPosition wp)]
-          (.writeNull dest-wtr)
-          pos)))))
-
-(defn- duv->vec-copier [^IVectorWriter dest-wtr, ^DenseUnionVector src-vec]
-  (let [copiers (object-array (for [child-vec src-vec]
-                                (.rowCopier dest-wtr child-vec)))]
-    (reify IRowCopier
-      (copyRow [_ src-idx]
-        (.copyRow ^IRowCopier (aget copiers (.getTypeId src-vec src-idx))
-                  (.getOffset src-vec src-idx))))))
-
-(defn- scalar-leg-writer [^IVectorWriter w, ^ArrowType arrow-type]
-  (let [field (.getField w)]
-    (if (or (and (= arrow-type #xt.arrow/type :null) (.isNullable field))
-            (= arrow-type (.getType field)))
-      w
-      (throw (IllegalArgumentException. (format "arrow-type mismatch: got <%s>, requested <%s>" (.getType field) arrow-type))))))
-
-(extend-protocol WriterFactory
-  NullVector (->writer* [arrow-vec _notify!] (NullVectorWriter. arrow-vec))
-  BaseFixedWidthVector (->writer* [arrow-vec _notify!] (FieldVectorWriters/writerFor arrow-vec))
-  BaseVariableWidthVector (->writer* [arrow-vec _notify!] (FieldVectorWriters/writerFor arrow-vec)))
 
 (extend-protocol ArrowWriteable
   nil
@@ -202,7 +168,9 @@
                                      :else nil))]
         (dotimes [_ absents]
           (.writeNull absent-writer))
-        (throw (UnsupportedOperationException. "populate-with-absents needs a nullable or union underneath!"))))))
+        (throw (ex-info "populate-with-absents needs a nullable or union underneath!"
+                        {:field (.getField w)
+                         :expected pos, :actual (.getPosition (.writerPosition w))}))))))
 
 
 (defn- check-field-types [^FieldType expected-field-type ^FieldType given-field-type]
@@ -211,214 +179,6 @@
       (when-not (= expected-field-type given-field-type)
         (throw (IllegalStateException. (str "Field type mismatch: " (pr-str {:expected expected-field-type
                                                                              :given given-field-type})))))))
-
-(extend-protocol WriterFactory
-  ListVector
-  (->writer* [arrow-vec notify!]
-    (let [col-name (.getName arrow-vec)
-          field (.getField arrow-vec)
-          nullable? (.isNullable field)
-          wp (IVectorPosition/build (.getValueCount arrow-vec))
-          !field (atom field)]
-
-      (letfn [(set-field! [el-field]
-                (reset! !field (types/->field col-name #xt.arrow/type :list nullable? el-field)))
-
-              (->el-writer [data-vec]
-                (->writer* data-vec
-                           (fn notify-list-writer! [el-field]
-                             (notify! (set-field! el-field)))))]
-
-        (let [!el-writer (atom (->el-writer (.getDataVector arrow-vec)))]
-
-          (reify IVectorWriter
-            (getVector [_] arrow-vec)
-            (getField [_] @!field)
-            (clear [_] (.clear arrow-vec) (.setPosition wp 0) (.clear ^IVectorWriter @!el-writer))
-
-            (rowCopier [this-wtr src-vec]
-              (cond
-                (instance? NullVector src-vec) (null->vec-copier this-wtr)
-                (instance? DenseUnionVector src-vec) (duv->vec-copier this-wtr src-vec)
-                (instance? ListVector src-vec)
-                (let [^ListVector src-vec src-vec
-                      data-vec (.getDataVector src-vec)
-                      inner-copier (.rowCopier (.listElementWriter this-wtr) data-vec)]
-                  (reify IRowCopier
-                    (copyRow [_ src-idx]
-                      (let [pos (.getPosition wp)]
-                        (if (.isNull src-vec src-idx)
-                          (.writeNull this-wtr)
-                          (do
-                            (.startList this-wtr)
-                            (let [start-idx (.getElementStartIndex src-vec src-idx)
-                                  end-idx (.getElementEndIndex src-vec src-idx)]
-                              (dotimes [n (- end-idx start-idx)]
-                                (.copyRow inner-copier (+ start-idx n))))
-                            (.endList this-wtr)))
-                        pos))))
-                :else
-                (throw (err/illegal-arg ::invalid-copy-src-vector
-                                        {::err/message (format "Can not copy from vector of %s to ListVector"
-                                                               (pr-str (.getFieldType (.getField src-vec))))}))))
-
-            (writerPosition [_] wp)
-            (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
-
-            (writeObject [this obj]
-              (cond
-                (instance? IListValueReader obj)
-                (let [^IListValueReader lst obj
-                      el-wtr (.listElementWriter this)]
-                  (.startList this)
-
-                  (dotimes [n (.size lst)]
-                    (.writeValue el-wtr (.nth lst n)))
-
-                  (.endList this))
-
-                (set? obj)
-                (let [el-wtr (.listElementWriter this)]
-                  (.startList this)
-
-                  (doseq [ele obj]
-                    (write-value! ele el-wtr))
-
-                  (.endList this))
-
-                :else
-                (throw (UnsupportedOperationException. (format "write-object '%s'" (class obj))))))
-
-            (writeValue0 [this vr] (.writeObject this (.readObject vr)))
-
-            (listElementWriter [this]
-              (if (instance? NullVector (.getDataVector arrow-vec))
-                (.listElementWriter this (FieldType/notNullable #xt.arrow/type :union))
-                @!el-writer))
-
-            (listElementWriter [_ field-type]
-              (let [create-vec-res (.addOrGetVector arrow-vec field-type)]
-                (if (.isCreated create-vec-res)
-                  (let [new-data-vec (.getVector create-vec-res)]
-                    (notify! (set-field! (.getField new-data-vec)))
-                    (reset! !el-writer (->el-writer new-data-vec)))
-                  @!el-writer)))
-
-            (startList [_]
-              (.startNewValue arrow-vec (.getPosition wp)))
-
-            (endList [_]
-              (let [pos (.getPositionAndIncrement wp)
-                    end-pos (.getPosition (.writerPosition ^IVectorWriter @!el-writer))]
-                (.endValue arrow-vec pos (- end-pos (.getElementStartIndex arrow-vec pos)))))
-
-            (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type)))))))
-
-  StructVector
-  (->writer* [arrow-vec notify!]
-    (let [col-name (.getName arrow-vec)
-          nullable? (.isNullable (.getField arrow-vec))
-          wp (IVectorPosition/build (.getValueCount arrow-vec))
-          writers (HashMap.)
-          !fields (atom {})]
-
-      (letfn [(update-child-field! [^Field field]
-                (apply types/->field col-name #xt.arrow/type :struct nullable?
-                       (vals (swap! !fields assoc (.getName field) field))))
-
-              (->key-writer [^ValueVector child-vec]
-                (let [w (->writer* child-vec (comp notify! update-child-field!))]
-                  (update-child-field! (.getField w))
-                  w))]
-
-        (doseq [^ValueVector child-vec arrow-vec]
-          (.put writers (.getName child-vec) (->key-writer child-vec)))
-
-        (reify IVectorWriter
-          (getVector [_] arrow-vec)
-
-          (getField [_]
-            (apply types/->field col-name #xt.arrow/type :struct nullable? (vals @!fields)))
-
-          (clear [_] (.clear arrow-vec) (.setPosition wp 0) (run! #(.clear ^IVectorWriter %) (.values writers)))
-
-          (rowCopier [this-wtr src-vec]
-            (cond
-              (instance? NullVector src-vec) (null->vec-copier this-wtr)
-              (instance? DenseUnionVector src-vec) (duv->vec-copier this-wtr src-vec)
-              (instance? StructVector src-vec)
-              (let [^StructVector src-vec src-vec
-                    inner-copiers (mapv (fn [^ValueVector inner]
-                                          (-> (.structKeyWriter this-wtr (.getName inner))
-                                              (.rowCopier inner)))
-                                        src-vec)]
-                (reify IRowCopier
-                  (copyRow [_ src-idx]
-                    (let [pos (.getPosition wp)]
-                      (if (.isNull src-vec src-idx)
-                        (.writeNull this-wtr)
-                        (do
-                          (.startStruct this-wtr)
-                          (doseq [^IRowCopier inner inner-copiers]
-                            (.copyRow inner src-idx))
-                          (.endStruct this-wtr)))
-                      pos))))
-              :else
-              (throw (err/illegal-arg ::invalid-copy-src-vector
-                                      {::err/message (format "Can not copy from vector of %s to StructVector"
-                                                             (pr-str (.getFieldType (.getField src-vec))))}))))
-
-          (writerPosition [_] wp)
-
-          (writeObject [this obj]
-            (if (instance? Map obj)
-              (do
-                (.startStruct this)
-
-                (doseq [[^String k, ^IValueReader v] obj]
-                  (.writeValue (.structKeyWriter this k) ^IValueReader v))
-
-                (.endStruct this))
-
-              (throw (IllegalArgumentException. (format "write-object '%s'" (class obj))))))
-
-          (writeNull [_]
-            (.setNull arrow-vec (.getPositionAndIncrement wp))
-
-            (doseq [^IVectorWriter w (.values writers)]
-              (.writeNull w)))
-
-          (writeValue0 [this vr] (.writeObject this (.readObject vr)))
-
-          (structKeyWriter [this-wtr col-name]
-            (or (.get writers col-name)
-                (.structKeyWriter this-wtr col-name (FieldType/notNullable #xt.arrow/type :union))))
-
-          (^IVectorWriter structKeyWriter [this-wtr ^String col-name ^FieldType field-type]
-           (when-let [^IVectorWriter wrt (.get writers col-name)]
-             (check-field-types (.getFieldType (.getField wrt)) field-type))
-
-           (.computeIfAbsent writers col-name
-                             (reify Function
-                               (apply [_ col-name]
-                                 (let [w (doto (->key-writer (.addOrGet arrow-vec col-name field-type ValueVector))
-                                           (populate-with-absents (.getPosition wp)))]
-                                   (notify! (.getField this-wtr))
-                                   w)))))
-
-          (startStruct [_]
-            (.setIndexDefined arrow-vec (.getPosition wp)))
-
-          (endStruct [_]
-            (let [pos (.getPositionAndIncrement wp)]
-              (doseq [^IVectorWriter w (.values writers)]
-                (populate-with-absents w (inc pos)))))
-
-          (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type))
-
-          Iterable
-          (iterator [_] (.iterator (.entrySet writers))))))))
-
 
 (extend-protocol ArrowWriteable
   List
@@ -467,6 +227,7 @@
                         v-leg-wtr (-> v-writer
                                       (.legWriter (value->arrow-type v)))]]
 
+
             (when-not (= (.getPosition (.writerPosition v-writer))
                          struct-pos)
               (throw (err/illegal-arg :xtdb/key-already-set {:k k, :ks (set (keys m))})))
@@ -476,227 +237,6 @@
         (.endStruct writer))
 
       (throw (UnsupportedOperationException. "Arrow Maps currently not supported")))))
-
-(defn- duv-child-writer [^IVectorWriter w, write-value!]
-  (reify IVectorWriter
-    (getVector [_] (.getVector w))
-    (getField [_] (.getField w))
-    (clear [_] (.clear w))
-
-    (rowCopier [_ src-vec]
-      (let [inner-copier (.rowCopier w src-vec)]
-        (reify IRowCopier
-          (copyRow [_ src-idx]
-            (write-value!)
-            (.copyRow inner-copier src-idx)))))
-
-    (writerPosition [_] (.writerPosition w))
-
-    (writeNull [_] (write-value!) (.writeNull w))
-    (writeBoolean [_ v] (write-value!) (.writeBoolean w v))
-    (writeByte [_ v] (write-value!) (.writeByte w v))
-    (writeShort [_ v] (write-value!) (.writeShort w v))
-    (writeInt [_ v] (write-value!) (.writeInt w v))
-    (writeLong [_ v] (write-value!) (.writeLong w v))
-    (writeFloat [_ v] (write-value!) (.writeFloat w v))
-    (writeDouble [_ v] (write-value!) (.writeDouble w v))
-    (writeBytes [_ v] (write-value!) (.writeBytes w v))
-    (writeObject [_ v] (write-value!) (.writeObject w v))
-
-    (structKeyWriter [_ k] (.structKeyWriter w k))
-    (structKeyWriter [_ k field-type] (.structKeyWriter w k field-type))
-    (startStruct [_] (.startStruct w))
-    (endStruct [_] (write-value!) (.endStruct w))
-
-    (listElementWriter [_] (.listElementWriter w))
-    (listElementWriter [_ field-type] (.listElementWriter w field-type))
-    (startList [_] (.startList w))
-    (endList [_] (write-value!) (.endList w))
-
-    (writeValue0 [_ vr] (write-value!) (.writeValue w vr))
-
-    (^IVectorWriter legWriter [_ ^Keyword leg] (.legWriter w leg))
-    (^IVectorWriter legWriter [_ ^ArrowType arrow-type] (.legWriter w arrow-type))))
-
-(defn- duv->duv-copier ^xtdb.vector.IRowCopier [^IVectorWriter dest-col, ^DenseUnionVector src-vec]
-  (let [src-field (.getField src-vec)
-        src-type (.getType src-field)
-        type-ids (.getTypeIds ^ArrowType$Union src-type)
-        child-fields (.getChildren src-field)
-        child-count (count child-fields)
-        copier-mapping (object-array child-count)]
-
-    (dotimes [n child-count]
-      (let [src-type-id (or (when type-ids (aget type-ids n))
-                            n)
-            child-vec (.getVectorByType src-vec src-type-id)
-            child-field (.getField child-vec)]
-        (aset copier-mapping src-type-id
-              (.rowCopier (.legWriter dest-col (keyword (.getName child-field)) (.getFieldType child-field))
-                          child-vec))))
-
-    (reify IRowCopier
-      (copyRow [_ src-idx]
-        (let [type-id (.getTypeId src-vec src-idx)]
-          (assert (not (neg? type-id)))
-          (-> ^IRowCopier (aget copier-mapping type-id)
-              (.copyRow (.getOffset src-vec src-idx))))))))
-
-(defn- vec->duv-copier ^xtdb.vector.IRowCopier [^IVectorWriter dest-col, ^ValueVector src-vec]
-  (let [field (.getField src-vec)
-        nn-type (.getType field)
-        nullable? (.isNullable field)
-        ^IRowCopier non-null-copier (when-not (= #xt.arrow/type :null nn-type)
-                                      (-> (.legWriter dest-col nn-type)
-                                          (.rowCopier src-vec)))
-        !null-copier (delay
-                       (-> (.legWriter dest-col #xt.arrow/type :null)
-                           (.rowCopier src-vec)))]
-      (reify IRowCopier
-        (copyRow [_ src-idx]
-          (if (and nullable? (.isNull src-vec src-idx))
-            (.copyRow ^IRowCopier @!null-copier src-idx)
-            (.copyRow non-null-copier src-idx))))))
-
-(extend-protocol WriterFactory
-  DenseUnionVector
-  (->writer* [duv notify!]
-    (let [col-name (.getName duv)
-          wp (IVectorPosition/build (.getValueCount duv))
-          writers-by-leg (HashMap.)
-          !field (atom nil)]
-
-      (letfn [(->field []
-                (apply types/->field col-name #xt.arrow/type :union false
-                       (map (fn [^ValueVector child-vec]
-                              (let [^IVectorWriter w (or (.get writers-by-leg (keyword (.getName child-vec)))
-                                                         (throw (NullPointerException. (pr-str {:legs (keys writers-by-leg)
-                                                                                                :leg (keyword (.getName child-vec))}))))]
-                                (.getField w)))
-                            duv)))
-
-              (->child-writer [^long type-id]
-                (let [v (.getVectorByType duv type-id)
-                      child-wtr (->writer* v (fn [_]
-                                               (notify! (reset! !field (->field)))))
-                      child-wp (.writerPosition child-wtr)
-
-                      child-wtr (-> child-wtr
-                                    (duv-child-writer (fn write-value! []
-                                                        (let [pos (.getPositionAndIncrement wp)]
-                                                          (.setTypeId duv pos type-id)
-                                                          (.setOffset duv pos (.getPosition child-wp))))))]
-                  child-wtr))
-
-              (->new-child-writer [leg ^FieldType field-type]
-                (let [field-name (name leg)
-                      field (Field. field-name field-type [])
-                      type-id (.registerNewTypeId duv field)
-                      new-vec (.createNewSingleVector field-type field-name (.getAllocator duv) nil)]
-                  (.addVector duv type-id new-vec)
-                  (->child-writer type-id)))]
-
-        ;; HACK this makes assumption about initial type-id layout which might not hold for arbitrary arrow data
-        (doseq [[type-id ^Field field] (map-indexed vector (.getChildren (.getField duv)))]
-          (.put writers-by-leg (keyword (.getName field)) (->child-writer type-id)))
-
-        (reset! !field (->field))
-
-        (reify IVectorWriter
-          (getVector [_] duv)
-          (getField [_] @!field)
-
-          (writeNull [_]
-            ;; DUVs can't technically contain null, but when they're stored within a nullable struct/list vector,
-            ;; we don't have anything else to write here :/
-            (.getPositionAndIncrement wp))
-
-          (clear [_] (.clear duv) (.setPosition wp 0) (run! #(.clear ^IVectorWriter %) (vals writers-by-leg)))
-
-          (rowCopier [this-writer src-vec]
-            (let [inner-copier (if (instance? DenseUnionVector src-vec)
-                                 (duv->duv-copier this-writer src-vec)
-                                 (vec->duv-copier this-writer src-vec))]
-              (reify IRowCopier
-                (copyRow [_ src-idx] (.copyRow inner-copier src-idx)))))
-
-          ;; DUV overrides the nullable one because DUVs themselves can't be null.
-          (writeValue [this vr] (.writeValue (.legWriter this (.getLeg vr)) vr))
-
-          (writerPosition [_] wp)
-
-          (^IVectorWriter legWriter [_this ^Keyword leg]
-           (or (.get writers-by-leg leg)
-               (throw (NullPointerException. (pr-str {:legs (set (keys writers-by-leg))
-                                                      :leg leg})))))
-          (legWriter [_ leg field-type]
-            (let [new-field? (not (.containsKey writers-by-leg leg))
-                  ^IVectorWriter w (.computeIfAbsent writers-by-leg leg
-                                                     (reify Function
-                                                       (apply [_ leg]
-                                                         (->new-child-writer leg field-type))))]
-
-              (if new-field?
-                (notify! (reset! !field (->field)))
-                (check-field-types (.getFieldType (.getField w)) field-type))
-
-              w))
-
-
-          (^IVectorWriter legWriter [this ^ArrowType leg-type]
-           (.legWriter this (types/arrow-type->leg leg-type) (FieldType/notNullable leg-type))))))))
-
-(extend-protocol WriterFactory
-  XtExtensionVector
-  (->writer* [arrow-vec _notify!] (FieldVectorWriters/writerFor arrow-vec))
-
-  SetVector
-  (->writer* [arrow-vec notify!]
-    (let [!field (atom nil)
-          inner (->writer* (.getUnderlyingVector arrow-vec)
-                           (fn [_]
-                             (notify! (reset! !field (.getField arrow-vec)))))]
-
-      (reset! !field (.getField arrow-vec))
-
-      (reify IVectorWriter
-        (getVector [_] arrow-vec)
-        (getField [_] @!field)
-        (clear [_] (.clear inner))
-        (rowCopier [this-wtr src-vec]
-          (cond
-            (instance? NullVector src-vec) (null->vec-copier this-wtr)
-            (instance? DenseUnionVector src-vec) (duv->vec-copier this-wtr src-vec)
-            :else (do
-                    (assert (instance? ExtensionTypeVector src-vec)
-                            (pr-str (class src-vec)))
-                    (.rowCopier inner (.getUnderlyingVector ^ExtensionTypeVector src-vec)))))
-
-        (writerPosition [_] (.writerPosition inner))
-
-        (writeValue0 [_ vr] (.writeValue inner vr))
-        (writeNull [_] (.writeNull inner))
-        (writeBoolean [_ v] (.writeBoolean inner v))
-        (writeByte [_ v] (.writeByte inner v))
-        (writeShort [_ v] (.writeShort inner v))
-        (writeInt [_ v] (.writeInt inner v))
-        (writeLong [_ v] (.writeLong inner v))
-        (writeFloat [_ v] (.writeFloat inner v))
-        (writeDouble [_ v] (.writeDouble inner v))
-        (writeBytes [_ v] (.writeBytes inner v))
-        (writeObject [_ v] (.writeObject inner v))
-
-        (structKeyWriter [_ k] (.structKeyWriter inner k))
-        (structKeyWriter [_ k field-type] (.structKeyWriter inner k field-type))
-        (startStruct [_] (.startStruct inner))
-        (endStruct [_] (.endStruct inner))
-
-        (listElementWriter [_] (.listElementWriter inner))
-        (listElementWriter [_ field-type] (.listElementWriter inner field-type))
-        (startList [_] (.startList inner))
-        (endList [_] (.endList inner))
-
-        (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type))))))
 
 (defn- write-as-transit [v w]
   (with-open [baos (ByteArrayOutputStream.)]

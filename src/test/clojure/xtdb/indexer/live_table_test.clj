@@ -42,11 +42,16 @@
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
 
-          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
+          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)
+                doc-wtr (.docWriter live-table-tx)]
             (let [wp (IVectorPosition/build)]
               (dotimes [_n n]
                 (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
-                         0 0 #(.getPositionAndIncrement wp))))
+                         0 0
+                         (fn []
+                           (.getPositionAndIncrement wp)
+                       (.startStruct doc-wtr)
+                       (.endStruct doc-wtr)))))
 
             (.commit live-table-tx)
 
@@ -74,11 +79,16 @@
                          ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
-          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
+          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)
+                doc-wtr (.docWriter live-table-tx)]
 
             (let [wp (IVectorPosition/build)]
               (dotimes [_n n]
-                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0 #(.getPositionAndIncrement wp))))
+                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+                         (fn []
+                           (.getPositionAndIncrement wp)
+                           (.startStruct doc-wtr)
+                           (.endStruct doc-wtr)))))
 
             (.commit live-table-tx)
 
@@ -122,13 +132,16 @@
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp rc "foo")]
-      (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)]
+      (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)
+            doc-wtr (.docWriter live-table-tx)]
 
         (let [wp (IVectorPosition/build)]
           (doseq [uuid uuids]
-            (.logPut
-             live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
-             0 0 #(.getPositionAndIncrement wp))))
+            (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+                     (fn []
+                       (.getPositionAndIncrement wp)
+                       (.startStruct doc-wtr)
+                       (.endStruct doc-wtr)))))
 
         (.commit live-table-tx)
 
@@ -149,26 +162,29 @@
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
-    (with-open [node (xtn/start-node {})
-                allocator (RootAllocator.)]
+    (util/with-open [node (xtn/start-node {})
+                     allocator (RootAllocator.)]
       (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
             mm (tu/component node ::meta/metadata-manager)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm
-                                                                   nil nil (HashMap.)
-                                                                   nil (StampedLock.)
-                                                                   (RefCounter.)
-                                                                   (RowCounter. 0) 102400
-                                                                   64 1024)]
+        (util/with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm
+                                                                        nil nil (HashMap.)
+                                                                        nil (StampedLock.)
+                                                                        (RefCounter.)
+                                                                        (RowCounter. 0) 102400
+                                                                        64 1024)]
           (let [tx-key (TransactionKey. 0 (.toInstant #inst "2000"))
                 live-index-tx (.startTx live-index tx-key)
-                live-table-tx (.liveTable live-index-tx table-name)]
+                live-table-tx (.liveTable live-index-tx table-name)
+                doc-wtr (.docWriter live-table-tx)]
 
             (let [wp (IVectorPosition/build)]
               (doseq [uuid uuids]
-                (.logPut
-                 live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
-                 0 0 #(.getPositionAndIncrement wp))))
+                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+                         (fn []
+                           (.getPositionAndIncrement wp)
+                           (.startStruct doc-wtr)
+                           (.endStruct doc-wtr)))))
 
             (.commit live-index-tx)
 

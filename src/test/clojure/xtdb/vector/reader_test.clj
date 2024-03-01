@@ -64,8 +64,8 @@
                                                               (types/col-type->field :utf8)
                                                               (types/col-type->field :absent))
                                                (types/->field "toto" #xt.arrow/type :union false
-                                                              (types/col-type->field :keyword)
-                                                              (types/col-type->field :absent))))
+                                                              (types/col-type->field :absent)
+                                                              (types/col-type->field :keyword))))
                  (.getField (.colWriter rel-wtr3 "my-column"))))))
 
     (t/testing "unions"
@@ -178,7 +178,7 @@
           (doto (.writeLong 42)))
       (t/is (thrown-with-msg?
              RuntimeException
-             #"Can not copy from vector of .* to ListVector"
+             #"illegal copy src vector"
              (.rowCopier list-wrt duv)))))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)
@@ -206,7 +206,7 @@
           (doto (.writeLong 42)))
       (t/is (thrown-with-msg?
              RuntimeException
-             #"Can not copy from vector of .* to StructVector"
+             #"illegal copy src vector"
              (.rowCopier struct-wrt duv)))))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)
@@ -231,9 +231,9 @@
                                                     (types/col-type->field :i64)) tu/*allocator*)]
     (let [set-wrt (vw/->writer set-vec)]
       (vw/write-value! #{1 2 3} set-wrt)
-      (.writeObject set-wrt #{1 2 3})
+      (vw/write-value! #{4 5 6} set-wrt)
 
-      (t/is (= [#{1 2 3} #{1 2 3}]
+      (t/is (= [#{1 2 3} #{4 5 6}]
                (tu/vec->vals (vw/vec-wtr->rdr  set-wrt))))
 
       (let [pos (IVectorPosition/build)]

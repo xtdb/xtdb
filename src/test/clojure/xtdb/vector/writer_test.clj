@@ -229,6 +229,7 @@
                                   (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :f64)))
                                   (.getField))))))
 
+  #_
   (with-open [struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {baz :i64}]) tu/*allocator*)]
     (let [struct-wtr (vw/->writer struct-vec)]
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false

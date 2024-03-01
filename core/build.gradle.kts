@@ -46,6 +46,8 @@ dependencies {
     api("commons-codec", "commons-codec", "1.15")
     api("com.carrotsearch", "hppc", "0.9.1")
 
+    api("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
+
     // monitoring
     api("io.micrometer", "micrometer-core", "1.12.2")
     api("io.micrometer", "micrometer-registry-prometheus", "1.12.2")

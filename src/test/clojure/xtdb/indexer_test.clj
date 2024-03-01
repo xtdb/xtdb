@@ -215,20 +215,23 @@
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
         tx-ops [[:put-docs :xt_docs {:xt/id "foo"
-                                :list [12.0 "foo"]}]
+                                     :list [12.0 "foo"]}]
                 [:put-docs :xt_docs {:xt/id 24}]
                 [:put-docs :xt_docs {:xt/id "bar"
-                                :list [#inst "2020-01-01" false]}]
+                                     :list [#inst "2020-01-01" false]}]
                 [:put-docs :xt_docs {:xt/id :baz
-                                :struct {:a 1, :b "b"}}]
+                                     :struct {:a 1, :b "b"}}]
                 [:put-docs :xt_docs {:xt/id 52}]
                 [:put-docs :xt_docs {:xt/id :quux
-                                :struct {:a true, :c "c"}}]]]
+                                     :struct {:a true, :c "c"}}]]]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (-> (xt/submit-tx node tx-ops)
-          (tu/then-await-tx node (Duration/ofMillis 2000)))
+    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+      (try
+        (-> (xt/submit-tx node tx-ops)
+            (tu/then-await-tx node (Duration/ofMillis 2000)))
+        (catch Throwable t
+          (throw (.getCause (.getCause t)))))
 
       (tu/finish-chunk! node)
 

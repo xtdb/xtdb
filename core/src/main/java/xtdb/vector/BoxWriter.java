@@ -54,8 +54,8 @@ abstract class BoxWriter implements IValueWriter {
     }
 
     @Override
-    public void writeObject(@Nullable Object v) {
-        box().writeObject(v);
+    public void writeObject(@Nullable Object obj) {
+        box().writeObject(obj);
     }
 
     @Override

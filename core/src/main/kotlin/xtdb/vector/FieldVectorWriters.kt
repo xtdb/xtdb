@@ -2,17 +2,31 @@
 
 package xtdb.vector
 
+import clojure.lang.Keyword
 import org.apache.arrow.vector.*
 import org.apache.arrow.vector.compare.VectorVisitor
 import org.apache.arrow.vector.complex.*
+import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.ArrowType.Union
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.toLeg
 import xtdb.vector.extensions.*
 import java.math.BigDecimal
+import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import kotlin.text.Charsets.UTF_8
 import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
+
+private val UNION_FIELD_TYPE = FieldType.notNullable(Union(UnionMode.Dense, null))
+
+fun interface FieldChangeListener {
+    fun notify(f: Field)
+}
+
+private operator fun FieldChangeListener?.invoke(f: Field) = this?.notify(f)
 
 private fun nullToVecCopier(dest: IVectorWriter): IRowCopier {
     val wp = dest.writerPosition()
@@ -24,6 +38,14 @@ private fun duvToVecCopier(dest: IVectorWriter, src: DenseUnionVector): IRowCopi
     return IRowCopier { srcIdx -> copiers[src.getTypeId(srcIdx).toInt()].copyRow(src.getOffset(srcIdx)) }
 }
 
+private fun IVectorWriter.monoLegWriter(leg: ArrowType): IVectorWriter {
+    if ((leg == NULL_TYPE && field.isNullable) || leg == field.type) return this
+    throw IllegalArgumentException("arrow-type mismatch: got <${field.type}>, requested <$leg>")
+}
+
+private data class InvalidCopySourceException(val src: Field, val dest: Field) :
+    IllegalArgumentException("illegal copy src vector")
+
 abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
 
     protected val wp = IVectorPosition.build(vector.valueCount)
@@ -32,19 +54,17 @@ abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
 
     override fun writerPosition() = wp
 
-    override fun legWriter(leg: ArrowType): IVectorWriter {
-        if ((leg == NULL_TYPE && field.isNullable) || leg == field.type) return this
-        throw IllegalArgumentException("arrow-type mismatch: got <${field.type}>, requested <$leg>")
-    }
+    override fun legWriter(leg: ArrowType) = monoLegWriter(leg)
 
     override fun rowCopier(src: ValueVector): IRowCopier {
-        return when (src) {
-            is NullVector -> nullToVecCopier(this)
-            is DenseUnionVector -> duvToVecCopier(this, src)
+        return when {
+            src is NullVector -> nullToVecCopier(this)
+            src is DenseUnionVector -> duvToVecCopier(this, src)
+            src.javaClass != vector.javaClass -> throw InvalidCopySourceException(src.field, field)
             else -> IRowCopier { srcIdx ->
-                val pos = wp.getPositionAndIncrement()
-                this.vector.copyFromSafe(srcIdx, pos, src)
-                pos
+                wp.getPositionAndIncrement().also { pos ->
+                    vector.copyFromSafe(srcIdx, pos, src)
+                }
             }
         }
     }
@@ -57,36 +77,43 @@ class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vec
 
 private class BitVectorWriter(override val vector: BitVector) : ScalarVectorWriter(vector) {
     override fun writeBoolean(v: Boolean) = vector.setSafe(wp.getPositionAndIncrement(), if (v) 1 else 0)
+    override fun writeObject(obj: Any?) = writeBoolean(obj as Boolean)
     override fun writeValue0(v: IValueReader) = writeBoolean(v.readBoolean())
 }
 
 private class TinyIntVectorWriter(override val vector: TinyIntVector) : ScalarVectorWriter(vector) {
     override fun writeByte(v: Byte) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeObject(obj: Any?) = writeByte(obj as Byte)
     override fun writeValue0(v: IValueReader) = writeByte(v.readByte())
 }
 
 private class SmallIntVectorWriter(override val vector: SmallIntVector) : ScalarVectorWriter(vector) {
     override fun writeShort(v: Short) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeObject(obj: Any?) = writeShort(obj as Short)
     override fun writeValue0(v: IValueReader) = writeShort(v.readShort())
 }
 
 private class IntVectorWriter(override val vector: IntVector) : ScalarVectorWriter(vector) {
     override fun writeInt(v: Int) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeObject(obj: Any?) = writeInt(obj as Int)
     override fun writeValue0(v: IValueReader) = writeInt(v.readInt())
 }
 
 private class BigIntVectorWriter(override val vector: BigIntVector) : ScalarVectorWriter(vector) {
     override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeObject(obj: Any?) = writeLong(obj as Long)
     override fun writeValue0(v: IValueReader) = writeLong(v.readLong())
 }
 
 private class Float4VectorWriter(override val vector: Float4Vector) : ScalarVectorWriter(vector) {
     override fun writeFloat(v: Float) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeObject(obj: Any?) = writeFloat(obj as Float)
     override fun writeValue0(v: IValueReader) = writeFloat(v.readFloat())
 }
 
 private class Float8VectorWriter(override val vector: Float8Vector) : ScalarVectorWriter(vector) {
     override fun writeDouble(v: Double) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeObject(obj: Any?) = writeDouble(obj as Double)
     override fun writeValue0(v: IValueReader) = writeDouble(v.readDouble())
 }
 
@@ -128,9 +155,9 @@ private class TimeNanoVectorWriter(override val vector: TimeNanoVector) : Scalar
 }
 
 private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVectorWriter(vector) {
-    override fun writeObject(v: Any?) {
-        require(v is BigDecimal)
-        vector.setSafe(wp.getPositionAndIncrement(), v.setScale(vector.scale))
+    override fun writeObject(obj: Any?) {
+        require(obj is BigDecimal)
+        vector.setSafe(wp.getPositionAndIncrement(), obj.setScale(vector.scale))
     }
 
     override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
@@ -147,19 +174,19 @@ private operator fun PeriodDuration.component2() = duration
 private class IntervalYearVectorWriter(override val vector: IntervalYearVector) : ScalarVectorWriter(vector) {
     override fun writeInt(v: Int) = vector.setSafe(wp.getPositionAndIncrement(), v)
 
-    override fun writeObject(v: Any?) {
-        require(v is PeriodDuration)
-        writeInt(v.period.toTotalMonths().toInt())
+    override fun writeObject(obj: Any?) {
+        require(obj is PeriodDuration)
+        writeInt(obj.period.toTotalMonths().toInt())
     }
 
     override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
 }
 
 private class IntervalDayVectorWriter(override val vector: IntervalDayVector) : ScalarVectorWriter(vector) {
-    override fun writeObject(v: Any?) {
-        require(v is PeriodDuration)
+    override fun writeObject(obj: Any?) {
+        require(obj is PeriodDuration)
 
-        val (p, d) = v
+        val (p, d) = obj
         require(p.years == 0 && p.months == 0)
 
         vector.setSafe(
@@ -173,9 +200,9 @@ private class IntervalDayVectorWriter(override val vector: IntervalDayVector) : 
 }
 
 private class IntervalMdnVectorWriter(override val vector: IntervalMonthDayNanoVector) : ScalarVectorWriter(vector) {
-    override fun writeObject(v: Any?) {
-        require(v is PeriodDuration)
-        val (p, d) = v
+    override fun writeObject(obj: Any?) {
+        require(obj is PeriodDuration)
+        val (p, d) = obj
 
         vector.setSafe(
             wp.getPositionAndIncrement(),
@@ -199,9 +226,9 @@ private class FixedSizeBinaryVectorWriter(override val vector: FixedSizeBinaryVe
         v.position(pos)
     }
 
-    override fun writeObject(v: Any?) {
-        require(v is ByteArray)
-        writeBytes(ByteBuffer.wrap(v))
+    override fun writeObject(obj: Any?) {
+        require(obj is ByteArray)
+        writeBytes(ByteBuffer.wrap(obj))
     }
 
     override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
@@ -221,16 +248,20 @@ abstract class VariableWidthVectorWriter(vector: BaseVariableWidthVector) : Scal
 
 private class VarCharVectorWriter(override val vector: VarCharVector) : VariableWidthVectorWriter(vector) {
 
-    override fun writeObject(v: Any?) {
-        require(v is CharSequence)
-        writeBytes(UTF_8.newEncoder().encode(CharBuffer.wrap(v)))
+    override fun writeObject(obj: Any?) {
+        val str: CharSequence = when(obj) {
+            is Keyword -> obj.sym.toString()
+            else -> obj.toString()
+        }
+
+        writeBytes(UTF_8.newEncoder().encode(CharBuffer.wrap(str)))
     }
 }
 
 private class VarBinaryVectorWriter(override val vector: VarBinaryVector) : VariableWidthVectorWriter(vector) {
-    override fun writeObject(v: Any?) {
-        require(v is ByteArray)
-        writeBytes(ByteBuffer.wrap(v))
+    override fun writeObject(obj: Any?) {
+        require(obj is ByteArray)
+        writeBytes(ByteBuffer.wrap(obj))
     }
 
     override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
@@ -250,8 +281,18 @@ class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private v
     override fun writeFloat(v: Float) = inner.writeFloat(v)
     override fun writeDouble(v: Double) = inner.writeDouble(v)
     override fun writeBytes(v: ByteBuffer) = inner.writeBytes(v)
-    override fun writeObject(v: Any?) = inner.writeObject(v)
+    override fun writeObject(obj: Any?) = inner.writeObject(obj)
     override fun writeValue0(v: IValueReader) = inner.writeValue(v)
+
+    override fun structKeyWriter(key: String) = inner.structKeyWriter(key)
+    override fun structKeyWriter(key: String, fieldType: FieldType) = inner.structKeyWriter(key, fieldType)
+    override fun startStruct() = inner.startStruct()
+    override fun endStruct() = inner.endStruct()
+
+    override fun listElementWriter() = inner.listElementWriter()
+    override fun listElementWriter(fieldType: FieldType) = inner.listElementWriter(fieldType)
+    override fun startList() = inner.startList()
+    override fun endList() = inner.endList()
 
     override fun rowCopier(src: ValueVector): IRowCopier = when (src) {
         is NullVector -> nullToVecCopier(this)
@@ -261,8 +302,394 @@ class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private v
     }
 }
 
-object WriterForVectorVisitor : VectorVisitor<IVectorWriter, Nothing?> {
-    override fun visit(vec: BaseFixedWidthVector, value: Nothing?) = when (vec) {
+private data class FieldMismatch(val expected: FieldType, val given: FieldType) :
+    IllegalArgumentException("Field type mismatch")
+
+private fun IVectorWriter.checkFieldType(given: FieldType) {
+    val expected = field.fieldType
+    if (!((expected.type == NULL_TYPE && given.type == NULL_TYPE) || (expected == given)))
+        throw FieldMismatch(expected, given)
+}
+
+class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
+    private val wp = IVectorPosition.build(vector.valueCount)
+    override var field: Field = vector.field
+
+    private var elWriter = writerFor(vector.dataVector) { notifyDataVec() }
+
+    private fun notifyDataVec() {
+        field = vector.field
+        notify(field)
+    }
+
+    override fun writerPosition() = wp
+
+    override fun clear() {
+        super.clear()
+        elWriter.clear()
+    }
+
+    override fun listElementWriter(): IVectorWriter =
+        if (vector.dataVector is NullVector) listElementWriter(UNION_FIELD_TYPE) else elWriter
+
+    override fun listElementWriter(fieldType: FieldType): IVectorWriter {
+        val res = vector.addOrGetVector<FieldVector>(fieldType)
+        if (!res.isCreated) return elWriter
+
+        notifyDataVec()
+        elWriter = writerFor(res.vector) { notifyDataVec() }
+        return elWriter
+    }
+
+    override fun startList() {
+        vector.startNewValue(wp.position)
+    }
+
+    override fun endList() {
+        val pos = wp.getPositionAndIncrement()
+        val endPos = elWriter.writerPosition().position
+        vector.endValue(pos, endPos - vector.getElementStartIndex(pos))
+    }
+
+    private inline fun writeList(f: () -> Unit) {
+        startList(); f(); endList()
+    }
+
+    override fun writeObject(obj: Any?) {
+        val elWtr = listElementWriter()
+
+        writeList {
+            when (obj) {
+                is IListValueReader -> {
+                    for (i in 0..<obj.size()) {
+                        elWtr.writeValue(obj.nth(i))
+                    }
+                }
+
+                is Set<*> -> obj.forEach { elWtr.writeObject(it) }
+
+                else -> throw IllegalArgumentException("list write-object: ${obj?.javaClass}")
+            }
+        }
+    }
+
+    override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
+
+    override fun legWriter(leg: ArrowType) = monoLegWriter(leg)
+
+    override fun rowCopier(src: ValueVector) = when (src) {
+        is NullVector -> nullToVecCopier(this)
+        is DenseUnionVector -> duvToVecCopier(this, src)
+        is ListVector -> {
+            val innerCopier = listElementWriter().rowCopier(src.dataVector)
+
+            IRowCopier { srcIdx ->
+                wp.position.also {
+                    if (src.isNull(srcIdx)) writeNull()
+                    else writeList {
+                        for (i in src.getElementStartIndex(srcIdx)..<src.getElementEndIndex(srcIdx)) {
+                            innerCopier.copyRow(i)
+                        }
+                    }
+                }
+            }
+        }
+
+        else -> throw InvalidCopySourceException(src.field, field)
+    }
+}
+
+private data class PopulateWithAbsentsException(val field: Field, val expectedPos: Int, val actualPos: Int) :
+    IllegalStateException("populate-with-absents needs a nullable or a union underneath")
+
+private fun IVectorWriter.populateWithAbsents(pos: Int) {
+    val absents = pos - writerPosition().position
+    if (absents > 0) {
+        val field = this.field
+        val absentWriter = when {
+            field.type == UNION_FIELD_TYPE.type -> legWriter(AbsentType)
+            field.isNullable -> this
+            else -> throw PopulateWithAbsentsException(field, pos, writerPosition().position)
+        }
+
+        repeat(absents) { absentWriter.writeNull() }
+    }
+}
+
+class StructVectorWriter(override val vector: StructVector, private val notify: FieldChangeListener?) : IVectorWriter,
+    Iterable<Map.Entry<String, IVectorWriter>> {
+    private val wp = IVectorPosition.build(vector.valueCount)
+    override var field: Field = vector.field
+
+    override fun writerPosition() = wp
+
+    private fun writerFor(vector: ValueVector) = writerFor(vector) { field = this.vector.field; notify(field) }
+
+    private val writers: MutableMap<String, IVectorWriter> =
+        vector.associateTo(HashMap()) { childVec -> childVec.name to writerFor(childVec) }
+
+    override fun iterator() = writers.iterator()
+
+    override fun clear() {
+        super.clear()
+        writers.forEach { (_, w) -> w.clear() }
+    }
+
+    override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
+
+    override fun writeNull() {
+        super.writeNull()
+        writers.values.forEach(IVectorWriter::writeNull)
+    }
+
+    override fun writeObject(obj: Any?) {
+        require(obj is Map<*, *>) { "struct write-object: ${obj?.javaClass}" }
+
+        writeStruct {
+            for ((k, v) in obj) {
+                structKeyWriter(k as String).writeValue(v as IValueReader)
+            }
+        }
+    }
+
+    override fun structKeyWriter(key: String): IVectorWriter = writers[key] ?: structKeyWriter(key, UNION_FIELD_TYPE)
+
+    override fun structKeyWriter(key: String, fieldType: FieldType): IVectorWriter {
+        val w = writers[key]
+        if (w != null) return w.also { it.checkFieldType(fieldType) }
+
+        return writerFor(vector.addOrGet(key, fieldType, FieldVector::class.java))
+            .also {
+                field = vector.field; notify(field)
+                writers[key] = it;
+                it.populateWithAbsents(wp.position)
+            }
+    }
+
+    override fun startStruct() = vector.setIndexDefined(wp.position)
+
+    override fun endStruct() {
+        val pos = wp.getPositionAndIncrement()
+        writers.values.forEach { it.populateWithAbsents(pos + 1) }
+    }
+
+    private inline fun writeStruct(f: () -> Unit) {
+        startStruct(); f(); endStruct()
+    }
+
+    override fun legWriter(leg: ArrowType) = monoLegWriter(leg)
+
+    override fun rowCopier(src: ValueVector) = when (src) {
+        is NullVector -> nullToVecCopier(this)
+        is DenseUnionVector -> duvToVecCopier(this, src)
+        is StructVector -> {
+            val innerCopiers = src.map { structKeyWriter(it.name).rowCopier(it) }
+            IRowCopier { srcIdx ->
+                wp.position.also {
+                    if (src.isNull(srcIdx))
+                        writeNull()
+                    else writeStruct {
+                        innerCopiers.forEach { it.copyRow(srcIdx) }
+                    }
+                }
+            }
+        }
+
+        else -> throw InvalidCopySourceException(src.field, field)
+    }
+}
+
+class DenseUnionVectorWriter(
+    override val vector: DenseUnionVector,
+    private val notify: FieldChangeListener?,
+) : IVectorWriter {
+    private val wp = IVectorPosition.build(vector.valueCount)
+    override var field: Field = vector.field
+
+    private inner class ChildWriter(private val inner: IVectorWriter, private val typeId: Byte) : IVectorWriter {
+        override val vector get() = inner.vector
+        private val parentDuv get() = this@DenseUnionVectorWriter.vector
+        private val parentWP get() = this@DenseUnionVectorWriter.wp
+
+        override fun writerPosition() = inner.writerPosition()
+
+        override fun clear() = inner.clear()
+
+        private fun writeValue() {
+            val pos = parentWP.getPositionAndIncrement()
+            parentDuv.setTypeId(pos, typeId)
+            parentDuv.setOffset(pos, this.writerPosition().position)
+        }
+
+        override fun writeNull() {
+            writeValue(); inner.writeNull()
+        }
+
+        override fun writeBoolean(v: Boolean) {
+            writeValue(); inner.writeBoolean(v)
+        }
+
+        override fun writeByte(v: Byte) {
+            writeValue(); inner.writeByte(v)
+        }
+
+        override fun writeShort(v: Short) {
+            writeValue(); inner.writeShort(v)
+        }
+
+        override fun writeInt(v: Int) {
+            writeValue(); inner.writeInt(v)
+        }
+
+        override fun writeLong(v: Long) {
+            writeValue(); inner.writeLong(v)
+        }
+
+        override fun writeFloat(v: Float) {
+            writeValue(); inner.writeFloat(v)
+        }
+
+        override fun writeDouble(v: Double) {
+            writeValue(); inner.writeDouble(v)
+        }
+
+        override fun writeBytes(v: ByteBuffer) {
+            writeValue(); inner.writeBytes(v)
+        }
+
+        override fun writeObject(obj: Any?) {
+            writeValue(); inner.writeObject(obj)
+        }
+
+        override fun structKeyWriter(key: String) = inner.structKeyWriter(key)
+        override fun structKeyWriter(key: String, fieldType: FieldType) = inner.structKeyWriter(key, fieldType)
+
+        override fun startStruct() = inner.startStruct()
+
+        override fun endStruct() {
+            writeValue(); inner.endStruct()
+        }
+
+        override fun listElementWriter() = inner.listElementWriter()
+        override fun listElementWriter(fieldType: FieldType) = inner.listElementWriter(fieldType)
+
+        override fun startList() = inner.startList()
+
+        override fun endList() {
+            writeValue(); inner.endList()
+        }
+
+        override fun writeValue0(v: IValueReader) {
+            writeValue(); inner.writeValue0(v)
+        }
+
+        override fun rowCopier(src: ValueVector): IRowCopier {
+            val innerCopier = inner.rowCopier(src)
+
+            return IRowCopier { srcIdx ->
+                writeValue()
+                innerCopier.copyRow(srcIdx)
+            }
+        }
+
+        override fun legWriter(leg: ArrowType) = inner.legWriter(leg)
+        override fun legWriter(leg: Keyword) = inner.legWriter(leg)
+        override fun legWriter(leg: Keyword, fieldType: FieldType) = inner.legWriter(leg, fieldType)
+    }
+
+    private fun writerFor(child: ValueVector, typeId: Byte) =
+        ChildWriter(writerFor(child) { field = vector.field; notify(field) }, typeId)
+
+    private val writersByLeg: MutableMap<Keyword, IVectorWriter> = vector.mapIndexed { typeId, child ->
+        Keyword.intern(child.name) to writerFor(child, typeId.toByte())
+    }.toMap(HashMap())
+
+    override fun writerPosition() = wp
+
+    override fun clear() {
+        super.clear()
+        writersByLeg.values.forEach(IVectorWriter::clear)
+    }
+
+    override fun writeNull() {
+        // DUVs can't technically contain null, but when they're stored within a nullable struct/list vector,
+        // we don't have anything else to write here :/
+
+        wp.getPositionAndIncrement()
+    }
+
+    // DUV overrides the nullable one because DUVs themselves can't be null.
+    override fun writeValue(v: IValueReader) {
+        legWriter(v.leg!!).writeValue(v)
+    }
+
+    override fun writeValue0(v: IValueReader) = throw UnsupportedOperationException()
+
+    private data class MissingLegException(val available: Set<Keyword>, val requested: Keyword) : NullPointerException()
+
+    override fun legWriter(leg: Keyword) =
+        writersByLeg[leg] ?: throw MissingLegException(writersByLeg.keys, leg)
+
+    @Suppress("NAME_SHADOWING")
+    override fun legWriter(leg: Keyword, fieldType: FieldType): IVectorWriter {
+        val isNew = leg !in writersByLeg
+
+        val w: IVectorWriter = writersByLeg.computeIfAbsent(leg) { leg ->
+            val field = Field(leg.sym.name, fieldType, emptyList())
+            val typeId = vector.registerNewTypeId(field)
+
+            val child = vector.addVector(typeId, fieldType.createNewSingleVector(field.name, vector.allocator, null))
+            writerFor(child, typeId)
+        }
+
+        if (isNew) {
+            field = vector.field
+            notify(field)
+        } else {
+            w.checkFieldType(fieldType)
+        }
+
+        return w
+    }
+
+    override fun legWriter(leg: ArrowType) = legWriter(leg.toLeg(), FieldType.notNullable(leg))
+
+    private fun duvRowCopier(src: DenseUnionVector): IRowCopier {
+        val copierMapping = src.map { childVec ->
+            val childField = childVec.field
+            legWriter(Keyword.intern(childField.name), childField.fieldType).rowCopier(childVec)
+        }
+
+        return IRowCopier { srcIdx ->
+            copierMapping[src.getTypeId(srcIdx).also { check(it >= 0) }.toInt()]
+                .copyRow(src.getOffset(srcIdx))
+        }
+    }
+
+    private fun rowCopier0(src: ValueVector): IRowCopier {
+        val srcField = src.field
+        val isNullable = srcField.isNullable
+
+        return object : IRowCopier {
+            private val notNullCopier by lazy { legWriter(srcField.type).rowCopier(src) }
+            private val nullCopier by lazy { legWriter(NULL_TYPE).rowCopier(src) }
+
+            override fun copyRow(sourceIdx: Int): Int {
+                return if (isNullable && src.isNull(sourceIdx)) {
+                    nullCopier.copyRow(sourceIdx)
+                } else {
+                    notNullCopier.copyRow(sourceIdx)
+                }
+            }
+        }
+    }
+
+    override fun rowCopier(src: ValueVector) =
+        if (src is DenseUnionVector) duvRowCopier(src) else rowCopier0(src)
+}
+
+private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChangeListener?> {
+    override fun visit(vec: BaseFixedWidthVector, notify: FieldChangeListener?) = when (vec) {
         is BitVector -> BitVectorWriter(vec)
         is TinyIntVector -> TinyIntVectorWriter(vec)
         is SmallIntVector -> SmallIntVectorWriter(vec)
@@ -294,32 +721,43 @@ object WriterForVectorVisitor : VectorVisitor<IVectorWriter, Nothing?> {
         else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
     }
 
-    override fun visit(vec: BaseVariableWidthVector, value: Nothing?) = when (vec) {
+    override fun visit(vec: BaseVariableWidthVector, notify: FieldChangeListener?) = when (vec) {
         is VarCharVector -> VarCharVectorWriter(vec)
         is VarBinaryVector -> VarBinaryVectorWriter(vec)
 
         else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
     }
 
-    override fun visit(vec: BaseLargeVariableWidthVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
-    override fun visit(vec: ListVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
-    override fun visit(vec: FixedSizeListVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
-    override fun visit(vec: LargeListVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
-    override fun visit(vec: NonNullableStructVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
-    override fun visit(vec: UnionVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
-    override fun visit(vec: DenseUnionVector, value: Nothing?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: BaseLargeVariableWidthVector, notify: FieldChangeListener?): IVectorWriter =
+        TODO("Not yet implemented")
 
-    override fun visit(vec: NullVector, value: Nothing?) = NullVectorWriter(vec)
+    override fun visit(vec: ListVector, notify: FieldChangeListener?) = ListVectorWriter(vec, notify)
+    override fun visit(vec: FixedSizeListVector, notify: FieldChangeListener?): IVectorWriter =
+        TODO("Not yet implemented")
 
-    override fun visit(vec: ExtensionTypeVector<*>, value: Nothing?) = when (vec) {
+    override fun visit(vec: LargeListVector, notify: FieldChangeListener?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: NonNullableStructVector, notify: FieldChangeListener?): IVectorWriter = when (vec) {
+        is StructVector -> StructVectorWriter(vec, notify)
+        else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
+    }
+
+    override fun visit(vec: UnionVector, notify: FieldChangeListener?): IVectorWriter = TODO("Not yet implemented")
+    override fun visit(vec: DenseUnionVector, notify: FieldChangeListener?): IVectorWriter =
+        DenseUnionVectorWriter(vec, notify)
+
+    override fun visit(vec: NullVector, notify: FieldChangeListener?) = NullVectorWriter(vec)
+
+    override fun visit(vec: ExtensionTypeVector<*>, notify: FieldChangeListener?) = when (vec) {
         is KeywordVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
         is UuidVector -> ExtensionVectorWriter(vec, FixedSizeBinaryVectorWriter(vec.underlyingVector))
         is UriVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
         is TransitVector -> ExtensionVectorWriter(vec, VarBinaryVectorWriter(vec.underlyingVector))
         is AbsentVector -> ExtensionVectorWriter(vec, NullVectorWriter(vec.underlyingVector))
+        is SetVector -> ExtensionVectorWriter(vec, ListVectorWriter(vec.underlyingVector) { notify(vec.field) })
         else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
     }
 }
 
-
-fun writerFor(vec: FieldVector): IVectorWriter = vec.accept(WriterForVectorVisitor, null)
+@JvmOverloads
+fun writerFor(vec: ValueVector, notify: FieldChangeListener? = null): IVectorWriter =
+    vec.accept(WriterForVectorVisitor, notify)

@@ -13,7 +13,7 @@ interface IValueWriter {
     fun writeFloat(v: Float)
     fun writeDouble(v: Double)
     fun writeBytes(v: ByteBuffer)
-    fun writeObject(v: Any?)
+    fun writeObject(obj: Any?)
 
     fun legWriter(leg: Keyword): IValueWriter
 }

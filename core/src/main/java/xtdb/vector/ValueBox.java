@@ -120,8 +120,8 @@ public class ValueBox implements IValueWriter, IValueReader {
     }
 
     @Override
-    public void writeObject(@Nullable Object v) {
-        this.obj = v;
+    public void writeObject(@Nullable Object obj) {
+        this.obj = obj;
     }
 
     @Override
