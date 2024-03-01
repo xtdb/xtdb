@@ -388,13 +388,18 @@ correlation_name
     ;
 
 character_string_type
-    : 'CHARACTER' [ <left_paren> character_length <right_paren> ]
+    : 'VARCHAR'
+    ;
+
+(* Currently unsupported character_string_type 
+    | 'VARCHAR'  [ <left_paren> character_length <right_paren> ] 
+    | 'CHARACTER' [ <left_paren> character_length <right_paren> ]
     | 'CHAR' [ <left_paren> character_length <right_paren> ]
     | 'CHARACTER' 'VARYING' <left_paren> character_length <right_paren>
     | 'CHAR' 'VARYING' <left_paren> character_length <right_paren>
-    | 'VARCHAR' [ <left_paren> character_length <right_paren> ]
     | character_large_object_type
-    ;
+*) 
+    
 
 character_large_object_type
     : 'CHARACTER' 'LARGE' 'OBJECT' [ <left_paren> character_large_object_length <right_paren> ]

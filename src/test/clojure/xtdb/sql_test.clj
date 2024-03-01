@@ -837,10 +837,7 @@
            (xt/q tu/*node* "SELECT CAST(DATE '2021-10-21' AS VARCHAR) as string FROM (VALUES 1) AS x")))
 
   (t/is (= [{:string "12:00:01"}]
-           (xt/q tu/*node* "SELECT CAST(TIME '12:00:01' AS VARCHAR) as string FROM (VALUES 1) AS x")))
-  
-  (t/is (= [{:string "2021"}]
-           (xt/q tu/*node* "SELECT CAST(TIMESTAMP '2021-10-21T12:34:01Z' AS VARCHAR(4)) as string FROM (VALUES 1) AS x"))))
+           (xt/q tu/*node* "SELECT CAST(TIME '12:00:01' AS VARCHAR) as string FROM (VALUES 1) AS x"))))
 
 (t/deftest test-expr-in-equi-join
   (t/is

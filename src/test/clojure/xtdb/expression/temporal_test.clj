@@ -255,10 +255,7 @@
           (t/is (= "2022-08-01T05:34:56.789" (test-cast #time/date-time "2022-08-01T05:34:56.789" :utf8))))
 
         (t/testing "tstz"
-          (t/is (= "2022-08-01T05:34:56.789Z[UTC]" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8))))
-
-        (t/testing "with string length limit"
-          (t/is (= "2022" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8 {:length 4}))))))))
+          (t/is (= "2022-08-01T05:34:56.789Z[UTC]" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8))))))))
 
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")

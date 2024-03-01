@@ -339,41 +339,40 @@
                             (local-time->nano))
                       (with-conversion :nano tgt-tsunit)))})
 
-(defn string->byte-buffer [^String s length]
-  (let [s (if length (subs s 0 length) s)]
-    (ByteBuffer/wrap (.getBytes s StandardCharsets/UTF_8))))
+(defn string->byte-buffer [^String s]
+  (ByteBuffer/wrap (.getBytes s StandardCharsets/UTF_8)))
 
-(defmethod expr/codegen-cast [:timestamp-local :utf8] [{[_ts ts-unit] :source-type {:keys [length]} :cast-opts}]
+(defmethod expr/codegen-cast [:timestamp-local :utf8] [{[_ts ts-unit] :source-type}]
   {:return-type :utf8
    :->call-code (fn [[ts]]
                   `(-> ~(ts->ldt ts ts-unit)
                        (.toString)
-                       (string->byte-buffer ~length)))})
+                       (string->byte-buffer)))})
 
-(defmethod expr/codegen-cast [:timestamp-tz :utf8] [{[_ts ts-unit tz] :source-type {:keys [length]} :cast-opts}]
+(defmethod expr/codegen-cast [:timestamp-tz :utf8] [{[_ts ts-unit tz] :source-type}]
   (let [zone-id-sym (gensym 'zone-id)]
     {:return-type :utf8
      :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
      :->call-code (fn [[ts]]
                     `(-> ~(ts->zdt ts ts-unit zone-id-sym)
                          (.toString)
-                         (string->byte-buffer ~length)))}))
+                         (string->byte-buffer)))}))
 
-(defmethod expr/codegen-cast [:date :utf8] [{{:keys [length]} :cast-opts}]
+(defmethod expr/codegen-cast [:date :utf8] [_]
   ;; FIXME this assumes date-unit :day
   {:return-type :utf8
    :->call-code (fn [[x]]
                   `(-> (LocalDate/ofEpochDay ~x)
                        (.toString)
-                       (string->byte-buffer ~length)))})
+                       (string->byte-buffer)))})
 
-(defmethod expr/codegen-cast [:time-local :utf8] [{[_ t-unit] :source-type {:keys [length]} :cast-opts}]
+(defmethod expr/codegen-cast [:time-local :utf8] [{[_ t-unit] :source-type}]
   {:return-type :utf8
    :->call-code (fn [[t]]
                   `(-> ~(with-conversion t t-unit :nano)
                        (LocalTime/ofNanoOfDay)
                        (.toString)
-                       (string->byte-buffer ~length)))})
+                       (string->byte-buffer)))})
 
 ;; TODO - finish this
 (defmethod expr/parse-list-form  'cast-tstz [[_ expr opts] env]
