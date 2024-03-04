@@ -9,12 +9,13 @@
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
            [java.util ArrayList Arrays Comparator LinkedList PriorityQueue]
+           (java.util.function Predicate)
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb Compactor IBufferPool)
            xtdb.bitemporal.IPolygonReader
-           (xtdb.trie EventRowPointer HashTrieKt IDataRel)
+           (xtdb.trie EventRowPointer HashTrieKt IDataRel MergePlanTask)
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.IVectorWriter
@@ -55,15 +56,18 @@
 
         is-valid-ptr (ArrowBufPointer.)]
 
-    (doseq [{:keys [^bytes path mp-nodes]} (trie/->merge-plan segments
-                                                              {:path-pred (when path-filter
-                                                                            (let [path-len (alength path-filter)]
-                                                                              (fn [^bytes page-path]
-                                                                                (let [len (min path-len (alength page-path))]
-                                                                                  (Arrays/equals path-filter 0 len
-                                                                                                 page-path 0 len)))))})
-
-            :let [data-rdrs (mapv trie/load-data-page mp-nodes)
+    (doseq [^MergePlanTask merge-plan-task (HashTrieKt/toMergePlan segments
+                                                                   (when path-filter
+                                                                     (let [path-len (alength path-filter)]
+                                                                       (reify Predicate
+                                                                         (test [_ page-path]
+                                                                           (let [^bytes page-path page-path
+                                                                                 len (min path-len (alength page-path))]
+                                                                             (Arrays/equals path-filter 0 len
+                                                                                            page-path 0 len)))))))
+            :let [mp-nodes (.getMpNodes merge-plan-task)
+                  ^bytes path (.getPath merge-plan-task)
+                  data-rdrs (mapv trie/load-data-page mp-nodes)
                   merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
                   path (if (or (nil? path-filter)
                                (> (alength path) (alength path-filter)))

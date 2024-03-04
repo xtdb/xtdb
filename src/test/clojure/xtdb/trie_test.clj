@@ -6,7 +6,7 @@
             [xtdb.time :as time])
   (:import (org.apache.arrow.memory RootAllocator)
            org.apache.arrow.vector.VectorSchemaRoot
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
+           (xtdb.trie HashTrieKt ArrowHashTrie ArrowHashTrie$Leaf MergePlanNode MergePlanTask)))
 
 (deftest parses-trie-paths
   (letfn [(parse [trie-key]
@@ -19,7 +19,6 @@
 (deftest test-merge-plan-with-nil-nodes-2700
   (letfn [(->arrow-hash-trie [^VectorSchemaRoot meta-root]
             (ArrowHashTrie. (.getVector meta-root "nodes")))]
-
     (with-open [al (RootAllocator.)
                 t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
                                                           {Long/MAX_VALUE 3, (time/instant->micros (time/->instant #inst "2023-01-01")) 4}])
@@ -33,16 +32,20 @@
                 {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
                 {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
                 {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
-               (->> (trie/->merge-plan [nil
-                                        {:seg :t1, :trie (->arrow-hash-trie t1-root)}
-                                        {:seg :log, :trie (->arrow-hash-trie log-root)}
-                                        {:seg :log2, :trie (->arrow-hash-trie log2-root)}]
-                                       {})
-                    (map (fn [{:keys [path mp-nodes]}]
-                           {:path (vec path)
-                            :pages (mapv (fn [{:keys [segment ^ArrowHashTrie$Leaf node]}]
-                                           {:seg (:seg segment), :page-idx (.getDataPageIndex node)})
-                                         mp-nodes)}))
+               (->> (HashTrieKt/toMergePlan [nil
+                                             {:seg :t1, :trie (->arrow-hash-trie t1-root)}
+                                             {:seg :log, :trie (->arrow-hash-trie log-root)}
+                                             {:seg :log2, :trie (->arrow-hash-trie log2-root)}]
+                                            nil)
+                    (map (fn [^MergePlanTask merge-plan-node]
+                           (let [path (.getPath merge-plan-node)
+                                 mp-nodes (.getMpNodes merge-plan-node)]
+                             {:path (vec path)
+                              :pages (mapv (fn [^MergePlanNode merge-plan-node]
+                                             (let [segment (.getSegment merge-plan-node)
+                                                   ^ArrowHashTrie$Leaf node (.getNode merge-plan-node)]
+                                               {:seg (:seg segment), :page-idx (.getDataPageIndex node)}))
+                                           mp-nodes)})))
                     (sort-by :path)))))))
 
 (defn ->trie-file-name

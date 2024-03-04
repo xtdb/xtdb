@@ -7,5 +7,5 @@ interface ITableMetadata {
    fun metadataReader() : IVectorReader
    fun columnNames() : Set<String>
    fun rowIndex(columnName: String, pageIdx: Int) : Long
-   fun iidBloomBitmap(pageIdx: Int) : ImmutableRoaringBitmap
+   fun iidBloomBitmap(pageIdx: Int) : ImmutableRoaringBitmap?
 }

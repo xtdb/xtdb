@@ -6,21 +6,19 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (com.carrotsearch.hppc ObjectStack)
-           (java.lang AutoCloseable)
+  (:import (java.lang AutoCloseable)
            (java.nio ByteBuffer)
            (java.nio.file Path)
            java.security.MessageDigest
            (java.util ArrayList Arrays List)
            (java.util.concurrent.atomic AtomicInteger)
-           (java.util.function IntConsumer IntFunction Supplier)
-           [java.util.stream IntStream]
+           (java.util.function IntConsumer Supplier)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            org.apache.arrow.vector.types.UnionMode
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie$RecencyBranch ArrowHashTrie$IidBranch ArrowHashTrie$Leaf HashTrie HashTrie$Node HashTrieKt ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie MergePlanNode ArrowHashTrie$Leaf HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -348,64 +346,6 @@
 
       (mapv :file-path !current-trie-keys))))
 
-(defrecord MergePlanNode [segment node])
-(defrecord MergePlanTask [mp-nodes path])
-
-(defn ->merge-plan
-  "segments :: [Segment]
-     Segment :: {:keys [trie]} ;; and anything else you need - you'll get this back in `:leaf`
-       trie :: HashTrie
-
-  return :: (seq {:keys [path segments nodes]})"
-  ([segments] (->merge-plan segments {}))
-
-  ([segments {:keys [path-pred]}]
-   (let [results (ArrayList.)
-         stack (ObjectStack.)]
-
-     (when-let [init-mp-nodes (not-empty (into []
-                                               (keep (fn [{:keys [^HashTrie trie] :as segment}]
-                                                       (when trie (->MergePlanNode segment (.getRootNode trie)))))
-                                               segments))]
-       (.push stack (->MergePlanTask init-mp-nodes (byte-array 0))))
-
-     (while (not (.isEmpty stack))
-       (let [{:keys [mp-nodes ^bytes path] :as merge-plan-task} (.pop stack)]
-         (cond
-           ;; TODO apply recency filter
-           (some #(instance? ArrowHashTrie$RecencyBranch (.node ^MergePlanNode %)) mp-nodes)
-           (.push stack (->MergePlanTask (into []
-                                               (mapcat (fn [{:keys [segment ^HashTrie$Node node] :as mp-node}]
-                                                         (if-let [recencies (.getRecencies node)]
-                                                           (-> (IntStream/range 0 (alength recencies))
-                                                               (.mapToObj (reify IntFunction
-                                                                            (apply [_ idx]
-                                                                              (->MergePlanNode segment (.recencyNode node idx)))))
-                                                               (.toList))
-                                                           [mp-node])))
-                                               mp-nodes)
-                                         path))
-
-           (and path-pred (not (path-pred path))) nil
-
-           (some #(instance? ArrowHashTrie$IidBranch (.node ^MergePlanNode %)) mp-nodes)
-           (let [iid-children (mapv #(.getIidChildren ^HashTrie$Node (:node %)) mp-nodes)]
-             (dotimes [n HashTrie/LEVEL_WIDTH]
-               ;; do these in reverse order so that they're on the stack in path-prefix order
-               (let [bucket-idx (- (dec HashTrie/LEVEL_WIDTH) n)]
-                 (when-let [mp-nodes (into []
-                                           (keep-indexed (fn [mp-node-idx {:keys [segment ^HashTrie$Node node]}]
-                                                           (when-let [node (if-let [^objects node-children (nth iid-children mp-node-idx)]
-                                                                             (aget node-children bucket-idx)
-                                                                             node)]
-                                                             (->MergePlanNode segment node))))
-                                           mp-nodes)]
-                   (.push stack (->MergePlanTask mp-nodes (HashTrieKt/conjPath path (byte bucket-idx))))))))
-
-           :else (.add results merge-plan-task))))
-
-     results)))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel
   (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
@@ -460,5 +400,7 @@
       (cond-> arrow-data-rels
         live-table-wm (conj (->LiveDataRel (.liveRelation live-table-wm)))))))
 
-(defn load-data-page [{{:keys [^IDataRel data-rel]} :segment, trie-leaf :node}]
-  (.loadPage data-rel trie-leaf))
+(defn load-data-page [^MergePlanNode merge-plan-node]
+  (let [{:keys [^IDataRel data-rel]} (.getSegment merge-plan-node)
+        trie-leaf (.getNode merge-plan-node)]
+    (.loadPage data-rel trie-leaf)))
