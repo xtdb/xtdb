@@ -24,6 +24,7 @@
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
+           (xtdb.metadata ITableMetadata)
            xtdb.IBufferPool
            (xtdb.trie HashTrie ArrowHashTrie)
            (xtdb.vector IVectorReader IVectorWriter RelationReader)))
@@ -47,13 +48,6 @@
                                 (fn [^Field field]
                                   (TransitFactory/taggedValue "array" [(.getName field) (.getFieldType field) (.getChildren field)])))})
 (set! *unchecked-math* :warn-on-boxed)
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ITableMetadata
-  (^xtdb.vector.IVectorReader metadataReader [])
-  (^java.util.Set columnNames [])
-  (^Long rowIndex [^String columnName, ^int pageIdx])
-  (^org.roaringbitmap.buffer.ImmutableRoaringBitmap iidBloomBitmap [^int pageIdx]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IPageMetadataWriter
