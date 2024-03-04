@@ -1,7 +1,10 @@
+@file:JvmName("Types")
+
 package xtdb
 
 import clojure.lang.Keyword
 import com.github.benmanes.caffeine.cache.Caffeine
+import org.apache.arrow.vector.PeriodDuration
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.DateUnit.DAY
 import org.apache.arrow.vector.types.FloatingPointPrecision
@@ -10,9 +13,18 @@ import org.apache.arrow.vector.types.IntervalUnit
 import org.apache.arrow.vector.types.IntervalUnit.*
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
+import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
+import xtdb.types.ClojureForm
+import xtdb.types.IntervalDayTime
+import xtdb.types.IntervalMonthDayNano
+import xtdb.types.IntervalYearMonth
 import xtdb.vector.extensions.*
+import java.math.BigDecimal
+import java.net.URI
+import java.nio.ByteBuffer
+import java.time.*
 import java.util.*
 
 internal val String.asKeyword: Keyword get() = Keyword.intern(this)
@@ -30,7 +42,7 @@ private fun FloatingPointPrecision.toLeg() = when (this) {
     HALF -> "f16"; SINGLE -> "f32"; DOUBLE -> "f64"
 }
 
-private fun IntervalUnit.toLegPart() = when(this) {
+private fun IntervalUnit.toLegPart() = when (this) {
     YEAR_MONTH -> "year-month"
     DAY_TIME -> "day-time"
     MONTH_DAY_NANO -> "month-day-nano"
@@ -42,16 +54,16 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
     override fun visit(type: ArrowType.Null) = "null"
     override fun visit(type: ArrowType.Struct) = "struct"
     override fun visit(type: ArrowType.List) = "list"
-    override fun visit(type: ArrowType.LargeList) = TODO("Not yet implemented")
+    override fun visit(type: ArrowType.LargeList) = throw UnsupportedOperationException()
     override fun visit(type: ArrowType.FixedSizeList) = "fixed-size-list-${type.listSize}"
     override fun visit(type: ArrowType.Union) = "union"
     override fun visit(type: ArrowType.Map) = if (type.keysSorted) "map-sorted" else "map-unsorted"
-    override fun visit(type: ArrowType.Int) = "${if (type.isSigned) "i" else "u" }${type.bitWidth}"
+    override fun visit(type: ArrowType.Int) = "${if (type.isSigned) "i" else "u"}${type.bitWidth}"
     override fun visit(type: ArrowType.FloatingPoint) = type.precision.toLeg()
     override fun visit(type: ArrowType.Utf8) = "utf8"
-    override fun visit(type: ArrowType.LargeUtf8) = TODO("Not yet implemented")
+    override fun visit(type: ArrowType.LargeUtf8) = throw UnsupportedOperationException()
     override fun visit(type: ArrowType.Binary) = "binary"
-    override fun visit(type: ArrowType.LargeBinary) = TODO("Not yet implemented")
+    override fun visit(type: ArrowType.LargeBinary) = throw UnsupportedOperationException()
     override fun visit(type: ArrowType.FixedSizeBinary) = "fixed-size-binary-${type.byteWidth}"
     override fun visit(type: ArrowType.Bool) = "bool"
     override fun visit(type: ArrowType.Decimal) = "decimal"
@@ -76,3 +88,56 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
         else -> throw UnsupportedOperationException("not supported for $type")
     }
 }).asKeyword
+
+private val TS_TZ_MICRO_TYPE = ArrowType.Timestamp(MICROSECOND, "UTC")
+private val TS_MICRO_TYPE = ArrowType.Timestamp(MICROSECOND, null)
+private val DATE_DAY_TYPE = ArrowType.Date(DAY)
+private val DURATION_MICRO_TYPE = ArrowType.Duration(MICROSECOND)
+private val TIME_NANO_TYPE = ArrowType.Time(NANOSECOND, 64)
+
+fun valueToArrowType(obj: Any?) = when (obj) {
+    null -> MinorType.NULL.type
+    is Boolean -> MinorType.BIT.type
+    is Byte -> MinorType.TINYINT.type
+    is Short -> MinorType.SMALLINT.type
+    is Int -> MinorType.INT.type
+    is Long -> MinorType.BIGINT.type
+    is Float -> MinorType.FLOAT4.type
+    is Double -> MinorType.FLOAT8.type
+
+    // HACK we should support parameterised decimals here
+    is BigDecimal -> ArrowType.Decimal(38, 19, 128)
+
+    is ZonedDateTime -> ArrowType.Timestamp(MICROSECOND, obj.zone.toString())
+    is OffsetDateTime -> ArrowType.Timestamp(MICROSECOND, obj.offset.toString())
+    is Instant -> TS_TZ_MICRO_TYPE
+    is Date -> TS_TZ_MICRO_TYPE
+    is LocalDateTime -> TS_MICRO_TYPE
+    is LocalDate -> DATE_DAY_TYPE
+    is LocalTime -> TIME_NANO_TYPE
+    is Duration -> DURATION_MICRO_TYPE
+
+    is CharSequence -> MinorType.VARCHAR.type
+    is ByteArray -> MinorType.VARBINARY.type
+    is ByteBuffer -> MinorType.VARBINARY.type
+    is UUID -> UuidType.INSTANCE
+    is URI -> UriType.INSTANCE
+    is Keyword -> KeywordType.INSTANCE
+    is ClojureForm -> TransitType.INSTANCE
+    is IllegalArgumentException -> TransitType.INSTANCE
+    is RuntimeException -> TransitType.INSTANCE
+
+    is List<*> -> MinorType.LIST.type
+    is Set<*> -> SetType.INSTANCE
+
+    // TODO support for Arrow maps
+    is Map<*, *> -> MinorType.STRUCT.type
+
+    is IntervalYearMonth -> MinorType.INTERVALYEAR.type
+    is IntervalDayTime -> MinorType.INTERVALDAY.type
+    is IntervalMonthDayNano, is PeriodDuration -> MinorType.INTERVALMONTHDAYNANO.type
+
+    else -> throw UnsupportedOperationException("unknown object type: ${obj.javaClass}")
+}
+
+internal fun Any?.toArrowType() = valueToArrowType(this)

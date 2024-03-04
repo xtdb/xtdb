@@ -7,7 +7,7 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql.edn :as xtql.edn])
-  (:import java.io.Writer
+  (:import [java.io ByteArrayOutputStream Writer]
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
@@ -295,3 +295,10 @@
           TxOp$DeleteDocs (transit/write-handler "xtdb.tx/delete" render-delete-docs)
           TxOp$EraseDocs (transit/write-handler "xtdb.tx/erase" render-erase-docs)
           TxOp$Call (transit/write-handler "xtdb.tx/call" render-call-op)}))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+;; was used in Types.kt
+(defn write-transit ^bytes [v]
+  (with-open [baos (ByteArrayOutputStream.)]
+    (transit/write (transit/writer baos :msgpack {:handlers transit-write-handlers}) v)
+    (.toByteArray baos)))

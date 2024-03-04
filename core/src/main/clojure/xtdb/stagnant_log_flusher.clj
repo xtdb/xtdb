@@ -42,7 +42,7 @@
               (try
                 (when (and (= @previously-seen-chunk-tx-id latest-chunk-tx-id)
                            (or (nil? @!last-flush-tx-id)
-                               (< @!last-flush-tx-id latest-tx-id)))
+                               (< (long @!last-flush-tx-id) (long latest-tx-id))))
                   (log/infof "last chunk tx-id %s, flushing any pending writes" latest-chunk-tx-id)
 
                   (let [record-buf (-> (ByteBuffer/allocate 9)

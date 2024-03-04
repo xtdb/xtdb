@@ -385,8 +385,8 @@
 
           (doseq [[k v] (sort-by key m)]
             (.startStruct entry-wtr)
-            (vw/write-value! k k-wtr)
-            (vw/write-value! v v-wtr)
+            (.writeObject k-wtr k)
+            (.writeObject v-wtr v)
             (.endStruct entry-wtr))
 
           (.endList map-wtr))

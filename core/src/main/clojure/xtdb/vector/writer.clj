@@ -1,8 +1,6 @@
 (ns xtdb.vector.writer
   (:require [cognitect.transit :as transit]
-            [xtdb.error :as err]
             [xtdb.serde :as serde]
-            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
@@ -12,14 +10,14 @@
            (java.math BigDecimal)
            java.net.URI
            (java.nio ByteBuffer)
-           (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
+           (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
            (java.util Date LinkedHashMap List Map Set UUID)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           xtdb.types.ClojureForm
+           xtdb.Types
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.vector FieldVectorWriters IRelationWriter IRowCopier IVectorPosition IVectorReader IVectorWriter RelationReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -27,135 +25,88 @@
 (defn ->writer ^xtdb.vector.IVectorWriter [arrow-vec]
   (FieldVectorWriters/writerFor arrow-vec))
 
-(defprotocol ArrowWriteable
-  (value->col-type [v])
+(defn value->arrow-type [v] (Types/valueToArrowType v))
 
-  (^org.apache.arrow.vector.types.pojo.ArrowType value->arrow-type [v])
-  (write-value! [v ^xtdb.vector.IVectorWriter writer]))
+(defprotocol ArrowWriteable
+  (value->col-type [v]))
+
+(defn write-value! [v ^xtdb.vector.IVectorWriter writer]
+  (.writeObject writer v))
 
 (extend-protocol ArrowWriteable
   nil
-  (value->arrow-type [_] #xt.arrow/type :null)
   (value->col-type [_] :null)
-  (write-value! [_v ^IVectorWriter w] (.writeNull w))
 
   Boolean
-  (value->arrow-type [_] #xt.arrow/type :bool)
   (value->col-type [_] :bool)
-  (write-value! [v ^IVectorWriter w] (.writeBoolean w v))
 
   Byte
-  (value->arrow-type [_] #xt.arrow/type :i8)
   (value->col-type [_] :i8)
-  (write-value! [v ^IVectorWriter w] (.writeByte w v))
 
   Short
-  (value->arrow-type [_] #xt.arrow/type :i16)
   (value->col-type [_] :i16)
-  (write-value! [v ^IVectorWriter w] (.writeShort w v))
 
   Integer
-  (value->arrow-type [_] #xt.arrow/type :i32)
   (value->col-type [_] :i32)
-  (write-value! [v ^IVectorWriter w] (.writeInt w v))
 
   Long
-  (value->arrow-type [_] #xt.arrow/type :i64)
   (value->col-type [_] :i64)
-  (write-value! [v ^IVectorWriter w] (.writeLong w v))
 
   Float
-  (value->arrow-type [_] #xt.arrow/type :f32)
   (value->col-type [_] :f32)
-  (write-value! [v ^IVectorWriter w] (.writeFloat w v))
 
   Double
-  (value->arrow-type [_] #xt.arrow/type :f64)
   (value->col-type [_] :f64)
-  (write-value! [v ^IVectorWriter w] (.writeDouble w v))
 
   BigDecimal
-  (value->arrow-type [_] #xt.arrow/type :decimal)
-  (value->col-type [_] :decimal)
-  (write-value! [v ^IVectorWriter w] (.writeObject w v)))
+  (value->col-type [_] :decimal))
 
 (extend-protocol ArrowWriteable
   Date
-  (value->arrow-type [_] #xt.arrow/type [:timestamp-tz :micro "UTC"])
   (value->col-type [_] [:timestamp-tz :micro "UTC"])
-  (write-value! [v ^IVectorWriter w] (.writeLong w (Math/multiplyExact (.getTime v) 1000)))
 
   Instant
-  (value->arrow-type [_] #xt.arrow/type [:timestamp-tz :micro "UTC"])
   (value->col-type [_] [:timestamp-tz :micro "UTC"])
-  (write-value! [v ^IVectorWriter w] (.writeLong w (time/instant->micros v)))
 
   ZonedDateTime
-  (value->arrow-type [v] (types/->arrow-type [:timestamp-tz :micro (.getId (.getZone v))]))
   (value->col-type [v] [:timestamp-tz :micro (.getId (.getZone v))])
-  (write-value! [v ^IVectorWriter w] (write-value! (.toInstant v) w))
 
   OffsetDateTime
-  (value->arrow-type [v] (types/->arrow-type [:timestamp-tz :micro (.getId (.getOffset v))]))
   (value->col-type [v] [:timestamp-tz :micro (.getId (.getOffset v))])
-  (write-value! [v ^IVectorWriter w] (write-value! (.toInstant v) w))
 
   LocalDateTime
-  (value->arrow-type [_] #xt.arrow/type [:timestamp-local :micro])
   (value->col-type [_] [:timestamp-local :micro])
-  (write-value! [v ^IVectorWriter w] (write-value! (.toInstant v ZoneOffset/UTC) w))
 
   Duration
-  (value->arrow-type [_] #xt.arrow/type [:duration :micro])
   (value->col-type [_] [:duration :micro])
-  (write-value! [v ^IVectorWriter w] (.writeLong w (quot (.toNanos v) 1000)))
 
   LocalDate
-  (value->arrow-type [_] #xt.arrow/type [:date :day])
   (value->col-type [_] [:date :day])
-  (write-value! [v ^IVectorWriter w] (.writeInt w (.toEpochDay v)))
 
   LocalTime
-  (value->arrow-type [_] #xt.arrow/type [:time-local :nano])
   (value->col-type [_] [:time-local :nano])
-  (write-value! [v ^IVectorWriter w] (.writeLong w (.toNanoOfDay v)))
 
   IntervalYearMonth
-  (value->arrow-type [_] #xt.arrow/type [:interval :year-month])
   (value->col-type [_] [:interval :year-month])
-  (write-value! [v ^IVectorWriter w] (.writeInt w (.toTotalMonths (.period v))))
 
   IntervalDayTime
-  (value->arrow-type [_] #xt.arrow/type [:interval :day-time])
   (value->col-type [_] [:interval :day-time])
-  (write-value! [v ^IVectorWriter w] (write-value! (PeriodDuration. (.period v) (.duration v)) w))
 
   IntervalMonthDayNano
-  (value->arrow-type [_] #xt.arrow/type [:interval :month-day-nano])
   (value->col-type [_] [:interval :month-day-nano])
-  (write-value! [v ^IVectorWriter w] (write-value! (PeriodDuration. (.period v) (.duration v)) w))
 
-  ;; allow the use of PeriodDuration for more precision
   PeriodDuration
-  (value->arrow-type [_] #xt.arrow/type [:interval :month-day-nano])
-  (value->col-type [_] [:interval :month-day-nano])
-  (write-value! [v ^IVectorWriter w] (.writeObject w v)))
+  (value->col-type [_] [:interval :month-day-nano]))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
-  (value->arrow-type [_] #xt.arrow/type :varbinary)
   (value->col-type [_] :varbinary)
-  (write-value! [v ^IVectorWriter w] (.writeObject w v))
 
   ByteBuffer
-  (value->arrow-type [_] #xt.arrow/type :varbinary)
   (value->col-type [_] :varbinary)
-  (write-value! [v ^IVectorWriter w] (.writeBytes w v))
 
   CharSequence
-  (value->arrow-type [_] #xt.arrow/type :utf8)
-  (value->col-type [_] :utf8)
-  (write-value! [v ^IVectorWriter w] (.writeObject w v)))
+  (value->col-type [_] :utf8))
 
 (defn populate-with-absents [^IVectorWriter w, ^long pos]
   (let [absents (- pos (.getPosition (.writerPosition w)))]
@@ -182,29 +133,12 @@
 
 (extend-protocol ArrowWriteable
   List
-  (value->arrow-type [_] #xt.arrow/type :list)
   (value->col-type [v] [:list (apply types/merge-col-types (into #{} (map value->col-type) v))])
-  (write-value! [v ^IVectorWriter writer]
-    (let [el-writer (.listElementWriter writer)]
-      (.startList writer)
-      (doseq [el v]
-        (write-value! el (.legWriter el-writer (value->arrow-type el))))
-      (.endList writer)))
 
   Set
-  (value->arrow-type [_] #xt.arrow/type :set)
   (value->col-type [v] [:set (apply types/merge-col-types (into #{} (map value->col-type) v))])
-  (write-value! [v ^IVectorWriter writer] (write-value! (vec v) writer))
 
   Map
-  (value->arrow-type [v]
-    (if (or (every? keyword? (keys v)) (every? string? (keys v)))
-      #xt.arrow/type :struct
-      #_                                ;TODO
-      (ArrowType$Map. false)
-
-      (throw (UnsupportedOperationException. "Arrow maps currently not supported"))))
-
   (value->col-type [v]
     (if (or (every? keyword? (keys v)) (every? string? (keys v)))
       [:struct (->> v
@@ -214,28 +148,6 @@
       #_[:map
          (apply types/merge-col-types (into #{} (map (comp value->col-type key)) v))
          (apply types/merge-col-types (into #{} (map (comp value->col-type val)) v))]
-      (throw (UnsupportedOperationException. "Arrow Maps currently not supported"))))
-
-  (write-value! [m ^IVectorWriter writer]
-    (if (or (every? keyword? (keys m)) (every? string? (keys m)))
-      (do
-        (.startStruct writer)
-
-        (let [struct-pos (.getPosition (.writerPosition writer))]
-          (doseq [[k v] m
-                  :let [v-writer (.structKeyWriter writer (util/str->normal-form-str (str (symbol k))))
-                        v-leg-wtr (-> v-writer
-                                      (.legWriter (value->arrow-type v)))]]
-
-
-            (when-not (= (.getPosition (.writerPosition v-writer))
-                         struct-pos)
-              (throw (err/illegal-arg :xtdb/key-already-set {:k k, :ks (set (keys m))})))
-
-            (write-value! v v-leg-wtr)))
-
-        (.endStruct writer))
-
       (throw (UnsupportedOperationException. "Arrow Maps currently not supported")))))
 
 (defn- write-as-transit [v w]
@@ -245,37 +157,25 @@
 
 (extend-protocol ArrowWriteable
   Keyword
-  (value->arrow-type [_] #xt.arrow/type :keyword)
   (value->col-type [_] :keyword)
-  (write-value! [kw ^IVectorWriter w]
-    (write-value! (str (symbol kw)) w))
 
   UUID
-  (value->arrow-type [_] #xt.arrow/type :uuid)
   (value->col-type [_] :uuid)
-  (write-value! [^UUID uuid ^IVectorWriter w]
-    (write-value! (util/uuid->bytes uuid) w))
 
   URI
-  (value->arrow-type [_] #xt.arrow/type :uri)
   (value->col-type [_] :uri)
-  (write-value! [^URI uri ^IVectorWriter w]
-    (write-value! (str uri) w))
 
   ClojureForm
-  (value->arrow-type [_] #xt.arrow/type :transit)
   (value->col-type [_] :transit)
   (write-value! [clj-form ^IVectorWriter w]
     (write-as-transit clj-form ^IVectorWriter w))
 
   xtdb.RuntimeException
-  (value->arrow-type [_] #xt.arrow/type :transit)
   (value->col-type [_] :transit)
   (write-value! [v ^IVectorWriter w]
     (write-as-transit v ^IVectorWriter w))
 
   xtdb.IllegalArgumentException
-  (value->arrow-type [_] #xt.arrow/type :transit)
   (value->col-type [_] :transit)
   (write-value! [v ^IVectorWriter w]
     (write-as-transit v ^IVectorWriter w)))
@@ -285,7 +185,7 @@
 
   (let [writer (->writer v)]
     (doseq [v vs]
-      (write-value! v (.legWriter writer (value->arrow-type v))))
+      (.writeObject writer v))
 
     (.syncValueCount writer)
 

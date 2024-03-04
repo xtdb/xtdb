@@ -259,14 +259,16 @@
         table-doc-writers (HashMap.)]
     (fn write-put! [^TxOp$PutDocs op]
       (.startStruct put-writer)
-      (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/->normal-form-str (.tableName op))
-                                               (util/->jfn
-                                                 (fn [table]
-                                                   (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
-                                                     (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct))))))
+      (let [^IVectorWriter table-doc-writer
+            (.computeIfAbsent table-doc-writers (util/->normal-form-str (.tableName op))
+                              (util/->jfn
+                                (fn [table]
+                                  (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
+                                    (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct))))))
+
             docs (.docs op)]
 
-        (vw/write-value! docs table-doc-writer)
+        (.writeObject table-doc-writer docs)
 
         (when-not *legacy-no-iids*
           (.startList iids-writer)
@@ -276,11 +278,11 @@
                                          (when (.equals "xt$id" (util/->normal-form-str (key e)))
                                            e)))
                                  val)]]
-            (vw/write-value! (trie/->iid eid) iid-writer))
+            (.writeBytes iid-writer (trie/->iid eid)))
           (.endList iids-writer)))
 
-      (vw/write-value! (.validFrom op) valid-from-writer)
-      (vw/write-value! (.validTo op) valid-to-writer)
+      (.writeObject valid-from-writer (.validFrom op))
+      (.writeObject valid-to-writer (.validTo op))
 
       (.endStruct put-writer))))
 
@@ -342,21 +344,21 @@
 
 (defn- ->call-writer [^IVectorWriter op-writer]
   (let [call-writer (.legWriter op-writer :call (FieldType/notNullable #xt.arrow/type :struct))
-        fn-id-writer (when *legacy-no-iids*
-                       (.structKeyWriter call-writer "fn-id" (FieldType/notNullable #xt.arrow/type :union)))
-        fn-iid-writer (when-not *legacy-no-iids*
-                        (.structKeyWriter call-writer "fn-iid" (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
+        ^IVectorWriter fn-id-writer (when *legacy-no-iids*
+                                      (.structKeyWriter call-writer "fn-id" (FieldType/notNullable #xt.arrow/type :union)))
+        ^IVectorWriter fn-iid-writer (when-not *legacy-no-iids*
+                                       (.structKeyWriter call-writer "fn-iid" (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
         args-list-writer (.structKeyWriter call-writer "args" (FieldType/notNullable #xt.arrow/type :transit))]
     (fn write-call! [^TxOp$Call op]
       (.startStruct call-writer)
 
       (let [fn-id (.fnId op)]
         (if-not *legacy-no-iids*
-          (vw/write-value! (trie/->iid fn-id) fn-iid-writer)
-          (vw/write-value! fn-id (.legWriter fn-id-writer (vw/value->arrow-type fn-id)))))
+          (.writeObject fn-iid-writer (trie/->iid fn-id))
+          (.writeObject fn-id-writer fn-id)))
 
       (let [clj-form (xt/->ClojureForm (vec (.args op)))]
-        (vw/write-value! clj-form (.legWriter args-list-writer (vw/value->arrow-type clj-form))))
+        (.writeObject args-list-writer clj-form))
 
       (.endStruct call-writer))))
 

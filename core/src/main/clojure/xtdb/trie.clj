@@ -16,10 +16,10 @@
            [java.util.stream IntStream]
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
-           org.apache.arrow.vector.types.UnionMode
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           org.apache.arrow.vector.types.UnionMode
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node HashTrieKt ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrie$Node HashTrieKt ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 

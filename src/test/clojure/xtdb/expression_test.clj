@@ -1568,12 +1568,13 @@
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-namespaced-struct-literals
-  (with-open [rel (tu/open-rel [(tu/open-vec "x/x" [1.2 3.4])
-                                (tu/open-vec "y/y" [3.4 8.25])])]
+  ;; everything's normalised by the time it hits the EE now
+  (with-open [rel (tu/open-rel [(tu/open-vec "x$x" [1.2 3.4])
+                                (tu/open-vec "y$y" [3.4 8.25])])]
     (t/is (= {:res [{:x/x 1.2, :y/y 3.4}
                     {:x/x 3.4, :y/y 8.25}]
-              :res-type [:struct '{x/x :f64, y/y :f64}]}
-             (run-projection rel '{:x/x x/x, :y/y y/y})))))
+              :res-type [:struct '{x$x :f64, y$y :f64}]}
+             (run-projection rel '{:x$x x$x, :y$y y$y})))))
 
 (t/deftest test-nested-structs
   (with-open [rel (tu/open-rel [(tu/open-vec "y" [1.2 3.4])])]

@@ -46,7 +46,8 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
     override fun writeFloat(v: Float): Unit = unsupported("writeFloat")
     override fun writeDouble(v: Double): Unit = unsupported("writeDouble")
     override fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
-    override fun writeObject(obj: Any?): Unit = unsupported("writeObject")
+    override fun writeObject(obj: Any?): Unit = if (obj == null) writeNull() else writeObject0(obj)
+    fun writeObject0(obj: Any)
 
     fun writeValue(v: IValueReader) = if (v.isNull) writeNull() else writeValue0(v)
     fun writeValue0(v: IValueReader)

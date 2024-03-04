@@ -14,7 +14,8 @@
            java.util.function.Function
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
-           (xtdb.vector RelationReader)))
+           (xtdb.vector RelationReader)
+           (xtdb.vector.extensions AbsentType)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -57,8 +58,8 @@
               (let [row (nth rows idx)]
                 (if (contains? row col-kw)
                   (let [v (-> (get row col-kw) (->v opts))]
-                    (vw/write-value! v (.legWriter out-writer (vw/value->arrow-type v))))
-                  (vw/write-value! nil (.legWriter out-writer #xt.arrow/type :absent)))))
+                    (.writeObject out-writer v))
+                  (.writeNull (.legWriter out-writer AbsentType/INSTANCE)))))
 
             (.syncValueCount out-writer)
             (.add out-cols (.withName (vr/vec->reader out-vec) (str col-name)))))
