@@ -1,0 +1,7 @@
+---
+title: Getting started (HTTP)
+---
+
+1. Firstly, to run the XTDB server, check out the general link:/intro/getting-started[getting started guide].
+2. Then, run through the link:/guides/sql-over-http[SQL over HTTP] usage guide to get familiar with the 3 endpoints
+3. Discover the full range of capabilities via the link:drivers/http/openapi/index[OpenAPI] documentation

@@ -34,13 +34,13 @@ For example, to check its status:
 curl http://localhost:3000/status
 ----
 
-To learn how to use the HTTP API, follow our introductory guide.
+To learn how to use the HTTP API and discover a few of XTDB's novel capabilities, follow the link:/tutorials/sql-over-http[introductory tutorial].
 
 You can also check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see all the options available.
 
-== Connecting from a client library
+== Connecting via a client driver
 
-If you're running on the JVM, you can use the JVM client library to connect to this node.
+Official client drivers are provived for a range of languages to make working with XTDB more ergonomic than working directly with HTTP and JSON.
 
 [.lang-icons.right]
 image:{icon}/clojure.svg[Clojure,link={clojure}#_connecting_through_http]
@@ -49,16 +49,4 @@ image:{icon}/kotlin.svg[Clojure,link={kotlin}#_connecting_through_http]
 
 For more details, check out the relevant instructions for your language:
 
-== In process (JVM)
-
-XTDB can also be run in-process (in a JVM) where desirable.
-
-If you're running a JVM (17+), you can also use XTDB directly, in-process, using the same API interface as the remote client.
-In-process XTDB is particularly useful for testing and interactive development - you can start an in-memory node quickly and with little hassle, which makes it a great tool for unit tests and REPL experimentation.
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_in_process]
-image:{icon}/java.svg[Clojure,link={java}#_in_process]
-image:{icon}/kotlin.svg[Clojure,link={kotlin}#_in_process]
-
-For more details, check out the relevant instructions for your language:
+More client drivers are link:/intro/roadmap.html[coming soon]!

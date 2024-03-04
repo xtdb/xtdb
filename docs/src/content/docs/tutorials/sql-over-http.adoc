@@ -2,7 +2,7 @@
 title: SQL over HTTP
 ---
 
-Assuming you have successfully started an XTDB server, this guide walks through the basic HTTP API usage. The examples should be runnable using any language, and cURL commands are also provided for convenience
+Assuming you have successfully started an XTDB server, this tutorial walks through basic HTTP API usage and showcases a few of the novel features of XTDB. The examples should be easily translatable to any language (or you could use one of the many supported link:/drivers[client drivers]), and cURL commands are also provided for convenience.
 
 == Status
 

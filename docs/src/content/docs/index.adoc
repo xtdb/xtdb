@@ -14,12 +14,14 @@ title: Welcome to XTDB!
 </div>
 ++++
 
-XTDB is an immutable database, queryable with both SQL and XTQL, that reduces the time and cost of building and maintaining safe systems of record.
+XTDB is an immutable database, queryable with both link:/reference/main/sql/queries.html[SQL] and link:/intro/what-is-xtql.html[XTQL], that reduces the time and cost of building and maintaining safe systems of record.
 It is free-to-use and open-source, under the https://opensource.org/license/mpl-2-0/[MPL license^].
 
-To quickly get up-and-running, check out our link:/intro/getting-started[getting started] guide.
+You can quickly try inserting data and querying XTDB right now using the link:https://fiddle.xtdb.com/[XT fiddle] website.
 
-XTDB is accessible over HTTP and via client drivers: Java, Kotlin and Clojure.
+Alternatively, to get up-and-running locally, check out our link:/intro/getting-started[getting started] guide.
+
+XTDB is distributed as a Docker image and is accessible over link:localhost:4322/intro/getting-started[HTTP] or via client drivers: link:/drivers/java/getting-started[Java], link:/drivers/kotlin/getting-started[Kotlin], link:/drivers/Clojure/getting-started[Clojure], and more link:/intro/roadmap.html[coming soon]!
 
 Next up:
 
@@ -28,5 +30,5 @@ Next up:
 * Find out more about link:/intro/what-is-xtql[XTQL].
 * Check out the link:/reference/main[XTDB reference documentation].
 * Get familiar with the individual link:/drivers[client drivers].
-* Learn about XTDB's link:/config/tx-log[transaction-log] and link:/config/storage[storage] configurations.
+* Learn about XTDB's link:/config/tx-log[transaction-log] and link:/config/storage[storage] advanced configuration options.
 * For help and support, visit the link:/intro/community[XTDB community].
