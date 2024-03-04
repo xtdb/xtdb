@@ -23,7 +23,8 @@ For the time being, XTDB is accessible through our HTTP API and Java, Kotlin and
 
 Next up:
 
-* Discover link:/intro/what-is-xtdb[What makes XTDB great].
+* Read link:/intro/what-is-xtdb[why we built XTDB].
+* Discover all the things that link:/intro/what-is-xtdb[makes XTDB great].
 * Find out more about link:/intro/what-is-xtql[XTQL].
 * Check out the link:/reference/main[XTDB reference documentation].
 * Get familiar with the individual link:/drivers[client drivers].

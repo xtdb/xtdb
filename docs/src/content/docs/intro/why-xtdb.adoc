@@ -2,6 +2,10 @@
 title: Why XTDB?
 ---
 
+XTDB is an immutable, time-travel database designed for building complex applications, and to support developers with features that are essential for meeting common regulatory compliance requirements.
+
+Temporal querying has been identified as a hard problem in SQL database for decades, and XTDB is the first ground-up realization of the 'bitemporal model', but XTDB's temporal powers have benefits for all kinds of applications - not just advanced scenarios in specific domains.
+
 == The Mission
 
 At link:https://juxt.pro/[JUXT], the company behind XTDB, our mission is *to simplify how the world makes software*.
@@ -29,3 +33,14 @@ In support of this mission, XTDB solves 4 distinct problems we see with existing
 == The Solution: XTDB
 
 We have designed XTDB to solve each of these problems in a cohesive way that we believe can reduce the time & costs required for organizations to build and maintain link:https://www.juxt.pro/blog/kent-beck-podcast/[*safe*] systems of record and their associated APIs.
+
+For the everyday application developer who is not working on regulated systems and is less concerned about the nuanced understanding and implications of bitemporal modelling, it is sufficient to simply be aware that the model underpins three distinct layers of capabilities, which the documentation explains in depth. In order of significance:
+
+. *Basis* - using a timestamp as a stable basis for querying prior database states - an essential safety net for developers and organizations alike - and the key to consistent downstreaming processing (e.g. creating a businss KPI report without ETL)
+. *System-Time* - a pair of hidden timestamp columns built-in to every table, maintained automatically, that can be used to retrieve old versions of data
+. *Valid-Time* - an advanced versioning mechanism that is helpful for scheduling changes across data, and critical for time-ware applications where system-time alone is not enough
+
+First and foremost, XTDB is built to reduce the risks and impact of data loss, update anomalies and brittle database designs. It achieves this goal primarily by always recording the history of all changes (particularly UPDATEs and DELETEs which are normally destructive operations), and by restricting the scope of concurrent database usage, such that an auditable, linear sequence of all changes is retained.
+
+Beyond the obvious auditing and debugging benefits of retaining change data and prior database states, XTDB's history-preserving capability presents a robust & stable source of truth - a _basis_ - within a wider IT architecture that is unlike anything that most databases can offer.
+

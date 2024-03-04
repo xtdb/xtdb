@@ -6,7 +6,7 @@ title: Getting started
 :java: /drivers/java/getting-started.html
 :kotlin: /drivers/kotlin/getting-started.html
 
-XTDB can run in-process (in a JVM), or through traditional client-server connections.
+XTDB is built for traditional client-server interactions over HTTP, but can also be run in-process (in a JVM) where desirable.
 
 == Client/Server
 
@@ -47,6 +47,14 @@ To run your first query:
 sql="SELECT t1.doc.foo[1]
      FROM (VALUES ({'foo':['Hello', 'world!']})) AS t1(doc)"; \
 curl --json "{\"query\": {\"sql\": \"${sql}\"}}" localhost:3000/query
+----
+
+To insert a document:
+
+[source,shell]
+----
+sql="INSERT INTO t2 (xt\$id, foo) VALUES (123, 'bar')"; \
+curl --json "{\"txOps\": [{\"sql\": \"${sql}\"}]}" localhost:3000/query
 ----
 
 From here, check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see what else is available.
