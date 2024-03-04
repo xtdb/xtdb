@@ -1,0 +1,73 @@
+---
+title: SQL over HTTP
+---
+
+Assuming you have successfully started an XTDB server, this guide walks through the basic HTTP API usage. The examples should be runnable using any language, and cURL commands are also provided for convenience
+
+== Status
+
+To confirm XTDB is running:
+
+`GET` to `localhost:3000/status`
+
+If that returns, everything should be up and running.
+
+== Transact
+
+To run your first transaction, send the following:
+
+`POST` to `localhost:3000/tx`
+
+[source,json]
+----
+{
+  "txOps": [{"sql": "INSERT INTO people (xt$id, name) VALUES (6, 'fred')"}]
+}
+----
+
+Note that the `people` doesn't have to be defined beforehand - the table is created dynamically during the INSERT along with any supplied columns and types.
+
+(TODO cURL tabs)
+
+Transactions are durable and processed asynchronously. If you wait a few milliseconds for the processing to finish, you can query then that data.
+
+== Query
+
+`POST` to `localhost:3000/query`
+
+[source,json]
+----
+{
+  "query": {"sql": "SELECT * FROM people"}}
+}
+----
+
+You can also ensure that the query reflects our transaction (after it has been either committed or aborted) by supplying the 'basis' map returned from our transations to the `queryOpts`:
+
+`POST` to `localhost:3000/query`
+
+[source,json]
+----
+{
+  "query": {"sql": "SELECT * FROM people"},
+  "queryOpts": {"basis": {"txId": 7806,
+                          "systemTime":"2024-03-04T14:31:03.728415Z"}}
+}
+----
+
+== Working with documents
+
+XTDB is designed to work with JSON-like nested data as a first-class concept. Which means you can send the following transaction:
+
+`POST` to `localhost:3000/tx`
+
+[source,json]
+----
+{
+  "txOps": [{"sql": "INSERT INTO people (xt$id, name, info)
+                     VALUES (6, 'fred', {'height': 172,
+                                         'age': 29,
+                                         'likes': ['apples'])"}]
+}
+----
+

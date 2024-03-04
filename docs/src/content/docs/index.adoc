@@ -19,7 +19,7 @@ It is free-to-use and open-source, under the https://opensource.org/license/mpl-
 
 To quickly get up-and-running, check out our link:/intro/getting-started[getting started] guide.
 
-For the time being, XTDB is accessible through our HTTP API and Java, Kotlin and Clojure drivers - drivers for JavaScript, Python and many more will be available in due course.
+XTDB is accessible over HTTP and via client drivers: Java, Kotlin and Clojure.
 
 Next up:
 

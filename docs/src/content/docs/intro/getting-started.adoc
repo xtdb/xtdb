@@ -6,11 +6,7 @@ title: Getting started
 :java: /drivers/java/getting-started.html
 :kotlin: /drivers/kotlin/getting-started.html
 
-XTDB is built for traditional client-server interactions over HTTP, but can also be run in-process (in a JVM) where desirable.
-
-== Client/Server
-
-You can start an XTDB server using the 'standalone' Docker image:
+XTDB is built for traditional client-server interactions over HTTP. You can start an XTDB server using the 'standalone' Docker image:
 
 [source,shell]
 ----
@@ -30,8 +26,6 @@ docker run \
   ghcr.io/xtdb/xtdb-standalone-ea
 ----
 
-=== Connecting through HTTP
-
 You can then connect to your XTDB server using cURL, or similar tools.
 For example, to check its status:
 
@@ -40,26 +34,11 @@ For example, to check its status:
 curl http://localhost:3000/status
 ----
 
-To run your first query:
+To learn how to use the HTTP API, follow our introductory guide.
 
-[source,shell]
-----
-sql="SELECT t1.doc.foo[1]
-     FROM (VALUES ({'foo':['Hello', 'world!']})) AS t1(doc)"; \
-curl --json "{\"query\": {\"sql\": \"${sql}\"}}" localhost:3000/query
-----
+You can also check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see all the options available.
 
-To insert a document:
-
-[source,shell]
-----
-sql="INSERT INTO t2 (xt\$id, foo) VALUES (123, 'bar')"; \
-curl --json "{\"txOps\": [{\"sql\": \"${sql}\"}]}" localhost:3000/query
-----
-
-From here, check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see what else is available.
-
-=== Connecting from a client library
+== Connecting from a client library
 
 If you're running on the JVM, you can use the JVM client library to connect to this node.
 
@@ -71,6 +50,8 @@ image:{icon}/kotlin.svg[Clojure,link={kotlin}#_connecting_through_http]
 For more details, check out the relevant instructions for your language:
 
 == In process (JVM)
+
+XTDB can also be run in-process (in a JVM) where desirable.
 
 If you're running a JVM (17+), you can also use XTDB directly, in-process, using the same API interface as the remote client.
 In-process XTDB is particularly useful for testing and interactive development - you can start an in-memory node quickly and with little hassle, which makes it a great tool for unit tests and REPL experimentation.

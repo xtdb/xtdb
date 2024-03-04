@@ -1,5 +1,5 @@
 ---
-title: Why XTDB?
+title: Mission
 ---
 
 XTDB is an immutable, time-travel database designed for building complex applications, and to support developers with features that are essential for meeting common regulatory compliance requirements.

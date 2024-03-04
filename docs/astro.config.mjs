@@ -34,20 +34,12 @@ export default defineConfig({
           collapsed: false,
           items: [
             { label: 'Overview', link: '/' },
-            { label: 'Why XTDB?', link: '/intro/why-xtdb' },
             { label: 'Getting started', link: '/intro/getting-started' },
-            {
-              label: 'What is XTDB?',
-              items: [
-                { label: 'At a glance', link: '/intro/what-is-xtdb' },
-                { label: 'What is XTQL?', link: '/intro/what-is-xtql' },
-                { label: 'Data model', link: '/intro/data-model' },
-                // { label: 'Architecture', link: '/intro/architecture' },
-                // { label: 'Bitemporality', link: '/intro/bitemporality' }
-              ]
-            },
+            { label: 'What is XTDB', link: '/intro/what-is-xtdb' },
+            { label: 'Data model', link: '/intro/data-model' },
             { label: 'Community', link: '/intro/community' },
             { label: 'Roadmap', link: '/intro/roadmap' },
+            { label: 'Mission', link: '/intro/why-xtdb' },
           ],
         },
 
@@ -63,6 +55,8 @@ export default defineConfig({
           label: 'Guides',
           collapsed: true,
           items: [
+ 	    { label: 'SQL over HTTP', link: '/guides/sql-over-http' },
+
             { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
             { label: 'XTQL Walkthrough', link: '/guides/xtql-walkthrough' },
           ],
@@ -107,11 +101,11 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'Overview', link: '/reference/main' },
-
             {
               label: 'XTQL',
               collapsed: true,
               items: [
+                { label: 'What is XTQL?', link: '/intro/what-is-xtql' },     
                 { label: 'Transactions', link: '/reference/main/xtql/txs' },
                 { label: 'Queries', link: '/reference/main/xtql/queries' },
               ]
