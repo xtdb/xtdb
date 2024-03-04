@@ -150,11 +150,6 @@
          (apply types/merge-col-types (into #{} (map (comp value->col-type val)) v))]
       (throw (UnsupportedOperationException. "Arrow Maps currently not supported")))))
 
-(defn- write-as-transit [v w]
-  (with-open [baos (ByteArrayOutputStream.)]
-    (transit/write (transit/writer baos :msgpack {:handlers serde/transit-write-handlers}) v)
-    (write-value! (.toByteArray baos) w)))
-
 (extend-protocol ArrowWriteable
   Keyword
   (value->col-type [_] :keyword)
@@ -167,18 +162,12 @@
 
   ClojureForm
   (value->col-type [_] :transit)
-  (write-value! [clj-form ^IVectorWriter w]
-    (write-as-transit clj-form ^IVectorWriter w))
 
   xtdb.RuntimeException
   (value->col-type [_] :transit)
-  (write-value! [v ^IVectorWriter w]
-    (write-as-transit v ^IVectorWriter w))
 
   xtdb.IllegalArgumentException
-  (value->col-type [_] :transit)
-  (write-value! [v ^IVectorWriter w]
-    (write-as-transit v ^IVectorWriter w)))
+  (value->col-type [_] :transit))
 
 (defn write-vec! [^ValueVector v, vs]
   (.clear v)
