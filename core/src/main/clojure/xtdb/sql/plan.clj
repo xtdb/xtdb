@@ -187,11 +187,13 @@
      (let [fp (parse-long fractional-precision)]
        (list 'cast-tstz e {:precision fp :unit (if (<= fp 6) :micro :nano)}))
 
+    [:duration_type "DURATION"]
+    (list 'cast e [:duration :micro])
+    [:duration_type "DURATION" [:unsigned_integer fractional-precision]]
+    (cast-temporal-with-precision e :duration fractional-precision)
+
     [:character_string_type "VARCHAR"]
     (list 'cast e :utf8)
-
-    [:character_string_type "VARCHAR" [:character_length [:unsigned_integer length]]]
-    (list 'cast e :utf8 {:length (parse-long length)})
 
     (throw (err/illegal-arg :xtdb.sql/parse-error
                             {::err/message (str "Cannot build cast for: " (pr-str cast-spec))

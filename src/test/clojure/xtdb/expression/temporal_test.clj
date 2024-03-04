@@ -230,6 +230,13 @@
           (t/is (thrown-with-msg? RuntimeException
                                   #"'2022-08-01T05:34:56.789' has invalid format for type timestamp with timezone"
                                   (test-cast "2022-08-01T05:34:56.789" [:timestamp-tz :second "UTC"]))))
+        
+        (t/testing "duration"
+          (t/is (= #time/duration "PT13M56.123456S" (test-cast "PT13M56.123456S" [:duration :micro])))
+          (t/is (= #time/duration "PT13M56S" (test-cast "PT13M56.123456S" [:duration :second])))
+          (t/is (thrown-with-msg? RuntimeException
+                                  #"'2022-08-01T00:00:00Z' has invalid format for type duration"
+                                  (test-cast "2022-08-01T00:00:00Z" [:duration :micro]))))
 
         (t/testing "with precision"
           (t/is (= #time/date-time "2022-08-01T05:34:56" (test-cast "2022-08-01T05:34:56.1234" [:timestamp-local :micro] {:precision 0})))
@@ -237,6 +244,7 @@
           (t/is (= #time/zoned-date-time "2022-08-01T05:34:56.12Z[UTC]" (test-cast  "2022-08-01T05:34:56.123456Z" [:timestamp-tz :micro "UTC"] {:precision 2})))
           (t/is (= #time/zoned-date-time "2022-08-01T04:04:56.12345678Z[UTC]" (test-cast "2022-08-01T05:34:56.123456789+01:30" [:timestamp-tz :nano "UTC"] {:precision 8})))
           (t/is (= #time/time "05:34:56.1234567" (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 7})))
+          (t/is (= #time/duration "PT13M56.1234567S" (test-cast "PT13M56.123456789S" [:duration :nano] {:precision 7})))
           (t/is (thrown-with-msg? IllegalArgumentException
                                   #"The minimum fractional seconds precision is 0."
                                   (test-cast "05:34:56.123456789" [:time-local :nano] {:precision -1})))
@@ -256,9 +264,9 @@
 
         (t/testing "tstz"
           (t/is (= "2022-08-01T05:34:56.789Z[UTC]" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8))))
-
-        (t/testing "with string length limit"
-          (t/is (= "2022" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8 {:length 4}))))))))
+        
+        (t/testing "duration"
+          (t/is (= "PT13M56.123S" (test-cast #time/duration "PT13M56.123S" :utf8))))))))
 
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")

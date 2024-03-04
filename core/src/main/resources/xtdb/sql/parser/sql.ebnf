@@ -385,16 +385,21 @@ correlation_name
     | datetime_type
     | interval_type
     | character_string_type
+    | duration_type 
     ;
 
 character_string_type
-    : 'CHARACTER' [ <left_paren> character_length <right_paren> ]
+    : 'VARCHAR'
+    ;
+
+(* Currently unsupported character_string_type 
+    | 'VARCHAR'  [ <left_paren> character_length <right_paren> ] 
+    | 'CHARACTER' [ <left_paren> character_length <right_paren> ]
     | 'CHAR' [ <left_paren> character_length <right_paren> ]
     | 'CHARACTER' 'VARYING' <left_paren> character_length <right_paren>
     | 'CHAR' 'VARYING' <left_paren> character_length <right_paren>
-    | 'VARCHAR' [ <left_paren> character_length <right_paren> ]
     | character_large_object_type
-    ;
+*) 
 
 character_large_object_type
     : 'CHARACTER' 'LARGE' 'OBJECT' [ <left_paren> character_large_object_length <right_paren> ]
@@ -413,6 +418,9 @@ binary_large_object_string_type
     : 'BINARY' 'LARGE' 'OBJECT' [ <left_paren> large_object_length <right_paren> ]
     | 'BLOB' [ <left_paren> large_object_length <right_paren> ]
     ;
+
+duration_type
+    : 'DURATION' [ <left_paren> time_precision <right_paren> ]
 
 <numeric_type>
     : exact_numeric_type
