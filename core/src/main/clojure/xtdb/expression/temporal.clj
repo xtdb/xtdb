@@ -417,8 +417,37 @@
      :target-type [:timestamp-tz unit (str (.getZone expr/*clock*))]
      :cast-opts opts}))
 
-;;;; SQL:2011 Operations involving datetimes and intervals
+(defmethod expr/codegen-cast [:utf8 :duration] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
+  (when precision (ensure-fractional-precision-valid precision))
+  {:return-type target-type
+   :->call-code (fn [[s]]
+                  (-> `(->> (expr/resolve-string ~s)
+                            (parse-with-error-handling "duration" #(Duration/parse %))
+                            ~@(if precision (list `(alter-duration-precision ~precision)) '())
+                            (duration->nano))
+                      (with-conversion :nano tgt-tsunit)))})
 
+(defn mdn-interval->duration [^PeriodDuration x]
+  (let [period (.getPeriod x)]
+    (if (> (.toTotalMonths period) 0)
+      (throw (err/runtime-err :xtdb.expression/cannot-cast-mdn-interval-with-months
+                              {::err/message "Cannot cast month-day-nano intervals when month component is non-zero."}))
+      (.plusDays (.getDuration x) (.getDays period)))))
+
+(defmethod expr/codegen-cast [:interval :duration] [{[_ iunit] :source-type [_ tgt-tsunit :as target-type] :target-type {:keys [precision]} :cast-opts}]
+  (when (not= iunit :month-day-nano)
+    (throw (UnsupportedOperationException. (format "Cannot cast a %s interval to a duration" (name iunit)))))
+  
+  (when precision (ensure-fractional-precision-valid precision))
+
+  {:return-type target-type
+   :->call-code (fn [[x]]
+                  (-> `(->> (mdn-interval->duration ~x)
+                            ~@(if precision (list `(alter-duration-precision ~precision)) '())
+                            (duration->nano))
+                      (with-conversion :nano tgt-tsunit)))})
+
+;;;; SQL:2011 Operations involving datetimes and intervals
 (defn- recall-with-cast
   ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))
 

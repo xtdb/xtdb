@@ -869,6 +869,13 @@
   (t/is (= [{:string "PT13M56.123S"}]
            (xt/q tu/*node* "SELECT CAST(docs.duration AS VARCHAR) as string FROM docs"))))
 
+(t/deftest test-cast-interval-to-duration
+  (t/is (= [{:duration #time/duration "PT13M56S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as duration FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:duration #time/duration "PT13M56.123456789S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as duration FROM (VALUES 1) AS x"))))
+
 (t/deftest test-expr-in-equi-join
   (t/is
     (=plan-file
