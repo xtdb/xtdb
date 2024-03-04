@@ -71,3 +71,28 @@ XTDB is designed to work with JSON-like nested data as a first-class concept. Wh
 }
 ----
 
+== Basis allows you to re-run queries
+
+Re-run the previous query with the basis map supplied and see that the results are the same:
+
+`POST` to `localhost:3000/query`
+
+[source,json]
+----
+{
+  "query": {"sql": "SELECT * FROM people"},
+  "queryOpts": {"basis": {"txId": 7806,
+                          "systemTime":"2024-03-04T14:31:03.728415Z"}}
+}
+----
+
+A basis map is like a pointer to a snapshot of a previous version of the entire database state, except unlike snapshots in other systems there is no copying or explicit snapshot creation required.
+
+If you re-run the previous query with the previous basis (returned by the first transaction), you _won't_ see the new version of Fred's record.
+
+A basis is stable and allows you to re-run unmodified queries indefinitely. This is useful for debugging, auditing, and exposing application data for processing in downstream systems (generating reports, analytics etc.)
+
+
+== System-Time Columns
+
+...
