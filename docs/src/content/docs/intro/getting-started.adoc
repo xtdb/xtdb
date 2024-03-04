@@ -51,7 +51,7 @@ curl -X POST localhost:3000/query \
      -d "{\"query\": {\"sql\": \"${sql}\"}}"
 ----
 
-From here, check out the link:/drivers/openapi/index.html[HTTP OpenAPI docs] to see what else is available.
+From here, check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see what else is available.
 
 === Connecting from a client library
 
