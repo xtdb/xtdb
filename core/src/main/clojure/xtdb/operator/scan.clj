@@ -22,7 +22,7 @@
            java.nio.ByteBuffer
            (java.nio.file Path)
            (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue ArrayList)
-           (java.util.function IntPredicate)
+           (java.util.function IntPredicate Predicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
@@ -35,7 +35,7 @@
            (xtdb.bitemporal IRowConsumer Polygon)
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
-           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie LiveHashTrie$Leaf)
+           (xtdb.trie HashTrieKt ArrowHashTrie$Leaf EventRowPointer HashTrie LiveHashTrie$Leaf MergePlanTask MergePlanNode ISegment)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
@@ -311,8 +311,12 @@
 (defn- ->path-pred [^ArrowBuf iid-arrow-buf]
   (if iid-arrow-buf
     (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-arrow-buf))]
-      #(zero? (HashTrie/compareToPath iid-ptr %)))
-    (constantly true)))
+      (reify Predicate
+        (test [_ path]
+          (zero? (HashTrie/compareToPath iid-ptr path)))))
+    (reify Predicate
+      (test [_ _path]
+        true))))
 
 (defn- ->merge-tasks
   "segments :: [Segment]
@@ -322,39 +326,43 @@
    return :: (seq {:keys [path leaves]})"
   [segments path-pred]
   (let [result (ArrayList.)]
-    (->> (trie/->merge-plan segments {:path-pred path-pred})
-         (run! (fn [{:keys [path mp-nodes]}]
-                 (let [^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)
+    (->> (HashTrieKt/toMergePlan segments path-pred)
+         (run! (fn [^MergePlanTask merge-plan-task]
+                 (let [path (.getPath merge-plan-task)
+                       mp-nodes (.getMpNodes merge-plan-task)
+                       ^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)
                        leaves (ArrayList.)]
-                   (loop [[{:keys [segment] trie-node :node} & more-mp-nodes] mp-nodes
+                   (loop [[^MergePlanNode mp-node & more-mp-nodes] mp-nodes
                           node-taken? false]
-                     (if segment
-                       (if-not trie-node
-                         (recur more-mp-nodes node-taken?)
+                     (if mp-node
+                       (let [segment (.getSegment mp-node)
+                             trie-node (.getNode mp-node)]
+                         (if-not trie-node
+                           (recur more-mp-nodes node-taken?)
 
-                         (condp = (class trie-node)
-                           ArrowHashTrie$Leaf
-                           (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata]} segment
-                                 page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
-                                 take-node? (.test page-idx-pred page-idx)]
+                           (condp = (class trie-node)
+                             ArrowHashTrie$Leaf
+                             (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata]} segment
+                                   page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
+                                   take-node? (.test page-idx-pred page-idx)]
 
-                             (when take-node?
-                               (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
-                                 (.or cumulative-iid-bitmap iid-bitmap)))
+                               (when take-node?
+                                 (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
+                                   (.or cumulative-iid-bitmap iid-bitmap)))
 
-                             (when (or take-node?
-                                       (when node-taken?
-                                         (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
-                                           (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
-                               (.add leaves [:arrow segment page-idx]))
+                               (when (or take-node?
+                                         (when node-taken?
+                                           (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
+                                             (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
+                                 (.add leaves [:arrow segment page-idx]))
 
-                             (recur more-mp-nodes (or node-taken? take-node?)))
+                               (recur more-mp-nodes (or node-taken? take-node?)))
 
-                           LiveHashTrie$Leaf
-                           (let [^LiveHashTrie$Leaf trie-node trie-node
-                                 {:keys [^RelationReader live-rel, trie]} segment]
-                             (.add leaves [:live (.select live-rel (.mergeSort trie-node trie))])
-                             (recur more-mp-nodes true))))
+                             LiveHashTrie$Leaf
+                             (let [^LiveHashTrie$Leaf trie-node trie-node
+                                   {:keys [^RelationReader live-rel, trie]} segment]
+                               (.add leaves [:live (.select live-rel (.mergeSort trie-node trie))])
+                               (recur more-mp-nodes true)))))
 
                        (when node-taken?
                          (.add result {:path path, :leaves (vec leaves)}))))))))
@@ -462,19 +470,19 @@
                                              (or (->merge-tasks (cond-> (mapv (fn [meta-file-path]
                                                                                 (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
                                                                                   (.add table-metadatas table-metadata)
-                                                                                  {:trie trie
-                                                                                   :trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
-                                                                                   :table-metadata table-metadata
-                                                                                   :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                            (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                                              (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                              page-idx-pred))
-                                                                                                          (.build metadata-pred table-metadata)
-                                                                                                          col-names)}))
+                                                                                  (into (trie/->Segment trie)
+                                                                                        {:trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
+                                                                                         :table-metadata table-metadata
+                                                                                         :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                                  (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                                    (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                                    page-idx-pred))
+                                                                                                                (.build metadata-pred table-metadata)
+                                                                                                                col-names)})))
                                                                               current-meta-files)
 
-                                                                  live-table-wm (conj {:trie (.liveTrie live-table-wm)
-                                                                                       :live-rel (.liveRelation live-table-wm)}))
+                                                                  live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
+                                                                                          (assoc :live-rel (.liveRelation live-table-wm)))))
 
                                                                 (->path-pred iid-arrow-buf))
                                                  []))]

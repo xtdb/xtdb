@@ -163,8 +163,10 @@
                   [{:xt/id "foo", :v 2}
                    {:xt/id "bar", :v 2}])
 
-    (let [segments [{:trie (.compactLogs (li/live-trie lt0)), :data-rel (tu/->live-data-rel lt0)}
-                    {:trie (.compactLogs (li/live-trie lt1)), :data-rel (tu/->live-data-rel lt1)}]]
+    (let [segments [(-> (trie/->Segment (.compactLogs (li/live-trie lt0)))
+                        (assoc :data-rel (tu/->live-data-rel lt0)))
+                    (-> (trie/->Segment (.compactLogs (li/live-trie lt1)))
+                        (assoc :data-rel (tu/->live-data-rel lt1)))]]
 
       (t/testing "merge segments"
         (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))

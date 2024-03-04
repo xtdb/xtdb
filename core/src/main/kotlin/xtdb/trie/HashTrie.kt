@@ -1,7 +1,12 @@
 package xtdb.trie
 
+import com.carrotsearch.hppc.ObjectStack
 import org.apache.arrow.memory.util.ArrowBufPointer
+import xtdb.trie.ArrowHashTrie.IidBranch
+import xtdb.trie.ArrowHashTrie.RecencyBranch
+import xtdb.trie.HashTrie.Node
 import java.util.*
+import java.util.function.Predicate
 import java.util.stream.Stream
 
 internal typealias RecencyArray = LongArray
@@ -14,7 +19,7 @@ fun conjPath(path: ByteArray, idx: Byte): ByteArray {
     return childPath
 }
 
-interface HashTrie<N : HashTrie.Node<N>> {
+interface HashTrie<N : Node<N>> {
     val rootNode: N?
 
     val leaves get() = rootNode?.leaves ?: emptyList()
@@ -35,6 +40,8 @@ interface HashTrie<N : HashTrie.Node<N>> {
 
         val leaves: List<Node<N>> get() = leafStream().toList()
     }
+
+    abstract class BaseNode : Node<BaseNode>
 
     @Suppress("MemberVisibilityCanBePrivate")
     companion object {
@@ -63,4 +70,66 @@ interface HashTrie<N : HashTrie.Node<N>> {
             return 0
         }
     }
+}
+
+interface ISegment {
+    val trie: HashTrie<*>
+}
+
+data class MergePlanNode(val segment: ISegment, val node: Node<*>)
+
+class MergePlanTask(val mpNodes: List<MergePlanNode>, val path: ByteArray)
+
+@Suppress("UNUSED_EXPRESSION")
+fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?): List<MergePlanTask> {
+    val result = mutableListOf<MergePlanTask>()
+    val stack = ObjectStack<MergePlanTask>()
+
+    val initialMpNodes = segments.mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode(seg, it) } }
+    if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
+
+    while (!stack.isEmpty) {
+        val mergePlanTask = stack.pop()
+        val mpNodes = mergePlanTask.mpNodes
+
+        when {
+            mpNodes.any { it.node is RecencyBranch } -> {
+                val newMpNodes = mutableListOf<MergePlanNode>()
+                for (mpNode in mergePlanTask.mpNodes) {
+                    // TODO filter by recencies #3166
+                    val recencies = mpNode.node.recencies
+                    if (recencies != null) {
+                        for (i in recencies.indices) {
+                            newMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
+                        }
+                    } else {
+                        newMpNodes += mpNode
+                    }
+                }
+                stack.push(MergePlanTask(newMpNodes, mergePlanTask.path))
+            }
+
+            pathPred != null && !pathPred.test(mergePlanTask.path) -> null
+
+            mpNodes.any { it.node is IidBranch } -> {
+                val nodeChildren = mpNodes.map { it.node.iidChildren }
+                // do these in reverse order so that they're on the stack in path-prefix order
+                for (bucketIdx in HashTrie.LEVEL_WIDTH - 1 downTo 0) {
+                    val newMpNodes = nodeChildren.mapIndexedNotNull { idx, children ->
+                        if (children != null) {
+                            children[bucketIdx]?.let { MergePlanNode(mpNodes[idx].segment, it) }
+                        } else {
+                            mpNodes[idx]
+                        }
+                    }
+
+                    if (newMpNodes.isNotEmpty())
+                        stack.push(MergePlanTask(newMpNodes, conjPath(mergePlanTask.path, bucketIdx.toByte())))
+                }
+            }
+
+            else -> result += mergePlanTask
+        }
+    }
+    return result
 }
