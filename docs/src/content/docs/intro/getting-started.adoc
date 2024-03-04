@@ -46,9 +46,7 @@ To run your first query:
 ----
 sql="SELECT t1.doc.foo[1]
      FROM (VALUES ({'foo':['Hello', 'world!']})) AS t1(doc)"; \
-curl -X POST localhost:3000/query \
-     -H "Content-Type: application/json" -H "Accept: application/jsonl" \
-     -d "{\"query\": {\"sql\": \"${sql}\"}}"
+curl --json "{\"query\": {\"sql\": \"${sql}\"}}" localhost:3000/query
 ----
 
 From here, check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see what else is available.
