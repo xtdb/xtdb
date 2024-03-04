@@ -14,7 +14,7 @@ title: Welcome to XTDB!
 </div>
 ++++
 
-XTDB is a bitemporal, dynamic database, queryable with SQL and XTQL, that reduces the time and cost of building and maintaining safe systems of record.
+XTDB is an immutable database, queryable with both SQL and XTQL, that reduces the time and cost of building and maintaining safe systems of record.
 It is free-to-use and open-source, under the https://opensource.org/license/mpl-2-0/[MPL license^].
 
 To quickly get up-and-running, check out our link:/intro/getting-started[getting started] guide.
@@ -23,9 +23,9 @@ For the time being, XTDB is accessible through our HTTP API and Java, Kotlin and
 
 Next up:
 
-* Find out link:/intro/what-is-xtdb[what makes XTDB great].
+* Discover link:/intro/what-is-xtdb[What makes XTDB great].
 * Find out more about link:/intro/what-is-xtql[XTQL].
-* Find out how to configure the XTDB link:/config/tx-log[transaction-log] and link:/config/storage[storage].
 * Check out the link:/reference/main[XTDB reference documentation].
-* Learn more about the individual link:/drivers[client drivers].
+* Get familiar with the individual link:/drivers[client drivers].
+* Learn about XTDB's link:/config/tx-log[transaction-log] and link:/config/storage[storage] configurations.
 * For help and support, visit the link:/intro/community[XTDB community].
