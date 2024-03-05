@@ -31,12 +31,14 @@ To run your first transaction, send the following:
 [source,bash]
 ----
 # note that dollar symbols in the SQL string must be escaped
-sql="INSERT INTO people (xt\$id, foo) VALUES (6, 'fred')"; \    
+sql="INSERT INTO people (xt\$id, name) VALUES (6, 'fred')"; \    
 curl --json "{\"txOps\": [{\"sql\": \"${sql}\"}]}" localhost:3000/tx
 ----
 ====
 
 Note that the `people` table doesn't have to be defined beforehand - the table is created dynamically during the INSERT along with any supplied columns and types.
+
+Each record in XTDB must contain a user-provided `xt$id` primary key column, but other columns are fully dynamic. Note that `xt$` is a reserved prefix convention for namepacing system-mandated columns and other XTDB-specific database objects.
 
 Transactions are durable and processed asynchronously, i.e. if you wait a few milliseconds for the processing to finish, you can then query that data in a subsequent request
 
@@ -152,4 +154,120 @@ A basis is stable and allows you to re-run unmodified queries indefinitely. This
 
 == System-Time Columns
 
-...
+The mechanism underpinning the basis concept is called 'System Time'.
+
+Normally a SQL database will irreversibly lose access to prior states of data after transactions containing `UPDATE` or `DELETE` statements are committed. System-time versioning is a standard defined in link:https://en.wikipedia.org/wiki/SQL:2011[SQL:2011], but unlike other implementations, XTDB has it baked into the core of the database engine such that all data is versioned by default and all modification operations are non-destructive.
+
+This minimises the circumstances where developers need to reach for backups or ETL integrations with other warehousing systems in order to recover data. It also provides an opportunity to avoid complicating application schemas with "soft delete" columns and audit tables.
+
+The system-time columns `xt$system_from` and `xt$system_to` are hidden from view by default but, when specified, can be found on every table within regular SQL - and can also be combined with the previously described capability to query at a prior basis (if desirable):
+
+`POST` to `localhost:3000/query`
+
+[source,json]
+----
+{
+  "query": {"sql": "SELECT people.*, people.xt$system_from, people.xt$system_to, FROM people"},
+  "queryOpts": {"basis": {"atTx": {"txId": 0,
+                                   "systemTime":"2024-03-04T14:31:03.728415Z"}}}
+}
+----
+
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+sql="SELECT people.*, people.xt$system_from, people.xt$system_to FROM people"; \    
+curl --json "{\"query\": {\"sql\": \"${sql}\"},\
+              \"queryOpts\": {\"basis\": {\"atTx\": {\"txId\": 0,\
+                                                     \"systemTime\": \"2024-03-04T14:31:03.728415Z\"}}}}" localhost:3000/query
+----
+====
+
+The full system-time history for a set of records in a table can be retrieved by specifying `FOR ALL SYSTEM_TIME` after each table reference:
+
+`POST` to `localhost:3000/query`
+
+[source,json]
+----
+{
+  "query": {"sql": "SELECT people.*, people.xt$system_from, people.xt$system_to, FROM people FOR ALL SYSTEM_TIME"},
+  "queryOpts": {"basis": {"atTx": {"txId": 0,
+                                   "systemTime":"2024-03-04T14:31:03.728415Z"}}}
+}
+----
+
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+sql="SELECT people.*, people.xt\$system_from, people.xt\$system_to FROM people FOR ALL SYSTEM_TIME"; \    
+curl --json "{\"query\": {\"sql\": \"${sql}\"},\
+              \"queryOpts\": {\"basis\": {\"atTx\": {\"txId\": 0,\
+                                                     \"systemTime\": \"2024-03-04T14:31:03.728415Z\"}}}}" localhost:3000/query
+----
+====
+
+You can also run queries against individual tables at specific timestamps using `FOR SYSTEM_TIME AS_OF <timestamp>` and use temporal period operators (`OVERLAPS`, `PRECEDES` etc.) to interrogate audit trails - see the link:/reference/main/sql/queries[SQL documentation].
+
+== ERASE as hard-delete
+
+Where data does need to be erased ("hard deleted"), an `ERASE` operation is provided:
+
+`POST` to `localhost:3000/tx`
+
+[source,json]
+----
+{
+  "txOps": [{"sql": "ERASE FROM people WHERE people.name = 'fred')"}]
+}
+----
+
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+sql="ERASE FROM people WHERE people.name = 'fred'"; \    
+curl --json "{\"txOps\": [{\"sql\": \"${sql}\"}]}" localhost:3000/tx
+----
+====
+
+The ERASE is effective as soon as the transaction is committed, and can be verified by again setting the `afterTx` to the previous transaction. Once again the TransactionKey shown is illustrative and you must replace it with the one returned by your XTDB server:
+
+`POST` to `localhost:3000/query`
+
+[source,json]
+----
+{
+  "query": {"sql": "SELECT * FROM people"},
+  "queryOpts": {"afterTx": {"txId": 2,
+                            "systemTime":"2024-03-04T14:32:03.728415Z"}}
+}
+----
+
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+sql="SELECT * FROM people"; \    
+curl --json "{\"query\": {\"sql\": \"${sql}\"},\
+              \"queryOpts\": {\"afterTx\": {\"txId\": 2,\
+                                            \"systemTime\": \"2024-03-04T14:32:03.728415Z\"}}}" localhost:3000/query
+----
+====
+
+Under the hood, the relevant data is guaranteed to be fully erased only once all background index processing has completed and the changes have been uploaded to object storage.
+
+== Valid-Time for advanced time-travel
+
+Everything demonstrated so far only scratches the surface of what XTDB can do, given that XTDB is a full SQL implementation with all the implications that has, however there is one further aspect where XTDB is very different to most databases: ubiquitous 'Valid-Time' versioning.
+
+In addition to system-time versioning, SQL:2011 also defines 'application-time' versioning. XTDB applies this versioning to all tables. It allows for several advanced usage scenarios:
+
+. *foo* - a
+. *bar* - b
+
