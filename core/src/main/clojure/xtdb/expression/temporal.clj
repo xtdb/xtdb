@@ -18,14 +18,20 @@
 
 ;;;; units
 
+(defn multiply-for-conversion ^long [^long ts ^long quotient]
+  (Math/multiplyExact ts quotient))
+
+(defn divide-for-conversion ^long [^long ts ^long quotient]
+  (quot ts quotient))
+
 (defn- with-conversion [form from-unit to-unit]
   (if (= from-unit to-unit)
     form
     (let [from-hz (types/ts-units-per-second from-unit)
           to-hz (types/ts-units-per-second to-unit)]
       (if (> to-hz from-hz)
-        `(Math/multiplyExact ~form ~(quot to-hz from-hz))
-        `(quot ~form ~(quot from-hz to-hz))))))
+        `(multiply-for-conversion ~form ~(quot to-hz from-hz))
+        `(divide-for-conversion ~form ~(quot from-hz to-hz))))))
 
 (defn- with-arg-unit-conversion [unit1 unit2 ->ret-type ->call-code]
   (if (= unit1 unit2)
