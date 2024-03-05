@@ -50,12 +50,12 @@ In addition to any user-defined columns asserted for a given row, XTDB maintains
 
 These columns are:
 
-- `system_time_from`
-- `system_time_to`
-- `valid_time_from`
-- `valid_time_to`
+- `xt$system_from`
+- `xt$system_to`
+- `xt$valid_from`
+- `xt$valid_to`
 
-The values of these columns are maintained automatically and the respective pairs of columns always form 'closed-open' periods (i.e. inclusive of 'from', exclusive of 'to').
+The columns are not visible unless explicitly queried. The values of these columns are maintained automatically and the respective pairs of columns always form 'closed-open' periods (i.e. inclusive of 'from', exclusive of 'to').
 
 'System time' represents the audit history of all changes to records and captures the time that information entered the system. 'Valid time' is a user-managed dimension and can be used for a variety of purposes (out of order updates, backfilling data, domain modeling etc.).
 
