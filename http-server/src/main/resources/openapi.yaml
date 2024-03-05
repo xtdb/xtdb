@@ -49,8 +49,8 @@ components:
         currentTime:
           description: wall clock time for functions that require it (i.e. `(current-time)`)
           $ref: '#/components/schemas/Instant'
-        afterTx:
-          description: requires that the node has indexed at least the specified transaction
+        atTx:
+          description: TransactionKey reference returned by any prior request to `/tx`, ensures that the node has indexed at least the specified transaction
           $ref: '#/components/schemas/TransactionKey'
     Binding:
       description: Binding
