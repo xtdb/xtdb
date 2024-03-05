@@ -396,6 +396,10 @@
     ;;=>
     (column-reference-symbol (sem/column-reference z))
 
+    [:column_reference [:schema_name _] _]
+    ;;=>
+    (column-reference-symbol (sem/column-reference z))
+
     [:cast_specification _ ^:z e _ cast-spec]
     (cast-expr (expr e) cast-spec)
 
@@ -1544,7 +1548,7 @@
       [:between (expr point-in-time-1) (expr point-in-time-2)])))
 
 (defn- build-table-primary [tp]
-  (let [{:keys [id correlation-name table-or-query-name] :as table} (sem/table tp)
+  (let [{:keys [id correlation-name table-or-query-name schema] :as table} (sem/table tp)
         projection (first (sem/projected-columns tp))]
     [:rename (table-reference-symbol correlation-name id)
      (if-let [subquery-ref (:subquery-ref (meta table))]
@@ -1553,7 +1557,12 @@
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
-       [:scan (->> {:table (symbol table-or-query-name)
+       [:scan (->> {:table (case schema
+                             "INFORMATION_SCHEMA"
+                             (symbol (str "information_schema$" table-or-query-name))
+                             "PG_CATALOG"
+                             (symbol (str "pg_catalog$" table-or-query-name))
+                             (symbol table-or-query-name))
                     :for-valid-time (interpret-application-time-period-spec tp)
                     :for-system-time (interpret-system-time-period-spec tp)}
                    (into {} (remove (comp nil? val))))
@@ -1901,79 +1910,6 @@
     [:table_primary [:arrow_table _ _] _ _ _]
     (build-arrow-table z)
 
-    [:table_primary [:subquery _]]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:subquery _] _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:subquery _] _ _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:subquery _] _ _ _]
-    ;;=>
-    (build-table-primary z)
-
-    ;; ident as first child indicates real table for now
-    ;; if and when query_name becomes a valid child of table_or_query_name
-    ;; this needs changing to specifically match on the table case
-
-    ;; table case in above comment refers to the situation in which a real
-    ;; table appears as a child, not the case of the characters in the table name
-
-    [:table_primary [:regular_identifier _]]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:regular_identifier _] _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:regular_identifier _] _ _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:regular_identifier _] _ _ _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:regular_identifier _] _ _ _ _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:regular_identifier _] _ _ _ _ _]
-    ;;=>
-    (build-table-primary z)
-
-    ;; duplicates matches for delimited_identifier for the same reason as above
-
-    [:table_primary [:delimited_identifier _]]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:delimited_identifier _] _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:delimited_identifier _] _ _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:delimited_identifier _] _ _ _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:delimited_identifier _] _ _ _ _]
-    ;;=>
-    (build-table-primary z)
-
-    [:table_primary [:delimited_identifier _] _ _ _ _ _]
-    ;;=>
-    (build-table-primary z)
-
     [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
     ;;=>
     (plan-qualified-join "INNER" lhs rhs sc)
@@ -2010,6 +1946,12 @@
       :delete_statement__searched (plan-dml :delete z)
       :update_statement__searched (plan-dml :update z)
       :erase_statement__searched (plan-erase z)
+      :table_primary (r/zcase (r/$ z 1)
+                       (:schema_name :delimited_identifier :regular_identifier :subquery)
+                       (build-table-primary z)
+                       (err/illegal-arg ::cannot-build-plan
+                                        {::err/message (str "Cannot build plan for table_primary: "  (pr-str (r/node z)))
+                                         :node (r/node z)}))
 
       (throw (err/illegal-arg ::cannot-build-plan
                               {::err/message (str "Cannot build plan for: "  (pr-str (r/node z)))
