@@ -321,7 +321,7 @@ components:
         $ref: '#/components/examples/InsertIntoExample'
     Instant:
       type: string
-      example: "2024-01-01T00:00Z"
+      example: "2024-01-01T00:00:00Z"
       format: date-time
     Join:
       description: join operator
@@ -859,7 +859,7 @@ components:
         '@value': "PT3H1M35.23S"
       my-instant:
         '@type': "xt:instant"
-        '@value': "2024-01-01T00:00Z"
+        '@value': "2024-01-01T00:00:00Z"
       my-local-date:
         '@type': "xt:date"
         '@value': "2024-01-01"
@@ -906,8 +906,8 @@ components:
       putDocs:
         - $ref: '#/components/examples/DocumentSmallExample'
       into: "docs"
-      validFrom: "2023-01-01T00:00Z"
-      validTo: "2024-01-01T00:00Z"
+      validFrom: "2023-01-01T00:00:00Z"
+      validTo: "2024-01-01T00:00:00Z"
     UpdateExample:
       update: "users"
       bind:
