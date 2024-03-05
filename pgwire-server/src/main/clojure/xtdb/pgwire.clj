@@ -609,11 +609,11 @@
     (when (realized? accept-socket)
       (let [^ServerSocket socket @accept-socket]
         (when-not (.isClosed socket)
-          (log/debug "Closing accept socket" port)
+          (log/trace "Closing accept socket" port)
           (.close socket))))
 
     (when-not (#{Thread$State/NEW, Thread$State/TERMINATED} (.getState accept-thread))
-      (log/debug "Closing accept thread")
+      (log/trace "Closing accept thread")
       (.interrupt accept-thread)
       (.join accept-thread (* 5 1000))
       (when-not (= Thread$State/TERMINATED (.getState accept-thread))
@@ -626,7 +626,7 @@
       (stop-connection conn))
 
     (when-not (.isShutdown thread-pool)
-      (log/debug "Closing thread pool")
+      (log/trace "Closing thread pool")
       (.shutdownNow thread-pool)
       (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
         (log/error "Could not shutdown thread pool gracefully" {:port port})
@@ -742,7 +742,7 @@
         drain (not (contains? #{0, nil} drain-wait))]
 
     (when (and drain (compare-and-set! server-status :running :draining))
-      (log/debug "Server draining connections")
+      (log/trace "Server draining connections")
       (let [wait-until (+ (System/currentTimeMillis) drain-wait)]
         (loop []
           (cond
@@ -1092,12 +1092,12 @@
 (defn- cmd-write-msg
   "Writes out a single message given a definition (msg-def) and optional data record."
   ([conn msg-def]
-   (log/debug "Writing server message" (select-keys msg-def [:char8 :name]))
+   (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
    (let [^DataOutputStream out @(:out conn)]
      (.writeByte out (byte (:char8 msg-def)))
      (.writeInt out 4)))
   ([conn msg-def data]
-   (log/debug "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
+   (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
    (let [^DataOutputStream out @(:out conn)
          bytes-out (ByteArrayOutputStream.)
          msg-out (DataOutputStream. bytes-out)
@@ -1149,7 +1149,7 @@
   (case close-type
     :prepared-stmt
     (do
-      (log/debug "Closing prepared statement" {:cid cid, :stmt close-name})
+      (log/trace "Closing prepared statement" {:cid cid, :stmt close-name})
       (when-some [stmt (get-in @conn-state [:prepared-statements close-name])]
 
         ;; dissoc associated portals from root (they are addressed there by execute)
@@ -1161,7 +1161,7 @@
 
     :portal
     (do
-      (log/debug "Closing portal" {:cid cid, :portal close-name})
+      (log/trace "Closing portal" {:cid cid, :portal close-name})
       (when-some [portal (get-in @conn-state [:portals close-name])]
 
         ;; remove portal from stmt
@@ -1285,17 +1285,17 @@
     (loop [n-rows-out 0]
       (cond
         (cancelled-by-client?)
-        (do (log/debug "Query cancelled by client")
+        (do (log/trace "Query cancelled by client")
             (swap! conn-state dissoc :cancel)
             (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
 
         (Thread/interrupted)
         (do
-          (log/debug "query interrupted by server (forced shutdown)")
+          (log/trace "query interrupted by server (forced shutdown)")
           (throw (InterruptedException.)))
 
         (closing?)
-        (log/debug "query result stream stopping (conn closing)")
+        (log/trace "query result stream stopping (conn closing)")
 
         (.hasNext result-set)
         (let [continue
@@ -1304,7 +1304,7 @@
                 :continue
                 ;; allow interrupts - this can happen if we are blocking during the row reduce and our conn is forced to close.
                 (catch InterruptedException e
-                  (log/debug e "Interrupt thrown sending query results")
+                  (log/trace e "Interrupt thrown sending query results")
                   (throw e))
 
                 ;; rethrow socket ex without logs (this is expected during any msg transfer
@@ -1359,7 +1359,7 @@
     (when cancelled (swap! conn-state dissoc :cancel))
 
     (when (Thread/interrupted)
-      (log/debug "query interrupted by server (forced shutdown)")
+      (log/trace "query interrupted by server (forced shutdown)")
       (throw (InterruptedException.)))
 
     ;; naive bounded wait a very short amount only after a few iterations (some queries return quickly!)
@@ -1370,12 +1370,12 @@
       ;; queries / operators cannot actually be interrupted right now, so just leave it dangling.
       cancelled
       (do
-        (log/debug "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
+        (log/trace "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
         (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
 
       ;; close happens if conns do not drain in time so we should exit
       (= :closing @conn-status)
-      (log/debug "query result stream stopping (conn closing)")
+      (log/trace "query result stream stopping (conn closing)")
 
       ;; very important done is the first cond state otherwise this cond might race
       ;; with the futs completion state
@@ -1416,7 +1416,7 @@
         (swap! conn-state update-in [:session :latest-submitted-tx] time/max-tx tx)
         nil)
       (catch Throwable e
-        (log/debug e "Error on submit-tx")
+        (log/trace e "Error on submit-tx")
         (err-execution-exception e "unexpected error on tx submit (report as a bug)")))))
 
 (defn- ->xtify-param [{:keys [arg-types param-format]}]
@@ -1500,7 +1500,7 @@
     (.whenComplete query-fut
                    (reify BiConsumer
                      (accept [_ _ ex]
-                       (when ex (log/debug ex "Error during query open-sql&"))
+                       (when ex (log/trace ex "Error during query open-sql&"))
                        (swap! conn-state update :executing disj query-fut))))
 
     (cmd-await-query-result conn {:projection projection, :query query, :iteration 0, :fut query-fut})))
@@ -1703,7 +1703,7 @@
   ;; put the conn in the extend protocol
   (swap! conn-state assoc :protocol :extended)
 
-  (log/debug "Parsing" {:stmt-name stmt-name,
+  (log/trace "Parsing" {:stmt-name stmt-name,
                         :query query
                         :port (:port server)
                         :cid cid})
@@ -1779,7 +1779,7 @@
         (not= :running @conn-status)
         (->> {:port port
               :cid cid}
-             (log/debug "Connection loop exiting (closing)"))
+             (log/trace "Connection loop exiting (closing)"))
 
         ;; if the server is draining, we may later allow connections to finish their queries
         ;; (consider policy - server has a drain limit but maybe better to be explicit here as well)
@@ -1791,14 +1791,14 @@
              (empty? (:cmd-buf @conn-state)))
         (do (->> {:port port
                   :cid cid}
-                 (log/debug "Connection loop exiting (draining)"))
+                 (log/trace "Connection loop exiting (draining)"))
             ;; TODO I think I should send an error, but if I do it causes a crash on the client?
             #_(cmd-send-error conn (err-admin-shutdown "draining connections"))
             (compare-and-set! conn-status :running :closing))
 
         ;; well, it won't have been us, as we would drain first
         (.isClosed socket)
-        (do (log/debug "Connection closed unexpectedly" {:port port, :cid cid})
+        (do (log/trace "Connection closed unexpectedly" {:port port, :cid cid})
             (compare-and-set! conn-status :running :closing))
 
         ;; we have queued a command to be processed
@@ -1825,7 +1825,7 @@
                     :cid cid,
                     :msg (or msg-var msg-char8)
                     :char8 msg-char8}
-                   (log/debug "Read client msg"))]
+                   (log/trace "Read client msg"))]
 
           (when (:skip-until-sync @conn-state)
             (if (= msg-var #'msg-sync)
@@ -1834,7 +1834,7 @@
                     :cid cid,
                     :msg (or msg-var msg-char8)
                     :char8 msg-char8}
-                   (log/debug "Skipping msg until next sync due to error in extended protocol"))))
+                   (log/trace "Skipping msg until next sync due to error in extended protocol"))))
 
           (when-not msg-var
             (cmd-send-error conn (err-protocol-violation "unknown client message")))
@@ -1906,22 +1906,22 @@
     ;; if we succeeded, start the conn loop
     (when (= :new @conn-status)
       (try
-        (log/debug "Starting connection loop" {:port port, :cid cid})
+        (log/trace "Starting connection loop" {:port port, :cid cid})
         (conn-loop conn)
         (catch SocketException e
           (when (= "Broken pipe (Write failed)" (.getMessage e))
-            (log/debug "Client closed socket while we were writing" {:port port, :cid cid})
+            (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
             (.close conn-socket))
 
           (when (= "Connection reset by peer" (.getMessage e))
-            (log/debug "Client closed socket while we were writing" {:port port, :cid cid})
+            (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
             (.close conn-socket))
 
           ;; socket being closed is normal, otherwise log.
           (when-not (.isClosed conn-socket)
             (log/error e "An exception was caught during connection" {:port port, :cid cid})))
         (catch EOFException _
-          (log/debug "Connection closed by client" {:port port, :cid cid}))
+          (log/trace "Connection closed by client" {:port port, :cid cid}))
         (catch Throwable e
           (log/error e "An exception was caught during connection" {:port port, :cid cid}))))
 
@@ -1929,7 +1929,7 @@
     ;; want to leave conns around for a bit, so you can look at their state and debug
     (cleanup-connection-resources conn)
 
-    (log/debug "Connection ended" {:cid cid, :port port})
+    (log/trace "Connection ended" {:cid cid, :port port})
 
     ;; can be used to co-ordinate waiting for close
     (when-some [close-promise (:close-promise @conn-state)]
@@ -1950,7 +1950,7 @@
   (when-not (compare-and-set! server-status :starting :running)
     (throw (Exception. "Accept loop requires a newly initialised server")))
 
-  (log/debug "Pgwire server listening on" port)
+  (log/info "PGWire server listening on" port)
 
   (try
     (loop []
@@ -1958,7 +1958,7 @@
         (Thread/interrupted) (throw (InterruptedException.))
 
         (.isClosed ^ServerSocket @accept-socket)
-        (log/debug "Accept socket closed, exiting accept loop")
+        (log/trace "Accept socket closed, exiting accept loop")
 
         (#{:draining :running} @server-status)
         (do
@@ -2003,7 +2003,7 @@
       (when-not (:silent-accept @server-state)
         (log/error e "Exception caught on accept thread" {:port port}))))
 
-  (log/debug "exiting accept loop"))
+  (log/trace "exiting accept loop"))
 
 (defn- create-server [{:keys [node port num-threads drain-wait unsafe-init-state]}]
   (assert node ":node is required")
