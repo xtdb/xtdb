@@ -21,7 +21,7 @@
            (java.io Closeable)
            java.nio.ByteBuffer
            (java.nio.file Path)
-           (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue ArrayList)
+           (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue)
            (java.util.function IntPredicate Predicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -35,7 +35,7 @@
            (xtdb.bitemporal IRowConsumer Polygon)
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
-           (xtdb.trie ArrowLeaf LiveLeaf MergeTask HashTrieKt ArrowHashTrie$Leaf EventRowPointer HashTrie LiveHashTrie$Leaf MergePlanTask MergePlanNode)
+           (xtdb.trie ArrowLeaf LiveLeaf MergeTask HashTrieKt EventRowPointer HashTrie ArrowSegment LiveSegment)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
@@ -205,7 +205,8 @@
 (defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache ^Path table-path leaf]
   (condp = (class leaf)
     ArrowLeaf
-    (let [{:keys [trie-key]} (.getSegment ^ArrowLeaf leaf)
+    (let [^ArrowSegment arrow-segment (.getSegment ^ArrowLeaf leaf)
+          trie-key (.getTrieKey arrow-segment)
           page-idx (.getPageIdx ^ArrowLeaf leaf)
           data-file-path (trie/->table-data-file-path table-path trie-key)]
       (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
@@ -425,19 +426,19 @@
                                               (cond-> (mapv (fn [meta-file-path]
                                                               (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
                                                                 (.add table-metadatas table-metadata)
-                                                                {:trie trie
-                                                                 :trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
-                                                                 :table-metadata table-metadata
-                                                                 :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                          (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                            (.and page-idx-pred bloom-page-idx-pred)
-                                                                                            page-idx-pred))
-                                                                                        (.build metadata-pred table-metadata)
-                                                                                        col-names)}))
+                                                                (ArrowSegment. table-metadata
+                                                                               (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                         (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                           (.and page-idx-pred bloom-page-idx-pred)
+                                                                                           page-idx-pred))
+                                                                                       (.build metadata-pred table-metadata)
+                                                                                       col-names)
+                                                                               (:trie-key (trie/parse-trie-file-path meta-file-path))
+                                                                               trie)))
                                                             current-meta-files)
 
-                                                live-table-wm (conj {:trie (.liveTrie live-table-wm)
-                                                                     :live-rel (.liveRelation live-table-wm)}))
+                                                live-table-wm
+                                                (conj (LiveSegment. (.liveRelation live-table-wm) (.liveTrie live-table-wm))))
 
                                               (->path-pred iid-arrow-buf)))]
 

@@ -11,7 +11,8 @@
             [xtdb.trie-test :refer [->trie-file-name]]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]))
+            [xtdb.vector.writer :as vw])
+  (:import (xtdb.trie CompactorSegment)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -163,11 +164,12 @@
                   [{:xt/id "foo", :v 2}
                    {:xt/id "bar", :v 2}])
 
-    (let [segments [{:trie (.compactLogs (li/live-trie lt0)), :data-rel (tu/->live-data-rel lt0)}
-                    {:trie (.compactLogs (li/live-trie lt1)), :data-rel (tu/->live-data-rel lt1)}]]
+    (let [segments [(CompactorSegment. (tu/->live-data-rel lt0) (.compactLogs (li/live-trie lt0)))
+                    (CompactorSegment. (tu/->live-data-rel lt1) (.compactLogs (li/live-trie lt1)))]]
 
       (t/testing "merge segments"
-        (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
+        (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema
+                                                                              (map #(.getDataRel ^CompactorSegment %) segments)))
                          recency-wtr (c/open-recency-wtr tu/*allocator*)]
 
           (c/merge-segments-into data-rel-wtr recency-wtr segments nil)
@@ -212,7 +214,8 @@
                    (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals)))))
 
       (t/testing "merge segments with path predicate"
-        (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
+        (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema
+                                                                              (map #(.getDataRel ^CompactorSegment %) segments)))
                          recency-wtr (c/open-recency-wtr tu/*allocator*)]
 
           (c/merge-segments-into data-rel-wtr recency-wtr segments (byte-array [2]))

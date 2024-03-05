@@ -15,7 +15,7 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb Compactor IBufferPool)
            xtdb.bitemporal.IPolygonReader
-           (xtdb.trie EventRowPointer HashTrieKt IDataRel MergePlanTask)
+           (xtdb.trie EventRowPointer HashTrieKt IDataRel MergePlanTask CompactorSegment)
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.IVectorWriter
@@ -118,10 +118,10 @@
         (.add table-metadatas (.openTableMetadata metadata-mgr (trie/->table-meta-file-path table-path trie-key))))
 
       (let [segments (mapv (fn [{:keys [trie] :as _table-metadata} data-rel]
-                             {:trie trie, :data-rel data-rel})
+                             (CompactorSegment. data-rel trie))
                            table-metadatas
                            data-rels)
-            schema (->log-data-rel-schema (map :data-rel segments))]
+            schema (->log-data-rel-schema (map #(.getDataRel ^CompactorSegment %) segments))]
 
         (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator schema)
                          recency-wtr (open-recency-wtr allocator)]

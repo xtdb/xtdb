@@ -6,7 +6,7 @@
             [xtdb.time :as time])
   (:import (org.apache.arrow.memory RootAllocator)
            org.apache.arrow.vector.VectorSchemaRoot
-           (xtdb.trie HashTrieKt ArrowHashTrie ArrowHashTrie$Leaf MergePlanNode MergePlanTask)))
+           (xtdb.trie HashTrieKt ArrowHashTrie ArrowHashTrie$Leaf MergePlanNode MergePlanTask Segment)))
 
 (deftest parses-trie-paths
   (letfn [(parse [trie-key]
@@ -15,6 +15,10 @@
                 (mapv [:level :part :next-row :rows])))]
     (t/is (= [0 nil 46 32] (parse (trie/->log-l0-l1-trie-key 0 46 32))))
     (t/is (= [2 [0 0 1 3] 120 nil] (parse (trie/->log-l2+-trie-key 2 (byte-array [0 0 1 3]) 120))))))
+
+(defrecord TestSegment [trie data]
+  Segment
+  (getTrie [_] trie))
 
 (deftest test-merge-plan-with-nil-nodes-2700
   (letfn [(->arrow-hash-trie [^VectorSchemaRoot meta-root]
@@ -32,10 +36,9 @@
                 {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
                 {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
                 {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
-               (->> (HashTrieKt/toMergePlan [nil
-                                             {:seg :t1, :trie (->arrow-hash-trie t1-root)}
-                                             {:seg :log, :trie (->arrow-hash-trie log-root)}
-                                             {:seg :log2, :trie (->arrow-hash-trie log2-root)}]
+               (->> (HashTrieKt/toMergePlan [(->TestSegment (->arrow-hash-trie t1-root) :t1)
+                                             (->TestSegment (->arrow-hash-trie log-root) :log)
+                                             (->TestSegment (->arrow-hash-trie log2-root) :log2)]
                                             nil)
                     (map (fn [^MergePlanTask merge-plan-node]
                            (let [path (.getPath merge-plan-node)
@@ -44,7 +47,7 @@
                               :pages (mapv (fn [^MergePlanNode merge-plan-node]
                                              (let [segment (.getSegment merge-plan-node)
                                                    ^ArrowHashTrie$Leaf node (.getNode merge-plan-node)]
-                                               {:seg (:seg segment), :page-idx (.getDataPageIndex node)}))
+                                               {:seg (:data segment), :page-idx (.getDataPageIndex node)}))
                                            mp-nodes)})))
                     (sort-by :path)))))))
 

@@ -1,10 +1,12 @@
 package xtdb.trie
 
-import clojure.lang.Keyword
 import com.carrotsearch.hppc.ObjectStack
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.types.pojo.Schema
 import org.roaringbitmap.buffer.MutableRoaringBitmap
 import xtdb.metadata.ITableMetadata
+import xtdb.trie.ArrowHashTrie.IidBranch
+import xtdb.trie.ArrowHashTrie.RecencyBranch
 import xtdb.trie.HashTrie.Node
 import xtdb.vector.RelationReader
 import java.util.*
@@ -72,104 +74,130 @@ interface HashTrie<N : Node<N>> {
         }
     }
 }
-data class MergePlanNode(val segment: Map<*,*>, val node: Node<*>?)
-data class MergePlanTask(val mpNodes: List<MergePlanNode>, val path: ByteArray)
 
-private val trieKey = Keyword.intern("trie")
+interface IDataRel {
+    fun getSchema(): Schema
+    fun loadPage(leaf: Node<*>): RelationReader
+}
+
+interface Segment {
+    val trie: HashTrie<*>
+}
+
+data class ArrowSegment(
+    val tableMetadata: ITableMetadata, val pageIdxPred: IntPredicate, val trieKey: String,
+    override val trie: HashTrie<ArrowHashTrie.Node>,
+) : Segment
+
+data class LiveSegment(val liveRel: RelationReader, override val trie: HashTrie<LiveHashTrie.Node>) : Segment
+
+data class CompactorSegment(val dataRel: IDataRel, override val trie: HashTrie<ArrowHashTrie.Node>) : Segment
+
+data class MergePlanNode(val segment: Segment, val node: Node<*>)
+
+class MergePlanTask(val mpNodes: List<MergePlanNode>, val path: ByteArray)
+
 @Suppress("UNUSED_EXPRESSION")
-fun toMergePlan(segments: List<Map<Keyword, Any>?>, pathPred: Predicate<ByteArray>?) : ArrayList<MergePlanTask> {
-    val result: ArrayList<MergePlanTask> = ArrayList()
-    val stack : ObjectStack<MergePlanTask> = ObjectStack()
+fun toMergePlan(segments: List<Segment>, pathPred: Predicate<ByteArray>?): List<MergePlanTask> {
+    val result = mutableListOf<MergePlanTask>()
+    val stack = ObjectStack<MergePlanTask>()
 
-    val initialMpNodes = ArrayList<MergePlanNode>()
-    for (segment in segments){
-        val trie = segment?.get(trieKey) as HashTrie<*>?
-        if (trie != null) segment?.let { MergePlanNode(it, trie.rootNode) }?.let { initialMpNodes.add(it) }
-    }
-
-    if (initialMpNodes.size > 0) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
+    val initialMpNodes = segments.mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode(seg, it) } }
+    if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
 
     while (!stack.isEmpty) {
         val mergePlanTask = stack.pop()
         val mpNodes = mergePlanTask.mpNodes
+
         when {
-            mpNodes.any { it.node is ArrowHashTrie.RecencyBranch} -> {
-                val newMpNodes = ArrayList<MergePlanNode>()
-                for (mpNode in mergePlanTask.mpNodes){
+            mpNodes.any { it.node is RecencyBranch } -> {
+                val newMpNodes = mutableListOf<MergePlanNode>()
+                for (mpNode in mergePlanTask.mpNodes) {
                     // TODO filter by recencies #3166
-                    if (mpNode.node?.recencies != null) {
-                        for(i in 0 until mpNode.node.recencies!!.size) {
-                            newMpNodes.add(MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i)))
+                    val recencies = mpNode.node.recencies
+                    if (recencies != null) {
+                        for (i in recencies.indices) {
+                            newMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
                         }
                     } else {
-                        newMpNodes.add(mpNode)
+                        newMpNodes += mpNode
                     }
                 }
                 stack.push(MergePlanTask(newMpNodes, mergePlanTask.path))
             }
-            pathPred?.test(mergePlanTask.path)?.not() == true ->  null
-            mpNodes.any { it.node is ArrowHashTrie.IidBranch } -> {
-                val nodeChildren = mpNodes.map { it.node?.iidChildren }
+
+            pathPred != null && !pathPred.test(mergePlanTask.path) -> null
+
+            mpNodes.any { it.node is IidBranch } -> {
+                val nodeChildren = mpNodes.map { it.node.iidChildren }
                 // do these in reverse order so that they're on the stack in path-prefix order
                 for (bucketIdx in HashTrie.LEVEL_WIDTH - 1 downTo 0) {
-                    val newMpNodes = ArrayList<MergePlanNode>()
-                    for (i in nodeChildren.indices) {
-                        val children : Array<out Node<*>?>? = nodeChildren.get(i)
+                    val newMpNodes = nodeChildren.mapIndexedNotNull { idx, children ->
                         if (children != null) {
-                            children.get(bucketIdx)?.also { newMpNodes.add(MergePlanNode(mpNodes.get(i).segment, it)) }
+                            children[bucketIdx]?.let { MergePlanNode(mpNodes[idx].segment, it) }
                         } else {
-                            newMpNodes.add(mpNodes.get(i))
+                            mpNodes[idx]
                         }
                     }
-                    if (newMpNodes.size > 0) stack.push(MergePlanTask(newMpNodes, conjPath(mergePlanTask.path, bucketIdx.toByte())))
+
+                    if (newMpNodes.isNotEmpty())
+                        stack.push(MergePlanTask(newMpNodes, conjPath(mergePlanTask.path, bucketIdx.toByte())))
                 }
             }
-            else ->  result.add(mergePlanTask)
+
+            else -> result += mergePlanTask
         }
     }
     return result
 }
 
-abstract class Leaf()
-data class ArrowLeaf(val segment: Any, val pageIdx: Int) : Leaf()
+sealed class Leaf()
+
+data class ArrowLeaf(val segment: ArrowSegment, val pageIdx: Int) : Leaf()
+
 data class LiveLeaf(val liveRel: RelationReader) : Leaf()
 
-data class MergeTask(val leaves: List<Leaf>, val path: ByteArray)
+class MergeTask(val leaves: List<Leaf>, val path: ByteArray)
 
-private val pageIdxPredKey = Keyword.intern("page-idx-pred")
-private val tableMetadataKey = Keyword.intern("table-metadata")
-private val liveRelKey= Keyword.intern("live-rel")
+private fun mergePlanTaskToMergeTask(mergePlanTask: MergePlanTask): MergeTask? {
+    var nodeTaken = false
+    val cumulativeIidBitmap = MutableRoaringBitmap()
+    val leaves = mutableListOf<Leaf>()
 
-fun toMergeTasks(segments: List<Map<Keyword, Any>?>, pathPred: Predicate<ByteArray>?) : ArrayList<Any> {
-    val result = ArrayList<Any>()
-    for (mergePlanTask in toMergePlan(segments, pathPred)) {
-        var nodeTaken = false
-        val cumulativeIidBitmap = MutableRoaringBitmap()
-        val leaves = ArrayList<Leaf>()
-        for(mpNode in mergePlanTask.mpNodes) when (mpNode.node) {
-            is ArrowHashTrie.Leaf -> {
-                val pageIdxPred = mpNode.segment.get(pageIdxPredKey) as IntPredicate
-                val tableMetadata = mpNode.segment.get(tableMetadataKey) as ITableMetadata
-                val pageIdx = mpNode.node.dataPageIndex
-                val takeNode = pageIdxPred.test(pageIdx)
-                if (takeNode) {
-                    val iidBloomBitmap = tableMetadata.iidBloomBitmap(pageIdx)
-                    cumulativeIidBitmap.or(iidBloomBitmap)
-                    leaves.add(ArrowLeaf(mpNode.segment, pageIdx))
-                } else if (nodeTaken && tableMetadata.iidBloomBitmap(pageIdx)?.let { MutableRoaringBitmap.intersects( it, cumulativeIidBitmap ) }!!) {
-                    leaves.add(ArrowLeaf(mpNode.segment, pageIdx))
-                }
+    for (mpNode in mergePlanTask.mpNodes) when (mpNode.segment) {
 
-                (nodeTaken or takeNode).also { nodeTaken = it }
+        is ArrowSegment -> {
+            val pageIdxPred = mpNode.segment.pageIdxPred
+            val tableMetadata = mpNode.segment.tableMetadata
+            val node = mpNode.node as ArrowHashTrie.Leaf
+            val pageIdx = node.dataPageIndex
+            val takeNode = pageIdxPred.test(pageIdx)
+            if (takeNode) {
+                val iidBloomBitmap = tableMetadata.iidBloomBitmap(pageIdx)
+                if (iidBloomBitmap != null) cumulativeIidBitmap.or(iidBloomBitmap)
+                leaves += ArrowLeaf(mpNode.segment, pageIdx)
+            } else if (nodeTaken) {
+                val iidBloomBitmap = tableMetadata.iidBloomBitmap(pageIdx)
+                if (iidBloomBitmap != null && MutableRoaringBitmap.intersects(iidBloomBitmap, cumulativeIidBitmap))
+                    leaves += ArrowLeaf(mpNode.segment, pageIdx)
             }
-            is LiveHashTrie.Leaf -> {
-                val liveRel = mpNode.segment.get(liveRelKey) as RelationReader
-                val trie = mpNode.segment.get(trieKey) as LiveHashTrie
-                leaves.add(LiveLeaf(liveRel.select(mpNode.node.mergeSort(trie))))
-                nodeTaken = true
-            }
+
+            nodeTaken = (nodeTaken or takeNode)
         }
-        if (nodeTaken) result.add(MergeTask(leaves, mergePlanTask.path))
+
+        is LiveSegment -> {
+            val liveRel = mpNode.segment.liveRel
+            val trie = mpNode.segment.trie as LiveHashTrie
+            val node = mpNode.node as LiveHashTrie.Leaf
+            leaves += LiveLeaf(liveRel.select(node.mergeSort(trie)))
+            nodeTaken = true
+        }
     }
-    return result
+
+    if (nodeTaken) return MergeTask(leaves, mergePlanTask.path)
+    return null
+}
+
+fun toMergeTasks(segments: List<Segment>, pathPred: Predicate<ByteArray>?): List<MergeTask> {
+    return toMergePlan(segments, pathPred).mapNotNull(::mergePlanTaskToMergeTask)
 }

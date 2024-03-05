@@ -18,7 +18,8 @@
            org.apache.arrow.vector.types.UnionMode
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            xtdb.IBufferPool
-           (xtdb.trie MergePlanNode ArrowHashTrie$Leaf HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie IDataRel MergePlanNode ArrowHashTrie$Leaf HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf
+                      CompactorSegment)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -346,11 +347,6 @@
 
       (mapv :file-path !current-trie-keys))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface IDataRel
-  (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
-  (^xtdb.vector.RelationReader loadPage [trie-leaf]))
-
 (deftype ArrowDataRel [^ArrowBuf buf
                        ^VectorSchemaRoot root
                        ^VectorLoader loader
@@ -401,6 +397,6 @@
         live-table-wm (conj (->LiveDataRel (.liveRelation live-table-wm)))))))
 
 (defn load-data-page [^MergePlanNode merge-plan-node]
-  (let [{:keys [^IDataRel data-rel]} (.getSegment merge-plan-node)
+  (let [^IDataRel data-rel (.getDataRel ^CompactorSegment (.getSegment merge-plan-node))
         trie-leaf (.getNode merge-plan-node)]
     (.loadPage data-rel trie-leaf)))
