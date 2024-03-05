@@ -9,6 +9,7 @@
             [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.format DateTimeParseException)
+           (org.apache.arrow.vector PeriodDuration)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -708,6 +709,78 @@
     #xt/interval-dt ["P0M" "PT0S"] '(/ (single-field-interval 1 "DAY" 2 0) 2)
     #xt/interval-dt ["P1D" "PT0S"] '(/ (single-field-interval 6 "DAY" 2 0) 5)))
 
+(t/deftest test-interval-comparison
+  (t/testing "comparing intervals with different types"
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"Cannot compare intervals with different units"
+           (et/project1 '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {}))))
+
+  (t/testing "comparing year month intervals"
+    (t/are [expected expr] (= expected (et/project1 expr {}))
+      ;; = 
+      true '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
+      false '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+
+      ;; <
+      true '(< (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))
+      false '(< (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
+
+      ;; <=
+      true '(<= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
+      false '(<= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+      true '(<= (single-field-interval 2 "YEAR" 2 0) (multi-field-interval "2-2" "YEAR" 2 "MONTH" 2))
+
+      ;; >
+      false '(> (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
+      true '(> (multi-field-interval "2-2" "YEAR" 2 "MONTH" 2) (single-field-interval 2 "YEAR" 2 0))
+      false '(> (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))
+
+      ;; >=
+      true '(>= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
+      true '(>= (multi-field-interval "2-2" "YEAR" 2 "MONTH" 2) (single-field-interval 2 "YEAR" 2 0))
+      false '(>= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))))
+
+  (t/testing "can't compare month-day-nano intervals if months > 0"
+    (let [test-doc {:xt$id :foo,
+                    :interval (PeriodDuration. (Period/of 0 4 8) (Duration/parse "PT1H"))}]
+      (t/is (thrown-with-msg?
+             RuntimeException
+             #"Cannot compare month-day-nano intervals when month component is non-zero."
+             (et/project1 '(= interval interval) test-doc)))))
+
+  (t/testing "can't comapre day-time intervals"
+    (t/is (thrown-with-msg?
+           RuntimeException
+           #"Cannot compare day-time intervals"
+           (et/project1 '(= (single-field-interval 1 "DAY" 2 0) (single-field-interval 1 "DAY" 2 0)) {}))))
+
+  (t/testing "comparing month-day-nano intervals"
+    (t/are [expected expr] (= expected (et/project1 expr {}))
+      ;; =
+      true '(= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+      false '(= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
+
+      ;; <
+      false '(< (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+      true '(< (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
+      false '(< (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+
+      ;; <=
+      true '(<= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+      true '(<= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
+      false '(<= (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+
+      ;; >
+      false '(> (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+      false '(> (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
+      true '(> (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+
+      ;; >=
+      true '(>= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+      false '(>= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
+      true '(>= (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2)))))
+
 (t/deftest test-uoe-thrown-for-unsupported-div
   (t/is (thrown? UnsupportedOperationException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
   (t/is (thrown? UnsupportedOperationException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "DAY" 2 0)) 3) {}))))
@@ -795,16 +868,6 @@
 
     #xt/interval-ym "P11M" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
     #xt/interval-dt ["P1D" "PT-1S"] '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
-
-(t/deftest test-interval-equality-quirks
-  (t/are [expr expected]
-      (= expected (et/project1 expr {}))
-
-    '(= (single-field-interval 0 "YEAR" 2 0)) true
-    '(= (single-field-interval 0 "YEAR" 2 0) (single-field-interval 0 "DAY" 2 0)) true
-    '(= (single-field-interval 0 "YEAR" 2 0) (single-field-interval 1 "DAY" 2 0)) false
-
-    '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0)) true))
 
 (def single-interval-constructor-gen
   (->> (tcg/hash-map

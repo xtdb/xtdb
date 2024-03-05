@@ -710,6 +710,25 @@
     "ABS(foo.a)" '(abs x1)
     "ABS(1 YEAR)" '(abs (single-field-interval 1 "YEAR" 2 0))))
 
+(t/deftest test-interval-comparison
+  (t/is (= [{:gt true}]
+           (xt/q tu/*node* "SELECT (INTERVAL '3 4' DAY TO HOUR > INTERVAL '3 1' DAY TO HOUR) as gt FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:lt false}]
+           (xt/q tu/*node* "SELECT (INTERVAL '3 4' DAY TO HOUR < INTERVAL '3 1' DAY TO HOUR) as lt FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:gte true}]
+           (xt/q tu/*node* "SELECT (INTERVAL '3 4' DAY TO HOUR >= INTERVAL '3 1' DAY TO HOUR) as gte FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:lte false}]
+           (xt/q tu/*node* "SELECT (INTERVAL '3 4' DAY TO HOUR <= INTERVAL '3 1' DAY TO HOUR) as lte FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:eq false}]
+           (xt/q tu/*node* "SELECT (INTERVAL '3 4' DAY TO HOUR = INTERVAL '3 1' DAY TO HOUR) as eq FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:eq true}]
+           (xt/q tu/*node* "SELECT (INTERVAL '3 1' DAY TO HOUR = INTERVAL '3 1' DAY TO HOUR) as eq FROM (VALUES 1) AS x"))))
+
 (deftest test-array-construction
   (t/are [sql expected]
     (= expected (plan-expr sql))
