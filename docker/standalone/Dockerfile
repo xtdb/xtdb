@@ -17,6 +17,9 @@ ENTRYPOINT ["java", \
 HEALTHCHECK --start-period=15s --timeout=3s \
     CMD curl -f http://localhost:3000/status || exit 1
 
+EXPOSE 5432
+EXPOSE 3000
+
 RUN mkdir -p /var/lib/xtdb
 VOLUME /var/lib/xtdb
 
