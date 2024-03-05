@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [xtdb.error :as err]
+            [xtdb.information-schema :as info-schema]
             [xtdb.rewrite :as r]
             [xtdb.sql.parser :as p]
             [xtdb.util :as util]))
@@ -115,6 +116,13 @@
       (identifier ident)
 
       [:derived_column
+       [:column_reference
+        [:schema_name _]
+        [:identifier_chain _ ^:z ident]]]
+      ;;=>
+      (identifier ident)
+
+      [:derived_column
        [:field_reference _ ^:z ident]]
       ;;=>
       (identifier ident)
@@ -163,6 +171,9 @@
      :with_list_element
      :target_table)
     (table-or-query-name (r/$ ag 1))
+
+    :schema_name
+    (table-or-query-name (r/right ag))
 
     :regular_identifier
     (identifier ag)
@@ -271,6 +282,14 @@
 
     nil))
 
+(defn schema [ag]
+  (r/zcase ag
+    :table_primary
+    (schema (r/$ ag 1))
+    :schema_name
+    (r/lexeme ag 1)
+    nil))
+
 (defn table [ag]
   (r/zcase ag
     :table_primary
@@ -284,11 +303,34 @@
             sq-scope-id (when (and sq-element (not= :collection_derived_table (r/ctor sq-element)))
                           (id sq-element))
             derived-columns (or (derived-columns ag) (:columns cte))
-            known-columns (get *table-info* table-name)]
+            {:keys [known-columns schema]}
+            (let [schema (schema ag)]
+              (case schema
+                "INFORMATION_SCHEMA"
+                {:schema schema
+                 :known-columns (get info-schema/info-table-cols table-name)}
+                "PG_CATALOG"
+                {:schema schema
+                 :known-columns (get info-schema/pg-catalog-table-cols table-name)}
+                "PUBLIC"
+                {:schema schema
+                 :known-columns (get *table-info* table-name)}
+                (cond (get *table-info* table-name)
+                      {:schema "PUBLIC"
+                       :known-columns (get *table-info* table-name)}
+                      (get info-schema/pg-catalog-table-cols table-name)
+                      {:schema "PG_CATALOG"
+                       :known-columns (get info-schema/pg-catalog-table-cols table-name)}
+                      :else
+                      {:schema "PUBLIC"
+                       :known-columns #{}})))]
+
+
         (with-meta
           (cond-> {:correlation-name correlation-name
                    :id (id ag)
-                   :scope-id (id (scope-element ag))}
+                   :scope-id (id (scope-element ag))
+                   :schema schema}
             table-name (assoc :table-or-query-name table-name)
             derived-columns (assoc :derived-columns derived-columns)
             sq-scope-id (assoc :subquery-scope-id sq-scope-id)
@@ -305,7 +347,8 @@
            :id (id ag)
            :scope-id (id (scope-element ag))
            :table-or-query-name table-name
-           :known-columns (get *table-info* table-name)}
+           :known-columns (or (get *table-info* table-name)
+                              (get info-schema/info-table-cols table-name))}
           (with-meta {:ref ag})))
 
     (:delete_statement__searched :update_statement__searched :erase_statement__searched)
@@ -666,6 +709,7 @@
                 (let [identifier (identifier ag)
                       qualified-column (when (r/ctor? :column_reference (r/$ ag 1))
                                          (identifiers (r/$ ag 1)))]
+
                   [(with-meta
                      (cond-> {:normal-form (r/node (r/$ ag 1))}
                        identifier (assoc :identifier identifier)
@@ -849,10 +893,23 @@
   (r/zcase ag
     :column_reference
     (let [identifiers (identifiers ag)
+          schema (schema (r/$ ag 1))
           env (env ag)
           column-scope-id (id (scope-element ag))
-          {table-id :id table-scope-id :scope-id :as table} (when (qualified? identifiers)
-                                                              (find-decl env (first identifiers)))
+          {table-id :id table-scope-id :scope-id table-schema :schema :as table}
+          (when (qualified? identifiers)
+            (find-decl env (first identifiers)))
+          _ (when schema
+              (when (or (not= table-schema schema)
+                        (and schema
+                             (not=
+                              (:table-or-query-name table)
+                              (:correlation-name table))))
+                (throw (err/illegal-arg
+                        :xtdb.sql/analyze-error
+                        {::err/message (format "%s is an invalid reference to %s, schema name does not match"
+                                               (str/join "." (cons schema identifiers))
+                                               (:correlation-name table))}))))
           outer-reference? (and table (< ^long table-scope-id ^long column-scope-id))
           group-env (group-env ag)
           column-reference-type (reduce
@@ -990,7 +1047,6 @@
       (if-not table-id
         [(format "Table not in scope: %s %s"
                  (first identifiers) (->line-info-str ag))]
-
         (let [projection (first (projected-columns (:ref (meta (:table (meta column-reference))))))]
           (cond
             (->> (map :qualified-column projection)

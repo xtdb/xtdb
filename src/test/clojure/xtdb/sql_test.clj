@@ -1784,3 +1784,55 @@
     "test-sql-over-scanning-asterisk-from-subquery"
     (plan-sql
      "SELECT bar.* FROM (SELECT foo.a, foo.b FROM foo) AS bar"))))
+
+(deftest test-schema-qualified-names
+
+  (t/is
+   (=plan-file
+    "test-schema-qualified-names-fully-qualified"
+    (plan-sql "SELECT information_schema.columns.column_name FROM information_schema.columns")))
+
+  (t/is
+   (=plan-file
+    "test-schema-qualified-names-aliased-table"
+    (plan-sql "SELECT f.column_name FROM information_schema.columns AS f")))
+  (t/is
+   (=plan-file
+    "test-schema-qualified-names-implict-pg_catalog"
+    (plan-sql "SELECT pg_attribute.attname FROM pg_attribute")))
+
+  (t/is
+   (=plan-file
+    "test-schema-qualified-names-unqualified-col-ref"
+    (plan-sql "SELECT pg_attribute.attname FROM pg_catalog.pg_attribute")))
+
+  (t/is
+   (=plan-file
+    "test-schema-qualified-names-qualified-col-ref"
+    (plan-sql "SELECT pg_catalog.pg_attribute.attname FROM pg_attribute")))
+
+  (t/is
+   (=plan-file
+    "test-schema-qualified-names-field"
+    (plan-sql "SELECT information_schema.columns.column_name.my_field FROM information_schema.columns")))
+
+  ;;errors
+  ;;
+  (t/testing "Invalid Queries"
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"PG_CATALOG.columns.column_name is an invalid reference to columns, schema name does not match"
+      (plan-sql "SELECT pg_catalog.columns.column_name FROM information_schema.columns")))
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"INFORMATION_SCHEMA.f.column_name is an invalid reference to f, schema name does not match"
+      (plan-sql "SELECT information_schema.f.column_name FROM information_schema.columns AS f")))
+
+    (t/is
+     (thrown-with-msg?
+      IllegalArgumentException
+      #"PG_CATALOG.f.column_name is an invalid reference to f, schema name does not match"
+      (plan-sql "SELECT pg_catalog.f.column_name FROM information_schema.columns AS f")))))

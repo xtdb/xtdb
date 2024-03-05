@@ -129,7 +129,7 @@
   ^bytes [s]
   (.getBytes (str s) StandardCharsets/UTF_8))
 
-(def ^:private oids
+(def oids
   "A map of postgres type (that we may support to some extent) to numeric oid.
   Mapping to oid is useful for result descriptions, as well as to determine the semantics of received parameters."
   {:undefined 0

@@ -8,6 +8,7 @@
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             xtdb.indexer.live-index
+            [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.object-store
@@ -400,11 +401,13 @@
                     (= "xt$iid" col-name) (types/col-type->field col-name [:fixed-size-binary 16])
                     (types/temporal-column? col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
 
-                    :else (types/merge-fields (.columnField metadata-mgr table col-name)
-                                              (some-> (.liveIndex wm)
-                                                      (.liveTable table)
-                                                      (.columnFields)
-                                                      (get col-name))))))]
+                    :else (if-let [info-field (get-in info-schema/derived-tables [table col-name])]
+                            info-field
+                            (types/merge-fields (.columnField metadata-mgr table col-name)
+                                                (some-> (.liveIndex wm)
+                                                        (.liveTable table)
+                                                        (.columnFields)
+                                                        (get col-name)))))))]
         (->> scan-cols
              (into {} (map (juxt identity ->field))))))
 
@@ -452,18 +455,20 @@
         {:fields fields
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, params default-all-valid-time?]}]
-                     (let [iid-bb (selects->iid-byte-buffer selects params)
-                           col-preds (cond-> col-preds
-                                       iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
-                           metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) params)
-                           scan-opts (-> scan-opts
-                                         (update :for-valid-time
-                                                 (fn [fvt]
-                                                   (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
-                           ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
-                           table-path (util/table-name->table-path table-name)
-                           current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
-                                                   (trie/current-trie-files))]
+                     (if-let [derived-table-schema (info-schema/derived-tables table-name)]
+                       (info-schema/->cursor allocator derived-table-schema table-name col-names col-preds params metadata-mgr watermark)
+                       (let [iid-bb (selects->iid-byte-buffer selects params)
+                             col-preds (cond-> col-preds
+                                         iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
+                             metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) params)
+                             scan-opts (-> scan-opts
+                                           (update :for-valid-time
+                                                   (fn [fvt]
+                                                     (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
+                             ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
+                             table-path (util/table-name->table-path table-name)
+                             current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
+                                                     (trie/current-trie-files))]
 
                        (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                          (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
@@ -484,15 +489,15 @@
                                                                   live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
                                                                                           (assoc :live-rel (.liveRelation live-table-wm)))))
 
-                                                                (->path-pred iid-arrow-buf))
-                                                 []))]
+                                                                  (->path-pred iid-arrow-buf))
+                                                   []))]
 
-                           (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
-                                         table-path col-names col-preds
-                                         (->temporal-bounds params basis scan-opts)
-                                         params
-                                         (->vsr-cache buffer-pool allocator)
-                                         buffer-pool)))))}))))
+                             (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
+                                           table-path col-names col-preds
+                                           (->temporal-bounds params basis scan-opts)
+                                           params
+                                           (->vsr-cache buffer-pool allocator)
+                                           buffer-pool))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-fields, param-fields]}]
   (.emitScan scan-emitter scan-expr scan-fields param-fields))

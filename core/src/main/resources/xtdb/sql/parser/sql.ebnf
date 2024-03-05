@@ -116,7 +116,7 @@ vertical_bar
 (*  5.2     <token> and <separator> *)
 
 regular_identifier
-    : !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*'
+: !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*'
     ;
 
 large_object_length_token
@@ -370,8 +370,14 @@ boolean_literal
     | delimited_identifier
     ;
 
+schema_name
+    : 'INFORMATION_SCHEMA'
+    | 'PG_CATALOG'
+    | 'PUBLIC'
+    ;
+
 <table_name>
-    : !#'(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)' identifier
+    : [ schema_name <period> ] !#'(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)' identifier
     ;
 
 <column_name>
@@ -637,7 +643,7 @@ identifier_chain
 (*  6.7        <column reference> *)
 
 column_reference
-    : basic_identifier_chain
+    : [ schema_name <period> ] basic_identifier_chain
     ;
 
 (*  6.9        <set function specification> *)
