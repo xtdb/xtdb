@@ -308,6 +308,19 @@
                               #"The minimum fractional seconds precision is 0."
                               (test-cast #xt/interval-mdn ["P4M8D" "PT0S"] [:duration :nano] {:precision -1}))))))
 
+
+(t/deftest cast-duration-to-interval
+  (letfn [(test-cast
+            [src-value tgt-type]
+            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+                              [:table [{}]]]
+                             {:basis {}})
+                first :res))]
+
+    (t/is (= #xt/interval-mdn ["P0D" "PT3H1.11S"] (test-cast #time/duration "PT3H1.11S" :interval)))
+    (t/is (= #xt/interval-mdn ["P1D" "PT1H1.11S"] (test-cast #time/duration "PT25H1.11S" :interval)))
+    (t/is (= #xt/interval-mdn ["P35D" "PT2H1.11S"] (test-cast #time/duration "P35DT2H1.11S" :interval)))))
+
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
                               (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))

@@ -447,6 +447,19 @@
                             (duration->nano))
                       (with-conversion :nano tgt-tsunit)))})
 
+
+(defn duration->mdn-interval [^Duration d]
+  (let [days-in-duration (.toDays d)]
+    (PeriodDuration. (Period/ofDays days-in-duration)
+                     (.minusDays d days-in-duration))))
+
+(defmethod expr/codegen-cast [:duration :interval] [{[_ d-unit] :source-type}]
+  {:return-type [:interval :month-day-nano]
+   :->call-code (fn [[d]]
+                  `(-> ~(with-conversion d d-unit :nano)
+                       (Duration/ofNanos)
+                       (duration->mdn-interval)))})
+
 ;;;; SQL:2011 Operations involving datetimes and intervals
 (defn- recall-with-cast
   ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))
