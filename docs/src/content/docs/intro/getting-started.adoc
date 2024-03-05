@@ -10,9 +10,7 @@ XTDB is built for traditional client-server interactions over HTTP. You can star
 
 [source,shell]
 ----
-docker pull ghcr.io/xtdb/xtdb-standalone-ea
-
-docker run -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
+docker run --pull=always -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
 ----
 
 This starts a server on http://localhost:3000.
@@ -21,6 +19,7 @@ By default, your data will be saved in a local directory in the Docker image, bu
 [source,sh]
 ----
 docker run \
+  --pull=always \
   -tip 3000:3000 \
   -v /path/to/host/dir:/var/lib/xtdb \
   ghcr.io/xtdb/xtdb-standalone-ea

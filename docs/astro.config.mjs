@@ -35,11 +35,11 @@ export default defineConfig({
           items: [
             { label: 'Overview', link: '/' },
             { label: 'Getting started', link: '/intro/getting-started' },
+            { label: 'Mission', link: '/intro/why-xtdb' },    
             { label: 'What is XTDB', link: '/intro/what-is-xtdb' },
-            { label: 'Data model', link: '/intro/data-model' },
+            { label: 'How XTDB works', link: '/intro/how-xtdb-works' },
             { label: 'Community', link: '/intro/community' },
             { label: 'Roadmap', link: '/intro/roadmap' },
-            { label: 'Mission', link: '/intro/why-xtdb' },
           ],
         },
 

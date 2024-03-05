@@ -25,7 +25,7 @@ XTDB is distributed as a Docker image and is accessible over link:localhost:4322
 
 Next up:
 
-* Read link:/intro/what-is-xtdb[why we built XTDB].
+* Read link:/intro/why-xtdb[why we built XTDB].
 * Discover all the things that link:/intro/what-is-xtdb[makes XTDB great].
 * Find out more about link:/intro/what-is-xtql[XTQL].
 * Check out the link:/reference/main[XTDB reference documentation].
