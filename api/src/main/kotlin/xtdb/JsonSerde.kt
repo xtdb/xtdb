@@ -176,7 +176,7 @@ internal fun jsonIAEwithMessage(message: String, element: JsonElement): IllegalA
 /**
  * @suppress
  */
-fun jsonRemoveComments(json : String) = json.replace(Regex("//.*\n"), "")
+fun jsonRemoveComments(json: String) = json.replace(Regex("//.*\n"), "")
 
 /**
  * @suppress
@@ -243,10 +243,11 @@ fun <T : Any> decode(inputStream: InputStream, clazz: Class<T>): Any {
             e.addSuppressed(t)
         }
 
-        throw IllegalArgumentException.createNoKey(
-            "Error decoding JSON!",
-            mapOf(Keyword.intern("json") to inputStream.bufferedReader().use { it.readText() }),
-            e
+        throw IllegalArgumentException(
+            Keyword.intern("malformed-request"),
+            message = "Error decoding JSON!",
+            data = mapOf(Keyword.intern("json") to inputStream.bufferedReader().use { it.readText() }),
+            cause = e
         )
     }
 }
@@ -286,7 +287,7 @@ fun <T : Any> encode(value: T, outputStream: OutputStream, clazz: Class<T>) {
  */
 @Suppress("unused")
 fun encodeStatus(value: Map<String, TransactionKey?>): String {
-    return JSON_SERDE.encodeToString(value.mapKeys { it.key.kebabToCamelCase()})
+    return JSON_SERDE.encodeToString(value.mapKeys { it.key.kebabToCamelCase() })
 }
 
 /**
@@ -300,4 +301,5 @@ fun encodePretty(value: Any) = JSON_SERDE_PRETTY_PRINT.encodeToString(value)
  */
 @Suppress("unused")
 @OptIn(InternalSerializationApi::class)
-fun <T : Any> encodePretty(value: T, clazz: Class<T>) = JSON_SERDE_PRETTY_PRINT.encodeToString(clazz.kotlin.serializer(), value)
+fun <T : Any> encodePretty(value: T, clazz: Class<T>) =
+    JSON_SERDE_PRETTY_PRINT.encodeToString(clazz.kotlin.serializer(), value)

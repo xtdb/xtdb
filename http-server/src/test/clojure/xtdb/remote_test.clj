@@ -321,7 +321,7 @@
                            :throw-exceptions? false})
             body (decode-transit body)]
         (t/is (= 400 status))
-        (t/is (= "Malformed \"application/json\" request." (ex-message body)))
+        (t/is (= "Error decoding JSON!" (ex-message body)))
         (t/is (= {:xtdb.error/error-key :malformed-request}
                  (-> (ex-data body) (select-keys [::err/error-key]))))))
 
