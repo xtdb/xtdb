@@ -337,7 +337,8 @@
                                         page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
                                         take-node? (.test page-idx-pred page-idx)]
                                     (when take-node?
-                                      (.or cumulative-iid-bitmap (.iidBloomBitmap table-metadata page-idx)))
+                                      (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
+                                        (.or cumulative-iid-bitmap iid-bitmap)))
 
                                     (recur more-nodes more-segs (or node-taken? take-node?)
                                            (cond-> leaves

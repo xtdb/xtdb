@@ -403,6 +403,13 @@
             (java.util.UUID. (Long/reverse n) 0))]
     (map new-uuid (range n))))
 
+(defn bad-uuid-seq
+  ([n] (bad-uuid-seq 0 n))
+  ([start end]
+   (letfn [(new-uuid [n]
+             (java.util.UUID. 0 n))]
+     (map new-uuid (range start end)))))
+
 (defn vec->vals
   ([^IVectorReader rdr] (vec->vals rdr #xt/key-fn :kebab-case-keyword))
   ([^IVectorReader rdr ^IKeyFn key-fn]
