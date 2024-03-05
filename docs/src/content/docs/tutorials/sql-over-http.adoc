@@ -25,11 +25,20 @@ To run your first transaction, send the following:
 }
 ----
 
-Note that the `people` doesn't have to be defined beforehand - the table is created dynamically during the INSERT along with any supplied columns and types.
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+# note that dollar symbols in the SQL string must be escaped
+sql="INSERT INTO people (xt\$id, foo) VALUES (6, 'fred')"; \    
+curl --json "{\"txOps\": [{\"sql\": \"${sql}\"}]}" localhost:3000/tx
+----
+====
 
-(TODO cURL tabs)
+Note that the `people` table doesn't have to be defined beforehand - the table is created dynamically during the INSERT along with any supplied columns and types.
 
-Transactions are durable and processed asynchronously. If you wait a few milliseconds for the processing to finish, you can query then that data.
+Transactions are durable and processed asynchronously, i.e. if you wait a few milliseconds for the processing to finish, you can then query that data in a subsequent request
 
 == Query
 
@@ -42,7 +51,17 @@ Transactions are durable and processed asynchronously. If you wait a few millise
 }
 ----
 
-You can also ensure that the query reflects our transaction (after it has been either committed or aborted) by supplying the 'basis' map returned from our transations to the `queryOpts`:
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+sql="SELECT * FROM people"; \    
+curl --json "{\"query\": {\"sql\": \"${sql}\"}}" localhost:3000/query
+----
+====
+
+You can also ensure that the query reflects our transaction (after it has been either committed or aborted) by supplying the 'TransactionKey' map returned from our transation as the value for `afterTx` within `queryOpts`. Note that the example map under the 'afterTx' key is shown here for illustration purposes only and you must replace it with exact the map returned from the Transact step:
 
 `POST` to `localhost:3000/query`
 
@@ -50,14 +69,26 @@ You can also ensure that the query reflects our transaction (after it has been e
 ----
 {
   "query": {"sql": "SELECT * FROM people"},
-  "queryOpts": {"basis": {"txId": 7806,
-                          "systemTime":"2024-03-04T14:31:03.728415Z"}}
+  "queryOpts": {"afterTx": {"txId": 0,
+                            "systemTime":"2024-03-04T14:31:03.728415Z"}}
 }
 ----
 
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+sql="SELECT * FROM people"; \    
+curl --json "{\"query\": {\"sql\": \"${sql}\"},\
+              \"queryOpts\": {\"afterTx\": {\"txId\": 0,\
+                                            \"systemTime\": \"2024-03-04T14:31:03.728415Z\"}}}" localhost:3000/query
+----
+====
+
 == Working with documents
 
-XTDB is designed to work with JSON-like nested data as a first-class concept. Which means you can send the following transaction:
+XTDB is designed to work with JSON-like nested data as a first-class concept. Which means you can send complex INSERTs like the following transaction:
 
 `POST` to `localhost:3000/tx`
 
@@ -71,9 +102,24 @@ XTDB is designed to work with JSON-like nested data as a first-class concept. Wh
 }
 ----
 
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+# note that dollar symbols in the SQL string must be escaped
+sql="\
+INSERT INTO people (xt\$id, name, info) \
+VALUES (6, 'fred', {'height': 172, \
+                    'age': 29, \
+                    'likes': ['apples']})"; \    
+curl --json "{\"txOps\": [{\"sql\": \"${sql}\"}]}" localhost:3000/tx
+----
+====
+
 == Basis allows you to re-run queries
 
-Re-run the previous query with the basis map supplied and see that the results are the same:
+Despite having just 'replaced' the version of the document in the previous tep, you can still re-run the previous query exactly and see that the results against the earlier basis remain the same. This is accomplished by defining a `basis` map which contains the same TransactionKey as used previously (within `afterTx`) but this time under the `atTx` key (once again, the TransactionKey shown is purely illustrative):
 
 `POST` to `localhost:3000/query`
 
@@ -81,17 +127,28 @@ Re-run the previous query with the basis map supplied and see that the results a
 ----
 {
   "query": {"sql": "SELECT * FROM people"},
-  "queryOpts": {"basis": {"txId": 7806,
-                          "systemTime":"2024-03-04T14:31:03.728415Z"}}
+  "queryOpts": {"basis": {"atTx": {"txId": 0,
+                                   "systemTime":"2024-03-04T14:31:03.728415Z"}}}
 }
 ----
+
+.cURL command
+[%collapsible%closed]
+====
+[source,bash]
+----
+sql="SELECT * FROM people"; \    
+curl --json "{\"query\": {\"sql\": \"${sql}\"},\
+              \"queryOpts\": {\"basis\": {\"atTx\": {\"txId\": 0,\
+                                                     \"systemTime\": \"2024-03-04T14:31:03.728415Z\"}}}}" localhost:3000/query
+----
+====
 
 A basis map is like a pointer to a snapshot of a previous version of the entire database state, except unlike snapshots in other systems there is no copying or explicit snapshot creation required.
 
 If you re-run the previous query with the previous basis (returned by the first transaction), you _won't_ see the new version of Fred's record.
 
 A basis is stable and allows you to re-run unmodified queries indefinitely. This is useful for debugging, auditing, and exposing application data for processing in downstream systems (generating reports, analytics etc.)
-
 
 == System-Time Columns
 
