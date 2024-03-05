@@ -237,7 +237,12 @@ fun <T : Any> decode(inputStream: InputStream, clazz: Class<T>): Any {
     try {
         return JSON_SERDE.decodeFromStream(deserializer = clazz.kotlin.serializer(), stream = inputStream)
     } catch (e: SerializationException) {
-        inputStream.reset()
+        try {
+            inputStream.reset()
+        } catch (t: Throwable) {
+            e.addSuppressed(t)
+        }
+
         throw IllegalArgumentException.createNoKey(
             "Error decoding JSON!",
             mapOf(Keyword.intern("json") to inputStream.bufferedReader().use { it.readText() }),
