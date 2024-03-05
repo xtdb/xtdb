@@ -269,6 +269,58 @@
         (t/testing "duration"
           (t/is (= "PT13M56.123S" (test-cast #time/duration "PT13M56.123S" :utf8))))))))
 
+(t/deftest cast-interval-to-duration
+  (letfn [(test-cast
+            ([src-value tgt-type] (test-cast src-value tgt-type nil))
+            ([src-value tgt-type cast-opts]
+             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+                               [:table [{}]]]
+                              {:basis {}})
+                 first :res)))]
+
+    (t/testing "cannot cast year-month interval to duration"
+      (t/is (thrown-with-msg? UnsupportedOperationException
+                              #"Cannot cast a year-month interval to a duration"
+                              (test-cast #xt/interval-ym "P12M" [:duration :micro]))))
+
+    (t/testing "cannot cast day-time interval to duration"
+      (t/is (thrown-with-msg? UnsupportedOperationException
+                              #"Cannot cast a day-time interval to a duration"
+                              (test-cast #xt/interval-dt ["P1D" "PT0S"] [:duration :micro]))))
+
+    (t/testing "cannot cast month-day-nano interval to duration when months > 0"
+      (t/is (thrown-with-msg? RuntimeException
+                              #"Cannot cast month-day-nano intervals when month component is non-zero."
+                              (test-cast #xt/interval-mdn ["P4M8D" "PT0S"] [:duration :micro]))))
+
+    (t/testing "casting month-day-nano intervals -> duration"
+      (t/is (= #time/duration "PT25H1S" (test-cast #xt/interval-mdn ["P1D" "PT1H1S"] [:duration :second])))
+      (t/is (= #time/duration "PT3H1M1S" (test-cast #xt/interval-mdn ["P0D" "PT3H1M1S"] [:duration :second])))
+      (t/is (= #time/duration "PT25H1.111111S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :micro]))))
+
+    (t/testing "casting month-day-nano intervals -> duration with precision"
+      (t/is (= #time/duration "PT25H1.11S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :milli] {:precision 2})))
+      (t/is (= #time/duration "PT25H1.1111111S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :nano] {:precision 7})))
+      (t/is (thrown-with-msg? IllegalArgumentException
+                              #"The maximum fractional seconds precision is 9."
+                              (test-cast #xt/interval-mdn ["P4M8D" "PT0S"] [:duration :nano] {:precision 10})))
+      (t/is (thrown-with-msg? IllegalArgumentException
+                              #"The minimum fractional seconds precision is 0."
+                              (test-cast #xt/interval-mdn ["P4M8D" "PT0S"] [:duration :nano] {:precision -1}))))))
+
+
+(t/deftest cast-duration-to-interval
+  (letfn [(test-cast
+            [src-value tgt-type]
+            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+                              [:table [{}]]]
+                             {:basis {}})
+                first :res))]
+
+    (t/is (= #xt/interval-mdn ["P0D" "PT3H1.11S"] (test-cast #time/duration "PT3H1.11S" :interval)))
+    (t/is (= #xt/interval-mdn ["P1D" "PT1H1.11S"] (test-cast #time/duration "PT25H1.11S" :interval)))
+    (t/is (= #xt/interval-mdn ["P35D" "PT2H1.11S"] (test-cast #time/duration "P35DT2H1.11S" :interval)))))
+
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
                               (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))

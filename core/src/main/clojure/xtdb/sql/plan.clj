@@ -192,6 +192,9 @@
     [:duration_type "DURATION" [:unsigned_integer fractional-precision]]
     (cast-temporal-with-precision e :duration fractional-precision)
 
+    [:interval_type "INTERVAL"]
+    (list 'cast e [:interval :month-day-nano])
+
     [:character_string_type "VARCHAR"]
     (list 'cast e :utf8)
 

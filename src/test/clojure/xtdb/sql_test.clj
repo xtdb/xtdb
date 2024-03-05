@@ -869,6 +869,25 @@
   (t/is (= [{:string "PT13M56.123S"}]
            (xt/q tu/*node* "SELECT CAST(docs.duration AS VARCHAR) as string FROM docs"))))
 
+(t/deftest test-cast-interval-to-duration
+  (t/is (= [{:duration #time/duration "PT13M56S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as duration FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:duration #time/duration "PT13M56.123456789S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as duration FROM (VALUES 1) AS x"))))
+
+(t/deftest test-cast-duration-to-interval
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :duration #time/duration "PT26H13M56S"}]])
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56S"]}]
+           (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL) as itvl FROM docs")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P5D" "PT2H"]}]
+           (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2021-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-mdn ["P370D" "PT2H"]}]
+           (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2020-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x"))))
+
 (t/deftest test-expr-in-equi-join
   (t/is
     (=plan-file

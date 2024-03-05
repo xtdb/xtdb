@@ -501,7 +501,7 @@ with_or_without_time_zone
     ;
 
 interval_type
-    : 'INTERVAL' interval_qualifier
+    : 'INTERVAL' [ interval_qualifier ]
     ;
 
 row_type
