@@ -1338,7 +1338,35 @@
                                      :for-system-time :all-time})
                        tx1 nil)))
 
-            "for all sys time"))))
+            "for all sys time")))
+  
+  (t/testing "testing temporal fns with params"
+    (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015"), :app-to nil}
+               {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
+             (set (xt/q tu/*node*
+                        '(from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
+                                                          :xt/valid-to app-to}]
+                                      :for-valid-time (in $arg-from $arg-to)})
+                        {:args {:arg-from #inst "2021"
+                                :arg-to #inst "2023"}}))))
+    
+    (t/is (= #{{:id :matthew}}
+             (set (xt/q tu/*node*
+                        '(unify (from :docs {:bind [{:xt/id id}]
+                                             :for-valid-time (at $arg-t1)})
+                                (from :docs {:bind [{:xt/id id}]
+                                             :for-valid-time (at $arg-t2)}))
+                        {:args {:arg-t1 #inst "2018"
+                                :arg-t2 #inst "2024"}}))))
+    
+    (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015"), :app-to nil}
+               {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
+             (set (xt/q tu/*node*
+                        '(from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
+                                                          :xt/valid-to app-to}]
+                                      :for-valid-time (in $arg-from $arg-to)})
+                        {:args {:arg-from #inst "2021"
+                                :arg-to #inst "2023"}}))))))
 
 (t/deftest test-for-valid-time-with-current-time-2493
   (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-to #inst "2040"}

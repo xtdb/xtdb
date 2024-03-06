@@ -422,6 +422,40 @@
          "test-dynamic-parameters-103-update-app-time"
          (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"))))
 
+(t/deftest test-dynamic-temporal-filters-3068
+  (t/testing "AS OF"
+    (t/is
+     (=plan-file
+      "test-dynamic-parameters-temporal-filters-3068-as-of"
+      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME AS OF ?"))))
+
+  (t/testing "FROM A to B"
+    (t/is
+     (=plan-file
+      "test-dynamic-parameters-temporal-filters-3068-from-to"
+      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME FROM ? TO ?"))))
+
+  (t/testing "BETWEEN A AND B"
+    (t/is
+     (=plan-file
+      "test-dynamic-parameters-temporal-filters-3068-between"
+      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME BETWEEN ? AND ?"))))
+  
+  (t/testing "AS OF SYSTEM TIME"
+    (t/is
+     (=plan-file
+      "test-dynamic-parameters-temporal-filters-3068-as-of-system-time"
+      (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF ?"))))
+
+  (t/testing "using dynamic AS OF in a query"
+    (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015"}
+                              {:xt/id :matthew}]
+                             [:put-docs {:into :docs, :valid-from #inst "2018"}
+                              {:xt/id :mark}]])
+    (t/is
+     (= [{:xt/id :matthew}]
+        (xt/q tu/*node* "SELECT docs.xt$id FROM docs FOR VALID_TIME AS OF ?" {:args [#inst "2016"]})))))
+
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file
          "test-order-by-null-handling-159-1"

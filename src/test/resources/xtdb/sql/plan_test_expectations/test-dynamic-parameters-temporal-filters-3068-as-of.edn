@@ -1,0 +1,1 @@
+[:scan {:table foo, :for-valid-time [:at ?_0]} [bar]]
