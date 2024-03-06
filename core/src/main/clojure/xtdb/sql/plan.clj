@@ -138,6 +138,112 @@
                             {::err/message (str "Cannot build interval for: "  (pr-str qualifier))
                              :qualifier qualifier}))))
 
+(defn interval-qualifier->map [qualifier]
+  (r/zmatch qualifier
+            [:interval_qualifier
+             [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]
+            ;; =>
+            {:start-field datetime-field
+             :end-field nil
+             :leading-precision 2
+             :fractional-precision 0}
+
+            [:interval_qualifier
+             [:single_datetime_field [:non_second_primary_datetime_field datetime-field] [:unsigned_integer leading-precision]]]
+            ;; =>
+            {:start-field datetime-field
+             :end-field nil
+             :leading-precision (parse-long leading-precision)
+             :fractional-precision 0}
+
+            [:interval_qualifier
+             [:single_datetime_field "SECOND"]]
+            ;; =>
+            {:start-field "SECOND"
+             :end-field nil
+             :leading-precision 2
+             :fractional-precision 6}
+
+            [:interval_qualifier
+             [:single_datetime_field "SECOND" [:unsigned_integer leading-precision]]]
+            ;; =>
+            {:start-field "SECOND"
+             :end-field nil
+             :leading-precision (parse-long leading-precision)
+             :fractional-precision 6}
+
+            [:interval_qualifier
+             [:single_datetime_field "SECOND" [:unsigned_integer leading-precision] [:unsigned_integer fractional-precision]]]
+            ;; =>
+            {:start-field "SECOND"
+             :end-field nil
+             :leading-precision (parse-long leading-precision)
+             :fractional-precision (parse-long fractional-precision)}
+
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field leading-field]]
+             "TO"
+             [:end_field [:non_second_primary_datetime_field trailing-field]]]
+            ;; =>
+            {:start-field leading-field
+             :end-field trailing-field
+             :leading-precision 2
+             :fractional-precision 2}
+
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+             "TO"
+             [:end_field [:non_second_primary_datetime_field trailing-field]]]
+            ;; =>
+            {:start-field leading-field
+             :end-field trailing-field
+             :leading-precision (parse-long leading-precision)
+             :fractional-precision 2}
+
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field leading-field]]
+             "TO"
+             [:end_field "SECOND"]]
+            ;; =>
+            {:start-field leading-field
+             :end-field "SECOND"
+             :leading-precision 2
+             :fractional-precision 6}
+
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+             "TO"
+             [:end_field "SECOND"]]
+            ;; =>
+            {:start-field leading-field
+             :end-field "SECOND"
+             :leading-precision (parse-long leading-precision)
+             :fractional-precision 6}
+
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+             "TO"
+             [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+            ;; =>
+            {:start-field leading-field
+             :end-field "SECOND"
+             :leading-precision (parse-long leading-precision)
+             :fractional-precision (parse-long fractional-precision)}
+
+            [:interval_qualifier
+             [:start_field [:non_second_primary_datetime_field leading-field]]
+             "TO"
+             [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+            ;; =>
+            {:start-field leading-field
+             :end-field "SECOND"
+             :leading-precision 2
+             :fractional-precision (parse-long fractional-precision)}
+
+            (throw (err/illegal-arg :xtdb.sql/parse-error
+                                    {::err/message (str "Cannot build interval qualifier opts for: "  (pr-str qualifier))
+                                     :qualifier qualifier}))))
+
 (defn cast-temporal-with-precision [e type fractional-precision]
   (let [fp (parse-long fractional-precision)]
     (list 'cast e [type (if (<= fp 6) :micro :nano)] {:precision fp})))
