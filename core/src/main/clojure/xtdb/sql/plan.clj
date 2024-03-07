@@ -301,6 +301,9 @@
     [:interval_type "INTERVAL"]
     (list 'cast e [:interval :month-day-nano])
 
+    [:interval_type "INTERVAL" q]
+    (list 'cast e :interval (interval-qualifier->map q))
+
     [:character_string_type "VARCHAR"]
     (list 'cast e :utf8)
 
