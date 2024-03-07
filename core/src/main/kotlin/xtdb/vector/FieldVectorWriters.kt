@@ -513,4 +513,3 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
 @JvmOverloads
 fun writerFor(vec: ValueVector, notify: FieldChangeListener? = null): IVectorWriter =
     vec.accept(WriterForVectorVisitor, notify)
-
