@@ -38,7 +38,8 @@
            xtdb.operator.IRelationSelector
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
-           (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
+           (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader
+                        IMultiVectorRelationFactory)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -117,30 +118,27 @@
     (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
       (.allTableColNames scan-emitter wm))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn- ->content-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, fields]
+(defn temporal-column? [col-name]
+  (contains? #{"xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to"}
+             (util/str->normal-form-str col-name)))
+
+(defn- leaf-rdr->rel [^RelationReader leaf-rel, content-col-names]
   (let [op-rdr (.readerForName leaf-rel "op")
-        put-rdr (.legReader op-rdr :put)
+        put-rdr (.legReader op-rdr :put)]
 
-        row-copiers (object-array
-                     (for [[col-name ^Field field] fields
-                           :let [col-name (str col-name)
-                                 normalized-name (util/str->normal-form-str col-name)
-                                 copier (case normalized-name
-                                          "xt$iid"
-                                          (.rowCopier (.readerForName leaf-rel "xt$iid")
-                                                      (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
-                                          ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
-                                          (some-> (.structKeyReader put-rdr normalized-name)
-                                                  (.rowCopier (.colWriter out-rel col-name (.getFieldType field)))))]
-                           :when copier]
-                       copier))]
+    (RelationReader/from
+     (for [^String col-name content-col-names
+           :let [normalized-name (util/str->normal-form-str col-name)
+                 rdr (if (= normalized-name "xt$iid")
+                       (some-> (.readerForName leaf-rel "xt$iid")
+                               (.withName col-name))
+                       (some-> (.structKeyReader put-rdr normalized-name)
+                               (.withName col-name)))]
+           :when rdr]
+       rdr))))
 
-    (reify IRowConsumer
-      (accept [_ idx _valid-from _valid-to _sys-from _sys-to]
-        (dotimes [i (alength row-copiers)]
-          (let [^IRowCopier copier (aget row-copiers i)]
-            (.copyRow copier idx)))))))
+(defn- ->content-rel-factory ^xtdb.vector.IMultiVectorRelationFactory [leaf-rdrs allocator content-col-names]
+  (vr/rels->multi-vector-rel-factory (map #(leaf-rdr->rel % content-col-names) leaf-rdrs) allocator content-col-names))
 
 (defn- ->bitemporal-consumer ^xtdb.bitemporal.IRowConsumer [^IRelationWriter out-rel, col-names]
   (letfn [(writer-for [normalised-col-name]
@@ -230,18 +228,21 @@
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
                 calculate-polygon (bitemp/polygon-calculator temporal-bounds)
-                bitemp-consumer (->bitemporal-consumer out-rel col-names)]
+                bitemp-consumer (->bitemporal-consumer out-rel col-names)
+                leaf-rdrs (for [leaf leaves
+                                :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)]]
+                            (cond-> data-rdr
+                              iid-pred (.select (.select iid-pred allocator data-rdr params))))
+                [temporal-cols content-cols] ((juxt filter remove) temporal-column? col-names)
+                content-rel-factory (->content-rel-factory leaf-rdrs allocator content-cols)]
 
-            (doseq [leaf leaves
-                    :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)
-                          ^RelationReader leaf-rdr (cond-> data-rdr
-                                                     iid-pred (.select (.select iid-pred allocator data-rdr params)))
-                          ev-ptr (EventRowPointer. leaf-rdr path)]]
+            (doseq [[idx leaf-rdr] (map-indexed vector leaf-rdrs)
+                    :let [ev-ptr (EventRowPointer. leaf-rdr path)]]
               (when (.isValid ev-ptr is-valid-ptr path)
-                (.add merge-q {:ev-ptr ev-ptr, :content-consumer (->content-consumer out-rel leaf-rdr fields)})))
+                (.add merge-q {:ev-ptr ev-ptr, :rel-idx idx})))
 
             (loop []
-              (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowConsumer content-consumer] :as q-obj} (.poll merge-q)]
+              (when-let [{:keys [^EventRowPointer ev-ptr, rel-idx] :as q-obj} (.poll merge-q)]
                 (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
                   (when (= :put (.getOp ev-ptr))
                     (let [sys-from (.getSystemFrom ev-ptr)
@@ -254,7 +255,7 @@
                                      (not (= valid-from valid-to))
                                      (not (= sys-from sys-to)))
                             (.startRow out-rel)
-                            (.accept content-consumer idx valid-from valid-to sys-from sys-to)
+                            (.accept content-rel-factory rel-idx idx)
                             (.accept bitemp-consumer idx valid-from valid-to sys-from sys-to)
                             (.endRow out-rel)))))))
 
@@ -263,10 +264,12 @@
                   (.add merge-q q-obj))
                 (recur)))
 
-            (let [^RelationReader rel (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
+            (let [^RelationReader rel (cond-> (.realize content-rel-factory)
+                                        (or (empty? (seq content-cols)) (seq temporal-cols))
+                                        (vr/concat-rels (vw/rel-wtr->rdr out-rel)))
+                  ^RelationReader rel (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
                                                 (.select rel (.select col-pred allocator rel params)))
-                                              (-> (vw/rel-wtr->rdr out-rel)
-                                                  (vr/with-absent-cols allocator col-names))
+                                              rel
                                               (vals (dissoc col-preds "xt$iid")))]
               (.accept c rel))))
         true)
