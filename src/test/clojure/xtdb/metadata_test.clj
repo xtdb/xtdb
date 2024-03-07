@@ -10,7 +10,6 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :each tu/with-node)
