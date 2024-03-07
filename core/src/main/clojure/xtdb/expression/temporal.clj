@@ -477,6 +477,27 @@
                     "MINUTE" `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~x))
                     "SECOND" `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~x))))})
 
+(defn ->single-field-interval-call [{{:keys [start-field leading-precision fractional-precision]} :cast-opts}]
+  (let [expr {:op :call
+              :f :single_field_interval
+              :args [{} {:literal start-field} {:literal leading-precision} {:literal fractional-precision}]
+              :arg-types [:utf8 :utf8 :int :int]}]
+    (expr/codegen-call expr)))
+
+(defn ->multi-field-interval-call [{{:keys [start-field end-field leading-precision fractional-precision]} :cast-opts}]
+  (let [expr {:op :call
+              :f :multi_field_interval
+              :args [{} {:literal start-field} {:literal leading-precision} {:literal end-field} {:literal fractional-precision}]
+              :arg-types [:utf8 :utf8 :int :utf8 :int]}]
+    (expr/codegen-call expr)))
+
+(defmethod expr/codegen-cast [:utf8 :interval] [{{:keys [start-field end-field]} :cast-opts :as expr}]
+  ;; Calls down to multi-field-interval if both start-field and end-field present, 
+  ;; else calls to single-field-interval if only start-field is present
+  (if (and start-field end-field)
+    (->multi-field-interval-call expr)
+    (->single-field-interval-call expr)))
+
 ;;;; SQL:2011 Operations involving datetimes and intervals
 (defn- recall-with-cast
   ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))

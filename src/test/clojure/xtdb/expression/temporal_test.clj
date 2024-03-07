@@ -341,6 +341,37 @@
            (test-cast 10 :interval {:start-field "DAY"
                                     :end-field "HOUR"})))))
 
+(t/deftest cast-utf8-to-interval
+  (letfn [(test-cast
+            [src-value tgt-type cast-opts]
+            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+                              [:table [{}]]]
+                             {:basis {}})
+                first :res))]
+
+    (t/is (= #xt/interval-ym "P12M"
+             (test-cast "1" :interval {:start-field "YEAR", :end-field nil, :leading-precision 2 :fractional-precision 0})))
+
+    (t/is (= #xt/interval-dt ["P10D" "PT0S"]
+             (test-cast "10" :interval {:start-field "DAY", :end-field nil, :leading-precision 2 :fractional-precision 0})))
+
+    (t/is (= #xt/interval-ym "P22M"
+             (test-cast "1-10" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2 :fractional-precision 0})))
+
+    (t/is (= #xt/interval-mdn ["P1D" "PT10H"]
+             (test-cast "1 10" :interval {:start-field "DAY", :end-field "HOUR", :leading-precision 2 :fractional-precision 0})))
+
+    (t/is (= #xt/interval-mdn ["P1D" "PT10H10M10S"]
+             (test-cast "1 10:10:10" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 6})))
+
+    (t/is (= #xt/interval-mdn ["P1D" "PT10H10M10.111111S"]
+             (test-cast "1 10:10:10.111111" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 6})))
+
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Interval end field must have less significance than the start field."
+           (test-cast "1 10:10:10.111111" :interval {:start-field "SECOND", :end-field "DAY", :leading-precision 2 :fractional-precision 6})))))
+
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
                               (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))

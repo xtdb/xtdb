@@ -934,6 +934,21 @@
          #"Cannot cast integer to a multi field interval"
          (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl FROM (VALUES 1) AS x"))))
 
+(t/deftest test-cast-string-to-interval
+  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT11H10M"]}]
+           (xt/q tu/*node* "SELECT CAST('3 11:10' AS INTERVAL DAY TO MINUTE) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-ym "P24M"}]
+           (xt/q tu/*node* "SELECT CAST('2' AS INTERVAL YEAR) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-ym "P22M"}]
+           (xt/q tu/*node* "SELECT CAST('1-10' AS INTERVAL YEAR TO MONTH) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Interval end field must have less significance than the start field."
+         (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl FROM (VALUES 1) AS x"))))
+
 (t/deftest test-expr-in-equi-join
   (t/is
     (=plan-file
