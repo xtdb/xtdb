@@ -922,6 +922,18 @@
   (t/is (= [{:itvl #xt/interval-mdn ["P370D" "PT2H"]}]
            (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2020-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x"))))
 
+(t/deftest test-cast-int-to-interval
+  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT0S"]}]
+           (xt/q tu/*node* "SELECT CAST(3 AS INTERVAL DAY) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-ym "P24M"}]
+           (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Cannot cast integer to a multi field interval"
+         (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl FROM (VALUES 1) AS x"))))
+
 (t/deftest test-expr-in-equi-join
   (t/is
     (=plan-file

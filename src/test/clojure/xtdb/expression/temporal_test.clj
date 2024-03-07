@@ -321,6 +321,26 @@
     (t/is (= #xt/interval-mdn ["P1D" "PT1H1.11S"] (test-cast #time/duration "PT25H1.11S" :interval)))
     (t/is (= #xt/interval-mdn ["P35D" "PT2H1.11S"] (test-cast #time/duration "P35DT2H1.11S" :interval)))))
 
+(t/deftest cast-int-to-interval
+  (letfn [(test-cast
+            [src-value tgt-type cast-opts]
+            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+                              [:table [{}]]]
+                             {:basis {}})
+                first :res))]
+
+    (t/is (= #xt/interval-ym "P12M" (test-cast 1 :interval {:start-field "YEAR"})))
+    (t/is (= #xt/interval-ym "P10M" (test-cast 10 :interval {:start-field "MONTH"})))
+    (t/is (= #xt/interval-mdn ["P10D" "PT0S"] (test-cast 10 :interval {:start-field "DAY"})))
+    (t/is (= #xt/interval-mdn ["P0D" "PT10H"] (test-cast 10 :interval {:start-field "HOUR"})))
+    (t/is (= #xt/interval-mdn ["P0D" "PT10M"] (test-cast 10 :interval {:start-field "MINUTE"})))
+    (t/is (= #xt/interval-mdn ["P0D" "PT10S"] (test-cast 10 :interval {:start-field "SECOND"})))
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Cannot cast integer to a multi field interval"
+           (test-cast 10 :interval {:start-field "DAY"
+                                    :end-field "HOUR"})))))
+
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
                               (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))

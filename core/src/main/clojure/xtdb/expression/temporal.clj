@@ -460,6 +460,23 @@
                        (Duration/ofNanos)
                        (duration->mdn-interval)))})
 
+(defmethod expr/codegen-cast [:int :interval] [{{:keys [start-field end-field]} :cast-opts}]
+  (when end-field (throw (err/illegal-arg :xtdb.expression/attempting-to-cast-int-to-multi-field-interval
+                                          {::err/message "Cannot cast integer to a multi field interval"
+                                           :start-field start-field
+                                           :end-field end-field})))
+  {:return-type (if (#{"YEAR" "MONTH"} start-field)
+                  [:interval :year-month]
+                  [:interval :month-day-nano])
+   :->call-code (fn [[x]]
+                  (case start-field
+                    "YEAR" `(PeriodDuration. (Period/ofYears ~x) Duration/ZERO)
+                    "MONTH" `(PeriodDuration. (Period/ofMonths ~x) Duration/ZERO)
+                    "DAY" `(PeriodDuration. (Period/ofDays ~x) Duration/ZERO)
+                    "HOUR" `(PeriodDuration. Period/ZERO (Duration/ofHours ~x))
+                    "MINUTE" `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~x))
+                    "SECOND" `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~x))))})
+
 ;;;; SQL:2011 Operations involving datetimes and intervals
 (defn- recall-with-cast
   ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))
