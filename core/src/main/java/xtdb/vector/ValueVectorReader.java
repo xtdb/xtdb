@@ -983,7 +983,7 @@ public class ValueVectorReader implements IVectorReader {
 
         @Override
         public IValueReader valueReader(IVectorPosition pos) {
-            var legReaders = legs.stream().collect(Collectors.toMap(l -> l, l -> DuvReader.this.legReader(l).valueReader(pos)));
+            var legReaders = legs.stream().collect(Collectors.toMap(l -> l, l -> this.legReader(l).valueReader(pos)));
 
             return new IValueReader() {
                 @Override

@@ -77,7 +77,7 @@
       (let [row-count (.rowCount in-rel)]
         (util/with-close-on-catch [^StructVector struct-vec (-> ^Field (apply types/->field (str col-name) #xt.arrow/type :struct false
                                                                               (for [^IVectorReader col in-rel]
-                                                                                (.getField col)))
+                                                                                (types/field-with-name (.getField col) (.getName col))))
                                                                 (.createVector allocator))]
 
           ;; TODO can we quickly set all of these to 1?
