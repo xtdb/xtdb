@@ -949,6 +949,25 @@
          #"Interval end field must have less significance than the start field."
          (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl FROM (VALUES 1) AS x"))))
 
+(t/deftest test-cast-interval-to-string
+  (t/is (= [{:string "P2YT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '2' YEAR AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P22MT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1-10' YEAR TO MONTH AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P-22MT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '-1-10' YEAR TO MONTH AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P1DT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1' DAY AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P1DT10H10M10S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 10:10:10' DAY TO SECOND AS VARCHAR) as string FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:string "P0DT10M10.111111111S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '10:10.111111111' MINUTE TO SECOND(9) AS VARCHAR) as string FROM (VALUES 1) AS x"))))
+
 (t/deftest test-expr-in-equi-join
   (t/is
     (=plan-file

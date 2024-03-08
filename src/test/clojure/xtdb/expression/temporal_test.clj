@@ -372,6 +372,45 @@
            #"Interval end field must have less significance than the start field."
            (test-cast "1 10:10:10.111111" :interval {:start-field "SECOND", :end-field "DAY", :leading-precision 2 :fractional-precision 6})))))
 
+(t/deftest cast-interval-to-string
+  (letfn [(test-cast
+            [src-value tgt-type]
+            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+                              [:table [{}]]]
+                             {:basis {}})
+                first :res))]
+    (t/testing "year-month interval -> string"
+      (t/are [expected src-value] (= expected (test-cast src-value :utf8))
+        "P12MT0S" #xt/interval-ym "P12M" 
+        "P-12MT0S" #xt/interval-ym "-P12M"
+        "P22MT0S" #xt/interval-ym "P22M"
+        "P-22MT0S" #xt/interval-ym "-P22M"
+        "P6MT0S" #xt/interval-ym "P6M"))
+
+    (t/testing "month-day-nano interval -> string"
+      (t/are [expected src-value] (= expected (test-cast src-value :utf8))
+        "P1DT0S" #xt/interval-mdn ["P1D" "PT0S"]
+        "P0DT1H" #xt/interval-mdn ["P0D" "PT1H"]
+        "P0DT1M" #xt/interval-mdn ["P0D" "PT1M"]
+        "P0DT1S" #xt/interval-mdn ["P0D" "PT1S"]
+        "P1DT1H" #xt/interval-mdn ["P1D" "PT1H"]
+        "P1DT1H1M" #xt/interval-mdn ["P1D" "PT1H1M"]
+        "P1DT1H1S" #xt/interval-mdn ["P1D" "PT1H1S"]
+        "P1DT1H1M1.111111111S" #xt/interval-mdn ["P1D" "PT1H1M1.111111111S"]
+        "P-1DT0S" #xt/interval-mdn ["-P1D" "PT0S"]
+        "P0DT-10H" #xt/interval-mdn ["P0D" "PT-10H"]
+        "P-1DT-10H-10M-10.111111111S" #xt/interval-mdn ["-P1D" "PT-10H-10M-10.111111111S"]
+        "P0DT-10H-10M" #xt/interval-mdn ["P0D" "PT-10H-10M"]))
+    
+    (t/testing "day-time interval -> string"
+      (t/are [expected src-value] (= expected (test-cast src-value :utf8))
+        "P1DT0S" #xt/interval-dt ["P1D" "PT0S"]
+        "P0DT1H" #xt/interval-dt ["P0D" "PT1H"]
+        "P0DT1M" #xt/interval-dt ["P0D" "PT1M"]
+        "P0DT1S" #xt/interval-dt ["P0D" "PT1S"]
+        "P0DT1.111S" #xt/interval-dt ["P0D" "PT1.111S"]
+        "P1DT1H1S" #xt/interval-dt ["P1D" "PT1H1S"]))))
+
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
                               (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))

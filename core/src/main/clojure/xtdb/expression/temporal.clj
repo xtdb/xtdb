@@ -498,6 +498,17 @@
     (->multi-field-interval-call expr)
     (->single-field-interval-call expr)))
 
+(defn interval->iso-string [^PeriodDuration x]
+  (let [period-str (.toString (.getPeriod x))
+        duration-str (.toString (.getDuration x))]
+    (str period-str (str/replace duration-str #"^PT" "T"))))
+
+(defmethod expr/codegen-cast [:interval :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[pd]]
+                  `(-> (interval->iso-string ~pd)
+                       (string->byte-buffer)))})
+
 ;;;; SQL:2011 Operations involving datetimes and intervals
 (defn- recall-with-cast
   ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))
