@@ -93,43 +93,43 @@ class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vec
 
 private class BitVectorWriter(override val vector: BitVector) : ScalarVectorWriter(vector) {
     override fun writeBoolean(v: Boolean) = vector.setSafe(wp.getPositionAndIncrement(), if (v) 1 else 0)
-    override fun writeObject0(obj: Any) = writeBoolean(obj as Boolean)
+    override fun writeObject0(obj: Any) = writeBoolean(obj as? Boolean ?: throw InvalidWriteObjectException(field, obj))
     override fun writeValue0(v: IValueReader) = writeBoolean(v.readBoolean())
 }
 
 private class TinyIntVectorWriter(override val vector: TinyIntVector) : ScalarVectorWriter(vector) {
     override fun writeByte(v: Byte) = vector.setSafe(wp.getPositionAndIncrement(), v)
-    override fun writeObject0(obj: Any) = writeByte(obj as Byte)
+    override fun writeObject0(obj: Any) = writeByte(obj as? Byte ?: throw InvalidWriteObjectException(field, obj))
     override fun writeValue0(v: IValueReader) = writeByte(v.readByte())
 }
 
 private class SmallIntVectorWriter(override val vector: SmallIntVector) : ScalarVectorWriter(vector) {
     override fun writeShort(v: Short) = vector.setSafe(wp.getPositionAndIncrement(), v)
-    override fun writeObject0(obj: Any) = writeShort(obj as Short)
+    override fun writeObject0(obj: Any) = writeShort(obj as? Short ?: throw InvalidWriteObjectException(field, obj))
     override fun writeValue0(v: IValueReader) = writeShort(v.readShort())
 }
 
 private class IntVectorWriter(override val vector: IntVector) : ScalarVectorWriter(vector) {
     override fun writeInt(v: Int) = vector.setSafe(wp.getPositionAndIncrement(), v)
-    override fun writeObject0(obj: Any) = writeInt(obj as Int)
+    override fun writeObject0(obj: Any) = writeInt(obj as? Int ?: throw InvalidWriteObjectException(field, obj))
     override fun writeValue0(v: IValueReader) = writeInt(v.readInt())
 }
 
 private class BigIntVectorWriter(override val vector: BigIntVector) : ScalarVectorWriter(vector) {
     override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
-    override fun writeObject0(obj: Any) = writeLong(obj as Long)
+    override fun writeObject0(obj: Any) = writeLong(obj as? Long ?: throw InvalidWriteObjectException(field, obj))
     override fun writeValue0(v: IValueReader) = writeLong(v.readLong())
 }
 
 private class Float4VectorWriter(override val vector: Float4Vector) : ScalarVectorWriter(vector) {
     override fun writeFloat(v: Float) = vector.setSafe(wp.getPositionAndIncrement(), v)
-    override fun writeObject0(obj: Any) = writeFloat(obj as Float)
+    override fun writeObject0(obj: Any) = writeFloat(obj as? Float ?: throw InvalidWriteObjectException(field, obj))
     override fun writeValue0(v: IValueReader) = writeFloat(v.readFloat())
 }
 
 private class Float8VectorWriter(override val vector: Float8Vector) : ScalarVectorWriter(vector) {
     override fun writeDouble(v: Double) = vector.setSafe(wp.getPositionAndIncrement(), v)
-    override fun writeObject0(obj: Any) = writeDouble(obj as Double)
+    override fun writeObject0(obj: Any) = writeDouble(obj as? Double ?: throw InvalidWriteObjectException(field, obj))
     override fun writeValue0(v: IValueReader) = writeDouble(v.readDouble())
 }
 
@@ -220,7 +220,7 @@ private class TimeNanoVectorWriter(override val vector: TimeNanoVector) : TimeVe
 
 private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVectorWriter(vector) {
     override fun writeObject0(obj: Any) {
-        require(obj is BigDecimal)
+        if (obj !is BigDecimal) throw InvalidWriteObjectException(field, obj)
         vector.setSafe(wp.getPositionAndIncrement(), obj.setScale(vector.scale))
     }
 
@@ -396,7 +396,7 @@ class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private v
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)
         is XtExtensionVector<*> -> inner.rowCopier(src.underlyingVector)
-        else -> throw IllegalArgumentException("unknown src type for rowCopier: ${src.javaClass.simpleName}, dest ${vector.javaClass.simpleName}")
+        else -> throw InvalidCopySourceException(src.field, field)
     }
 }
 
@@ -466,7 +466,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
 
                 is Collection<*> -> obj.forEach { elWtr.writeObject(it) }
 
-                else -> throw IllegalArgumentException("list write-object: ${obj.javaClass}")
+                else -> throw InvalidWriteObjectException(field, obj)
             }
         }
     }
@@ -541,7 +541,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     }
 
     override fun writeObject0(obj: Any) {
-        require(obj is Map<*, *>) { "struct write-object: ${obj.javaClass}" }
+        if (obj !is Map<*, *>) throw InvalidWriteObjectException(field, obj)
 
         writeStruct {
             val structPos = wp.position
