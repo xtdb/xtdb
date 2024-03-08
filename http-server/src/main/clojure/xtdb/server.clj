@@ -193,6 +193,29 @@
             (finally
               (util/close out))))))))
 
+(defn- ->json-resultset-encoder [_opts]
+  (reify
+    mf/EncodeToBytes
+
+    mf/EncodeToOutputStream
+    (encode-to-output-stream [_ res _]
+      (fn [^OutputStream out]
+        (if-not (ex-data res)
+          (with-open [^Stream res res]
+            (try
+              (JsonSerde/encode (.toList res) out)
+              (catch Throwable t
+                (JsonSerde/encode t out)
+                (.write out ^byte ascii-newline))
+              (finally
+                (util/close res)
+                (util/close out))))
+
+          (try
+            (JsonSerde/encode res out)
+            (finally
+              (util/close out))))))))
+
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
@@ -230,6 +253,9 @@
                            (assoc-in [:formats "application/transit+json" :encoder]
                                      [->tj-resultset-encoder {:handlers serde/transit-write-handlers}])
 
+                           (assoc-in [:formats "application/json" :encoder]
+                                     [->json-resultset-encoder {}])
+
                            (assoc-in [:formats "application/jsonl" :encoder]
                                      [->jsonl-resultset-encoder {}])
 
@@ -239,9 +265,7 @@
                      (let [{{:keys [query] :as query-opts} :body} parameters]
                        (-> (xtp/open-query& node query (dissoc query-opts :query))
                            (util/then-apply (fn [res]
-                                              (cond-> {:status 200, :body res}
-                                                (= (-> req :muuntaja/response :format) "application/json")
-                                                (assoc :muuntaja/content-type "application/jsonl")))))))
+                                              {:status 200, :body res})))))
 
           :parameters {:body ::query-body}}})
 

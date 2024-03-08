@@ -448,14 +448,14 @@
                decode-json*))
         "testing sql query with args"))
 
-(deftest reply-with-with-jsonlines-even-when-asked-for-simple-json-3142
+(deftest accept-json
   (xt/submit-tx *node* [[:put-docs :visits {:xt/id 1 :foo "bar"} {:xt/id 2 :foo "bar"}]])
-  (let [{:keys [content-type body]} (http/request {:accept "application/json"
-                                                   :as :string
-                                                   :request-method :post
-                                                   :content-type :json
-                                                   :form-params {:query {"from" "visits", "bind" ["foo"]}}
-                                                   :url (http-url "query")})]
-    (t/is (= :application/jsonl content-type)
-          "content-type is JSON lines")
-    (t/is (= [{"foo" "bar"} {"foo" "bar"}] (decode-json* body)))))
+  (let [{:keys [content-type ^String body]} (http/request {:accept "application/json"
+                                                           :as :string
+                                                           :request-method :post
+                                                           :content-type :json
+                                                           :form-params {:query {"from" "visits", "bind" ["foo"]}}
+                                                           :url (http-url "query")})]
+    (t/is (= :application/json content-type)
+          "content-type is JSON")
+    (t/is (= [{"foo" "bar"} {"foo" "bar"}] (JsonSerde/decode body)))))
