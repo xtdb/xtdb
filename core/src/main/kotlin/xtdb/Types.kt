@@ -120,15 +120,15 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     is CharSequence -> MinorType.VARCHAR.type
     is ByteArray -> MinorType.VARBINARY.type
     is ByteBuffer -> MinorType.VARBINARY.type
-    is UUID -> UuidType.INSTANCE
-    is URI -> UriType.INSTANCE
-    is Keyword -> KeywordType.INSTANCE
-    is ClojureForm -> TransitType.INSTANCE
-    is IllegalArgumentException -> TransitType.INSTANCE
-    is RuntimeException -> TransitType.INSTANCE
+    is UUID -> UuidType
+    is URI -> UriType
+    is Keyword -> KeywordType
+    is ClojureForm -> TransitType
+    is IllegalArgumentException -> TransitType
+    is RuntimeException -> TransitType
 
     is List<*> -> MinorType.LIST.type
-    is Set<*> -> SetType.INSTANCE
+    is Set<*> -> SetType
 
     // TODO support for Arrow maps
     is Map<*, *> -> MinorType.STRUCT.type
