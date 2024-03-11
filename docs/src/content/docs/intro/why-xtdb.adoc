@@ -38,7 +38,7 @@ For the everyday application developer who is not working on regulated systems a
 
 . *Basis* - using a timestamp as a stable basis for querying prior database states - an essential safety net for developers and organizations alike - and the key to consistent downstreaming processing (e.g. creating a businss KPI report without ETL)
 . *System-Time* - a pair of hidden timestamp columns built-in to every table, maintained automatically, that can be used to retrieve old versions of data
-. *Valid-Time* - an advanced versioning mechanism that is helpful for scheduling changes across data, and critical for time-ware applications where system-time alone is not enough
+. *Valid-Time* - an advanced versioning mechanism that is helpful for scheduling changes across data, and critical for time-aware applications where system-time alone is not enough
 
 First and foremost, XTDB is built to reduce the risks and impact of data loss, update anomalies and brittle database designs. It achieves this goal primarily by always recording the history of all changes (particularly UPDATEs and DELETEs which are normally destructive operations), and by restricting the scope of concurrent database usage, such that an auditable, linear sequence of all changes is retained.
 

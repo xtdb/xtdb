@@ -119,7 +119,7 @@ curl --json "{\"txOps\": [{\"sql\": \"${sql}\"}]}" localhost:3000/tx
 ----
 ====
 
-== Basis allows you to re-run queries
+== Basis: re-run queries against stable data without explicit snapshots
 
 Despite having just 'replaced' the version of the document in the previous tep, you can still re-run the previous query exactly and see that the results against the earlier basis remain the same. This is accomplished by defining a `basis` map which contains the same TransactionKey as used previously (within `afterTx`) but this time under the `atTx` key (once again, the TransactionKey shown is purely illustrative):
 
@@ -152,7 +152,7 @@ If you re-run the previous query with the previous basis (returned by the first 
 
 A basis is stable and allows you to re-run unmodified queries indefinitely. This is useful for debugging, auditing, and exposing application data for processing in downstream systems (generating reports, analytics etc.)
 
-== System-Time Columns
+== System-Time Columns: query previous versions of data
 
 The mechanism underpinning the basis concept is called 'System Time'.
 
@@ -212,6 +212,14 @@ curl --json "{\"query\": {\"sql\": \"${sql}\"},\
 
 You can also run queries against individual tables at specific timestamps using `FOR SYSTEM_TIME AS_OF <timestamp>` and use temporal period operators (`OVERLAPS`, `PRECEDES` etc.) to interrogate audit trails - see the link:/reference/main/sql/queries[SQL documentation].
 
+== View a delta of changes to a table since a given system-time
+
+TODO
+
+== Restore a record
+
+TODO un-delete given an id
+
 == ERASE as hard-delete
 
 Where data does need to be erased ("hard deleted"), an `ERASE` operation is provided:
@@ -266,8 +274,18 @@ Under the hood, the relevant data is guaranteed to be fully erased only once all
 
 Everything demonstrated so far only scratches the surface of what XTDB can do, given that XTDB is a full SQL implementation with all the implications that has, however there is one further aspect where XTDB is very different to most databases: ubiquitous 'Valid-Time' versioning.
 
-In addition to system-time versioning, SQL:2011 also defines 'application-time' versioning. XTDB applies this versioning to all tables. It allows for several advanced usage scenarios:
+In addition to system-time versioning, SQL:2011 also defines 'application-time' versioning. XTDB applies this versioning to all tables.
+
+Valid-Time is a key tool for application developers who need to offer time-travel functionality within their applications, it is a rigourous model that can help avoid cluttering the application schema and queries.
+
+It allows for several advanced usage scenarios:
 
 . *foo* - a
 . *bar* - b
+
+Note that valid-time as XTDB offers it is specifically about the validity (or "effective from" time) of a given row in the table, and not _necessarily_ (unless you carefully map it 1:1) some other domain conception of time.
+
+XTDB is optimized for as-of-now queries, but is also tuned with the following secondary temporal query patterns in mind (in order of importance for low-latency performance):
+
+. *asdf* - asdf
 
