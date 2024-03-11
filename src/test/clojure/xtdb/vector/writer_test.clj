@@ -207,8 +207,8 @@
             "can't now get a different type")
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
-                              (types/->field "foo" #xt.arrow/type :union false)
-                              (types/->field "bar" #xt.arrow/type :i64 false))
+                              (types/->field "bar" #xt.arrow/type :i64 false)
+                              (types/->field "foo" #xt.arrow/type :union false))
                (-> struct-wtr
                    (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                    (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))

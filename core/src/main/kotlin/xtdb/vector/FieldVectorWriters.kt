@@ -413,12 +413,12 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     private val wp = IVectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
-    private var elWriter = writerFor(vector.dataVector) { notifyDataVec() }
-
-    private fun notifyDataVec() {
-        field = vector.field
+    private fun upsertElField(elField: Field) {
+        field = Field(field.name, field.fieldType, listOf(elField))
         notify(field)
     }
+
+    private var elWriter = writerFor(vector.dataVector, ::upsertElField)
 
     override fun writerPosition() = wp
 
@@ -434,8 +434,9 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         val res = vector.addOrGetVector<FieldVector>(fieldType)
         if (!res.isCreated) return elWriter
 
-        notifyDataVec()
-        elWriter = writerFor(res.vector) { notifyDataVec() }
+        val newDataVec = res.vector
+        upsertElField(newDataVec.field)
+        elWriter = writerFor(newDataVec, ::upsertElField)
         return elWriter
     }
 
@@ -519,9 +520,18 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     private val wp = IVectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
+    private val childFields: MutableMap<String, Field> =
+        field.children.associateByTo(HashMap()) { childField -> childField.name }
+
     override fun writerPosition() = wp
 
-    private fun writerFor(vector: ValueVector) = writerFor(vector) { field = this.vector.field; notify(field) }
+    private fun upsertChildField(childField: Field) {
+        childFields[childField.name] = childField
+        field = Field(field.name, field.fieldType, childFields.values.toList())
+        notify(field)
+    }
+
+    private fun writerFor(child: ValueVector) = writerFor(child, ::upsertChildField)
 
     private val writers: MutableMap<String, IVectorWriter> =
         vector.associateTo(HashMap()) { childVec -> childVec.name to writerFor(childVec) }
@@ -579,7 +589,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
         return writerFor(vector.addOrGet(key, fieldType, FieldVector::class.java))
             .also {
-                field = vector.field; notify(field)
+                upsertChildField(Field(key, fieldType, emptyList()))
                 writers[key] = it
                 it.populateWithAbsents(wp.position)
             }
@@ -624,6 +634,9 @@ class DenseUnionVectorWriter(
 ) : IVectorWriter {
     private val wp = IVectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
+
+    private val childFields: MutableMap<String, Field> =
+        field.children.associateByTo(LinkedHashMap()) { childField -> childField.name }
 
     private inner class ChildWriter(private val inner: IVectorWriter, private val typeId: Byte) : IVectorWriter {
         override val vector get() = inner.vector
@@ -716,8 +729,14 @@ class DenseUnionVectorWriter(
         override fun legWriter(leg: Keyword, fieldType: FieldType) = inner.legWriter(leg, fieldType)
     }
 
+    private fun upsertChildField(childField: Field) {
+        childFields[childField.name] = childField
+        field = Field(field.name, field.fieldType, childFields.values.toList())
+        notify(field)
+    }
+
     private fun writerFor(child: ValueVector, typeId: Byte) =
-        ChildWriter(writerFor(child) { field = vector.field; notify(field) }, typeId)
+        ChildWriter(writerFor(child, ::upsertChildField), typeId)
 
     private val writersByLeg: MutableMap<Keyword, IVectorWriter> = vector.mapIndexed { typeId, child ->
         Keyword.intern(child.name) to writerFor(child, typeId.toByte())
@@ -765,8 +784,7 @@ class DenseUnionVectorWriter(
         }
 
         if (isNew) {
-            field = vector.field
-            notify(field)
+            upsertChildField(w.field)
         } else {
             w.checkFieldType(fieldType)
         }
@@ -887,3 +905,4 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
 @JvmOverloads
 fun writerFor(vec: ValueVector, notify: FieldChangeListener? = null): IVectorWriter =
     vec.accept(WriterForVectorVisitor, notify)
+
