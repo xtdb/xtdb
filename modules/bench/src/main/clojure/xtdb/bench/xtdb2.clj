@@ -64,7 +64,9 @@
                     :ts-devices
                     ((requiring-resolve 'xtdb.bench.ts-devices/benchmark) benchmark-opts)
                     :test-bm
-                    ((requiring-resolve 'xtdb.bench.test-benchmark/benchmark) benchmark-opts))
+                    ((requiring-resolve 'xtdb.bench.test-benchmark/benchmark) benchmark-opts)
+                    :products
+                    ((requiring-resolve 'xtdb.bench.products/benchmark) benchmark-opts))
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (with-open [node (->local-node node-opts)]
       (binding [bm/*registry* (:registry node)]
@@ -159,12 +161,19 @@
 
    ["-h" "--help"]])
 
+(def ^:private products-cli-options
+  [["-l" "--limit LIMIT"
+    :parse-fn parse-long]
+
+   ["-h" "--help"]])
+
 (defn -main [benchmark-type & args]
   (let [benchmark-type (keyword benchmark-type)
-        {:keys [options errors summary]} (case benchmark-type
-                                           :tpch (cli/parse-opts args tpch-cli-options)
-                                           :auctionmark (cli/parse-opts args auctionmark-cli-options)
-                                           {:errors [(str "Unknown benchmark: " (name benchmark-type))]})]
+        {:keys [options errors summary]} (cli/parse-opts args (case benchmark-type
+                                                                :tpch tpch-cli-options
+                                                                :auctionmark auctionmark-cli-options
+                                                                :products products-cli-options
+                                                                {:errors [(str "Unknown benchmark: " (name benchmark-type))]}))]
     (cond
       (seq errors) (binding [*out* *err*]
                      (doseq [error errors]

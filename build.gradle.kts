@@ -245,6 +245,9 @@ dependencies {
     devImplementation("software.amazon.awssdk", "sso", "2.16.76")
     devImplementation("software.amazon.awssdk", "ssooidc", "2.16.76")
 
+    devImplementation("com.taoensso", "nippy", "3.3.0")
+    testImplementation("com.taoensso", "nippy", "3.3.0")
+
     // hato uses cheshire for application/json encoding
     testImplementation("cheshire", "cheshire", "5.12.0")
 }
@@ -337,49 +340,39 @@ createSltTask(
     extraArgs = listOf("--dirs")
 )
 
-tasks.create("tpch", JavaExec::class) {
-    classpath = sourceSets.dev.get().runtimeClasspath
-    mainClass.set("clojure.main")
-    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val args = mutableListOf("-m", "xtdb.bench.xtdb2", "tpch")
+fun createBench(benchName: String, properties: Map<String, String>) {
+    tasks.create(benchName, JavaExec::class) {
+        classpath = sourceSets.dev.get().runtimeClasspath
+        mainClass.set("clojure.main")
+        jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+        val args = mutableListOf("-m", "xtdb.bench.xtdb2", benchName)
 
-    if (project.hasProperty("scaleFactor")) {
-        val scaleFactor: String by project
-        args.add("--scale-factor")
-        args.add(scaleFactor)
+        properties.forEach { (k, v) ->
+            if (project.hasProperty(v)) {
+                args.add(v)
+                args.add(project.properties[k] as String)
+            }
+        }
+
+        if (project.hasProperty("yourkit"))
+            jvmArgs("-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=on_exit=snapshot,async_sampling_cpu,app_name=xtdb-$benchName")
+
+        this.args = args
     }
-
-    if (project.hasProperty("yourkit")) {
-        jvmArgs("-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=on_exit=snapshot,async_sampling_cpu,app_name=xtdb-tpch")
-    }
-
-    this.args = args
 }
 
-tasks.create("auctionmark", JavaExec::class) {
-    classpath = sourceSets.dev.get().runtimeClasspath
-    mainClass.set("clojure.main")
-    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val args = mutableListOf("-m", "xtdb.bench.xtdb2", "auctionmark")
+createBench("tpch", mapOf("scaleFactor" to "--scale-factor"))
 
-    if (project.hasProperty("yourkit")) {
-        jvmArgs("-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=on_exit=snapshot,async_sampling_cpu,app_name=xtdb-auctionmark")
-    }
+createBench(
+    "auctionmark",
+    mapOf(
+        "scaleFactor" to "--scale-factor",
+        "duration" to "--duration",
+        "threads" to "--threads"
+    )
+)
 
-    if (project.hasProperty("duration")) {
-        val duration: String by project
-        args.add("--duration")
-        args.add(duration)
-    }
-
-    if (project.hasProperty("threads")) {
-        val threads: String by project
-        args.add("--threads")
-        args.add(threads)
-    }
-
-    this.args = args
-}
+createBench("products", mapOf("limit" to "--limit"))
 
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")

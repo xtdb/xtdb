@@ -19,6 +19,10 @@ TPC-H::
 AuctionMark::
 `./gradlew auctionmark -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
 
+Products::
+`./gradlew products`
+
+
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 
 == Running from a standalone JAR
@@ -50,7 +54,21 @@ java -Dclojure.main.report=stderr \
      --add-opens=java.base/java.nio=ALL-UNNAMED \
      -Dio.netty.tryReflectionSetAccessible=true \
      -cp bench-standalone.jar \
-     clojure.main -m xtdb.bench.xtdb2 auctionmark --duration PT30S --scale-factor 0.1 --threads 8
+     clojure.main -m xtdb.bench.xtdb2 auctionmark \
+     --duration PT30S --scale-factor 0.1 --threads 8
+----
+Products::
+[source,bash]
+----
+# ensure you've either downloaded the products dataset
+# from S3 to datasets/products.transit.msgpack.gz,
+# or your process has permissions to do so
+
+java -Dclojure.main.report=stderr \
+     --add-opens=java.base/java.nio=ALL-UNNAMED \
+     -Dio.netty.tryReflectionSetAccessible=true \
+     -cp bench-standalone.jar \
+     clojure.main -m xtdb.bench.xtdb2 products
 ----
 --
 

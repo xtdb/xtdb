@@ -22,6 +22,8 @@ dependencies {
     // bench
     api("com.github.oshi", "oshi-core", "6.3.0")
     api("pro.juxt.clojars-mirrors.hiccup", "hiccup", "2.0.0-alpha2")
+
+    api("software.amazon.awssdk", "s3", "2.25.24")
 }
 
 
