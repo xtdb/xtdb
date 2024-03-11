@@ -18,7 +18,7 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
 
     val vector: FieldVector
 
-    val field: Field get() = vector.field
+    val field: Field
 
     /**
      * This method calls [ValueVector.setValueCount] on the underlying vector, so that all of the values written

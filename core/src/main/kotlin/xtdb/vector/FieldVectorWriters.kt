@@ -65,7 +65,7 @@ abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
 
     protected val wp = IVectorPosition.build(vector.valueCount)
 
-    override val field: Field get() = vector.field
+    override val field: Field = vector.field
 
     override fun writerPosition() = wp
 
@@ -640,6 +640,7 @@ class DenseUnionVectorWriter(
 
     private inner class ChildWriter(private val inner: IVectorWriter, private val typeId: Byte) : IVectorWriter {
         override val vector get() = inner.vector
+        override val field: Field get() = inner.field
         private val parentDuv get() = this@DenseUnionVectorWriter.vector
         private val parentWP get() = this@DenseUnionVectorWriter.wp
 
