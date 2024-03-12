@@ -607,19 +607,16 @@
     (interval-expr (expr n) q)
 
     [:interval_literal _
-     [:unquoted_iso8601_duration_string
-      [:unquoted_iso8601_date_duration_string p]]]
+     [:unquoted_iso8601_interval_string
+      [:unquoted_iso8601_interval_period_string p]]]
+    ;; =>
     (iso8601-interval-expr p nil)
 
     [:interval_literal _
-     [:unquoted_iso8601_duration_string
-      [:unquoted_iso8601_time_duration_string d]]]
-    (iso8601-interval-expr nil d)
-
-    [:interval_literal _
-     [:unquoted_iso8601_duration_string
-      [:unquoted_iso8601_date_duration_string p]
-      [:unquoted_iso8601_time_duration_string d]]]
+     [:unquoted_iso8601_interval_string
+      [:unquoted_iso8601_interval_period_string p]
+      [:unquoted_iso8601_duration_time_string d]]]
+    ;; =>
     (iso8601-interval-expr p d)
 
     [:interval_term ^:z i [:asterisk "*"] ^:z n]
