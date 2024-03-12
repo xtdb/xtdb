@@ -1035,6 +1035,28 @@
     (= expected (plan-expr sql))
     "DATE '3000-03-15'" #time/date "3000-03-15"))
 
+(t/deftest interval-literal
+  (t/are [sql expected] (= expected (plan-expr sql))
+    "INTERVAL 'P1Y'" #xt/interval-mdn ["P1Y" "PT0S"]
+    "INTERVAL 'P1Y-2M3D'" #xt/interval-mdn ["P1Y-2M3D" "PT0S"]
+    "INTERVAL 'PT5H6M12.912S'" #xt/interval-mdn ["P0D" "PT5H6M12.912S"]
+    "INTERVAL 'PT5H-6M-12.912S'" #xt/interval-mdn ["P0D" "PT4H53M47.088S"]
+    "INTERVAL 'P1Y3DT12H52S'" #xt/interval-mdn ["P1Y3D" "PT12H52S"]
+    "INTERVAL 'P1Y10M3DT12H52S'" #xt/interval-mdn ["P1Y10M3D" "PT12H52S"]))
+
+(t/deftest interval-literal-query
+  (t/is (= [{:interval #xt/interval-mdn ["P12M" "PT0S"]}]
+           (xt/q tu/*node* "SELECT INTERVAL 'P1Y' as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P10M3D" "PT0S"]}]
+           (xt/q tu/*node* "SELECT INTERVAL 'P1Y-2M3D' as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P0D" "PT5H6M12.912S"]}]
+           (xt/q tu/*node* "SELECT INTERVAL 'PT5H6M12.912S' as interval FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:interval #xt/interval-mdn ["P22M3D" "PT4H53M47.088S"]}]
+           (xt/q tu/*node* "SELECT INTERVAL 'P1Y10M3DT5H-6M-12.912S' as interval FROM (VALUES 1) AS x"))))
+
 (deftest test-date-trunc-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are

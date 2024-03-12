@@ -8,7 +8,8 @@
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.util :as util])
-  (:import (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneId ZoneOffset ZonedDateTime)))
+  (:import (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
+           (xtdb.types IntervalMonthDayNano)))
 
 ;; Attribute grammar for transformation into logical plan.
 
@@ -191,6 +192,14 @@
             (throw (err/illegal-arg :xtdb.sql/parse-error
                                     {::err/message (str "Cannot build interval qualifier opts for: "  (pr-str qualifier))
                                      :qualifier qualifier}))))
+
+(defn- iso8601-interval-expr [p-str d-str]
+  (IntervalMonthDayNano. (if-not (str/blank? p-str)
+                           (Period/parse (str "P" p-str))
+                           Period/ZERO)
+                         (if d-str
+                           (Duration/parse (str "PT" d-str))
+                           Duration/ZERO)))
 
 (defn cast-temporal-with-precision [e type fractional-precision]
   (let [fp (parse-long fractional-precision)]
@@ -596,6 +605,22 @@
     [:interval_primary ^:z n q]
     ;; =>
     (interval-expr (expr n) q)
+
+    [:interval_literal _
+     [:unquoted_iso8601_duration_string
+      [:unquoted_iso8601_date_duration_string p]]]
+    (iso8601-interval-expr p nil)
+
+    [:interval_literal _
+     [:unquoted_iso8601_duration_string
+      [:unquoted_iso8601_time_duration_string d]]]
+    (iso8601-interval-expr nil d)
+
+    [:interval_literal _
+     [:unquoted_iso8601_duration_string
+      [:unquoted_iso8601_date_duration_string p]
+      [:unquoted_iso8601_time_duration_string d]]]
+    (iso8601-interval-expr p d)
 
     [:interval_term ^:z i [:asterisk "*"] ^:z n]
     ;; =>

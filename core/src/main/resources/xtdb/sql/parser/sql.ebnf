@@ -270,6 +270,7 @@ time_value
 
 interval_literal
     : 'INTERVAL' [ sign ] interval_string interval_qualifier
+    | 'INTERVAL' <quote> unquoted_iso8601_duration_string <quote>
     ;
 
 interval_string
@@ -290,6 +291,18 @@ unquoted_timestamp_string
 
 unquoted_interval_string
     : #'[\d\:\-\+\. ]+'
+    ;
+
+unquoted_iso8601_duration_string
+    : <#'P'> [ unquoted_iso8601_date_duration_string ] [ ( <#'T'> unquoted_iso8601_time_duration_string ) ]
+    ;
+
+unquoted_iso8601_date_duration_string
+    : #'(?:-?(\d+)Y)?(?:-?(\d+)M)?(?:-?(\d+)W)?(?:-?(\d+)D)?'
+    ;
+
+unquoted_iso8601_time_duration_string
+    : #'(?:-?(\d+)H)?(?:-?(\d+)M)?(?:-?(\d+(?:\.\d+)?)S)?'
     ;
 
 <years_value>
