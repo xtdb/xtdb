@@ -5,6 +5,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            xtdb.api.query.IKeyFn
+           xtdb.Absent
            (xtdb.vector IVectorReader RelationReader ValueVectorReadersKt)))
 
 (defn vec->reader ^IVectorReader [^ValueVector v]
@@ -41,6 +42,7 @@
      (mapv (fn [idx]
              (->> col-ks
                   (into {} (keep (fn [[^IVectorReader col k]]
-                                   (when-not (.isAbsent col idx)
-                                     (MapEntry/create k (.getObject col idx key-fn))))))))
+                                   (let [v (.getObject col idx key-fn)]
+                                     (when-not (= v Absent/INSTANCE)
+                                       (MapEntry/create k v))))))))
            (range (.rowCount rel))))))

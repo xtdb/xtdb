@@ -1,0 +1,3 @@
+package xtdb
+
+object Absent

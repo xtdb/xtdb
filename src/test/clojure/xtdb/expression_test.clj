@@ -16,6 +16,7 @@
            (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
+           xtdb.Absent
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
 
@@ -1735,7 +1736,7 @@
                                   :f64}]}
              (run-projection rel 'x)))
 
-    (t/is (= {:res [42 12 nil nil 15 nil]
+    (t/is (= {:res [42 12 Absent/INSTANCE nil 15 nil]
               :res-type [:union #{:i64 :absent :null}]}
              (run-projection rel '(. x a))))
 

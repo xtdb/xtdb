@@ -9,6 +9,7 @@ import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
+import xtdb.Absent;
 import xtdb.api.query.IKeyFn;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
@@ -325,7 +326,17 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public int hashCode(int idx, ArrowBufHasher hasher) {
-                return 33;
+                return Absent.INSTANCE.hashCode();
+            }
+
+            @Override
+            public Object getObject(int idx) {
+                return Absent.INSTANCE;
+            }
+
+            @Override
+            public Object getObject(int idx, IKeyFn<?> keyFn) {
+                return Absent.INSTANCE;
             }
         };
     }
@@ -780,12 +791,12 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
-                var res = new HashMap<Object, Object>();
+                var res = new HashMap<>();
 
-                rdrs.forEach((k, v) -> {
-                    if (!v.isAbsent(idx)) {
-                        res.put(keyFn.denormalize(k), v.getObject(idx, keyFn));
-                    }
+                rdrs.forEach((k, reader) -> {
+                    Object v = reader.getObject(idx, keyFn);
+                    if (v != Absent.INSTANCE)
+                        res.put(keyFn.denormalize(k), v);
                 });
 
                 return PersistentArrayMap.create(res);
