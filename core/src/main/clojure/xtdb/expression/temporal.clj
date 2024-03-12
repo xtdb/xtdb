@@ -460,6 +460,55 @@
                        (Duration/ofNanos)
                        (duration->mdn-interval)))})
 
+(defmethod expr/codegen-cast [:int :interval] [{{:keys [start-field end-field]} :cast-opts}]
+  (when end-field (throw (err/illegal-arg :xtdb.expression/attempting-to-cast-int-to-multi-field-interval
+                                          {::err/message "Cannot cast integer to a multi field interval"
+                                           :start-field start-field
+                                           :end-field end-field})))
+  {:return-type (if (#{"YEAR" "MONTH"} start-field)
+                  [:interval :year-month]
+                  [:interval :month-day-nano])
+   :->call-code (fn [[x]]
+                  (case start-field
+                    "YEAR" `(PeriodDuration. (Period/ofYears ~x) Duration/ZERO)
+                    "MONTH" `(PeriodDuration. (Period/ofMonths ~x) Duration/ZERO)
+                    "DAY" `(PeriodDuration. (Period/ofDays ~x) Duration/ZERO)
+                    "HOUR" `(PeriodDuration. Period/ZERO (Duration/ofHours ~x))
+                    "MINUTE" `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~x))
+                    "SECOND" `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~x))))})
+
+(defn ->single-field-interval-call [{{:keys [start-field leading-precision fractional-precision]} :cast-opts}]
+  (let [expr {:op :call
+              :f :single_field_interval
+              :args [{} {:literal start-field} {:literal leading-precision} {:literal fractional-precision}]
+              :arg-types [:utf8 :utf8 :int :int]}]
+    (expr/codegen-call expr)))
+
+(defn ->multi-field-interval-call [{{:keys [start-field end-field leading-precision fractional-precision]} :cast-opts}]
+  (let [expr {:op :call
+              :f :multi_field_interval
+              :args [{} {:literal start-field} {:literal leading-precision} {:literal end-field} {:literal fractional-precision}]
+              :arg-types [:utf8 :utf8 :int :utf8 :int]}]
+    (expr/codegen-call expr)))
+
+(defmethod expr/codegen-cast [:utf8 :interval] [{{:keys [start-field end-field]} :cast-opts :as expr}]
+  ;; Calls down to multi-field-interval if both start-field and end-field present, 
+  ;; else calls to single-field-interval if only start-field is present
+  (if (and start-field end-field)
+    (->multi-field-interval-call expr)
+    (->single-field-interval-call expr)))
+
+(defn interval->iso-string [^PeriodDuration x]
+  (let [period-str (.toString (.getPeriod x))
+        duration-str (.toString (.getDuration x))]
+    (str period-str (str/replace duration-str #"^PT" "T"))))
+
+(defmethod expr/codegen-cast [:interval :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[pd]]
+                  `(-> (interval->iso-string ~pd)
+                       (string->byte-buffer)))})
+
 ;;;; SQL:2011 Operations involving datetimes and intervals
 (defn- recall-with-cast
   ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))

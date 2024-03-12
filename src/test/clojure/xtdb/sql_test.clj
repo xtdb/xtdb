@@ -922,6 +922,52 @@
   (t/is (= [{:itvl #xt/interval-mdn ["P370D" "PT2H"]}]
            (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2020-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x"))))
 
+(t/deftest test-cast-int-to-interval
+  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT0S"]}]
+           (xt/q tu/*node* "SELECT CAST(3 AS INTERVAL DAY) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-ym "P24M"}]
+           (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Cannot cast integer to a multi field interval"
+         (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl FROM (VALUES 1) AS x"))))
+
+(t/deftest test-cast-string-to-interval
+  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT11H10M"]}]
+           (xt/q tu/*node* "SELECT CAST('3 11:10' AS INTERVAL DAY TO MINUTE) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-ym "P24M"}]
+           (xt/q tu/*node* "SELECT CAST('2' AS INTERVAL YEAR) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-ym "P22M"}]
+           (xt/q tu/*node* "SELECT CAST('1-10' AS INTERVAL YEAR TO MONTH) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Interval end field must have less significance than the start field."
+         (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl FROM (VALUES 1) AS x"))))
+
+(t/deftest test-cast-interval-to-string
+  (t/is (= [{:string "P2YT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '2' YEAR AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P22MT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1-10' YEAR TO MONTH AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P-22MT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '-1-10' YEAR TO MONTH AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P1DT0S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1' DAY AS VARCHAR) as string FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:string "P1DT10H10M10S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 10:10:10' DAY TO SECOND AS VARCHAR) as string FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:string "P0DT10M10.111111111S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '10:10.111111111' MINUTE TO SECOND(9) AS VARCHAR) as string FROM (VALUES 1) AS x"))))
+
 (t/deftest test-expr-in-equi-join
   (t/is
     (=plan-file

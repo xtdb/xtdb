@@ -138,6 +138,60 @@
                             {::err/message (str "Cannot build interval for: "  (pr-str qualifier))
                              :qualifier qualifier}))))
 
+(defn field->opts-map [field]
+  (r/zmatch field
+            [_ [:non_second_primary_datetime_field datetime-field]]
+            {:field datetime-field}
+
+            [_ [:non_second_primary_datetime_field datetime-field] [:unsigned_integer leading-precision]]
+            {:field datetime-field
+             :lp (parse-long leading-precision)}
+
+            [:end_field "SECOND" [:unsigned_integer fractional-precision]]
+            {:field "SECOND"
+             :fp (parse-long fractional-precision)}
+
+            [_ "SECOND"]
+            {:field "SECOND"
+             :fp 6}
+
+            [_ "SECOND" [:unsigned_integer leading-precision]]
+            {:field "SECOND"
+             :lp (parse-long leading-precision)
+             :fp 6}
+
+            [_ "SECOND" [:unsigned_integer leading-precision] [:unsigned_integer fractional-precision]]
+            {:field "SECOND"
+             :lp (parse-long leading-precision)
+             :fp (parse-long fractional-precision)}
+
+            (throw (err/illegal-arg :xtdb.sql/parse-error
+                                    {::err/message (str "Cannot build interval qualifier opts for field: "  (pr-str field))
+                                     :field field}))))
+
+(defn interval-qualifier->map [qualifier]
+  (r/zmatch qualifier
+            [:interval_qualifier start-field]
+            ;; =>
+            (let [{:keys [field lp fp]} (field->opts-map start-field)]
+              {:start-field field
+               :end-field nil
+               :leading-precision (or lp 2)
+               :fractional-precision (or fp 0)})
+
+            [:interval_qualifier start-field "TO" end-field]
+            ;; =>
+            (let [sf-opts (field->opts-map start-field)
+                  ef-opts (field->opts-map end-field)]
+              {:start-field (:field sf-opts)
+               :end-field (:field ef-opts)
+               :leading-precision (or (:lp start-field) 2)
+               :fractional-precision (or (:fp end-field) 2)})
+
+            (throw (err/illegal-arg :xtdb.sql/parse-error
+                                    {::err/message (str "Cannot build interval qualifier opts for: "  (pr-str qualifier))
+                                     :qualifier qualifier}))))
+
 (defn cast-temporal-with-precision [e type fractional-precision]
   (let [fp (parse-long fractional-precision)]
     (list 'cast e [type (if (<= fp 6) :micro :nano)] {:precision fp})))
@@ -194,6 +248,9 @@
 
     [:interval_type "INTERVAL"]
     (list 'cast e [:interval :month-day-nano])
+
+    [:interval_type "INTERVAL" q]
+    (list 'cast e :interval (interval-qualifier->map q))
 
     [:character_string_type "VARCHAR"]
     (list 'cast e :utf8)
