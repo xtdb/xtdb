@@ -3,7 +3,7 @@ package xtdb.vector
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
 
-class RelationWriter(private val allocator: BufferAllocator): IRelationWriter {
+class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
     private val wp = IVectorPosition.build()
     private val writers = mutableMapOf<String, IVectorWriter>()
 

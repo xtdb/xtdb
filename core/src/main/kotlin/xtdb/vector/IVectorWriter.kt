@@ -81,6 +81,12 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
 
 internal val UNION_FIELD_TYPE = FieldType.notNullable(ArrowType.Union(UnionMode.Dense, null))
 
+internal data class InvalidWriteObjectException(val field: Field, val obj: Any?) :
+    IllegalArgumentException("invalid writeObject")
+
+internal data class InvalidCopySourceException(val src: Field, val dest: Field) :
+    IllegalArgumentException("illegal copy src vector")
+
 private data class PopulateWithAbsentsException(val field: Field, val expectedPos: Int, val actualPos: Int) :
     IllegalStateException("populate-with-absents needs a nullable or a union underneath")
 
