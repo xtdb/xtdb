@@ -3,9 +3,11 @@ package xtdb.vector
 import clojure.lang.Keyword
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ValueVector
+import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.vector.extensions.AbsentType
 import java.nio.ByteBuffer
 
 interface IVectorWriter : IValueWriter, AutoCloseable {
@@ -76,3 +78,32 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
         writerPosition().position = 0
     }
 }
+
+internal val UNION_FIELD_TYPE = FieldType.notNullable(ArrowType.Union(UnionMode.Dense, null))
+
+private data class PopulateWithAbsentsException(val field: Field, val expectedPos: Int, val actualPos: Int) :
+    IllegalStateException("populate-with-absents needs a nullable or a union underneath")
+
+internal fun IVectorWriter.populateWithAbsents(pos: Int) {
+    val absents = pos - writerPosition().position
+    if (absents > 0) {
+        val field = this.field
+        val absentWriter = when {
+            field.type == UNION_FIELD_TYPE.type -> legWriter(AbsentType)
+            field.isNullable -> this
+            else -> throw PopulateWithAbsentsException(field, pos, writerPosition().position)
+        }
+
+        repeat(absents) { absentWriter.writeNull() }
+    }
+}
+
+private data class FieldMismatch(val expected: FieldType, val given: FieldType) :
+    IllegalArgumentException("Field type mismatch")
+
+internal fun IVectorWriter.checkFieldType(given: FieldType) {
+    val expected = field.fieldType
+    if (!((expected.type == ArrowType.Null.INSTANCE && given.type == ArrowType.Null.INSTANCE) || (expected == given)))
+        throw FieldMismatch(expected, given)
+}
+

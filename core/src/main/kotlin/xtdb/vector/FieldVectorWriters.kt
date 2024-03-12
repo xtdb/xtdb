@@ -7,9 +7,7 @@ import org.apache.arrow.vector.*
 import org.apache.arrow.vector.compare.VectorVisitor
 import org.apache.arrow.vector.complex.*
 import org.apache.arrow.vector.types.TimeUnit
-import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.ArrowType.Union
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.RuntimeException
@@ -31,8 +29,6 @@ import java.time.ZoneOffset.UTC
 import java.util.*
 import kotlin.text.Charsets.UTF_8
 import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
-
-private val UNION_FIELD_TYPE = FieldType.notNullable(Union(UnionMode.Dense, null))
 
 fun interface FieldChangeListener {
     fun notify(f: Field)
@@ -400,15 +396,6 @@ class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private v
     }
 }
 
-private data class FieldMismatch(val expected: FieldType, val given: FieldType) :
-    IllegalArgumentException("Field type mismatch")
-
-private fun IVectorWriter.checkFieldType(given: FieldType) {
-    val expected = field.fieldType
-    if (!((expected.type == NULL_TYPE && given.type == NULL_TYPE) || (expected == given)))
-        throw FieldMismatch(expected, given)
-}
-
 class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
     private val wp = IVectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
@@ -495,23 +482,6 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         }
 
         else -> throw InvalidCopySourceException(src.field, field)
-    }
-}
-
-private data class PopulateWithAbsentsException(val field: Field, val expectedPos: Int, val actualPos: Int) :
-    IllegalStateException("populate-with-absents needs a nullable or a union underneath")
-
-private fun IVectorWriter.populateWithAbsents(pos: Int) {
-    val absents = pos - writerPosition().position
-    if (absents > 0) {
-        val field = this.field
-        val absentWriter = when {
-            field.type == UNION_FIELD_TYPE.type -> legWriter(AbsentType)
-            field.isNullable -> this
-            else -> throw PopulateWithAbsentsException(field, pos, writerPosition().position)
-        }
-
-        repeat(absents) { absentWriter.writeNull() }
     }
 }
 

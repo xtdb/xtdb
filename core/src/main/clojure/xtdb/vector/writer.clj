@@ -1,24 +1,20 @@
 (ns xtdb.vector.writer
-  (:require [cognitect.transit :as transit]
-            [xtdb.serde :as serde]
-            [xtdb.types :as types]
+  (:require [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (clojure.lang Keyword)
-           [java.io ByteArrayOutputStream]
            (java.lang AutoCloseable)
            (java.math BigDecimal)
            java.net.URI
            (java.nio ByteBuffer)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
            (java.util Date LinkedHashMap List Map Set UUID)
-           (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector FieldVectorWriters IRelationWriter IRowCopier IVectorPosition IVectorReader IVectorWriter RelationReader)))
+           (xtdb.vector FieldVectorWriters IRelationWriter IRowCopier IVectorPosition IVectorReader IVectorWriter RelationReader RelationWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -123,14 +119,6 @@
                         {:field (.getField w)
                          :expected pos, :actual (.getPosition (.writerPosition w))}))))))
 
-
-(defn- check-field-types [^FieldType expected-field-type ^FieldType given-field-type]
-  (or (and (= #xt.arrow/type :null (.getType expected-field-type))
-           (= #xt.arrow/type :null (.getType given-field-type)))
-      (when-not (= expected-field-type given-field-type)
-        (throw (IllegalStateException. (str "Field type mismatch: " (pr-str {:expected expected-field-type
-                                                                             :given given-field-type})))))))
-
 (extend-protocol ArrowWriteable
   List
   (value->col-type [v] [:list (apply types/merge-col-types (into #{} (map value->col-type) v))])
@@ -205,45 +193,7 @@
           pos)))))
 
 (defn ->rel-writer ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-  (let [writer-array (volatile! nil)
-        writers (LinkedHashMap.)
-        wp (IVectorPosition/build)]
-    (reify IRelationWriter
-      (writerPosition [_] wp)
-
-      (startRow [_])
-
-      (endRow [_]
-        (when (nil? @writer-array)
-          (vreset! writer-array (object-array (.values writers))))
-
-        (let [pos (.getPositionAndIncrement wp)
-              ^objects arr @writer-array]
-          (dotimes [i (alength arr)]
-            (populate-with-absents (aget arr i) (inc pos)))))
-
-      (^IVectorWriter colWriter [this ^String col-name]
-       (or (.get writers col-name)
-           (.colWriter this col-name (FieldType/notNullable #xt.arrow/type :union))))
-
-      (colWriter [_  col-name field-type]
-        (when-let [^IVectorWriter wrt (.get writers col-name)]
-          (check-field-types (.getFieldType (.getField wrt)) field-type))
-
-        (.computeIfAbsent writers col-name
-                          (reify Function
-                            (apply [_ _col-name]
-                              (doto (->vec-writer allocator col-name field-type)
-                                (populate-with-absents (.getPosition wp)))))))
-
-      (rowCopier [this in-rel] (->rel-copier this in-rel))
-
-      (iterator [_] (.iterator (.entrySet writers)))
-
-      AutoCloseable
-      (close [this]
-        (run! util/try-close (vals this))))))
-
+  (RelationWriter. allocator))
 
 (defn root->writer ^xtdb.vector.IRelationWriter [^VectorSchemaRoot root]
   (let [writer-array (volatile! nil)

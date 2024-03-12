@@ -284,7 +284,7 @@
 
   (t/testing "populate-with-absents for non union columns"
     (t/is (thrown-with-msg? RuntimeException
-                            #"populate-with-absents needs a nullable or union underneath!"
+                            #"populate-with-absents needs a nullable or a union underneath"
                             (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
                               (let [int-wtr (.colWriter rel-wtr "my-int" (FieldType/notNullable #xt.arrow/type :i64))
                                     _str-wtr (.colWriter rel-wtr "my-str" (FieldType/notNullable #xt.arrow/type :utf8))]
