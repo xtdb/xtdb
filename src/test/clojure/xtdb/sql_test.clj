@@ -1057,6 +1057,31 @@
   (t/is (= [{:interval #xt/interval-mdn ["P22M3D" "PT4H53M47.088S"]}]
            (xt/q tu/*node* "SELECT INTERVAL 'P1Y10M3DT5H-6M-12.912S' as interval FROM (VALUES 1) AS x"))))
 
+(t/deftest duration-literal
+  (t/are [sql expected] (= expected (plan-expr sql))
+    "DURATION 'P1D'" #time/duration "PT24H"
+    "DURATION 'PT1H'" #time/duration "PT1H"
+    "DURATION 'PT1M'" #time/duration "PT1M"
+    "DURATION 'PT1H1M1.111111S'" #time/duration "PT1H1M1.111111S"
+    "DURATION 'P1DT1H'" #time/duration "PT25H"
+    "DURATION 'P1DT10H1M1.111111S'" #time/duration "PT34H1M1.111111S"
+    "DURATION 'PT-1H'" #time/duration "PT-1H"
+    "DURATION 'P-1DT2H'" #time/duration "PT-22H"
+    "DURATION 'P-1DT-10H-1M'" #time/duration "PT-34H-1M"))
+
+(t/deftest duration-literal-query
+  (t/is (= [{:duration #time/duration "PT24H"}]
+           (xt/q tu/*node* "SELECT DURATION 'P1D' as duration FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:duration #time/duration "PT1H"}]
+           (xt/q tu/*node* "SELECT DURATION 'PT1H' as duration FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:duration #time/duration "PT26H"}]
+           (xt/q tu/*node* "SELECT DURATION 'P1DT2H' as duration FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:duration #time/duration "PT-22H"}]
+           (xt/q tu/*node* "SELECT DURATION 'P-1DT2H' as duration FROM (VALUES 1) AS x"))))
+
 (deftest test-date-trunc-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are

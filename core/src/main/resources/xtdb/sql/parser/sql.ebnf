@@ -172,6 +172,7 @@ separator
     | binary_string_literal
     | datetime_literal
     | interval_literal
+    | duration_literal
     | boolean_literal
     | null_specification
     ;
@@ -266,6 +267,17 @@ date_value
 
 time_value
     : hours_value <colon> minutes_value <colon> seconds_value
+    ;
+
+duration_literal
+    : 'DURATION' <quote> unquoted_iso8601_duration_string <quote>
+
+unquoted_iso8601_duration_string
+    : <#'P'> unquoted_iso8601_duration_day_string [ ( <#'T'> unquoted_iso8601_duration_time_string ) ]
+    ;
+
+unquoted_iso8601_duration_day_string
+    : #'(?:-?(\d+)D)?'
     ;
 
 interval_literal

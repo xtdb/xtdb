@@ -201,6 +201,9 @@
                            (Duration/parse (str "PT" d-str))
                            Duration/ZERO)))
 
+(defn- iso8601-duration-expr [day-str time-str]
+  (Duration/parse (str "P" day-str "T" (if time-str time-str "0S"))))
+
 (defn cast-temporal-with-precision [e type fractional-precision]
   (let [fp (parse-long fractional-precision)]
     (list 'cast e [type (if (<= fp 6) :micro :nano)] {:precision fp})))
@@ -618,6 +621,19 @@
       [:unquoted_iso8601_duration_time_string d]]]
     ;; =>
     (iso8601-interval-expr p d)
+
+    [:duration_literal _
+     [:unquoted_iso8601_duration_string
+      [:unquoted_iso8601_duration_day_string d]]]
+    ;; =>
+    (iso8601-duration-expr d nil)
+
+    [:duration_literal _
+     [:unquoted_iso8601_duration_string
+      [:unquoted_iso8601_duration_day_string d]
+      [:unquoted_iso8601_duration_time_string t]]]
+    ;; =>
+    (iso8601-duration-expr d t)
 
     [:interval_term ^:z i [:asterisk "*"] ^:z n]
     ;; =>
