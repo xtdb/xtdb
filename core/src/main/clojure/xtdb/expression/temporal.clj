@@ -477,6 +477,16 @@
                     "MINUTE" `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~x))
                     "SECOND" `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~x))))})
 
+(defn iso8601-string-to-period-duration [iso-string]
+  (try
+    (let [[_ p d] (re-find #"P((?:-?\d+Y)?(?:-?\d+M)?(?:-?\d+W)?(?:-?\d+D)?)?T?((?:-?\d+H)?(?:-?\d+M)?(?:-?\d+\.?\d*?S)?)?" iso-string)]
+      (PeriodDuration. (if (str/blank? p) Period/ZERO (Period/parse (str "P" p)))
+                       (if (str/blank? d) Duration/ZERO (Duration/parse (str "PT" d)) )))
+    (catch DateTimeParseException e
+      (throw (err/runtime-err :xtdb.expression/invalid-iso-interval-string
+                              {::err/message (format "Invalid ISO 8601 string '%s' for interval" iso-string)
+                               ::err/parse-exception e})))))
+
 (defn ->single-field-interval-call [{{:keys [start-field leading-precision fractional-precision]} :cast-opts}]
   (let [expr {:op :call
               :f :single_field_interval
@@ -491,12 +501,15 @@
               :arg-types [:utf8 :utf8 :int :utf8 :int]}]
     (expr/codegen-call expr)))
 
-(defmethod expr/codegen-cast [:utf8 :interval] [{{:keys [start-field end-field]} :cast-opts :as expr}]
-  ;; Calls down to multi-field-interval if both start-field and end-field present, 
-  ;; else calls to single-field-interval if only start-field is present
-  (if (and start-field end-field)
-    (->multi-field-interval-call expr)
-    (->single-field-interval-call expr)))
+(defmethod expr/codegen-cast [:utf8 :interval] [{interval-opts :cast-opts :as expr}]
+  (if (empty? interval-opts)
+    {:return-type [:interval :month-day-nano]
+     :->call-code (fn [[x]]
+                    `(iso8601-string-to-period-duration (expr/resolve-string ~x)))}
+    
+    (if (nil? (:end-field interval-opts))
+      (->single-field-interval-call expr)
+      (->multi-field-interval-call expr))))
 
 (defn interval->iso-string [^PeriodDuration x]
   (let [period-str (.toString (.getPeriod x))

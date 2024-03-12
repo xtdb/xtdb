@@ -341,7 +341,25 @@
            (test-cast 10 :interval {:start-field "DAY"
                                     :end-field "HOUR"})))))
 
-(t/deftest cast-utf8-to-interval
+(t/deftest cast-utf8-to-interval-without-qualifier
+  (letfn [(test-cast
+            [src-value tgt-type]
+            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+                              [:table [{}]]]
+                             {:basis {}})
+                first :res))]
+    
+    (t/are [expected src-value] (= expected (test-cast src-value :interval))
+      #xt/interval-mdn ["P12M" "PT0S"] "P12M"
+      #xt/interval-mdn ["P14M" "PT0S"] "P1Y2M"
+      #xt/interval-mdn ["P1D" "PT0S"] "P1D"
+      #xt/interval-mdn ["P-1D" "PT0S"] "P-1D"
+      #xt/interval-mdn ["P1D" "PT1H1M"] "P1DT1H1M"
+      #xt/interval-mdn ["P1M2D" "PT1H"] "P1M2DT1H"
+      #xt/interval-mdn ["P0D" "PT10H10M10.111111S"] "PT10H10M10.111111S"
+      #xt/interval-mdn ["P0D" "PT-10H-10M-10.111111S"] "PT-10H-10M-10.111111S")))
+
+(t/deftest cast-utf8-to-interval-with-qualifier
   (letfn [(test-cast
             [src-value tgt-type cast-opts]
             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]

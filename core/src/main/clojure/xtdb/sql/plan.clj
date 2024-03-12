@@ -259,7 +259,7 @@
     (cast-temporal-with-precision e :duration fractional-precision)
 
     [:interval_type "INTERVAL"]
-    (list 'cast e [:interval :month-day-nano])
+    (list 'cast e :interval)
 
     [:interval_type "INTERVAL" q]
     (list 'cast e :interval (interval-qualifier->map q))

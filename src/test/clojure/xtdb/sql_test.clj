@@ -934,7 +934,7 @@
          #"Cannot cast integer to a multi field interval"
          (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl FROM (VALUES 1) AS x"))))
 
-(t/deftest test-cast-string-to-interval
+(t/deftest test-cast-string-to-interval-with-qualifier
   (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT11H10M"]}]
            (xt/q tu/*node* "SELECT CAST('3 11:10' AS INTERVAL DAY TO MINUTE) as itvl FROM (VALUES 1) AS x")))
   
@@ -948,6 +948,22 @@
          IllegalArgumentException
          #"Interval end field must have less significance than the start field."
          (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl FROM (VALUES 1) AS x"))))
+
+(t/deftest test-cast-string-to-interval-without-qualifier
+  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT11H10M"]}]
+           (xt/q tu/*node* "SELECT CAST('P3DT11H10M' AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P24M" "PT0S"]}]
+           (xt/q tu/*node* "SELECT CAST('P2Y' AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P22M" "PT0S"]}]
+           (xt/q tu/*node* "SELECT CAST('P1Y10M' AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-mdn ["P1M1D" "PT1H1M1.11111S"]}]
+           (xt/q tu/*node* "SELECT CAST('P1M1DT1H1M1.11111S' AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT-1H-1M"]}]
+           (xt/q tu/*node* "SELECT CAST('PT-1H-1M' AS INTERVAL) as itvl FROM (VALUES 1) AS x"))))
 
 (t/deftest test-cast-interval-to-string
   (t/is (= [{:string "P2YT0S"}]
