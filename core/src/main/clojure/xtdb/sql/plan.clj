@@ -186,8 +186,8 @@
                   ef-opts (field->opts-map end-field)]
               {:start-field (:field sf-opts)
                :end-field (:field ef-opts)
-               :leading-precision (or (:lp start-field) 2)
-               :fractional-precision (or (:fp end-field) 2)})
+               :leading-precision (or (:lp sf-opts) 2)
+               :fractional-precision (or (:fp ef-opts) 0)})
 
             (throw (err/illegal-arg :xtdb.sql/parse-error
                                     {::err/message (str "Cannot build interval qualifier opts for: "  (pr-str qualifier))
