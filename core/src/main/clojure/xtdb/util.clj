@@ -12,7 +12,8 @@
            java.lang.reflect.Method
            (java.net MalformedURLException URI URL ServerSocket)
            java.nio.ByteBuffer
-           (java.nio.channels Channels ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
+           (java.nio.channels Channels ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel
+                              ClosedByInterruptException)
            java.nio.charset.StandardCharsets
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
@@ -587,3 +588,11 @@
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
+
+(defn unroll-interrupt-ex [e]
+  (letfn [(unroll [^Throwable e]
+            (if (or (instance? InterruptedException e) (instance? ClosedByInterruptException e))
+              e
+              (when-let [cause (.getCause e)]
+                (unroll cause))))]
+    (or (unroll e) e)))

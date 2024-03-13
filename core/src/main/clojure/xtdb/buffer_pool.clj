@@ -75,6 +75,14 @@
       (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
       [hit (retain arrow-buf)])))
 
+(defn- close-arrow-writer [^ArrowFileWriter aw]
+  ;; arrow wraps InterruptExceptions
+  ;; https://github.com/apache/arrow/blob/d10f468b0603da41a285c60a38b095a30b91e2c1/java/vector/src/main/java/org/apache/arrow/vector/ipc/ArrowWriter.java#L217-L222
+  (try
+    (util/close aw)
+    (catch Throwable t
+      (throw (util/unroll-interrupt-ex t)))))
+
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
   (getBuffer [_ k]
@@ -125,7 +133,7 @@
           (.putObject this k (ByteBuffer/wrap (.toByteArray baos))))
 
         (close [_]
-          (.close aw)
+          (close-arrow-writer aw)
           (when (.isOpen write-ch)
             (.close write-ch))))))
 
@@ -213,7 +221,7 @@
             (util/atomic-move tmp-path file-path)))
 
         (close [_]
-          (util/close aw)
+          (close-arrow-writer aw)
           (when (.isOpen file-ch)
             (.close file-ch))))))
 
@@ -361,8 +369,7 @@
             (util/atomic-move tmp-path file-path)))
 
         (close [_]
-          (util/close aw)
-
+          (close-arrow-writer aw)
           (when (.isOpen file-ch)
             (.close file-ch))))))
 
