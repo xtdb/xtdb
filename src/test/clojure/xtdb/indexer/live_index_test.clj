@@ -50,7 +50,7 @@
             (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
                      #(do
                         (.getPositionAndIncrement wp)
-                        (vw/write-value! {:some :doc} put-doc-wrt)))))
+                        (.writeObject put-doc-wrt {:some :doc})))))
 
         (.commit live-idx-tx)
 

@@ -87,13 +87,13 @@
   (with-open [allocator (RootAllocator.)
               my-int-vec (.createVector (types/col-type->field "my-int" :i64) allocator)]
     (let [my-int-wrt (vw/->writer my-int-vec)]
-      (vw/write-value! 42 my-int-wrt)))
+      (.writeObject my-int-wrt 42)))
 
   ;; Beware that if you don't close the vector the allocator will complain.
   (with-open [allocator (RootAllocator.)
               my-int-vec (.createVector (types/col-type->field "my-int" :i64) allocator)]
     (let [my-int-wrt (vw/->writer my-int-vec)]
-      (vw/write-value! 42 my-int-wrt)))
+      (.writeObject my-int-wrt 42)))
 
   ;; Let's also now see how you can write to nested types. In the following we creating a struct vector where
   ;; the struct has a predefined field with name `foo` of type `i64`. We are going to see how the

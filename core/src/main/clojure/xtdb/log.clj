@@ -167,12 +167,12 @@
         args-writer (.structKeyWriter xtql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-xtql+args! [^TxOp$XtqlAndArgs op+args]
       (.startStruct xtql-writer)
-      (vw/write-value! (ClojureForm. (.op op+args)) xtql-op-writer)
+      (.writeObject xtql-op-writer (ClojureForm. (.op op+args)))
 
       (when-let [arg-rows (.argRows op+args)]
         (util/with-open [args-wtr (vw/->vec-writer allocator "args" (FieldType/notNullable #xt.arrow/type :struct))]
           (doseq [arg-row arg-rows]
-            (vw/write-value! arg-row args-wtr))
+            (.writeObject args-wtr arg-row))
 
           (.syncValueCount args-wtr)
 
@@ -193,7 +193,7 @@
 
     (fn write-xtql! [^TxOp$XtqlOp op]
       (.startStruct xtql-writer)
-      (vw/write-value! (ClojureForm. op) xtql-op-writer)
+      (.writeObject xtql-op-writer (ClojureForm. op))
       (.endStruct xtql-writer))))
 
 (defn encode-sql-args [^BufferAllocator allocator, query, arg-rows]
@@ -223,10 +223,10 @@
     (fn write-sql! [^TxOp$Sql op]
       (let [sql (.sql op)]
         (.startStruct sql-writer)
-        (vw/write-value! sql query-writer)
+        (.writeObject query-writer sql)
 
         (when-let [arg-rows (.argRows op)]
-          (vw/write-value! (encode-sql-args allocator sql arg-rows) args-writer)))
+          (.writeObject args-writer (encode-sql-args allocator sql arg-rows))))
 
       (.endStruct sql-writer))))
 
@@ -237,10 +237,10 @@
     (fn write-sql! [^TxOp$SqlByteArgs op]
       (let [sql (.sql op)]
         (.startStruct sql-writer)
-        (vw/write-value! sql query-writer)
+        (.writeObject query-writer sql)
 
         (when-let [arg-bytes (.argBytes op)]
-          (vw/write-value! arg-bytes args-writer)))
+          (.writeObject args-writer arg-bytes)))
 
       (.endStruct sql-writer))))
 
@@ -301,19 +301,19 @@
       (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct delete-writer)
 
-        (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
+        (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
 
         (if-not *legacy-no-iids*
           (do
             (.startList iids-writer)
             (doseq [doc-id doc-ids]
-              (vw/write-value! (trie/->iid doc-id) iid-writer))
+              (.writeObject iid-writer (trie/->iid doc-id)))
             (.endList iids-writer))
 
-          (vw/write-value! (vec doc-ids) doc-ids-writer))
+          (.writeObject doc-ids-writer (vec doc-ids)))
 
-        (vw/write-value! (.validFrom op) valid-from-writer)
-        (vw/write-value! (.validTo op) valid-to-writer)
+        (.writeObject valid-from-writer (.validFrom op))
+        (.writeObject valid-to-writer (.validTo op))
 
         (.endStruct delete-writer)))))
 
@@ -329,16 +329,16 @@
     (fn [^TxOp$EraseDocs op]
       (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct erase-writer)
-        (vw/write-value! (util/str->normal-form-str (.tableName op)) table-writer)
+        (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
 
         (if-not *legacy-no-iids*
           (do
             (.startList iids-writer)
             (doseq [doc-id doc-ids]
-              (vw/write-value! (trie/->iid doc-id) iid-writer))
+              (.writeObject iid-writer (trie/->iid doc-id)))
             (.endList iids-writer))
 
-          (vw/write-value! (vec doc-ids) doc-ids-writer))
+          (.writeObject doc-ids-writer (vec doc-ids)))
 
         (.endStruct erase-writer)))))
 
@@ -402,10 +402,10 @@
           app-time-behaviour-writer (vw/->writer (.getVector root "default-all-valid-time?"))]
 
       (when system-time
-        (vw/write-value! system-time (vw/->writer (.getVector root "system-time"))))
+        (.writeObject (vw/->writer (.getVector root "system-time")) system-time))
 
-      (vw/write-value! (str default-tz) default-tz-writer)
-      (vw/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
+      (.writeObject default-tz-writer (str default-tz))
+      (.writeObject app-time-behaviour-writer (boolean default-all-valid-time?))
 
       (.startList ops-list-writer)
       (write-tx-ops! allocator

@@ -380,7 +380,7 @@
                        :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
           (.logPut live-table-tx (trie/->iid eid)
                    (time/instant->micros valid-from) (time/instant->micros valid-to)
-                   (fn [] (vw/write-value! doc doc-wtr)))))
+                   (fn [] (.writeObject doc-wtr doc)))))
       (catch Throwable t
         (.abort live-table-tx)
         (throw t)))

@@ -33,7 +33,7 @@
                            (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
 
 (defn- test-round-trip [vs]
-  (test-read vw/value->arrow-type #(vw/write-value! %2 %1) vs))
+  (test-read vw/value->arrow-type #(.writeObject ^IVectorWriter %1 %2) vs))
 
 (t/deftest round-trips-values
   (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0 BigDecimal/ONE]
@@ -139,14 +139,14 @@
     (t/is (= [iym]
              (:vs (test-read (constantly #xt.arrow/type [:interval :year-month])
                              (fn [^IVectorWriter w, ^IntervalYearMonth v]
-                               (vw/write-value! v w))
+                               (.writeObject w v))
                              [iym])))))
 
   (let [idt #xt/interval-dt ["P1434D" "PT0.023S"]]
     (t/is (= [idt]
              (:vs (test-read (constantly #xt.arrow/type [:interval :day-time])
                              (fn [^IVectorWriter w, ^IntervalDayTime v]
-                               (vw/write-value! v w))
+                               (.writeObject w v))
                              [idt])))))
 
   (let [imdn #xt/interval-mdn ["P33M244D" "PT0.003444443S"]]

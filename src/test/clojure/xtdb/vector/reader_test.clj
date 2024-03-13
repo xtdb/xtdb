@@ -43,8 +43,8 @@
           (.startStruct my-column-wtr2)
           (-> (.structKeyWriter my-column-wtr2 "foo" (FieldType/notNullable #xt.arrow/type :f64))
               (.writeDouble 42.0))
-          (->> (.structKeyWriter my-column-wtr2 "toto" (FieldType/notNullable #xt.arrow/type :keyword))
-               (vw/write-value! :my-keyword))
+          (-> (.structKeyWriter my-column-wtr2 "toto" (FieldType/notNullable #xt.arrow/type :keyword))
+              (.writeObject :my-keyword))
           (.endStruct my-column-wtr2))
 
         (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
@@ -80,8 +80,8 @@
               (.writeObject "forty-two"))
           (-> (.legWriter my-column-wtr2 :foo (FieldType/notNullable #xt.arrow/type :i64))
               (.writeLong 42))
-          (->> (.legWriter my-column-wtr2 :toto (FieldType/notNullable #xt.arrow/type :keyword))
-               (vw/write-value! :my-keyword)))
+          (-> (.legWriter my-column-wtr2 :toto (FieldType/notNullable #xt.arrow/type :keyword))
+              (.writeObject :my-keyword)))
 
         (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
               copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
@@ -230,8 +230,8 @@
   (with-open [set-vec (.createVector (types/->field "my-set" #xt.arrow/type :set false
                                                     (types/col-type->field :i64)) tu/*allocator*)]
     (let [set-wrt (vw/->writer set-vec)]
-      (vw/write-value! #{1 2 3} set-wrt)
-      (vw/write-value! #{4 5 6} set-wrt)
+      (.writeObject set-wrt #{1 2 3})
+      (.writeObject set-wrt #{4 5 6})
 
       (t/is (= [#{1 2 3} #{4 5 6}]
                (tu/vec->vals (vw/vec-wtr->rdr  set-wrt))))

@@ -25,9 +25,6 @@
 (defprotocol ArrowWriteable
   (value->col-type [v]))
 
-(defn write-value! [v ^xtdb.vector.IVectorWriter writer]
-  (.writeObject writer v))
-
 (extend-protocol ArrowWriteable
   nil
   (value->col-type [_] :null)

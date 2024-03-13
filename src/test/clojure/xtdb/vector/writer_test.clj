@@ -289,7 +289,7 @@
                               (let [int-wtr (.colWriter rel-wtr "my-int" (FieldType/notNullable #xt.arrow/type :i64))
                                     _str-wtr (.colWriter rel-wtr "my-str" (FieldType/notNullable #xt.arrow/type :utf8))]
                                 (.startRow rel-wtr)
-                                (vw/write-value! 42 int-wtr)
+                                (.writeObject int-wtr 42)
                                 (.endRow rel-wtr)))))))
 
 (deftest rel-writer-fixed-schema-testing
@@ -335,15 +335,15 @@
 
 (deftest rel-writer-dynamic-struct-writing
   (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
-    (let [some-nestesd-structs [{:foo {:bibble true} :bar {:baz -4113466} :flib {:true false}}
-                                {:foo {:bibble true}  :bar {:baz 1001}}]
+    (let [some-nested-structs [{:foo {:bibble true} :bar {:baz -4113466} :flib {:true false}}
+                               {:foo {:bibble true}  :bar {:baz 1001}}]
           col-writer (.colWriter rel-wtr "my-column")
           struct-wtr (.legWriter col-writer #xt.arrow/type :struct)]
       (.startRow rel-wtr)
-      (vw/write-value! (first some-nestesd-structs) struct-wtr)
+      (.writeObject struct-wtr (first some-nested-structs))
       (.endRow rel-wtr)
       (.startRow rel-wtr)
-      (vw/write-value! (second some-nestesd-structs) struct-wtr)
+      (.writeObject struct-wtr (second some-nested-structs))
       (.endRow rel-wtr)
 
       (t/is (= [{:my-column {:flib {:true false}, :foo {:bibble true}, :bar {:baz -4113466}}}

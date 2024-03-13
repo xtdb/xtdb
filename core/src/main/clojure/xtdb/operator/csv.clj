@@ -43,10 +43,10 @@
                         (when-let [parse-value (get col-parsers (.getName fv))]
                           (let [writer (vw/->writer fv)]
                             (dotimes [row-idx row-count]
-                              (vw/write-value! (-> (nth row-batch row-idx)
-                                                   (nth col-idx)
-                                                   parse-value)
-                                               writer)))))
+                              (.writeObject writer
+                                            (-> (nth row-batch row-idx)
+                                                (nth col-idx)
+                                                parse-value))))))
                       (.getFieldVectors root)))
 
         (.setRowCount root row-count)
