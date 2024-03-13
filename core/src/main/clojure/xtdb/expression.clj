@@ -12,10 +12,11 @@
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
-           (java.util Arrays Date List Map Set UUID)
+           (java.util Arrays Date List Map UUID)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
+           org.apache.arrow.vector.types.pojo.FieldType
            (org.apache.commons.codec.binary Hex)
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
@@ -1485,21 +1486,23 @@
          (sequence (comp (distinct) cat)))))
 
 (defn write-value-out-code [return-type]
-  (zmatch return-type
-    [:union inner-types]
-    (let [writer-syms (->> inner-types
-                           (into {} (map (juxt identity (fn [_] (gensym 'out-writer))))))]
-      {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
-                              (mapcat (fn [[value-type writer-sym]]
-                                        [writer-sym `(.legWriter ~out-writer-sym ~(types/->arrow-type value-type))]))
-                              writer-syms)
+  (let [field (types/col-type->field return-type)]
+    (if (= (.getType field) #xt.arrow/type :union)
+      (let [writer-syms (->> (.getChildren field)
+                             (into {} (map (juxt types/field->col-type (fn [_] (gensym 'out-writer))))))]
+        {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
+                                (mapcat (fn [[value-type writer-sym]]
+                                          (let [field (types/col-type->field value-type)]
+                                            [writer-sym `(.legWriter ~out-writer-sym ~(keyword (.getName field))
+                                                                     (FieldType. ~(.isNullable field) ~(.getType field) nil))])))
+                                writer-syms)
 
+         :write-value-out! (fn [value-type code]
+                             (write-value-code value-type (get writer-syms value-type) code))})
+
+      {:writer-bindings [out-writer-sym `(vw/->writer ~out-vec-sym)]
        :write-value-out! (fn [value-type code]
-                           (write-value-code value-type (get writer-syms value-type) code))})
-
-    {:writer-bindings [out-writer-sym `(vw/->writer ~out-vec-sym)]
-     :write-value-out! (fn [value-type code]
-                         (write-value-code value-type out-writer-sym code))}))
+                           (write-value-code value-type out-writer-sym code))})))
 
 (defn- wrap-zone-id-cache-buster [f]
   (fn [expr opts]
