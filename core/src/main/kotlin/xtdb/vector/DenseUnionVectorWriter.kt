@@ -197,11 +197,11 @@ class DenseUnionVectorWriter(
 
         return object : IRowCopier {
             private val notNullCopier by lazy { legWriter(srcField.type).rowCopier(src) }
-            private val nullCopier by lazy { legWriter(ArrowType.Null.INSTANCE).rowCopier(src) }
+            private val nullWriter by lazy { legWriter(ArrowType.Null.INSTANCE) }
 
             override fun copyRow(sourceIdx: Int): Int {
                 return if (isNullable && src.isNull(sourceIdx)) {
-                    nullCopier.copyRow(sourceIdx)
+                    wp.position.also { nullWriter.writeNull() }
                 } else {
                     notNullCopier.copyRow(sourceIdx)
                 }

@@ -10,6 +10,7 @@ import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.Absent
 import xtdb.RuntimeException
 import xtdb.types.ClojureForm
 import xtdb.types.IntervalDayTime
@@ -74,7 +75,25 @@ abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
 class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vector) {
     override fun writeValue0(v: IValueReader) = writeNull()
     override fun writeObject0(obj: Any): Unit = throw UnsupportedOperationException()
-    override fun rowCopier(src: ValueVector) = IRowCopier { _ -> wp.position.also { writeNull() } }
+    override fun rowCopier(src: ValueVector) =
+        when (src) {
+            is DenseUnionVector -> duvToVecCopier(this, src)
+            is AbsentVector, is NullVector -> IRowCopier { _ -> wp.position.also { writeNull() } }
+            else -> throw InvalidCopySourceException(src.field, field)
+        }
+}
+
+class AbsentVectorWriter(override val vector: AbsentVector) : ScalarVectorWriter(vector) {
+    override fun writeValue0(v: IValueReader) = writeNull()
+    override fun writeObject0(obj: Any): Unit =
+        if (obj == Absent) writeNull() else throw InvalidWriteObjectException(field, obj)
+
+    override fun rowCopier(src: ValueVector) =
+        when (src) {
+            is DenseUnionVector -> duvToVecCopier(this, src)
+            is AbsentVector, is NullVector -> IRowCopier { _ -> wp.position.also { writeNull() } }
+            else -> throw InvalidCopySourceException(src.field, field)
+        }
 }
 
 private class BitVectorWriter(override val vector: BitVector) : ScalarVectorWriter(vector) {
@@ -454,7 +473,7 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
         is UuidVector -> ExtensionVectorWriter(vec, FixedSizeBinaryVectorWriter(vec.underlyingVector))
         is UriVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
         is TransitVector -> ExtensionVectorWriter(vec, VarBinaryVectorWriter(vec.underlyingVector))
-        is AbsentVector -> ExtensionVectorWriter(vec, NullVectorWriter(vec.underlyingVector))
+        is AbsentVector -> AbsentVectorWriter(vec)
         is SetVector -> ExtensionVectorWriter(vec, ListVectorWriter(vec.underlyingVector) { notify(vec.field) })
         else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
     }

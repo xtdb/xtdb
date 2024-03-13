@@ -97,6 +97,7 @@ private val TIME_NANO_TYPE = ArrowType.Time(NANOSECOND, 64)
 
 fun valueToArrowType(obj: Any?) = when (obj) {
     null -> MinorType.NULL.type
+    Absent -> AbsentType
     is Boolean -> MinorType.BIT.type
     is Byte -> MinorType.TINYINT.type
     is Short -> MinorType.SMALLINT.type

@@ -13,7 +13,7 @@
            (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb ICursor)
+           (xtdb Absent ICursor)
            (xtdb.vector RelationReader)
            (xtdb.vector.extensions AbsentType)))
 
@@ -59,7 +59,7 @@
                 (if (contains? row col-kw)
                   (let [v (-> (get row col-kw) (->v opts))]
                     (.writeObject out-writer v))
-                  (.writeNull (.legWriter out-writer AbsentType/INSTANCE)))))
+                  (.writeObject out-writer Absent/INSTANCE))))
 
             (.syncValueCount out-writer)
             (.add out-cols (.withName (vr/vec->reader out-vec) (str col-name)))))

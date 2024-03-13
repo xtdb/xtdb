@@ -19,7 +19,7 @@
                             (types/col-type->field 'i64 :i64))
 
              (-> (vw/->writer duv)
-                 (doto (.legWriter #xt.arrow/type :i64))
+                 (doto (.writeObject 42))
                  (.getField)))))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)]

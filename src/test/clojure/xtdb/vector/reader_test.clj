@@ -74,14 +74,10 @@
                   rel-wtr3 (vw/->rel-writer tu/*allocator*)]
         (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :union))
               my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :union))]
-          (-> (.legWriter my-column-wtr1 :foo (FieldType/notNullable #xt.arrow/type :i64))
-              (.writeLong 42))
-          (-> (.legWriter my-column-wtr1 :bar (FieldType/notNullable #xt.arrow/type :utf8))
-              (.writeObject "forty-two"))
-          (-> (.legWriter my-column-wtr2 :foo (FieldType/notNullable #xt.arrow/type :i64))
-              (.writeLong 42))
-          (-> (.legWriter my-column-wtr2 :toto (FieldType/notNullable #xt.arrow/type :keyword))
-              (.writeObject :my-keyword)))
+          (.writeObject my-column-wtr1 42)
+          (.writeObject my-column-wtr1 "forty-two")
+          (.writeObject my-column-wtr2 42)
+          (.writeObject my-column-wtr2 :my-keyword))
 
         (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
               copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
@@ -95,9 +91,9 @@
                   {:my-column :my-keyword}]
                  (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
         (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                                (types/col-type->field "foo" :i64)
-                                (types/col-type->field "bar" :utf8)
-                                (types/col-type->field "toto" :keyword))
+                                (types/col-type->field "i64" :i64)
+                                (types/col-type->field "utf8" :utf8)
+                                (types/col-type->field "keyword" :keyword))
                  (.getField (.colWriter rel-wtr3 "my-column"))))))
 
     (t/testing "list"
@@ -157,14 +153,14 @@
               int-vec (.createVector (types/->field "my-int" #xt.arrow/type :i64 false) tu/*allocator*)]
     (let [duv-wrt (vw/->writer duv)
           int-wrt (vw/->writer int-vec)]
-      (-> duv-wrt
-          (.legWriter #xt.arrow/type :i64)
-          (doto (.writeLong 42))
-          (doto (.writeLong 43)))
+      (doto duv-wrt
+        (.writeObject 42)
+        (.writeObject 43))
 
-      (let [copier (.rowCopier int-wrt duv)]
-        (.copyRow copier 0)
-        (.copyRow copier 1))
+      (doto (.rowCopier int-wrt duv)
+        (.copyRow 0)
+        (.copyRow 1))
+
       (t/is (= [42 43]
                (tu/vec->vals (vw/vec-wtr->rdr  int-wrt)))
             "duv to monomorphic base type vector copying")))
@@ -173,9 +169,7 @@
               list-vec (ListVector/empty "my-list" tu/*allocator*)]
     (let [duv-wrt (vw/->writer duv)
           list-wrt (vw/->writer list-vec)]
-      (-> duv-wrt
-          (.legWriter #xt.arrow/type :i64)
-          (doto (.writeLong 42)))
+      (.writeObject duv-wrt 42)
       (t/is (thrown-with-msg?
              RuntimeException
              #"illegal copy src vector"
@@ -185,11 +179,13 @@
               list-vec (ListVector/empty "my-list" tu/*allocator*)]
     (let [duv-wrt (vw/->writer duv)
           list-wrt (vw/->writer list-vec)
-          duv-list-wrt (.legWriter duv-wrt #xt.arrow/type :list)]
+          duv-list-wrt (.legWriter duv-wrt :list (FieldType/notNullable #xt.arrow/type :list))]
       (.startList duv-list-wrt)
-      (-> duv-list-wrt
-          (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64))
-          (doto (.writeLong 42) (.writeLong 43)))
+      (doto (-> duv-list-wrt
+                (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64)))
+        (.writeLong 42)
+        (.writeLong 43))
+
       (.endList duv-list-wrt)
       (let [copier (.rowCopier list-wrt duv)]
         (.copyRow copier 0))
@@ -201,9 +197,7 @@
               struct-vec (StructVector/empty "my-struct" tu/*allocator*)]
     (let [duv-wrt (vw/->writer duv)
           struct-wrt (vw/->writer struct-vec)]
-      (-> duv-wrt
-          (.legWriter #xt.arrow/type :i64)
-          (doto (.writeLong 42)))
+      (.writeObject duv-wrt 42)
       (t/is (thrown-with-msg?
              RuntimeException
              #"illegal copy src vector"
@@ -213,7 +207,7 @@
               struct-vec (StructVector/empty "my-struct" tu/*allocator*)]
     (let [duv-wrt (vw/->writer duv)
           struct-wrt (vw/->writer struct-vec)
-          duv-struct-wrt (.legWriter duv-wrt #xt.arrow/type :struct)]
+          duv-struct-wrt (.legWriter duv-wrt :struct (FieldType/notNullable #xt.arrow/type :struct))]
       (.startStruct duv-struct-wrt)
       (-> (.structKeyWriter duv-struct-wrt "foo" (FieldType/notNullable #xt.arrow/type :i64))
           (.writeLong 42))
