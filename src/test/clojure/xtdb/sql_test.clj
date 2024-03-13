@@ -939,6 +939,31 @@
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56.111S"]}]
              (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO SECOND(3)) as itvl FROM docs")))))
 
+(t/deftest test-cast-interval-to-interval
+  (t/is (= [{:itvl #xt/interval-ym "P22M"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1-10' YEAR TO MONTH AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-ym "P12M"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1-10' YEAR TO MONTH AS INTERVAL YEAR) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H"]}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO HOUR) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H11M"]}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO MINUTE) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H11M11.111S"]}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO SECOND) as itvl FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H11M11S"]}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO SECOND(0)) as itvl FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT35H"]}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL HOUR) as itvl FROM (VALUES 1) AS x"))))
+
 (t/deftest test-cast-int-to-interval
   (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT0S"]}]
            (xt/q tu/*node* "SELECT CAST(3 AS INTERVAL DAY) as itvl FROM (VALUES 1) AS x")))

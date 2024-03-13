@@ -471,6 +471,67 @@
         "P0DT1.111S" #xt/interval-dt ["P0D" "PT1.111S"]
         "P1DT1H1S" #xt/interval-dt ["P1D" "PT1H1S"]))))
 
+(t/deftest cast-interval-to-interval
+  (letfn [(test-cast
+            [src-value tgt-type iq]
+            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~iq)}]
+                              [:table [{}]]]
+                             {:basis {}})
+                first :res))]
+    (t/testing "casting interval to interval without qualifier is a no-op"
+      (t/is (= #xt/interval-ym "P12M" (test-cast #xt/interval-ym "P12M" :interval {})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT1H"] (test-cast #xt/interval-mdn ["P0D" "PT1H"] :interval {})))
+      (t/is (= #xt/interval-dt ["P0D" "PT1H"] (test-cast #xt/interval-dt ["P0D" "PT1H"] :interval {}))))
+
+    (t/testing "casting YM interval to non YM interval should fail"
+      (t/is (thrown-with-msg?
+             UnsupportedOperationException
+             #"Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
+             (test-cast #xt/interval-ym "P12M" :interval {:start-field "DAY", :leading-precision 2, :fractional-precision 0}))))
+
+    (t/testing "casting non YM interval to YM interval should fail"
+      (t/is (thrown-with-msg?
+             UnsupportedOperationException
+             #"Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
+             (test-cast #xt/interval-mdn ["P1M1D" "PT1H"] :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
+
+    (t/testing "invlaid fractional precision throws exception"
+      (t/is (thrown-with-msg?
+             IllegalArgumentException
+             #"The maximum fractional seconds precision is 9."
+             (test-cast #xt/interval-mdn ["P1D" "PT1H"] :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2, :fractional-precision 11}))))
+
+    (t/testing "casting between interval year month"
+      (t/is (= #xt/interval-ym "P12M" (test-cast #xt/interval-ym "P13M" :interval {:start-field "YEAR", :leading-precision 2, :fractional-precision 0})))
+      (t/is (= #xt/interval-ym "P0D" (test-cast #xt/interval-ym "P11M" :interval {:start-field "YEAR", :leading-precision 2, :fractional-precision 0})))
+      (t/is (= #xt/interval-ym "P23M" (test-cast #xt/interval-ym "P1Y11M" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0})))
+      (t/is (= #xt/interval-ym "P12M" (test-cast #xt/interval-ym "P1Y" :interval {:start-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
+
+    (t/testing "casting between interval month-day-nano"
+      (t/is (= #xt/interval-mdn ["P0D" "PT36H"] (test-cast #xt/interval-mdn ["P0D" "PT36H"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT0S"] (test-cast #xt/interval-mdn ["P0D" "PT36H"]  :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H"] (test-cast #xt/interval-mdn ["P0D" "PT36H10M10S"] :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M"] (test-cast #xt/interval-mdn ["P0D" "PT36H10M10S"] :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10S"] (test-cast #xt/interval-mdn ["P0D" "PT36H10M10.111S"] :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10.1111S"] (test-cast #xt/interval-mdn ["P0D" "PT36H10M10.111111S"] :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1S"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1S"] :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111S"] :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111S"] :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111S"] :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111S"] :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT36H"] (test-cast #xt/interval-mdn ["P1D" "PT12H"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0}))))
+
+    (t/testing "casting between interval day-time"
+      (t/is (= #xt/interval-dt ["P0D" "PT36H"] (test-cast #xt/interval-dt ["P0D" "PT36H"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-dt ["P1D" "PT12H"] (test-cast #xt/interval-dt ["P0D" "PT36H"] :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-dt ["P1D" "PT0H"] (test-cast #xt/interval-dt ["P0D" "PT36H"] :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0}))))))
+
+
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
                               (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))

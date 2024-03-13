@@ -315,10 +315,6 @@
 (defmethod expr/codegen-cast [:time-local :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
 
-(defmethod expr/codegen-cast [:interval :interval] [{:keys [source-type target-type]}]
-  (assert (= source-type target-type) "TODO #478")
-  {:return-type target-type, :->call-code first})
-
 (defn- ensure-fractional-precision-valid [^long fractional-precision]
   (cond
     (< fractional-precision 0)
@@ -566,6 +562,33 @@
                        (Duration/ofNanos)
                        (duration->mdn-interval)
                        ~@(gen-normalize-call interval-qualifier)))})
+
+
+(defn normalize-interval-to-ym-iq [^PeriodDuration pd {:keys [start-field end-field]}]
+  (let [period (.getPeriod pd)
+        total-months-in-period (.toTotalMonths period)
+        years-in-period (quot total-months-in-period 12)]
+    (case [start-field end-field]
+      ["YEAR" nil] (PeriodDuration. (Period/ofYears years-in-period) Duration/ZERO)
+      ["YEAR" "MONTH"] (PeriodDuration. (Period/of years-in-period (mod total-months-in-period 12) 0) Duration/ZERO)
+      ["MONTH" nil] (PeriodDuration. (Period/ofMonths total-months-in-period) Duration/ZERO))))
+
+(defmethod expr/codegen-cast [:interval :interval] [{source-type :source-type interval-qualifier :cast-opts}]
+  (if (empty? interval-qualifier)
+    {:return-type source-type, :->call-code first}
+    (let [{:keys [start-field end-field leading-precision fractional-precision]} interval-qualifier
+          ym-cast? (some? (#{"YEAR" "MONTH"} start-field))]  
+      ;; Assertions against precision and units are not strictly necessary but are specified by SQL2011
+      (ensure-interval-precision-valid leading-precision)
+      (when end-field (ensure-interval-units-valid start-field end-field))
+      (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision))
+      ;; Assert that we are not casting year-month intervals to month-day-nano/day-time intervals and vice versa
+      (when (and ym-cast? (not= source-type [:interval :year-month])) (throw (UnsupportedOperationException. "Cannot cast a non Year-Month interval with a Year-Month interval qualifier")))
+      (when (and (not ym-cast?) (= source-type [:interval :year-month])) (throw (UnsupportedOperationException. "Cannot cast a Year-Month interval with a non Year-Month interval qualifier")))
+      
+      (if ym-cast?
+        {:return-type [:interval :year-month], :->call-code (fn [[pd]] `(normalize-interval-to-ym-iq ~pd ~interval-qualifier))}
+        {:return-type source-type, :->call-code (fn [[pd]] `(normalize-interval-to-mdn-iq ~pd ~interval-qualifier))}))))
 
 (defmethod expr/codegen-cast [:int :interval] [{{:keys [start-field end-field]} :cast-opts}]
   (when end-field (throw (err/illegal-arg :xtdb.expression/attempting-to-cast-int-to-multi-field-interval
