@@ -410,13 +410,13 @@
   {:p_brand "Brand#54" :p_type "ECONOMY ANODIZED BRASS" :p_size 9 :supplier_cnt 1}]
 
  ;; Q17
- [{:avg_yearly nil}]
+ [{}]
 
  ;; Q18
  []
 
  ;; Q19
- [{:revenue nil}]
+ [{}]
 
  ;; Q20
  []

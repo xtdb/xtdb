@@ -58,19 +58,12 @@
             "typeIds" : [ ]
           },
           "children" : [{
-            "name" : "absent",
-            "nullable" : false,
+            "name" : "null",
+            "nullable" : true,
             "type" : {
-              "name" : "AbsentType"
+              "name" : "null"
             },
-            "children" : [ ],
-            "metadata" : [{
-              "value" : "absent",
-              "key" : "ARROW:extension:name"
-            },{
-              "value" : "",
-              "key" : "ARROW:extension:metadata"
-            }]
+            "children" : [ ]
           },{
             "name" : "struct",
             "nullable" : false,
@@ -254,19 +247,12 @@
               }]
             }]
           },{
-            "name" : "absent",
-            "nullable" : false,
+            "name" : "null",
+            "nullable" : true,
             "type" : {
-              "name" : "AbsentType"
+              "name" : "null"
             },
-            "children" : [ ],
-            "metadata" : [{
-              "value" : "absent",
-              "key" : "ARROW:extension:name"
-            },{
-              "value" : "",
-              "key" : "ARROW:extension:metadata"
-            }]
+            "children" : [ ]
           }]
         }]
       },{
@@ -323,7 +309,7 @@
           "TYPE_ID" : [0,0,0,0,1,1],
           "OFFSET" : [0,1,2,3,0,1],
           "children" : [{
-            "name" : "absent",
+            "name" : "null",
             "count" : 4
           },{
             "name" : "struct",
@@ -450,7 +436,7 @@
               }]
             }]
           },{
-            "name" : "absent",
+            "name" : "null",
             "count" : 4
           }]
         }]

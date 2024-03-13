@@ -153,14 +153,7 @@
                 },
                 "children" : [ ]
               },{
-                "name" : "absent",
-                "nullable" : true,
-                "type" : {
-                  "name" : "bool"
-                },
-                "children" : [ ]
-              },{
-                "name" : "struct-3",
+                "name" : "struct-2",
                 "nullable" : true,
                 "type" : {
                   "name" : "list"
@@ -410,12 +403,7 @@
                 "VALIDITY" : [0,1,0,0,0,0,0,0,0],
                 "DATA" : [0,1,0,0,0,0,0,0,0]
               },{
-                "name" : "absent",
-                "count" : 9,
-                "VALIDITY" : [0,0,0,1,1,1,0,0,1],
-                "DATA" : [0,0,0,1,1,1,0,0,1]
-              },{
-                "name" : "struct-3",
+                "name" : "struct-2",
                 "count" : 9,
                 "VALIDITY" : [0,0,0,0,0,1,0,0,0],
                 "OFFSET" : [0,0,0,0,0,0,3,3,3,3],

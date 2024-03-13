@@ -1,3 +1,0 @@
-package xtdb
-
-object Absent

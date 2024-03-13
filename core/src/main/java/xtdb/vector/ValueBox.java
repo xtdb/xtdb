@@ -25,11 +25,6 @@ public class ValueBox implements IValueWriter, IValueReader {
     }
 
     @Override
-    public boolean isAbsent() {
-        return leg == ABSENT_LEG;
-    }
-
-    @Override
     public boolean readBoolean() {
         return prim != 0;
     }

@@ -5,7 +5,6 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            xtdb.api.query.IKeyFn
-           xtdb.Absent
            (xtdb.vector IVectorReader RelationReader ValueVectorReadersKt)))
 
 (defn vec->reader ^IVectorReader [^ValueVector v]
@@ -20,12 +19,12 @@
               (.getRowCount root)))
 
 (defn ->absent-col [col-name allocator row-count]
-  (vec->reader (doto (-> (types/col-type->field col-name :absent)
+  (vec->reader (doto (-> (types/col-type->field col-name :null)
                          (.createVector allocator))
                  (.setValueCount row-count))))
 
 ;; we don't allocate anything here, but we need it because BaseValueVector
-;; (a distant supertype of AbsentVector) thinks it needs one.
+;; (a distant supertype of NullVector) thinks it needs one.
 (defn with-absent-cols ^xtdb.vector.RelationReader [^RelationReader rel, ^BufferAllocator allocator, col-names]
   (let [row-count (.rowCount rel)
         available-col-names (into #{} (map #(.getName ^IVectorReader %)) rel)]
@@ -43,6 +42,6 @@
              (->> col-ks
                   (into {} (keep (fn [[^IVectorReader col k]]
                                    (let [v (.getObject col idx key-fn)]
-                                     (when-not (= v Absent/INSTANCE)
+                                     (when (some? v)
                                        (MapEntry/create k v))))))))
            (range (.rowCount rel))))))

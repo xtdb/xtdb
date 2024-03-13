@@ -26,8 +26,6 @@ public interface IVectorReader extends AutoCloseable {
 
     boolean isNull(int idx);
 
-    boolean isAbsent(int idx);
-
     boolean getBoolean(int idx);
 
     byte getByte(int idx);

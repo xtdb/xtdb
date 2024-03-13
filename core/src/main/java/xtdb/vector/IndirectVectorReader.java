@@ -71,11 +71,6 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public boolean isAbsent(int idx) {
-        return reader.isAbsent(indirection.getIndex(idx));
-    }
-
-    @Override
     public boolean getBoolean(int idx) {
         return reader.getBoolean(indirection.getIndex(idx));
     }

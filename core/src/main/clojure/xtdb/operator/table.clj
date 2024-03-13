@@ -13,9 +13,8 @@
            (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb Absent ICursor)
-           (xtdb.vector RelationReader)
-           (xtdb.vector.extensions AbsentType)))
+           (xtdb ICursor)
+           (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -55,11 +54,9 @@
           (util/with-close-on-catch [out-writer (vw/->writer out-vec)]
 
             (dotimes [idx row-count]
-              (let [row (nth rows idx)]
-                (if (contains? row col-kw)
-                  (let [v (-> (get row col-kw) (->v opts))]
-                    (.writeObject out-writer v))
-                  (.writeObject out-writer Absent/INSTANCE))))
+              (let [row (nth rows idx)
+                    v (-> (get row col-kw) (->v opts))]
+                (.writeObject out-writer v)))
 
             (.syncValueCount out-writer)
             (.add out-cols (.withName (vr/vec->reader out-vec) (str col-name)))))
@@ -81,7 +78,7 @@
 
         (doseq [absent-column absent-columns
                 :let [^Set field-set (.computeIfAbsent field-sets (symbol absent-column) (reify Function (apply [_ _] (HashSet.))))]]
-          (.add field-set types/absent-field))
+          (.add field-set types/null-field))
 
         (doseq [[k v] row
                 :let [k-sym (symbol k)]]

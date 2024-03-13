@@ -9,7 +9,7 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            xtdb.Types
-           (xtdb.vector.extensions AbsentType TransitType KeywordType SetType UriType UuidType)))
+           (xtdb.vector.extensions TransitType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -104,8 +104,7 @@
   KeywordType (<-arrow-type [_] :keyword)
   UuidType (<-arrow-type [_] :uuid)
   UriType (<-arrow-type [_] :uri)
-  TransitType (<-arrow-type [_] :transit)
-  AbsentType (<-arrow-type [_] :absent))
+  TransitType (<-arrow-type [_] :transit))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/type reader macro
 (defn ->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [col-type]
@@ -130,7 +129,6 @@
     :uuid UuidType/INSTANCE
     :uri UriType/INSTANCE
     :transit TransitType/INSTANCE
-    :absent AbsentType/INSTANCE
 
     :struct ArrowType$Struct/INSTANCE
     :list ArrowType$List/INSTANCE
@@ -242,7 +240,7 @@
 
 (def col-type-hierarchy
   (-> (make-hierarchy)
-      (derive :null :any) (derive :absent :any)
+      (derive :null :any)
       (derive :bool :any)
 
       (derive :f32 :float) (derive :f64 :float)
@@ -284,14 +282,14 @@
               [:fixed-size-list el-count inner-type] (update acc [:fixed-size-list el-count] merge-col-type* inner-type)
               [:struct struct-col-types] (update acc :struct
                                                  (fn [acc]
-                                                   (let [default-col-type (if acc {:absent nil} nil)]
+                                                   (let [default-col-type (if acc {:null nil} nil)]
                                                      (as-> acc acc
                                                            (reduce-kv (fn [acc col-name col-type]
                                                                         (update acc col-name (fnil merge-col-type* default-col-type) col-type))
                                                                       acc
                                                                       struct-col-types)
-                                                           (reduce (fn [acc absent-k]
-                                                                     (update acc absent-k merge-col-type* :absent))
+                                                           (reduce (fn [acc null-k]
+                                                                     (update acc null-k merge-col-type* :null))
                                                                    acc
                                                                    (set/difference (set (keys acc))
                                                                                    (set (keys struct-col-types))))))))
@@ -317,73 +315,68 @@
         (map->col-type))))
 
 (def ^Field null-field (->field "null" ArrowType$Null/INSTANCE true))
-(def ^Field absent-field (->field "absent" AbsentType/INSTANCE false))
 
 ;; beware that anywhere this is used, naming of the fields (apart from struct subfields) should not matter
 (defn merge-fields [& fields]
-  (letfn [(null? [col-type-map] (contains? col-type-map :null))
-
-          (merge-field* [acc ^Field field]
+  (letfn [(merge-field* [acc ^Field field]
             (let [arrow-type (.getType field)
                   nullable? (.isNullable field)
                   acc (cond-> acc
-                        nullable? (assoc :null nil))]
+                        nullable? (assoc #xt.arrow/type :null nil))]
               (condp = (class arrow-type)
                 ArrowType$Null acc
                 ArrowType$Union (reduce merge-field* acc (.getChildren field))
-                ArrowType$List (update acc :list merge-field* (first (.getChildren field)))
-                SetType (update acc :set merge-field* (first (.getChildren field)))
-                ArrowType$FixedSizeList (update acc [:fixed-size-list
-                                                     (.getListSize ^ArrowType$FixedSizeList arrow-type)] merge-field*
+                ArrowType$List (update acc arrow-type merge-field* (first (.getChildren field)))
+                SetType (update acc arrow-type merge-field* (first (.getChildren field)))
+                ArrowType$FixedSizeList (update acc arrow-type merge-field*
                                                 (first (.getChildren field)))
-                ArrowType$Struct (update acc :struct
+                ArrowType$Struct (update acc arrow-type
                                          (fn [acc]
-                                           (let [default-field-mapping (if acc {absent-field nil} nil)
+                                           (let [default-field-mapping (if acc {#xt.arrow/type :null nil} nil)
                                                  children (.getChildren field)]
                                              (as-> acc acc
-                                                   (reduce (fn [acc ^Field field]
-                                                             (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
-                                                           acc
-                                                           children)
-                                                   (reduce (fn [acc absent-k]
-                                                             (update acc absent-k merge-field* absent-field))
-                                                           acc
-                                                           (set/difference (set (keys acc))
-                                                                           (set (map #(.getName ^Field %) children))))))))
+                                               (reduce (fn [acc ^Field field]
+                                                         (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
+                                                       acc
+                                                       children)
+                                               (reduce (fn [acc null-k]
+                                                         (update acc null-k merge-field* null-field))
+                                                       acc
+                                                       (set/difference (set (keys acc))
+                                                                       (set (map #(.getName ^Field %) children))))))))
                 (assoc acc field nil))))
 
-          (kv->field [[head opts] & {:keys [nullable?] :or {nullable? false}}]
-            (case (if (vector? head) (first head) head)
-              :list (->field-default-name #xt.arrow/type :list nullable? [(map->field opts)])
-              :set (->field-default-name #xt.arrow/type :set nullable? [(map->field opts)])
-              :fixed-size-list (->field-default-name (ArrowType$FixedSizeList. (second head)) (or (null? opts) nullable?)
-                                                     [(map->field (dissoc opts :null))])
-              :struct (->field-default-name #xt.arrow/type :struct (or (null? opts) nullable?)
-                                            (map (fn [[name opts]]
-                                                   (let [^Field field (map->field opts)]
-                                                     (apply ->field name (.getType field) (.isNullable field)
-                                                            (cond->> (.getChildren field)
-                                                              (not= ArrowType$Struct (class (.getType field)))
-                                                              (map ->canonical-field)))))
-                                                 (dissoc opts :null)))
+          (kv->field [[arrow-type opts] {:keys [nullable?] :or {nullable? false}}]
+            (condp instance? arrow-type
+              ArrowType$List (->field-default-name arrow-type nullable? [(map->field opts)])
+              SetType (->field-default-name arrow-type nullable? [(map->field opts)])
+              ArrowType$FixedSizeList (->field-default-name arrow-type (or (contains? opts #xt.arrow/type :null) nullable?)
+                                                            [(map->field (dissoc opts #xt.arrow/type :null))])
+              ArrowType$Struct (->field-default-name arrow-type nullable?
+                                                     (map (fn [[name opts]]
+                                                            (let [^Field field (map->field opts)]
+                                                              (apply ->field name (.getType field) (.isNullable field)
+                                                                     (cond->> (.getChildren field)
+                                                                       (not= ArrowType$Struct (class (.getType field)))
+                                                                       (map ->canonical-field)))))
+                                                          opts))
 
-              :null (->field-default-name #xt.arrow/type :null true nil)
+              ArrowType$Null (->field-default-name #xt.arrow/type :null true nil)
 
-              (cond-> head
+              (cond-> arrow-type
                 nullable? ->nullable-field)))
 
-          (map->field [col-type-map]
-            (let [without-null (dissoc col-type-map :null)
-                  nullable? (contains? col-type-map :null)]
+          (map->field [arrow-type-map]
+            (let [without-null (dissoc arrow-type-map #xt.arrow/type :null)
+                  nullable? (contains? arrow-type-map #xt.arrow/type :null)]
               (case (count without-null)
                 0 null-field
-                1 (kv->field (first without-null) :nullable? nullable?)
+                1 (kv->field (first without-null) {:nullable? nullable?})
 
-                (->field-default-name #xt.arrow/type :union false (map kv->field col-type-map)))))]
+                (->field-default-name #xt.arrow/type :union false (map #(kv->field % {}) arrow-type-map)))))]
 
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-field*) {} fields)
         (map->field))))
-
 
 ;;; time units
 
@@ -440,9 +433,6 @@
 
 (defmethod col-type->field* :transit [col-name nullable? _col-type]
   (->field col-name TransitType/INSTANCE nullable?))
-
-(defmethod col-type->field* :absent [col-name nullable? _col-type]
-  (->field col-name AbsentType/INSTANCE nullable?))
 
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
@@ -636,7 +626,6 @@
 (defmethod arrow-type->col-type UriType [_] :uri)
 (defmethod arrow-type->col-type UuidType [_] :uuid)
 (defmethod arrow-type->col-type TransitType [_] :transit)
-(defmethod arrow-type->col-type AbsentType [_] :absent)
 
 ;;; LUB
 

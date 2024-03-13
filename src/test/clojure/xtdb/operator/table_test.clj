@@ -7,7 +7,7 @@
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-table
-  (t/is (= {:res [{:a 12, :b "foo" :c 1.2, :d nil, :e true, :f (Duration/ofHours 1)}
+  (t/is (= {:res [{:a 12, :b "foo" :c 1.2, :e true, :f (Duration/ofHours 1)}
                   {:a 100, :b "bar", :c 3.14, :d (time/->zdt #inst "2020"), :e 10, :f (Duration/ofMinutes 1)}]
             :col-types '{a :i64, b :utf8, c :f64,
                          d [:union #{:null [:timestamp-tz :micro "UTC"]}]
@@ -18,8 +18,8 @@
                                                {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]}
                              :with-col-types? true}))))
 
-  (t/is (= {:res [{:a 12, :b "foo" :c 1.2 :d nil :e true}
-                  {:a 100, :b "bar" :c 3.14 :d (time/->zdt #inst "2020") :e 10}]
+  (t/is (= {:res [{:a 12, :b "foo", :c 1.2, :e true}
+                  {:a 100, :b "bar", :c 3.14, :d (time/->zdt #inst "2020"), :e 10}]
             :col-types '{a :i64, b :utf8, c :f64,
                          d [:union #{:null [:timestamp-tz :micro "UTC"]}]
                          e [:union #{:bool :i64}]}}
@@ -35,7 +35,7 @@
         "empty")
 
   (t/is (= {:res [{:a 12, :b "foo"}, {:a 100}]
-            :col-types '{a :i64, b [:union #{:utf8 :absent}]}}
+            :col-types '{a :i64, b [:union #{:utf8 :null}]}}
            (-> (tu/query-ra '[:table ?table]
                             {:params {'?table [{:a 12, :b "foo"}
                                                {:a 100}]}
@@ -61,7 +61,7 @@
 
 (t/deftest test-table-handles-exprs
   (t/is (= [{:a 3, :b false}
-            {:a nil, :b [24 24]}
+            {:b [24 24]}
             {:a 3, :b 4}]
            (tu/query-ra '[:table [{:a (+ 1 2), :b (> 3 4)}
                                   {:a nil, :b [24 (* 3 8)]}
@@ -131,13 +131,13 @@
 
 (t/deftest test-absent-columns
   (t/is (= '{:res [{:x5 1} {:x6 -77}],
-             :col-types {x5 [:union #{:absent :i64}], x6 [:union #{:absent :i64}]}}
+             :col-types {x5 [:union #{:null :i64}], x6 [:union #{:null :i64}]}}
            (tu/query-ra
             '[:table [{:x5 1} {:x6 -77}]]
             {:with-col-types? true})))
 
   (t/is (= '{:res [{:x5 1} {:x6 -77}],
-             :col-types {x5 [:union #{:absent :i64}], x6 [:union #{:absent :i64}]}}
+             :col-types {x5 [:union #{:null :i64}], x6 [:union #{:null :i64}]}}
            (tu/query-ra '[:table ?table]
                         {:params {'?table [{:x5 1} {:x6 -77}]}
                          :with-col-types? true}))

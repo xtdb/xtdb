@@ -1213,7 +1213,7 @@
 
 
  ;; Q17
- [{:avg_yearly nil}]
+ [{}]
 
  ;; Q18
  [{:c_name "Customer#000000667",

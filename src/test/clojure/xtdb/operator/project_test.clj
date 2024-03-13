@@ -53,7 +53,7 @@
                          :with-col-types? true}))))
 
 (t/deftest test-identity-projection-not-closed
-  (t/is (= [{:a nil, :b 12} {:a nil, :b 2} {:a 12, :b nil} {:a 0, :b nil}]
+  (t/is (= [{:b 12} {:b 2} {:a 12} {:a 0}]
            (tu/query-ra
              '[:project [a b]
                [:full-outer-join [false]

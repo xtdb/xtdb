@@ -21,12 +21,6 @@
 (defmethod expr/codegen-call [:null_eq :null :null] [_]
   {:return-type :bool, :->call-code (constantly true)})
 
-(defmethod expr/codegen-call [:null_eq :null :absent] [_]
-  {:return-type :bool, :->call-code (constantly true)})
-
-(defmethod expr/codegen-call [:null_eq :absent :null] [_]
-  {:return-type :bool, :->call-code (constantly true)})
-
 (defmethod expr/codegen-call [:<> :num :num] [_]
   {:return-type :bool, :->call-code #(do `(not (== ~@%)))})
 
@@ -48,18 +42,6 @@
    :->call-code (fn [emitted-args]
                   `(Double/compare ~@emitted-args))})
 
-(defmethod expr/codegen-call [:compare :any :absent] [_]
-  {:return-type :null
-   :->call-code (constantly nil)})
-
-(defmethod expr/codegen-call [:compare :absent :any] [_]
-  {:return-type :null
-   :->call-code (constantly nil)})
-
-(defmethod expr/codegen-call [:compare :absent :absent] [_]
-  {:return-type :i32
-   :->call-code (constantly 0)})
-
 ;; NOTE UUID compares according to bytes rather than Java `compare` - https://bugs.openjdk.org/browse/JDK-7025832
 (doseq [col-type #{:varbinary :fixed-size-binary :utf8 :uri :keyword :uuid}]
   (defmethod expr/codegen-call [:compare col-type col-type] [_]
@@ -68,22 +50,12 @@
                     `(util/compare-nio-buffers-unsigned ~@emitted-args))}))
 
 (doseq [[f left-type right-type res] [[:compare_nulls_first :null :null 0]
-                                      [:compare_nulls_first :absent :absent 0]
-                                      [:compare_nulls_first :absent :null 1]
-                                      [:compare_nulls_first :null :absent -1]
                                       [:compare_nulls_first :null :any -1]
-                                      [:compare_nulls_first :absent :any -1]
                                       [:compare_nulls_first :any :null 1]
-                                      [:compare_nulls_first :any :absent 1]
 
                                       [:compare_nulls_last :null :null 0]
-                                      [:compare_nulls_last :absent :absent 0]
-                                      [:compare_nulls_last :null :absent 1]
-                                      [:compare_nulls_last :absent :null -1]
                                       [:compare_nulls_last :null :any 1]
-                                      [:compare_nulls_last :absent :any 1]
-                                      [:compare_nulls_last :any :null -1]
-                                      [:compare_nulls_last :any :absent -1]]]
+                                      [:compare_nulls_last :any :null -1]]]
   (defmethod expr/codegen-call [f left-type right-type] [_]
     {:return-type :i32
      :->call-code (constantly res)}))

@@ -64,8 +64,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES ('foo')"]])
 
     (t/is (= [{:xt/id "foo",
-               :xt/valid-from (time/->zdt #inst "2020")
-               :xt/valid-to nil}]
+               :xt/valid-from (time/->zdt #inst "2020")}]
              (q)))
 
     (xt/submit-tx tu/*node* [[:sql "DELETE FROM foo"]])
@@ -168,8 +167,7 @@ VALUES (1, 2, DATE '1997-01-01', DATE '2001-01-01')"]])
              {:xt/id 1, :v 2,
               :xt/valid-from (time/->zdt #inst "1997")
               :xt/valid-to (time/->zdt #inst "2001")
-              :xt/system-from (time/->zdt #inst "2020-01-02")
-              :xt/system-to nil}}
+              :xt/system-from (time/->zdt #inst "2020-01-02")}}
 
            (set (xt/q tu/*node* "
 SELECT foo.xt$id, foo.v,
@@ -183,8 +181,7 @@ INSERT INTO foo (xt$id, v)
 VALUES (1, 1)"]])
 
   (t/is (= [{:xt/id 1, :v 1,
-             :xt/valid-from (time/->zdt #inst "2020")
-             :xt/valid-to nil}]
+             :xt/valid-from (time/->zdt #inst "2020")}]
            (xt/q tu/*node* "SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to FROM foo")))
 
   (t/is (= []
@@ -230,8 +227,7 @@ WHERE foo.xt$id = 1"]])]
                  :xt/valid-from (time/->zdt #inst "2022")
                  :xt/valid-to (time/->zdt #inst "2024")}
                 {:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2024")
-                 :xt/valid-to nil}]
+                 :xt/valid-from (time/->zdt #inst "2024")}]
 
                (q1 {:basis {:at-tx tx1}, :default-all-valid-time? true})))
 
@@ -245,14 +241,12 @@ WHERE foo.xt$id = 1"]])]
                  :xt/valid-from (time/->zdt #inst "2022")
                  :xt/valid-to (time/->zdt #inst "2023")}
                 {:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2025")
-                 :xt/valid-to nil}]
+                 :xt/valid-from (time/->zdt #inst "2025")}]
 
                (q1 {:basis {:at-tx tx2}, :default-all-valid-time? true})))
 
       (t/is (= [{:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2025")
-                 :xt/valid-to nil}]
+                 :xt/valid-from (time/->zdt #inst "2025")}]
 
                (q1 {:basis {:at-tx tx2, :current-time (time/->instant #inst "2026")}
                     :default-all-valid-time? false})))
@@ -399,8 +393,8 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (1, NULL, ?), (2, ?, NULL), (3, NULL, NULL)"
                             [#inst "3000" , #inst "3000"]]])
   (t/is (= #{{:id 1, :vf (time/->zdt #inst "2020"), :vt (time/->zdt #inst "3000")}
-             {:id 2, :vf (time/->zdt #inst "3000"), :vt nil}
-             {:id 3, :vf (time/->zdt #inst "2020"), :vt nil}}
+             {:id 2, :vf (time/->zdt #inst "3000")}
+             {:id 3, :vf (time/->zdt #inst "2020")}}
            (set (xt/q tu/*node* '(from :docs {:bind [{:xt/id id, :xt/valid-from vf, :xt/valid-to vt}]
                                               :for-valid-time :all-time}))))))
 
@@ -526,7 +520,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            (xt/q tu/*node* "SELECT t1.data FROM t1"))
         "testing insert worked")
 
-  (t/is (= [{:field-name2 true, :baz nil}]
+  (t/is (= [{:field-name2 true}]
            (xt/q tu/*node* "SELECT t2.field_name1.field_name2, t2.field$name4.baz
                             FROM (SELECT t1.data.field_name1, t1.data.field$name4 FROM t1) AS t2"))
         "testing insert worked"))
@@ -535,17 +529,17 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t2(xt$id, data) VALUES(1, 'bar')"]
                            [:sql "INSERT INTO t2(xt$id, data) VALUES(2, OBJECT('foo': 2))"]])
 
-  (t/is (= [{:foo 2} {:foo nil}]
+  (t/is (= [{:foo 2} {}]
            (xt/q tu/*node* "SELECT t2.data.foo FROM t2"))))
 
 (t/deftest distinct-null-2535
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, foo) VALUES(1, NULL)"]
                            [:sql "INSERT INTO t1(xt$id, foo) VALUES(2, NULL)"]])
 
-  (t/is (= [{:nil nil}]
+  (t/is (= [{}]
            (xt/q tu/*node* "SELECT DISTINCT NULL AS nil FROM t1")))
 
-  (t/is (= [{:foo nil}]
+  (t/is (= [{}]
            (xt/q tu/*node* "SELECT DISTINCT t1.foo FROM t1"))))
 
 ;; TODO move this to api-test once #2937 is in

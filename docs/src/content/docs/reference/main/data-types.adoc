@@ -159,27 +159,3 @@ XTDB supports arbitrarily nested data.
 
 |===
 
-== Null/Absent
-
-XTDB differentiates between an explicitly provided 'null' value and the absence of a value - for example, none of these three documents are not considered equivalent:
-
-[source,json]
-----
-{ "xt$id" : "steve", "middleName" : null }
-{ "xt$id" : "steve", "middleName" : null } // i.e. null != null
-{ "xt$id" : "steve" } // i.e. null != absent
-----
-
-XTDB's expression engine handles null values using https://en.wikipedia.org/wiki/Three-valued_logic[3-valued logic], in keeping with the SQL standard - for example:
-
-* By default, whenever a function is passed any argument that is null, the whole function returns null - e.g. `4 + NULL` returns null.
-** The exceptions are well-defined - e.g. `IS_NULL(NULL)` is obviously true.
-** Null values are not equal to each other - e.g. two tables with a join condition of `left.a = right.b` will not yield any rows where either `left.a` or `right.b` is null.
-* When aggregating (e.g. `SELECT t.a, COUNT(t.b) FROM table t GROUP BY t.a`), all values with null `t.a` are grouped in the same bucket (again, in keeping with the SQL standard).
-
-Absence is handled similarly to null but with some subtle differences:
-
-* By default, whenever a function is passed any argument that is missing in the input document, the whole function returns null - e.g. `4 + a` returns null for rows missing `a`.
-* Absent values _are_ equal to each other - e.g. if you join using `left.a = right.b`, row pairs where neither table has a value defined for the given column will join.
-* When aggregating, rows with absent grouping values are grouped in the same bucket as the nulls.
-* When ordering by 'nulls first' or 'nulls last', we use `null < absent < any other value` and `any other value < absent < null` respectively.

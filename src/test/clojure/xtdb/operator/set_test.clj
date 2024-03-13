@@ -147,7 +147,7 @@
                                 [::tu/blocks '{a :i64} []]]))))
 
   (t/testing "distinct null"
-    (t/is (= [{:a nil}]
+    (t/is (= [{}]
              (tu/query-ra [:distinct
                            [::tu/blocks '{a :null}
                             [{:a nil}, {:a nil}, {:a nil}]]])))))

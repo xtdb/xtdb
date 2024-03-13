@@ -16,7 +16,6 @@
            (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
-           xtdb.Absent
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
 
@@ -446,16 +445,16 @@
       (t/is (= 0 (length {})))
       (t/is (= 1 (length {:a 1})))
       (t/is (= 3 (length {:a 1 :b 2 :c 3})))
-      (t/is (= 3 (length {:a 1 :b 2 :c nil}))))))
+      (t/is (= 2 (length {:a 1 :b 2 :c nil}))))))
 
 (t/deftest test-struct-length-handles-absents
-  (with-open [rel (tu/open-rel [(-> (types/col-type->field "x" [:struct '{xa [:union #{:i8 :absent :null}]
-                                                                          xb [:union #{:i8 :absent :null}]}])
-                                    (tu/open-vec [{:xa 42}
-                                                  {:xa 42 :xb 41}
-                                                  {:xb 41}
+  (with-open [rel (tu/open-rel [(-> (types/col-type->field "x" [:struct '{xa [:union #{:i8 :null}]
+                                                                          xb [:union #{:i8 :null}]}])
+                                    (tu/open-vec [{:xa (byte 42)}
+                                                  {:xa (byte 42), :xb (byte 41)}
+                                                  {:xb (byte 41)}
                                                   {:xa nil :xb nil}]))])] 
-    (t/is (= {:res [1 2 1 2], :res-type :i32}
+    (t/is (= {:res [1 2 1 0], :res-type :i32}
              (run-projection rel '(length x))))))
 
 (t/deftest test-like
@@ -1728,26 +1727,26 @@
     (t/is (= {:res [{:a 42}
                     {:a 12, :b 5}
                     {:b 10}
-                    {:a nil, :b 12}
+                    {:b 12}
                     {:a 15, :b 25.0}
                     10.0]
-              :res-type [:union #{[:struct '{a [:union #{:absent :null :i64}],
-                                             b [:union #{:absent :f64 :i64}]}]
+              :res-type [:union #{[:struct '{a [:union #{:null :i64}],
+                                             b [:union #{:null :f64 :i64}]}]
                                   :f64}]}
              (run-projection rel 'x)))
 
-    (t/is (= {:res [42 12 Absent/INSTANCE nil 15 nil]
-              :res-type [:union #{:i64 :absent :null}]}
+    (t/is (= {:res [42 12 nil nil 15 nil]
+              :res-type [:union #{:i64 :null}]}
              (run-projection rel '(. x a))))
 
     (t/is (= {:res [{:xa 42}
                     {:xa 12, :xb 5}
                     {:xb 10}
-                    {:xa nil, :xb 12}
+                    {:xb 12}
                     {:xa 15, :xb 25.0}
-                    {:xa nil, :xb nil}],
-              :res-type '[:struct {xa [:union #{:null :absent :i64}],
-                                   xb [:union #{:f64 :null :absent :i64}]}]}
+                    {}],
+              :res-type '[:struct {xa [:union #{:null :i64}],
+                                   xb [:union #{:f64 :null :i64}]}]}
              (run-projection rel '{:xa (. x a),
                                    :xb (. x b)})))))
 
@@ -1800,17 +1799,17 @@
                     {:a 12.0, :sums [17.0 7]}
                     {:sums [nil 11.5]}
                     {:a 15, :sums [40 nil]}
-                    {:a nil, :sums [nil nil]}],
+                    {:sums [nil nil]}],
               :res-type '[:struct
-                          {a [:union #{:f64 :null :absent :i64}],
+                          {a [:union #{:f64 :null :i64}],
                            sums [:list [:union #{:f64 :null :i64}]]}]}
              (run-projection rel '{:a (. x a),
                                    :sums [(+ (. x a) (. x b))
                                           (+ (. x b) (nth (. x c) 1))]})))))
 
 (t/deftest absent-handling-2944
-  (with-open [rel (tu/open-rel [(-> (types/col-type->field "x" [:struct '{maybe-float [:union #{:f64 :absent}]
-                                                                          maybe-str [:union #{:utf8 :absent}]}])
+  (with-open [rel (tu/open-rel [(-> (types/col-type->field "x" [:struct '{maybe-float [:union #{:f64 :null}]
+                                                                          maybe-str [:union #{:utf8 :null}]}])
                                     (tu/open-vec [{}]))])]
 
     (t/is (= {:res [nil], :res-type [:union #{:f64 :null}]}

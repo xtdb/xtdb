@@ -174,13 +174,6 @@
                   "children" : [ ]
                 }]
               },{
-                "name" : "absent",
-                "nullable" : true,
-                "type" : {
-                  "name" : "bool"
-                },
-                "children" : [ ]
-              },{
                 "name" : "i64",
                 "nullable" : true,
                 "type" : {
@@ -336,11 +329,6 @@
                   "OFFSET" : [0,0,0,4,4,4],
                   "DATA" : ["","","toto","",""]
                 }]
-              },{
-                "name" : "absent",
-                "count" : 5,
-                "VALIDITY" : [0,0,1,0,0],
-                "DATA" : [0,0,1,0,0]
               },{
                 "name" : "i64",
                 "count" : 5,

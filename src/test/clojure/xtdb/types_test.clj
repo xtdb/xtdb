@@ -70,7 +70,7 @@
             {:b 2, :c 1, :f false}
             [1 {:b [2]}]
             [1 {:b [2]}]
-            {:b 3.14, :d {:e ["hello" -1]}, :f nil}]]
+            {:b 3.14, :d {:e ["hello" -1]}}]]
     (t/is (= {:vs vs
               :vec-types [ListVector ListVector StructVector StructVector StructVector ListVector ListVector StructVector]}
              (test-round-trip vs))
@@ -190,14 +190,15 @@
 
     (let [struct0 '[:struct {a :utf8, b :utf8}]
           struct1 '[:struct {b :utf8, c :i64}]]
-      (t/is (= '[:struct {a [:union #{:utf8 :absent}]
+      (t/is (= '[:struct {a [:union #{:utf8 :null}]
                           b :utf8
-                          c [:union #{:i64 :absent}]}]
+                          c [:union #{:i64 :null}]}]
                (types/merge-col-types struct0 struct1))))
 
     (t/is (= '[:union #{:f64 [:struct {a [:union #{:i64 :utf8}]}]}]
              (types/merge-col-types '[:union #{:f64, [:struct {a :i64}]}]
                                     '[:struct {a :utf8}]))))
+
   (t/testing "null behaviour"
     (t/is (= :null
              (types/merge-col-types :null)))
@@ -272,9 +273,9 @@
 
     (let [struct0 (types/col-type->field '[:struct {a :utf8, b :utf8}])
           struct1 (types/col-type->field '[:struct {b :utf8, c :i64}])]
-      (t/is (= (types/col-type->field '[:struct {a [:union #{:utf8 :absent}]
+      (t/is (= (types/col-type->field '[:struct {a [:union #{:utf8 :null}]
                                                  b :utf8
-                                                 c [:union #{:i64 :absent}]}])
+                                                 c [:union #{:i64 :null}]}])
                (types/merge-fields struct0 struct1))))
 
     (t/is (= #_(types/col-type->field '[:union #{:f64 [:struct {a [:union #{:utf8 :i64}]}]}])
@@ -337,9 +338,7 @@
                                                          (types/->field-default-name #xt.arrow/type :struct false
                                                                                      [(types/col-type->field "bibble" :bool)])
                                                          (types/col-type->field :utf8))
-                                          (types/->field "bar" #xt.arrow/type :union false
-                                                         (types/col-type->field :absent)
-                                                         (types/col-type->field :i64))])
+                                          (types/col-type->field "bar" [:union #{:null :i64}])])
 
              (types/merge-fields (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])
                                  (types/col-type->field '[:struct {foo :utf8 bar :i64}]))))))

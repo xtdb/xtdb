@@ -64,10 +64,9 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
     override fun visit(v: NonNullableStructVector, value: Any?): IVectorReader = structVector(v)
     override fun visit(v: UnionVector, value: Any?): IVectorReader = throw UnsupportedOperationException()
     override fun visit(v: DenseUnionVector, value: Any?): IVectorReader = denseUnionVector(v)
-    override fun visit(v: NullVector, value: Any?): IVectorReader = nullVector(v)
+    override fun visit(v: NullVector, value: Any?): IVectorReader = ValueVectorReader(v)
 
     override fun visit(v: ExtensionTypeVector<*>, value: Any?): IVectorReader = when (v) {
-        is AbsentVector -> absentVector(v)
         is KeywordVector -> keywordVector(v)
         is UuidVector -> uuidVector(v)
         is UriVector -> uriVector(v)

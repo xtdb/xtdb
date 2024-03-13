@@ -59,8 +59,8 @@
             "empty input"))
 
     (t/is (= #{{:a 1, :var-pop 25.0, :var-samp 50.0, :stddev-pop 5.0, :stddev-samp 7.0710678118654755}
-               {:a 2, :var-pop 0.0, :var-samp nil, :stddev-pop 0.0, :stddev-samp nil}
-               {:a 3, :var-pop nil, :var-samp nil, :stddev-pop nil, :stddev-samp nil}}
+               {:a 2, :var-pop 0.0, :stddev-pop 0.0}
+               {:a 3}}
              (set (tu/query-ra [:group-by '[a
                                             {var-pop (var-pop b)}
                                             {var-samp (var-samp b)}
@@ -195,7 +195,7 @@
         "empty if there's a grouping key"))
 
 (t/deftest test-sum-empty-null-behaviour
-  (t/is (= [{:n nil}]
+  (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (sum a)}]
                           [:table []]]))
         "sum empty returns null")
@@ -205,22 +205,22 @@
                           [:table []]]))
         "sum empty returns empty when there are groups")
 
-  (t/is (= [{:n nil}]
+  (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (sum a)}]
                           [:table [{:a nil}]]]))
         "sum all nulls returns null")
 
   (t/testing "summed group all null"
-    (t/is (= [{:a 42, :n nil}]
+    (t/is (= [{:a 42}]
              (tu/query-ra '[:group-by [a {n (sum b)}]
                             [:table [{:a 42, :b nil}]]])))
 
-    (t/is (= [{:a 42, :n nil} {:a 45, :n 1}]
+    (t/is (= [{:a 42} {:a 45, :n 1}]
              (tu/query-ra '[:group-by [a {n (sum b)}]
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-avg-empty-null-behaviour
-  (t/is (= [{:n nil}]
+  (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (avg a)}]
                           [:table []]]))
         "avg empty returns null")
@@ -230,22 +230,22 @@
                           [:table []]]))
         "avg empty returns empty when there are groups")
 
-  (t/is (= [{:n nil}]
+  (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (avg a)}]
                           [:table [{:a nil}]]]))
         "avg all nulls returns null")
 
   (t/testing "averaged group all null"
-    (t/is (= [{:a 42, :n nil}]
+    (t/is (= [{:a 42}]
              (tu/query-ra '[:group-by [a {n (avg b)}]
                             [:table [{:a 42, :b nil}]]])))
 
-    (t/is (= [{:a 42, :n nil} {:a 45, :n 1.0}]
+    (t/is (= [{:a 42} {:a 45, :n 1.0}]
              (tu/query-ra '[:group-by [a {n (avg b)}]
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-min-of-empty-rel-returns-nil
-  (t/is (= [{:n nil}]
+  (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (min a)}]
                           [:table []]]))
         "min empty returns null")
@@ -255,17 +255,17 @@
                           [:table []]]))
         "min empty returns empty when there are groups")
 
-  (t/is (= [{:n nil}]
+  (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (min a)}]
                           [:table [{:a nil}]]]))
         "min all nulls returns null")
 
   (t/testing "min'd group all null"
-    (t/is (= [{:a 42, :n nil}]
+    (t/is (= [{:a 42}]
              (tu/query-ra '[:group-by [a {n (min b)}]
                             [:table [{:a 42, :b nil}]]])))
 
-    (t/is (= [{:a 42, :n nil} {:a 45, :n 1}]
+    (t/is (= [{:a 42} {:a 45, :n 1}]
              (tu/query-ra '[:group-by [a {n (min b)}]
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
@@ -345,7 +345,7 @@
 (t/deftest test-bool-aggs
   (t/is (= {:res #{{:k "t", :all-vs true, :any-vs true}
                    {:k "f", :all-vs false, :any-vs false}
-                   {:k "n", :all-vs nil, :any-vs nil}
+                   {:k "n"}
                    {:k "fn", :all-vs false, :any-vs false}
                    {:k "tn", :all-vs true, :any-vs true}
                    {:k "tf", :all-vs false, :any-vs true}
@@ -368,12 +368,12 @@
                          [::tu/blocks '{k :utf8, v [:union #{:bool :null}]}
                           []]])))
 
-  (t/is (= [{:all-vs nil, :any-vs nil}]
+  (t/is (= [{}]
            (tu/query-ra [:group-by '[{all-vs (all v)} {any-vs (any v)}]
                          [::tu/blocks '{v [:union #{:bool :null}]}
                           []]])))
 
-  (t/is (= [{:n nil}]
+  (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (all b)}]
                           [::tu/blocks
                            [[{:b nil}]]]]))))
@@ -418,7 +418,7 @@
                (update :res set)))))
 
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
-  (t/is (= {:res #{{:a 42} {:a nil}}
+  (t/is (= {:res #{{:a 42} {}}
             :col-types '{a [:union #{:i64 :null}]}}
            (-> (tu/query-ra '[:group-by [a]
                               [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]]
@@ -426,7 +426,7 @@
                (update :res set)))))
 
 (t/deftest test-group-by-groups-nils
-  (t/is (= {:res #{{:a nil, :b 1, :n 85}}
+  (t/is (= {:res #{{:b 1, :n 85}}
             :col-types '{a :null, b :i64, n [:union #{:null :i64}]}}
            (-> (tu/query-ra '[:group-by [a b {n (sum c)}]
                               [:table [{:a nil, :b 1, :c 42}
@@ -443,7 +443,7 @@
 (t/deftest test-handles-absent-3057
   (with-open [node (xtn/start-node)]
     (let [data [{:id 1 :a 1}
-                {:id 1} ; NOTE: Absent :a
+                {:id 1} ; NOTE: absent :a
                 {:id 2 :a 2}
                 {:id 2 :a 3}]]
 

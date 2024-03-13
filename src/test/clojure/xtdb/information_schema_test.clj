@@ -101,16 +101,13 @@
 (deftest test-pg-tables
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= #{{:tablespace nil,
-              :schemaname "public",
+  (t/is (= #{{:schemaname "public",
               :tableowner "default",
               :tablename "xt$txs"}
-             {:tablespace nil,
-              :schemaname "public",
+             {:schemaname "public",
               :tableowner "default",
               :tablename "baseball"}
-             {:tablespace nil,
-              :schemaname "public",
+             {:schemaname "public",
               :tableowner "default",
               :tablename "beanie"}}
            (set (tu/query-ra '[:scan
@@ -197,15 +194,12 @@
   (t/is (=
          #{{:nspowner 722480637,
             :oid -1980112537,
-            :nspacl nil,
             :nspname "information_schema"}
            {:nspowner 722480637,
             :oid -2125819141,
-            :nspacl nil,
             :nspname "pg_catalog"}
            {:nspowner 722480637,
             :oid 1106696632,
-            :nspacl nil,
             :nspname "public"}}
          (set (tu/query-ra '[:scan {:table pg_catalog$pg_namespace} [oid nspname nspowner nspacl]]
                            {:node tu/*node*})))))

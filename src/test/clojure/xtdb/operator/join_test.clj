@@ -218,7 +218,7 @@
 
   (t/testing "empty input"
     (t/is (= [[{:a 12, :m false}, {:a 0, :m false}]
-              [{:a 100, :m false}, {:a nil, :m false}]]
+              [{:a 100, :m false}, {:m false}]]
              (tu/query-ra [:mark-join '{m [{a b}]}
                            [::tu/blocks
                             [[{:a 12}, {:a 0}]
@@ -245,14 +245,14 @@
         "no matches"))
 
 (t/deftest test-mark-join-nils
-  (t/is (= [{:a 12, :m true}, {:a 14, :m false}, {:a nil, :m nil}]
+  (t/is (= [{:a 12, :m true}, {:a 14, :m false}, {}]
            (tu/query-ra [:mark-join '{m [{a b}]}
                          [::tu/blocks
-                          [[{:a 12}, {:a 14}, {:a nil}]]]
+                          [[{:a 12}, {:a 14}, {}]]]
                          [::tu/blocks
                           [[{:b 12}]]]])))
 
-  (t/is (= [{:a 12, :m true}, {:a 14, :m nil} {:a nil, :m nil}]
+  (t/is (= [{:a 12, :m true}, {:a 14} {}]
            (tu/query-ra [:mark-join '{m [{a b}]}
                          [::tu/blocks
                           [[{:a 12}, {:a 14}, {:a nil}]]]
@@ -260,14 +260,14 @@
                           [[{:b 12}, {:b nil}]]]]))))
 
 (t/deftest test-mark-join-theta
-  (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m nil}]
+  (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {}]
            (tu/query-ra [:mark-join '{m [(>= a b)]}
                          [::tu/blocks
                           [[{:a 12}, {:a 14}, {:a nil}]]]
                          [::tu/blocks
                           [[{:b 12}]]]])))
 
-  (t/is (= [{:a 12, :m nil}, {:a 14, :m true} {:a nil, :m nil}]
+  (t/is (= [{:a 12}, {:a 14, :m true} {}]
            (tu/query-ra [:mark-join '{m [(> a b)]}
                          [::tu/blocks
                           [[{:a 12}, {:a 14}, {:a nil}]]]
@@ -278,28 +278,28 @@
   ;;These are arguably not tests of mark-join functionality itself,
   ;;but prove that exist/not-exists can be expressed via mark-join (and a negation)
   (t/testing "exists"
-    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m true}]
+    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:m true}]
              (tu/query-ra [:mark-join '{m [true]}
                            [::tu/blocks
                             [[{:a 12}, {:a 14}, {:a nil}]]]
                            [::tu/blocks
                             [[{:b 1} {:c 2}]]]])))
 
-    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m true}]
+    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:m true}]
              (tu/query-ra [:mark-join '{m [true]}
                            [::tu/blocks
                             [[{:a 12}, {:a 14}, {:a nil}]]]
                            [::tu/blocks
                             [[{:a nil}]]]])))
 
-    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:a nil, :m false}]
+    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
              (tu/query-ra [:mark-join '{m [true]}
                            [::tu/blocks
                             [[{:a 12}, {:a 14}, {:a nil}]]]
                            [::tu/blocks
                             [[]]]]))))
   (t/testing "not-exists"
-    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:a nil, :m false}]
+    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
              (tu/query-ra '[:project [a {m (not m)}]
                             [:mark-join {m [true]}
                             [::tu/blocks
@@ -307,7 +307,7 @@
                             [::tu/blocks
                              [[{:b 1} {:c 2}]]]]])))
 
-    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:a nil, :m false}]
+    (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
              (tu/query-ra '[:project [a {m (not m)}]
                             [:mark-join {m [true]}
                              [::tu/blocks
@@ -315,7 +315,7 @@
                              [::tu/blocks
                               [[{:a nil}]]]]])))
 
-    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m true}]
+    (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:m true}]
              (tu/query-ra '[:project [a {m (not m)}]
                             [:mark-join {m [true]}
                              [::tu/blocks
@@ -324,7 +324,7 @@
                               [[]]]]])))))
 
 (t/deftest test-left-equi-join
-  (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0, :b nil, :c nil} 1}
+  (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
             :col-types '{a :i64, b [:union #{:null :i64}], c [:union #{:null :i64}]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
@@ -338,8 +338,8 @@
                (update :res (partial mapv frequencies)))))
 
   (t/testing "empty input"
-    (t/is (= {:res [#{{:a 12, :b nil}, {:a 0, :b nil}}
-                    #{{:a 100, :b nil}}]
+    (t/is (= {:res [#{{:a 12}, {:a 0}}
+                    #{{:a 100}}]
               :col-types '{a :i64, b [:union #{:null :i64}]}}
              (-> (tu/query-ra [:left-outer-join '[{a b}]
                                [::tu/blocks
@@ -358,8 +358,8 @@
                              [{:b 100} {:b 0}]]]]
                           {:preserve-blocks? true, :with-col-types? true})))
 
-    (t/is (= {:res [#{{:a 12, :b nil}, {:a 0, :b nil}}
-                    #{{:a 100, :b nil}}]
+    (t/is (= {:res [#{{:a 12}, {:a 0}}
+                    #{{:a 100}}]
               :col-types '{a :i64, b [:union #{:null :i64}]}}
              (-> (tu/query-ra [:left-outer-join '[{a b}]
                                [::tu/blocks
@@ -372,8 +372,8 @@
 
 (t/deftest test-left-equi-join-multi-col
   (->> "multi column left"
-       (t/is (= [{{:a 11, :b 44, :c nil, :d nil, :e nil} 1
-                  {:a 10, :b 42, :c nil, :d nil, :e nil} 1
+       (t/is (= [{{:a 11, :b 44} 1
+                  {:a 10, :b 42} 1
                   {:a 12, :b 42, :c 12, :d 42, :e 0} 6
                   {:a 12, :b 42, :c 12, :d 42, :e 1} 2}]
                 (->> (tu/query-ra [:left-outer-join '[{a c} {b d}]
@@ -402,39 +402,39 @@
                [[{:c 12, :d 43}
                  {:c 11, :d 42}]]]]
 
-    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
+    (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44, :c 12, :d 43} 1
-               {:a 10, :b 42, :c nil, :d nil} 2}]
+               {:a 10, :b 42} 2}]
              (->> (tu/query-ra [:left-outer-join '[{a c} (> b d)] left right]
                                {:preserve-blocks? true})
                   (mapv frequencies))))
 
-    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
-               {:a 12, :b 44, :c nil, :d nil} 1
-               {:a 10, :b 42, :c nil, :d nil} 2}]
+    (t/is (= [{{:a 12, :b 42} 1
+               {:a 12, :b 44} 1
+               {:a 10, :b 42} 2}]
              (->> (tu/query-ra [:left-outer-join '[{a c} (> b d) (= c -1)] left right]
                                {:preserve-blocks? true})
                   (mapv frequencies))))
 
-    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
-               {:a 12, :b 44, :c nil, :d nil} 1
-               {:a 10, :b 42, :c nil, :d nil} 2}]
+    (t/is (= [{{:a 12, :b 42} 1
+               {:a 12, :b 44} 1
+               {:a 10, :b 42} 2}]
              (->> (tu/query-ra [:left-outer-join '[{a c} (and (= c -1) (> b d))] left right]
                                {:preserve-blocks? true})
                   (mapv frequencies))))
 
-    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
-               {:a 12, :b 44, :c nil, :d nil} 1
-               {:a 10, :b 42, :c nil, :d nil} 2}]
+    (t/is (= [{{:a 12, :b 42} 1
+               {:a 12, :b 44} 1
+               {:a 10, :b 42} 2}]
              (->> (tu/query-ra [:left-outer-join '[{a c} {b d} (= c -1)] left right]
                                {:preserve-blocks? true})
                   (mapv frequencies))))))
 
 (t/deftest test-full-outer-join
   (t/testing "missing on both sides"
-    (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a nil, :b 2, :c 1} 1}
+    (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:b 2, :c 1} 1}
                     {{:a 12, :b 12, :c 2} 2, {:a 100, :b 100, :c 3} 1}
-                    {{:a 0, :b nil, :c nil} 1}]
+                    {{:a 0} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/blocks
@@ -446,9 +446,9 @@
                               {:preserve-blocks? true, :with-col-types? true})
                  (update :res (partial mapv frequencies)))))
 
-    (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2, {:a nil, :b 2, :c 1} 1}
+    (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2, {:b 2, :c 1} 1}
                     {{:a 100, :b 100, :c 3} 1}
-                    {{:a 0, :b nil, :c nil} 1}]
+                    {{:a 0} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/blocks
@@ -488,7 +488,7 @@
                  (update :res (partial mapv frequencies))))))
 
   (t/testing "empty input"
-    (t/is (= {:res [{{:a 0, :b nil} 1, {:a 100, :b nil} 1, {:a 12, :b nil} 1}]
+    (t/is (= {:res [{{:a 0} 1, {:a 100} 1, {:a 12} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/blocks
@@ -498,8 +498,8 @@
                               {:preserve-blocks? true, :with-col-types? true})
                  (update :res (partial mapv frequencies)))))
 
-    (t/is (= {:res [{{:a nil, :b 12} 1, {:a nil, :b 2} 1}
-                    {{:a nil, :b 100} 1, {:a nil, :b 0} 1}]
+    (t/is (= {:res [{{:b 12} 1, {:b 2} 1}
+                    {{:b 100} 1, {:b 0} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/blocks '{a :i64} []]
@@ -512,12 +512,12 @@
 (t/deftest test-full-outer-equi-join-multi-col
   (->> "multi column full outer"
        (t/is (= [{{:a 12 :b 42 :c 12 :d 42 :e 0} 2
-                  {:a nil :b nil :c 11 :d 42 :e 0} 1
-                  {:a nil :b nil :c 12 :d 43 :e 0} 1}
+                  {:c 11 :d 42 :e 0} 1
+                  {:c 12 :d 43 :e 0} 1}
                  {{:a 12 :b 42 :c 12 :d 42 :e 0} 4
                   {:a 12 :b 42 :c 12 :d 42 :e 1} 2}
-                 {{:a 10 :b 42 :c nil :d nil :e nil} 1
-                  {:a 11 :b 44 :c nil :d nil :e nil} 1}]
+                 {{:a 10 :b 42} 1
+                  {:a 11 :b 44} 1}]
                 (->> (tu/query-ra [:full-outer-join '[{a c} {b d}]
                                    [::tu/blocks
                                     [[{:a 12, :b 42}
@@ -545,18 +545,18 @@
                  {:c 11, :d 42}]]]]
 
     (t/is (= {{:a 12, :b 42, :c 12, :d 43} 1
-              {:a 12, :b 44, :c nil, :d nil} 1
-              {:a 10, :b 42, :c nil, :d nil} 2
-              {:a nil, :b nil, :c 11, :d 42} 1}
+              {:a 12, :b 44} 1
+              {:a 10, :b 42} 2
+              {:c 11, :d 42} 1}
 
              (->> (tu/query-ra [:full-outer-join '[{a c} (not (= b 44))] left right])
                   (frequencies))))
 
-    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
-              {:a 12, :b 44, :c nil, :d nil} 1
-              {:a 10, :b 42, :c nil :d nil} 2
-              {:a nil, :b nil, :c 12, :d 43} 1
-              {:a nil, :b nil, :c 11, :d 42} 1}
+    (t/is (= {{:a 12, :b 42} 1
+              {:a 12, :b 44} 1
+              {:a 10, :b 42} 2
+              {:c 12, :d 43} 1
+              {:c 11, :d 42} 1}
              (->> (tu/query-ra [:full-outer-join '[{a c} false] left right])
                   (frequencies))))))
 
@@ -677,12 +677,12 @@
                                 (if right? [[{:b 12}, {:b 2}]] [])]]
                               {:preserve-blocks? true})
                  (mapv frequencies)))]
-    (t/is (= [{{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:a 12} 1,
+               {:a 0} 1}]
              (run-loj true false nil)))
 
-    (t/is (= [{{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:a 12} 1,
+               {:a 0} 1}]
              (run-loj true false true)))
 
     (t/is (= []
@@ -691,12 +691,12 @@
     (t/is (= []
              (run-loj false true true)))
 
-    (t/is (= [{{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:a 12} 1,
+               {:a 0} 1}]
              (run-loj true true false)))
 
-    (t/is (= [{{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:a 12} 1,
+               {:a 0} 1}]
              (run-loj true true nil)))
 
     (t/is (= [{{:a 12, :b 12} 1,
@@ -714,32 +714,32 @@
                                 (if right? [[{:b 12}, {:b 2}]] [])]]
                               {:preserve-blocks? true})
                  (mapv frequencies)))]
-    (t/is (= [{{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:a 12} 1,
+               {:a 0} 1}]
              (run-foj true false nil)))
 
-    (t/is (= [{{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:a 12} 1,
+               {:a 0} 1}]
              (run-foj true false true)))
 
-    (t/is (= [{{:a nil, :b 12} 1,
-               {:a nil, :b 2} 1}]
+    (t/is (= [{{:b 12} 1,
+               {:b 2} 1}]
              (run-foj false true nil)))
 
-    (t/is (= [{{:a nil, :b 12} 1,
-               {:a nil, :b 2} 1}]
+    (t/is (= [{{:b 12} 1,
+               {:b 2} 1}]
              (run-foj false true true)))
 
-    (t/is (= [{{:a nil, :b 12} 1,
-               {:a nil, :b 2} 1}
-              {{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:b 12} 1,
+               {:b 2} 1}
+              {{:a 12} 1,
+               {:a 0} 1}]
              (run-foj true true false)))
 
-    (t/is (= [{{:a nil, :b 12} 1,
-               {:a nil, :b 2} 1}
-              {{:a 12, :b nil} 1,
-               {:a 0, :b nil} 1}]
+    (t/is (= [{{:b 12} 1,
+               {:b 2} 1}
+              {{:a 12} 1,
+               {:a 0} 1}]
              (run-foj true true nil)))
 
     (t/is (= [{{:a 12, :b 12} 1,
@@ -823,7 +823,7 @@
                             [::tu/blocks {x :i64} []]
                             [::tu/blocks [[{:y 0}, {:y 1}, {:y 1}]]]])))
 
-    (t/is (= [{:x 0, :y nil}]
+    (t/is (= [{:x 0}]
              (tu/query-ra '[:single-join [{x y}]
                             [::tu/blocks [[{:x 0}]]]
                             [::tu/blocks {y :i64} []]])))))

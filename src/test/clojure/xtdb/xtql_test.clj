@@ -196,7 +196,7 @@
     (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :dave :first-name nil}]
                              [:put-docs :docs {:xt/id :jeff :first-name "Jeff"}]])
 
-    (t/is (= [{:first-name nil}
+    (t/is (= [{}
               {:first-name "Ivan"}
               {:first-name "Jeff"}
               {:first-name "Petr"}]
@@ -207,7 +207,7 @@
     (t/is (= [{:first-name "Ivan"}
               {:first-name "Jeff"}
               {:first-name "Petr"}
-              {:first-name nil}]
+              {}]
              (xt/q tu/*node*
                    '(-> (from :docs [first-name])
                         (order-by {:val first-name :dir :asc :nulls :last})))))))
@@ -257,8 +257,7 @@
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 2, :e2 2, :n "Petr"}
-               {:e 3, :e2 3, :n "Ivan"}
-               {:e 4, :e2 4}}
+               {:e 3, :e2 3, :n "Ivan"}}
              (set (xt/q tu/*node*
                         '(-> (unify (from :docs [{:xt/id e, :name n, :age a}])
                                     (from :docs [{:xt/id e2, :name n, :age a}]))
@@ -637,8 +636,8 @@
   (t/is (= #{{:e :ivan, :c :petr}
              {:e :petr, :c :sergei}
              {:e :petr, :c :jeff}
-             {:e :sergei, :c nil}
-             {:e :jeff, :c nil}}
+             {:e :sergei}
+             {:e :jeff}}
            (set (xt/q tu/*node*
                       '(unify (from :docs [{:xt/id e}])
                               (left-join (from :docs [{:xt/id c :parent e}])
@@ -646,8 +645,8 @@
 
         "independent: find people who have children")
 
-  (t/is (= #{{:e :ivan, :s nil}
-             {:e :petr, :s nil}
+  (t/is (= #{{:e :ivan}
+             {:e :petr}
              {:e :sergei, :s :jeff}
              {:e :jeff, :s :sergei}}
            (set (xt/q tu/*node*
@@ -1294,7 +1293,7 @@
                (set (q '(from :docs [{:xt/id id}]), tx0, #inst "2023")))
             "back in system-time")
 
-      (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015"), :app-to nil}
+      (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                  {:id :mark, :app-from (time/->zdt #inst "2018"), :app-to (time/->zdt #inst "2020")}
                  {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}
                  {:id :mark, :app-from (time/->zdt #inst "2023"), :app-to (time/->zdt #inst "2024")}
@@ -1305,7 +1304,7 @@
                        tx1, nil)))
             "entity history, all time")
 
-      (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015"), :app-to nil}
+      (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                  {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
                (set (q '(from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
                                                          :xt/valid-to app-to}]
@@ -1323,10 +1322,8 @@
 
       (t/is (= #{{:vt-from (time/->zdt #inst "2021")
                   :vt-to (time/->zdt #inst "2022")
-                  :tt-from (time/->zdt #inst "2020")
-                  :tt-to nil}
+                  :tt-from (time/->zdt #inst "2020")}
                  {:vt-from (time/->zdt #inst "2022")
-                  :vt-to nil
                   :tt-from (time/->zdt #inst "2020")
                   :tt-to (time/->zdt  #inst "2020-01-02")}}
                (set (q '(from :docs {:bind [{:xt/id :luke
@@ -1341,7 +1338,7 @@
             "for all sys time")))
   
   (t/testing "testing temporal fns with params"
-    (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015"), :app-to nil}
+    (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
              (set (xt/q tu/*node*
                         '(from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
@@ -1359,7 +1356,7 @@
                         {:args {:arg-t1 #inst "2018"
                                 :arg-t2 #inst "2024"}}))))
     
-    (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015"), :app-to nil}
+    (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
              (set (xt/q tu/*node*
                         '(from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
@@ -1405,8 +1402,7 @@
           tx1 (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-to #inst "2040"}
                                         {:xt/id :matthew}]])]
       (t/is (= #{{:id :matthew,
-                  :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                  :vt-to nil}
+                  :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
                  {:id :mark,
                   :vt-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                   :vt-to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}
@@ -1416,8 +1412,7 @@
                        tx0, #inst "2023"))))
 
       (t/is (= [{:id :matthew,
-                 :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                 :vt-to nil}]
+                 :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}]
                (q '(from :docs {:bind [{:xt/id id
                                         :xt/valid-from vt-from
                                         :xt/valid-to vt-to}]
@@ -1554,8 +1549,7 @@
       (t/is (= [{:prop 3621,
                  :vt-begin (time/->zdt #inst "1998-01-15"),
                  :vt-to (time/->zdt #inst "1998-01-20"),
-                 :recorded-from (time/->zdt #inst "1998-01-31"),
-                 :recorded-stop nil}]
+                 :recorded-from (time/->zdt #inst "1998-01-31"),}]
                (q-with-args
                 '(-> (unify (from :docs {:bind [{:property-number $prop
                                                  :customer-number cust
@@ -1791,10 +1785,8 @@
                  (where (contains? docs_app_time xt_cats_app_time))))))
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :docs-sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                             :xt/to nil},
-             :xt-cats-sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                                :xt/to nil}}]
+             :docs-sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"},
+             :xt-cats-sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}]
            (xt/q
             tu/*node*
             '(unify (from :docs {:bind [xt/id {:xt/system-time docs_sys_time}]
@@ -1843,8 +1835,7 @@
   (t/is (= [{:xt/id 1,
              :app-time {:xt/from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :xt/to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                        :xt/to nil}}]
+             :sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",}}]
            (xt/q
             tu/*node*
             '(from :docs {:bind [xt/id {:xt/valid-time app_time
@@ -1865,8 +1856,7 @@
              :id2 1,
              :app-time {:xt/from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :xt/to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                        :xt/to nil}}]
+             :sys-time {:xt/from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}]
            (xt/q tu/*node* '(unify (from :docs {:bind [xt/id {:xt/valid-time app-time
                                                               :xt/system-time sys-time}]
                                                 :for-valid-time :all-time
@@ -1881,8 +1871,7 @@
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 2}]])
 
   (t/is (= [{:xt/id 2,
-             :time {:xt/from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
-                    :xt/to nil}}]
+             :time {:xt/from #time/zoned-date-time "2020-01-02T00:00Z[UTC]"}}]
            (xt/q tu/*node*
                  '(from :docs
                         {:bind [xt/id {:xt/valid-time time
@@ -2163,23 +2152,14 @@
                     '(-> (from :customers [{:xt/id id} name])
                          (with {:orders (pull* (from :orders [{:customer-id $c-id} {:xt/id id}])
                                                {:args [{:c-id id}]})}))))))
-  (t/is (=
-         [{:orders nil}]
-         (xt/q tu/*node*
-               '(unify
-                 (with {orders (pull (rel [] []))})))))
+  (t/is (= [{}]
+           (xt/q tu/*node* '(unify (with {orders (pull (rel [] []))})))))
 
-  (t/is (=
-         [{:orders {}}]
-         (xt/q tu/*node*
-               '(unify
-                 (with {orders (pull (rel [{}] []))})))))
+  (t/is (= [{:orders {}}]
+           (xt/q tu/*node* '(unify (with {orders (pull (rel [{}] []))})))))
 
-  (t/is (=
-         [{:orders nil}]
-         (xt/q tu/*node*
-               '(unify
-                 (with {orders (pull* (rel [] []))})))))
+  (t/is (= [{}]
+           (xt/q tu/*node* '(unify (with {orders (pull* (rel [] []))})))))
 
   (t/is (=
          [{:orders [{}]}]
@@ -2236,7 +2216,7 @@
            (xt/q tu/*node*
                  '(-> (rel [{:x {:foo 1}}] [x])
                       (return {:r (. x foo)})))))
-  (t/is (= [{:r nil}]
+  (t/is (= [{}]
            (xt/q tu/*node*
                  '(-> (rel [{:x {:foo 1}}] [x])
                       (return {:r (. x bar)})))))
@@ -2393,10 +2373,10 @@
                            [:put-docs :users {:xt/id :bob :friends []}]
                            [:put-docs :users {:xt/id :jimmy :friends [:ben]}]])
 
-  (t/is (= [{:friends nil, :id :bob}
+  (t/is (= [{:id :bob}
             {:friends [{:id :ben, :friends [{:id :bob, :friends []}
                                             {:id :jimmy, :friends [:ben]}]}], :id :jimmy}
-            {:friends [{:id :bob, :friends nil}
+            {:friends [{:id :bob}
                        {:id :jimmy, :friends [{:id :ben, :friends [:jimmy :bob]}]}], :id :ben}]
            (xt/q tu/*node* '(-> (from :users [{:xt/id id} friends])
                                 (with {:friends
@@ -2425,7 +2405,7 @@
                                 :bind [b c]}))))
         "simple expression in arg (join)")
 
-  (t/is (= [{:aid :a3, :a 2, :b nil} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2, :b nil}]
+  (t/is (= [{:aid :a3, :a 2} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
                          (left-join (rel [{:b $a}] [b])
@@ -2441,7 +2421,7 @@
                                 :bind [b]}))))
         "expression with subquery (join)")
 
-  (t/is (= [{:aid :a3, :a 2, :b nil} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2, :b nil}]
+  (t/is (= [{:aid :a3, :a 2} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
                          (left-join (rel [{:b $a}] [b])

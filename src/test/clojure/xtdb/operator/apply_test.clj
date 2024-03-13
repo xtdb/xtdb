@@ -28,7 +28,7 @@
     (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
               {:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 14.80}
               {:c-id "c2", :c-name "Bob", :o-customer-id "c2", :o-value 91.46}
-              {:c-id "c3", :c-name "Charlie", :o-customer-id nil, :o-value nil}]
+              {:c-id "c3", :c-name "Charlie"}]
 
              (q :left-outer-join)))
 
@@ -55,7 +55,7 @@
                                 {:o-customer-id "c4"}]]]]
                             {:with-col-types? true}))))
 
-  (t/is (= {:res [{:x 0, :match nil}]
+  (t/is (= {:res [{:x 0}]
             :col-types '{x :i64, match [:union #{:null :bool}]}}
            (-> (tu/query-ra '[:apply {:mark-join {match (= 4 y)}} {}
                               [:table [{x 0}]]
@@ -72,7 +72,7 @@
         "NULL IN {}"))
 
 (t/deftest test-apply-single
-  (t/is (= [{:y 0, :a nil, :b nil}
+  (t/is (= [{:y 0}
             {:y 1, :a 1, :b 2}]
            (tu/query-ra '[:apply :single-join {y ?y}
                           [:table [{:y 0} {:y 1}]]
@@ -95,14 +95,14 @@
                             [:table ?x]]
                           {:params '{?x []}})))
 
-    (t/is (= [{:y 0, :a nil, :b nil}]
+    (t/is (= [{:y 0}]
              (tu/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
                             [:table [a b] ?x]]
                           {:params '{?x []}})))))
 
 (t/deftest test-apply-empty-rel-bug-237
-  (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :i64}]}}
+  (t/is (= {:res [{}], :col-types '{x3 [:union #{:null :i64}]}}
            (-> (tu/query-ra
                 '[:group-by [{x3 (sum x2)}]
                   [:apply :cross-join {}
@@ -133,8 +133,8 @@
                  [:table [{:y 0}, {:y 1}]]]]] {}))))
 
 (t/deftest test-shadowed-param
-  (t/is (= [{:z 0, :x 1, :y nil}
-            {:z 1, :x 1, :y nil}]
+  (t/is (= [{:z 0, :x 1}
+            {:z 1, :x 1}]
            (tu/query-ra
              '[:apply :cross-join {z ?foo}
                [:table [{:z 0}, {:z 1}]]
@@ -167,7 +167,7 @@
     "col with non null type")
 
   (t/is
-    (= [{:foo nil :baz 1}]
+    (= [{:baz 1}]
        (tu/query-ra
          '[:apply :cross-join
            {foo ?bar}

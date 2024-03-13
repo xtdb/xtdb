@@ -349,7 +349,7 @@
                                        {}))))
 
 (t/deftest test-left-outer-join-with-composite-types-2393
-  (t/is (= {:res [{{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 0, :b nil, :c nil} 1}
+  (t/is (= {:res [{{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 100, :b 100, :c {:foo 2}} 1}]
             :col-types '{a :i64, c [:union #{[:struct {foo :i64}] :null}], b [:union #{:null :i64}]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
@@ -362,7 +362,8 @@
                             {:preserve-blocks? true, :with-col-types? true})
                (update :res (partial mapv frequencies))))
         "testing left-outer-join with structs")
-  (t/is (= {:res [{{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 0, :c nil, :b nil} 1}
+
+  (t/is (= {:res [{{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 0} 1}
                   {{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 100, :c [4], :b 100} 1}]
             :col-types '{a :i64, c [:union #{[:list :i64] :null}], b [:union #{:null :i64}]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]

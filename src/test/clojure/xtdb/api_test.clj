@@ -236,7 +236,7 @@
 
     (t/is (= (TransactionKey. 0 (time/->instant #inst "2020-01-01")) tx))
 
-    (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018"), :xt/valid-to nil}]
+    (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
              (xt/q *node* "SELECT foo.xt$id, foo.xt$valid_from, foo.xt$valid_to FROM foo")))))
 
 (deftest test-dml-default-all-valid-time-flag-339
@@ -251,7 +251,7 @@
                     [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
                       ["foo", 0]]])
 
-      (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to nil}}
+      (t/is (= #{{:version 0, :xt/valid-from tt1}}
                (q)))
 
       (t/testing "update as-of-now"
@@ -260,7 +260,7 @@
                       {:default-all-valid-time? false})
 
         (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}
-                   {:version 1, :xt/valid-from tt2, :xt/valid-to nil}}
+                   {:version 1, :xt/valid-from tt2}}
                  (q))))
 
       (t/testing "`FOR PORTION OF` means flag is ignored"
@@ -271,7 +271,7 @@
                         [tt1 tt2]]]
                       {:default-all-valid-time? false})
         (t/is (= #{{:version 2, :xt/valid-from tt1, :xt/valid-to tt2}
-                   {:version 1, :xt/valid-from tt2, :xt/valid-to nil}}
+                   {:version 1, :xt/valid-from tt2}}
                  (q))))
 
       (t/testing "UPDATE for-all-time"
@@ -280,7 +280,7 @@
                       {:default-all-valid-time? true})
 
         (t/is (= #{{:version 3, :xt/valid-from tt1, :xt/valid-to tt2}
-                   {:version 3, :xt/valid-from tt2, :xt/valid-to nil}}
+                   {:version 3, :xt/valid-from tt2}}
                  (q))))
 
       (t/testing "DELETE as-of-now"
@@ -317,25 +317,25 @@
                   [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
                     ["foo", 0]]])
 
-    (t/is (= [{:version 0, :xt/valid-from tt1, :xt/valid-to nil}]
+    (t/is (= [{:version 0, :xt/valid-from tt1}]
              (xt/q *node*
                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
                    {:default-all-valid-time? false})))
 
-    (t/is (= [{:version 0, :xt/valid-from tt1, :xt/valid-to nil}]
+    (t/is (= [{:version 0, :xt/valid-from tt1}]
              (xt/q *node*
                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo")))
 
     (xt/submit-tx *node*
                   [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]])
 
-    (t/is (= [{:version 1, :xt/valid-from tt2, :xt/valid-to nil}]
+    (t/is (= [{:version 1, :xt/valid-from tt2}]
              (xt/q *node*
                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"))
           "without flag it returns as of now")
 
     (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}
-               {:version 1, :xt/valid-from tt2, :xt/valid-to nil}}
+               {:version 1, :xt/valid-from tt2}}
              (set (xt/q *node*
                         "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
                         {:default-all-valid-time? true}))))
@@ -349,7 +349,7 @@
           "`FOR VALID_TIME AS OF` overrides flag")
 
     (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}
-               {:version 1, :xt/valid-from tt2, :xt/valid-to nil}}
+               {:version 1, :xt/valid-from tt2}}
              (set (xt/q *node*
                         "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to
                              FROM foo FOR ALL VALID_TIME"
@@ -372,15 +372,12 @@
               :xt/valid-to (time/->zdt #inst "2020-01-02")}
 
           v1 {:version 1,
-              :xt/valid-from (time/->zdt #inst "2020-01-02"),
-              :xt/valid-to nil}]
+              :xt/valid-from (time/->zdt #inst "2020-01-02")}]
 
       (t/is (= #{{:xt/id "foo", :version 0,
-                  :xt/valid-from (time/->zdt #inst "2020-01-01")
-                  :xt/valid-to nil}
+                  :xt/valid-from (time/->zdt #inst "2020-01-01")}
                  {:xt/id "bar", :version 0,
-                  :xt/valid-from (time/->zdt #inst "2020-01-01")
-                  :xt/valid-to nil}}
+                  :xt/valid-from (time/->zdt #inst "2020-01-01")}}
                (q tx1)))
 
       (t/is (= #{(assoc v0 :xt/id "foo")
@@ -395,8 +392,7 @@
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx2)))
 
         (t/is (= #{{:xt/id "bar", :version 0,
-                    :xt/valid-from (time/->zdt #inst "2020-01-01")
-                    :xt/valid-to nil}}
+                    :xt/valid-from (time/->zdt #inst "2020-01-01")}}
                  (q tx1)))))))
 
 (t/deftest throws-static-tx-op-errors-on-submit-346
@@ -540,15 +536,12 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
               :xt/valid-to (time/->zdt #inst "2020-01-02")}
 
           v1 {:version 1,
-              :xt/valid-from (time/->zdt #inst "2020-01-02"),
-              :xt/valid-to nil}]
+              :xt/valid-from (time/->zdt #inst "2020-01-02")}]
 
       (t/is (= #{{:xt/id "foo", :version 0,
-                  :xt/valid-from (time/->zdt #inst "2020-01-01")
-                  :xt/valid-to nil}
+                  :xt/valid-from (time/->zdt #inst "2020-01-01")}
                  {:xt/id "bar", :version 0,
-                  :xt/valid-from (time/->zdt #inst "2020-01-01")
-                  :xt/valid-to nil}}
+                  :xt/valid-from (time/->zdt #inst "2020-01-01")}}
                (q tx1)))
 
       (t/is (= #{(assoc v0 :xt/id "foo")
@@ -562,8 +555,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx2)))
 
         (t/is (= #{{:xt/id "bar", :version 0,
-                    :xt/valid-from (time/->zdt #inst "2020-01-01")
-                    :xt/valid-to nil}}
+                    :xt/valid-from (time/->zdt #inst "2020-01-01")}}
                  (q tx1)))))))
 
 (t/deftest test-assert-dml

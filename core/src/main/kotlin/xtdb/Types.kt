@@ -80,7 +80,6 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
 
     override fun visit(type: ArrowType.ExtensionType) = when (type) {
         is KeywordType -> "keyword"
-        is AbsentType -> "absent"
         is TransitType -> "transit"
         is UuidType -> "uuid"
         is UriType -> "uri"
@@ -97,7 +96,6 @@ private val TIME_NANO_TYPE = ArrowType.Time(NANOSECOND, 64)
 
 fun valueToArrowType(obj: Any?) = when (obj) {
     null -> MinorType.NULL.type
-    Absent -> AbsentType
     is Boolean -> MinorType.BIT.type
     is Byte -> MinorType.TINYINT.type
     is Short -> MinorType.SMALLINT.type

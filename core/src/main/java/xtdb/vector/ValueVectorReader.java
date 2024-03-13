@@ -9,7 +9,6 @@ import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
-import xtdb.Absent;
 import xtdb.api.query.IKeyFn;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
@@ -75,11 +74,6 @@ public class ValueVectorReader implements IVectorReader {
     @Override
     public boolean isNull(int idx) {
         return vector.isNull(idx);
-    }
-
-    @Override
-    public boolean isAbsent(int idx) {
-        return false;
     }
 
     @Override
@@ -241,11 +235,6 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public boolean isAbsent() {
-            return ValueVectorReader.this.isAbsent(pos.getPosition());
-        }
-
-        @Override
         public boolean readBoolean() {
             return ValueVectorReader.this.getBoolean(pos.getPosition());
         }
@@ -304,41 +293,6 @@ public class ValueVectorReader implements IVectorReader {
     @Override
     public String toString() {
         return "(ValueVectorReader {vector=%s})".formatted(vector);
-    }
-
-    public static IVectorReader nullVector(NullVector v) {
-        return new ValueVectorReader(v) {
-            @Override
-            public int hashCode(int idx, ArrowBufHasher hasher) {
-                // Until https://github.com/apache/arrow/pull/35590 is merged, Arrow 13.
-                return 31;
-            }
-        };
-    }
-
-    public static IVectorReader absentVector(AbsentVector v) {
-        return new ValueVectorReader(v) {
-
-            @Override
-            public boolean isAbsent(int idx) {
-                return true;
-            }
-
-            @Override
-            public int hashCode(int idx, ArrowBufHasher hasher) {
-                return Absent.INSTANCE.hashCode();
-            }
-
-            @Override
-            public Object getObject(int idx) {
-                return Absent.INSTANCE;
-            }
-
-            @Override
-            public Object getObject(int idx, IKeyFn<?> keyFn) {
-                return Absent.INSTANCE;
-            }
-        };
     }
 
     public static IVectorReader bitVector(BitVector v) {
@@ -795,7 +749,7 @@ public class ValueVectorReader implements IVectorReader {
 
                 rdrs.forEach((k, reader) -> {
                     Object v = reader.getObject(idx, keyFn);
-                    if (v != Absent.INSTANCE)
+                    if (v != null)
                         res.put(keyFn.denormalize(k), v);
                 });
 
@@ -998,12 +952,6 @@ public class ValueVectorReader implements IVectorReader {
             return v.getVectorByType(getTypeId(idx)).isNull(v.getOffset(idx));
         }
 
-        @Override
-        @SuppressWarnings("resource")
-        public boolean isAbsent(int idx) {
-            return legReader(getLeg(idx)).isAbsent(idx);
-        }
-
         @SuppressWarnings("resource")
         Object getObject0(int idx, IKeyFn<?> keyFn) {
             return legReader(getLeg(idx)).getObject(idx, keyFn);
@@ -1049,11 +997,6 @@ public class ValueVectorReader implements IVectorReader {
                 @Override
                 public boolean isNull() {
                     return legReader().isNull();
-                }
-
-                @Override
-                public boolean isAbsent() {
-                    return legReader().isAbsent();
                 }
 
                 @Override

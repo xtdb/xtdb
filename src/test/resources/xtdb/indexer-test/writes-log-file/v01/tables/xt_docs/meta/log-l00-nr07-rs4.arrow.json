@@ -173,13 +173,6 @@
                   },
                   "children" : [ ]
                 }]
-              },{
-                "name" : "absent",
-                "nullable" : true,
-                "type" : {
-                  "name" : "bool"
-                },
-                "children" : [ ]
               }]
             },{
               "name" : "bloom",
@@ -311,11 +304,6 @@
                   "OFFSET" : [0,0,0,3,8],
                   "DATA" : ["","","foo","april"]
                 }]
-              },{
-                "name" : "absent",
-                "count" : 4,
-                "VALIDITY" : [0,0,0,1],
-                "DATA" : [0,0,0,1]
               }]
             },{
               "name" : "bloom",

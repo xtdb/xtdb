@@ -35,14 +35,10 @@
 
     (t/is (= {:doc {:xt/id :doc,
                     :xt/valid-from system-time
-                    :xt/valid-to nil
-                    :xt/system-from system-time
-                    :xt/system-to nil}
+                    :xt/system-from system-time}
               :doc-with-app-time {:xt/id :doc-with-app-time,
                                   :xt/valid-from (time/->zdt #inst "2021")
-                                  :xt/valid-to nil
-                                  :xt/system-from system-time
-                                  :xt/system-to nil}}
+                                  :xt/system-from system-time}}
              (->> (tu/query-ra '[:scan {:table docs}
                                  [xt$id
                                   xt$valid_from xt$valid_to
@@ -60,20 +56,16 @@
         original-v0-doc {:xt/id :doc, :version 0
                          :xt/valid-from tt1
                          :xt/valid-to tt2
-                         :xt/system-from tt1
-                         :xt/system-to nil}
+                         :xt/system-from tt1}
 
         replaced-v0-doc {:xt/id :doc, :version 0
                          :xt/valid-from tt2
-                         :xt/valid-to nil
                          :xt/system-from tt1
                          :xt/system-to tt2}
 
         v1-doc {:xt/id :doc, :version 1
                 :xt/valid-from tt2
-                :xt/valid-to nil
-                :xt/system-from tt2
-                :xt/system-to nil}]
+                :xt/system-from tt2}]
 
     (t/is (= #{original-v0-doc v1-doc}
              (set (xt/q tu/*node*

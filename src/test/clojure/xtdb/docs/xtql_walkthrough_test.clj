@@ -139,7 +139,7 @@
 
   (t/is (= #{{:cid "ivan", :order-value 150, :currency :gbp}
              {:cid "ivan", :order-value 100, :currency :gbp}
-             {:cid "petr", :order-value nil, :currency nil}}
+             {:cid "petr"}}
            (set
             (xt/q tu/*node*
                   '
@@ -218,7 +218,7 @@
   (testing "To count/sum/average values, we use `aggregate`:"
 
     (t/is (= #{{:cid "ivan", :currency :gbp, :order-count 2, :total-value 250}
-               {:cid "petr", :currency nil, :order-count 0, :total-value 0}}
+               {:cid "petr", :order-count 0, :total-value 0}}
              (set
                (xt/q tu/*node*
                  '
@@ -339,12 +339,10 @@
 
   (t/is (= #{{:first-name "Ivan"
               :last-name "Ivanov"
-              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"
-              :xt/valid-to nil}
+              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
              {:first-name "Petr"
               :last-name "Petrov"
-              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"
-              :xt/valid-to nil}}
+              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
            (set
             (xt/q tu/*node*
                   '(from :users [first-name last-name
@@ -361,12 +359,10 @@
 
   (t/is (= #{{:first-name "Ivan"
               :last-name "Ivanov"
-              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"
-              :xt/valid-to nil}
+              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
              {:first-name "Petr"
               :last-name "Petrov"
-              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"
-              :xt/valid-to nil}}
+              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
            (set
             (xt/q tu/*node*
                   '(from :users [first-name last-name
@@ -385,12 +381,10 @@
 
   (t/is (= #{{:first-name "Ivan"
               :last-name "Ivanov"
-              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"
-              :xt/valid-to nil}
+              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
              {:first-name "Petr"
               :last-name "Petrov"
-              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"
-              :xt/valid-to nil}}
+              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
            (set
             (xt/q tu/*node*
                   '(from :users [first-name last-name

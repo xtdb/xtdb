@@ -7,7 +7,6 @@ interface IValueReader {
     val leg: Keyword?
 
     val isNull: Boolean
-    val isAbsent: Boolean
 
     fun readBoolean(): Boolean
     fun readByte(): Byte

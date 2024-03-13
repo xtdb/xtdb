@@ -167,9 +167,7 @@
           tt (.getSystemTime tx)]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
-                 :xt/valid-to nil
-                 :xt/system-from (time/->zdt tt)
-                 :xt/system-to nil}]
+                 :xt/system-from (time/->zdt tt)}]
                (tu/query-ra '[:scan {:table xt_docs}
                               [xt$id version
                                xt$valid_from, xt$valid_to
@@ -181,19 +179,15 @@
             tt2 (.getSystemTime tx1)]
         (t/is (= #{{:xt/id :foo, :version 0,
                     :xt/valid-from (time/->zdt tt2)
-                    :xt/valid-to nil
                     :xt/system-from (time/->zdt tt)
                     :xt/system-to (time/->zdt tt2)}
                    {:xt/id :foo, :version 0,
                     :xt/valid-from (time/->zdt tt)
                     :xt/valid-to (time/->zdt tt2)
-                    :xt/system-from (time/->zdt tt)
-                    :xt/system-to nil}
+                    :xt/system-from (time/->zdt tt)}
                    {:xt/id :foo, :version 1,
                     :xt/valid-from (time/->zdt tt2)
-                    :xt/valid-to nil
-                    :xt/system-from (time/->zdt tt2)
-                    :xt/system-to nil}}
+                    :xt/system-from (time/->zdt tt2)}}
                  (set (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
                                      [xt$id version
                                       xt$valid_from, xt$valid_to
@@ -202,9 +196,7 @@
 
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (time/->zdt tt)
-                   :xt/valid-to nil
-                   :xt/system-from (time/->zdt tt)
-                   :xt/system-to nil}]
+                   :xt/system-from (time/->zdt tt)}]
                  (tu/query-ra '[:scan {:table xt_docs}
                                 [xt$id version
                                  xt$valid_from, xt$valid_to
@@ -274,11 +266,11 @@
                                                               (types/col-type->field :utf8)
                                                               (types/col-type->field [:timestamp-tz :micro "UTC"])
                                                               (types/col-type->field :bool)))
-                                (types/col-type->field :absent))
+                                (types/col-type->field :null))
                  (.columnField mm "xt_docs" "list")))
 
         (t/is (= (types/->field "struct" #xt.arrow/type :union false
-                                (types/col-type->field :absent)
+                                (types/col-type->field :null)
                                 (types/->field "struct" #xt.arrow/type :struct false
                                                (types/->field "a" #xt.arrow/type :union false
                                                               (types/col-type->field :i64)
@@ -293,14 +285,11 @@
                                                                                             (types/col-type->field :utf8))))))
                  (.columnField mm "xt_docs" "struct")))))))
 
-(t/deftest round-trips-nils
+(t/deftest drops-nils-on-round-trip
   (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "nil-bar"
-                                        :foo "foo"
-                                        :bar nil}]
-                        [:put-docs :xt_docs {:xt/id "no-bar"
-                                        :foo "foo"}]])
-    (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}
+    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "nil-bar", :foo "foo", :bar nil}]
+                        [:put-docs :xt_docs {:xt/id "no-bar", :foo "foo"}]])
+    (t/is (= [{:id "nil-bar", :foo "foo"}
               {:id "no-bar", :foo "foo"}]
              (xt/q node '(from :xt_docs [{:xt/id id} foo bar]))))))
 
