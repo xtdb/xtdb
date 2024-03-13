@@ -3,18 +3,17 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (clojure.lang Keyword)
-           (java.lang AutoCloseable)
            (java.math BigDecimal)
            java.net.URI
            (java.nio ByteBuffer)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
-           (java.util Date LinkedHashMap List Map Set UUID)
+           (java.util Date List Map Set UUID)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector FieldVectorWriters IRelationWriter IRowCopier IVectorPosition IVectorReader IVectorWriter RelationReader RelationWriter)))
+           (xtdb.vector FieldVectorWriters IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -104,21 +103,6 @@
   CharSequence
   (value->col-type [_] :utf8))
 
-(defn populate-with-absents [^IVectorWriter w, ^long pos]
-  (let [absents (- pos (.getPosition (.writerPosition w)))]
-    (when (pos? absents)
-      (if-let [absent-writer (let [field (.getField w)]
-                               (cond (= #xt.arrow/type :union (.getType field))
-                                     (.legWriter w #xt.arrow/type :absent)
-                                     (.isNullable field)
-                                     w
-                                     :else nil))]
-        (dotimes [_ absents]
-          (.writeNull absent-writer))
-        (throw (ex-info "populate-with-absents needs a nullable or union underneath!"
-                        {:field (.getField w)
-                         :expected pos, :actual (.getPosition (.writerPosition w))}))))))
-
 (extend-protocol ArrowWriteable
   List
   (value->col-type [v] [:list (apply types/merge-col-types (into #{} (map value->col-type) v))])
@@ -196,46 +180,7 @@
   (RelationWriter. allocator))
 
 (defn root->writer ^xtdb.vector.IRelationWriter [^VectorSchemaRoot root]
-  (let [writer-array (volatile! nil)
-        writers (LinkedHashMap.)
-        wp (IVectorPosition/build)]
-    (doseq [^ValueVector vec (.getFieldVectors root)]
-      (.put writers (.getName vec) (->writer vec)))
-
-    (reify IRelationWriter
-      (writerPosition [_] wp)
-
-      (startRow [_])
-      (endRow [_]
-        (when (nil? @writer-array)
-          (vreset! writer-array (object-array (.values writers))))
-        (let [pos (.getPositionAndIncrement wp)
-              ^objects arr @writer-array]
-          (dotimes [i (alength arr)]
-            (populate-with-absents (aget arr i) (inc pos)))))
-
-      (^IVectorWriter colWriter [_ ^String col-name]
-       (or (.get writers col-name)
-           (throw (NullPointerException. (pr-str {:cols (keys writers), :col col-name})))))
-
-      (colWriter [_ col-name _field-type]
-        (or (.get writers col-name)
-            (throw (UnsupportedOperationException. "Dynamic column creation unsupported for this RelationWriter!"))))
-
-      (rowCopier [this in-rel] (->rel-copier this in-rel))
-
-      (iterator [_] (.iterator (.entrySet writers)))
-
-      (syncRowCount [_]
-        (.syncSchema root)
-        (.setRowCount root (.getPosition wp))
-
-        (doseq [^IVectorWriter w (vals writers)]
-          (.syncValueCount w)))
-
-      AutoCloseable
-      (close [this]
-        (run! util/try-close (vals this))))))
+  (RootWriter. root))
 
 (defn struct-writer->rel-copier ^xtdb.vector.IRowCopier [^IVectorWriter vec-wtr, ^RelationReader in-rel]
   (let [wp (.writerPosition vec-wtr)

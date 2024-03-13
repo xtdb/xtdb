@@ -316,7 +316,7 @@
                    (.structKeyWriter "my-int")
                    (.getField))))
 
-      (t/is (thrown-with-msg? RuntimeException #"Dynamic column creation unsupported for this RelationWriter!"
+      (t/is (thrown-with-msg? RuntimeException #"Dynamic column creation unsupported in RootWriter"
                               (-> rel-wtr
                                   (.colWriter "my-list2" (FieldType/notNullable #xt.arrow/type :i64))
                                   (.getField))))
