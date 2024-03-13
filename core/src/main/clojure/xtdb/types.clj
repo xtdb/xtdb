@@ -8,14 +8,15 @@
            [java.io Writer]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           xtdb.Types
            (xtdb.vector.extensions AbsentType TransitType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 ;;;; fields
 
-(defprotocol ArrowTypeLegs
-  (^clojure.lang.Keyword arrow-type->leg [arrow-type]))
+(defn arrow-type->leg [^ArrowType arrow-type]
+  (Types/toLeg arrow-type))
 
 (defprotocol FromArrowType
   (<-arrow-type [arrow-type]))
@@ -105,25 +106,6 @@
   UriType (<-arrow-type [_] :uri)
   TransitType (<-arrow-type [_] :transit)
   AbsentType (<-arrow-type [_] :absent))
-
-(extend-protocol ArrowTypeLegs
-  ArrowType (arrow-type->leg [arrow-type] (<-arrow-type arrow-type))
-
-  ArrowType$Timestamp
-  (arrow-type->leg [arrow-type]
-    (let [[ts-type time-unit tz] (<-arrow-type arrow-type)]
-      (keyword (case ts-type
-                 :timestamp-tz (format "timestamp-tz-%s-%s" (name time-unit) (-> (str/lower-case tz) (str/replace #"[/:]" "_")))
-                 :timestamp-local (format "timestamp-local-%s" (name time-unit))))))
-
-  ArrowType$Date (arrow-type->leg [arrow-type] (keyword (format "date-%s" (name (second (<-arrow-type arrow-type))))))
-  ArrowType$Time (arrow-type->leg [arrow-type] (keyword (format "time-local-%s" (name (second (<-arrow-type arrow-type))))))
-  ArrowType$Duration (arrow-type->leg [arrow-type] (keyword (format "duration-%s" (name (second (<-arrow-type arrow-type))))))
-  ArrowType$Interval (arrow-type->leg [arrow-type] (keyword (format "interval-%s" (name (second (<-arrow-type arrow-type))))))
-
-  ArrowType$Map (arrow-type->leg [arrow-type] (if (.getKeysSorted arrow-type) :map-sorted :map-unsorted))
-  ArrowType$FixedSizeList (arrow-type->leg [arrow-type] (keyword (format "fixed-size-list-%d" (second (<-arrow-type arrow-type)))))
-  ArrowType$FixedSizeBinary (arrow-type->leg [arrow-type] (keyword (format "fixed-size-binary-%d" (second (<-arrow-type arrow-type))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/type reader macro
 (defn ->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [col-type]
