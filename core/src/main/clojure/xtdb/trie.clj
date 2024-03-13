@@ -193,7 +193,7 @@
 
         AutoCloseable
         (close [_]
-          (util/close [meta-vsr data-file-wtr meta-vsr]))))))
+          (util/close [data-vsr data-file-wtr meta-vsr]))))))
 
 (defn write-live-trie-node [^ITrieWriter trie-wtr, ^HashTrie$Node node, ^RelationReader data-rel]
   (let [copier (.rowCopier (.getDataWriter trie-wtr) data-rel)]
