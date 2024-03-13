@@ -911,16 +911,33 @@
            (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as duration FROM (VALUES 1) AS x"))))
 
 (t/deftest test-cast-duration-to-interval
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :duration #time/duration "PT26H13M56S"}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :duration #time/duration "PT26H13M56.111111S"}]])
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56S"]}]
-           (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL) as itvl FROM docs")))
+  (t/testing "without interval qualifier"
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT26H13M56.111111S"]}]
+             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL) as itvl FROM docs")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P5D" "PT2H"]}]
-           (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2021-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT122H"]}]
+             (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2021-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x")))
+    
+    (t/is (= [{:itvl #xt/interval-mdn  ["P0D" "PT8882H"]}]
+             (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2020-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x"))))
   
-  (t/is (= [{:itvl #xt/interval-mdn ["P370D" "PT2H"]}]
-           (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2020-10-21T12:00:00') AS INTERVAL) as itvl FROM (VALUES 1) AS x"))))
+  (t/testing "with interval qualifier"
+    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY) as itvl FROM docs")))
+
+    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H"]}]
+             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO HOUR) as itvl FROM docs")))
+
+    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M"]}]
+             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO MINUTE) as itvl FROM docs")))
+
+    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56.111111S"]}]
+             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO SECOND) as itvl FROM docs")))
+
+    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56.111S"]}]
+             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO SECOND(3)) as itvl FROM docs")))))
 
 (t/deftest test-cast-int-to-interval
   (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT0S"]}]

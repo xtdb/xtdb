@@ -87,6 +87,51 @@
               (throw (RuntimeException. "cannot subtract infinite timestamps"))
               ~inner)))))))
 
+(defn- ensure-interval-precision-valid [^long precision]
+  (cond
+    (< precision 1)
+    (throw (err/illegal-arg :xtdb.expression/invalid-interval-precision
+                            {::err/message "The minimum leading field precision is 1."
+                             :precision precision}))
+
+    (< 8 precision)
+    (throw (err/illegal-arg :xtdb.expression/invalid-interval-precision
+                            {::err/message "The maximum leading field precision is 8."
+                             :precision precision}))))
+
+(defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
+  (cond
+    (< fractional-precision 0)
+    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
+                            {::err/message "The minimum fractional seconds precision is 0."
+                             :fractional-precision fractional-precision}))
+
+    (< 9 fractional-precision)
+    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
+                            {::err/message "The maximum fractional seconds precision is 9."
+                             :fractional-precision fractional-precision}))))
+
+(defn- ensure-interval-units-valid [unit1 unit2]
+  ;; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
+  ;; these rules are not strictly necessary but are specified by SQL2011
+  (letfn [(->iae [msg]
+                 (err/illegal-arg :xtdb.expression/invalid-interval-units
+                                  {::err/message msg
+                                   :start-unit unit1
+                                   :end-unit unit2}))]
+    (when (and (= unit1 "YEAR") (not= unit2 "MONTH"))
+      (throw (->iae "If YEAR specified as the interval start field, MONTH must be the end field.")))
+
+    (when (= unit1 "MONTH")
+      (throw (->iae "MONTH is not permitted as the interval start field.")))
+
+    ;; less significance rule.
+    (when-not (or (= unit1 "YEAR")
+                  (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
+      (throw (->iae "Interval end field must have less significance than the start field.")))))
+
 (defn- time-unit->eot-v [time-unit]
   (case time-unit
     (:second :milli) Integer/MAX_VALUE
@@ -345,7 +390,7 @@
                             (local-time->nano))
                       (with-conversion :nano tgt-tsunit)))})
 
-(defn alter-duration-precision [^long precision ^Duration duration]
+(defn alter-duration-precision ^Duration [^long precision ^Duration duration]
   (if (= precision 0)
     (.withNanos duration 0)
     (.withNanos duration (let [nanos (.getNano duration)
@@ -449,16 +494,78 @@
 
 
 (defn duration->mdn-interval [^Duration d]
-  (let [days-in-duration (.toDays d)]
-    (PeriodDuration. (Period/ofDays days-in-duration)
-                     (.minusDays d days-in-duration))))
+  (PeriodDuration. Period/ZERO d))
 
-(defmethod expr/codegen-cast [:duration :interval] [{[_ d-unit] :source-type}]
+;; Used for DAY as lone start-field
+(defn ->day-mdn-interval [^Period p ^Duration d]
+  (PeriodDuration. (Period/ofDays (+ (.getDays p) (.toDays d))) Duration/ZERO))
+
+;; Used for DAY as start-field and HOUR as end-field
+(defn ->day-hour-mdn-interval [^Period p ^Duration d]
+  (PeriodDuration. (Period/ofDays (+ (.getDays p) (.toDays d))) (Duration/ofHours (rem (.toHours d) 24))))
+
+;; Used for DAY as start-field and MINUTE as end-field
+(defn ->day-minute-mdn-interval [^Period p ^Duration d]
+  (PeriodDuration. (Period/ofDays (+ (.getDays p) (.toDays d))) (Duration/ofMinutes (rem (.toMinutes d) 1440))))
+
+;; Used for DAY as start-field and SECOND as end-field
+(defn ->day-second-mdn-interval [^Period p ^Duration d ^long fractional-precision]
+  (let [^Duration altered-precision-duration (alter-duration-precision fractional-precision d)]
+    (PeriodDuration. (Period/ofDays (+ (.getDays p) (.toDays d)))
+                     (.minusDays altered-precision-duration (.toDays d)))))
+
+;; Used for HOUR as lone start-field or as end-field
+(defn ->hour-mdn-interval [^Period p ^Duration d]
+  (PeriodDuration. Period/ZERO (.plusDays (Duration/ofHours (.toHours d)) (.getDays p))))
+
+;; Used for MINUTE as lone start-field or as end-field
+(defn ->minute-mdn-interval [^Period p ^Duration d]
+  (PeriodDuration. Period/ZERO (.plusDays (Duration/ofMinutes (.toMinutes d)) (.getDays p))))
+
+;; Used for SECOND as lone start-field or as end-field
+(defn ->second-mdn-interval [^Period p ^Duration d ^long fractional-precision]
+  (let [^Duration altered-precision-duration (alter-duration-precision fractional-precision d)]
+    (PeriodDuration. Period/ZERO (.plusDays altered-precision-duration (.getDays p)))))
+
+(defn normalize-interval-to-mdn-iq [^PeriodDuration pd {:keys [start-field end-field fractional-precision]}]
+  (let [period (.getPeriod pd)
+        duration (.getDuration pd)]
+    
+    (when (> (.toTotalMonths period) 0)
+      (throw (throw (err/runtime-err :xtdb.expression/cannot-normalize-mdn-interval-with-months
+                                     {::err/message "Cannot normalize month-day-nano interval with non-zero month component"}))))
+
+    (case [start-field end-field]
+      ["DAY" nil] (->day-mdn-interval period duration)
+      ["DAY" "HOUR"] (->day-hour-mdn-interval period duration)
+      ["DAY" "MINUTE"] (->day-minute-mdn-interval period duration)
+      ["DAY" "SECOND"] (->day-second-mdn-interval period duration fractional-precision)
+      ["HOUR" nil] (->hour-mdn-interval period duration)
+      ["HOUR" "MINUTE"] (->minute-mdn-interval period duration)
+      ["HOUR" "SECOND"] (->second-mdn-interval period duration fractional-precision)
+      ["MINUTE" nil] (->minute-mdn-interval period duration)
+      ["MINUTE" "SECOND"] (->second-mdn-interval period duration fractional-precision)
+      ["SECOND" nil] (->second-mdn-interval period duration fractional-precision))))
+
+(defn gen-normalize-call [interval-qualifier]
+  (if interval-qualifier (list `(normalize-interval-to-mdn-iq ~interval-qualifier)) '()))
+
+(defmethod expr/codegen-cast [:duration :interval]
+  [{[_ d-unit] :source-type {:keys [start-field end-field leading-precision fractional-precision] :as interval-qualifier} :cast-opts}]
+  
+  (when interval-qualifier
+    (when (or (= "YEAR" start-field) (= "MONTH" start-field))
+      (throw (UnsupportedOperationException. "Cannot cast a duration to a year-month interval")))
+    (ensure-interval-precision-valid leading-precision)
+    (when end-field (ensure-interval-units-valid start-field end-field))
+    (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision)))
+
   {:return-type [:interval :month-day-nano]
    :->call-code (fn [[d]]
                   `(-> ~(with-conversion d d-unit :nano)
                        (Duration/ofNanos)
-                       (duration->mdn-interval)))})
+                       (duration->mdn-interval)
+                       ~@(gen-normalize-call interval-qualifier)))})
 
 (defmethod expr/codegen-cast [:int :interval] [{{:keys [start-field end-field]} :cast-opts}]
   (when end-field (throw (err/illegal-arg :xtdb.expression/attempting-to-cast-int-to-multi-field-interval
@@ -929,30 +1036,6 @@
                   :day-time #(do `(interval-abs-dt ~@%))
                   (throw (UnsupportedOperationException. "Can only ABS YEAR_MONTH / DAY_TIME intervals")))})
 
-(defn- ensure-interval-precision-valid [^long precision]
-  (cond
-    (< precision 1)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-precision
-                            {::err/message "The minimum leading field precision is 1."
-                             :precision precision}))
-
-    (< 8 precision)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-precision
-                            {::err/message "The maximum leading field precision is 8."
-                             :precision precision}))))
-
-(defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
-  (cond
-    (< fractional-precision 0)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
-                            {::err/message "The minimum fractional seconds precision is 0."
-                             :fractional-precision fractional-precision}))
-
-    (< 9 fractional-precision)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
-                            {::err/message "The maximum fractional seconds precision is 9."
-                             :fractional-precision fractional-precision}))))
-
 (defmethod expr/codegen-call [:single_field_interval :int :utf8 :int :int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]
     (ensure-interval-precision-valid precision)
@@ -1115,35 +1198,17 @@
 (defn parse-multi-field-interval
   "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
   ^PeriodDuration [s unit1 unit2]
-  ;; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
-  ;; these rules are not strictly necessary but are specified by SQL2011
-
-  (letfn [(->iae [msg]
-            (err/illegal-arg :xtdb.expression/invalid-interval-units
-                             {::err/message msg
-                              :start-unit unit1
-                              :end-unit unit2}))]
-    (when (and (= unit1 "YEAR") (not= unit2 "MONTH"))
-      (throw (->iae "If YEAR specified as the interval start field, MONTH must be the end field.")))
-
-    (when (= unit1 "MONTH")
-      (throw (->iae "MONTH is not permitted as the interval start field.")))
-
-    ;; less significance rule.
-    (when-not (or (= unit1 "YEAR")
-                  (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
-                  (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
-                  (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
-      (throw (->iae "Interval end field must have less significance than the start field.")))
-
-    (or (if (= "YEAR" unit1)
-          (parse-year-month-literal s)
-          (parse-day-to-second-literal s unit1 unit2))
-        (throw (->iae "Cannot parse interval, incorrect format.")))))
+  (or (if (= "YEAR" unit1)
+        (parse-year-month-literal s)
+        (parse-day-to-second-literal s unit1 unit2))
+      (throw (err/illegal-arg :xtdb.expression/invalid-interval-string
+                              {::err/message "Cannot parse interval, incorrect format."
+                               :start-unit unit1
+                               :end-unit unit2}))))
 
 (defmethod expr/codegen-call [:multi_field_interval :utf8 :utf8 :int :utf8 :int] [{:keys [args]}]
   (let [[_ unit1 precision unit2 fractional-precision] (map :literal args)]
-
+    (ensure-interval-units-valid unit1 unit2)
     (ensure-interval-precision-valid precision)
     (when (= "SECOND" unit2)
       (ensure-interval-fractional-precision-valid fractional-precision))

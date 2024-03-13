@@ -310,16 +310,58 @@
 
 
 (t/deftest cast-duration-to-interval
-  (letfn [(test-cast
-            [src-value tgt-type]
-            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
-                              [:table [{}]]]
-                             {:basis {}})
-                first :res))]
+  (t/testing "without interval qualifier"
+    (letfn [(test-cast
+              [src-value tgt-type]
+              (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+                                [:table [{}]]]
+                               {:basis {}})
+                  first :res))]
 
-    (t/is (= #xt/interval-mdn ["P0D" "PT3H1.11S"] (test-cast #time/duration "PT3H1.11S" :interval)))
-    (t/is (= #xt/interval-mdn ["P1D" "PT1H1.11S"] (test-cast #time/duration "PT25H1.11S" :interval)))
-    (t/is (= #xt/interval-mdn ["P35D" "PT2H1.11S"] (test-cast #time/duration "P35DT2H1.11S" :interval)))))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1.11S"] (test-cast #time/duration "PT3H1.11S" :interval)))
+      (t/is (= #xt/interval-mdn ["P0D" "PT25H1.11S"] (test-cast #time/duration "PT25H1.11S" :interval)))
+      (t/is (= #xt/interval-mdn ["P0D" "PT842H1.11S"] (test-cast #time/duration "P35DT2H1.11S" :interval)))
+      (t/is (= #xt/interval-mdn ["P0D" "PT1M1.111111S"] (test-cast #time/duration "PT1M1.111111S" :interval)))))
+
+  (t/testing "with interval qualifier"
+    (letfn [(test-cast
+              [src-value tgt-type iq]
+              (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~iq)}]
+                                [:table [{}]]]
+                               {:basis {}})
+                  first :res))]
+
+      (t/is (= #xt/interval-mdn ["P0D" "PT36H"] (test-cast #time/duration "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT0S"] (test-cast #time/duration "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H"] (test-cast #time/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M"] (test-cast #time/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10S"] (test-cast #time/duration "PT36H10M10.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10.1111S"] (test-cast #time/duration "PT36H10M10.111111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H"] (test-cast #time/duration "PT3H1M1S" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #time/duration "PT3H1M1S" :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))))
+
+  (t/testing "with invalid interval qualifier"
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"Cannot cast a duration to a year-month interval"
+           (tu/query-ra [:project [{'res `(~'cast #time/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
+                         [:table [{}]]]
+                        {:basis {}})))
+
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"The maximum fractional seconds precision is 9."
+           (tu/query-ra [:project [{'res `(~'cast #time/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]
+                         [:table [{}]]]
+                        {:basis {}})))))
 
 (t/deftest cast-int-to-interval
   (letfn [(test-cast
