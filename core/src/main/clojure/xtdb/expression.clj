@@ -16,7 +16,6 @@
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
-           org.apache.arrow.vector.types.pojo.FieldType
            (org.apache.commons.codec.binary Hex)
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
@@ -1492,9 +1491,7 @@
                              (into {} (map (juxt types/field->col-type (fn [_] (gensym 'out-writer))))))]
         {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
                                 (mapcat (fn [[value-type writer-sym]]
-                                          (let [field (types/col-type->field value-type)]
-                                            [writer-sym `(.legWriter ~out-writer-sym ~(keyword (.getName field))
-                                                                     (FieldType. ~(.isNullable field) ~(.getType field) nil))])))
+                                          [writer-sym `(.legWriter ~out-writer-sym ~(types/->arrow-type value-type))]))
                                 writer-syms)
 
          :write-value-out! (fn [value-type code]

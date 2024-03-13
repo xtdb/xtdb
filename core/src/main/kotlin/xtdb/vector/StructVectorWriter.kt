@@ -104,8 +104,6 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         startStruct(); f(); endStruct()
     }
 
-    override fun legWriter(leg: ArrowType) = monoLegWriter(leg)
-
     override fun rowCopier(src: ValueVector) = when (src) {
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)

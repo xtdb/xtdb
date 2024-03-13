@@ -108,10 +108,6 @@ class DenseUnionVectorWriter(
                 innerCopier.copyRow(srcIdx)
             }
         }
-
-        override fun legWriter(leg: ArrowType) = inner.legWriter(leg)
-        override fun legWriter(leg: Keyword) = inner.legWriter(leg)
-        override fun legWriter(leg: Keyword, fieldType: FieldType) = inner.legWriter(leg, fieldType)
     }
 
     private fun upsertChildField(childField: Field) {

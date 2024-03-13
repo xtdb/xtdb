@@ -25,7 +25,6 @@ import java.time.*
 import java.time.ZoneOffset.UTC
 import java.util.*
 import kotlin.text.Charsets.UTF_8
-import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
 
 fun interface FieldChangeListener {
     fun notify(f: Field)
@@ -43,11 +42,6 @@ internal fun duvToVecCopier(dest: IVectorWriter, src: DenseUnionVector): IRowCop
     return IRowCopier { srcIdx -> copiers[src.getTypeId(srcIdx).toInt()].copyRow(src.getOffset(srcIdx)) }
 }
 
-internal fun IVectorWriter.monoLegWriter(leg: ArrowType): IVectorWriter {
-    if ((leg == NULL_TYPE && field.isNullable) || leg == field.type) return this
-    throw IllegalArgumentException("arrow-type mismatch: got <${field.type}>, requested <$leg>")
-}
-
 abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
 
     protected val wp = IVectorPosition.build(vector.valueCount)
@@ -55,8 +49,6 @@ abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
     override val field: Field = vector.field
 
     override fun writerPosition() = wp
-
-    override fun legWriter(leg: ArrowType) = monoLegWriter(leg)
 
     override fun rowCopier(src: ValueVector): IRowCopier {
         return when {

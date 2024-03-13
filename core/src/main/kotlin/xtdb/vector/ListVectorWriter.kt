@@ -74,8 +74,6 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
 
     override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
 
-    override fun legWriter(leg: ArrowType) = monoLegWriter(leg)
-
     override fun rowCopier(src: ValueVector) = when (src) {
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)
