@@ -1,8 +1,8 @@
 ---
-title: The XTDB Data Model
+title: How XTDB Works
 ---
 
-XTDB is a 'bitemporal' and 'dynamic' relational database with columnar foundations. This makes is uniquely capable at handling evolving, semi-structured data - the kind of data that developers might ordinarily handle using manual copies of "documents" or "diffs" and JSONB columns.
+XTDB is a database built on top of columnar storage (using link:https://arrow.apache.org/[Apache Arrow]) and is designed to handle evolving, semi-structured data via SQL natively, avoiding the need for workarounds like JSONB columns and audit tables.
 
 In XTDB all data, including nested data, is able to be stored in tables without classic constraints or restrictions in the range of types or shapes, and without any upfront schema definitions. This is more akin to a document database than a classic SQL database.
 
@@ -37,7 +37,7 @@ In addition to `xt$id`, which is the only mandatory column, 2 pairs of system-ma
 As implied by the nature of these columns, no rows written into XTDB are ever mutated directly, and only new rows can be inserted. The only exceptions to this principle are:
 
 . the existence of the `ERASE` operation, which can permanently delete entire rows for explicit data retention policies, and,
-. the need to 'close' the `xt$system-to` period for the now-superseded row
+. the need to 'close' the `xt$system_to` period for the now-superseded row
 
 == How temporal columns are maintained
 

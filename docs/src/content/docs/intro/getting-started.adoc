@@ -1,77 +1,77 @@
 ---
-title: Getting started
+title: Quickstart
 ---
 :icon: /images/icons
 :clojure: /drivers/clojure/getting-started.html
 :java: /drivers/java/getting-started.html
 :kotlin: /drivers/kotlin/getting-started.html
 
-XTDB can run in-process (in a JVM), or through traditional client-server connections.
+== Try Online
 
-== Client/Server
+If you want to avoid starting your own server locally, you can instantly play with inserting data and querying XTDB right now using the link:https://fiddle.xtdb.com/[XT fiddle] website.
 
-You can start an XTDB server using the 'standalone' Docker image:
+== Docker Install
 
-[source,shell]
+XTDB is built for traditional client-server interactions over HTTP. You can start an XTDB server using the following Docker image:
+
+[source,bash]
 ----
-docker pull ghcr.io/xtdb/xtdb-standalone-ea
-
-docker run -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
+docker run --pull=always -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
 ----
 
 This starts a server on http://localhost:3000.
-By default, your data will be saved in a local directory in the Docker image, but you can also attach a host volume in the usual Docker way, to preserve your data on your host machine:
-
-[source,sh]
-----
-docker run \
-  -tip 3000:3000 \
-  -v /path/to/host/dir:/var/lib/xtdb \
-  ghcr.io/xtdb/xtdb-standalone-ea
-----
-
-=== Connecting through HTTP
+By default your data will only be stored transiently using a local directory within the Docker image, but you can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`.
 
 You can then connect to your XTDB server using cURL, or similar tools.
-For example, to check its status:
+For example, to check the status of the server:
 
-[source,shell]
+[source,bash]
 ----
 curl http://localhost:3000/status
 ----
 
-To run your first query:
+== Run the `xtsql` interactive console
 
-[source,shell]
+To work with XTDB interactively right away, you can run raw SQL commands using the `xtsql.py` terminal console:
+
+[source,bash]
 ----
-sql="SELECT t1.doc.foo[1]
-     FROM (VALUES ({'foo':['Hello', 'world!']})) AS t1(doc)"; \
-curl -X POST localhost:3000/query \
-     -H "Content-Type: application/json" -H "Accept: application/jsonl" \
-     -d "{\"query\": {\"sql\": \"${sql}\"}}"
+# any recent version of Python should work, no Python knowledge required
+curl -s https://docs.xtdb.com/xtsql.py && \
+  python xtsql.py --url=http://localhost:3000
 ----
 
-From here, check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see what else is available.
+=== Confirm connectivity
 
-=== Connecting from a client library
+In addition to running SQL statements, `xtsql` supports a number of built-in commands, e.g. type 'status' and hit Enter to confirm XTDB is running and that you are connected:
 
-If you're running on the JVM, you can use the JVM client library to connect to this node.
+[source,text]
+----
+-> status
+| latestCompletedTx | latestSubmittedTx |
+|-------------------|-------------------|
+| None              | None              |
+----
+
+If that returns a table like the above, then everything should be up and running.
+
+Next up, you probably want to start by inserting data, running your first queries, and learning about XTDB's novel capabilities:
+
+link:/quickstart/insert-and-query[Let's INSERT some data]!
+
+== Option B: Exploring via HTTP
+
+Alternatively, to learn how to use the HTTP API and discover a few of XTDB's novel capabilities using curl or another REST client of choice check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see all the options available.
+
+== Option C: Connecting via a client driver
+
+Official client drivers are provided for a range of languages to make working with XTDB more ergonomic than working directly with HTTP and JSON.
 
 [.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_connecting_through_http]
 image:{icon}/java.svg[Clojure,link={java}#_connecting_through_http]
 image:{icon}/kotlin.svg[Clojure,link={kotlin}#_connecting_through_http]
+image:{icon}/clojure.svg[Clojure,link={clojure}#_connecting_through_http]
 
 For more details, check out the relevant instructions for your language:
 
-== In process (JVM)
-
-If you're running a JVM (17+), you can also use XTDB directly, in-process, using the same API interface as the remote client.
-In-process XTDB is particularly useful for testing and interactive development - you can start an in-memory node quickly and with little hassle, which makes it a great tool for unit tests and REPL experimentation.
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_in_process]
-image:{icon}/java.svg[Clojure,link={java}#_in_process]
-image:{icon}/kotlin.svg[Clojure,link={kotlin}#_in_process]
-
-For more details, check out the relevant instructions for your language:
+More client drivers are link:/intro/roadmap.html[coming soon]!

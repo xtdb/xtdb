@@ -29,13 +29,17 @@ export default defineConfig({
 
         { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
 
-        { label: 'Overview', link: '/index.html' },
+        { label: 'Introduction', link: '/index.html' },
 
         {
 	  label: 'Getting Started',
 	  collapsed: false,
 	  items: [
-            { label: 'Basic Setup', link: '/intro/getting-started' },
+            { label: 'Quickstart', link: '/intro/getting-started' },
+            { label: 'SQL basics', link: '/quickstart/insert-and-query' },
+            { label: 'Query the past', link: '/quickstart/query-the-past' },
+	    { label: 'Set Valid-Time', link: '/quickstart/set-valid-time' },
+
 	  ]
 	},
         {
