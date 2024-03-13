@@ -4,7 +4,7 @@ title: XTDB Client Language Drivers
 
 XTDB is accessible through our HTTP API and Java, Kotlin and Clojure drivers - drivers for JavaScript, Python and many more will be available in due course.
 
-* link:/drivers/http/openapi/index.html[OpenAPI HTTP specification^]
-* link:/drivers/clojure/getting-started[Clojure]
+* link:/drivers/http/getting-started.html[HTTP + JSON]
 * link:/drivers/java/getting-started[Java]
 * link:/drivers/kotlin/getting-started[Kotlin]
+* link:/drivers/clojure/getting-started[Clojure]
