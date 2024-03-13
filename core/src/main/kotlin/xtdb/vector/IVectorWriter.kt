@@ -33,6 +33,19 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
 
     fun rowCopier(src: ValueVector): IRowCopier
 
+    fun rowCopier(src: RelationReader): IRowCopier {
+        val wp = writerPosition()
+        val copiers = src.map { it.rowCopier(structKeyWriter(it.name)) }
+
+        return IRowCopier { srcIdx ->
+            val pos = wp.position
+            startStruct()
+            copiers.forEach { it.copyRow(srcIdx) }
+            endStruct()
+            pos
+        }
+    }
+
     private fun unsupported(method: String): Nothing =
         throw UnsupportedOperationException("$method not implemented for ${vector.javaClass.simpleName}")
 

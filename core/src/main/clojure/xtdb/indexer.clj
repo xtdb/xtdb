@@ -79,9 +79,9 @@
                                     (let [table-name (str (symbol table))
                                           table-docs-rdr (.legReader docs-rdr table)
                                           doc-rdr (.listElementReader table-docs-rdr)
-                                          table-rel-rdr (vr/rel-reader (for [sk (.structKeys doc-rdr)]
-                                                                         (.structKeyReader doc-rdr sk))
-                                                                       (.valueCount doc-rdr))
+                                          ^RelationReader table-rel-rdr (vr/rel-reader (for [sk (.structKeys doc-rdr)]
+                                                                                         (.structKeyReader doc-rdr sk))
+                                                                                       (.valueCount doc-rdr))
                                           live-table (.liveTable live-idx-tx table-name)]
                                       (MapEntry/create table
                                                        {:id-rdr (.structKeyReader doc-rdr "xt$id")
@@ -91,7 +91,7 @@
                                                         :docs-rdr table-docs-rdr
 
                                                         :doc-copier (-> (.docWriter live-table)
-                                                                        (vw/struct-writer->rel-copier table-rel-rdr))}))))))]
+                                                                        (.rowCopier table-rel-rdr))}))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -316,11 +316,11 @@
     (reify RelationIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
-              content-rel (vr/rel-reader (->> in-rel
-                                              (remove (comp types/temporal-column? #(.getName ^IVectorReader %)))
-                                              (map (fn [^IVectorReader vec]
-                                                     (.withName vec (util/str->normal-form-str (.getName vec))))))
-                                         (.rowCount in-rel))
+              ^RelationReader content-rel (vr/rel-reader (->> in-rel
+                                                              (remove (comp types/temporal-column? #(.getName ^IVectorReader %)))
+                                                              (map (fn [^IVectorReader vec]
+                                                                     (.withName vec (util/str->normal-form-str (.getName vec))))))
+                                                         (.rowCount in-rel))
               table (util/str->normal-form-str table)
               id-col (.readerForName in-rel "xt$id")
               valid-from-rdr (.readerForName in-rel "xt$valid_from")
@@ -328,7 +328,7 @@
 
               live-idx-table (.liveTable live-idx-tx table)
               live-idx-table-copier (-> (.docWriter live-idx-table)
-                                        (vw/struct-writer->rel-copier content-rel))]
+                                        (.rowCopier content-rel))]
 
           (when-not id-col
             (throw (err/runtime-err :xtdb.indexer/missing-xt-id-column
@@ -568,7 +568,7 @@
                (let [e-wtr (.structKeyWriter doc-writer "xt$error" (FieldType/nullable #xt.arrow/type :transit))]
                  (if (or (nil? t) (= t abort-exn))
                    (.writeNull e-wtr)
-                   (vw/write-value! t e-wtr)))
+                   (.writeObject e-wtr t)))
                (.endStruct doc-writer)))))
 
 (deftype Indexer [^BufferAllocator allocator

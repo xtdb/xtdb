@@ -196,7 +196,7 @@
           (util/close [meta-vsr data-file-wtr meta-vsr]))))))
 
 (defn write-live-trie-node [^ITrieWriter trie-wtr, ^HashTrie$Node node, ^RelationReader data-rel]
-  (let [copier (vw/->rel-copier (.getDataWriter trie-wtr) data-rel)]
+  (let [copier (.rowCopier (.getDataWriter trie-wtr) data-rel)]
     (letfn [(write-node! [^HashTrie$Node node]
               (if-let [children (.getIidChildren node)]
                 (let [child-count (alength children)

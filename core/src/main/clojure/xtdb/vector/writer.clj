@@ -163,37 +163,11 @@
 (defn ->vec-writer ^xtdb.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name, ^FieldType field-type]
   (->writer (.createNewSingleVector field-type col-name allocator nil)))
 
-(defn ->rel-copier ^xtdb.vector.IRowCopier [^IRelationWriter rel-wtr, ^RelationReader in-rel]
-  (let [wp (.writerPosition rel-wtr)
-        copiers (vec (for [^IVectorReader in-vec in-rel]
-                       (.rowCopier in-vec (.colWriter rel-wtr (.getName in-vec)))))]
-    (reify IRowCopier
-      (copyRow [_ src-idx]
-        (.startRow rel-wtr)
-        (let [pos (.getPosition wp)]
-          (doseq [^IRowCopier copier copiers]
-            (.copyRow copier src-idx))
-          (.endRow rel-wtr)
-          pos)))))
-
 (defn ->rel-writer ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
   (RelationWriter. allocator))
 
 (defn root->writer ^xtdb.vector.IRelationWriter [^VectorSchemaRoot root]
   (RootWriter. root))
-
-(defn struct-writer->rel-copier ^xtdb.vector.IRowCopier [^IVectorWriter vec-wtr, ^RelationReader in-rel]
-  (let [wp (.writerPosition vec-wtr)
-        copiers (for [^IVectorReader src-vec in-rel]
-                  (.rowCopier src-vec (.structKeyWriter vec-wtr (.getName src-vec))))]
-    (reify IRowCopier
-      (copyRow [_ src-idx]
-        (let [pos (.getPosition wp)]
-          (.startStruct vec-wtr)
-          (doseq [^IRowCopier copier copiers]
-            (.copyRow copier src-idx))
-          (.endStruct vec-wtr)
-          pos)))))
 
 (defmulti open-vec (fn [_allocator col-name-or-field _vs]
                      (if (instance? Field col-name-or-field)
