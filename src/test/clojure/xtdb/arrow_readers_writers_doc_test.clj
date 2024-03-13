@@ -1,8 +1,9 @@
-(ns ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false} arrow-readers-writers-doc
+(ns xtdb.arrow-readers-writers-doc-test
   (:require [clojure.test :as t]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.test-util :as tu])
   (:import (org.apache.arrow.memory RootAllocator)
            (org.apache.arrow.vector.complex DenseUnionVector)
            (org.apache.arrow.vector.types.pojo Field FieldType)))
@@ -101,19 +102,19 @@
   ;; When asking for a writer for field `foo` you are going to get a writer with the specified type back.
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
-    (-> (vw/->writer struct-vec)
-        (.structKeyWriter "foo")
-        (.getField)))
-  ;; => <Field "foo" #xt.arrow/type :i64 not-null>
+    (t/is (= (types/->field "foo" #xt.arrow/type :i64 false)
+             (-> (vw/->writer struct-vec)
+                 (.structKeyWriter "foo")
+                 (.getField)))))
 
   ;; You can also ask for a writer specifying a field type. In this case it works as the writer matches the
   ;; previously specified field type.
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
-    (-> (vw/->writer struct-vec)
-        (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :i64))
-        (.getField)))
-  ;; => <Field "foo" #xt.arrow/type :i64 not-null>
+    (t/is (= (types/->field "foo" #xt.arrow/type :i64 false)
+             (-> (vw/->writer struct-vec)
+                 (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :i64))
+                 (.getField)))))
 
   ;; If you are asking for a different field type then the one specified in the beginning you are going to get
   ;; an type mismatch error.
@@ -129,48 +130,43 @@
   ;; types that are going to be written to this field.
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
-    (-> (vw/->writer struct-vec)
-        (.structKeyWriter "bar")
-        (.getField)))
-  ;; => <Field "bar" #xt.arrow/type :union not-null>
+    (t/is (= (types/->field "bar" #xt.arrow/type :union false)
+             (-> (vw/->writer struct-vec)
+                 (.structKeyWriter "bar")
+                 (.getField)))))
 
   ;; But you can also ask for a type explicitly and then it will be honoured.
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
-    (-> (vw/->writer struct-vec)
-        (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
-        (.getField)))
-  ;; => <Field "bar" #xt.arrow/type :utf8 not-null>
+    (t/is (= (types/->field "bar" #xt.arrow/type :utf8 false)
+             (-> (vw/->writer struct-vec)
+                 (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
+                 (.getField)))))
 
   ;; Beware that you can not first ask for one type and then later for different one, hoping that the
   ;; underlying vector gets promoted to a union vector.
-  (t/is (thrown? Exception
-                 (with-open [allocator (RootAllocator.)
-                             struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
-                   (-> (vw/->writer struct-vec)
-                       (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
-                       (.getField))
+  (with-open [allocator (RootAllocator.)
+              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
+    (-> (vw/->writer struct-vec)
+        (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
+        (.getField))
 
+    (t/is (thrown? Throwable
                    (-> (vw/->writer struct-vec)
-                       (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64))
-                       (.getField)))))
+                       (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64))))))
 
   ;; Lets also look at how one would write to a duv.
 
   (with-open [allocator (RootAllocator.)
               duv (DenseUnionVector/empty "my-duv" allocator)]
     (let [duv-writer (vw/->writer duv)]
-      (->> (.legWriter duv-writer :foo (FieldType/notNullable #xt.arrow/type :i64))
-           (vw/write-value! 42))
-      (->> (.legWriter duv-writer :bar (FieldType/notNullable #xt.arrow/type :utf8))
-           (vw/write-value! "forty-two"))
+      (.writeObject duv-writer 42)
+      (.writeObject duv-writer "forty-two")
+
       ;; here we first transform from writer to reader then read the objects out
       ;; of the reader
-      (let [rdr (vw/vec-wtr->rdr duv-writer)]
-        (->> (for [i (range (.valueCount rdr))]
-               (.getObject rdr i))
-             (into [])))))
-  ;; => [42 "forty-two"]
+      (t/is (= [42 "forty-two"]
+               (tu/vec->vals (vw/vec-wtr->rdr duv-writer))))))
 
   ;; Writing to a relation is done similarly to `structKeyWriter` but with the method being called `colWriter`.
 
@@ -180,23 +176,28 @@
     (-> rel-wtr
         (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
         (.writeLong 42))
+
     (-> rel-wtr
         (.colWriter "my-union")
-        (.legWriter :i64 (FieldType/notNullable #xt.arrow/type :i64))
-        (.writeLong 42))
+        (.writeObject 42))
+
     (.endRow rel-wtr)
+
     (.startRow rel-wtr)
+
     (-> rel-wtr
         (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
         (.writeLong 43))
+
     (-> rel-wtr
         (.colWriter "my-union")
-        (.legWriter :utf8 (FieldType/notNullable #xt.arrow/type :utf8))
         (.writeObject "forty-three"))
+
     (.endRow rel-wtr)
-    (-> (vw/rel-wtr->rdr rel-wtr)
-        (vr/rel->rows)))
-  ;; => [{:my-i64 42, :my-union 42} {:my-i64 43, :my-union "forty-three"}]
+
+    (t/is (= [{:my-i64 42, :my-union 42} {:my-i64 43, :my-union "forty-three"}]
+             (-> (vw/rel-wtr->rdr rel-wtr)
+                 (vr/rel->rows)))))
 
   ;; Beware that in order for columns to not be populated the types need to be :unions or nullables as otherwise
   ;; there is no way to signal the absence of that value.
@@ -204,20 +205,16 @@
   (with-open [allocator (RootAllocator.)
               rel-wtr (vw/->rel-writer allocator)]
     (.startRow rel-wtr)
-    (-> rel-wtr
-        (.colWriter "my-first-column")
-        (.legWriter :i64 (FieldType/notNullable #xt.arrow/type :i64))
-        (.writeLong 42))
+    (.writeObject (.colWriter rel-wtr "my-first-column") 42)
     (.endRow rel-wtr)
+
     (.startRow rel-wtr)
-    (-> rel-wtr
-        (.colWriter "my-second-column")
-        (.legWriter :utf8 (FieldType/notNullable #xt.arrow/type :utf8))
-        (.writeObject "forty-three"))
+    (.writeObject (.colWriter rel-wtr "my-second-column") "forty-three")
     (.endRow rel-wtr)
-    (-> (vw/rel-wtr->rdr rel-wtr)
-        (vr/rel->rows)))
-  ;; => [{:my-first-column 42} {:my-second-column "forty-three"}]
+    (t/is (= [{:my-first-column 42} {:my-second-column "forty-three"}]
+             (-> (vw/rel-wtr->rdr rel-wtr)
+                 (vr/rel->rows)))))
+  ;; =>
 
   ;; Let's now look at the readers and row-copiers. Readers are quite similar in nature (walking nested structures)
   ;; to writers except that one reads from them. A simple example:
@@ -226,11 +223,11 @@
               my-int-vec (.createVector (types/col-type->field "my-int" :i64) allocator)]
     ;; writing into the vec
     (let [my-int-wrt (vw/->writer my-int-vec)]
-      (vw/write-value! 42 my-int-wrt)
+      (.writeLong my-int-wrt 42)
 
       ;; reading from a reader
-      (-> (vw/vec-wtr->rdr my-int-wrt)
-          (.getLong 0))))
+      (t/is (= 42 (-> (vw/vec-wtr->rdr my-int-wrt)
+                      (.getLong 0))))))
 
   ;; Readers are mostly used to copy from a relation into new relation writer.
   ;; The following copies the first row of `rel-wtr1` into `rel-wtr2`.
@@ -261,10 +258,13 @@
       (.copyRow copier2 0))
 
     ;; checkout of the field type of that column
-    (prn (.getField (.colWriter rel-wtr3 "my-column")))
+    (t/is (= (types/->field "my-column" #xt.arrow/type :union false
+                            (types/->field "i64" #xt.arrow/type :i64 false)
+                            (types/->field "utf8" #xt.arrow/type :utf8 false))
+             (.getField (.colWriter rel-wtr3 "my-column"))))
 
-    (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3)))
-  ;; => [{:my-column 42} {:my-column "forty-two"}]
+    (t/is (= [{:my-column 42} {:my-column "forty-two"}]
+             (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3)))))
 
   ;; What is nice about the above example is that even though the types of "my-column" of rel-wtr1 and rel-wtr2
   ;; are base types the row copiers take care to create "union" types.

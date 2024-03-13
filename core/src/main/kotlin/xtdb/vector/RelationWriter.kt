@@ -20,14 +20,15 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
 
     override fun colWriter(colName: String) = writers[colName] ?: colWriter(colName, UNION_FIELD_TYPE)
 
-    override fun colWriter(colName: String, fieldType: FieldType): IVectorWriter {
-        val existing = writers[colName]
-        if (existing != null) return existing.also { it.checkFieldType(fieldType) }
+    override fun colWriter(colName: String, fieldType: FieldType) =
+        writers[colName]
+            ?.also { it.checkFieldType(fieldType) }
 
-        val newWriter = writerFor(fieldType.createNewSingleVector(colName, allocator, null))
-        writers[colName] = newWriter
-        return newWriter
-    }
+            ?: writerFor(fieldType.createNewSingleVector(colName, allocator, null))
+                .also {
+                    it.populateWithAbsents(wp.position)
+                    writers[colName] = it
+                }
 
     override fun close() {
         writers.values.forEach(IVectorWriter::close)
