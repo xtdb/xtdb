@@ -281,4 +281,8 @@ a| Returns true iff `p1` starts after `p2` ends
 
 | `(extract "field" interval)` | `EXTRACT('field', interval)`
 | Extracts the given field from the interval. Field must be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` or `SECOND`.
+
+| `(age date-time date-time)` | `AGE(date_time, date_time)` 
+| Returns an **interval** representing the difference between two date-times - subtracting the second value from the first. Works for any combination of **date times**, **date times with time zone identifiers**, or **dates**.
+
 |===
