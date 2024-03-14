@@ -16,6 +16,6 @@ title: Welcome to XTDB!
 
 XTDB is an immutable database that reduces the time and cost of building and maintaining safe systems of record.
 
-To start learning how to use XTDB with SQL, link:/intro/getting-started[click here].
+To begin learning about the novel features of XTDB with SQL, take a look at the link:/intro/getting-started[Quickstart].
 
 XTDB is free-to-use and open-source, under the https://opensource.org/license/mpl-2-0/[MPL license^]. For help and support, join link:/intro/community[the community].

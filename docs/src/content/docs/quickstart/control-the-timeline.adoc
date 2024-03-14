@@ -19,7 +19,7 @@ Note that valid-time as provided by XTDB is specifically about the validity (or 
 
 === INSERT into the past
 
-We can specify the `xt$valid_from` column during an INSERT statement to record when the organization (not necessarily this particular database!) first became aware of `carol`:
+We can specify the `xt$valid_from` column during an INSERT statement to record when the _organization_ (i.e. thinking beyond this particular database!) first became aware of `carol`:
 
 [source,sql]
 ----
@@ -29,7 +29,7 @@ INSERT INTO people (xt$id, name, favorite_color, xt$valid_from)
 
 === What did you know?
 
-We can now show that we knew `carol` existed in the company records before the database was even created:
+We can now show that we knew `carol` existed in the company records before this database was even created:
 
 [source,sql]
 ----
@@ -45,3 +45,9 @@ The 'bitemporal' combination of valid-time and system-time columns allows us to 
 SELECT people.xt$id, people.xt$valid_from, people.xt$system_from
   FROM people FOR ALL VALID_TIME FOR ALL SYSTEM_TIME;
 ----
+
+== Next steps!
+
+You have now learned the essentials of using XTDB!
+
+Looking for more? Please have a browse around the docs, try building something, and feel very welcome to say link:https://discuss.xtdb.com/[hello] 👋
