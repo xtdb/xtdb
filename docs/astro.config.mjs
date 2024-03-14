@@ -76,7 +76,7 @@ export default defineConfig({
               ]
             },
 
-{
+            {
               label: 'XTQL',
               collapsed: true,
               items: [
