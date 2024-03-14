@@ -14,6 +14,7 @@ import xtdb.toLeg
 import xtdb.util.requiringResolve
 import xtdb.vector.ValueVectorReader.nullVector
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
 
 class IndirectMultiVectorReader(
     private val readers: List<IVectorReader?>,
@@ -22,6 +23,7 @@ class IndirectMultiVectorReader(
 ) : IVectorReader {
 
     private val fields: List<Field?> = readers.map { it?.field }
+    private val legReaders = ConcurrentHashMap<Keyword, IVectorReader>()
 
     companion object {
         private val MERGE_FIELDS: IFn = requiringResolve("xtdb.types/merge-fields")
@@ -167,31 +169,33 @@ class IndirectMultiVectorReader(
     }
 
     override fun legReader(legKey: Keyword): IVectorReader {
-        val validReaders = readers.zip(fields).map { (reader, field) ->
-            if (reader == null) null
-            else when (val type = field!!.fieldType.type) {
-                is ArrowType.Union -> reader.legReader(legKey)
-                else -> {
-                    if (field.fieldType.type.toLeg() == legKey) reader
-                    else null
+        return legReaders.computeIfAbsent(legKey) {
+            val validReaders = readers.zip(fields).map { (reader, field) ->
+                if (reader == null) null
+                else when (val type = field!!.fieldType.type) {
+                    is ArrowType.Union -> reader.legReader(legKey)
+                    else -> {
+                        if (field.fieldType.type.toLeg() == legKey) reader
+                        else null
+                    }
                 }
             }
+
+            IndirectMultiVectorReader(
+                validReaders,
+                object : IVectorIndirection {
+                    override fun valueCount(): Int {
+                        return readerIndirection.valueCount()
+                    }
+
+                    override fun getIndex(idx: Int): Int {
+                        val readerIdx = readerIndirection[idx]
+                        if (validReaders[readerIdx] != null) return readerIdx;
+                        return -1
+                    }
+                }, vectorIndirections
+            )
         }
-
-        return IndirectMultiVectorReader(
-            validReaders,
-            object : IVectorIndirection {
-                override fun valueCount(): Int {
-                    return readerIndirection.valueCount()
-                }
-
-                override fun getIndex(idx: Int): Int {
-                    val readerIdx = readerIndirection[idx]
-                    if (validReaders[readerIdx] != null) return readerIdx;
-                    return -1
-                }
-            }, vectorIndirections
-        )
     }
 
     override fun legs(): List<Keyword> {
@@ -237,7 +241,6 @@ class IndirectMultiVectorReader(
                 }
         }
     }
-
 
     override fun valueReader(pos: IVectorPosition): IValueReader {
         // simulating a duv in case the legs are non monomorphic
