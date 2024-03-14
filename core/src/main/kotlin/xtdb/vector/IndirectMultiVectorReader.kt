@@ -9,12 +9,10 @@ import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toLeg
 import xtdb.util.requiringResolve
 import xtdb.vector.ValueVectorReader.nullVector
-import xtdb.vector.extensions.AbsentType
 import java.nio.ByteBuffer
 
 class IndirectMultiVectorReader(
@@ -23,12 +21,11 @@ class IndirectMultiVectorReader(
     private val vectorIndirections: IVectorIndirection,
 ) : IVectorReader {
 
+    private val fields: List<Field?> = readers.map { it?.field }
+
     companion object {
         private val MERGE_FIELDS: IFn = requiringResolve("xtdb.types/merge-fields")
         private val VEC_TO_WRITER: IFn = requiringResolve("xtdb.vector.writer/->writer")
-
-        private val ABSENT_FIELD = Field("absent", FieldType(false, AbsentType, null, null), null)
-        private val NULL_FIELD = Field("null", FieldType(false, ArrowType.Null.INSTANCE, null, null), null)
     }
 
     init {
@@ -56,7 +53,7 @@ class IndirectMultiVectorReader(
     }
 
     override fun getField(): Field {
-        return MERGE_FIELDS.applyTo(RT.seq(readers.filterNotNull().map { it.field })) as Field
+        return MERGE_FIELDS.applyTo(RT.seq(fields.filterNotNull())) as Field
     }
 
     override fun hashCode(idx: Int, hasher: ArrowBufHasher): Int {
@@ -156,26 +153,26 @@ class IndirectMultiVectorReader(
 
     override fun getLeg(idx: Int): Keyword {
         val reader = safeReader(idx)
-        return when (val type = reader.field.fieldType.type) {
+        return when (val type = fields[readerIndirection[idx]]!!.fieldType.type) {
             is ArrowType.Union -> reader.getLeg(vectorIndirections[idx])
             else -> type.toLeg()
         }
     }
 
-    private fun isUnion(reader: IVectorReader): Boolean {
-        return when (reader.field.fieldType.type) {
+    private fun isUnion(field: Field): Boolean {
+        return when (field.fieldType.type) {
             is ArrowType.Union -> true
             else -> false
         }
     }
 
     override fun legReader(legKey: Keyword): IVectorReader {
-        val validReaders = readers.map {
-            if (it == null) null
-            else when (val type = it.field.fieldType.type) {
-                is ArrowType.Union -> it.legReader(legKey)
+        val validReaders = readers.zip(fields).map { (reader, field) ->
+            if (reader == null) null
+            else when (val type = field!!.fieldType.type) {
+                is ArrowType.Union -> reader.legReader(legKey)
                 else -> {
-                    if (it.field.fieldType.type.toLeg() == legKey) it
+                    if (field.fieldType.type.toLeg() == legKey) reader
                     else null
                 }
             }
@@ -198,12 +195,14 @@ class IndirectMultiVectorReader(
     }
 
     override fun legs(): List<Keyword> {
-        return readers.filterNotNull().flatMap {
-            when (val type = it.field.fieldType.type) {
-                is ArrowType.Union -> it.legs()
-//                null -> emptyList()
-                //listOf(NULL_FIELD.fieldType.type.toLeg())
-                else -> listOf(type.toLeg())
+        return fields.flatMapIndexed { index: Int, field: Field? ->
+            if (field != null) {
+                when (val type = field.fieldType.type) {
+                    is ArrowType.Union -> readers[index]!!.legs()
+                    else -> listOf(type.toLeg())
+                }
+            } else {
+                emptyList()
             }
         }.toSet().toList()
     }
@@ -242,7 +241,7 @@ class IndirectMultiVectorReader(
 
     override fun valueReader(pos: IVectorPosition): IValueReader {
         // simulating a duv in case the legs are non monomorphic
-        if (legs().size > 1 || readers.filterNotNull().any(::isUnion)) {
+        if (legs().size > 1 || fields.filterNotNull().any(::isUnion)) {
             val legReaders = legs().associateWith { l -> legReader(l).valueReader(pos) }
 
             return object : IValueReader {
