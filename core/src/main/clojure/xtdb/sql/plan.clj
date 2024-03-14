@@ -1031,6 +1031,10 @@
     ;;=>
     (list 'date_trunc dtps (expr dte))
 
+    [:age_function "AGE" [:age_source ^:z dt1] [:age_source ^:z dt2]]
+    ;;=>
+    (list 'age (expr dt1) (expr dt2))
+
     (expr-varargs z)))
 
 ;; Logical plan.

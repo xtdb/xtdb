@@ -1297,6 +1297,7 @@ interval_primary
 <interval_value_function>
     : interval_absolute_value_function
     | date_trunc_interval_function
+    | age_function
     ;
 
 interval_absolute_value_function
@@ -2583,6 +2584,15 @@ date_trunc_interval_source
 
 <date_trunc_time_zone>
     : <quote> time_zone_region <quote>
+
+(* AGE function *)
+age_function
+    : 'AGE' <left_paren> age_source <comma> age_source <right_paren>
+    ;
+
+age_source
+    : datetime_value_expression
+    ;
 
 (* ARROW_TABLE <table primary>, based on SQL:2016 JSON_TABLE *)
 
