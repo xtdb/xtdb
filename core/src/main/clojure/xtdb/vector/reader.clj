@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [xtdb.types :as types])
   (:import clojure.lang.MapEntry
-           com.carrotsearch.hppc.IntArrayList
+           (com.carrotsearch.hppc IntArrayList)
+           (java.util ArrayList)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            xtdb.api.query.IKeyFn
@@ -63,10 +64,9 @@
         (let [reader-selection (IVectorIndirection$Selection. (.toArray reader-indirection))
               vector-selection (IVectorIndirection$Selection. (.toArray vector-indirection))]
           (letfn [(->indirect-multi-vec [col-name]
-                    (IndirectMultiVectorReader.
-                     (map #(.readerForName ^RelationReader % col-name) rels)
-                     reader-selection
-                     vector-selection))]
+                    (let [readers (ArrayList.)]
+                      (run! #(.add readers (.readerForName ^RelationReader % col-name)) rels)
+                      (IndirectMultiVectorReader. readers reader-selection vector-selection)))]
             (RelationReader/from (map ->indirect-multi-vec col-names))))))))
 
 (defn concat-rels [^RelationReader rel1 ^RelationReader rel2]
