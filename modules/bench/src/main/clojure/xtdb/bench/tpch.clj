@@ -84,22 +84,24 @@
                                                                :end-ms end-ms
                                                                :buffer-pool-stats bf-stats})))}]))})
 
-(defn benchmark [{:keys [scale-factor seed] :or {scale-factor 0.01 seed 0}}]
+(defn benchmark [{:keys [scale-factor seed load-phase] :or {scale-factor 0.01 seed 0 load-phase true}}]
   (log/info {:scale-factor scale-factor})
   {:title "TPC-H (OLAP)"
    :seed seed
    :tasks
    [{:t :do
      :stage :ingest
-     :tasks [{:t :do
-              :stage :submit-docs
-              :tasks [{:t :call :f (fn [{:keys [sut]}] (tpch/submit-docs! sut scale-factor))}]}
-             {:t :do
-              :stage :sync
-              :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofHours 5)))}]}
-             {:t :do
-              :stage :finish-chunk
-              :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/finish-chunk! sut))}]}]}
+     :tasks (into (if load-phase
+                    [{:t :do
+                      :stage :submit-docs
+                      :tasks [{:t :call :f (fn [{:keys [sut]}] (tpch/submit-docs! sut scale-factor))}]}]
+                    [])
+                  [{:t :do
+                    :stage :sync
+                    :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofHours 5)))}]}
+                   {:t :do
+                    :stage :finish-chunk
+                    :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/finish-chunk! sut))}]}])}
 
     (queries-stage :cold-queries)
 

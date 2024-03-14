@@ -2,7 +2,9 @@
   "A namespace for running benchmarks at the repl."
   (:require [clojure.java.io :as io]
             [xtdb.bench.xtdb2 :as bxt]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.datasets.tpch :as tpch]
+            [xtdb.test-util :as tu])
   (:import (java.time InstantSource)))
 
 (comment
@@ -37,18 +39,24 @@
   ;; running benchmarks
   (run-bench {:type :ts-devices :opts {:size :small}})
 
-  (run-bench {:type :tpch :opts {:scale-factor 0.01}})
+  (def node-dir (.toPath (io/file "dev/tpc-h-1.0")))
 
+  (with-open [node (tu/->local-node {:node-dir node-dir})]
+    (tpch/submit-docs! node 1.0)
+    (tu/then-await-tx node))
 
-  ;; auctionmark
-  (def node-dir (.toPath (io/file "dev/dev-node")))
+  (time (run-bench {:type :tpch
+                    :opts {:scale-factor 1.0 :load-phase false}
+                    :node-dir node-dir}))
+
+  (def node-dir (.toPath (io/file "dev/auctionmark")))
   (util/delete-dir node-dir)
 
   (run-bench {:type :auctionmark
-              :opts {:duration "PT2M"
-                     :load-phase true
+              :opts {:duration "PT30S"
+                     :load-phase false
                      :scale-factor 0.1
-                     :threads 1
+                     :threads 8
                      :sync true}
               :node-dir node-dir})
 
