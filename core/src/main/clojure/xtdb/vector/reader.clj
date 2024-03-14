@@ -53,7 +53,7 @@
            (range (.rowCount rel))))))
 
 (defn rels->multi-vector-rel-factory ^xtdb.vector.IMultiVectorRelationFactory [rels, ^BufferAllocator allocator, col-names]
-  (let [rels (map #(with-absent-cols % allocator (set col-names)) rels)
+  (let [rels (mapv #(with-absent-cols % allocator (set col-names)) rels)
         reader-indirection (IntArrayList.)
         vector-indirection (IntArrayList.)]
     (reify IMultiVectorRelationFactory
@@ -65,9 +65,10 @@
               vector-selection (IVectorIndirection$Selection. (.toArray vector-indirection))]
           (letfn [(->indirect-multi-vec [col-name]
                     (let [readers (ArrayList.)]
-                      (run! #(.add readers (.readerForName ^RelationReader % col-name)) rels)
+                      (doseq [^RelationReader rel rels]
+                        (.add readers (.readerForName rel col-name)))
                       (IndirectMultiVectorReader. readers reader-selection vector-selection)))]
-            (RelationReader/from (map ->indirect-multi-vec col-names))))))))
+            (RelationReader/from (mapv ->indirect-multi-vec col-names))))))))
 
 (defn concat-rels [^RelationReader rel1 ^RelationReader rel2]
   (cond (empty? (seq rel1)) rel2

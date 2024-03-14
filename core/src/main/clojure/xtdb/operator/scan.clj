@@ -138,7 +138,7 @@
        rdr))))
 
 (defn- ->content-rel-factory ^xtdb.vector.IMultiVectorRelationFactory [leaf-rdrs allocator content-col-names]
-  (vr/rels->multi-vector-rel-factory (map #(leaf-rdr->rel % content-col-names) leaf-rdrs) allocator content-col-names))
+  (vr/rels->multi-vector-rel-factory (mapv #(leaf-rdr->rel % content-col-names) leaf-rdrs) allocator content-col-names))
 
 (defn- ->bitemporal-consumer ^xtdb.bitemporal.IRowConsumer [^IRelationWriter out-rel, col-names]
   (letfn [(writer-for [normalised-col-name]
