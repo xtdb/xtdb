@@ -173,7 +173,7 @@ class Xtdb(AbstractXtdb):
 
             return json_array
 
-    def sql_tx(self, q, p=[], m=False, accept=None):
+    def sql_tx(self, q, p=[], m=False, accept=None, import_system_time=None):
         """Executes a transactional SQL statement
         The SQL statement is sent to the `/tx` endpoint at `Xtdb.url` over HTTP.
         Parameters
@@ -200,7 +200,10 @@ class Xtdb(AbstractXtdb):
 
         # TODO afterTx, atTx
 
-        payload = {"txOps":[{"sql": q[:-1]}]}
+        payload = {"txOps": [{"sql": q[:-1]}],
+                   "opts": {"systemTime": import_system_time}}
+
+        payload = remove_none_and_empty_dict_values(payload)
 
         url = self.url + '/tx'
 
@@ -359,6 +362,7 @@ class XtdbConsole(cmd.Cmd):
         self.txtimeout = "PT1S"
         self.basis_at_tx_id = -1
         self.basis_at_system_time = end_of_time
+        self.import_system_time = end_of_time
         self.tabulate = True
         self.lines = []
         self.was_error = False
@@ -407,7 +411,19 @@ class XtdbConsole(cmd.Cmd):
         self.basis_at_system_time = end_of_time
         self.basis_at_tx_id = -1
         print('basis cleared')
+        
+    def do_import_system_time(self, arg):
+        'Sets or shows current systemTime used for the override during monotonic import and simulation of historic transactions.'
+        if arg:
+            self.import_system_time = parse_iso_datetime(arg).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z'
+        if self.import_system_time:
+            print(self.import_system_time)
 
+    def do_clear_import_system_time(self, arg):
+        'Clear current `import_system_time` setting.'
+        self.import_system_time = end_of_time
+        print('import_system_time cleared')
+        
     def do_recent_transactions(self, arg):
         'Show the 10 most recent transactions by running `SELECT * FROM xt$txs ORDER BY xt$txs.xt$id DESC LIMIT 20;`'
         result = Xtdb(self.url, self.accept,
@@ -496,8 +512,11 @@ class XtdbConsole(cmd.Cmd):
 
             dml_operations = ("INSERT", "UPDATE", "DELETE", "ERASE")
 
+            import_system_time_param = None if self.import_system_time == end_of_time else self.import_system_time
+
             if sql.upper().startswith(dml_operations):
-                result = Xtdb(self.url, self.accept, self.txtimeout).sql_tx(sql)
+                result = Xtdb(self.url, self.accept, self.txtimeout).sql_tx(sql,
+                                                                            import_system_time=import_system_time_param)
             else:
                 result = Xtdb(self.url, self.accept,
                                    self.txtimeout).sql_query(sql,
