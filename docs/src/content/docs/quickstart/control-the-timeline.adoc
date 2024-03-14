@@ -1,5 +1,5 @@
 ---
-title: Set Valid-Time
+title: Control the timeline
 ---
 
 Everything demonstrated so far only scratches the surface of what XTDB can do, given that XTDB is a full SQL implementation with all the implications that has, however there is one further aspect where XTDB is very different to most databases: ubiquitous 'Valid-Time' versioning.

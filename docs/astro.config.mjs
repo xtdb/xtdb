@@ -38,33 +38,10 @@ export default defineConfig({
             { label: 'Quickstart', link: '/intro/getting-started' },
             { label: 'SQL basics', link: '/quickstart/insert-and-query' },
             { label: 'Query the past', link: '/quickstart/query-the-past' },
-	    { label: 'Set Valid-Time', link: '/quickstart/set-valid-time' },
+	    { label: 'Control the timeline', link: '/quickstart/control-the-timeline' },
 
 	  ]
 	},
-        {
-          label: 'Background',
-          collapsed: true,
-          items: [
-            { label: 'Mission', link: '/intro/why-xtdb' },
-            { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
-            { label: 'How XTDB works', link: '/intro/data-model' },
-            // { label: 'Architecture', link: '/intro/architecture' },
-            // { label: 'Bitemporality', link: '/intro/bitemporality' }
-
-            { label: 'Community', link: '/intro/community' },
-            { label: 'Roadmap', link: '/intro/roadmap' },
-
-            {
-              label: 'XTQL',
-              collapsed: true,
-              items: [
-                { label: 'Overview', link: '/intro/what-is-xtql' },
-                { label: 'XTQL Walkthrough', link: '/guides/xtql-walkthrough' },
-               ]
-            },
-          ],
-        },
 
 /*        {
           label: 'Tutorials',
@@ -78,6 +55,9 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
+            { label: 'XTQL Overview', link: '/intro/what-is-xtql' },
+            { label: 'XTQL Walkthrough', link: '/guides/xtql-walkthrough' },
+
           ],
         },
 
@@ -130,6 +110,7 @@ export default defineConfig({
             { label: 'Overview', link: '/drivers' },
             {
               label: 'HTTP + JSON',
+              collapsed: true,
               items: [
                 { label: 'Getting started', link: '/drivers/http/getting-started' },
                 { label: 'HTTP (OpenAPI) ↗', link: '/drivers/http/openapi/index.html', attrs: { target: '_blank' } },
@@ -138,6 +119,7 @@ export default defineConfig({
 
             {
               label: 'Java',
+              collapsed: true,
               items: [
                 { label: 'Getting started', link: '/drivers/java/getting-started' },
                 // TODO broken atm
@@ -147,6 +129,7 @@ export default defineConfig({
 
             {
               label: 'Kotlin',
+              collapsed: true,
               items: [
                 { label: 'Getting started', link: '/drivers/kotlin/getting-started' },
                 { label: 'KDoc ↗', link: '/drivers/kotlin/kdoc/index.html', attrs: { target: '_blank' } }
@@ -155,16 +138,14 @@ export default defineConfig({
 
             {
               label: 'Clojure',
+              collapsed: true,
               items: [
                 { label: 'Getting started', link: '/drivers/clojure/getting-started' },
                 { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: { target: '_blank' } },
                 { label: 'Configuration cookbook', link: '/drivers/clojure/configuration' },
                 { label: 'Transactions cookbook', link: '/drivers/clojure/txs' },
-                { label: 'Clojure Tutorials',
-		  items: [
-			   { label: 'Learn XTQL Today, with Clojure', link: '/tutorials/learn-xtql-today-with-clojure' },
-                  ]
-		},
+                { label: 'Tutorial: Learn XTQL Today', link: '/tutorials/learn-xtql-today-with-clojure' },
+
               ]
             },
 
@@ -202,6 +183,21 @@ export default defineConfig({
               ]
             },
           ]
+        },
+	{
+          label: 'Appendices',
+          collapsed: true,
+          items: [
+            { label: 'Mission', link: '/intro/why-xtdb' },
+            { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
+            { label: 'How XTDB works', link: '/intro/data-model' },
+            // { label: 'Architecture', link: '/intro/architecture' },
+            // { label: 'Bitemporality', link: '/intro/bitemporality' }
+
+            { label: 'Community', link: '/intro/community' },
+            { label: 'Roadmap', link: '/intro/roadmap' },
+
+          ],
         },
       ],
 
