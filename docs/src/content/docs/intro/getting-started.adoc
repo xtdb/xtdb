@@ -59,19 +59,4 @@ Next up, you probably want to start by inserting data, running your first querie
 
 link:/quickstart/insert-and-query[Let's INSERT some data]!
 
-== Option B: Exploring via HTTP
-
-Alternatively, to learn how to use the HTTP API and discover a few of XTDB's novel capabilities using curl or another REST client of choice check out the link:/drivers/http/openapi/index.html[HTTP OpenAPI docs] to see all the options available.
-
-== Option C: Connecting via a client driver
-
-Official client drivers are provided for a range of languages to make working with XTDB more ergonomic than working directly with HTTP and JSON.
-
-[.lang-icons.right]
-image:{icon}/java.svg[Clojure,link={java}#_connecting_through_http]
-image:{icon}/kotlin.svg[Clojure,link={kotlin}#_connecting_through_http]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_connecting_through_http]
-
-For more details, check out the relevant instructions for your language:
-
-More client drivers are link:/intro/roadmap.html[coming soon]!
+XTDB also has an link:/drivers/http/getting-started[HTTP + JSON] API and link:/drivers[client drivers] are provided for a range of languages to make working with XTDB more ergonomic than working directly with HTTP directly.
