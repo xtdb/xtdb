@@ -55,10 +55,10 @@ XTDB is designed to work with JSON-like nested data as a first-class concept (i.
 [source,sql]
 ----
 UPDATE people
-SET info = {'phone_numbers': [{'loc': 'home',
-                               'tel': '123-456-7890'},
-                              {'loc': 'work',
-                               'tel': '098-765-4321'}]}
+SET info = {'contact': [{'loc': 'home',
+                         'tel': '123'},
+                        {'loc': 'work',
+                         'tel': '456'}]}
   WHERE people.name = 'fred';
 ----
 
@@ -66,7 +66,7 @@ And you can then query this nested data intuitively:
 
 [source,sql]
 ----
-SELECT people.info.phone_numbers[2].tel FROM people
+SELECT people.info.contact[2].tel FROM people
   WHERE people.name = 'fred';
 ----
 

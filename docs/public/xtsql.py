@@ -19,6 +19,9 @@ import urllib.request
 
 end_of_time = "9999-12-31T23:59:59.999999Z"
 
+def print2(s):
+    print('\n'+s+'\n')
+
 def parse_iso_datetime(date_string):
     """
     Attempts to parse a date_string with varying levels of granularity, from just a year
@@ -141,7 +144,7 @@ class Xtdb(AbstractXtdb):
             accept = self.accept
         headers = {'Accept': accept,
                    'Content-Type': 'application/json'}
-
+        
         if p == []:
             args_value = []
         else:
@@ -255,11 +258,13 @@ import time
 # import edn_format
 
 def markdownSimpleTable(data):
-    # Ensure there is data to process
     if not data:
-        return "No data provided."
+        return "No data returned."
 
-    # Collect keys in order while avoiding duplicates
+    if isinstance(data, list) and data:
+        if isinstance(data[0], dict) and len(data[0]) == 0:
+            return "No columns returned."
+
     seen_keys = set()
     ordered_keys = []
     for item in data:
@@ -268,39 +273,31 @@ def markdownSimpleTable(data):
                 seen_keys.add(key)
                 ordered_keys.append(key)
 
-    # Calculate Padding For Each Column Based On Header and Data Length
     rowsPadding = {}
     for index, key in enumerate(ordered_keys):
-        padCount = max(len(str(item.get(key, ""))) + 1 for item in data) + 2  # Adjusted for added space
+        padCount = max(len(str(item.get(key, ""))) + 1 for item in data) + 2
         headerPadCount = len(key) + 2
         rowsPadding[index] = max(padCount, headerPadCount)
 
-    # Render Markdown Header
     header_row = '|' + '|'.join((' ' + key).ljust(rowsPadding[index]) for index, key in enumerate(ordered_keys)) + '|'
     separator_row = '|' + '|'.join('-' * rowsPadding[index] for index in range(len(ordered_keys))) + '|'
     rows = [header_row, separator_row]
 
-    # Render Tabular Data
     for item in data:
-        row = '|' + '|'.join((' ' + str(item.get(key, ""))).ljust(rowsPadding[index]) for index, key in enumerate(ordered_keys)) + '|'
+        row = '|' + '|'.join((' ' + (str(item[key]) if item.get(key, "NULL") != None else "NULL")).ljust(rowsPadding[index]) for index, key in enumerate(ordered_keys)) + '|'
         rows.append(row)
 
-    # Convert Tabular String Rows Into String
     tableString = "\n".join(rows)
     return tableString
 
 def prepare_for_tabulate(data, special_key='xt$id'):
     # return data
-    # Check if the special key exists in any of the dictionaries
     if any(special_key in row for row in data):
-        # Sort keys alphanumerically, but put special_key first
         sorted_keys = sorted({key for row in data for key in row if key != special_key})
-        sorted_keys.insert(0, special_key)  # Insert the special_key at the beginning
+        sorted_keys.insert(0, special_key)
     else:
-        # Just sort keys alphanumerically if special_key doesn't exist
         sorted_keys = sorted({key for row in data for key in row})
 
-    # Reorder the dictionaries according to sorted_keys
     reordered_data = [{key: row.get(key) for key in sorted_keys} for row in data]
 
     return reordered_data
@@ -345,13 +342,13 @@ class XtdbConsole(cmd.Cmd):
     url : str
         HTTP URL of an XTDB server
     accept : str, optional
-        accept header content type (defaults to 'application/json')
+        accept header content type (defaults to 'application/jsonl')
     prompt : str, optional
         initial prompt (defaults to '->')
     nested_prompt : str, optional
         prompt for multi-line SQL statements (defaults to '..')
     """
-    def __init__(self, url, accept='application/json', prompt='-> ', nested_prompt='.. '):
+    def __init__(self, url, accept='application/jsonl', prompt='-> ', nested_prompt='.. '):
         super().__init__()
         self.url = url
         self.accept = accept
@@ -368,6 +365,7 @@ class XtdbConsole(cmd.Cmd):
         self.was_error = False
 
     def emptyline(self):
+        print2('Type \'help\' for commands, or input valid SQL followed by a semi-colon')
         pass
 
     def do_timer(self, arg):
@@ -375,9 +373,9 @@ class XtdbConsole(cmd.Cmd):
         if arg:
             self.timer = arg == 'on'
         if self.timer:
-            print('on')
+            print2('on')
         else:
-            print('off')
+            print2('off')
 
     def complete_txtimeout(self, text, line, begidx, endidx):
         return [x for x in ['off']
@@ -388,14 +386,14 @@ class XtdbConsole(cmd.Cmd):
         if arg:
             self.txtimeout = arg
         if self.txtimeout:
-            print(self.txtimeout)
+            print2(self.txtimeout)
 
     def do_basis_at_tx_id(self, arg):
         'Sets or shows current TxId used for the time-travel `basis` at which queries are run.'
         if arg:
             self.basis_at_tx_id = int(arg)
         if self.basis_at_tx_id:
-            print(self.basis_at_tx_id)
+            print2(self.basis_at_tx_id)
         # TODO clear_basis?
         # TODO print json toggle (off by default)
 
@@ -404,25 +402,25 @@ class XtdbConsole(cmd.Cmd):
         if arg:
             self.basis_at_system_time = parse_iso_datetime(arg).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z'
         if self.basis_at_system_time:
-            print(self.basis_at_system_time)
+            print2(self.basis_at_system_time)
 
     def do_clear_basis(self, arg):
         'Clear current `basis` settings.'
         self.basis_at_system_time = end_of_time
         self.basis_at_tx_id = -1
-        print('basis cleared')
+        print2('basis cleared')
         
     def do_import_system_time(self, arg):
         'Sets or shows current systemTime used for the override during monotonic import and simulation of historic transactions.'
         if arg:
             self.import_system_time = parse_iso_datetime(arg).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z'
         if self.import_system_time:
-            print(self.import_system_time)
+            print2(self.import_system_time)
 
     def do_clear_import_system_time(self, arg):
         'Clear current `import_system_time` setting.'
         self.import_system_time = end_of_time
-        print('import_system_time cleared')
+        print2('import_system_time cleared')
         
     def do_recent_transactions(self, arg):
         'Show the 10 most recent transactions by running `SELECT * FROM xt$txs ORDER BY xt$txs.xt$id DESC LIMIT 20;`'
@@ -430,26 +428,31 @@ class XtdbConsole(cmd.Cmd):
                            self.txtimeout).sql_query('SELECT * FROM xt$txs ORDER BY xt$txs.xt$id DESC LIMIT 20;')
         if self.tabulate:
                 result2 = [pretty_format(item) for item in result]
-                print(markdownSimpleTable(prepare_for_tabulate(result2)))
+                print2(markdownSimpleTable(prepare_for_tabulate(result2)))
         else:
+            print()
             pprint.pprint(result)
+            print()
 
     def do_tabulate(self, arg):
         'Sets or shows table printer setting.'
         if arg:
             self.tabulate = arg == 'on'
         if self.tabulate:
-            print('on')
+            print2('on')
         else:
-            print('off')
+            print2('off')
 
     def do_status(self, arg):
         'Calls the `/status` endpoint of the connected XTDB server.'
         result = Xtdb(self.url, self.accept).sql_status()
         if self.tabulate:
-            print(markdownSimpleTable(result))
+            result2 = [pretty_format(item) for item in result]
+            print2(markdownSimpleTable(prepare_for_tabulate(result2)))
         else:
+            print()
             pprint.pprint(result)
+            print()
 
     def complete_accept(self, text, line, begidx, endidx):
         return [x for x in ['application/json']
@@ -459,13 +462,13 @@ class XtdbConsole(cmd.Cmd):
         'Sets or shows the accepted mime type.'
         if arg:
             self.accept = re.sub('=\s*', '', arg)
-        print(self.accept)
+        print2(self.accept)
 
     def do_url(self, arg):
         'Sets or shows the database URL.'
         if arg:
             self.url = re.sub('=\s*', '', arg)
-        print(self.url)
+        print2(self.url)
 
     def do_quit(self, arg):
         'Quits the console.'
@@ -565,8 +568,7 @@ def main():
     print("Copyright © 2021-2024, JUXT LTD.")
     print()
     print("Type 'help' for commands")
-    print()
-
+ 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('sql', nargs='*', help='SQL statement or file')
     parser.add_argument('--url', default='http://localhost:3000')
