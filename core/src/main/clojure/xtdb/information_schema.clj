@@ -26,7 +26,7 @@
     {:idx idx ;; no guarentee of order/stability of idx for a given col
      :table table
      :name name
-     :type (map #(types/arrow-type->col-type (.getType ^Field %)) col-types)}))
+     :type (map #(apply types/arrow-type->col-type (.getType ^Field %) (.getChildren ^Field %)) col-types)}))
 
 (def info-tables-raw {"tables" {"table_catalog" (types/col-type->field "table_catalog" :utf8)
                                 "table_schema" (types/col-type->field "table_schema" :utf8)

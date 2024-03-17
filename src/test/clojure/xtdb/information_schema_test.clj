@@ -221,3 +221,11 @@
               :schema-owner "default"}}
            (set (tu/query-ra '[:scan {:table information_schema$schemata} [catalog_name schema_name schema_owner]]
                              {:node tu/*node*})))))
+
+(deftest test-composite-columns
+  (xt/submit-tx tu/*node* [[:put-docs :composite-docs {:xt/id 1 :set-column #{"hello world"}}]])
+
+  (t/is (= [{:data-type ["[:set :utf8]"]}]
+           (xt/q tu/*node*
+                 "SELECT columns.data_type FROM information_schema.columns AS columns
+                  WHERE columns.column_name = 'set_column'"))))
