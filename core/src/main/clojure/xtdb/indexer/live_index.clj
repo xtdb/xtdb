@@ -12,7 +12,7 @@
            (java.lang AutoCloseable)
            (java.time Duration)
            (java.util ArrayList HashMap Map)
-           (java.util.concurrent CompletableFuture)
+           (java.util.concurrent CompletableFuture CompletionException)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
@@ -365,7 +365,11 @@
                     (remove nil?)
                     (into-array CompletableFuture))]
 
-      @(CompletableFuture/allOf futs)
+      ;; TODO currently non interruptible, meaning this waits for the tries to be written
+      (try
+        (.join (CompletableFuture/allOf futs))
+        (catch CompletionException e
+          (throw (.getCause e))))
 
       (let [table-metadata (-> (into {} (keep deref) futs)
                                (util/rethrowing-cause))]
