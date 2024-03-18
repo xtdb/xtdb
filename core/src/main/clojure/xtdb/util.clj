@@ -38,12 +38,26 @@
     m))
 
 (defn close [c]
-  (cond
-    (nil? c) nil
-    (instance? AutoCloseable c) (.close ^AutoCloseable c)
-    (instance? Map c) (run! close (.values ^Map c))
-    (seqable? c) (run! close c)
-    :else (throw (ClassCastException. (format "could not close '%s'" (.getName (class c)))))))
+  (letfn [(close-all [closables]
+            (let [{:keys [toplevel-ex]}
+                  (reduce (fn [{:keys [^Throwable toplevel-ex] :as res} closable]
+                            (try
+                              (close closable)
+                              res
+                              (catch Throwable t
+                                (if toplevel-ex
+                                  (do (.addSuppressed toplevel-ex t) res)
+                                  {:toplevel-ex t}))))
+                          {:toplevel-ex nil}
+                          closables)]
+              (when toplevel-ex
+                (throw toplevel-ex))))]
+    (cond
+      (nil? c) nil
+      (instance? AutoCloseable c) (.close ^AutoCloseable c)
+      (instance? Map c) (close-all (.values ^Map c))
+      (seqable? c) (close-all c)
+      :else (throw (ClassCastException. (format "could not close '%s'" (.getName (class c))))))))
 
 (defn try-close [c]
   (cond

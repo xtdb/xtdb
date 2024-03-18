@@ -4,7 +4,8 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
            [xtdb.api.tx TxOps]))
 
@@ -618,3 +619,21 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            (xt/q tu/*node*
                  '(from :xt/txs [{:xt/id 1} xt/id xt/committed? xt/error])))
         "when the table has an (non-matching) entry the assert also fails"))
+
+(defn- random-maps [n]
+  (let [nb-ks 5
+        ks [:foo :bar :baz :toto :fufu]]
+    (->> (repeatedly n #(zipmap ks (map str (repeatedly nb-ks random-uuid))))
+         (map-indexed #(assoc %2 :xt/id %1)))))
+
+(deftest resources-are-correctly-closed-on-interrupt-2800
+  (let [node-dir (.toPath (io/file "test/incoming-puts-dont-cause-memory-leak"))
+        node-opts {:node-dir node-dir
+                   :rows-per-chunk 16}]
+    (util/delete-dir node-dir)
+    (dotimes [_ 5]
+      (with-open [node (tu/->local-node node-opts)]
+        (doseq [tx (->> (random-maps 32)
+                        (map #(vector :put-docs :docs %))
+                        (partition-all 16))]
+          (xt/submit-tx node tx))))))
