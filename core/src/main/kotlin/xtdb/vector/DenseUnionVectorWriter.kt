@@ -8,6 +8,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.toArrowType
 import xtdb.toLeg
+import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.util.HashMap
 import java.util.LinkedHashMap
@@ -101,6 +102,15 @@ class DenseUnionVectorWriter(
         }
 
         override fun rowCopier(src: ValueVector): IRowCopier {
+            val innerCopier = inner.rowCopier(src)
+
+            return IRowCopier { srcIdx ->
+                writeValue()
+                innerCopier.copyRow(srcIdx)
+            }
+        }
+
+        override fun rowCopier(src: RelationReader): IRowCopier {
             val innerCopier = inner.rowCopier(src)
 
             return IRowCopier { srcIdx ->

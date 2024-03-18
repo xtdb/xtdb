@@ -116,21 +116,23 @@
                  (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :i64))
                  (.getField)))))
 
-  ;; If you are asking for a different field type then the one specified in the beginning you are going to get
-  ;; an type mismatch error.
-  (t/is (thrown? Throwable
-                 (with-open [allocator (RootAllocator.)
-                             struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
-                   (-> (vw/->writer struct-vec)
-                       (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :utf8))
-                       (.getField)))))
+  ;; If you are asking for a different field type then the one specified in the beginning it'll promote the writer
+  (with-open [allocator (RootAllocator.)
+              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
+    (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
+                            (types/->field "foo" #xt.arrow/type :union false
+                                           (types/->field "i64" #xt.arrow/type :i64 false)
+                                           (types/->field "utf8" #xt.arrow/type :utf8 false)))
+             (-> (vw/->writer struct-vec)
+                 (doto (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :utf8)))
+                 (.getField)))))
 
-  ;; Lets now look at the defaulting behaviour if you do not specify the field type up front.
-  ;; By default you are going to get a `:union` type. The idea being that we don't know yet all the different
-  ;; types that are going to be written to this field.
+  ;; Let's now look at the defaulting behaviour if you do not specify the field type up front.
+  ;; By default you are going to get a `:null` type, because this is the easiest to create.
+  ;; We can promote it later
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
-    (t/is (= (types/->field "bar" #xt.arrow/type :union false)
+    (t/is (= (types/->field "bar" #xt.arrow/type :null true)
              (-> (vw/->writer struct-vec)
                  (.structKeyWriter "bar")
                  (.getField)))))
@@ -143,17 +145,20 @@
                  (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.getField)))))
 
-  ;; Beware that you can not first ask for one type and then later for different one, hoping that the
-  ;; underlying vector gets promoted to a union vector.
+  ;; If you first ask for one type and then later for different one, the underlying vector gets promoted to a union vector.
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
     (-> (vw/->writer struct-vec)
         (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
         (.getField))
 
-    (t/is (thrown? Throwable
-                   (-> (vw/->writer struct-vec)
-                       (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64))))))
+    (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
+                            (types/->field "bar" #xt.arrow/type :union false
+                                           (types/->field "utf8" #xt.arrow/type :utf8 false)
+                                           (types/->field "i64" #xt.arrow/type :i64 false)))
+             (-> (vw/->writer struct-vec)
+                 (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
+                 (.getField)))))
 
   ;; Lets also look at how one would write to a duv.
 

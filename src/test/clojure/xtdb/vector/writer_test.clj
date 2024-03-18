@@ -76,14 +76,12 @@
 
                (.getField duv-wtr)))
 
-      (let [a-wtr (.structKeyWriter my-struct-wtr "a")]
+      (let [a-wtr (.structKeyWriter my-struct-wtr "a" (FieldType/notNullable #xt.arrow/type :union))]
         (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                                 (types/->field "struct" #xt.arrow/type :struct false
                                                (types/->field "a" #xt.arrow/type :union false)))
 
-                 (.getField duv-wtr))
-
-              "legWriter pessimistically adds struct keys as unions")
+                 (.getField duv-wtr)))
 
         (.legWriter a-wtr (.getType Types$MinorType/BIGINT))
 
@@ -94,7 +92,9 @@
 
                  (.getField duv-wtr)))
 
-        (-> (.structKeyWriter my-struct-wtr "b") (.legWriter (.getType Types$MinorType/FLOAT8)))
+        (-> (.structKeyWriter my-struct-wtr "b" (FieldType/notNullable #xt.arrow/type :union))
+            (.legWriter (.getType Types$MinorType/FLOAT8)))
+
         (-> a-wtr (.legWriter (.getType Types$MinorType/VARCHAR)))
 
         (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
@@ -188,27 +188,28 @@
                (.getField struct-wtr)))
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
-                              (types/->field "foo" #xt.arrow/type :union false))
+                              (types/->field "foo" #xt.arrow/type :null true))
                (-> struct-wtr
                    (doto (.structKeyWriter "foo"))
                    (.getField)))
-            "structKeyWriter should create a dense union")
+            "structKeyWriter creates null vector by default")
 
-      (t/is (= (types/->field "foo" #xt.arrow/type :union false)
+      (t/is (= (types/->field "foo" #xt.arrow/type :null true)
                (-> struct-wtr
-                   (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :union))
+                   (.structKeyWriter "foo" (FieldType/nullable #xt.arrow/type :null))
                    (.getField)))
-            "call to structKeyWriter with correct field should not throw")
+            "call to structKeyWriter with same field should not throw")
 
-      (t/is (thrown-with-msg? RuntimeException #"Field type mismatch"
-                              (-> struct-wtr
-                                  (doto (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :f64)))
-                                  (.getField)))
-            "can't now get a different type")
+      (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
+                              (types/->field "foo" #xt.arrow/type :f64 true))
+               (-> struct-wtr
+                   (doto (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :f64)))
+                   (.getField)))
+            "new type promotes the struct key")
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
                               (types/->field "bar" #xt.arrow/type :i64 false)
-                              (types/->field "foo" #xt.arrow/type :union false))
+                              (types/->field "foo" #xt.arrow/type :f64 true))
                (-> struct-wtr
                    (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                    (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
@@ -224,12 +225,15 @@
                    (.structKeyWriter "bar")
                    (.getField))))
 
-      (t/is (thrown-with-msg? RuntimeException #"Field type mismatch"
-                              (-> struct-wtr
-                                  (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :f64)))
-                                  (.getField))))))
+      (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
+                              (types/->field "bar" #xt.arrow/type :union false
+                                             (types/->field "i64" #xt.arrow/type :i64 false)
+                                             (types/->field "f64" #xt.arrow/type :f64 false))
+                              (types/->field "foo" #xt.arrow/type :f64 true))
+               (-> struct-wtr
+                   (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :f64)))
+                   (.getField))))))
 
-  #_
   (with-open [struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {baz :i64}]) tu/*allocator*)]
     (let [struct-wtr (vw/->writer struct-vec)]
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
@@ -248,11 +252,14 @@
                    (.getField)))
             "call to structKeyWriter with correct field should not throw")
 
-      (t/is (thrown-with-msg? RuntimeException #"Field type mismatch"
-                              (-> struct-wtr
-                                  (doto (.structKeyWriter "baz" (FieldType/notNullable #xt.arrow/type :f64)))
-                                  (.getField)))
-            "structKeyWriter can't promote non preexising union type"))))
+      (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
+                              (types/->field "baz" #xt.arrow/type :union false
+                                             (types/->field "i64" #xt.arrow/type :i64 false)
+                                             (types/->field "f64" #xt.arrow/type :f64 false)))
+               (-> struct-wtr
+                   (doto (.structKeyWriter "baz" (FieldType/notNullable #xt.arrow/type :f64)))
+                   (.getField)))
+            "structKeyWriter promotes non pre-existing union type"))))
 
 (deftest rel-writer-dynamic-testing
   (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
@@ -282,9 +289,9 @@
                                 (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :f64))
                                 (.getField)))))
 
-  (t/testing "populate-with-absents for non union columns"
+  (t/testing "promotion doesn't (yet) work in rel-wtrs"
     (t/is (thrown-with-msg? RuntimeException
-                            #"populate-with-absents needs a nullable or a union underneath"
+                            #"invalid writeObject"
                             (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
                               (let [int-wtr (.colWriter rel-wtr "my-int" (FieldType/notNullable #xt.arrow/type :i64))
                                     _str-wtr (.colWriter rel-wtr "my-str" (FieldType/notNullable #xt.arrow/type :utf8))]

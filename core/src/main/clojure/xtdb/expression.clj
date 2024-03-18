@@ -265,24 +265,27 @@
 
 (defn- continue-read-union [f inner-types reader-sym args]
   (let [without-null (disj inner-types :null)]
-    (cond
-      (empty? without-null) (f :null nil)
+    (if (empty? without-null)
+      (f :null nil)
 
-      (and (contains? inner-types :null) (= 1 (count without-null)))
-      `(if (.isNull ~reader-sym ~@args)
-         ~(f :null nil)
-         ~(let [nn-type (first (seq without-null))]
-            (f nn-type (read-value-code nn-type reader-sym))))
+      (let [nn-code (if (= 1 (count without-null))
+                      (let [nn-type (first (seq without-null))]
+                        (f nn-type (read-value-code nn-type reader-sym)))
 
-      :else
-      `(case (.getLeg ~reader-sym ~@args)
-         ;; https://ask.clojure.org/index.php/13407/method-large-compiling-expression-unfortunate-clause-hashes
-         :wont-ever-be-this (throw (IllegalStateException.))
+                      `(case (.getLeg ~reader-sym ~@args)
+                         ;; https://ask.clojure.org/index.php/13407/method-large-compiling-expression-unfortunate-clause-hashes
+                         :wont-ever-be-this (throw (IllegalStateException.))
 
-         ~@(->> inner-types
-                (mapcat (fn [col-type]
-                          [(types/col-type->leg col-type)
-                           (f col-type (read-value-code col-type reader-sym))])))))))
+                         ~@(->> inner-types
+                                (mapcat (fn [col-type]
+                                          [(types/col-type->leg col-type)
+                                           (f col-type (read-value-code col-type reader-sym))])))))]
+        (if (contains? inner-types :null)
+          `(if (.isNull ~reader-sym ~@args)
+             ~(f :null nil)
+             ~nn-code)
+
+          nn-code)))))
 
 (defn- continue-read [f col-type reader-sym & args]
   (zmatch col-type

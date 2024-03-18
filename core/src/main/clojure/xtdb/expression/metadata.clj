@@ -39,7 +39,7 @@
                                           (filterv types/num-types base-col-types)
 
                                           (and (vector? param-type) (isa? types/col-type-hierarchy (first param-type) :date-time))
-                                          (filterv (comp types/date-time-types first) base-col-types)
+                                          (filterv (comp types/date-time-types types/col-type-head) base-col-types)
 
                                           (contains? base-col-types param-type)
                                           [param-type])]

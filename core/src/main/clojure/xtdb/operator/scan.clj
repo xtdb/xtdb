@@ -22,21 +22,21 @@
            (java.io Closeable)
            java.nio.ByteBuffer
            (java.nio.file Path)
-           (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue ArrayList)
+           (java.util ArrayList Comparator HashMap Iterator LinkedList Map PriorityQueue)
            (java.util.function IntPredicate Predicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector VectorLoader)
-           (org.apache.arrow.vector.types.pojo FieldType)
+           (org.apache.arrow.vector.types.pojo Field FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           xtdb.IBufferPool
-           xtdb.ICursor
            xtdb.api.TransactionKey
            (xtdb.bitemporal IRowConsumer Polygon)
+           xtdb.IBufferPool
+           xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
-           (xtdb.trie HashTrieKt ArrowHashTrie$Leaf EventRowPointer HashTrie LiveHashTrie$Leaf MergePlanTask MergePlanNode ISegment)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
@@ -118,20 +118,21 @@
       (.allTableColNames scan-emitter wm))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn- ->content-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
+(defn- ->content-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, fields]
   (let [op-rdr (.readerForName leaf-rel "op")
         put-rdr (.legReader op-rdr :put)
 
         row-copiers (object-array
-                     (for [^String col-name col-names
-                           :let [normalized-name (util/str->normal-form-str col-name)
+                     (for [[col-name ^Field field] fields
+                           :let [col-name (str col-name)
+                                 normalized-name (util/str->normal-form-str col-name)
                                  copier (case normalized-name
                                           "xt$iid"
                                           (.rowCopier (.readerForName leaf-rel "xt$iid")
                                                       (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
                                           ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
                                           (some-> (.structKeyReader put-rdr normalized-name)
-                                                  (.rowCopier (.colWriter out-rel col-name))))]
+                                                  (.rowCopier (.colWriter out-rel col-name (.getFieldType field)))))]
                            :when copier]
                        copier))]
 
@@ -217,7 +218,7 @@
     :live (first leaf-args)))
 
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
-                     ^Path table-path, col-names, ^Map col-preds,
+                     ^Path table-path, col-names, fields, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
                      params, vsr-cache, buffer-pool]
   ICursor
@@ -237,7 +238,7 @@
                                                      iid-pred (.select (.select iid-pred allocator data-rdr params)))
                           ev-ptr (EventRowPointer. leaf-rdr path)]]
               (when (.isValid ev-ptr is-valid-ptr path)
-                (.add merge-q {:ev-ptr ev-ptr, :content-consumer (->content-consumer out-rel leaf-rdr col-names)})))
+                (.add merge-q {:ev-ptr ev-ptr, :content-consumer (->content-consumer out-rel leaf-rdr fields)})))
 
             (loop []
               (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowConsumer content-consumer] :as q-obj} (.poll merge-q)]
@@ -406,8 +407,7 @@
                             (types/merge-fields (.columnField metadata-mgr table col-name)
                                                 (some-> (.liveIndex wm)
                                                         (.liveTable table)
-                                                        (.columnFields)
-                                                        (get col-name)))))))]
+                                                        (.columnField col-name)))))))]
         (->> scan-cols
              (into {} (map (juxt identity ->field))))))
 
@@ -493,7 +493,7 @@
                                                    []))]
 
                              (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
-                                           table-path col-names col-preds
+                                           table-path col-names fields col-preds
                                            (->temporal-bounds params basis scan-opts)
                                            params
                                            (->vsr-cache buffer-pool allocator)

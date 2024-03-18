@@ -16,6 +16,7 @@ import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.types.ClojureForm
 import xtdb.types.IntervalDayTime
 import xtdb.types.IntervalMonthDayNano
@@ -140,3 +141,4 @@ fun valueToArrowType(obj: Any?) = when (obj) {
 }
 
 internal fun Any?.toArrowType() = valueToArrowType(this)
+internal fun Any?.toFieldType() = FieldType(this == null, toArrowType(), null)

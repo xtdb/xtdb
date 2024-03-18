@@ -18,6 +18,7 @@ import xtdb.types.IntervalYearMonth
 import xtdb.util.requiringResolve
 import xtdb.vector.extensions.*
 import java.math.BigDecimal
+import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.time.*
@@ -65,13 +66,12 @@ abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
 
 class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vector) {
     override fun writeValue0(v: IValueReader) = writeNull()
-    override fun writeObject0(obj: Any): Unit = throw UnsupportedOperationException()
-    override fun rowCopier(src: ValueVector) =
-        when (src) {
-            is DenseUnionVector -> duvToVecCopier(this, src)
-            is NullVector -> IRowCopier { _ -> wp.position.also { writeNull() } }
-            else -> throw InvalidCopySourceException(src.field, field)
-        }
+    override fun writeObject0(obj: Any): Unit = throw InvalidWriteObjectException(field, obj)
+    override fun rowCopier(src: ValueVector) = when (src) {
+        is DenseUnionVector -> duvToVecCopier(this, src)
+        is NullVector -> IRowCopier { _ -> wp.position.also { writeNull() } }
+        else -> throw InvalidCopySourceException(src.field, field)
+    }
 }
 
 private class BitVectorWriter(override val vector: BitVector) : ScalarVectorWriter(vector) {
@@ -291,20 +291,14 @@ private class FixedSizeBinaryVectorWriter(override val vector: FixedSizeBinaryVe
         v.position(pos)
     }
 
-    override fun writeObject0(obj: Any) = writeBytes(when (obj) {
-        is ByteBuffer -> obj
-        is ByteArray -> ByteBuffer.wrap(obj)
+    override fun writeObject0(obj: Any) = writeBytes(
+        when (obj) {
+            is ByteBuffer -> obj
+            is ByteArray -> ByteBuffer.wrap(obj)
 
-        is UUID -> {
-            ByteBuffer.allocate(16).also {
-                it.putLong(obj.mostSignificantBits)
-                it.putLong(obj.leastSignificantBits)
-                it.position(0)
-            }
+            else -> throw InvalidWriteObjectException(field, obj)
         }
-
-        else -> throw InvalidWriteObjectException(field, obj)
-    })
+    )
 
     override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
 }
@@ -324,9 +318,9 @@ abstract class VariableWidthVectorWriter(vector: BaseVariableWidthVector) : Scal
 private class VarCharVectorWriter(override val vector: VarCharVector) : VariableWidthVectorWriter(vector) {
 
     override fun writeObject0(obj: Any) {
-        val str: CharSequence = when (obj) {
-            is Keyword -> obj.sym.toString()
-            else -> obj.toString()
+        val str = when (obj) {
+            is String -> obj
+            else -> throw InvalidWriteObjectException(field, obj)
         }
 
         writeBytes(UTF_8.newEncoder().encode(CharBuffer.wrap(str)))
@@ -334,22 +328,25 @@ private class VarCharVectorWriter(override val vector: VarCharVector) : Variable
 }
 
 private class VarBinaryVectorWriter(override val vector: VarBinaryVector) : VariableWidthVectorWriter(vector) {
-    override fun writeObject0(obj: Any) = writeBytes(
-        when (obj) {
-            is ByteBuffer -> obj
-            is ByteArray -> ByteBuffer.wrap(obj)
-            is ClojureForm, is RuntimeException, is xtdb.IllegalArgumentException ->
-                ByteBuffer.wrap(requiringResolve("xtdb.serde/write-transit")(obj) as ByteArray)
-
-            else -> throw InvalidWriteObjectException(field, obj)
-        }
-    )
+    override fun writeObject0(obj: Any) =
+        writeBytes(
+            when (obj) {
+                is ByteBuffer -> obj
+                is ByteArray -> ByteBuffer.wrap(obj)
+                else -> throw InvalidWriteObjectException(field, obj)
+            }
+        )
 
     override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
 }
 
-class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private val inner: IVectorWriter) :
+abstract class ExtensionVectorWriter(
+    final override val vector: XtExtensionVector<*>,
+    notify: FieldChangeListener? = null,
+) :
     ScalarVectorWriter(vector) {
+
+    private val inner = writerFor(vector.underlyingVector, notify)
 
     override fun clear() = inner.clear()
     override fun writerPosition() = inner.writerPosition()
@@ -375,12 +372,68 @@ class ExtensionVectorWriter(override val vector: XtExtensionVector<*>, private v
     override fun startList() = inner.startList()
     override fun endList() = inner.endList()
 
-    override fun rowCopier(src: ValueVector): IRowCopier = when (src) {
-        is NullVector -> nullToVecCopier(this)
-        is DenseUnionVector -> duvToVecCopier(this, src)
-        is XtExtensionVector<*> -> inner.rowCopier(src.underlyingVector)
-        else -> throw InvalidCopySourceException(src.field, field)
+    override fun rowCopier(src: ValueVector): IRowCopier = when {
+        src is NullVector -> nullToVecCopier(this)
+        src is DenseUnionVector -> duvToVecCopier(this, src)
+        src !is XtExtensionVector<*> || src.javaClass != vector.javaClass -> throw InvalidCopySourceException(
+            src.field,
+            field
+        )
+
+        else -> inner.rowCopier(src.underlyingVector)
     }
+}
+
+internal class KeywordVectorWriter(vector: KeywordVector) : ExtensionVectorWriter(vector, null) {
+    override fun writeObject0(obj: Any) =
+        if (obj !is Keyword) throw InvalidWriteObjectException(field, obj)
+        else super.writeObject0(obj.sym.toString())
+
+    override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
+}
+
+internal class UuidVectorWriter(vector: UuidVector) : ExtensionVectorWriter(vector, null) {
+    override fun writeObject0(obj: Any) =
+        if (obj !is UUID) throw InvalidWriteObjectException(field, obj)
+        else
+            super.writeObject0(ByteBuffer.allocate(16).also {
+                it.putLong(obj.mostSignificantBits)
+                it.putLong(obj.leastSignificantBits)
+                it.position(0)
+            })
+
+    override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
+}
+
+internal class UriVectorWriter(vector: UriVector) : ExtensionVectorWriter(vector, null) {
+    override fun writeObject0(obj: Any) =
+        if (obj !is URI) throw InvalidWriteObjectException(field, obj)
+        else super.writeObject0(obj.toString())
+
+    override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
+}
+
+internal class TransitVectorWriter(vector: TransitVector) : ExtensionVectorWriter(vector, null) {
+    override fun writeObject0(obj: Any) =
+        when (obj) {
+            is ClojureForm, is RuntimeException, is xtdb.IllegalArgumentException,
+            -> super.writeObject0(requiringResolve("xtdb.serde/write-transit")(obj) as ByteArray)
+
+            else -> throw InvalidWriteObjectException(field, obj)
+        }
+
+    override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
+}
+
+internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) : ExtensionVectorWriter(vector, notify) {
+    override fun writeObject0(obj: Any) =
+        when (obj) {
+            is IListValueReader -> super.writeObject0(obj)
+            is Set<*> -> super.writeObject0(obj.toList())
+            else -> throw InvalidWriteObjectException(field, obj)
+        }
+
+    override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
 }
 
 private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChangeListener?> {
@@ -446,12 +499,12 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
 
     override fun visit(vec: NullVector, notify: FieldChangeListener?) = NullVectorWriter(vec)
 
-    override fun visit(vec: ExtensionTypeVector<*>, notify: FieldChangeListener?) = when (vec) {
-        is KeywordVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
-        is UuidVector -> ExtensionVectorWriter(vec, FixedSizeBinaryVectorWriter(vec.underlyingVector))
-        is UriVector -> ExtensionVectorWriter(vec, VarCharVectorWriter(vec.underlyingVector))
-        is TransitVector -> ExtensionVectorWriter(vec, VarBinaryVectorWriter(vec.underlyingVector))
-        is SetVector -> ExtensionVectorWriter(vec, ListVectorWriter(vec.underlyingVector) { notify(vec.field) })
+    override fun visit(vec: ExtensionTypeVector<*>, notify: FieldChangeListener?): IVectorWriter = when (vec) {
+        is KeywordVector -> KeywordVectorWriter(vec)
+        is UuidVector -> UuidVectorWriter(vec)
+        is UriVector -> UriVectorWriter(vec)
+        is TransitVector -> TransitVectorWriter(vec)
+        is SetVector -> SetVectorWriter(vec) { notify(vec.field) }
         else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
     }
 }

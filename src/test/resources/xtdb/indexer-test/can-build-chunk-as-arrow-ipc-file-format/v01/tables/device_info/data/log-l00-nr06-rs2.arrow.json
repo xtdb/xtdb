@@ -53,82 +53,37 @@
           "name" : "xt$id",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
+            "name" : "utf8"
           },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         },{
           "name" : "os_name",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
+            "name" : "utf8"
           },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         },{
           "name" : "model",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
+            "name" : "utf8"
           },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         },{
           "name" : "api_version",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
+            "name" : "utf8"
           },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         },{
           "name" : "manufacturer",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
+            "name" : "utf8"
           },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         }]
       },{
         "name" : "delete",
@@ -181,63 +136,33 @@
         "children" : [{
           "name" : "xt$id",
           "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "utf8",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,22,44],
-            "DATA" : ["device-info-demo000001","device-info-demo000000"]
-          }]
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,22,44],
+          "DATA" : ["device-info-demo000001","device-info-demo000000"]
         },{
           "name" : "os_name",
           "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "utf8",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,5,10],
-            "DATA" : ["6.0.1","6.0.1"]
-          }]
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,5,10],
+          "DATA" : ["6.0.1","6.0.1"]
         },{
           "name" : "model",
           "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "utf8",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,7,12],
-            "DATA" : ["mustang","pinto"]
-          }]
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,7,12],
+          "DATA" : ["mustang","pinto"]
         },{
           "name" : "api_version",
           "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "utf8",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,2,4],
-            "DATA" : ["23","23"]
-          }]
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,2,4],
+          "DATA" : ["23","23"]
         },{
           "name" : "manufacturer",
           "count" : 2,
-          "TYPE_ID" : [0,0],
-          "OFFSET" : [0,1],
-          "children" : [{
-            "name" : "utf8",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,6,12],
-            "DATA" : ["iobeam","iobeam"]
-          }]
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,6,12],
+          "DATA" : ["iobeam","iobeam"]
         }]
       },{
         "name" : "delete",

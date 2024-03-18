@@ -59,13 +59,12 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
 
         writeList {
             when (obj) {
-                is IListValueReader -> {
+                is IListValueReader ->
                     for (i in 0..<obj.size()) {
                         elWtr.writeValue(obj.nth(i))
                     }
-                }
 
-                is Collection<*> -> obj.forEach { elWtr.writeObject(it) }
+                is List<*> -> obj.forEach { elWtr.writeObject(it) }
 
                 else -> throw InvalidWriteObjectException(field, obj)
             }

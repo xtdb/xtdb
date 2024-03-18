@@ -7,6 +7,7 @@ import xtdb.vector.RelationReader
 import java.util.concurrent.atomic.AtomicInteger
 
 interface ILiveTableWatermark : AutoCloseable {
+    fun columnField(col: String): Field
     fun columnFields(): Map<String, Field>
     fun liveRelation(): RelationReader
     fun liveTrie(): LiveHashTrie

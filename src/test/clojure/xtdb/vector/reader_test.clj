@@ -57,12 +57,8 @@
                  (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
         (t/is (= (types/->field "my-column" #xt.arrow/type :union false
                                 (types/->field "struct" #xt.arrow/type :struct false
-                                               (types/->field "toto" #xt.arrow/type :union false
-                                                              (types/col-type->field :null)
-                                                              (types/col-type->field :keyword))
-                                               (types/->field "bar" #xt.arrow/type :union false
-                                                              (types/col-type->field :utf8)
-                                                              (types/col-type->field :null))
+                                               (types/col-type->field "toto" [:union #{:null :keyword}])
+                                               (types/col-type->field "bar" [:union #{:null :utf8}])
                                                (types/->field "foo" #xt.arrow/type :union false
                                                               (types/col-type->field :i64)
                                                               (types/col-type->field :f64))))

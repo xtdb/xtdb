@@ -5,6 +5,7 @@
             [xtdb.metadata :as meta]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
@@ -152,6 +153,9 @@
                 wm-live-trie @!transient-trie]
 
             (reify ILiveTableWatermark
+              (columnField [_ col-name]
+                (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
+
               (columnFields [_] fields)
               (liveRelation [_] wm-live-rel)
               (liveTrie [_] wm-live-trie)
@@ -191,6 +195,9 @@
           wm-live-rel (open-wm-live-rel live-rel retain?)
           wm-live-trie (.withIidReader ^LiveHashTrie (.live-trie this) (.readerForName wm-live-rel "xt$iid"))]
       (reify ILiveTableWatermark
+        (columnField [_ col-name]
+          (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
+
         (columnFields [_] fields)
         (liveRelation [_] wm-live-rel)
         (liveTrie [_] wm-live-trie)

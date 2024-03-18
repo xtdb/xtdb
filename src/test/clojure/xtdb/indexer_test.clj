@@ -18,6 +18,8 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
+           [org.apache.arrow.vector.types UnionMode]
+           [org.apache.arrow.vector.types.pojo ArrowType$Union]
            xtdb.IBufferPool
            (xtdb.api TransactionKey)
            (xtdb.metadata IMetadataManager)
@@ -72,7 +74,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  7021)
+  4757)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
@@ -219,11 +221,8 @@
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-      (try
-        (-> (xt/submit-tx node tx-ops)
-            (tu/then-await-tx node (Duration/ofMillis 2000)))
-        (catch Throwable t
-          (throw (.getCause (.getCause t)))))
+      (-> (xt/submit-tx node tx-ops)
+          (tu/then-await-tx node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk! node)
 
@@ -233,15 +232,15 @@
 (t/deftest test-multi-block-metadata
   (let [node-dir (util/->path "target/multi-block-metadata")
         tx0 [[:put-docs :xt_docs {:xt/id "foo"
-                             :list [12.0 "foo"]}]
+                                  :list [12.0 "foo"]}]
              [:put-docs :xt_docs {:xt/id :bar
-                             :struct {:a 1, :b "b"}}]
+                                  :struct {:a 1, :b "b"}}]
              [:put-docs :xt_docs {:xt/id "baz"
-                             :list [#inst "2020-01-01" false]}]
+                                  :list [#inst "2020-01-01" false]}]
              [:put-docs :xt_docs {:xt/id 24}]]
         tx1 [[:put-docs :xt_docs {:xt/id 52}]
              [:put-docs :xt_docs {:xt/id :quux
-                             :struct {:a true, :b {:c "c", :d "d"}}}]]]
+                                  :struct {:a true, :b {:c "c", :d "d"}}}]]]
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
@@ -256,33 +255,29 @@
                      (.resolve node-dir "objects"))
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
-        (t/is (= (types/col-type->field "xt$id" [:union #{:utf8 :keyword :i64}])
+        (t/is (= (types/->field "xt$id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
+                                (types/col-type->field :utf8)
+                                (types/col-type->field :keyword)
+                                (types/col-type->field :i64))
                  (.columnField mm "xt_docs" "xt$id")))
 
-        (t/is (= (types/->field "list" #xt.arrow/type :union false
-                                (types/->field "list" #xt.arrow/type :list false
-                                               (types/->field "$data$" #xt.arrow/type :union false
-                                                              (types/col-type->field :f64)
-                                                              (types/col-type->field :utf8)
-                                                              (types/col-type->field [:timestamp-tz :micro "UTC"])
-                                                              (types/col-type->field :bool)))
-                                (types/col-type->field :null))
+        (t/is (= (types/->field "list" #xt.arrow/type :list true
+                                (types/->field "$data$" #xt.arrow/type :union false
+                                               (types/col-type->field :f64)
+                                               (types/col-type->field :utf8)
+                                               (types/col-type->field [:timestamp-tz :micro "UTC"])
+                                               (types/col-type->field :bool)))
                  (.columnField mm "xt_docs" "list")))
 
-        (t/is (= (types/->field "struct" #xt.arrow/type :union false
-                                (types/col-type->field :null)
-                                (types/->field "struct" #xt.arrow/type :struct false
-                                               (types/->field "a" #xt.arrow/type :union false
-                                                              (types/col-type->field :i64)
-                                                              (types/col-type->field :bool)
-                                                              )
-                                               (types/->field "b" #xt.arrow/type :union false
-                                                              (types/col-type->field :utf8)
-                                                              (types/->field "struct" #xt.arrow/type :struct false
-                                                                             (types/->field "c" #xt.arrow/type :union false
-                                                                                            (types/col-type->field :utf8))
-                                                                             (types/->field "d" #xt.arrow/type :union false
-                                                                                            (types/col-type->field :utf8))))))
+        (t/is (= (types/->field "struct" #xt.arrow/type :struct true
+                                (types/->field "a" #xt.arrow/type :union false
+                                               (types/->field "i64" #xt.arrow/type :i64 true)
+                                               (types/->field "bool" #xt.arrow/type :bool true))
+                                (types/->field "b" #xt.arrow/type :union false
+                                               (types/->field "utf8" #xt.arrow/type :utf8 true)
+                                               (types/->field "struct" #xt.arrow/type :struct true
+                                                              (types/->field "c" #xt.arrow/type :utf8 true)
+                                                              (types/->field "d" #xt.arrow/type :utf8 true))))
                  (.columnField mm "xt_docs" "struct")))))))
 
 (t/deftest drops-nils-on-round-trip
@@ -551,8 +546,8 @@
 
         (tu/finish-chunk! node1)
 
-        (t/is (=  :utf8
-                  (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
+        (t/is (= :utf8
+                 (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
 
         (let [tx2 (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                                        [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]

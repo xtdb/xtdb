@@ -3,13 +3,11 @@ package xtdb.vector
 import clojure.lang.Keyword
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ValueVector
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import java.nio.ByteBuffer
-import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
 
 interface IVectorWriter : IValueWriter, AutoCloseable {
     /**
@@ -62,7 +60,11 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
     override fun writeFloat(v: Float): Unit = unsupported("writeFloat")
     override fun writeDouble(v: Double): Unit = unsupported("writeDouble")
     override fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
-    override fun writeObject(obj: Any?): Unit = if (obj == null) writeNull() else writeObject0(obj)
+    override fun writeObject(obj: Any?): Unit = when {
+        obj != null -> writeObject0(obj)
+        !field.isNullable -> throw InvalidWriteObjectException(field, null)
+        else -> writeNull()
+    }
     fun writeObject0(obj: Any)
 
     fun writeValue(v: IValueReader) = if (v.isNull) writeNull() else writeValue0(v)
@@ -101,25 +103,15 @@ internal data class InvalidWriteObjectException(val field: Field, val obj: Any?)
 internal data class InvalidCopySourceException(val src: Field, val dest: Field) :
     IllegalArgumentException("illegal copy src vector")
 
-private data class PopulateWithAbsentsException(val field: Field, val expectedPos: Int, val actualPos: Int) :
-    IllegalStateException("populate-with-absents needs a nullable or a union underneath")
+internal fun IVectorWriter.populateWithAbsents(pos: Int) =
+    repeat(pos - writerPosition().position) { writeObject(null) }
 
-internal fun IVectorWriter.populateWithAbsents(pos: Int) {
-    val absents = pos - writerPosition().position
-    if (absents > 0) {
-        if (!field.isNullable && field.type != MinorType.DENSEUNION.type)
-            throw PopulateWithAbsentsException(field, pos, writerPosition().position)
-
-        repeat(absents) { writeObject(null) }
-    }
-}
-
-private data class FieldMismatch(val expected: FieldType, val given: FieldType) :
+internal data class FieldMismatch(val expected: FieldType, val given: FieldType) :
     IllegalArgumentException("Field type mismatch")
 
 internal fun IVectorWriter.checkFieldType(given: FieldType) {
     val expected = field.fieldType
-    if (!((expected.type == NULL_TYPE && given.type == NULL_TYPE) || (expected == given)))
+    if (expected.type != given.type || (given.isNullable && !expected.isNullable))
         throw FieldMismatch(expected, given)
 }
 

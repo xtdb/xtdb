@@ -949,7 +949,8 @@ public class ValueVectorReader implements IVectorReader {
 
         @Override
         public boolean isNull(int idx) {
-            return v.getVectorByType(getTypeId(idx)).isNull(v.getOffset(idx));
+            byte typeId = getTypeId(idx);
+            return typeId < 0 || v.getVectorByType(typeId).isNull(v.getOffset(idx));
         }
 
         @SuppressWarnings("resource")
@@ -1051,3 +1052,4 @@ public class ValueVectorReader implements IVectorReader {
         return new DuvReader(v);
     }
 }
+

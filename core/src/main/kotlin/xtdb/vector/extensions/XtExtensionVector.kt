@@ -24,6 +24,9 @@ abstract class XtExtensionVector<V : FieldVector>(private val field: Field, allo
         underlyingVector.copyFromSafe(fromIndex, thisIndex, (from as XtExtensionVector<*>).underlyingVector)
     }
 
+    override fun getTransferPair(field: Field, allocator: BufferAllocator) =
+        makeTransferPair(field.createVector(allocator))
+
     override fun makeTransferPair(target: ValueVector): TransferPair {
         val targetUnderlying: ValueVector = (target as XtExtensionVector<*>).underlyingVector
         val tp = underlyingVector.makeTransferPair(targetUnderlying)

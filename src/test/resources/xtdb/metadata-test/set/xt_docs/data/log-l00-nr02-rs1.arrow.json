@@ -53,56 +53,38 @@
           "name" : "xt$id",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
+            "name" : "utf8"
           },
-          "children" : [{
-            "name" : "utf8",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         },{
           "name" : "colours",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [ ]
+            "name" : "SetType"
           },
           "children" : [{
-            "name" : "set",
+            "name" : "$data$",
             "nullable" : false,
             "type" : {
-              "name" : "SetType"
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "$data$",
+              "name" : "utf8",
               "nullable" : false,
               "type" : {
-                "name" : "union",
-                "mode" : "Dense",
-                "typeIds" : [ ]
+                "name" : "utf8"
               },
-              "children" : [{
-                "name" : "utf8",
-                "nullable" : false,
-                "type" : {
-                  "name" : "utf8"
-                },
-                "children" : [ ]
-              }]
-            }],
-            "metadata" : [{
-              "value" : "set",
-              "key" : "ARROW:extension:name"
-            },{
-              "value" : "",
-              "key" : "ARROW:extension:metadata"
+              "children" : [ ]
             }]
+          }],
+          "metadata" : [{
+            "value" : "set",
+            "key" : "ARROW:extension:name"
+          },{
+            "value" : "",
+            "key" : "ARROW:extension:metadata"
           }]
         }]
       },{
@@ -156,37 +138,25 @@
         "children" : [{
           "name" : "xt$id",
           "count" : 1,
-          "TYPE_ID" : [0],
-          "OFFSET" : [0],
-          "children" : [{
-            "name" : "utf8",
-            "count" : 1,
-            "VALIDITY" : [1],
-            "OFFSET" : [0,3],
-            "DATA" : ["foo"]
-          }]
+          "VALIDITY" : [1],
+          "OFFSET" : [0,3],
+          "DATA" : ["foo"]
         },{
           "name" : "colours",
           "count" : 1,
-          "TYPE_ID" : [0],
-          "OFFSET" : [0],
+          "VALIDITY" : [1],
+          "OFFSET" : [0,3],
           "children" : [{
-            "name" : "set",
-            "count" : 1,
-            "VALIDITY" : [1],
-            "OFFSET" : [0,3],
+            "name" : "$data$",
+            "count" : 3,
+            "TYPE_ID" : [0,0,0],
+            "OFFSET" : [0,1,2],
             "children" : [{
-              "name" : "$data$",
+              "name" : "utf8",
               "count" : 3,
-              "TYPE_ID" : [0,0,0],
-              "OFFSET" : [0,1,2],
-              "children" : [{
-                "name" : "utf8",
-                "count" : 3,
-                "VALIDITY" : [1,1,1],
-                "OFFSET" : [0,4,9,12],
-                "DATA" : ["blue","green","red"]
-              }]
+              "VALIDITY" : [1,1,1],
+              "OFFSET" : [0,4,9,12],
+              "DATA" : ["blue","green","red"]
             }]
           }]
         }]

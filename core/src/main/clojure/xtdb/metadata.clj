@@ -23,7 +23,7 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector FieldVector)
-           (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType)
            (xtdb.metadata ITableMetadata)
            xtdb.IBufferPool
            (xtdb.trie HashTrie ArrowHashTrie)
@@ -89,10 +89,9 @@
   (reduce (fn [fields [table {new-fields :fields}]]
             (update fields table
                     (fn [fields new-fields]
-                      (->>
-                       (merge-with types/merge-fields fields new-fields)
-                       (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
-                       (into {})))
+                      (->> (merge-with types/merge-fields fields new-fields)
+                           (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
+                           (into {})))
                     new-fields))
           fields
           tables))
@@ -244,14 +243,14 @@
                                              (disj :null)
                                              (doto (-> count (<= 1) (assert (str (pr-str (.getField content-col)) "should just be nullable mono-vecs here"))))))]
                 (-> ^NestedMetadataWriter
-                 (.computeIfAbsent type-metadata-writers col-type
-                                   (reify Function
-                                     (apply [_ col-type]
-                                       (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))
+                    (.computeIfAbsent type-metadata-writers col-type
+                                      (reify Function
+                                        (apply [_ col-type]
+                                          (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))
                     (.appendNestedMetadata content-col))))
 
             (write-col-meta! [root-col?, ^IVectorReader content-col]
-              (let [content-writers (->> (if (= #xt.arrow/type :union (.getType (.getField content-col)))
+              (let [content-writers (->> (if (instance? ArrowType$Union (.getType (.getField content-col)))
                                            (->> (.legs content-col)
                                                 (mapv (fn [leg]
                                                         (->nested-meta-writer (.legReader content-col leg)))))
@@ -369,7 +368,10 @@
       table-metadata))
 
   (chunksMetadata [_] chunks-metadata)
-  (columnField [_ table-name col-name] (get-in fields [table-name col-name]))
+  (columnField [_ table-name col-name]
+    (some-> (get fields table-name)
+            (get col-name (types/->field col-name #xt.arrow/type :null true))))
+
   (columnFields [_ table-name] (get fields table-name))
   (allColumnFields [_] fields)
 
@@ -404,6 +406,14 @@
                                                              arrow-read-handlers)})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
     cm))
+
+(comment
+  (require '[clojure.java.io :as io])
+
+  (with-open [is (io/input-stream "/home/james/src/xtdb/xtdb2/src/test/resources/xtdb/indexer-test/can-build-live-index/v01/chunk-metadata/00.transit.json")]
+    (let [rdr (transit/reader is :json {:handlers (merge serde/transit-read-handlers
+                                                         arrow-read-handlers)})]
+      (transit/read rdr))))
 
 (defmethod ig/prep-key ::metadata-manager [_ opts]
   (merge {:buffer-pool (ig/ref :xtdb/buffer-pool)}

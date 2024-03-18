@@ -59,47 +59,29 @@
                   "name" : "xt$id",
                   "nullable" : false,
                   "type" : {
-                    "name" : "union",
-                    "mode" : "Dense",
-                    "typeIds" : [ ]
+                    "name" : "KeywordType"
                   },
-                  "children" : [{
-                    "name" : "keyword",
-                    "nullable" : false,
-                    "type" : {
-                      "name" : "KeywordType"
-                    },
-                    "children" : [ ],
-                    "metadata" : [{
-                      "value" : "xt/clj-keyword",
-                      "key" : "ARROW:extension:name"
-                    },{
-                      "value" : "",
-                      "key" : "ARROW:extension:metadata"
-                    }]
+                  "children" : [ ],
+                  "metadata" : [{
+                    "value" : "xt/clj-keyword",
+                    "key" : "ARROW:extension:name"
+                  },{
+                    "value" : "",
+                    "key" : "ARROW:extension:metadata"
                   }]
                 },{
                   "name" : "xt$fn",
                   "nullable" : false,
                   "type" : {
-                    "name" : "union",
-                    "mode" : "Dense",
-                    "typeIds" : [ ]
+                    "name" : "TransitType"
                   },
-                  "children" : [{
-                    "name" : "transit",
-                    "nullable" : false,
-                    "type" : {
-                      "name" : "TransitType"
-                    },
-                    "children" : [ ],
-                    "metadata" : [{
-                      "value" : "xt/transit+msgpack",
-                      "key" : "ARROW:extension:name"
-                    },{
-                      "value" : "",
-                      "key" : "ARROW:extension:metadata"
-                    }]
+                  "children" : [ ],
+                  "metadata" : [{
+                    "value" : "xt/transit+msgpack",
+                    "key" : "ARROW:extension:name"
+                  },{
+                    "value" : "",
+                    "key" : "ARROW:extension:metadata"
                   }]
                 }]
               }]
@@ -194,27 +176,15 @@
                 "children" : [{
                   "name" : "xt$id",
                   "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "keyword",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "OFFSET" : [0,3,6],
-                    "DATA" : ["foo","bar"]
-                  }]
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,3,6],
+                  "DATA" : ["foo","bar"]
                 },{
                   "name" : "xt$fn",
                   "count" : 2,
-                  "TYPE_ID" : [0,0],
-                  "OFFSET" : [0,1],
-                  "children" : [{
-                    "name" : "transit",
-                    "count" : 2,
-                    "VALIDITY" : [1,1],
-                    "OFFSET" : [0,68,136],
-                    "DATA" : ["92af7e23787464622f636c6a2d666f726d92a67e236c69737493a47e24666e91a47e2469649193aa7e3a7075742d646f6373a57e3a666f6f81a77e3a78742f6964a25e33","92af7e23787464622f636c6a2d666f726d92a67e236c69737493a47e24666e91a47e2469649193aa7e3a7075742d646f6373a57e3a62617281a77e3a78742f6964a25e33"]
-                  }]
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,68,136],
+                  "DATA" : ["92af7e23787464622f636c6a2d666f726d92a67e236c69737493a47e24666e91a47e2469649193aa7e3a7075742d646f6373a57e3a666f6f81a77e3a78742f6964a25e33","92af7e23787464622f636c6a2d666f726d92a67e236c69737493a47e24666e91a47e2469649193aa7e3a7075742d646f6373a57e3a62617281a77e3a78742f6964a25e33"]
                 }]
               }]
             }]

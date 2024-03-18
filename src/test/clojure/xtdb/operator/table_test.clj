@@ -141,4 +141,12 @@
            (tu/query-ra '[:table ?table]
                         {:params {'?table [{:x5 1} {:x6 -77}]}
                          :with-col-types? true}))
-        "differing columns"))
+        "differing columns")
+
+  (t/is (= {:res [{:a 12.4, :b 10} {:b 15} {:a 100, :b 83} {:a 83.0, :b 100}],
+            :col-types '{a [:union #{:f64 :null :i64}], b :i64}}
+
+           (tu/query-ra '[:table ?table]
+                        {:params {'?table [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]}
+                         :with-col-types? true}))
+        "actual nils"))
