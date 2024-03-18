@@ -165,7 +165,10 @@
 
         (abort [_]
           (when new-live-table?
-            (util/close this-table))))))
+            (util/close this-table)))
+
+        AutoCloseable
+        (close [_]))))
 
   (finishChunk [_ next-chunk-idx]
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)
