@@ -393,8 +393,8 @@
 
     (scanFields [_ wm scan-cols]
       (letfn [(->field [[table col-name]]
-                (let [table (str table)
-                      col-name (str col-name)]
+                (let [table (util/str->normal-form-str (str table))
+                      col-name (util/str->normal-form-str (str col-name))]
 
                   ;; TODO move to fields here
                   (cond

@@ -340,25 +340,30 @@
 
 (t/deftest test-scan-col-types
   (with-open [node (xtn/start-node {})]
-    (let [^IRaQuerySource ra-src (util/component node :xtdb.query/ra-query-source)]
-      (letfn [(->col-types [tx]
-                (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt$id]])
-                    (.bind (util/component node :xtdb/indexer) {:node node, :basis {:at-tx tx}})
-                    (.columnFields)
-                    (update-vals types/field->col-type)))]
+    (letfn [(->col-type [col]
+              (:col-types
+               (tu/query-ra [:scan '{:table xt_docs} [col]]
+                            {:node node, :with-col-types? true})))]
 
-        (let [tx (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :doc}]])
-                     (tu/then-await-tx node))]
-          (tu/finish-chunk! node)
+      (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :doc}]])
+          (tu/then-await-tx node))
 
-          (t/is (= '{xt$id :keyword}
-                   (->col-types tx))))
+      (tu/finish-chunk! node)
 
-        (let [tx (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]])
-                     (tu/then-await-tx node))]
+      (t/is (= '{xt$id :keyword}
+               (->col-type 'xt$id)))
 
-          (t/is (= '{xt$id [:union #{:keyword :utf8}]}
-                   (->col-types tx))))))))
+      (t/is (= '{xt/id :keyword}
+               (->col-type 'xt/id)))
+
+      (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]])
+          (tu/then-await-tx node))
+
+      (t/is (= '{xt$id [:union #{:keyword :utf8}]}
+               (->col-type 'xt$id)))
+
+      (t/is (= '{xt/id [:union #{:keyword :utf8}]}
+               (->col-type 'xt/id))))))
 
 #_ ; TODO adapt for scan/->temporal-bounds
 (t/deftest can-create-temporal-min-max-range
