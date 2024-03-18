@@ -42,12 +42,12 @@ XTDB data types are implemented using Apache Arrow.
 
 |`INTERVAL`
 |Day/Time Interval
-|`INTERVAL '163 12'`
+|`INTERVAL '163 12:00:00' DAY TO SECOND`
 |TBD
 
 |`INTERVAL`
 |Year/Month Interval
-|`INTERVAL '163-11'`
+|`INTERVAL '12-11' YEAR TO MONTH`
 |TBD
 
 |`PERIOD`
@@ -108,7 +108,7 @@ TIMEZONE]`
 
 |`DURATION`
 | Duration of time
-|TBD
+|`DURATION 'PT1H3M5S'`
 |`#time/duration "PT1H3M5S"`
 
 |===

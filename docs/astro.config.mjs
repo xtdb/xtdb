@@ -84,8 +84,14 @@ export default defineConfig({
                 { label: 'Queries', link: '/reference/main/xtql/queries' },
               ]
             },
-
-            { label: 'Data Types', link: '/reference/main/data-types' },
+            {
+              label: 'Data Types',
+              collapsed: false,
+              items: [
+                { label: 'Overview', link: '/reference/main/data-types' },
+                { label: 'Temporal Types', link: '/reference/main/data-types/temporal-types' },
+              ]
+            },
 
             {
               label: 'Standard Library',
