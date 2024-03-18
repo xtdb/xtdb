@@ -37,6 +37,11 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** To run a single test file, run (e.g.) `./gradlew test --tests 'xtdb.api_test**'`
 ** Run `git config core.hooksPath .githooks` to add xtdb hooks to your local repo.
 
+== Attaching a debugger to the Clojure REPL
+
+1. Add `-PdebugJvm` to the Gradle command - e.g. `./gradlew :clojureRepl -PdebugJvm` - you should see `Listening for transport dt_socket at address: 5005`.
+2. Connect the debugger - in IntelliJ, 'Run' -> 'Attach to Process' (or `Ctrl-Alt-5`).
+
 == Testing
 
 * Test all with `./gradlew test`; `./gradlew integration-test` for longer tests

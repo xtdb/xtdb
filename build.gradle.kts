@@ -108,11 +108,18 @@ allprojects {
 
             tasks.clojureRepl {
                 forkOptions.run {
-                    jvmArgs = defaultJvmArgs
+                    val jvmArgs = defaultJvmArgs.toMutableList()
 
                     if (project.hasProperty("yourkit")) {
-                        jvmArgs = defaultJvmArgs + "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"
+                        jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"
                     }
+
+                    if (project.hasProperty("debugJvm")) {
+                        jvmArgs += "-Xdebug"
+                        jvmArgs += "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
+                    }
+
+                    this.jvmArgs = jvmArgs
                 }
 
                 middleware.add("cider.nrepl/cider-middleware")
