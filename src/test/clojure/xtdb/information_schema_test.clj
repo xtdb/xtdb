@@ -16,47 +16,47 @@
               :table-schema "public",
               :table-name "beanie",
               :column-name "col1",
-              :data-type ["utf8" "i64"]}
+              :data-type "[:union #{:utf8 :i64}]"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$tx_time",
-              :data-type ["[:timestamp-tz :micro \"UTC\"]"]}
+              :data-type "[:timestamp-tz :micro \"UTC\"]"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$id",
-              :data-type ["i64"]}
+              :data-type ":i64"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "beanie",
               :column-name "xt$id",
-              :data-type ["keyword"]}
+              :data-type ":keyword"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "baseball",
               :column-name "col2",
-              :data-type ["i64"]}
+              :data-type ":i64"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$error",
-              :data-type ["transit"]}
+              :data-type "[:union #{:null :transit}]"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "baseball",
               :column-name "col1",
-              :data-type ["i64"]}
+              :data-type ":i64"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "baseball",
               :column-name "xt$id",
-              :data-type ["keyword"]}
+              :data-type ":keyword"}
              {:table-catalog "default",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$committed?",
-              :data-type ["bool"]}}
+              :data-type ":bool"}}
            (set (tu/query-ra '[:scan
                                {:table information_schema$columns}
                                [table_catalog table_schema table_name column_name data_type]]
@@ -148,7 +148,7 @@
                   "SELECT pg_attribute.attname, pg_attribute.attrelid FROM pg_attribute LIMIT 2"))))
 
   (t/is (= [{:table-name "baseball",
-             :data-type ["keyword"],
+             :data-type ":keyword",
              :column-name "xt$id",
              :table-catalog "default",
              :table-schema "public"}]
@@ -225,7 +225,7 @@
 (deftest test-composite-columns
   (xt/submit-tx tu/*node* [[:put-docs :composite-docs {:xt/id 1 :set-column #{"hello world"}}]])
 
-  (t/is (= [{:data-type ["[:set :utf8]"]}]
+  (t/is (= [{:data-type "[:set :utf8]"}]
            (xt/q tu/*node*
                  "SELECT columns.data_type FROM information_schema.columns AS columns
                   WHERE columns.column_name = 'set_column'"))))

@@ -20,13 +20,12 @@
         [idx col] (map-indexed #(vector %1 %2) (val table-entry))
         :let [table (key table-entry)
               name (key col)
-              ^Field col-field (val col)
-              col-types (or (seq (.getChildren col-field)) [col-field])]]
+              col-field (val col)]]
 
     {:idx idx ;; no guarentee of order/stability of idx for a given col
      :table table
      :name name
-     :type (map #(apply types/arrow-type->col-type (.getType ^Field %) (.getChildren ^Field %)) col-types)}))
+     :type (types/field->col-type col-field)}))
 
 (def info-tables-raw {"tables" {"table_catalog" (types/col-type->field "table_catalog" :utf8)
                                 "table_schema" (types/col-type->field "table_schema" :utf8)
@@ -36,7 +35,7 @@
                                  "table_schema" (types/col-type->field "table_schema" :utf8)
                                  "table_name" (types/col-type->field "table_name" :utf8)
                                  "column_name" (types/col-type->field "column_name" :utf8)
-                                 "data_type" (types/col-type->field "data_type" [:list :utf8])}
+                                 "data_type" (types/col-type->field "data_type" :utf8)}
                       "schemata" {"catalog_name" (types/col-type->field "catalog_name" :utf8)
                                   "schema_name" (types/col-type->field "schema_name" :utf8)
                                   "schema_owner" (types/col-type->field "schema_owner" :utf8)}})
@@ -121,11 +120,7 @@
         "table_name" (.writeObject col-wtr table)
         "table_schema" (.writeObject col-wtr "public")
         "column_name" (.writeObject col-wtr name)
-        "data_type" (let [el-wtr (.listElementWriter col-wtr)]
-                      (.startList col-wtr)
-                      (doseq [type-el type]
-                        (.writeObject el-wtr type-el))
-                      (.endList col-wtr))))
+        "data_type" (.writeObject col-wtr (pr-str type))))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
   rel-wtr)
