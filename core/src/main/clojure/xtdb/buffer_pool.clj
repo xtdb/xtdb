@@ -118,24 +118,24 @@
              (vec)))))
 
   (openArrowWriter [this k vsr]
-    (let [baos (ByteArrayOutputStream.)
-          write-ch (Channels/newChannel baos)
-          aw (ArrowFileWriter. vsr nil write-ch)]
+    (let [baos (ByteArrayOutputStream.)]
+      (util/with-close-on-catch [write-ch (Channels/newChannel baos)
+                                 aw (ArrowFileWriter. vsr nil write-ch)]
 
-      (.start aw)
+        (.start aw)
 
-      (reify IArrowWriter
-        (writeBatch [_] (.writeBatch aw))
+        (reify IArrowWriter
+          (writeBatch [_] (.writeBatch aw))
 
-        (end [_]
-          (.end aw)
-          (.close write-ch)
-          (.putObject this k (ByteBuffer/wrap (.toByteArray baos))))
+          (end [_]
+            (.end aw)
+            (.close write-ch)
+            (.putObject this k (ByteBuffer/wrap (.toByteArray baos))))
 
-        (close [_]
-          (close-arrow-writer aw)
-          (when (.isOpen write-ch)
-            (.close write-ch))))))
+          (close [_]
+            (close-arrow-writer aw)
+            (when (.isOpen write-ch)
+              (.close write-ch)))))))
 
   EvictBufferTest
   (evict-cached-buffer! [_ _k]
@@ -205,25 +205,25 @@
                        (.relativize disk-store path))))))))
 
   (openArrowWriter [_ k vsr]
-    (let [tmp-path (create-tmp-path disk-store)
-          file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
-          aw (ArrowFileWriter. vsr nil file-ch)]
-      (.start aw)
-      (reify IArrowWriter
-        (writeBatch [_] (.writeBatch aw))
+    (let [tmp-path (create-tmp-path disk-store)]
+      (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
+                                 aw (ArrowFileWriter. vsr nil file-ch)]
+        (.start aw)
+        (reify IArrowWriter
+          (writeBatch [_] (.writeBatch aw))
 
-        (end [_]
-          (.end aw)
-          (.close file-ch)
+          (end [_]
+            (.end aw)
+            (.close file-ch)
 
-          (let [file-path (.resolve disk-store k)]
-            (util/create-parents file-path)
-            (util/atomic-move tmp-path file-path)))
+            (let [file-path (.resolve disk-store k)]
+              (util/create-parents file-path)
+              (util/atomic-move tmp-path file-path)))
 
-        (close [_]
-          (close-arrow-writer aw)
-          (when (.isOpen file-ch)
-            (.close file-ch))))))
+          (close [_]
+            (close-arrow-writer aw)
+            (when (.isOpen file-ch)
+              (.close file-ch)))))))
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
@@ -348,30 +348,30 @@
 
   (openArrowWriter [_ k vsr]
     (let [k (.resolve storage-root k)
-          tmp-path (create-tmp-path local-disk-cache)
-          file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
-          aw (ArrowFileWriter. vsr nil file-ch)]
+          tmp-path (create-tmp-path local-disk-cache)]
+      (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
+                                 aw (ArrowFileWriter. vsr nil file-ch)]
 
-      (.start aw)
+        (.start aw)
 
-      (reify IArrowWriter
-        (writeBatch [_] (.writeBatch aw))
+        (reify IArrowWriter
+          (writeBatch [_] (.writeBatch aw))
 
-        (end [_]
-          (.end aw)
-          (.close file-ch)
+          (end [_]
+            (.end aw)
+            (.close file-ch)
 
-          (upload-arrow-file allocator object-store k tmp-path)
+            (upload-arrow-file allocator object-store k tmp-path)
 
-          (let [file-path (.resolve local-disk-cache k)]
-            (util/create-parents file-path)
-            ;; see #2847
-            (util/atomic-move tmp-path file-path)))
+            (let [file-path (.resolve local-disk-cache k)]
+              (util/create-parents file-path)
+              ;; see #2847
+              (util/atomic-move tmp-path file-path)))
 
-        (close [_]
-          (close-arrow-writer aw)
-          (when (.isOpen file-ch)
-            (.close file-ch))))))
+          (close [_]
+            (close-arrow-writer aw)
+            (when (.isOpen file-ch)
+              (.close file-ch)))))))
 
   (putObject [_ k buffer]
     (let [k (.resolve storage-root k)]
