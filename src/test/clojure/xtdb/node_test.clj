@@ -627,7 +627,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
          (map-indexed #(assoc %2 :xt/id %1)))))
 
 (deftest resources-are-correctly-closed-on-interrupt-2800
-  (let [node-dir (.toPath (io/file "test/incoming-puts-dont-cause-memory-leak"))
+  (let [node-dir (.toPath (io/file "target/incoming-puts-dont-cause-memory-leak"))
         node-opts {:node-dir node-dir
                    :rows-per-chunk 16}]
     (util/delete-dir node-dir)
