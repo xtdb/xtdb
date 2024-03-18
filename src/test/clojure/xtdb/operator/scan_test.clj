@@ -658,3 +658,9 @@
                                       [xt$iid xt$valid_from xt$valid_to]]
                                     {:node tu/*node*
                                      :with-col-types? true})))))
+
+(deftest live-hash-trie-branches-get-expanded-3247
+  (xt/submit-tx tu/*node* (for [id (range 2000)] ; 2000 to go over the page size
+                            [:put-docs :docs {:xt/id id}]))
+
+  (t/is (= 2000 (count (xt/q tu/*node* '(from :docs [{:xt/id id}]))))))
