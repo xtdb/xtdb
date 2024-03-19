@@ -67,7 +67,7 @@
   (.listObjects buffer-pool (.resolve table-path "meta")))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
-  (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
+  (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 4))) false
                            (types/col-type->field "nil" :null)
                            (types/col-type->field "branch-iid" [:list [:union #{:null :i32}]])
                            (types/->field "branch-recency" #xt.arrow/type [:map {:sorted? true}] false
