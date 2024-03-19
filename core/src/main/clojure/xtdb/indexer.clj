@@ -67,9 +67,8 @@
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
                                                    ^IVectorReader tx-ops-rdr, ^Instant system-time]
   (let [put-leg (.legReader tx-ops-rdr :put-docs)
-        ;; TODO legacy - see #3204. non-nullable iids-rdr and remove docs-rdr
         iids-rdr (.structKeyReader put-leg "iids")
-        iid-rdr (some-> iids-rdr (.listElementReader))
+        iid-rdr (.listElementReader iids-rdr)
         docs-rdr (.structKeyReader put-leg "documents")
         valid-from-rdr (.structKeyReader put-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
@@ -126,11 +125,8 @@
 (defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
   (let [delete-leg (.legReader tx-ops-rdr :delete-docs)
         table-rdr (.structKeyReader delete-leg "table")
-        ;; TODO legacy - see #3204. non-nullable iids-rdr and remove doc-ids-rdr
-        doc-ids-rdr (.structKeyReader delete-leg "doc-ids")
-        eid-rdr (some-> doc-ids-rdr .listElementReader)
         iids-rdr (.structKeyReader delete-leg "iids")
-        iid-rdr (some-> iids-rdr .listElementReader)
+        iid-rdr (.listElementReader iids-rdr)
         valid-from-rdr (.structKeyReader delete-leg "xt$valid_from")
         valid-to-rdr (.structKeyReader delete-leg "xt$valid_to")
         current-time-µs (time/instant->micros current-time)]
@@ -149,45 +145,26 @@
                                     {:valid-from (time/micros->instant valid-from)
                                      :valid-to (time/micros->instant valid-to)})))
 
-          (when doc-ids-rdr
-            (let [doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
-              (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
-                (let [eid-idx (+ doc-ids-start-idx eid-idx)
-                      eid (.getObject eid-rdr eid-idx)]
-                  (.logDelete live-table (trie/->iid eid) valid-from valid-to)))))
-
-          (when iids-rdr
-            (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
-              (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
-                (.logDelete live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))
-                            valid-from valid-to)))))
+          (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
+            (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
+              (.logDelete live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))
+                          valid-from valid-to))))
 
         nil))))
 
 (defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
   (let [erase-leg (.legReader tx-ops-rdr :erase-docs)
         table-rdr (.structKeyReader erase-leg "table")
-        ;; TODO legacy - see #3204. non-nullable iids-rdr and remove doc-ids-rdr
-        doc-ids-rdr (.structKeyReader erase-leg "doc-ids")
-        eid-rdr (some-> doc-ids-rdr .listElementReader)
         iids-rdr (.structKeyReader erase-leg "iids")
-        iid-rdr (some-> iids-rdr .listElementReader)]
+        iid-rdr (.listElementReader iids-rdr)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
-              live-table (.liveTable live-idx-tx table)]
+              live-table (.liveTable live-idx-tx table)
 
-          (when doc-ids-rdr
-            (let [doc-ids-start-idx (.getListStartIndex doc-ids-rdr tx-op-idx)]
-              (dotimes [eid-idx (.getListCount doc-ids-rdr tx-op-idx)]
-                (let [eid-idx (+ doc-ids-start-idx eid-idx)
-                      eid (.getObject eid-rdr eid-idx)]
-                  (.logErase live-table (trie/->iid eid))))))
-
-          (when iids-rdr
-            (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
-              (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
-                (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx)))))))
+              iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
+          (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
+            (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx)))))
 
         nil))))
 

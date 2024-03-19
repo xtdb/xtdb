@@ -5,7 +5,6 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.indexer :as idx]
-            [xtdb.log :as xt.log]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
@@ -20,8 +19,8 @@
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
-           xtdb.IBufferPool
            (xtdb.api TransactionKey)
+           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            (xtdb.watermark IWatermarkSource)))
 
@@ -614,11 +613,3 @@
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))
-
-(t/deftest test-indexes-legacy-no-iids-tx-log-3201
-  (with-open [node (xtn/start-node)]
-    (binding [xt.log/*legacy-no-iids* true]
-      (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :v 0}]])
-
-      (t/is (= [{:xt/id :foo, :v 0}]
-               (xt/q node '(from :docs [*])))))))

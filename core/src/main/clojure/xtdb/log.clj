@@ -244,13 +244,9 @@
 
       (.endStruct sql-writer))))
 
-;; TODO legacy, see #3204
-(def ^:dynamic *legacy-no-iids* false)
-
 (defn- ->put-writer [^IVectorWriter op-writer]
   (let [put-writer (.legWriter op-writer :put-docs (FieldType/notNullable #xt.arrow/type :struct))
-        iids-writer (when-not *legacy-no-iids*
-                      (.structKeyWriter put-writer "iids" (FieldType/notNullable #xt.arrow/type :list)))
+        iids-writer (.structKeyWriter put-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
         doc-writer (.structKeyWriter put-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
@@ -270,16 +266,15 @@
 
         (.writeObject table-doc-writer docs)
 
-        (when-not *legacy-no-iids*
-          (.startList iids-writer)
-          (doseq [doc docs
-                  :let [eid (->> doc
-                                 (some (fn [e]
-                                         (when (.equals "xt$id" (util/->normal-form-str (key e)))
-                                           e)))
-                                 val)]]
-            (.writeBytes iid-writer (trie/->iid eid)))
-          (.endList iids-writer)))
+        (.startList iids-writer)
+        (doseq [doc docs
+                :let [eid (->> doc
+                               (some (fn [e]
+                                       (when (.equals "xt$id" (util/->normal-form-str (key e)))
+                                         e)))
+                               val)]]
+          (.writeBytes iid-writer (trie/->iid eid)))
+        (.endList iids-writer))
 
       (.writeObject valid-from-writer (.validFrom op))
       (.writeObject valid-to-writer (.validTo op))
@@ -289,10 +284,7 @@
 (defn- ->delete-writer [^IVectorWriter op-writer]
   (let [delete-writer (.legWriter op-writer :delete-docs (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        doc-ids-writer (when *legacy-no-iids*
-                         (.structKeyWriter delete-writer "doc-ids" (FieldType/notNullable #xt.arrow/type :list)))
-        iids-writer (when-not *legacy-no-iids*
-                      (.structKeyWriter delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list)))
+        iids-writer (.structKeyWriter delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
         valid-from-writer (.structKeyWriter delete-writer "xt$valid_from" types/nullable-temporal-field-type)
@@ -303,14 +295,10 @@
 
         (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
 
-        (if-not *legacy-no-iids*
-          (do
-            (.startList iids-writer)
-            (doseq [doc-id doc-ids]
-              (.writeObject iid-writer (trie/->iid doc-id)))
-            (.endList iids-writer))
-
-          (.writeObject doc-ids-writer (vec doc-ids)))
+        (.startList iids-writer)
+        (doseq [doc-id doc-ids]
+          (.writeObject iid-writer (trie/->iid doc-id)))
+        (.endList iids-writer)
 
         (.writeObject valid-from-writer (.validFrom op))
         (.writeObject valid-to-writer (.validTo op))
@@ -320,10 +308,7 @@
 (defn- ->erase-writer [^IVectorWriter op-writer]
   (let [erase-writer (.legWriter op-writer :erase-docs (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        doc-ids-writer (when *legacy-no-iids*
-                         (.structKeyWriter erase-writer "doc-ids" (FieldType/notNullable #xt.arrow/type :list)))
-        iids-writer (when-not *legacy-no-iids*
-                      (.structKeyWriter erase-writer "iids" (FieldType/notNullable #xt.arrow/type :list)))
+        iids-writer (.structKeyWriter erase-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))]
     (fn [^TxOp$EraseDocs op]
@@ -331,31 +316,22 @@
         (.startStruct erase-writer)
         (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
 
-        (if-not *legacy-no-iids*
-          (do
-            (.startList iids-writer)
-            (doseq [doc-id doc-ids]
-              (.writeObject iid-writer (trie/->iid doc-id)))
-            (.endList iids-writer))
-
-          (.writeObject doc-ids-writer (vec doc-ids)))
+        (.startList iids-writer)
+        (doseq [doc-id doc-ids]
+          (.writeObject iid-writer (trie/->iid doc-id)))
+        (.endList iids-writer)
 
         (.endStruct erase-writer)))))
 
 (defn- ->call-writer [^IVectorWriter op-writer]
   (let [call-writer (.legWriter op-writer :call (FieldType/notNullable #xt.arrow/type :struct))
-        ^IVectorWriter fn-id-writer (when *legacy-no-iids*
-                                      (.structKeyWriter call-writer "fn-id" (FieldType/notNullable #xt.arrow/type :union)))
-        ^IVectorWriter fn-iid-writer (when-not *legacy-no-iids*
-                                       (.structKeyWriter call-writer "fn-iid" (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
+        fn-iid-writer (.structKeyWriter call-writer "fn-iid" (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16]))
         args-list-writer (.structKeyWriter call-writer "args" (FieldType/notNullable #xt.arrow/type :transit))]
     (fn write-call! [^TxOp$Call op]
       (.startStruct call-writer)
 
       (let [fn-id (.fnId op)]
-        (if-not *legacy-no-iids*
-          (.writeObject fn-iid-writer (trie/->iid fn-id))
-          (.writeObject fn-id-writer fn-id)))
+        (.writeObject fn-iid-writer (trie/->iid fn-id)))
 
       (let [clj-form (xt/->ClojureForm (vec (.args op)))]
         (.writeObject args-list-writer clj-form))

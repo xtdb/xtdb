@@ -76,11 +76,6 @@
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx.json") devices-docs))
 
-(t/deftest can-write-no-iids-tx-to-arrow-ipc-streaming-format-3201
-  ;; remove with #3204 (and the test file)
-  (binding [log/*legacy-no-iids* true]
-    (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx-no-iids.json") devices-docs)))
-
 (t/deftest can-write-put-fns
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-put-fns.json")
                          [[:put-fn :foo '(fn [id] [[:put-docs :foo {:xt/id id}]])]
