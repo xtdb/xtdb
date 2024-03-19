@@ -131,7 +131,7 @@
 ;; can be used to control state transitions from any thread.
 ;; The :draining status is used to stop connections when they have finished their current query
 
-(defrecord Server [port node
+(defrecord Server [port
 
                    ;; (delay) server socket and thread for accepting connections
                    accept-socket
@@ -189,6 +189,7 @@
 
 (defrecord Connection
   [^Server server
+   node
    socket
 
    ;; a positive integer that identifies the connection on this server
@@ -1359,13 +1360,13 @@
 (def supported-param-oids
   (set (map (comp oids :pg) type-mappings)))
 
-(defn- submit-tx [{:keys [server conn-state]} dml-buf {:keys [default-all-valid-time?]}]
+(defn- submit-tx [{:keys [node conn-state]} dml-buf {:keys [default-all-valid-time?]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql transformed-query params])
                      dml-buf)]
     ;; TODO review err log policy
     (try
-      (let [tx (xt/submit-tx (:node server) tx-ops {:default-all-valid-time? default-all-valid-time?})]
+      (let [tx (xt/submit-tx node tx-ops {:default-all-valid-time? default-all-valid-time?})]
         (swap! conn-state update-in [:session :latest-submitted-tx] time/max-tx tx)
         nil)
       (catch Throwable e
@@ -1421,10 +1422,9 @@
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
-  [{:keys [server, conn-state] :as conn}
+  [{:keys [node conn-state] :as conn}
    {:keys [query transformed-query projection params] :as stmt}]
-  (let [node (:node server)
-        xtify-param (->xtify-param stmt)
+  (let [xtify-param (->xtify-param stmt)
         xt-params (vec (map-indexed xtify-param params))
 
         {{:keys [^Clock clock, latest-submitted-tx] :as session} :session
@@ -1473,7 +1473,6 @@
             (assoc defaults :column-name col)))
         data {:columns (mapv apply-defaults cols)}]
     (cmd-write-msg conn msg-row-description data)))
-
 (defn cmd-describe-canned-response [conn canned-response]
   (let [{:keys [cols]} canned-response]
     (cmd-send-row-description conn cols)))
@@ -1481,14 +1480,14 @@
 (defn cmd-describe-query [conn {:keys [projection]}]
   (cmd-send-row-description conn projection))
 
-(defn cmd-begin [{:keys [server conn-state] :as conn} access-mode]
+(defn cmd-begin [{:keys [node conn-state] :as conn} access-mode]
   (swap! conn-state
          (fn [{:keys [session] :as st}]
            (let [{:keys [^Clock clock latest-submitted-tx]} session]
              (-> st
                  (assoc :transaction
                         {:basis {:current-time (.instant clock)
-                                 :at-tx (time/max-tx (:latest-completed-tx (xt/status (:node server)))
+                                 :at-tx (time/max-tx (:latest-completed-tx (xt/status node))
                                                      latest-submitted-tx)}
 
                          :access-mode (or access-mode
@@ -1819,8 +1818,8 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [server ^Socket conn-socket]
-  (let [{:keys [node, server-state, port]} server
+  [server, ^Socket conn-socket, node]
+  (let [{:keys [server-state, port]} server
         cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
         in (delay (DataInputStream. (.getInputStream conn-socket)))
         out (delay (DataOutputStream. (.getOutputStream conn-socket)))
@@ -1899,7 +1898,9 @@
            server-state
            ^ExecutorService thread-pool,
            port]
-    :as server}]
+    :as server}
+
+   node]
   (when-not (compare-and-set! server-status :starting :running)
     (throw (Exception. "Accept loop requires a newly initialised server")))
 
@@ -1930,7 +1931,7 @@
               (.setTcpNoDelay conn-socket true)
               (if (= :running @server-status)
                 ;; TODO fix buffer on tp? q gonna be infinite right now
-                (.submit thread-pool ^Runnable (fn [] (connect server conn-socket)))
+                (.submit thread-pool ^Runnable (fn [] (connect server conn-socket node)))
                 (do
                   (err-cannot-connect-now "server shutting down")
                   (.close conn-socket))))
@@ -1958,7 +1959,7 @@
 
   (log/trace "exiting accept loop"))
 
-(defn- create-server [{:keys [node port num-threads drain-wait unsafe-init-state]}]
+(defn- create-server [node {:keys [port num-threads drain-wait unsafe-init-state]}]
   (assert node ":node is required")
   (let [self (atom nil)
         clock (Clock/systemDefaultZone)
@@ -1968,9 +1969,8 @@
                                     "server_encoding" "UTF8"
                                     "client_encoding" "UTF8"}}
         srvr (map->Server {:port port
-                           :node node
                            :accept-socket (delay (ServerSocket. port))
-                           :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
+                           :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self node)) (str "pgwire-server-accept-" port))
                            :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                            :server-status (atom :new)
                            :server-state (atom (merge unsafe-init-state default-state))})]
@@ -1994,8 +1994,8 @@
                    :num-threads 42
                    ;; 5 seconds of draining
                    :drain-wait 5000}
-         cfg (assoc (merge defaults opts) :node node)]
-     (doto (create-server cfg)
+         cfg (merge defaults opts)]
+     (doto (create-server node cfg)
        (start-server cfg)))))
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads]}]
