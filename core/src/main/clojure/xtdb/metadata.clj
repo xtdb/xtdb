@@ -410,7 +410,7 @@
 (comment
   (require '[clojure.java.io :as io])
 
-  (with-open [is (io/input-stream "/home/james/src/xtdb/xtdb2/src/test/resources/xtdb/indexer-test/can-build-live-index/v01/chunk-metadata/00.transit.json")]
+  (with-open [is (io/input-stream "src/test/resources/xtdb/indexer-test/can-build-live-index/v02/chunk-metadata/00.transit.json")]
     (let [rdr (transit/reader is :json {:handlers (merge serde/transit-read-handlers
                                                          arrow-read-handlers)})]
       (transit/read rdr))))
