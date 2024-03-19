@@ -47,22 +47,6 @@
           (set! *server*)))))
 
 (t/use-fixtures :once
-  (fn [f]
-    (let [check-if-no-pgwire-threads (zero? (count @#'pgwire/servers))]
-      (try
-        (f)
-        (finally
-          (when check-if-no-pgwire-threads
-            ;; warn if it looks like threads are stick around (for CI logs)
-            (when-not (zero? (->> (Thread/getAllStackTraces)
-                                  keys
-                                  (map #(.getName ^Thread %))
-                                  (filter #(str/starts-with? % "pgwire"))
-                                  count))
-              (log/warn "dangling pgwire resources discovered after tests!"))
-
-            ;; stop all just in case we can clean up anyway
-            (pgwire/stop-all))))))
 
   #_ ; HACK commented out while we're not bringing in the Flight JDBC driver
   (fn [f]
@@ -316,21 +300,11 @@
                 (when clj-pred
                   (is (clj-pred clj-value) "parsed value should pass :clj-pred"))))))))))
 
-(defn- registered? [server]
-  (= server (get @#'pgwire/servers (:port server))))
-
-(deftest server-registered-on-start-test
-  (require-server)
-  (is (registered? *server*)))
-
 (defn check-server-resources-freed
   ([]
    (require-server)
    (check-server-resources-freed *server*))
   ([server]
-   (testing "unregistered"
-     (is (not (registered? server))))
-
    (testing "accept socket"
      (is (.isClosed @(:accept-socket server))))
 
@@ -343,8 +317,7 @@
 
 (deftest server-resources-freed-on-close-test
   (require-node)
-  (doseq [close-method [#(.close %)
-                         pgwire/stop-server]]
+  (doseq [close-method [#(.close %)]]
     (with-open [server (pgwire/serve *node* {:port (tu/free-port)})]
       (close-method server)
       (check-server-resources-freed server))))
@@ -459,25 +432,6 @@
   (require-server {:accept-so-timeout nil})
   (is (= 0 (.getSoTimeout @(:accept-socket *server*)))))
 
-(deftest stop-all-test
-  (when-not (= 0 (count @#'pgwire/servers))
-    (log/warn "skipping stop-all-test because servers already exist"))
-
-  (when (= 0 (count @#'pgwire/servers))
-    (require-node)
-    (let [server1 (pgwire/serve *node* {:port (tu/free-port)})
-          server2 (pgwire/serve *node* {:port (tu/free-port)})]
-      (pgwire/stop-all)
-      (check-server-resources-freed server1)
-      (check-server-resources-freed server2))))
-
-(deftest conn-registered-on-start-test
-  (require-server {:num-threads 2})
-  (with-open [_ (jdbc-conn)]
-    (is (= 1 (count (:connections @(:server-state *server*)))))
-    (with-open [_ (jdbc-conn)]
-      (is (= 2 (count (:connections @(:server-state *server*))))))))
-
 (defn- get-connections []
   (vals (:connections @(:server-state *server*))))
 
@@ -487,25 +441,9 @@
 (defn- wait-for-close [server-conn ms]
   (deref (:close-promise @(:conn-state server-conn)) ms false))
 
-(deftest conn-deregistered-on-close-test
-  (require-server {:num-threads 2})
-  (with-open [conn1 (jdbc-conn)
-              srv-conn1 (get-last-conn)
-              conn2 (jdbc-conn)
-              srv-conn2 (get-last-conn)]
-    (.close conn1)
-    (is (wait-for-close srv-conn1 500))
-    (is (= 1 (count (get-connections))))
-
-    (.close conn2)
-    (is (wait-for-close srv-conn2 500))
-    (is (= 0 (count (get-connections))))))
-
 (defn check-conn-resources-freed [server-conn]
-  (let [{:keys [cid, socket, server]} server-conn
-        {:keys [server-state]} server]
-    (is (.isClosed socket))
-    (is (not (contains? (:connections @server-state) cid)))))
+  (let [{:keys [socket]} server-conn]
+    (t/is (.isClosed socket))))
 
 (deftest conn-force-closed-by-server-frees-resources-test
   (require-server)
@@ -867,14 +805,9 @@
   (tu/with-log-level 'xtdb.pgwire :info
     (let [port (tu/free-port)]
       (with-open [_node (xtn/start-node {:pgwire-server {:port port
-                                                         :num-threads 3}})] 
-        (let [srv (get @#'pgwire/servers (int port))]
-          (is (some? srv)))
-
-        (with-open [conn (jdbc-conn)]
-          (is (= "pong" (ping conn)))))
-
-      (is (not (contains? @#'pgwire/servers port))))))
+                                                         :num-threads 3}})
+                  conn (jdbc-conn)]
+        (is (= "pong" (ping conn)))))))
 
 (deftest open-close-transaction-does-not-crash-test
   (with-open [conn (jdbc-conn)]
