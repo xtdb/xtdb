@@ -531,6 +531,99 @@
       (t/is (= #xt/interval-dt ["P1D" "PT12H"] (test-cast #xt/interval-dt ["P0D" "PT36H"] :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
       (t/is (= #xt/interval-dt ["P1D" "PT0H"] (test-cast #xt/interval-dt ["P0D" "PT36H"] :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0}))))))
 
+(defn age [dt1 dt2]
+  (-> (tu/query-ra [:project [{'res `(~'age ~dt1 ~dt2)}]
+                    [:table [{}]]]
+                   {:basis {}})
+      first :res))
+
+;; Keeping in mind - age(dt1, dt2) is dt1 - dt2.
+;; As such, we refer to start time / end time, where age(end time, start time)
+(t/deftest test-age-edge-cases
+  ;; Same day, different times
+  (t/is (= #xt/interval-mdn ["P0D" "PT23H"] (age #time/date-time "2021-10-31T23:00" #time/date-time "2021-10-31T00:00")))
+  ;; End of month to next month (with and without time differences)
+  (t/is (= #xt/interval-mdn ["P0D" "PT2H"] (age #time/date-time "2021-11-01T01:00" #time/date-time "2021-10-31T23:00")))
+  ;; Leap year
+  (t/is (= #xt/interval-mdn ["P2D" "PT0S"] (age #time/date-time "2020-03-01T12:00" #time/date-time "2020-02-28T12:00")))
+  ;; Different years
+  (t/is (= #xt/interval-mdn ["P0D" "PT2H"] (age #time/date-time "2021-01-01T01:00" #time/date-time "2020-12-31T23:00")))
+  ;; More than a month
+  (t/is (= #xt/interval-mdn ["P1M1D" "PT0S"] (age #time/date-time "2021-02-02T00:00" #time/date-time "2021-01-01T00:00")))
+  ;; More than a year
+  (t/is (= #xt/interval-mdn ["P24M" "PT0S"] (age #time/date-time "2021-01-01T00:00" #time/date-time "2019-01-01T00:00")))
+  ;; Start time after end time (dt1 - dt2)
+  (t/is (= #xt/interval-mdn ["P-12M" "PT0S"] (age #time/date-time "2020-01-01T00:00" #time/date-time "2021-01-01T00:00")))
+  ;; Time within the same day but with start time after end time
+  (t/is (= #xt/interval-mdn ["P0D" "PT-1H"] (age #time/date-time "2021-01-01T11:00" #time/date-time "2021-01-01T12:00")))
+  ;; Exactly the same start and end time
+  (t/is (= #xt/interval-mdn ["P0D" "PT0S"] (age #time/date-time "2021-01-01T00:00" #time/date-time "2021-01-01T00:00"))))
+
+(t/deftest test-age-fn
+  (t/testing "testing with local date times"
+    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+      #xt/interval-mdn ["P0D" "PT2H"] #time/date-time "2022-05-02T01:00" #time/date-time "2022-05-01T23:00"
+      #xt/interval-mdn ["P6M" "PT0S"] #time/date-time "2022-11-01T00:00" #time/date-time "2022-05-01T00:00"
+      #xt/interval-mdn ["P-6M" "PT0S"] #time/date-time "2022-05-01T00:00" #time/date-time "2022-11-01T00:00"
+      #xt/interval-mdn ["P0D" "PT0S"] #time/date-time "2023-01-01T00:00" #time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P30D" "PT12H"] #time/date-time "2023-02-01T12:00" #time/date-time "2023-01-02T00:00"
+      #xt/interval-mdn ["P-12M" "PT0S"] #time/date-time "2022-01-01T00:00" #time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P0D" "PT1H"] #time/date-time "2023-01-01T01:00" #time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P24M" "PT3H"] #time/date-time "2025-01-01T03:00" #time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P0D" "PT-23H"] #time/date-time "2023-01-01T01:00" #time/date-time "2023-01-02T00:00"
+      #xt/interval-mdn ["P48M" "PT6M"] #time/date-time "2027-01-01T00:06" #time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P-48M" "PT-6M"] #time/date-time "2023-01-01T00:00" #time/date-time "2027-01-01T00:06"
+      #xt/interval-mdn ["P29D" "PT23H"] #time/date-time "2023-02-28T23:00" #time/date-time "2023-01-30T00:00"
+      #xt/interval-mdn ["P28D" "PT23H"] #time/date-time "2023-03-29T23:00" #time/date-time "2023-03-01T00:00"
+      #xt/interval-mdn ["P0D" "PT-1M"] #time/date-time "2023-04-01T00:00" #time/date-time "2023-04-01T00:01"
+      #xt/interval-mdn ["P0D" "PT0.001S"] #time/date-time "2023-07-01T12:00:30.501" #time/date-time "2023-07-01T12:00:30.500"
+      #xt/interval-mdn ["P0D" "PT-0.001S"] #time/date-time "2023-07-01T12:00:30.499" #time/date-time "2023-07-01T12:00:30.500"
+      #xt/interval-mdn ["P25M3D" "PT4H5M6.007S"] #time/date-time "2025-02-04T18:06:07.007" #time/date-time "2023-01-01T14:01:01.000"))
+
+  (t/testing "testing with zoned date times"
+    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+      #xt/interval-mdn ["P0D" "PT1H"] #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #time/zoned-date-time "2023-06-01T11:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT0H"] #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #time/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT0S"] #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #time/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT1M"] #time/zoned-date-time "2023-03-26T03:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-03-26T01:59+01:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT-1H-59M"] #time/zoned-date-time "2023-10-29T01:00+01:00[Europe/Berlin]" #time/zoned-date-time "2023-10-29T02:59+01:00[Europe/Berlin]"
+      #xt/interval-mdn ["P-1D" "PT0S"] #time/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]" #time/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]"
+      #xt/interval-mdn ["P1D" "PT0S"] #time/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]" #time/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]"
+      #xt/interval-mdn ["P0D" "PT0S"] #time/zoned-date-time "2023-01-01T12:00-05:00[America/New_York]" #time/zoned-date-time "2023-01-01T18:00+01:00[Europe/Paris]"
+      #xt/interval-mdn ["P12M" "PT0S"] #time/zoned-date-time "2024-03-30T01:00+01:00[Europe/Berlin]" #time/zoned-date-time "2023-03-30T01:00+01:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT3H"] #time/zoned-date-time "2023-05-15T15:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-05-15T12:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P1D" "PT2H"] #time/zoned-date-time "2023-05-16T02:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-05-14T22:00+00:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT3H"] #time/zoned-date-time "2023-05-16T03:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-05-15T22:00+00:00[Europe/London]"
+      #xt/interval-mdn ["P0D" "PT0.001S"] #time/zoned-date-time "2023-07-01T12:00:30.501+02:00[Europe/Berlin]" #time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT-0.001S"] #time/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P25M3D" "PT3H5M6.007S"] #time/zoned-date-time "2025-02-04T18:06:07.007+01:00[Europe/Paris]" #time/zoned-date-time "2023-01-01T14:01:01.000+00:00[Europe/Paris]"))
+
+  (t/testing "testing with dates"
+    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+      #xt/interval-mdn ["P1D" "PT0S"] #time/date "2023-01-02" #time/date "2023-01-01"
+      #xt/interval-mdn ["P-1D" "PT0S"] #time/date "2023-01-01" #time/date "2023-01-02"
+      #xt/interval-mdn ["P30D" "PT0S"] #time/date "2023-01-31" #time/date "2023-01-01"
+      #xt/interval-mdn ["P2D" "PT0S"] #time/date "2020-03-01" #time/date "2020-02-28"
+      #xt/interval-mdn ["P1D" "PT0S"] #time/date "2021-03-01" #time/date "2021-02-28"
+      #xt/interval-mdn ["P12M" "PT0S"] #time/date "2024-01-01" #time/date "2023-01-01"
+      #xt/interval-mdn ["P-12M" "PT0S"] #time/date "2023-01-01" #time/date "2024-01-01"
+      #xt/interval-mdn ["P13M" "PT0S"] #time/date "2024-02-01" #time/date "2023-01-01"
+      #xt/interval-mdn ["P-13M" "PT0S"] #time/date "2023-01-01" #time/date "2024-02-01"
+      #xt/interval-mdn ["P0D" "PT0S"] #time/date "2023-01-01" #time/date "2023-01-01"))
+  
+  (t/testing "test with mixed types"
+    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+      #xt/interval-mdn ["P1D" "PT0S"] #time/date "2023-01-02" #time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P-1D" "PT0S"] #time/date-time "2023-01-01T00:00" #time/date "2023-01-02"
+      #xt/interval-mdn ["P12M" "PT0S"] #time/date "2024-01-01" #time/zoned-date-time "2023-01-01T00:00+00:00[UTC]"
+      #xt/interval-mdn ["P-12M" "PT0S"] #time/zoned-date-time "2023-01-01T00:00+00:00[UTC]" #time/date "2024-01-01"
+      #xt/interval-mdn ["P0D" "PT2H"] #time/date-time "2023-06-01T12:00" #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]"
+      #xt/interval-mdn ["P0D" "PT2H"] #time/zoned-date-time "2023-06-01T09:00-05:00[America/Chicago]" #time/date-time "2023-06-01T12:00"
+      #xt/interval-mdn ["P6M" "PT0S"] #time/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]" #time/date "2022-05-01"
+      #xt/interval-mdn ["P5M30D" "PT23H"] #time/zoned-date-time "2022-11-01T00:00+01:00[Europe/Paris]" #time/date "2022-05-01"
+      #xt/interval-mdn ["P-6M" "PT0S"] #time/date "2022-05-01" #time/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]"
+      #xt/interval-mdn ["P0D" "PT2H0.001S"] #time/date-time "2023-07-01T12:00:30.501" #time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT-2H-0.001S"] #time/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #time/date-time "2023-07-01T12:00:30.500")))
 
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")

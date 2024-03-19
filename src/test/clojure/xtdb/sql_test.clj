@@ -1282,6 +1282,37 @@
            #"Extract \"TIMEZONE_HOUR\" not supported for type interval"
            (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))))
 
+(deftest test-age-function
+  (t/testing "testing AGE with timestamps"
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-02T01:00:00', TIMESTAMP '2022-05-01T23:00:00') as itvl FROM (VALUES 1) AS z")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P6M" "PT0S"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-11-01T00:00:00', TIMESTAMP '2022-05-01T00:00:00') as itvl FROM (VALUES 1) AS z")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT1H"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-01-01T01:00:00', TIMESTAMP '2023-01-01T00:00:00') as itvl FROM (VALUES 1) AS z"))))
+
+  (t/testing "testing AGE with timestamp with timezone"
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT1H"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T11:00:00+01:00[Europe/London]', TIMESTAMP '2023-06-01T11:00:00+02:00[Europe/Berlin]') as itvl FROM (VALUES 1) AS z")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T09:00:00-05:00[America/Chicago]', TIMESTAMP '2023-06-01T12:00:00') as itvl FROM (VALUES 1) AS z"))))
+
+  (t/testing "testing AGE with date"
+    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', DATE '2023-01-01') as itvl FROM (VALUES 1) AS z")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P-12M" "PT0S"]}]
+             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-01', DATE '2024-01-01') as itvl FROM (VALUES 1) AS z"))))
+
+  (t/testing "test with mixed types"
+    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', TIMESTAMP '2023-01-01T00:00:00') as itvl FROM (VALUES 1) AS z")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P-6M" "PT0S"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-01T00:00:00', TIMESTAMP '2022-11-01T00:00:00+00:00[Europe/London]') as itvl FROM (VALUES 1) AS z")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H0.001S"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.501', TIMESTAMP '2023-07-01T12:00:30.500+02:00[Europe/Berlin]') as itvl FROM (VALUES 1) AS z")))
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT-2H-0.001S"]}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.499+02:00[Europe/Berlin]', TIMESTAMP '2023-07-01T12:00:30.500') as itvl FROM (VALUES 1) AS z")))))
+
 (deftest test-system-time-queries
   (t/testing "AS OF"
     (t/is

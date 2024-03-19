@@ -1440,6 +1440,49 @@
                       "MILLISECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MILLIS))
                       "MICROSECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MICROS)))))})
 
+(defn ->mdn-interval-between [^LocalDateTime end-dt ^LocalDateTime start-dt]
+  (let [period-between (Period/between (.toLocalDate start-dt) (.toLocalDate end-dt))
+        period-days (.getDays period-between)
+        duration-between (Duration/between start-dt end-dt)
+        start-lt (.toLocalTime start-dt)
+        end-lt (.toLocalTime end-dt)
+        period-day-adjustment (cond
+                                (and (.isNegative period-between)
+                                     (.isBefore start-lt end-lt))
+                                1
+
+                                (and (not (.isNegative period-between))
+                                     (not= period-days 0)
+                                     (.isAfter start-lt end-lt))
+                                -1
+
+                                :else 0)
+        adjusted-period (.plusDays period-between period-day-adjustment)
+        adjusted-duration (.minusDays duration-between (.toDays duration-between))]
+    (PeriodDuration. adjusted-period adjusted-duration)))
+
+(defmethod expr/codegen-call [:age :timestamp-local :timestamp-local] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
+  {:return-type [:interval :month-day-nano] 
+   :->call-code (fn [[x y]] `(->mdn-interval-between ~(ts->ldt x x-unit) ~(ts->ldt y y-unit)))})
+
+;; Cast and call for timestamp tz and mixed types
+(doseq [x [:timestamp-tz :timestamp-local]
+        y [:timestamp-tz :timestamp-local]]
+  (when-not (= x y :timestamp-local)
+    (defmethod expr/codegen-call [:age x y] [{[[_ x-unit _], [_ y-unit _]] :arg-types, :as expr}]
+      (-> expr (recall-with-cast [:timestamp-local x-unit] [:timestamp-local y-unit])))))
+
+;; Cast and call age for date and mixed types with date 
+(defmethod expr/codegen-call [:age :date :date] [expr]
+  (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
+
+(doseq [x [:timestamp-tz :timestamp-local]]
+  (defmethod expr/codegen-call [:age x :date] [{[[_ x-unit _] _] :arg-types, :as expr}]
+    (-> expr (recall-with-cast [:timestamp-local x-unit] [:timestamp-local :micro])))
+  
+  (defmethod expr/codegen-call [:age :date x] [{[_ [_ y-unit _]] :arg-types, :as expr}]
+    (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local y-unit]))))
+
 (defn- bound-precision ^long [^long precision]
   (-> precision (max 0) (min 9)))
 
