@@ -187,23 +187,27 @@
 ;; Like the server, we use an atom :conn-status to mediate life-cycle state changes to control for concurrency
 ;; unlike the server, a connections lifetime is entirely bounded by a blocking (connect) call - so shutdowns should be more predictable.
 
-(defrecord Connection
-  [^Server server
-   node
-   socket
+(defrecord Connection [^Server server
+                       node close-node?
+                       socket
 
-   ;; a positive integer that identifies the connection on this server
-   ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
-   cid
-   ;; atom to mediate lifecycle transitions (see Connection lifecycle comment)
-   conn-status
-   ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
-   conn-state
-   ;; io
-   ^DataInputStream in
-   ^DataOutputStream out]
+                       ;; a positive integer that identifies the connection on this server
+                       ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
+                       cid
+                       ;; atom to mediate lifecycle transitions (see Connection lifecycle comment)
+                       conn-status
+                       ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
+                       conn-state
+                       ;; io
+                       ^DataInputStream in
+                       ^DataOutputStream out]
+
   Closeable
-  (close [this] (stop-connection this)))
+  (close [this]
+    (stop-connection this)
+
+    (when close-node?
+      (util/close node))))
 
 ;; best the server/conn records are opaque when printed as they contain mutual references
 (defmethod print-method Server [wtr o] ((get-method print-method Object) wtr o))
@@ -1827,16 +1831,23 @@
         conn-state (atom {:close-promise (promise)
                           :session {:access-mode :read-only
                                     :clock (:clock @server-state)}})
-        conn
-        (map->Connection
-          {:server server,
-           :node node,
-           :socket conn-socket,
-           :cid cid,
-           :conn-status conn-status
-           :conn-state conn-state
-           :in in
-           :out out})]
+
+        create-node? (nil? node)
+
+        node (or node
+                 (do
+                   (log/debug "starting in-memory node")
+                   (xtn/start-node)))
+
+        conn (map->Connection {:server server,
+                               :node node
+                               :close-node? create-node?
+                               :socket conn-socket,
+                               :cid cid,
+                               :conn-status conn-status
+                               :conn-state conn-state
+                               :in in
+                               :out out})]
 
     ;; first try and initialise the connection
     (try
@@ -1880,6 +1891,9 @@
     ;; right now we'll deregister and cleanup regardless, but later we may
     ;; want to leave conns around for a bit, so you can look at their state and debug
     (cleanup-connection-resources conn)
+    (when create-node?
+      (log/debug "closing in-memory node")
+      (util/close node))
 
     (log/trace "Connection ended" {:cid cid, :port port})
 
@@ -1901,6 +1915,7 @@
     :as server}
 
    node]
+
   (when-not (compare-and-set! server-status :starting :running)
     (throw (Exception. "Accept loop requires a newly initialised server")))
 
@@ -1959,8 +1974,10 @@
 
   (log/trace "exiting accept loop"))
 
-(defn- create-server [node {:keys [port num-threads drain-wait unsafe-init-state]}]
-  (assert node ":node is required")
+(defn- create-server
+  "node: if provided, uses the given node for all connections; otherwise, creates a transient, in-memory node for each new connection"
+  [node {:keys [port num-threads drain-wait unsafe-init-state]}]
+
   (let [self (atom nil)
         clock (Clock/systemDefaultZone)
         default-state {:clock clock
