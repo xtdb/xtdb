@@ -1,7 +1,7 @@
 import { Binding, ToBindings, toBindings } from './binding.mjs'
 import { Expr } from './expr.mjs'
 
-type TemporalFilter = { from: Date } | { to: Date } | { in: [Date, Date] } | "all-time"
+type TemporalFilter = { from: Date } | { to: Date } | { in: [Date, Date] } | "allTime"
 
 class From {
     forValidTime?: TemporalFilter;
