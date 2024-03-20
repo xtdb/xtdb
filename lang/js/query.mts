@@ -16,7 +16,7 @@ class From {
         this.projectAllCols = opts.projectAllCols;
     }
 
-    binding(bindings: ToBindings[]): From {
+    binding(...bindings: ToBindings[]): From {
         this.bind = bindings.flatMap(toBindings)
         return this
     }
@@ -43,7 +43,7 @@ class Join {
 
     bind: Binding[] = []
 
-    binding(bindings: ToBindings[]): Join {
+    binding(...bindings: ToBindings[]): Join {
         this.bind = bindings.flatMap(toBindings)
         return this
     }
@@ -58,7 +58,7 @@ class LeftJoin {
 
     public bind: Binding[] = []
 
-    binding(bindings: ToBindings[]): LeftJoin {
+    binding(...bindings: ToBindings[]): LeftJoin {
         this.bind = bindings.flatMap(toBindings)
         return this
     }
