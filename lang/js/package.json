@@ -1,0 +1,30 @@
+{
+  "name": "@xtdb/xtdb",
+  "version": "0.0.0-2024.3.19.9",
+  "type": "module",
+  "description": "A JavaScript client library for XTDB",
+  "scripts": {
+    "prepare": "rimraf dist && tsc"
+  },
+  "main": "dist/index.mjs",
+  "files": [
+    "dist/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xtdb/xtdb"
+  },
+  "keywords": [
+    "xtdb"
+  ],
+  "author": "JUXT Ltd",
+  "license": "MPL-2.0",
+  "devDependencies": {
+    "@types/luxon": "^3.4.2",
+    "rimraf": "^3.0.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "luxon": "^3.4.4"
+  }
+}

@@ -204,6 +204,7 @@
           (with-open [^Stream res res]
             (try
               (JsonSerde/encode (.toList res) out)
+
               (catch Throwable t
                 (JsonSerde/encode t out)
                 (.write out ^byte ascii-newline))
@@ -259,9 +260,12 @@
                            (assoc-in [:formats "application/jsonl" :encoder]
                                      [->jsonl-resultset-encoder {}])
 
+                           (assoc-in [:formats "application/json" :encoder]
+                                     [->json-resultset-encoder {}])
+
                            (assoc-in [:formats "application/json" :decoder] (json-query-decoder))))
 
-   :post {:handler (fn [{:keys [node parameters] :as req}]
+   :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
                        (-> (xtp/open-query& node query (dissoc query-opts :query))
                            (util/then-apply (fn [res]

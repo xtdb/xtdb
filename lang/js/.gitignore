@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+
+dist/
+*.tern-port
+node_modules/
+yarn-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+.npm
+.eslintcache
