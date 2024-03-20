@@ -126,11 +126,12 @@ export default class Xtdb {
     }
 
     async query(query: Query, opts: QueryOpts = {}): Promise<any> {
-        if (opts.afterTx === undefined) opts = { afterTx: this.latestSubmittedTx, ...opts }
+        // FIXME
+        // if (opts.afterTx === undefined) opts = { afterTx: this.latestSubmittedTx, ...opts }
 
         const req = {
             method: 'POST',
-            body: JSON.stringify({query, ...opts}, replacer),
+            body: JSON.stringify({query, queryOpts: opts}, replacer),
             headers: {
                 accept: "application/json",
                 "content-type": "application/json"
