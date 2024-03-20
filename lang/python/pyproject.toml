@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "xtdb-juxt"
+version = "0.0.0-dev0"
+description = ""
+authors = ["XTDB Team <hello@xtdb.com>"]
+license = "MPL-2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+urllib3 = "^2.2.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
