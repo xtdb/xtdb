@@ -1,6 +1,6 @@
 {
   "name": "@xtdb/xtdb",
-  "version": "0.0.0-2024.3.19.9",
+  "version": "0.0.0-2024.3.20",
   "type": "module",
   "description": "A JavaScript client library for XTDB",
   "scripts": {

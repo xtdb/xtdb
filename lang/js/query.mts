@@ -3,11 +3,23 @@ import { Expr } from './expr.mjs'
 
 type TemporalFilter = { from: Date } | { to: Date } | { in: [Date, Date] } | "all-time"
 
-type From = {
-    from: string;
+class From {
     forValidTime?: TemporalFilter;
     forSystemTime?: TemporalFilter;
     projectAllCols: boolean;
+
+    bind: Binding[] = []
+
+    constructor(public readonly from: string, opts: FromOpts) {
+        this.forValidTime = opts.forValidTime;
+        this.forSystemTime = opts.forSystemTime;
+        this.projectAllCols = opts.projectAllCols;
+    }
+
+    binding(bindings: ToBindings[]): From {
+        this.bind = bindings.flatMap(toBindings)
+        return this
+    }
 }
 
 type FromOpts = {
@@ -17,7 +29,7 @@ type FromOpts = {
 }
 
 export function from(table: string, opts: FromOpts = { projectAllCols: false }) : From {
-    return { from: table, ...opts }
+    return new From(table, opts)
 }
 
 type Where = { where: Expr[] }
@@ -29,7 +41,7 @@ export function where(...preds: Expr[]) {
 class Join {
     constructor(public readonly join: Query, public readonly args: Binding[]) {}
 
-    public bind: Binding[] = []
+    bind: Binding[] = []
 
     binding(bindings: ToBindings[]): Join {
         this.bind = bindings.flatMap(toBindings)
