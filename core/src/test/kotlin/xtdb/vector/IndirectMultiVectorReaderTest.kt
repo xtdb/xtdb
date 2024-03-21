@@ -245,9 +245,9 @@ class IndirectMultiVectorReaderTest {
             Selection(intArrayOf(0, 0, 1, 1, 2, 2))
         )
         val r = 0..5
-        val expected = listOf(0, "first", "absent", 3, "fourth", "absent")
+        val expected = listOf(0, "first", null, 3, "fourth", null)
         assertEquals(expected, r.map {
-            if (indirectRdr.isAbsent(it)) "absent"
+            if (indirectRdr.isNull(it)) null
             else indirectRdr.getObject(it)
         })
 
@@ -255,7 +255,7 @@ class IndirectMultiVectorReaderTest {
         val valueRdr = indirectRdr.valueReader(pos)
         assertEquals(expected, r.map {
             val res =
-                if (valueRdr.isAbsent) "absent"
+                if (valueRdr.isNull) null
                 else valueRdr.readObject()
             pos.getPositionAndIncrement()
             res

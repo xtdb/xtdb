@@ -12,7 +12,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
 import xtdb.toLeg
 import xtdb.util.requiringResolve
-import xtdb.vector.ValueVectorReader.nullVector
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
@@ -65,10 +64,6 @@ class IndirectMultiVectorReader(
     override fun isNull(idx: Int): Boolean {
         val readerIdx = readerIndirection[idx]
         return readerIdx < 0 || readers[readerIdx] == null || readers[readerIdx]!!.isNull(vectorIndirections[idx])
-    }
-
-    override fun isAbsent(idx: Int): Boolean {
-        return safeReader(idx).isAbsent(vectorIndirections[idx])
     }
 
     override fun getBoolean(idx: Int): Boolean {
@@ -228,7 +223,7 @@ class IndirectMultiVectorReader(
     }
 
     override fun rowCopier(writer: IVectorWriter): IRowCopier {
-        val rowCopiers = readers.map { it?.rowCopier(writer) ?: nullVector(NullVector()).rowCopier(writer) }
+        val rowCopiers = readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector()).rowCopier(writer) }
         return IRowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
     }
 
@@ -257,9 +252,6 @@ class IndirectMultiVectorReader(
 
                 override val isNull: Boolean
                     get() = legReader().isNull
-
-                override val isAbsent: Boolean
-                    get() = legReader().isAbsent
 
                 override fun readBoolean(): Boolean {
                     return legReader().readBoolean()
@@ -310,8 +302,6 @@ class IndirectMultiVectorReader(
                     get() = null
                 override val isNull: Boolean
                     get() = safeReader().isNull
-                override val isAbsent: Boolean
-                    get() = safeReader().isAbsent
 
                 override fun readBoolean(): Boolean {
                     return safeReader().readBoolean()
