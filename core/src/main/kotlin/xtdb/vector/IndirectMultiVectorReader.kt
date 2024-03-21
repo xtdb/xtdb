@@ -238,106 +238,54 @@ class IndirectMultiVectorReader(
     }
 
     override fun valueReader(pos: IVectorPosition): IValueReader {
-        // simulating a duv in case the legs are non monomorphic
-        if (legs().size > 1 || fields.filterNotNull().any(::isUnion)) {
-            val legReaders = legs().associateWith { l -> legReader(l).valueReader(pos) }
+        val indirectPos = indirectVectorPosition(pos)
+        val valueReaders = readers.map { it?.valueReader(indirectPos) }.toTypedArray()
 
-            return object : IValueReader {
-                override val leg: Keyword
-                    get() = this@IndirectMultiVectorReader.getLeg(pos.position)
-
-                private fun legReader(): IValueReader {
-                    return legReaders[this.leg]!!
-                }
-
-                override val isNull: Boolean
-                    get() = legReader().isNull
-
-                override fun readBoolean(): Boolean {
-                    return legReader().readBoolean()
-                }
-
-                override fun readByte(): Byte {
-                    return legReader().readByte()
-                }
-
-                override fun readShort(): Short {
-                    return legReader().readShort()
-                }
-
-                override fun readInt(): Int {
-                    return legReader().readInt()
-                }
-
-                override fun readLong(): Long {
-                    return legReader().readLong()
-                }
-
-                override fun readFloat(): Float {
-                    return legReader().readFloat()
-                }
-
-                override fun readDouble(): Double {
-                    return legReader().readDouble()
-                }
-
-                override fun readBytes(): ByteBuffer {
-                    return legReader().readBytes()
-                }
-
-                override fun readObject(): Any? {
-                    return legReader().readObject()
-                }
+        return object : IValueReader {
+            private fun valueReader(): IValueReader {
+                return valueReaders[readerIndirection[pos.position]]!!
             }
-        } else {
-            val indirectPos = indirectVectorPosition(pos)
-            val valueReaders = readers.map { it?.valueReader(indirectPos) }
-            return object : IValueReader {
 
-                private fun safeReader(): IValueReader {
-                    return valueReaders[readerIndirection[pos.position]] ?: throw unsupported()
-                }
+            override val leg: Keyword?
+                get() = valueReader().leg
 
-                override val leg: Keyword?
-                    get() = null
-                override val isNull: Boolean
-                    get() = safeReader().isNull
+            override val isNull: Boolean
+                get() = valueReader().isNull
 
-                override fun readBoolean(): Boolean {
-                    return safeReader().readBoolean()
-                }
+            override fun readBoolean(): Boolean {
+                return valueReader().readBoolean()
+            }
 
-                override fun readByte(): Byte {
-                    return safeReader().readByte()
-                }
+            override fun readByte(): Byte {
+                return valueReader().readByte()
+            }
 
-                override fun readShort(): Short {
-                    return safeReader().readShort()
-                }
+            override fun readShort(): Short {
+                return valueReader().readShort()
+            }
 
-                override fun readInt(): Int {
-                    return safeReader().readInt()
-                }
+            override fun readInt(): Int {
+                return valueReader().readInt()
+            }
 
-                override fun readLong(): Long {
-                    return safeReader().readLong()
-                }
+            override fun readLong(): Long {
+                return valueReader().readLong()
+            }
 
-                override fun readFloat(): Float {
-                    return safeReader().readFloat()
-                }
+            override fun readFloat(): Float {
+                return valueReader().readFloat()
+            }
 
-                override fun readDouble(): Double {
-                    return safeReader().readDouble()
-                }
+            override fun readDouble(): Double {
+                return valueReader().readDouble()
+            }
 
-                override fun readBytes(): ByteBuffer {
-                    return safeReader().readBytes()
-                }
+            override fun readBytes(): ByteBuffer {
+                return valueReader().readBytes()
+            }
 
-                override fun readObject(): Any? {
-                    return safeReader().readObject()
-                }
+            override fun readObject(): Any? {
+                return valueReader().readObject()
             }
         }
     }
