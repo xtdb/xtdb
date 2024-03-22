@@ -45,7 +45,9 @@ class From(UnifyClause, Query):
         self.bind: List[Binding] = []
 
     def binding(self, *bindings: ToBindings) -> 'From':
-        self.bind.extend(binding for binding in bindings for binding in to_bindings(binding))
+        self.bind.extend(out_binding
+                         for in_binding in bindings
+                         for out_binding in to_bindings(in_binding))
         return self
 
     def for_valid_time(self) -> TemporalFilterConfigurator:
@@ -79,7 +81,9 @@ class Join(UnifyClause):
         self.bindings: List[Binding] = []
 
     def binding(self, *bindings: ToBindings) -> 'Join':
-        self.bindings.extend(binding for binding in bindings for binding in to_bindings(binding))
+        self.bindings.extend(out_binding
+                             for in_binding in bindings
+                             for out_binding in to_bindings(in_binding))
         return self
 
     def to_json(self):
@@ -98,7 +102,9 @@ class LeftJoin(UnifyClause):
         self.args = args
 
     def binding(self, *bindings: ToBindings) -> 'LeftJoin':
-        self.bindings.extend(binding for binding in bindings for binding in to_bindings(binding))
+        self.bindings.extend(out_binding
+                             for in_binding in bindings
+                             for out_binding in to_bindings(in_binding))
         return self
 
     def to_json(self):
@@ -111,7 +117,9 @@ class LeftJoin(UnifyClause):
 
 class Aggregate(QueryTail):
     def __init__(self, *bindings: ToBindings):
-        self.bindings = [binding for binding in bindings for binding in to_bindings(binding)]
+        self.bindings = [out_binding
+                         for in_binding in bindings
+                         for out_binding in to_bindings(in_binding)]
 
     def to_json(self):
         return {"aggregate": [binding.to_json() for binding in self.bindings]}
@@ -119,7 +127,9 @@ class Aggregate(QueryTail):
 
 class With(QueryTail, UnifyClause):
     def __init__(self, *bindings: ToBindings):
-        self.bindings = [binding for binding in bindings for binding in to_bindings(binding)]
+        self.bindings = [out_binding
+                         for in_binding in bindings
+                         for out_binding in to_bindings(in_binding)]
 
     def to_json(self):
         return {"with": [binding.to_json() for binding in self.bindings]}
@@ -127,7 +137,9 @@ class With(QueryTail, UnifyClause):
 
 class Return(QueryTail):
     def __init__(self, *bindings: ToBindings):
-        self.bindings = [binding for binding in bindings for binding in to_bindings(binding)]
+        self.bindings = [out_binding
+                         for in_binding in bindings
+                         for out_binding in to_bindings(in_binding)]
 
     def to_json(self):
         return {"return": [binding.to_json() for binding in self.bindings]}

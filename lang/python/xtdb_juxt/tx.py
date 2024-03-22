@@ -156,11 +156,15 @@ class Update(TxOp):
         return self
 
     def binding(self, *bindings: ToBindings) -> 'Update':
-        self.bind.extend(binding for binding in bindings for binding in to_bindings(binding))
+        self.bind.extend(out_binding
+                         for in_binding in bindings
+                         for out_binding in to_bindings(in_binding))
         return self
 
     def setting(self, *bindings: ToBindings) -> 'Update':
-        self.set.extend(binding for binding in bindings for binding in to_bindings(binding))
+        self.set.extend(out_binding
+                        for in_binding in bindings
+                        for out_binding in to_bindings(in_binding))
         return self
 
     def unifying(self, *clauses: UnifyClause) -> 'Update':
@@ -207,7 +211,9 @@ class Delete(TxOp):
         return self
 
     def binding(self, *bindings: ToBindings) -> 'Delete':
-        self.bind.extend(binding for binding in bindings for binding in to_bindings(binding))
+        self.bind.extend(out_binding
+                         for in_binding in bindings
+                         for out_binding in to_bindings(in_binding))
         return self
 
     def unifying(self, *clauses: UnifyClause) -> 'Delete':
@@ -236,7 +242,9 @@ class Erase(TxOp):
         self.arg_rows: Optional[List[ArgRow]] = None
 
     def binding(self, *bindings: ToBindings) -> 'Erase':
-        self.bind.extend(binding for binding in bindings for binding in to_bindings(binding))
+        self.bind.extend(out_binding
+                         for in_binding in bindings
+                         for out_binding in to_bindings(in_binding))
         return self
 
     def unifying(self, *clauses: UnifyClause) -> 'Erase':
