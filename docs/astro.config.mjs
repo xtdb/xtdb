@@ -150,6 +150,7 @@ export default defineConfig({
                 { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: { target: '_blank' } },
                 { label: 'Configuration cookbook', link: '/drivers/clojure/configuration' },
                 { label: 'Transactions cookbook', link: '/drivers/clojure/txs' },
+                { label: 'Temporal Types cookbook', link: '/drivers/clojure/temporal' },
                 { label: 'Tutorial: Learn XTQL Today', link: '/tutorials/learn-xtql-today-with-clojure' },
 
               ]

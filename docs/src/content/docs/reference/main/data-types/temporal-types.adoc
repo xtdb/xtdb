@@ -1,6 +1,8 @@
 ---
 title: XTDB Temporal Types
 ---
+:icon: /images/icons
+:clojure: /drivers/clojure/temporal
 
 NOTE: The contents of this page focus mainly on construction and casting of Temporal Types. For information on functions which apply to temporal types, see the link:../stdlib/temporal[Temporal Functions] page.
 
@@ -56,19 +58,13 @@ DURATION 'P20H3M11.1S' -- A Duration specified in ISO8601 format.
 PERIOD(DATE '1998-01-05', DATE '1998-01-12') -- A Period specified with two dates.
 ----
 
-=== XTQL/Clojure Examples
+=== XTQL / Client Library Examples
 
-[source,clojure]
-----
-#time/date "2023-03-15" ; Constructs a date.
-#time/date-time "2023-03-15T12:00:00" ; Timestamp without time zone.
-#time/zoned-date-time "2023-03-15T12:00:00+01:00" ; Timestamp with time zone.
-#time/time "14:30:00" ; Time without time zone.
-#xt/interval-ym "P1Y2M" ; A Year-Month Interval specified in ISO8601 format.
-#xt/interval-mdn ["P1D" "PT2H30M10.111111S"] ; A Day-Time Interval specified in ISO8601 format.
-#time/duration "P20H3M11.1S" ; A Duration specified in ISO8601 format.
-(period #time/date "1998-01-05" #time/date "1998-01-12") ; A Period specified with two dates.
-----
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}]
+
+The temporal types can also be constructed for use in XTQL queries and transactions within our various client libraries. For examples of these, see the individual client library documentation:
+
 
 == Casting Between Temporal Types
 
