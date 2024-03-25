@@ -68,6 +68,7 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
         !field.isNullable -> throw InvalidWriteObjectException(field, null)
         else -> writeNull()
     }
+
     fun writeObject0(obj: Any)
 
     fun writeValue(v: IValueReader) = if (v.isNull) writeNull() else writeValue0(v)
@@ -142,7 +143,8 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
                 val legWriter = duvWriter.legWriter(field.type.toLeg(), field.fieldType)
                 vector.makeTransferPair(legWriter.vector).transfer()
 
-                duvWriter.legWriter(fieldType.type.toLeg(), fieldType)
+                if (fieldType.type !is ArrowType.Union)
+                    duvWriter.legWriter(fieldType.type.toLeg(), fieldType)
             }
 
             duv.apply {
