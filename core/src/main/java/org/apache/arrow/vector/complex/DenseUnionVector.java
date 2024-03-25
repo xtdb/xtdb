@@ -1069,6 +1069,18 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     copyFrom(inIndex, outIndex, from);
   }
 
+  FieldVector putVector(byte typeId, FieldVector child) {
+    internalStruct.putVector(child.getName(), child);
+    childVectors[typeId] = child;
+    typeFields[typeId] = child.getField();
+
+    if (callBack != null) {
+      callBack.doWork();
+    }
+
+    return child;
+  }
+
   public FieldVector addVector(byte typeId, FieldVector v) {
     final String name = v.getName().isEmpty() ? fieldName(typeId, v.getMinorType()) : v.getName();
     Preconditions.checkState(internalStruct.getChild(name) == null, String.format("%s vector already exists", name));

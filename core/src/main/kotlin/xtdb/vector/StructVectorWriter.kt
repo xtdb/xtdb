@@ -7,14 +7,11 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.complex.replaceChild
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.asKeyword
 import xtdb.toFieldType
-import xtdb.toLeg
 import xtdb.util.normalForm
-import xtdb.util.requiringResolve
 import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Union as UNION_TYPE
 
@@ -53,58 +50,20 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         writers.values.forEach(IVectorWriter::writeNull)
     }
 
-    private fun IVectorWriter.promote(fieldType: FieldType): IVectorWriter {
-        val structVector = this@StructVectorWriter.vector
-        val al = structVector.allocator
-        val field = field
-
-        if (field.type is UNION_TYPE) return this
-
-        syncValueCount()
-
-        val newVec = when {
-            fieldType.type == NULL_TYPE || (field.type == fieldType.type && fieldType.isNullable) ->
-                vector
-                    .getTransferPair(Field(field.name, FieldType.nullable(field.type), field.children), al)
-                    .also { it.transfer() }
-                    .to as FieldVector
-
-            field.type == NULL_TYPE ->
-                Field(field.name, FieldType.nullable(fieldType.type), emptyList())
-                    .createVector(al).also { it.valueCount = vector.valueCount }
-
-            else -> {
-                val duv = DenseUnionVector(field.name, al, UNION_FIELD_TYPE, null)
-                val valueCount = vector.valueCount
-
-                writerFor(duv).also { duvWriter ->
-                    val legWriter = duvWriter.legWriter(field.type.toLeg(), field.fieldType)
-                    vector.makeTransferPair(legWriter.vector).transfer()
-
-                    duvWriter.legWriter(fieldType.type.toLeg(), fieldType)
-                }
-
-                duv.apply {
-                    repeat(valueCount) { idx -> setTypeId(idx, 0); setOffset(idx, idx) }
-                    this.valueCount = valueCount
-                }
-            }
-        }
-
-        structVector.replaceChild(newVec)
-
-        return writerFor(newVec).also {
+    private fun promoteChild(childWriter: IVectorWriter, fieldType: FieldType): IVectorWriter =
+        if (childWriter.field.type is UNION_TYPE) childWriter
+        else writerFor(childWriter.promote(fieldType, vector.allocator)).also {
+            vector.replaceChild(it.vector)
             upsertChildField(it.field)
-            writers[vector.name] = it
+            writers[childWriter.vector.name] = it
         }
-    }
 
     private fun IVectorWriter.writeChildObject(v: Any?): IVectorWriter =
         try {
             if (v is IValueReader) writeValue(v) else writeObject(v)
             this
         } catch (e: InvalidWriteObjectException) {
-            promote(e.obj.toFieldType()).also { promoted ->
+            promoteChild(this, e.obj.toFieldType()).also { promoted ->
                 if (v is IValueReader) promoted.writeValue(v) else promoted.writeObject(v)
             }
         }
@@ -153,7 +112,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         writers[key] ?: newChildWriter(key, FieldType.nullable(NULL_TYPE))
 
     override fun structKeyWriter(key: String, fieldType: FieldType) =
-        writers[key]?.let { if (it.field.fieldType == fieldType) it else it.promote(fieldType) }
+        writers[key]?.let { if (it.field.fieldType == fieldType) it else promoteChild(it, fieldType) }
             ?: newChildWriter(key, fieldType)
 
     override fun startStruct() = vector.setIndexDefined(wp.position)
@@ -164,7 +123,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
             try {
                 w.populateWithAbsents(pos)
             } catch (e: InvalidWriteObjectException) {
-                w.promote(FieldType.nullable(NULL_TYPE)).populateWithAbsents(pos)
+                promoteChild(w, FieldType.nullable(NULL_TYPE)).populateWithAbsents(pos)
             }
         }
     }
@@ -183,7 +142,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         return try {
             toRowCopier(childWriter)
         } catch (e: InvalidCopySourceException) {
-            return toRowCopier(childWriter.promote(e.src.fieldType))
+            return toRowCopier(promoteChild(childWriter, e.src.fieldType))
         }
     }
 

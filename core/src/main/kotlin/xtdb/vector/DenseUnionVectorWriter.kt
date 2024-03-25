@@ -3,6 +3,7 @@ package xtdb.vector
 import clojure.lang.Keyword
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
+import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -23,7 +24,7 @@ class DenseUnionVectorWriter(
     private val childFields: MutableMap<String, Field> =
         field.children.associateByTo(LinkedHashMap()) { childField -> childField.name }
 
-    private inner class ChildWriter(private val inner: IVectorWriter, private val typeId: Byte) : IVectorWriter {
+    private inner class ChildWriter(private val inner: IVectorWriter, val typeId: Byte) : IVectorWriter {
         override val vector get() = inner.vector
         override val field: Field get() = inner.field
         private val parentDuv get() = this@DenseUnionVectorWriter.vector
@@ -162,11 +163,21 @@ class DenseUnionVectorWriter(
     override fun legWriter(leg: Keyword) =
         writersByLeg[leg] ?: throw MissingLegException(writersByLeg.keys, leg)
 
+    private fun promoteLeg(legWriter: IVectorWriter, fieldType: FieldType): IVectorWriter {
+        val typeId = (legWriter as ChildWriter).typeId
+
+        return writerFor(legWriter.promote(fieldType, vector.allocator), typeId).also { newLegWriter ->
+            vector.replaceChild(typeId, newLegWriter.vector)
+            upsertChildField(newLegWriter.field)
+            writersByLeg[Keyword.intern(newLegWriter.field.name)] = newLegWriter
+        }
+    }
+
     @Suppress("NAME_SHADOWING")
     override fun legWriter(leg: Keyword, fieldType: FieldType): IVectorWriter {
         val isNew = leg !in writersByLeg
 
-        val w: IVectorWriter = writersByLeg.computeIfAbsent(leg) { leg ->
+        var w: IVectorWriter = writersByLeg.computeIfAbsent(leg) { leg ->
             val field = Field(leg.sym.name, fieldType, emptyList())
             val typeId = vector.registerNewTypeId(field)
 
@@ -176,8 +187,12 @@ class DenseUnionVectorWriter(
 
         if (isNew) {
             upsertChildField(w.field)
-        } else {
-            w.checkFieldType(fieldType)
+        } else if(fieldType.isNullable && !w.field.isNullable) {
+            w = promoteLeg(w, fieldType)
+        }
+
+        if (fieldType.type != w.field.type) {
+            throw FieldMismatch(w.field.fieldType, fieldType)
         }
 
         return w

@@ -1,12 +1,15 @@
 package xtdb.vector
 
 import clojure.lang.Keyword
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ValueVector
+import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.toLeg
 import java.nio.ByteBuffer
 
 interface IVectorWriter : IValueWriter, AutoCloseable {
@@ -115,3 +118,37 @@ internal fun IVectorWriter.checkFieldType(given: FieldType) {
         throw FieldMismatch(expected, given)
 }
 
+internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): FieldVector {
+    val field = this.field
+
+    syncValueCount()
+
+    return when {
+        fieldType.type == ArrowType.Null.INSTANCE || (field.type == fieldType.type && fieldType.isNullable) ->
+            vector
+                .getTransferPair(Field(field.name, FieldType.nullable(field.type), field.children), al)
+                .also { it.transfer() }
+                .to as FieldVector
+
+        field.type == ArrowType.Null.INSTANCE ->
+            Field(field.name, FieldType.nullable(fieldType.type), emptyList())
+                .createVector(al).also { it.valueCount = vector.valueCount }
+
+        else -> {
+            val duv = DenseUnionVector(field.name, al, UNION_FIELD_TYPE, null)
+            val valueCount = vector.valueCount
+
+            writerFor(duv).also { duvWriter ->
+                val legWriter = duvWriter.legWriter(field.type.toLeg(), field.fieldType)
+                vector.makeTransferPair(legWriter.vector).transfer()
+
+                duvWriter.legWriter(fieldType.type.toLeg(), fieldType)
+            }
+
+            duv.apply {
+                repeat(valueCount) { idx -> setTypeId(idx, 0); setOffset(idx, idx) }
+                this.valueCount = valueCount
+            }
+        }
+    }
+}
