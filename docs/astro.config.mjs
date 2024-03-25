@@ -84,8 +84,14 @@ export default defineConfig({
                 { label: 'Queries', link: '/reference/main/xtql/queries' },
               ]
             },
-
-            { label: 'Data Types', link: '/reference/main/data-types' },
+            {
+              label: 'Data Types',
+              collapsed: false,
+              items: [
+                { label: 'Overview', link: '/reference/main/data-types' },
+                { label: 'Temporal Types', link: '/reference/main/data-types/temporal-types' },
+              ]
+            },
 
             {
               label: 'Standard Library',
@@ -144,6 +150,7 @@ export default defineConfig({
                 { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: { target: '_blank' } },
                 { label: 'Configuration cookbook', link: '/drivers/clojure/configuration' },
                 { label: 'Transactions cookbook', link: '/drivers/clojure/txs' },
+                { label: 'Temporal Types cookbook', link: '/drivers/clojure/temporal' },
                 { label: 'Tutorial: Learn XTQL Today', link: '/tutorials/learn-xtql-today-with-clojure' },
 
               ]

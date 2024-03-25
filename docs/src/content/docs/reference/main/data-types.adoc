@@ -41,19 +41,19 @@ XTDB data types are implemented using Apache Arrow.
 |`2147483647`
 
 |`INTERVAL`
-|Day/Time Interval
-|`INTERVAL '163 12'`
-|TBD
+|Month-Day-Nano Interval
+|`INTERVAL '163 12:00:00' DAY TO SECOND`
+|`#xt/interval-mdn ["P163D" "PT12H"]`
 
 |`INTERVAL`
-|Year/Month Interval
-|`INTERVAL '163-11'`
-|TBD
+|Year-Month Interval
+|`INTERVAL '12-11' YEAR TO MONTH`
+|`#xt/interval-ym "P12Y11M"`
 
 |`PERIOD`
 | <a pair of TIMESTAMPs>
 |`PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
-|TBD
+|`(period #time/date "1998-01-05" #time/date "1998-01-12")`
 
 |`SMALLINT`
 |16-bit Signed Integer
@@ -65,21 +65,21 @@ XTDB data types are implemented using Apache Arrow.
 TIMEZONE]`
 |Timestamp without a Timezone offset
 |`TIMESTAMP '16:00:00'`
-|`#inst "2007-06-29T16:00:00Z"`
+|`#time/date-time "2007-06-29T16:00:00"`
 
 |`TIMESTAMP +
 WITH +
 TIMEZONE`
 |Timestamp with a Timezone offset
 |`TIMESTAMP '16:00:00+04:00'`
-|TBD
+|`#time/zoned-date-time "2007-06-29T16:00:00+04:00"`
 
 |`TIME +
 [WITHOUT +
 TIMEZONE]`
 |Time of day with nanosecond precision
 |`TIME '22:15:04.1237'`
-|TBD
+|`#time/time "22:15:04.1237"`
 
 |`UUID`
 |Universally Unique Identifier
@@ -108,7 +108,7 @@ TIMEZONE]`
 
 |`DURATION`
 | Duration of time
-|TBD
+|`DURATION 'PT1H3M5S'`
 |`#time/duration "PT1H3M5S"`
 
 |===

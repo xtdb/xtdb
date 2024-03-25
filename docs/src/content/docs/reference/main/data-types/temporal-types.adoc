@@ -1,0 +1,139 @@
+---
+title: XTDB Temporal Types
+---
+:icon: /images/icons
+:clojure: /drivers/clojure/temporal
+
+NOTE: The contents of this page focus mainly on construction and casting of Temporal Types. For information on functions which apply to temporal types, see the link:../stdlib/temporal[Temporal Functions] page.
+
+This document outlines the supported types of XTDB, alongside their usage, construction and casting behaviors.
+
+== Supported Temporal Types
+
+[cols="3,5",options="header"]
+|===
+|XTDB Type |Description
+
+|`TIMESTAMP [WITHOUT TIMEZONE]`
+|Represents both date and time *without* a time zone offset.
+
+|`TIMESTAMP WITH TIMEZONE`
+|Represents both date and time *with* a time zone offset.
+
+|`DATE`
+|Represents a date without a time component.
+
+|`TIME [WITHOUT TIME ZONE]`
+|Represents the time of day without a date.
+
+|`INTERVAL [INTERVAL QUALIFIER] [(p)]`
+|Represents a span of time without a specific start or end timestamp. 
+
+|`PERIOD`
+|Represents a specific start and end timestamp, capturing a range of time.
+
+|`DURATION`
+|Represents duration of time - purely in hours, minutes, seconds and fractional seconds.
+|===
+
+
+== Temporal Constructors and Literals
+
+Temporal values are instantiated using syntax compliant with SQL standards or ISO8601 strings for broader compatibility.
+
+=== SQL Examples
+
+[source,sql]
+----
+DATE '2023-03-15' -- Constructs a date.
+TIMESTAMP '2023-03-15 12:00:00' -- Timestamp without time zone.
+TIMESTAMP '2023-03-15T12:00:00' -- Timestamp without time zone in ISO8601 format.
+TIMESTAMP '2023-03-15 12:00:00+01:00' -- Timestamp with time zone.
+TIME '14:30:00' -- Time without time zone.
+INTERVAL '1-2' YEAR TO MONTH -- A Year-Month Interval specified with an interval qualifier.
+INTERVAL 'P1Y2M' -- The Same Interval specified in a ISO8601 format.
+INTERVAL '1 2:30:10.111111' DAY TO SECOND(6) -- A Day-Time Interval specified with an interval qualifier.
+INTERVAL 'P1DT2H30M10.111111S' -- The Same Interval specified in a ISO8601 format.
+DURATION 'P20H3M11.1S' -- A Duration specified in ISO8601 format.
+PERIOD(DATE '1998-01-05', DATE '1998-01-12') -- A Period specified with two dates.
+----
+
+=== XTQL / Client Library Examples
+
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}]
+
+The temporal types can also be constructed for use in XTQL queries and transactions within our various client libraries. For examples of these, see the individual client library documentation:
+
+
+== Casting Between Temporal Types
+
+There are a number of considerations when casting between temporal types:
+
+* Casting from `date` to `timestamp` assumes the start of the day.
+* Casting to `timestamp with time zone` will consider the system default time zone.
+* When explicitly casting to most temporal types, can specify an optional fractional precision to truncate the value to:
+** In SQL, the syntax for this would be `CAST(value AS TYPE(<precision>))`.
+* Casting to/from `varchar` involves formatting or parsing as ISO8601 strings.
+* Intervals have specific casting behaviors, which are detailed in the next section.
+
+== Intervals
+
+Internally within XTDB, intervals are represented in a number of different formats, including:
+
+- `Month-Day-Nanosecond`
+- `Year-Month` 
+- `Day-Time`
+
+Constructing an interval **using an ISO8601 string** will _always_ return a `Month-Day-Nanosecond` interval.
+
+=== Constructing with an Interval Qualifier
+
+Constructing an interval **using an interval qualifier** will return a different interval type, dependent on the qualifier used:
+
+[cols="5,3",options="header"]
+|===
+|Supported Interval Qualifier|Interval Type
+|`YEAR TO MONTH` |`Year-Month`
+|`YEAR`|`Year-Month`
+|`MONTH`|`Year-Month`
+|`DAY`|`Day-Time`
+|`HOUR`|`Day-Time`
+|`MINUTE`|`Day-Time`
+|`SECOND [<leading precision>, <fractional precision>]`|`Day-Time`
+|`DAY TO HOUR`|`Month-Day-Nanosecond`
+|`DAY TO MINUTE`|`Month-Day-Nanosecond`
+|`DAY TO SECOND [<fractional precision>]`|`Month-Day-Nanosecond`
+|`HOUR TO SECOND [<fractional precision>]`|`Month-Day-Nanosecond`
+|`HOUR TO MINUTE`|`Month-Day-Nanosecond`
+|`MINUTE TO SECOND [<fractional precision>]`|`Month-Day-Nanosecond`
+|===
+
+Dependent on interval type, the exact functions and operations available will differ.
+
+=== Casting between Intervals
+
+Explicitly casting between intervals is supported, but only between **intervals of the same type**. When casting between intervals, it is required to specify an interval qualifier, 
+otherwise the cast operation will not do anything. Casting to an interval qualifier will:
+
+* **Normalize** the interval to the new qualifier
+** ie. If an Interval of `25 hours` is cast to `DAY TO HOUR`, it will be normalized to `1 day 1 hour`.
+* **Truncate** the interval to the new qualifier 
+** ie. If an Interval of `25 hours` is cast to `DAY`, it will be truncated to `1 day`.
+
+=== Casting to/from Intervals
+
+When casting to/from intervals from other types, the following rules apply:
+
+* Casting from `varchar` to an interval:
+** **Without** specifying an interval qualifier - will parse the string as an ISO8601 interval, and will return a `Month-Day-Nanosecond` interval.
+** **With** an interval qualifier - will parse the string and output the type of interval based on the qualifier.
+* Casting from an `interval` to `varchar` will format the interval as an ISO8601 string.
+* Casting from an `interval` to `duration`:
+** Will only work if the interval is a `Month-Day-Nano` interval.
+** Will only work if the month count is 0.
+** Will return the entire interval as it's ISO 8601 duration - any `days` will be converted to 24 hours.
+* Casting from a `duration` to `interval`:
+** Always returns a `Month-Day-Nanosecond` interval.
+** **Without** specifying an interval qualifier - always returns with zero days and put the whole duration into the time part of the interval.
+** **With** an interval qualifier - will normalize and truncate the duration according to the interval qualifier (will normalize hours to days, with day=24 hours, if qualifier contains `DAY`).
