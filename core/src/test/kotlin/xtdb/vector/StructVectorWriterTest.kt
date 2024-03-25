@@ -3,10 +3,13 @@ package xtdb.vector
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.StructVector
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 class StructVectorWriterTest {
 
@@ -90,6 +93,16 @@ class StructVectorWriterTest {
         writerFor(StructVector.empty("foo", al)).use { w ->
             objs.forEach { w.writeObject(it) }
             assertEquals(objs, w.toReader().toList())
+        }
+    }
+
+    @Test
+    fun `test StructVector handles DUV children`() {
+        val child = Field("child", UNION_FIELD_TYPE, emptyList())
+        val structField = Field("foo", FieldType.notNullable(STRUCT_TYPE), listOf(child))
+
+        StructVector(structField, al, null).use { structVec ->
+            assertEquals(structField, structVec.field)
         }
     }
 }
