@@ -119,6 +119,10 @@ allprojects {
                         jvmArgs += "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
                     }
 
+                    if (project.hasProperty("arrowUnsafeMemoryAccess")) {
+                        jvmArgs += "-Darrow.enable_unsafe_memory_access=true"
+                    }
+
                     this.jvmArgs = jvmArgs
                 }
 

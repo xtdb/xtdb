@@ -87,6 +87,7 @@ To attach YourKit:
 
 * Install YourKit (it's on the AUR, for Arch folks)
 * `./gradlew :clojureRepl -Pyourkit`
+* You might also want `-ParrowUnsafeMemoryAccess` which turns off bounds checking.
 +
 This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR) - feel free to adapt the property (or even use its value) if you have it installed elsewhere.
 
