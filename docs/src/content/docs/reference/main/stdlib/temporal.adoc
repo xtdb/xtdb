@@ -2,40 +2,7 @@
 title: Temporal functions
 ---
 
-== Constructors
-
-[cols="3,3,8"]
-|===
-| XTQL | SQL | Return type
-
-| | `DATE 'date_str'` | Construct a date - e.g. `DATE '2020-01-01'`
-
-| | `INTERVAL num 'unit'`
-
-  `INTERVAL interval 'unit TO unit'`
-| Construct a single-field interval - e.g. `INTERVAL 4 'HOUR'`.
-
-  Construct a multi-field interval - e.g. `INTERVAL '3 04:20:12.53' 'DAY TO SECOND'`
-
-| `(period start end)` | `PERIOD(start, end)`
-| Constructs a period.
-  Verifies that `+start <= end+`, or throws a runtime exception.
-
-| | `TIME 'time_str'` | Construct a time - e.g. `TIME '01:23:45.678'`
-
-|
-| `TIMESTAMP 'timestamp_str'`
-a| Constructs a timestamp.
-
-`timestamp_str` may be an ISO8601 or SQL timestamp representation, with or without time-zone.
-Examples:
-
-* `TIMESTAMP '2020-01-01 12:34:56.789'`
-* `TIMESTAMP '2020-01-01T12:34:56.789'`
-* `TIMESTAMP '2020-01-01 12:34:56.789Z'`
-* `TIMESTAMP '2020-01-01T12:34:56.789+03:00'`
-* `TIMESTAMP '2020-01-01T12:34:56.789[Europe/London]`
-|===
+NOTE: For information on what temporal types we support and how to construct temporal literals, see link:/reference/main/data-types/temporal-types[**temporal types**].
 
 == Temporal arithmetic
 
