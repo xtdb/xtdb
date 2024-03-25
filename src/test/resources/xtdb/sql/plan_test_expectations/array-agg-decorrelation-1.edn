@@ -3,11 +3,11 @@
  [:project
   [x5]
   [:group-by
-   [x1 $row_number$ {x5 (sum x3)}]
+   [x1 xt$row_number {x5 (sum x3)}]
    [:apply
     :left-outer-join
     {x1 ?x7}
     [:map
-     [{$row_number$ (row-number)}]
+     [{xt$row_number (row-number)}]
      [:rename {z x1} [:scan {:table tab0} [z]]]]
     [:table [x3] [{x3 1} {x3 2} {x3 3} {x3 ?x7}]]]]]]
