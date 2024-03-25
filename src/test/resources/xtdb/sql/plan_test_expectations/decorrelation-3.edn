@@ -1,5 +1,5 @@
 [:rename
- {x1 name, x11 $column_2$}
+ {x1 name, x11 xt$column_2}
  [:project
   [x1 x11]
   [:group-by

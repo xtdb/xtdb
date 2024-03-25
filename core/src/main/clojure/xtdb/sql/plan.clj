@@ -23,7 +23,7 @@
   (symbol (str table lp/relation-id-delimiter table-id lp/relation-prefix-delimiter column)))
 
 (defn unqualified-projection-symbol [{:keys [identifier ^long index] :as _projection}]
-  (symbol (or identifier (str "$column_" (inc index) "$"))))
+  (symbol (or identifier (str "xt$column_" (inc index)))))
 
 (defn qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
   (let [{derived-column :ref table :table} (meta projection)]

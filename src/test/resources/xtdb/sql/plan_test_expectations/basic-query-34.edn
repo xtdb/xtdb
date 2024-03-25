@@ -1,5 +1,5 @@
 [:rename
- {x7 $column_1$, x8 $column_2$, x9 $column_3$}
+ {x7 xt$column_1, x8 xt$column_2, x9 xt$column_3}
  [:project
   [{x7 (case (+ x1 1) x2 111 x3 222 x4 333 x5 444 555)}
    {x8

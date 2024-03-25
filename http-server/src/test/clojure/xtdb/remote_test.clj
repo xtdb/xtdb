@@ -436,7 +436,7 @@
                decode-json*))))
 
 (deftest testing-sql-query-with-args-3167
-  (t/is (= [{".column-1/" 1, ".column-2/" 3}]
+  (t/is (= [{"xt/column-1" 1, "xt/column-2" 3}]
            (-> (http/request {:accept "application/jsonl"
                               :as :string
                               :request-method :post

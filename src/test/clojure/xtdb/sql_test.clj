@@ -1867,3 +1867,18 @@
       IllegalArgumentException
       #"PG_CATALOG.f.column_name is an invalid reference to f, schema name does not match"
       (plan-sql "SELECT pg_catalog.f.column_name FROM information_schema.columns AS f")))))
+
+(t/deftest test-generated-column-names
+  (t/is (= [{:xt/column-1 1, :xt/column-2 3}]
+           (xt/q tu/*node* "SELECT LEAST(1,2), LEAST(3,4) FROM (VALUES (1)) x")))
+  
+  (t/testing "Aggregates"
+    (t/is (= [{:xt/column-1 1}]
+             (xt/q tu/*node* "SELECT COUNT(*) FROM (VALUES (1)) x"))))
+  
+  (t/testing "ARRAY()"
+   (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id 1 :a 42}]
+                            [:put-docs :b {:xt/id 2 :b1 "one" :b2 42}]])
+
+    (t/is (= [{:xt/column-1 ["one"]}]
+             (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42")))))
