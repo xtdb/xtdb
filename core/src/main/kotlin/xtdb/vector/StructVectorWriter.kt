@@ -112,7 +112,10 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         writers[key] ?: newChildWriter(key, FieldType.nullable(NULL_TYPE))
 
     override fun structKeyWriter(key: String, fieldType: FieldType) =
-        writers[key]?.let { if (it.field.fieldType == fieldType) it else promoteChild(it, fieldType) }
+        writers[key]?.let {
+            if (it.field.type == fieldType.type && (it.field.isNullable || !fieldType.isNullable)) it
+            else promoteChild(it, fieldType)
+        }
             ?: newChildWriter(key, fieldType)
 
     override fun startStruct() = vector.setIndexDefined(wp.position)

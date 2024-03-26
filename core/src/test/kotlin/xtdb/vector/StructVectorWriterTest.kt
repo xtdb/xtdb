@@ -3,6 +3,7 @@ package xtdb.vector
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.StructVector
+import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
@@ -103,6 +104,26 @@ class StructVectorWriterTest {
 
         StructVector(structField, al, null).use { structVec ->
             assertEquals(structField, structVec.field)
+        }
+    }
+
+    @Test
+    fun `test nullable struct-vector key doesn't promote for non-nullable source`() {
+        val aField = Field("a", FieldType.nullable(MinorType.BIGINT.type), emptyList())
+        val structField = Field("src", FieldType.nullable(STRUCT_TYPE), listOf(aField))
+
+        StructVector.empty("src", al).use { srcVec ->
+            val structWriter = writerFor(srcVec)
+
+            val nullWriter = structWriter.structKeyWriter("a", FieldType.nullable(MinorType.BIGINT.type))
+
+            assertEquals(structField, structWriter.field)
+            assertEquals(aField, nullWriter.field)
+
+            val nnWriter = structWriter.structKeyWriter("a", FieldType.notNullable(MinorType.BIGINT.type))
+
+            assertEquals(structField, structWriter.field)
+            assertEquals(aField, nnWriter.field)
         }
     }
 }
