@@ -227,6 +227,7 @@ dependencies {
 
     devImplementation("integrant", "repl", "0.3.2")
     devImplementation("com.azure", "azure-identity", "1.9.0")
+    devImplementation("com.taoensso", "tufte", "2.6.3")
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("org.postgresql", "postgresql", "42.5.0")
