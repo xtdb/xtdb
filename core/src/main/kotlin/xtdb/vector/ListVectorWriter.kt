@@ -27,6 +27,12 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         elWriter.clear()
     }
 
+    override fun writeNull() {
+        // see https://github.com/apache/arrow/issues/40796
+        super.writeNull()
+        vector.lastSet = wp.position - 1
+    }
+
     override fun listElementWriter(): IVectorWriter =
         if (vector.dataVector is NullVector) listElementWriter(UNION_FIELD_TYPE) else elWriter
 
