@@ -38,12 +38,12 @@
        x20
        x22
        x23
-       $row_number$
+       xt$row_number_0
        {x38 (min x25)}]
       [:left-outer-join
        [{x1 x26}]
        [:map
-        [{$row_number$ (row-number)}]
+        [{xt$row_number_0 (row-number)}]
         [:mega-join
          [{x20 x22} {x12 x19} {x1 x14} {x11 x15}]
          [[:rename

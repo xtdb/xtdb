@@ -1,5 +1,5 @@
 [:rename
- {x1 col1, x5 $column_2$}
+ {x1 col1, x5 xt$column_2}
  [:single-join
   []
   [:rename {col1 x1} [:scan {:table t1} [col1]]]

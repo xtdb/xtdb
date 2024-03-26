@@ -38,15 +38,6 @@
 
 (def ^:dynamic *gensym* gensym)
 
-(defn seeded-gensym
-  ([] (seeded-gensym "" 0))
-  ([count-start] (seeded-gensym "" count-start))
-  ([suffix count-start]
-   (let [ctr (atom (dec count-start))]
-     (fn gensym-seed
-       ([] (symbol (str "gensym" suffix (swap! ctr inc))))
-       ([prefix] (symbol (str prefix suffix (swap! ctr inc))))))))
-
 (defprotocol ExprPlan
   (plan-expr [expr])
   (required-vars [expr]))
@@ -906,7 +897,7 @@
 
 (def compile-query
   (-> (fn [query table-info]
-        (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)
+        (let [{:keys [ra-plan]} (binding [*gensym* (util/seeded-gensym "_" 0)
                                           *table-info* table-info]
                                   (plan-query query))]
 
@@ -1034,7 +1025,7 @@
        (:ra-plan (plan-query (.query query)))]]]))
 
 (defn compile-dml [query {:keys [table-info] :as tx-opts}]
-  (let [ra-plan (binding [*gensym* (seeded-gensym "_" 0)
+  (let [ra-plan (binding [*gensym* (util/seeded-gensym "_" 0)
                           *table-info* table-info]
                   (plan-dml query tx-opts))
         [dml-op dml-op-opts plan] ra-plan]

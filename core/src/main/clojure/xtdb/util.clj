@@ -610,3 +610,12 @@
               (when-let [cause (.getCause e)]
                 (unroll cause))))]
     (or (unroll e) e)))
+
+(defn seeded-gensym
+  ([] (seeded-gensym "" 0))
+  ([^long count-start] (seeded-gensym "" count-start))
+  ([suffix ^long count-start]
+   (let [ctr (atom (dec count-start))]
+     (fn gensym-seed
+       ([] (symbol (str "gensym" suffix (swap! ctr inc))))
+       ([prefix] (symbol (str prefix suffix (swap! ctr inc))))))))

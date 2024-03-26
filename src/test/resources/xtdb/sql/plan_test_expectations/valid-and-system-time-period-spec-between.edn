@@ -1,5 +1,5 @@
 [:rename
- {x2 $column_1$}
+ {x2 xt$column_1}
  [:project
   [{x2 4}]
   [:rename

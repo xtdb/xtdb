@@ -23,7 +23,7 @@
   (symbol (str table lp/relation-id-delimiter table-id lp/relation-prefix-delimiter column)))
 
 (defn unqualified-projection-symbol [{:keys [identifier ^long index] :as _projection}]
-  (symbol (or identifier (str "$column_" (inc index) "$"))))
+  (symbol (or identifier (str "xt$column_" (inc index)))))
 
 (defn qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
   (let [{derived-column :ref table :table} (meta projection)]
@@ -42,20 +42,23 @@
 (defn- table-reference-symbol [correlation-name id]
   (symbol (str correlation-name lp/relation-id-delimiter id)))
 
-(defn- aggregate-symbol [prefix z]
+(def agg-in-prefix "xt$agg_in")
+(def agg-out-prefix "xt$agg_out")
+
+(defn- aggregate-symbol [agg-prefix z]
   (let [query-id (sem/id (sem/scope-element z))]
-    (symbol (str "$" prefix lp/relation-id-delimiter query-id lp/relation-prefix-delimiter (sem/id z) "$"))))
+    (symbol (str agg-prefix lp/relation-id-delimiter query-id lp/relation-prefix-delimiter (sem/id z)))))
 
 (defn- exists-symbol [qe]
-  (id-symbol "subquery" (sem/id qe) "$exists$"))
+  (id-symbol "xt$subquery" (sem/id qe) "exists"))
 
 (defn- subquery-reference-symbol [qe]
-  (table-reference-symbol "subquery" (sem/id qe)))
+  (table-reference-symbol "xt$subquery" (sem/id qe)))
 
 (defn- subquery-projection-symbols [qe]
   (let [subquery-id (sem/id qe)]
     (vec (for [projection (first (sem/projected-columns qe))]
-           (id-symbol "subquery" subquery-id (unqualified-projection-symbol projection))))))
+           (id-symbol "xt$subquery" subquery-id (unqualified-projection-symbol projection))))))
 
 (defn- subquery-array-symbol
   "When you have a ARRAY ( subquery ) expression, use this to reference the projected column
@@ -866,15 +869,15 @@
 
     [:aggregate_function _]
     ;;=>
-    (aggregate-symbol "agg_out" z)
+    (aggregate-symbol agg-out-prefix z)
 
     [:aggregate_function "COUNT" [:asterisk "*"]]
     ;;=>
-    (aggregate-symbol "agg_out" z)
+    (aggregate-symbol agg-out-prefix z)
 
     [:aggregate_function _ _]
     ;;=>
-    (aggregate-symbol "agg_out" z)
+    (aggregate-symbol agg-out-prefix z)
 
     [:subquery ^:z qe]
     ;;=>
@@ -1107,7 +1110,7 @@
     (w/prewalk
       (fn [node]
         (when (and (symbol? node)
-                   (str/starts-with? (str node) "$agg_out"))
+                   (str/starts-with? (str node) agg-out-prefix))
           (vswap! column-refs conj node))
         node
         node)
@@ -1393,33 +1396,33 @@
         group-by (for [aggregate aggregates]
                    (r/zmatch aggregate
                      [:aggregate_function [:general_set_function [:computational_operation sf] ^:z ve]]
-                     {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
-                      :out {(aggregate-symbol "agg_out" aggregate)
+                     {:in {(aggregate-symbol agg-in-prefix aggregate) (expr ve)}
+                      :out {(aggregate-symbol agg-out-prefix aggregate)
                             (-> sf
                                 (str/lower-case)
                                 (str/replace "_" "-")
                                 (symbol)
-                                (list (aggregate-symbol "agg_in" aggregate)))}}
+                                (list (aggregate-symbol agg-in-prefix aggregate)))}}
 
                      [:aggregate_function [:general_set_function [:computational_operation sf] [:set_quantifier sq] ^:z ve]]
-                     {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
-                      :out {(aggregate-symbol "agg_out" aggregate)
+                     {:in {(aggregate-symbol agg-in-prefix aggregate) (expr ve)}
+                      :out {(aggregate-symbol agg-out-prefix aggregate)
                             (-> sf
                                 (str/lower-case)
                                 (str/replace "_" "-")
                                 (str "-" (str/lower-case sq))
                                 (symbol)
-                                (list (aggregate-symbol "agg_in" aggregate)))}}
+                                (list (aggregate-symbol agg-in-prefix aggregate)))}}
 
                      [:aggregate_function "COUNT" [:asterisk "*"]]
-                     {:in {(aggregate-symbol "agg_in" aggregate) 1}
-                      :out {(aggregate-symbol "agg_out" aggregate)
-                            (list 'count (aggregate-symbol "agg_in" aggregate))}}
+                     {:in {(aggregate-symbol agg-in-prefix aggregate) 1}
+                      :out {(aggregate-symbol agg-out-prefix aggregate)
+                            (list 'count (aggregate-symbol agg-in-prefix aggregate))}}
 
                      [:aggregate_function [:array_aggregate_function "ARRAY_AGG" ^:z ve]]
-                     {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
-                      :out {(aggregate-symbol "agg_out" aggregate)
-                            (list 'array-agg (aggregate-symbol "agg_in" aggregate))}}
+                     {:in {(aggregate-symbol agg-in-prefix aggregate) (expr ve)}
+                      :out {(aggregate-symbol agg-out-prefix aggregate)
+                            (list 'array-agg (aggregate-symbol agg-in-prefix aggregate))}}
 
                      (throw (err/illegal-arg :xtdb.sql/parse-error
                                              {::err/message "unknown aggregation function"}))))]

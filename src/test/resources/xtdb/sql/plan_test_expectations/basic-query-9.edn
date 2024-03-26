@@ -1,5 +1,5 @@
 [:rename
- {x1 name, x8 $column_2$}
+ {x1 name, x8 xt$column_2}
  [:project
   [x1 x8]
   [:select

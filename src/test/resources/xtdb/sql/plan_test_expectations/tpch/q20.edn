@@ -18,11 +18,11 @@
        [:map
         [{x24 (* 0.5 x22)}]
         [:group-by
-         [x9 x10 x11 $row_number$ {x22 (sum x17)}]
+         [x9 x10 x11 xt$row_number_0 {x22 (sum x17)}]
          [:left-outer-join
           [{x10 x18} {x9 x19}]
           [:map
-           [{$row_number$ (row-number)}]
+           [{xt$row_number_0 (row-number)}]
            [:semi-join
             [{x10 x13}]
             [:rename

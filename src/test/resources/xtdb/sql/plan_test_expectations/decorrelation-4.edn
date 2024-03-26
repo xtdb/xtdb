@@ -5,11 +5,11 @@
   [:select
    (= x6 x11)
    [:group-by
-    [x1 x2 x4 x5 x6 $row_number$ {x11 (min x8)}]
+    [x1 x2 x4 x5 x6 xt$row_number_0 {x11 (min x8)}]
     [:left-outer-join
      [{x2 x9}]
      [:map
-      [{$row_number$ (row-number)}]
+      [{xt$row_number_0 (row-number)}]
       [:mega-join
        [{x2 x5}]
        [[:rename {name x1, id x2} [:scan {:table students} [name id]]]
