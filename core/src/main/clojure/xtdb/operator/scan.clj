@@ -217,6 +217,8 @@
 
     :live (first leaf-args)))
 
+(defrecord LeafPointer [ev-ptr content-consumer])
+
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
                      ^Path table-path, col-names, fields, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
@@ -228,9 +230,10 @@
             is-valid-ptr (ArrowBufPointer.)]
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
-                merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
+                merge-q (PriorityQueue. (Comparator/comparing (util/->jfn #(.ev_ptr ^LeafPointer %)) (EventRowPointer/comparator)))
                 calculate-polygon (bitemp/polygon-calculator temporal-bounds)
                 bitemp-consumer (->bitemporal-consumer out-rel col-names)]
+
 
             (doseq [leaf leaves
                     :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)
@@ -238,30 +241,32 @@
                                                      iid-pred (.select (.select iid-pred allocator data-rdr params)))
                           ev-ptr (EventRowPointer. leaf-rdr path)]]
               (when (.isValid ev-ptr is-valid-ptr path)
-                (.add merge-q {:ev-ptr ev-ptr, :content-consumer (->content-consumer out-rel leaf-rdr fields)})))
+                (.add merge-q (->LeafPointer ev-ptr (->content-consumer out-rel leaf-rdr fields)))))
 
             (loop []
-              (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowConsumer content-consumer] :as q-obj} (.poll merge-q)]
-                (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
-                  (when (= :put (.getOp ev-ptr))
-                    (let [sys-from (.getSystemFrom ev-ptr)
-                          idx (.getIndex ev-ptr)]
-                      (dotimes [i (.getValidTimeRangeCount polygon)]
-                        (let [valid-from (.getValidFrom polygon i)
-                              valid-to (.getValidTo polygon i)
-                              sys-to (.getSystemTo polygon i)]
-                          (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
-                                     (not (= valid-from valid-to))
-                                     (not (= sys-from sys-to)))
-                            (.startRow out-rel)
-                            (.accept content-consumer idx valid-from valid-to sys-from sys-to)
-                            (.accept bitemp-consumer idx valid-from valid-to sys-from sys-to)
-                            (.endRow out-rel)))))))
+              (when-let [^LeafPointer q-obj (.poll merge-q)]
+                (let [^EventRowPointer ev-ptr (.ev_ptr q-obj),
+                      ^IRowConsumer content-consumer (.content_consumer q-obj)]
+                  (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
+                    (when (= :put (.getOp ev-ptr))
+                      (let [sys-from (.getSystemFrom ev-ptr)
+                            idx (.getIndex ev-ptr)]
+                        (dotimes [i (.getValidTimeRangeCount polygon)]
+                          (let [valid-from (.getValidFrom polygon i)
+                                valid-to (.getValidTo polygon i)
+                                sys-to (.getSystemTo polygon i)]
+                            (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
+                                       (not (= valid-from valid-to))
+                                       (not (= sys-from sys-to)))
+                              (.startRow out-rel)
+                              (.accept content-consumer idx valid-from valid-to sys-from sys-to)
+                              (.accept bitemp-consumer idx valid-from valid-to sys-from sys-to)
+                              (.endRow out-rel)))))))
 
-                (.nextIndex ev-ptr)
-                (when (.isValid ev-ptr is-valid-ptr path)
-                  (.add merge-q q-obj))
-                (recur)))
+                  (.nextIndex ev-ptr)
+                  (when (.isValid ev-ptr is-valid-ptr path)
+                    (.add merge-q q-obj))
+                  (recur))))
 
             (let [^RelationReader rel (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
                                                 (.select rel (.select col-pred allocator rel params)))
