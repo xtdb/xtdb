@@ -116,7 +116,7 @@ vertical_bar
 (*  5.2     <token> and <separator> *)
 
 regular_identifier
-: !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*'
+: !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME|CURRENT_USER|CURRENT_SCHEMA|CURRENT_DATABASE)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*'
     ;
 
 large_object_length_token
@@ -1128,6 +1128,7 @@ binary_concatenation
     | fold
     | trim_function
     | character_overlay_function
+    | session_variable_function
     ;
 
 character_substring_function
@@ -1163,6 +1164,13 @@ trim_specification
 character_overlay_function
     : 'OVERLAY' <left_paren> character_value_expression 'PLACING' character_value_expression 'FROM' start_position [ 'FOR' string_length ] [ 'USING' char_length_units ] <right_paren>
     ;
+
+session_variable_function 
+    : 'CURRENT_USER'
+    | 'CURRENT_SCHEMA'
+    | 'CURRENT_DATABASE'
+    ;
+
 
 <binary_value_function>
     : binary_substring_function

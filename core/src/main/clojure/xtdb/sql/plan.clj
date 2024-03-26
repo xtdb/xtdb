@@ -824,6 +824,10 @@
     [:concatenation ^:z nve1 _ ^:z nve2]
     (list 'concat (expr nve1) (expr nve2))
 
+    [:session_variable_function "CURRENT_USER"] '(current-user)
+    [:session_variable_function "CURRENT_SCHEMA"] '(current-schema)
+    [:session_variable_function "CURRENT_DATABASE"] '(current-database)
+
     [:character_position_expression _ ^:z needle _ ^:z haystack]
     (list 'position (expr needle) (expr haystack))
 
