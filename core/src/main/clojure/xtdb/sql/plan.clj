@@ -50,15 +50,15 @@
     (symbol (str agg-prefix lp/relation-id-delimiter query-id lp/relation-prefix-delimiter (sem/id z)))))
 
 (defn- exists-symbol [qe]
-  (id-symbol "subquery" (sem/id qe) "$exists$"))
+  (id-symbol "xt$subquery" (sem/id qe) "exists"))
 
 (defn- subquery-reference-symbol [qe]
-  (table-reference-symbol "subquery" (sem/id qe)))
+  (table-reference-symbol "xt$subquery" (sem/id qe)))
 
 (defn- subquery-projection-symbols [qe]
   (let [subquery-id (sem/id qe)]
     (vec (for [projection (first (sem/projected-columns qe))]
-           (id-symbol "subquery" subquery-id (unqualified-projection-symbol projection))))))
+           (id-symbol "xt$subquery" subquery-id (unqualified-projection-symbol projection))))))
 
 (defn- subquery-array-symbol
   "When you have a ARRAY ( subquery ) expression, use this to reference the projected column
