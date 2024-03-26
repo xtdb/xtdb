@@ -38,7 +38,7 @@
            xtdb.operator.IRelationSelector
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
-           (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
+           (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -118,21 +118,21 @@
       (.allTableColNames scan-emitter wm))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn- ->content-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, fields]
+(defn- ->content-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
   (let [op-rdr (.readerForName leaf-rel "op")
         put-rdr (.legReader op-rdr :put)
 
         row-copiers (object-array
-                     (for [[col-name ^Field field] fields
-                           :let [col-name (str col-name)
-                                 normalized-name (util/str->normal-form-str col-name)
+                     (for [[col-name col-writer] out-rel
+                           :let [normalized-name (util/str->normal-form-str col-name)
                                  copier (case normalized-name
                                           "xt$iid"
                                           (.rowCopier (.readerForName leaf-rel "xt$iid")
-                                                      (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
+                                                      col-writer)
+
                                           ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
                                           (some-> (.structKeyReader put-rdr normalized-name)
-                                                  (.rowCopier (.colWriter out-rel col-name (.getFieldType field)))))]
+                                                  (.rowCopier col-writer)))]
                            :when copier]
                        copier))]
 
@@ -219,67 +219,68 @@
 
 (defrecord LeafPointer [ev-ptr content-consumer])
 
-(deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
-                     ^Path table-path, col-names, fields, ^Map col-preds,
+(deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks, ^IRelationWriter out-rel
+                     ^Path table-path, col-names, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
                      params, vsr-cache, buffer-pool]
   ICursor
   (tryAdvance [_ c]
     (if (.hasNext merge-tasks)
       (let [{:keys [leaves path]} (.next merge-tasks)
-            is-valid-ptr (ArrowBufPointer.)]
-        (with-open [out-rel (vw/->rel-writer allocator)]
-          (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
-                merge-q (PriorityQueue. (Comparator/comparing (util/->jfn #(.ev_ptr ^LeafPointer %)) (EventRowPointer/comparator)))
-                calculate-polygon (bitemp/polygon-calculator temporal-bounds)
-                bitemp-consumer (->bitemporal-consumer out-rel col-names)]
+            is-valid-ptr (ArrowBufPointer.)
+            ^IRelationSelector iid-pred (get col-preds "xt$iid")
+            merge-q (PriorityQueue. (Comparator/comparing (util/->jfn #(.ev_ptr ^LeafPointer %)) (EventRowPointer/comparator)))
+            calculate-polygon (bitemp/polygon-calculator temporal-bounds)
+            bitemp-consumer (->bitemporal-consumer out-rel col-names)]
 
+        (.clear out-rel)
 
-            (doseq [leaf leaves
-                    :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)
-                          ^RelationReader leaf-rdr (cond-> data-rdr
-                                                     iid-pred (.select (.select iid-pred allocator data-rdr params)))
-                          ev-ptr (EventRowPointer. leaf-rdr path)]]
+        (doseq [leaf leaves
+                :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)
+                      ^RelationReader leaf-rdr (cond-> data-rdr
+                                                 iid-pred (.select (.select iid-pred allocator data-rdr params)))
+                      ev-ptr (EventRowPointer. leaf-rdr path)]]
+          (when (.isValid ev-ptr is-valid-ptr path)
+            (.add merge-q (->LeafPointer ev-ptr (->content-consumer out-rel leaf-rdr col-names)))))
+
+        (loop []
+          (when-let [^LeafPointer q-obj (.poll merge-q)]
+            (let [^EventRowPointer ev-ptr (.ev_ptr q-obj),
+                  ^IRowConsumer content-consumer (.content_consumer q-obj)]
+              (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
+                (when (= :put (.getOp ev-ptr))
+                  (let [sys-from (.getSystemFrom ev-ptr)
+                        idx (.getIndex ev-ptr)]
+                    (dotimes [i (.getValidTimeRangeCount polygon)]
+                      (let [valid-from (.getValidFrom polygon i)
+                            valid-to (.getValidTo polygon i)
+                            sys-to (.getSystemTo polygon i)]
+                        (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
+                                   (not (= valid-from valid-to))
+                                   (not (= sys-from sys-to)))
+                          (.startRow out-rel)
+                          (.accept content-consumer idx valid-from valid-to sys-from sys-to)
+                          (.accept bitemp-consumer idx valid-from valid-to sys-from sys-to)
+                          (.endRow out-rel)))))))
+
+              (.nextIndex ev-ptr)
               (when (.isValid ev-ptr is-valid-ptr path)
-                (.add merge-q (->LeafPointer ev-ptr (->content-consumer out-rel leaf-rdr fields)))))
+                (.add merge-q q-obj))
+              (recur))))
 
-            (loop []
-              (when-let [^LeafPointer q-obj (.poll merge-q)]
-                (let [^EventRowPointer ev-ptr (.ev_ptr q-obj),
-                      ^IRowConsumer content-consumer (.content_consumer q-obj)]
-                  (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
-                    (when (= :put (.getOp ev-ptr))
-                      (let [sys-from (.getSystemFrom ev-ptr)
-                            idx (.getIndex ev-ptr)]
-                        (dotimes [i (.getValidTimeRangeCount polygon)]
-                          (let [valid-from (.getValidFrom polygon i)
-                                valid-to (.getValidTo polygon i)
-                                sys-to (.getSystemTo polygon i)]
-                            (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
-                                       (not (= valid-from valid-to))
-                                       (not (= sys-from sys-to)))
-                              (.startRow out-rel)
-                              (.accept content-consumer idx valid-from valid-to sys-from sys-to)
-                              (.accept bitemp-consumer idx valid-from valid-to sys-from sys-to)
-                              (.endRow out-rel)))))))
-
-                  (.nextIndex ev-ptr)
-                  (when (.isValid ev-ptr is-valid-ptr path)
-                    (.add merge-q q-obj))
-                  (recur))))
-
-            (let [^RelationReader rel (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
-                                                (.select rel (.select col-pred allocator rel params)))
-                                              (-> (vw/rel-wtr->rdr out-rel)
-                                                  (vr/with-absent-cols allocator col-names))
-                                              (vals (dissoc col-preds "xt$iid")))]
-              (.accept c rel))))
+        (let [^RelationReader rel (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
+                                            (.select rel (.select col-pred allocator rel params)))
+                                          (-> (vw/rel-wtr->rdr out-rel)
+                                              (vr/with-absent-cols allocator col-names))
+                                          (vals (dissoc col-preds "xt$iid")))]
+          (.accept c rel))
         true)
 
       false))
 
   (close [_]
-    (util/close vsr-cache)))
+    (util/close vsr-cache)
+    (util/close out-rel)))
 
 (defn- eid-select->eid [eid-select]
   (cond (= 'xt$id (second eid-select))
@@ -394,25 +395,27 @@
                   (update-vals (.allColumnFields metadata-mgr)
                                (comp set keys))
                   (update-vals (some-> (.liveIndex wm)
-                                       (.allColumnFields ))
+                                       (.allColumnFields))
                                (comp set keys))))
 
     (scanFields [_ wm scan-cols]
       (letfn [(->field [[table col-name]]
-                (let [table (util/str->normal-form-str (str table))
-                      col-name (util/str->normal-form-str (str col-name))]
+                (let [normal-table (util/str->normal-form-str (str table))
+                      col-name (str col-name)
+                      normal-col-name (util/str->normal-form-str col-name)]
 
                   ;; TODO move to fields here
-                  (cond
-                    (= "xt$iid" col-name) (types/col-type->field col-name [:fixed-size-binary 16])
-                    (types/temporal-column? col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
+                  (-> (cond
+                        (= "xt$iid" normal-col-name) (types/col-type->field col-name [:fixed-size-binary 16])
+                        (types/temporal-column? normal-col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
 
-                    :else (if-let [info-field (get-in info-schema/derived-tables [table col-name])]
-                            info-field
-                            (types/merge-fields (.columnField metadata-mgr table col-name)
-                                                (some-> (.liveIndex wm)
-                                                        (.liveTable table)
-                                                        (.columnField col-name)))))))]
+                        :else (if-let [info-field (get-in info-schema/derived-tables [normal-table normal-col-name])]
+                                info-field
+                                (types/merge-fields (.columnField metadata-mgr normal-table normal-col-name)
+                                                    (some-> (.liveIndex wm)
+                                                            (.liveTable normal-table)
+                                                            (.columnField normal-col-name)))))
+                      (types/field-with-name col-name))))]
         (->> scan-cols
              (into {} (map (juxt identity ->field))))))
 
@@ -475,34 +478,37 @@
                              current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
                                                      (trie/current-trie-files))]
 
-                       (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
-                         (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
-                                             (or (->merge-tasks (cond-> (mapv (fn [meta-file-path]
-                                                                                (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
-                                                                                  (.add table-metadatas table-metadata)
-                                                                                  (into (trie/->Segment trie)
-                                                                                        {:trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
-                                                                                         :table-metadata table-metadata
-                                                                                         :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                                  (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                                                    (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                                    page-idx-pred))
-                                                                                                                (.build metadata-pred table-metadata)
-                                                                                                                col-names)})))
-                                                                              current-meta-files)
+                         (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
+                           (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
+                                               (or (->merge-tasks (cond-> (mapv (fn [meta-file-path]
+                                                                                  (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
+                                                                                    (.add table-metadatas table-metadata)
+                                                                                    (into (trie/->Segment trie)
+                                                                                          {:trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
+                                                                                           :table-metadata table-metadata
+                                                                                           :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                                    (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                                      (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                                      page-idx-pred))
+                                                                                                                  (.build metadata-pred table-metadata)
+                                                                                                                  col-names)})))
+                                                                                current-meta-files)
 
-                                                                  live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
-                                                                                          (assoc :live-rel (.liveRelation live-table-wm)))))
+                                                                    live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
+                                                                                            (assoc :live-rel (.liveRelation live-table-wm)))))
 
                                                                   (->path-pred iid-arrow-buf))
                                                    []))]
 
-                             (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
-                                           table-path col-names fields col-preds
-                                           (->temporal-bounds params basis scan-opts)
-                                           params
-                                           (->vsr-cache buffer-pool allocator)
-                                           buffer-pool))))))}))))
+                             (util/with-close-on-catch [out-rel (RelationWriter. allocator
+                                                                                 (for [^Field field (vals fields)]
+                                                                                   (vw/->writer (.createVector field allocator))))]
+                               (->TrieCursor allocator (.iterator ^Iterable merge-tasks) out-rel
+                                             table-path col-names col-preds
+                                             (->temporal-bounds params basis scan-opts)
+                                             params
+                                             (->vsr-cache buffer-pool allocator)
+                                             buffer-pool)))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-fields, param-fields]}]
   (.emitScan scan-emitter scan-expr scan-fields param-fields))

@@ -54,7 +54,9 @@ abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
         return when {
             src is NullVector -> nullToVecCopier(this)
             src is DenseUnionVector -> duvToVecCopier(this, src)
-            src.javaClass != vector.javaClass -> throw InvalidCopySourceException(src.field, field)
+            src.javaClass != vector.javaClass || (src.field.isNullable && !field.isNullable) ->
+                throw InvalidCopySourceException(src.field, field)
+
             else -> IRowCopier { srcIdx ->
                 wp.getPositionAndIncrement().also { pos ->
                     vector.copyFromSafe(srcIdx, pos, src)
@@ -375,10 +377,8 @@ abstract class ExtensionVectorWriter(
     override fun rowCopier(src: ValueVector): IRowCopier = when {
         src is NullVector -> nullToVecCopier(this)
         src is DenseUnionVector -> duvToVecCopier(this, src)
-        src !is XtExtensionVector<*> || src.javaClass != vector.javaClass -> throw InvalidCopySourceException(
-            src.field,
-            field
-        )
+        src !is XtExtensionVector<*> || src.javaClass != vector.javaClass || (src.field.isNullable && !field.isNullable) ->
+            throw InvalidCopySourceException(src.field, field)
 
         else -> inner.rowCopier(src.underlyingVector)
     }
@@ -425,7 +425,8 @@ internal class TransitVectorWriter(vector: TransitVector) : ExtensionVectorWrite
     override fun writeValue0(v: IValueReader) = writeBytes(v.readBytes())
 }
 
-internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) : ExtensionVectorWriter(vector, notify) {
+internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) :
+    ExtensionVectorWriter(vector, notify) {
     override fun writeObject0(obj: Any) =
         when (obj) {
             is IListValueReader -> super.writeObject0(obj)

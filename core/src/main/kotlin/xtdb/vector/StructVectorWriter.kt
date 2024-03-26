@@ -153,6 +153,9 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)
         is StructVector -> {
+            if (src.field.isNullable && !field.isNullable)
+                throw InvalidCopySourceException(src.field, field)
+
             val innerCopiers =
                 src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> w.rowCopier(child) } }
 
@@ -179,7 +182,6 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
                 writeStruct {
                     innerCopiers.forEach { it.copyRow(srcIdx) }
                 }
-
             }
         }
     }

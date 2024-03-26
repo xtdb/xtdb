@@ -341,8 +341,7 @@
       (t/is (= '{xt/id :keyword}
                (->col-type 'xt/id)))
 
-      (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]])
-          (tu/then-await-tx node))
+      (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]])
 
       (t/is (= '{xt$id [:union #{:keyword :utf8}]}
                (->col-type 'xt$id)))

@@ -14,7 +14,7 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.complex.StructVector
-           org.apache.arrow.vector.types.pojo.Field
+           (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.ICursor
            xtdb.operator.IProjectionSpec
            xtdb.vector.IVectorReader
@@ -61,7 +61,7 @@
       (getColumnName [_] col-name)
       (getColumnType [_] :i64)
       (project [_ allocator in-rel _params]
-        (util/with-close-on-catch [row-num-wtr (vw/->writer (BigIntVector. (str col-name) allocator))]
+        (util/with-close-on-catch [row-num-wtr (vw/->writer (BigIntVector. (str col-name) (FieldType/notNullable #xt.arrow/type :i64) allocator))]
           (let [start-row-num (aget row-num 0)
                 row-count (.rowCount in-rel)]
             (dotimes [idx row-count]
@@ -136,35 +136,34 @@
 
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-fields] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
-    (lp/unary-expr
-     emitted-child-relation
-     (fn [inner-fields]
-       (let [projection-specs (concat (when append-columns?
-                                        (for [[col-name field] inner-fields]
-                                          (->identity-projection-spec col-name field)))
-                                      (for [[p-type arg] projections]
-                                        (case p-type
-                                          :column (->identity-projection-spec arg (get inner-fields arg))
+    (lp/unary-expr emitted-child-relation
+      (fn [inner-fields]
+        (let [projection-specs (concat (when append-columns?
+                                         (for [[col-name field] inner-fields]
+                                           (->identity-projection-spec col-name field)))
+                                       (for [[p-type arg] projections]
+                                         (case p-type
+                                           :column (->identity-projection-spec arg (get inner-fields arg))
 
-                                          :row-number-column (let [[col-name _form] (first arg)]
-                                                               (->row-number-projection-spec col-name))
+                                           :row-number-column (let [[col-name _form] (first arg)]
+                                                                (->row-number-projection-spec col-name))
 
-                                          :star (let [[col-name _star] (first arg)]
-                                                  (->star-projection-spec col-name [:struct (update-vals inner-fields types/field->col-type)]))
+                                           :star (let [[col-name _star] (first arg)]
+                                                   (->star-projection-spec col-name [:struct (update-vals inner-fields types/field->col-type)]))
 
-                                          :rename (let [[to-name from-name] (first arg)]
-                                                    (->rename-projection-spec to-name from-name (get inner-fields from-name)))
+                                           :rename (let [[to-name from-name] (first arg)]
+                                                     (->rename-projection-spec to-name from-name (get inner-fields from-name)))
 
-                                          :extend (let [[col-name form] (first arg)
-                                                        input-types {:col-types (update-vals inner-fields types/field->col-type)
-                                                                     :param-types (update-vals param-fields types/field->col-type)}
-                                                        expr (expr/form->expr form input-types)]
-                                                    (expr/->expression-projection-spec col-name expr input-types)))))]
-         {:fields (->> projection-specs
-                       (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
-                                           (comp types/col-type->field #(.getColumnType ^IProjectionSpec %))))))
-          :stats (:stats emitted-child-relation)
-          :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))})))))
+                                           :extend (let [[col-name form] (first arg)
+                                                         input-types {:col-types (update-vals inner-fields types/field->col-type)
+                                                                      :param-types (update-vals param-fields types/field->col-type)}
+                                                         expr (expr/form->expr form input-types)]
+                                                     (expr/->expression-projection-spec col-name expr input-types)))))]
+          {:fields (->> projection-specs
+                        (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
+                                            (comp types/col-type->field #(.getColumnType ^IProjectionSpec %))))))
+           :stats (:stats emitted-child-relation)
+           :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))})))))
 
 (defmethod lp/emit-expr :map [op args]
   (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))

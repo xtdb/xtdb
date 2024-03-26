@@ -83,6 +83,9 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)
         is ListVector -> {
+            if (src.field.isNullable && !field.isNullable)
+                throw InvalidCopySourceException(src.field, field)
+
             val innerCopier = listElementWriter().rowCopier(src.dataVector)
 
             IRowCopier { srcIdx ->

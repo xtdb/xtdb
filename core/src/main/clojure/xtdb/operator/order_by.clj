@@ -18,10 +18,9 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter)
-           [org.apache.arrow.vector.ipc ArrowStreamReader]
-           org.apache.arrow.vector.VectorSchemaRoot
+           org.apache.arrow.vector.types.pojo.Field
            xtdb.ICursor
-           (xtdb.vector IRowCopier IVectorPosition IVectorReader RelationReader)))
+           (xtdb.vector IRowCopier IVectorPosition IVectorReader RelationReader RelationWriter)))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
@@ -243,7 +242,10 @@
                     false)))]
         (if-not (nil? reader)
           (load-next-batch)
-          (with-open [rel-writer (vw/->rel-writer allocator)]
+          (with-open [rel-writer (RelationWriter. allocator (for [[col-name ^Field field] static-fields]
+                                                              (-> (types/field-with-name field (str col-name))
+                                                                  (.createVector allocator)
+                                                                  vw/->writer)))]
             (let [pos (.writerPosition rel-writer)]
               (while (and (<= (.getPosition pos) ^int *chunk-size*)
                           (.tryAdvance in-cursor

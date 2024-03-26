@@ -344,7 +344,7 @@
                                                        acc
                                                        (set/difference (set (keys acc))
                                                                        (set (map #(.getName ^Field %) children))))))))
-                (assoc acc field nil))))
+                (assoc acc (.getType field) nil))))
 
           (kv->field [[arrow-type opts] {:keys [nullable?] :or {nullable? false}}]
             (condp instance? arrow-type
@@ -363,8 +363,7 @@
 
               ArrowType$Null (->field-default-name #xt.arrow/type :null true nil)
 
-              (cond-> arrow-type
-                nullable? ->nullable-field)))
+              (->field-default-name arrow-type nullable? nil)))
 
           (map->field [arrow-type-map]
             (let [without-null (dissoc arrow-type-map #xt.arrow/type :null)

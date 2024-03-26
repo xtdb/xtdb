@@ -13,6 +13,7 @@ import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.util.HashMap
 import java.util.LinkedHashMap
+import kotlin.LazyThreadSafetyMode.PUBLICATION
 
 class DenseUnionVectorWriter(
     override val vector: DenseUnionVector,
@@ -214,20 +215,7 @@ class DenseUnionVectorWriter(
 
     private fun rowCopier0(src: ValueVector): IRowCopier {
         val srcField = src.field
-        val isNullable = srcField.isNullable
-
-        return object : IRowCopier {
-            private val notNullCopier by lazy { legWriter(srcField.type).rowCopier(src) }
-            private val nullWriter by lazy { legWriter(ArrowType.Null.INSTANCE) }
-
-            override fun copyRow(sourceIdx: Int): Int {
-                return if (isNullable && src.isNull(sourceIdx)) {
-                    wp.position.also { nullWriter.writeNull() }
-                } else {
-                    notNullCopier.copyRow(sourceIdx)
-                }
-            }
-        }
+        return legWriter(srcField.type.toLeg(), srcField.fieldType).rowCopier(src)
     }
 
     override fun rowCopier(src: ValueVector) =
