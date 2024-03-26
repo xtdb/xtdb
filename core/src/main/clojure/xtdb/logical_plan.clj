@@ -999,11 +999,16 @@
        (filter (comp (partial parameters-referenced-in-relation? dependent-relation) hash-set val))
        (into {})))
 
+(def ^:dynamic *gensym* gensym)
+
+(defn gen-row-number []
+  (symbol (str "xt$" (*gensym* "row_number"))))
+
 (defn- decorrelate-group-by-apply [post-group-by-projection group-by-columns
                                    apply-mode columns independent-relation dependent-relation]
   (let [independent-projection (relation-columns independent-relation)
         smap (set/map-invert columns)
-        row-number-sym 'xt$row_number
+        row-number-sym (gen-row-number)
         columns (remove-unused-correlated-columns columns dependent-relation)
         post-group-by-projection (remove symbol? post-group-by-projection)]
     (cond->> [:group-by (vec (concat independent-projection
@@ -1380,28 +1385,29 @@
 
 (defn rewrite-plan [plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}, :as opts}]
   (let [!fired-rules (atom [])]
-    (letfn [(instrument-rule [f]
-              (fn [z]
-                (when-let [successful-rewrite (f z)]
-                  (swap! !fired-rules conj
-                         [(name (.toSymbol ^Var f))
-                          (r/znode z)
-                          successful-rewrite
-                          "=================="])
-                  successful-rewrite)))
-            (instrument-rules [rules]
-              (->> rules
-                   (mapv (if instrument-rules? instrument-rule deref))
-                   (apply some-fn)))]
-      (-> (->> plan
-               (r/vector-zip)
-               (#(if decorrelate?
-                   (r/innermost (r/mono-tp (instrument-rules decorrelate-plan-rules)) %)
-                   %))
-               (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
-               (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
-               (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
-               (r/node))))))
+    (binding [*gensym* (util/seeded-gensym "_" 0)]
+      (letfn [(instrument-rule [f]
+                (fn [z]
+                  (when-let [successful-rewrite (f z)]
+                    (swap! !fired-rules conj
+                           [(name (.toSymbol ^Var f))
+                            (r/znode z)
+                            successful-rewrite
+                            "=================="])
+                    successful-rewrite)))
+              (instrument-rules [rules]
+                (->> rules
+                     (mapv (if instrument-rules? instrument-rule deref))
+                     (apply some-fn)))]
+        (-> (->> plan
+                 (r/vector-zip)
+                 (#(if decorrelate?
+                     (r/innermost (r/mono-tp (instrument-rules decorrelate-plan-rules)) %)
+                     %))
+                 (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
+                 (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
+                 (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
+                 (r/node)))))))
 
 (defn validate-plan [plan]
   (when-not (s/valid? ::logical-plan plan)

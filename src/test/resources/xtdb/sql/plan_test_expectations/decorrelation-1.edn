@@ -5,11 +5,11 @@
   [:select
    (< 1000000 x6)
    [:group-by
-    [x1 xt$row_number {x6 (sum x3)}]
+    [x1 xt$row_number_0 {x6 (sum x3)}]
     [:left-outer-join
      [{x1 x4}]
      [:map
-      [{xt$row_number (row-number)}]
+      [{xt$row_number_0 (row-number)}]
       [:rename {custkey x1} [:scan {:table customer} [custkey]]]]
      [:rename
       {totalprice x3, custkey x4}

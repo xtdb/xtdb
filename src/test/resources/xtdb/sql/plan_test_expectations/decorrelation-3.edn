@@ -3,11 +3,11 @@
  [:project
   [x1 x11]
   [:group-by
-   [x1 x2 x3 xt$row_number {x11 (count x10)}]
+   [x1 x2 x3 xt$row_number_0 {x11 (count x10)}]
    [:left-outer-join
     [{x2 x8}]
     [:map
-     [{xt$row_number (row-number)}]
+     [{xt$row_number_0 (row-number)}]
      [:anti-join
       [(or (= x3 x5) (nil? x3) (nil? x5))]
       [:rename
