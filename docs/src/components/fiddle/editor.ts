@@ -54,7 +54,8 @@ let extensions = [
     synhl.of(syntaxHighlighting(selectedTheme, { fallback: true })),
     bracketMatching(),
     closeBrackets(),
-    autocompletion(),
+    // Annoying in practice:
+    // autocompletion(),
     keymap.of([
         ...defaultKeymap,
         ...historyKeymap,
