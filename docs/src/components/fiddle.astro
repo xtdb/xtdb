@@ -12,32 +12,46 @@ function gensym() {
 }
 ---
 <fiddle-embed class="not-content" data-id={gensym()} {...props}>
-    <div class="flex flex-col gap-2 p-2 rounded-sm border border-gray-300">
+    <div class="flex flex-col gap-2 p-2 rounded-sm border border-gray-300 dark:border-gray-600">
         <div class="flex flex-col gap-1">
             <slot />
         </div>
         <div class="flex flex-row gap-1">
             <div data-id="run"
-                 class="px-2 bg-gray-300 hover:bg-gray-400/50 cursor-pointer rounded-md">
+                 class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
                 Run >
             </div>
             <div class="flex-grow" />
             <div data-id="open-in-fiddle"
-                 class="px-2 bg-gray-300 hover:bg-gray-400/50 cursor-pointer rounded-md">
+                 class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
                 Edit in xt-fiddle />
             </div>
         </div>
-        <div data-id="results" />
+        <div class="bg-gray-100 dark:bg-gray-800 rounded-md"
+             data-id="results" />
     </div>
 </fiddle-embed>
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css" />
 <script>
     import { makeEditor } from "./fiddle/editor.ts"
     import hljs from "highlight.js/lib/core"
     import hljsJson from "highlight.js/lib/languages/json"
+    import { getTheme, onThemeChange } from "../utils.ts"
 
     hljs.registerLanguage('json', hljsJson);
+
+    function set_hljs_theme(theme) {
+        console.log('Setting theme to', theme);
+        if (theme == "dark") {
+            document.getElementById('hl-dark').removeAttribute("disabled");
+            document.getElementById('hl-light').setAttribute("disabled", "disabled");
+        } else {
+            document.getElementById('hl-light').removeAttribute("disabled");
+            document.getElementById('hl-dark').setAttribute("disabled", "disabled");
+        }
+    }
+    set_hljs_theme(getTheme());
+    onThemeChange(set_hljs_theme);
 
     function parseSQLTxs(s) {
         var txs = s
@@ -52,13 +66,13 @@ function gensym() {
 
     function makeError(title, message, data) {
         return `
-        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4">
+        <div class="bg-[#fad1df] dark:bg-[#4e2232] border-l-4 border-[#f53d7d] dark:border-[#ee5389] text-[#8a0f3a] dark:text-[#f9c3d6] p-4">
           <p class="font-bold">${title}</p>
-          <p class="whitespace-pre-wrap font-mono">${message.replace(/(?:\r\n|\r|\n)/g, '<br>')}</p>
+          <p class="whitespace-pre-wrap font-mono text-black dark:text-white">${message.replace(/(?:\r\n|\r|\n)/g, '<br>')}</p>
           ${
               data
               ? `<p class="pt-2 font-semibold">Data:</p>
-                 <p>${JSON.stringify(data)}</p>`
+                 <p class="text-black dark:text-white">${JSON.stringify(data)}</p>`
               : ""
            }
         </div>`

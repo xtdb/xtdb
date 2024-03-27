@@ -547,6 +547,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@codemirror/theme-one-dark@npm:^6.1.2":
+  version: 6.1.2
+  resolution: "@codemirror/theme-one-dark@npm:6.1.2"
+  dependencies:
+    "@codemirror/language": ^6.0.0
+    "@codemirror/state": ^6.0.0
+    "@codemirror/view": ^6.0.0
+    "@lezer/highlight": ^1.0.0
+  checksum: 29bc09f79534115f62658caf3d0db527fe347d058b69a8c7f580ae636827377aadd0606fd0d83dbab8d6f3b0a5df53d3253c619341b5fb93d2c8291a8efb9556
+  languageName: node
+  linkType: hard
+
 "@codemirror/view@npm:^6.0.0, @codemirror/view@npm:^6.17.0, @codemirror/view@npm:^6.23.0, @codemirror/view@npm:^6.25.1":
   version: 6.25.1
   resolution: "@codemirror/view@npm:6.25.1"
@@ -2243,6 +2255,7 @@ __metadata:
     "@codemirror/autocomplete": ^6.14.0
     "@codemirror/commands": ^6.3.3
     "@codemirror/lang-sql": ^6.6.1
+    "@codemirror/theme-one-dark": ^6.1.2
     "@codemirror/view": ^6.25.1
     "@rollup/plugin-yaml": ^4.0.1
     "@tailwindcss/typography": ^0.5.9

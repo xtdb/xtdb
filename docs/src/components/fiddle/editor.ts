@@ -1,9 +1,11 @@
 import { EditorView, lineNumbers, keymap, drawSelection } from "@codemirror/view";
-import { Text } from "@codemirror/state";
+import { Compartment, Text } from "@codemirror/state";
 import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { foldGutter, syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
+import { oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
+import { getTheme, onThemeChange } from "../../utils.ts";
 
 
 let theme = EditorView.theme({
@@ -36,11 +38,20 @@ let theme = EditorView.theme({
     }
 })
 
+let synhl = new Compartment();
+
+let selectedTheme = undefined;
+if (getTheme() == "dark") {
+    selectedTheme = oneDarkHighlightStyle;
+} else {
+    selectedTheme = defaultHighlightStyle;
+}
+
 let extensions = [
     theme,
     history(),
     drawSelection(),
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    synhl.of(syntaxHighlighting(selectedTheme, { fallback: true })),
     bracketMatching(),
     closeBrackets(),
     autocompletion(),
@@ -59,9 +70,19 @@ interface Params {
 }
 
 export function makeEditor({ initialText, parent }: Params) {
-    return new EditorView({
+    const view = new EditorView({
         doc: Text.of(initialText.split("\n")),
         extensions: extensions,
         parent: parent,
     });
+
+    onThemeChange((newTheme) => {
+        if (newTheme == 'dark') {
+            view.dispatch({ effects: synhl.reconfigure(syntaxHighlighting(oneDarkHighlightStyle, { fallback: true })) })
+        } else {
+            view.dispatch({ effects: synhl.reconfigure(syntaxHighlighting(defaultHighlightStyle, { fallback: true })) })
+        }
+    });
+
+    return view;
 }

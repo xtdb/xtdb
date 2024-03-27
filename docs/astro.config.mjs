@@ -209,6 +209,24 @@ export default defineConfig({
       ],
 
       customCss: ['./src/styles/tailwind.css'],
+      head: [
+        {
+          tag: 'link',
+          attrs: {
+            id: 'hl-light',
+            rel: 'stylesheet',
+            href: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css"
+          },
+        },
+        {
+          tag: 'link',
+          attrs: {
+            id: 'hl-dark',
+            rel: 'stylesheet',
+            href: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+          },
+        },
+      ],
 
       components: {
         TableOfContents: './src/components/table-of-contents.astro',
