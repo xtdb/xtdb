@@ -1,0 +1,100 @@
+---
+title: Avoiding a lossy database
+---
+
+import Fiddle from '../../../components/fiddle.astro';
+import Txs from '../../../components/fiddle/txs.astro';
+import Query from '../../../components/fiddle/query.astro';
+
+
+Imagine a system that stores product data.
+
+Suppose somebody decides to delete a product from our database.
+
+```sql
+DELETE FROM product WHERE product.id = 1;
+```
+
+In a traditional database, this record is now gone for good, and
+unrecoverable (except for restoring from backups, which is
+expensive, time-consuming and notoriously unreliable!).
+
+One common workaround is the use of a status column:
+
+```sql
+UPDATE product SET status = 'UNAVAILABLE'
+WHERE product.id = 1;
+```
+
+The downside of this approach is that *all* queries to the product
+table now need to be aware of this workaround and add explicit
+clauses to their queries.
+
+```sql
+SELECT * FROM product WHERE status <> 'UNAVAILABLE'
+```
+
+Another downside is that we no longer have any historic record of
+when a status changed.
+
+*This is a trivial example but one that clearly demonstrates the
+fragility and complexity of managing time in data systems.*
+
+## Using an Immutable Database
+
+Using an immutable database we keep everything, including the
+history of any change to the database. Therefore, we can get back
+deleted data.
+
+For example, let's set up a scenario by inserting some product records:
+
+Let's pretend the day we are inserting these records is 2024-01-01.
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-01"
+       txs="INSERT INTO product (xt$id, name)
+            VALUES
+            (1, 'Pendleton Electric Bicycle'),
+            (2, 'Bicycle Pump')" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+Let's query these products:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT * FROM product" />
+</Fiddle>
+
+A month later, someone deletes the product.
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-02-01"
+       txs="DELETE FROM product WHERE product.name = 'Pendleton Electric Bicycle'" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+Let's check that the bicycle is no longer in our database:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT * FROM product" />
+</Fiddle>
+
+The product is gone! Oh no!
+
+However, don't worry. Since the database is immutable, we can make
+a historical query different time. We can do this by adding a
+qualifier to the query:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT *
+            FROM product
+            FOR VALID_TIME AS OF DATE '2024-01-01'" />
+</Fiddle>
+
+## Conclusion
+
+We've shown that it's possible to use standard SQL to make
+historical queries against an immutable database, to bring back
+deleted data.
+
+Now try out [part 2](/tutorials/sakila-2).

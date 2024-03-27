@@ -1,0 +1,99 @@
+---
+title: Understanding change
+---
+
+import Fiddle from '../../../components/fiddle.astro';
+import Txs from '../../../components/fiddle/txs.astro';
+import Query from '../../../components/fiddle/query.astro';
+
+In [part 1](/tutorials/sakila-1), we covered deleted data, and the fact that in an immutable database, data is never truly gone.
+
+In this part, we'll expand more
+on the idea of querying the timeline.
+
+Let's use a single record for this example.
+
+Let's pretend the first version is inserted on `2024-01-01`.
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-01"
+       txs="INSERT INTO product (xt$id, name, price)
+            VALUES
+            (1, 'Pendleton Electric Bicycle', 340)" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+(Notice how we don't have to create a database table explicitly, or tell our database about the columns - the database will learn the schema from the data we give it)
+
+Let's query this product:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT * FROM product" />
+</Fiddle>
+
+A month later on `2024-02-01`, we decide to update the price of the product.
+
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-02-01"
+       txs="UPDATE product
+            SET price = 360
+            WHERE product.name = 'Pendleton Electric Bicycle'" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+Let's check the new price:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT * FROM product" />
+</Fiddle>
+
+A month later on `2024-03-01`, with part costs still increasing, we increase the price again.
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-03-01"
+       txs="UPDATE product
+            SET price = 400
+            WHERE product.name = 'Pendleton Electric Bicycle'" />
+  <Query q="SELECT * FROM product" />
+</Fiddle>
+
+Let's say we need to do an audit query, and we need to know
+the price of every product as of `2024-01-15`.
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2024-01-15'" />
+</Fiddle>
+
+Here you can see we have the correct historical price for `2024-01-15`, which is 340
+
+Now lets say our the CFO wants to how the prices have increased over Q1?
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT product.*, product.xt$valid_from, product.xt$valid_to
+            FROM product
+            FOR ALL VALID_TIME
+            ORDER BY product.xt$valid_from" />
+</Fiddle>
+
+When did the bicycle price first exceed $350 ?
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT product.*, product.xt$valid_from, product.xt$valid_to
+            FROM product
+            FOR ALL VALID_TIME
+            WHERE product.price > 350
+            ORDER BY product.xt$valid_from
+            LIMIT 1" />
+</Fiddle>
+
+Yes, it was the price change of `2024-02-01` where the bicycle's
+price exceeded $350.
+
+## Conclusion
+
+We've shown that it's possible to view the past history of records
+in our database without creating any special views, audit tables or
+workarounds.
+
+Let's move ahead to [part 3](/tutorials/sakila-3).
