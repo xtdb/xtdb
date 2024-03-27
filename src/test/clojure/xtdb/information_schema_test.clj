@@ -12,47 +12,47 @@
 (deftest test-info-schema-columns
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= #{{:table-catalog "default",
+  (t/is (= #{{:table-catalog "xtdb",
               :table-schema "public",
               :table-name "beanie",
               :column-name "col1",
               :data-type "[:union #{:utf8 :i64}]"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$tx_time",
               :data-type "[:timestamp-tz :micro \"UTC\"]"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$id",
               :data-type ":i64"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "beanie",
               :column-name "xt$id",
               :data-type ":keyword"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "baseball",
               :column-name "col2",
               :data-type ":i64"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$error",
               :data-type "[:union #{:null :transit}]"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "baseball",
               :column-name "col1",
               :data-type ":i64"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "baseball",
               :column-name "xt$id",
               :data-type ":keyword"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "xt$txs",
               :column-name "xt$committed?",
@@ -65,15 +65,15 @@
 (deftest test-info-schema-tables
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= #{{:table-catalog "default",
+  (t/is (= #{{:table-catalog "xtdb",
               :table-schema "public",
               :table-name "beanie",
               :table-type "BASE TABLE"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "xt$txs",
               :table-type "BASE TABLE"}
-             {:table-catalog "default",
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "baseball",
               :table-type "BASE TABLE"}}
@@ -102,13 +102,13 @@
   (xt/submit-tx tu/*node* test-data)
 
   (t/is (= #{{:schemaname "public",
-              :tableowner "default",
+              :tableowner "xtdb",
               :tablename "xt$txs"}
              {:schemaname "public",
-              :tableowner "default",
+              :tableowner "xtdb",
               :tablename "baseball"}
              {:schemaname "public",
-              :tableowner "default",
+              :tableowner "xtdb",
               :tablename "beanie"}}
            (set (tu/query-ra '[:scan
                                {:table pg_catalog$pg_tables}
@@ -147,7 +147,7 @@
   (t/is (= [{:table-name "baseball",
              :data-type ":keyword",
              :column-name "xt$id",
-             :table-catalog "default",
+             :table-catalog "xtdb",
              :table-schema "public"}]
            (xt/q tu/*node*
                  "SELECT * FROM information_schema.columns AS c LIMIT 1"))))
@@ -192,27 +192,27 @@
 
 (deftest test-pg-namespace
   (t/is (=
-         #{{:nspowner 722480637,
+         #{{:nspowner 1376455703,
             :oid -1980112537,
             :nspname "information_schema"}
-           {:nspowner 722480637,
+           {:nspowner 1376455703,
             :oid -2125819141,
             :nspname "pg_catalog"}
-           {:nspowner 722480637,
+           {:nspowner 1376455703,
             :oid 1106696632,
             :nspname "public"}}
          (set (tu/query-ra '[:scan {:table pg_catalog$pg_namespace} [oid nspname nspowner nspacl]]
                            {:node tu/*node*})))))
 (deftest test-schemata
-  (t/is (= #{{:catalog-name "default",
+  (t/is (= #{{:catalog-name "xtdb",
               :schema-name "information_schema",
-              :schema-owner "default"}
-             {:catalog-name "default",
+              :schema-owner "xtdb"}
+             {:catalog-name "xtdb",
               :schema-name "pg_catalog",
-              :schema-owner "default"}
-             {:catalog-name "default",
+              :schema-owner "xtdb"}
+             {:catalog-name "xtdb",
               :schema-name "public",
-              :schema-owner "default"}}
+              :schema-owner "xtdb"}}
            (set (tu/query-ra '[:scan {:table information_schema$schemata} [catalog_name schema_name schema_owner]]
                              {:node tu/*node*})))))
 
@@ -223,3 +223,4 @@
            (xt/q tu/*node*
                  "SELECT columns.data_type FROM information_schema.columns AS columns
                   WHERE columns.column_name = 'set_column'"))))
+

@@ -69,15 +69,15 @@
 
 (def derived-tables (merge info-tables pg-catalog-tables))
 
-(def schemas [{"catalog_name" "default"
+(def schemas [{"catalog_name" "xtdb"
                "schema_name" "pg_catalog"
-               "schema_owner" "default"}
-              {"catalog_name" "default"
+               "schema_owner" "xtdb"}
+              {"catalog_name" "xtdb"
                "schema_name" "public"
-               "schema_owner" "default"}
-              {"catalog_name" "default"
+               "schema_owner" "xtdb"}
+              {"catalog_name" "xtdb"
                "schema_name" "information_schema"
-               "schema_owner" "default"}])
+               "schema_owner" "xtdb"}])
 
 (def pg-namespaces (map (fn [{:strs [schema_owner schema_name] :as schema}]
                           (-> schema
@@ -90,7 +90,7 @@
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
-        "table_catalog" (.writeObject col-wtr "default")
+        "table_catalog" (.writeObject col-wtr "xtdb")
         "table_name" (.writeObject col-wtr table)
         "table_schema" (.writeObject col-wtr "public")
         "table_type" (.writeObject col-wtr "BASE TABLE")))
@@ -105,7 +105,7 @@
       (case col
         "schemaname" (.writeObject col-wtr "public")
         "tablename" (.writeObject col-wtr table)
-        "tableowner" (.writeObject col-wtr "default")
+        "tableowner" (.writeObject col-wtr "xtdb")
         "tablespace" (.writeObject col-wtr nil)))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
@@ -116,7 +116,7 @@
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
-        "table_catalog" (.writeObject col-wtr "default")
+        "table_catalog" (.writeObject col-wtr "xtdb")
         "table_name" (.writeObject col-wtr table)
         "table_schema" (.writeObject col-wtr "public")
         "column_name" (.writeObject col-wtr name)
