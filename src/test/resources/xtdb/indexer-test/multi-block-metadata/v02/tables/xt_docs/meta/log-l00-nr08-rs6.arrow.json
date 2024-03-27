@@ -222,22 +222,6 @@
                   "children" : [ ]
                 }]
               },{
-                "name" : "struct-6",
-                "nullable" : true,
-                "type" : {
-                  "name" : "list"
-                },
-                "children" : [{
-                  "name" : "$data$",
-                  "nullable" : true,
-                  "type" : {
-                    "name" : "int",
-                    "bitWidth" : 32,
-                    "isSigned" : true
-                  },
-                  "children" : [ ]
-                }]
-              },{
                 "name" : "keyword",
                 "nullable" : true,
                 "type" : {
@@ -421,13 +405,13 @@
               },{
                 "name" : "struct-2",
                 "count" : 10,
-                "VALIDITY" : [0,0,0,0,0,0,1,0,0,0],
-                "OFFSET" : [0,0,0,0,0,0,0,2,2,2,2],
+                "VALIDITY" : [0,0,0,0,0,1,1,0,0,0],
+                "OFFSET" : [0,0,0,0,0,0,2,4,4,4,4],
                 "children" : [{
                   "name" : "$data$",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "DATA" : [2,5]
+                  "count" : 4,
+                  "VALIDITY" : [1,1,1,1],
+                  "DATA" : [3,4,2,5]
                 }]
               },{
                 "name" : "i64",
@@ -465,17 +449,6 @@
                   "VALIDITY" : [0,0,0,1,1,1,0,1,1,0],
                   "OFFSET" : [0,0,0,0,1,2,3,3,6,9,9],
                   "DATA" : ["","","","c","d","b","","foo","foo",""]
-                }]
-              },{
-                "name" : "struct-6",
-                "count" : 10,
-                "VALIDITY" : [0,0,0,0,0,1,0,0,0,0],
-                "OFFSET" : [0,0,0,0,0,0,2,2,2,2,2],
-                "children" : [{
-                  "name" : "$data$",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "DATA" : [3,4]
                 }]
               },{
                 "name" : "keyword",
