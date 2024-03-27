@@ -1894,6 +1894,7 @@ subquery
     | quantified_comparison_predicate
     | exists_predicate
     | period_predicate
+    | postgres_access_privilege_predicate
     ;
 
 (*  8.2        <comparison predicate> *)
@@ -2135,6 +2136,44 @@ period_immediately_succeeds_predicate_part_2
 
 search_condition
     : boolean_value_expression
+    ;
+
+(*  postgres access privilege predicates *)
+
+<postgres_access_privilege_predicate>
+    : has_table_privilege_predicate
+    | has_schema_privilege_predicate
+    ;
+
+has_table_privilege_predicate
+    : [ <pg_catalog_reference> ] 'HAS_TABLE_PRIVILEGE' <left_paren> user_string <comma> table_string <comma> privilege_string <right_paren>
+    | [ <pg_catalog_reference> ] 'HAS_TABLE_PRIVILEGE' <left_paren> table_string <comma> privilege_string <right_paren>
+    ;
+
+has_schema_privilege_predicate
+    : [ <pg_catalog_reference> ] 'HAS_SCHEMA_PRIVILEGE' <left_paren> user_string <comma> schema_string <comma> privilege_string <right_paren>
+    | [ <pg_catalog_reference> ] 'HAS_SCHEMA_PRIVILEGE' <left_paren> schema_string <comma> privilege_string <right_paren>
+    ;
+
+(* Sometimes specified as pg_catalog.fn, so add parsing for that *)
+pg_catalog_reference
+    : 'PG_CATALOG' <period>
+    ;
+
+user_string
+    : character_value_expression
+    ;
+
+table_string
+    : character_value_expression
+    ;
+
+schema_string
+    : character_value_expression
+    ;
+
+privilege_string
+    : character_value_expression
     ;
 
 (*  10 Additional common elements *)

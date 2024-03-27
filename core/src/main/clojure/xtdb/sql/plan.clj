@@ -737,6 +737,12 @@
               "SYMMETRIC" 'between-symmetric
               "ASYMMETRIC" 'between)]
       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))))
+    
+    ;; Various table access control functions - always return true for now, since we lack the concept.
+    [:has_table_privilege_predicate "HAS_TABLE_PRIVILEGE" _table _privilege] true
+    [:has_table_privilege_predicate "HAS_TABLE_PRIVILEGE" _user _table _privilege] true
+    [:has_schema_privilege_predicate "HAS_SCHEMA_PRIVILEGE" _schema _privilege] true
+    [:has_schema_privilege_predicate "HAS_SCHEMA_PRIVILEGE" _user _schema _privilege] true
 
     [:extract_expression "EXTRACT" [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
     ;;=>

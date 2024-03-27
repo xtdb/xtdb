@@ -1893,3 +1893,23 @@
   
   (t/is (= [{:xt/column-1 "public"}]
            (xt/q tu/*node* "SELECT current_schema FROM (VALUES 1) AS x"))))
+
+(t/deftest test-postgres-access-control-functions
+  ;; These current functions should always should return true
+  (t/are [sql expected] (= expected (plan-expr sql))
+    "has_table_privilege('xtdb','docs', 'select')" true
+    "has_table_privilege('docs', 'select')" true
+    "pg_catalog.has_table_privilege('docs', 'select')" true
+
+    "has_schema_privilege('xtdb', 'public', 'select')" true
+    "has_schema_privilege('public', 'select')" true
+    "pg_catalog.has_schema_privilege('public', 'select')" true
+
+    "has_table_privilege(current_user, 'docs', 'select')" true
+    "has_schema_privilege(current_user, 'public', 'select')" true)
+
+  (t/testing "example SQL query"
+    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3}]])
+
+    (t/is (= [{:x 3}]
+             (xt/q tu/*node* "SELECT docs.x FROM docs WHERE has_table_privilege('docs', 'select') ")))))
