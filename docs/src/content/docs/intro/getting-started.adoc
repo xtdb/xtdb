@@ -16,10 +16,10 @@ XTDB is built for traditional client-server interactions over HTTP. You can star
 
 [source,bash]
 ----
-docker run --pull=always -tip 3000:3000 ghcr.io/xtdb/xtdb-standalone-ea
+docker run --pull=always -tip 6543:3000 ghcr.io/xtdb/xtdb-standalone-ea
 ----
 
-This starts a server on http://localhost:3000.
+This starts a server on http://localhost:6543.
 By default your data will only be stored transiently using a local directory within the Docker image, but you can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`.
 
 You can then connect to your XTDB server using cURL, or similar tools.
@@ -27,7 +27,7 @@ For example, to check the status of the server:
 
 [source,bash]
 ----
-curl http://localhost:3000/status
+curl http://localhost:6543/status
 ----
 
 == Run the `xtsql` interactive console
@@ -38,7 +38,7 @@ To work with XTDB interactively right away, you can run raw SQL commands using t
 ----
 # any recent version of Python should work, no Python knowledge required
 curl -s https://docs.xtdb.com/xtsql.py -O && \
-  python xtsql.py --url=http://localhost:3000
+  python xtsql.py --url=http://localhost:6543
 ----
 
 === Confirm connectivity
