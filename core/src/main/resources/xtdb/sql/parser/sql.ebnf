@@ -380,6 +380,10 @@ schema_name
     : [ schema_name <period> ] !#'(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)' identifier
     ;
 
+<qualified_identifier>
+    : identifier
+    ;
+
 <column_name>
     : identifier
     ;
@@ -584,6 +588,7 @@ field_definition
     | field_reference
     | collection_value_constructor
     | array_element_reference
+    | routine_invocation
     ;
 
 <collection_value_constructor>
@@ -1894,7 +1899,6 @@ subquery
     | quantified_comparison_predicate
     | exists_predicate
     | period_predicate
-    | postgres_access_privilege_predicate
     ;
 
 (*  8.2        <comparison predicate> *)
@@ -2138,44 +2142,6 @@ search_condition
     : boolean_value_expression
     ;
 
-(*  postgres access privilege predicates *)
-
-<postgres_access_privilege_predicate>
-    : has_table_privilege_predicate
-    | has_schema_privilege_predicate
-    ;
-
-has_table_privilege_predicate
-    : [ <pg_catalog_reference> ] 'HAS_TABLE_PRIVILEGE' <left_paren> user_string <comma> table_string <comma> privilege_string <right_paren>
-    | [ <pg_catalog_reference> ] 'HAS_TABLE_PRIVILEGE' <left_paren> table_string <comma> privilege_string <right_paren>
-    ;
-
-has_schema_privilege_predicate
-    : [ <pg_catalog_reference> ] 'HAS_SCHEMA_PRIVILEGE' <left_paren> user_string <comma> schema_string <comma> privilege_string <right_paren>
-    | [ <pg_catalog_reference> ] 'HAS_SCHEMA_PRIVILEGE' <left_paren> schema_string <comma> privilege_string <right_paren>
-    ;
-
-(* Sometimes specified as pg_catalog.fn, so add parsing for that *)
-pg_catalog_reference
-    : 'PG_CATALOG' <period>
-    ;
-
-user_string
-    : character_value_expression
-    ;
-
-table_string
-    : character_value_expression
-    ;
-
-schema_string
-    : character_value_expression
-    ;
-
-privilege_string
-    : character_value_expression
-    ;
-
 (*  10 Additional common elements *)
 
 (*  10.1 <interval qualifier> *)
@@ -2218,6 +2184,23 @@ non_second_primary_datetime_field
 
 <interval_leading_field_precision>
     : unsigned_integer
+    ;
+
+(*  10.4 <routine_invocation> *)
+routine_invocation
+    : routine_name sql_argument_list
+    ;
+
+<routine_name> 
+    : [ schema_name <period> ] <qualified_identifier>
+    ;
+
+sql_argument_list 
+    : <left_paren> [ sql_argument [ { <comma> sql_argument } ] ] <right_paren>
+    ;
+
+<sql_argument> 
+    : value_expression
     ;
 
 (*  10.9 <aggregate function> *)

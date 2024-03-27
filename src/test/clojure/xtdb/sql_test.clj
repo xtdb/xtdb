@@ -1906,7 +1906,10 @@
     "pg_catalog.has_schema_privilege('public', 'select')" true
 
     "has_table_privilege(current_user, 'docs', 'select')" true
-    "has_schema_privilege(current_user, 'public', 'select')" true)
+    "has_schema_privilege(current_user, 'public', 'select')" true
+    
+    "HAS_TABLE_PRIVILEGE('xtdb','docs', 'select')" true
+    "PG_CATALOG.HAS_TABLE_PRIVILEGE('xtdb','docs', 'select')" true)
 
   (t/testing "example SQL query"
     (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3}]])

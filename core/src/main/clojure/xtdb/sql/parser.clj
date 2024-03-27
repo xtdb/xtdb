@@ -277,6 +277,8 @@
 
 
   (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
+  (sql-parser "SELECT pg_catalog.HAS_TABLE_PRIVILEGE(current_user, 'foo', 'bar') FROM foo" :directly_executable_statement)
+  (sql-parser "SELECT has_table_privilege(current_user, 'foo', 'bar') FROM foo" :directly_executable_statement)
 
   (println (failure->str (sql-parser "* FROMfoo" :term)))
 

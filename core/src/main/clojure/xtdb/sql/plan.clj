@@ -393,6 +393,14 @@
        ;; should never be reached
        (throw (err/illegal-arg :xtdb.sql/parse-error {::err/message "Invalid Period Predicand"}))))))
 
+(defn routine-invocation [_schema routine-name _fn-opts]
+  (case (str/lower-case routine-name)
+    "has_table_privilege" true
+    "has_schema_privilege" true
+    (throw (err/illegal-arg :xtdb.sql/parse-error
+                            {::err/message (str "Attempting to invoke unknown routine - " routine-name)
+                             :routine-name routine-name}))))
+
 (defn expr [z]
   (r/zmatch z
     [:column_reference _]
@@ -737,12 +745,6 @@
               "SYMMETRIC" 'between-symmetric
               "ASYMMETRIC" 'between)]
       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))))
-    
-    ;; Various table access control functions - always return true for now, since we lack the concept.
-    [:has_table_privilege_predicate "HAS_TABLE_PRIVILEGE" _table _privilege] true
-    [:has_table_privilege_predicate "HAS_TABLE_PRIVILEGE" _user _table _privilege] true
-    [:has_schema_privilege_predicate "HAS_SCHEMA_PRIVILEGE" _schema _privilege] true
-    [:has_schema_privilege_predicate "HAS_SCHEMA_PRIVILEGE" _user _schema _privilege] true
 
     [:extract_expression "EXTRACT" [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
     ;;=>
@@ -1047,6 +1049,14 @@
     [:age_function "AGE" [:age_source ^:z dt1] [:age_source ^:z dt2]]
     ;;=>
     (list 'age (expr dt1) (expr dt2))
+
+    [:routine_invocation [:regular_identifier routine-name] sql-args]
+    ;;=>
+    (routine-invocation nil routine-name sql-args)
+    
+    [:routine_invocation [:schema_name schema-name] [:regular_identifier routine-name] sql-args]
+    ;;=>
+    (routine-invocation schema-name routine-name sql-args)
 
     (expr-varargs z)))
 
