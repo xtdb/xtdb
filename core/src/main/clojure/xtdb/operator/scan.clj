@@ -317,14 +317,11 @@
                                                    (bloom/bloom->bitmap bloom-rdr bloom-vec-idx))))))))))
 
 (defn- ->path-pred [^ArrowBuf iid-arrow-buf]
-  (if iid-arrow-buf
+  (when iid-arrow-buf
     (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-arrow-buf))]
       (reify Predicate
         (test [_ path]
-          (zero? (HashTrie/compareToPath iid-ptr path)))))
-    (reify Predicate
-      (test [_ _path]
-        true))))
+          (zero? (HashTrie/compareToPath iid-ptr path)))))))
 
 (defn- ->merge-tasks
   "segments :: [Segment]
