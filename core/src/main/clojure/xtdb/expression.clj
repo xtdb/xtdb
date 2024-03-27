@@ -1041,6 +1041,17 @@
    :->call-code (fn [[code]]
                   `(ByteBuffer/wrap (.getBytes (.toLowerCase (resolve-string ~code)) StandardCharsets/UTF_8)))})
 
+;; SQL Session Variable functions.
+;; We currently return hard-coded values for these functions, as we do not currently have any of these concepts.
+(defmethod codegen-call [:current_user] [_]
+  {:return-type :utf8 :->call-code (fn [_] `(ByteBuffer/wrap (.getBytes "xtdb" StandardCharsets/UTF_8)))})
+
+(defmethod codegen-call [:current_database] [_]
+  {:return-type :utf8 :->call-code (fn [_] `(ByteBuffer/wrap (.getBytes "xtdb" StandardCharsets/UTF_8)))})
+
+(defmethod codegen-call [:current_schema] [_]
+  {:return-type :utf8 :->call-code (fn [_] `(ByteBuffer/wrap (.getBytes "public" StandardCharsets/UTF_8)))})
+
 (defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
   (loop [i (int 0)
          capacity (int 0)]

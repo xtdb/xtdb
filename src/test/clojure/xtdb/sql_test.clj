@@ -1882,3 +1882,14 @@
 
     (t/is (= [{:xt/column-1 ["one"]}]
              (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42")))))
+
+(t/deftest test-postgres-session-variables
+  ;; These currently return hard-coded values.
+  (t/is (= [{:xt/column-1 "xtdb"}]
+           (xt/q tu/*node* "SELECT current_user FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:xt/column-1 "xtdb"}]
+           (xt/q tu/*node* "SELECT current_database FROM (VALUES 1) AS x")))
+  
+  (t/is (= [{:xt/column-1 "public"}]
+           (xt/q tu/*node* "SELECT current_schema FROM (VALUES 1) AS x"))))
