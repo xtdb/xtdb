@@ -1,0 +1,13 @@
+---
+const { hidden, systemTime, txs } = Astro.props;
+
+var props = {
+    'data-hidden': hidden ? 'true' : undefined,
+    'data-system-time': systemTime ? systemTime : undefined,
+    'data-txs': txs.trim(),
+}
+---
+<div class:list={[{hidden: hidden}, "relative", "p-1", "bg-gray-100" ,"rounded-md"]}>
+    { systemTime && <div class="absolute top-0 right-1 px-1">{systemTime}</div> }
+    <fiddle-txs {...props} />
+</div>

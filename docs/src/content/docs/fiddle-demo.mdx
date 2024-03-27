@@ -1,0 +1,147 @@
+---
+title: Fiddle Demo
+---
+
+import Fiddle from '../../components/fiddle.astro';
+import Txs from '../../components/fiddle/txs.astro';
+import Query from '../../components/fiddle/query.astro';
+
+## Basic Usage
+
+You can add a `Fiddle` to the page with pre-set transactions & query like so:
+
+<Fiddle>
+  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Query q="SELECT * FROM docs" />
+</Fiddle>
+
+If you want to preserve whitespace you can do this:
+
+<Fiddle>
+  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Query q={
+`SELECT docs.xt$id, docs.foo
+  FROM docs
+-- You can also put comments :)`}
+/>
+</Fiddle>
+
+
+## Hide editors
+
+Sometimes you just want to show of the query, you can hide the transactions like so:
+
+<Fiddle>
+  <Txs hidden={true}
+       txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Query q="SELECT * FROM docs" />
+</Fiddle>
+
+
+You can do the same with the query of course:
+
+<Fiddle>
+  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Query hidden={true} q="SELECT * FROM docs"/>
+</Fiddle>
+
+If you have an error in the transactions/query it looks like this:
+
+<Fiddle>
+  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Query q="SELECT * FOM docs" />
+</Fiddle>
+
+## System Time
+
+You can set system time on a transaction like so:
+
+<Fiddle>
+  <Txs systemTime="2020-01-01"
+       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one');" />
+  <Query q="SELECT * FROM xt$txs" />
+</Fiddle>
+
+## Multiple Transactions
+
+It can be useful to include multiple "batches" of transactions.
+Particularly for showing of valid time & system time:
+
+<Fiddle>
+  <Txs systemTime="2020-01-01"
+       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one');" />
+  <Txs systemTime="2020-01-02"
+       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'two');" />
+  <Query q={
+`SELECT d.xt$id, d.name, d.xt$system_from
+  FROM docs FOR ALL VALID_TIME AS d
+  ORDER BY d.xt$id, d.xt$system_from`} />
+</Fiddle>
+
+## Magic Context
+
+While of course you can use hidden `Txs` to include transactions previously executed on the page but that can get tedious.
+
+Instead you can tell the component to look at transactions from *previous* fiddles on the page.
+Note that it will only look for transactions from fiddles with the *same context id string* set.
+
+For example:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2020-01-01"
+       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one');" />
+  <Query q="SELECT * FROM docs" />
+</Fiddle>
+
+Note that it we only have docs from this fiddle.
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2020-01-02"
+       txs="
+    INSERT INTO docs (xt$id, name) VALUES (1, 'two');
+    INSERT INTO docs (xt$id, name) VALUES (2, 'three');" />
+  <Query q={
+`SELECT d.xt$id, d.name, d.xt$system_from
+  FROM docs FOR ALL VALID_TIME AS d
+  ORDER BY d.xt$id, d.xt$system_from`} />
+</Fiddle>
+
+Note that now we have the transactions from the previous fiddle :)
+
+This fiddle uses a different context id, so it will not use the context of previous fiddles:
+
+<Fiddle magicContext="different-context">
+  <Txs systemTime="2020-01-02"
+       txs="
+    INSERT INTO docs (xt$id, name) VALUES (1, 'two');
+    INSERT INTO docs (xt$id, name) VALUES (2, 'three');" />
+  <Query q={
+`SELECT d.xt$id, d.name, d.xt$system_from
+  FROM docs FOR ALL VALID_TIME AS d
+  ORDER BY d.xt$id, d.xt$system_from`} />
+</Fiddle>
+
+
+## Caveats
+
+Please note that the fiddle expects **exactly one** `Query` and it will always run it **after all transactions are run**
+For example:
+
+<Fiddle>
+  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one')" />
+  <Query q="SELECT * FROM docs" />
+  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (2, 'two')" />
+  <Query q="SELECT * FROM docs" />
+</Fiddle>
+
+And with no query you'll get an error:
+
+<Fiddle>
+  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (2, 'two')" />
+</Fiddle>
+
+Having just a query is fine though (and useful with Magic Context):
+
+<Fiddle>
+  <Query q="SELECT * FROM docs" />
+</Fiddle>
