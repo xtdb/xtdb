@@ -43,13 +43,23 @@ export default defineConfig({
                     ]
                 },
 
-                /*      {
-                          label: 'Tutorials',
-                          collapsed: true,
-                          items: [
-                          ],
+                {
+                    label: 'Tutorials',
+                    collapsed: true,
+                    items: [
+                        {
+                            label: 'Immutability Walkthrough',
+                            collapsed: false,
+                            items: [
+                                { label: 'Avoiding a lossy database', link: '/tutorials/sakila-1' },
+                                { label: 'Understanding change', link: '/tutorials/sakila-2' },
+                                { label: 'Updating the past', link: '/tutorials/sakila-3' },
+                                { label: 'Changing an immutable database', link: '/tutorials/sakila-4' },
+                            ],
                         },
-                */
+                    ],
+                },
+
                 {
                     label: 'Guides',
                     collapsed: true,
