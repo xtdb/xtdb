@@ -25,6 +25,11 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
     override fun writerPosition() = wp
 
+    override fun setWriterPosition(pos: Int) {
+        writerPosition().position = pos
+        writers.values.forEach { it.setWriterPosition(pos) }
+    }
+
     private fun upsertChildField(childField: Field) {
         childFields[childField.name] = childField
         field = Field(field.name, field.fieldType, childFields.values.toList())

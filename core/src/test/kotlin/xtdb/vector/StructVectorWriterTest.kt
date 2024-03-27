@@ -27,6 +27,22 @@ class StructVectorWriterTest {
     }
 
     @Test
+    fun `test struct vector skipping with setWriterPosition`() {
+        val objs = listOf(
+            mapOf("a" to 12, "b" to 24.0),
+            null,
+            mapOf("a" to 20, "b" to 3.4),
+        )
+
+        writerFor(StructVector.empty("foo", al)).use { w ->
+            w.writeObject(objs[0])
+            w.setWriterPosition(2)
+            w.writeObject(objs[2])
+            assertEquals(objs, w.toReader().toList())
+        }
+    }
+
+    @Test
     fun `test write some structs with writeObject`() {
         val objs = listOf(
             mapOf("a" to 12, "b" to 24.0),

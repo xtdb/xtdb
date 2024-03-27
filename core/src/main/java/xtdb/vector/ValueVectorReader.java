@@ -1051,5 +1051,124 @@ public class ValueVectorReader implements IVectorReader {
     public static IVectorReader denseUnionVector(DenseUnionVector v) {
         return new DuvReader(v);
     }
-}
 
+    public static class SuvReader extends ValueVectorReader {
+        private final UnionVector v;
+
+        private final List<Keyword> legs;
+        private final Map<Keyword, IVectorReader> legReaders = new ConcurrentHashMap<>();
+
+        private SuvReader(UnionVector v) {
+            super(v);
+            this.v = v;
+
+            // only using getChildrenFromFields because DUV.getField is so expensive.
+            List<? extends ValueVector> children = v.getChildrenFromFields();
+            this.legs = children.stream().map(c -> Keyword.intern(c.getName())).toList();
+        }
+
+        @Override
+        public boolean isNull(int idx) {
+            int typeId = getTypeValue(idx);
+            return typeId < 0 || v.getVectorByType(typeId).isNull(idx);
+        }
+
+        @SuppressWarnings("resource")
+        Object getObject0(int idx, IKeyFn<?> keyFn) {
+            return legReader(getLeg(idx)).getObject(idx, keyFn);
+        }
+
+        private int getTypeValue(int idx) {
+            return v.getTypeValue(idx);
+        }
+
+        @Override
+        public Keyword getLeg(int idx) {
+            return legs.get(getTypeValue(idx));
+        }
+
+        @Override
+        public IVectorReader legReader(Keyword legKey) {
+            return legReaders.computeIfAbsent(legKey, k -> {
+                var child = v.getChild(k.sym.toString());
+                if (child == null) return null;
+                return ValueVectorReader.from(child);
+            });
+        }
+
+        @Override
+        public List<Keyword> legs() {
+            return legs;
+        }
+
+        @Override
+        public IValueReader valueReader(IVectorPosition pos) {
+            var legReaders = legs.stream().collect(Collectors.toMap(l -> l, l -> SuvReader.this.legReader(l).valueReader(pos)));
+
+            return new IValueReader() {
+                @Override
+                public Keyword getLeg() {
+                    return SuvReader.this.getLeg(pos.getPosition());
+                }
+
+                private IValueReader legReader() {
+                    return legReaders.get(getLeg());
+                }
+
+                @Override
+                public boolean isNull() {
+                    return legReader().isNull();
+                }
+
+                @Override
+                public boolean readBoolean() {
+                    return legReader().readBoolean();
+                }
+
+                @Override
+                public byte readByte() {
+                    return legReader().readByte();
+                }
+
+                @Override
+                public short readShort() {
+                    return legReader().readShort();
+                }
+
+                @Override
+                public int readInt() {
+                    return legReader().readInt();
+                }
+
+                @Override
+                public long readLong() {
+                    return legReader().readLong();
+                }
+
+                @Override
+                public float readFloat() {
+                    return legReader().readFloat();
+                }
+
+                @Override
+                public double readDouble() {
+                    return legReader().readDouble();
+                }
+
+                @Override
+                public ByteBuffer readBytes() {
+                    return legReader().readBytes();
+                }
+
+                @Override
+                public Object readObject() {
+                    return legReader().readObject();
+                }
+            };
+        }
+    }
+
+    public static IVectorReader sparseUnionVector(UnionVector v) {
+        return new SuvReader(v);
+    }
+}

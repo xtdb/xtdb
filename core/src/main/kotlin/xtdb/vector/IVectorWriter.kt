@@ -20,6 +20,10 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
      */
     fun writerPosition(): IVectorPosition
 
+    fun setWriterPosition(pos: Int){
+        writerPosition().position = pos
+    }
+
     val vector: FieldVector
 
     val field: Field

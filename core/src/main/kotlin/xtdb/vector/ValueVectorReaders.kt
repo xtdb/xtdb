@@ -62,7 +62,7 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
     override fun visit(v: FixedSizeListVector, value: Any?): IVectorReader = throw UnsupportedOperationException()
     override fun visit(v: LargeListVector, value: Any?): IVectorReader = throw UnsupportedOperationException()
     override fun visit(v: NonNullableStructVector, value: Any?): IVectorReader = structVector(v)
-    override fun visit(v: UnionVector, value: Any?): IVectorReader = throw UnsupportedOperationException()
+    override fun visit(v: UnionVector, value: Any?): IVectorReader = sparseUnionVector(v)
     override fun visit(v: DenseUnionVector, value: Any?): IVectorReader = denseUnionVector(v)
     override fun visit(v: NullVector, value: Any?): IVectorReader = ValueVectorReader(v)
 
