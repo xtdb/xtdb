@@ -1176,7 +1176,6 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
 
       for (int i = startIndex; i < startIndex + length; i++) {
         byte typeId = typeBuffer.getByte(i);
-
         if (typeId >= 0) {
           to.offsetBuffer.setInt((long) (i - startIndex) * OFFSET_WIDTH, typeCounts[typeId]);
           typeCounts[typeId] += 1;
