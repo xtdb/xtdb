@@ -8,6 +8,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
+    antlr
 }
 
 publishing {
@@ -55,6 +56,9 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
     api("com.charleskorn.kaml","kaml","0.56.0")
 
+    antlr("org.antlr:antlr4:4.13.1")
+    implementation("org.antlr:antlr4-runtime:4.13.1")
+
     testImplementation("io.mockk","mockk", "1.13.9")
     testImplementation("org.clojure","test.check", "1.1.1")
     testImplementation(project(":xtdb-http-server"))
@@ -78,6 +82,18 @@ kotlin {
             freeCompilerArgs.add("-Xjvm-default=all")
         }
     }
+}
+
+tasks.compileKotlin {
+    dependsOn("generateGrammarSource")
+}
+
+tasks.compileTestKotlin {
+    dependsOn("generateTestGrammarSource")
+}
+
+tasks.withType(AntlrTask::class.java) {
+    arguments = listOf("-package", "xtdb.antlr", "-visitor", "-no-listener")
 }
 
 tasks.dokkaHtmlPartial {
