@@ -17,6 +17,7 @@ mkdir -p "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"{complex/impl,i
     echo Copying files...
 
     cp vector/target/generated-sources/org/apache/arrow/vector/complex/DenseUnionVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"
+    cp vector/target/generated-sources/org/apache/arrow/vector/complex/UnionVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"
     cp vector/src/main/java/org/apache/arrow/vector/complex/AbstractContainerVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"
     cp vector/target/generated-sources/org/apache/arrow/vector/complex/impl/NullableStructWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/impl/"
     cp vector/src/main/java/org/apache/arrow/vector/ipc/JsonFileWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/ipc/"
