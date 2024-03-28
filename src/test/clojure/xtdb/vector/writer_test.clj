@@ -201,7 +201,7 @@
             "call to structKeyWriter with same field should not throw")
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
-                              (types/->field "foo" #xt.arrow/type :f64 true))
+                              (types/->field "foo" #xt.arrow/type :f64 false))
                (-> struct-wtr
                    (doto (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :f64)))
                    (.getField)))
@@ -209,7 +209,7 @@
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
                               (types/->field "bar" #xt.arrow/type :i64 false)
-                              (types/->field "foo" #xt.arrow/type :f64 true))
+                              (types/->field "foo" #xt.arrow/type :f64 false))
                (-> struct-wtr
                    (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                    (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
@@ -229,7 +229,7 @@
                               (types/->field "bar" #xt.arrow/type :union false
                                              (types/->field "i64" #xt.arrow/type :i64 false)
                                              (types/->field "f64" #xt.arrow/type :f64 false))
-                              (types/->field "foo" #xt.arrow/type :f64 true))
+                              (types/->field "foo" #xt.arrow/type :f64 false))
                (-> struct-wtr
                    (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :f64)))
                    (.getField))))))

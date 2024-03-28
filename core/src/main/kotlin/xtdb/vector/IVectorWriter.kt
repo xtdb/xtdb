@@ -131,9 +131,10 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
                 .also { it.transfer() }
                 .to as FieldVector
 
-        field.type == ArrowType.Null.INSTANCE ->
-            Field(field.name, FieldType.nullable(fieldType.type), emptyList())
+        field.type == ArrowType.Null.INSTANCE -> {
+            Field(field.name, FieldType(writerPosition().position > 0, fieldType.type, null), emptyList())
                 .createVector(al).also { it.valueCount = vector.valueCount }
+        }
 
         else -> {
             val duv = DenseUnionVector(field.name, al, UNION_FIELD_TYPE, null)

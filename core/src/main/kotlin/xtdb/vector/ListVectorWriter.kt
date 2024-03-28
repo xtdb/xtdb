@@ -5,9 +5,10 @@ import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
-import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.complex.replaceDataVector
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.toFieldType
 
 class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
     private val wp = IVectorPosition.build(vector.valueCount)
@@ -19,6 +20,13 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     }
 
     private var elWriter = writerFor(vector.dataVector, ::upsertElField)
+
+    private fun promoteElWriter(fieldType: FieldType): IVectorWriter {
+        val newVec = elWriter.promote(fieldType, vector.allocator)
+        vector.replaceDataVector(newVec)
+        upsertElField(newVec.field)
+        return writerFor(newVec, ::upsertElField).also { elWriter = it }
+    }
 
     override fun writerPosition() = wp
 
@@ -61,16 +69,24 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     }
 
     override fun writeObject0(obj: Any) {
-        val elWtr = listElementWriter()
-
         writeList {
             when (obj) {
                 is IListValueReader ->
                     for (i in 0..<obj.size()) {
-                        elWtr.writeValue(obj.nth(i))
+                        try {
+                            elWriter.writeValue(obj.nth(i))
+                        } catch (e: InvalidWriteObjectException) {
+                            promoteElWriter(e.obj.toFieldType()).writeObject(obj.nth(i))
+                        }
                     }
 
-                is List<*> -> obj.forEach { elWtr.writeObject(it) }
+                is List<*> -> obj.forEach {
+                    try {
+                        elWriter.writeObject(it)
+                    } catch (e: InvalidWriteObjectException) {
+                        promoteElWriter(e.obj.toFieldType()).writeObject(it)
+                    }
+                }
 
                 else -> throw InvalidWriteObjectException(field, obj)
             }

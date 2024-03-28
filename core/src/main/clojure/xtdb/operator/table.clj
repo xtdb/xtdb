@@ -12,7 +12,7 @@
   (:import clojure.lang.MapEntry
            (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
-           (org.apache.arrow.vector.types.pojo Field)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field)
            (xtdb ICursor)
            (xtdb.vector RelationReader)))
 
@@ -130,6 +130,7 @@
                                   :let [^Field el-field (first (.getChildren field))]
                                   ^Field el-leg (types/flatten-union-field el-field)
                                   :when (or (= #xt.arrow/type :struct (.getType el-leg))
+                                            (= #xt.arrow/type :null (.getType el-leg))
                                             (throw (err/illegal-arg :illegal-param-type
                                                                     {::err/message "Table param must be of type struct list"
                                                                      :param param})))
@@ -142,10 +143,10 @@
      :->out-rel (fn [{:keys [^RelationReader params]}]
                   (let [vec-rdr (.readerForName params (str (symbol param)))
                         list-rdr (cond-> vec-rdr
-                                   (.legs vec-rdr) (.legReader :list))
+                                   (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.legReader :list))
                         el-rdr (some-> list-rdr .listElementReader)
                         el-struct-rdr (cond-> el-rdr
-                                        (.legs el-rdr) (.legReader :struct))
+                                        (instance? ArrowType$Union (.getType (.getField el-rdr))) (.legReader :struct))
                         res (vr/rel-reader (for [k (some-> el-struct-rdr .structKeys)
                                                  :when (contains? fields (symbol k)) ]
                                              (.structKeyReader el-struct-rdr k))

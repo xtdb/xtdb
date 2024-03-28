@@ -9,3 +9,8 @@ internal fun StructVector.replaceChild(child: FieldVector) = apply {
 internal fun DenseUnionVector.replaceChild(typeId: Byte, child: FieldVector) = apply {
     putVector(typeId, child)
 }
+
+internal fun ListVector.replaceDataVector(newDataVec: FieldVector) = apply {
+    // calls to protected method
+    replaceDataVector(newDataVec)
+}
