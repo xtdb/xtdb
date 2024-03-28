@@ -1,4 +1,7 @@
 ---
+import Play from 'astro-heroicons/solid/Play.astro';
+import Pencil from 'astro-heroicons/solid/Pencil.astro';
+
 const { magicContext } = Astro.props;
 
 var props = {};
@@ -19,12 +22,18 @@ function gensym() {
         <div class="flex flex-row gap-1">
             <div data-id="run"
                  class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
-                Run >
+                <div class="flex flex-row items-center gap-1">
+                    Run
+                    <Play class="size-4" />
+                </div>
             </div>
             <div class="flex-grow" />
             <div data-id="open-in-fiddle"
                  class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
-                Edit in xt-fiddle />
+                <div class="flex flex-row items-center gap-1">
+                    <Pencil class="size-4" />
+                    Edit in xt-fiddle
+                </div>
             </div>
         </div>
         <div class="bg-gray-100 dark:bg-gray-800 rounded-md overflow-x-auto"

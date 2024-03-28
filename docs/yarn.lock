@@ -1505,6 +1505,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"astro-heroicons@npm:^2.1.1":
+  version: 2.1.1
+  resolution: "astro-heroicons@npm:2.1.1"
+  checksum: b3d3b7eb73cdee0446b4cf8719e372333d2ef4e471dd3424da29ed3b1d5f61405c9d240e02fa729fa51c97b40f2cdad3df05e8ac7523fdd5790ff92639675074
+  languageName: node
+  linkType: hard
+
 "astro@npm:^4.0.1":
   version: 4.5.0
   resolution: "astro@npm:4.5.0"
@@ -2261,6 +2268,7 @@ __metadata:
     "@tailwindcss/typography": ^0.5.9
     asciidoctor: ^2.2.6
     astro: ^4.0.1
+    astro-heroicons: ^2.1.1
     date-fns: ^2.29.3
     highlight.js: ^11.9.0
     rehype-highlight: ^6.0.0

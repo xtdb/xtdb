@@ -22,6 +22,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.25.1",
     "astro": "^4.0.1",
+    "astro-heroicons": "^2.1.1",
     "date-fns": "^2.29.3",
     "highlight.js": "^11.9.0",
     "rehype-highlight": "^6.0.0",
