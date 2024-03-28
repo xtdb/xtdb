@@ -4,11 +4,11 @@ import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { foldGutter, syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
-import { oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
+import { oneDarkHighlightStyle, color as colorDark, oneDarkTheme } from "@codemirror/theme-one-dark";
 import { getTheme, onThemeChange } from "../../utils.ts";
 
 
-let theme = EditorView.theme({
+let themeObj = {
     "&.cm-editor": {
         height: "100%"
     },
@@ -36,22 +36,32 @@ let theme = EditorView.theme({
     "&.cm-focused .cm-cursor": {
         visibility: "visible"
     }
-})
+}
 
+let darkThemeObj = structuredClone(themeObj);
+darkThemeObj[".cm-content"]["caretColor"] = colorDark.cursor;
+darkThemeObj[".cm-cursor, .cm-dropCursor"] = { backgroundColor: colorDark.background };
+darkThemeObj["&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection"]
+    = { backgroundColor: colorDark.selection };
+
+let lightTheme = EditorView.theme(themeObj);
+let darkTheme = EditorView.theme(darkThemeObj, { dark: true });
+
+let theme = new Compartment();
 let synhl = new Compartment();
 
-let selectedTheme = undefined;
+let selectedHL = defaultHighlightStyle;
+let selectedTheme = lightTheme;
 if (getTheme() == "dark") {
-    selectedTheme = oneDarkHighlightStyle;
-} else {
-    selectedTheme = defaultHighlightStyle;
+    selectedHL = oneDarkHighlightStyle;
+    selectedTheme = darkTheme;
 }
 
 let extensions = [
-    theme,
+    theme.of(selectedTheme),
     history(),
     drawSelection(),
-    synhl.of(syntaxHighlighting(selectedTheme, { fallback: true })),
+    synhl.of(syntaxHighlighting(selectedHL, { fallback: true })),
     bracketMatching(),
     closeBrackets(),
     // Annoying in practice:
@@ -79,9 +89,19 @@ export function makeEditor({ initialText, parent }: Params) {
 
     onThemeChange((newTheme) => {
         if (newTheme == 'dark') {
-            view.dispatch({ effects: synhl.reconfigure(syntaxHighlighting(oneDarkHighlightStyle, { fallback: true })) })
+            view.dispatch({
+                effects: [
+                    synhl.reconfigure(syntaxHighlighting(oneDarkHighlightStyle, { fallback: true })),
+                    theme.reconfigure(darkTheme),
+                ],
+            })
         } else {
-            view.dispatch({ effects: synhl.reconfigure(syntaxHighlighting(defaultHighlightStyle, { fallback: true })) })
+            view.dispatch({
+                effects: [
+                    synhl.reconfigure(syntaxHighlighting(defaultHighlightStyle, { fallback: true })),
+                    theme.reconfigure(lightTheme),
+                ],
+            })
         }
     });
 
