@@ -225,12 +225,12 @@
     (log stack-name "- installing java")
     (ssh dev-box "sudo" "yum" "install" "-y" "git" "java-17-amazon-corretto-headless")
     (log stack-name "- cloning xtdb")
-    (ssh dev-box "git" "clone" "https://github.com/xtdb/xtdb.git" "--depth" "1" "--branch" "2.x" "--single-branch")
+    (ssh dev-box "git" "clone" "https://github.com/xtdb/xtdb.git" "--depth" "1" "--branch" "main" "--single-branch")
     (log stack-name "- provisioning complete")
     dev-box))
 
 (defn checkout
-  "Fetches and checkouts a commit on a remote dev box, e.g (checkout \"2.x\")"
+  "Fetches and checkouts a commit on a remote dev box, e.g (checkout \"main\")"
   [dev-box sha-or-branch]
   (doto dev-box
     (ssh "cd" "xtdb" ";" "git" "fetch" "origin" sha-or-branch)
@@ -341,8 +341,8 @@
   ;; a valid :xtdb.s3/object-store configuration for the stack with the given :prefix
   (s3-module-config wot-s3 "foo")
 
-  ;; if you want to checkout a different commit, branch or tag (available on GitHub), by default the latest 2.x is checked out
+  ;; if you want to checkout a different commit, branch or tag (available on GitHub), by default the latest main is checked out
   ;; when you provision, this command will fetch the latest from the remote
-  (checkout wot-xtdb "2.x")
+  (checkout wot-xtdb "main")
 
   )

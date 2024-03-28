@@ -21,7 +21,7 @@ import java.nio.file.Path
  * You will need to set up authentication using any of the methods listed within the documentation to be able to make use of the operations inside the modules.
  *
  * For more info on setting up the necessary infrastructure on Google Cloud to be able to use Google Cloud Storage as an XTDB object store, see the section on setting up
- * the [Google Cloud Deployment Manager Configuration](https://github.com/xtdb/xtdb/tree/2.x/modules/google-cloud#google-cloud-deployment-manager-configuration) within our Google Cloud docs.
+ * the [Google Cloud Deployment Manager Configuration](https://github.com/xtdb/xtdb/tree/main/modules/google-cloud#google-cloud-deployment-manager-configuration) within our Google Cloud docs.
  * 
  * Example usage, as part of a node config:
  * ```kotlin
@@ -50,7 +50,7 @@ object GoogleCloudStorage {
      * You will need to set up authentication using any of the methods listed within the documentation to be able to make use of the operations inside the modules.
      *
      * For more info on setting up the necessary infrastructure on Google Cloud to be able to use Google Cloud Storage as an XTDB object store, see the section on setting up
-     * the [Google Cloud Deployment Manager Configuration](https://github.com/xtdb/xtdb/tree/2.x/modules/google-cloud#google-cloud-deployment-manager-configuration) within our Google Cloud docs.
+     * the [Google Cloud Deployment Manager Configuration](https://github.com/xtdb/xtdb/tree/main/modules/google-cloud#google-cloud-deployment-manager-configuration) within our Google Cloud docs.
      *
      * @param projectId The name of the Google Cloud Platform project that the [bucket] is contained within
      * @param bucket The name of the [Cloud Storage bucket](https://cloud.google.com/storage/docs/buckets) to use as an object store
@@ -70,7 +70,7 @@ object GoogleCloudStorage {
      * You will need to set up authentication using any of the methods listed within the documentation to be able to make use of the operations inside the modules.
      *
      * For more info on setting up the necessary infrastructure on Google Cloud to be able to use Google Cloud Storage as an XTDB object store, see the section on setting up
-     * the [Google Cloud Deployment Manager Configuration](https://github.com/xtdb/xtdb/tree/2.x/modules/google-cloud#google-cloud-deployment-manager-configuration) within our Google Cloud docs.
+     * the [Google Cloud Deployment Manager Configuration](https://github.com/xtdb/xtdb/tree/main/modules/google-cloud#google-cloud-deployment-manager-configuration) within our Google Cloud docs.
      *
      * @param projectId The name of the Google Cloud Platform project that the [bucket] is contained within
      * @param bucket The name of the [Cloud Storage bucket](https://cloud.google.com/storage/docs/buckets) to use as an object store

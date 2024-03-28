@@ -24,7 +24,7 @@ First, ensure the `com.xtdb/xtdb-azure` Maven dependency is added to your XTDB n
 [NOTE]
 .Resource Manager template
 ====
-We provide a https://github.com/xtdb/xtdb/blob/2.x/modules/azure/azure-resource-manager/azure-stack.json[parameterized 'Azure Resource Manager' stack] to help set up everything that you need.
+We provide a https://github.com/xtdb/xtdb/blob/main/modules/azure/azure-resource-manager/azure-stack.json[parameterized 'Azure Resource Manager' stack] to help set up everything that you need.
 ====
 
 To use Azure Blob Storage as the object store, the following infrastructure is required:

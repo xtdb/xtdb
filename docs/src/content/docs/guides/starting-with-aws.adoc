@@ -4,7 +4,7 @@ title: Getting started with XTDB on AWS
 
 This guide will walk you through the process of configuring an XTDB cluster on AWS, featuring a customizable number of nodes operating on https://aws.amazon.com/ecs/[**ECS**], all accessible via a load balancer.
 
-We'll utilize a set of provided CloudFormation templates available in the https://github.com/xtdb/xtdb/tree/2.x/cloudformation[**XTDB repository**]. These will set up a cluster of XTDB nodes that use https://aws.amazon.com/s3/[**S3**] as the XTDB object store, and https://aws.amazon.com/msk/[**MSK**] hosted **Kafka** as the XTDB log.
+We'll utilize a set of provided CloudFormation templates available in the https://github.com/xtdb/xtdb/tree/main/cloudformation[**XTDB repository**]. These will set up a cluster of XTDB nodes that use https://aws.amazon.com/s3/[**S3**] as the XTDB object store, and https://aws.amazon.com/msk/[**MSK**] hosted **Kafka** as the XTDB log.
 
 While we provide numerous parameters to configure these templates, you're encouraged to edit them for more advanced use-cases or to reuse existing infrastructure where appropriate.
 

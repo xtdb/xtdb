@@ -23,7 +23,7 @@ First, ensure the `com.xtdb/xtdb-s3` Maven dependency is added to your XTDB node
 [NOTE]
 .CloudFormation stack
 ====
-We provide a https://github.com/xtdb/xtdb/blob/2.x/modules/s3/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help set up everything that you need.
+We provide a https://github.com/xtdb/xtdb/blob/main/modules/s3/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help set up everything that you need.
 
 The stack accepts the (globally unique) name of an S3 bucket as an input - this will be created, and referenced in associated resources - and outputs the SNS topic ARN, to be used in your XTDB configuration.
 ====

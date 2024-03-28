@@ -19,7 +19,7 @@ import java.nio.file.Path
  * Requires at least [storageAccount][Factory.storageAccount], [container][Factory.container], [serviceBusNamespace][Factory.serviceBusNamespace] and [serviceBusTopicName][Factory.serviceBusTopicName] to be provided - these will need to be accessible to whichever authentication credentials you use.
  * Authentication for the components in the module is done via the [DefaultAzureCredential] class - you will need to set up authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
  *
- * For more info on setting up the necessary Azure infrastructure to use Azure Blob Storage as an XTDB object store, see the section on setting up the [Azure Resource Manager Stack](https://github.com/xtdb/xtdb/tree/2.x/modules/azure#azure-resource-manager-stack) within our Azure docs.
+ * For more info on setting up the necessary Azure infrastructure to use Azure Blob Storage as an XTDB object store, see the section on setting up the [Azure Resource Manager Stack](https://github.com/xtdb/xtdb/tree/main/modules/azure#azure-resource-manager-stack) within our Azure docs.
  *
  * Example usage, as part of a node config:
  * ```kotlin
@@ -46,7 +46,7 @@ object AzureBlobStorage {
      * The [storageAccount], [container], [serviceBusNamespace] and [serviceBusTopicName] will need to be accessible to whichever authentication credentials you use.
      * Authentication for the components in the module is done via the [DefaultAzureCredential] class - you will need to set up authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
      *
-     * For more info on setting up the necessary Azure infrastructure to use Azure Blob Storage as an XTDB object store, see the section on setting up the [Azure Resource Manager Stack](https://github.com/xtdb/xtdb/tree/2.x/modules/azure#azure-resource-manager-stack) within our Azure docs.
+     * For more info on setting up the necessary Azure infrastructure to use Azure Blob Storage as an XTDB object store, see the section on setting up the [Azure Resource Manager Stack](https://github.com/xtdb/xtdb/tree/main/modules/azure#azure-resource-manager-stack) within our Azure docs.
      *
      * @param storageAccount The [storage account](https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview) which has the [container] to be used as an object store
      * @param container The name of the [container](https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers) to be used as an object store
@@ -67,7 +67,7 @@ object AzureBlobStorage {
      * The [storageAccount], [container], [serviceBusNamespace] and [serviceBusTopicName] will need to be accessible to whichever authentication credentials you use.
      * Authentication for the components in the module is done via the [DefaultAzureCredential] class - you will need to set up authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
      *
-     * For more info on setting up the necessary Azure infrastructure to use Azure Blob Storage as an XTDB object store, see the section on setting up the [Azure Resource Manager Stack](https://github.com/xtdb/xtdb/tree/2.x/modules/azure#azure-resource-manager-stack) within our Azure docs.
+     * For more info on setting up the necessary Azure infrastructure to use Azure Blob Storage as an XTDB object store, see the section on setting up the [Azure Resource Manager Stack](https://github.com/xtdb/xtdb/tree/main/modules/azure#azure-resource-manager-stack) within our Azure docs.
      *
      * @param storageAccount The [storage account](https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview) which has the [container] to be used as an object store
      * @param container The name of the [container](https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers) to be used as an object store

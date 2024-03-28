@@ -19,7 +19,7 @@ jobs:
         uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: test
-          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Upload build reports
         if: success() || failure() # i.e. not cancelled
         uses: actions/upload-artifact@v3
@@ -33,7 +33,7 @@ jobs:
           name: core-build-reports
           path: core/build/reports/
       - name: Post Slack Notification (On Fail)
-        if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/2.x'
+        if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
         uses: ravsamhq/notify-slack-action@v2
         with:
           status: ${{ job.status }}
@@ -57,7 +57,7 @@ jobs:
         uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: integration-test
-          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Upload build reports
         if: success() || failure() # i.e. not cancelled
         uses: actions/upload-artifact@v3
@@ -65,7 +65,7 @@ jobs:
           name: build-reports
           path: build/reports/
       - name: Post Slack Notification (On Fail)
-        if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/2.x'
+        if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
         uses: ravsamhq/notify-slack-action@v2
         with:
           status: ${{ job.status }}
@@ -90,7 +90,7 @@ jobs:
         uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: slt-test
-          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
   slt-2:
     name: SLT 2
@@ -107,7 +107,7 @@ jobs:
         uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: slt-test-2
-          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
   deploy-standalone-docker:
     name: Deploy XTDB Standalone Docker Image
@@ -130,7 +130,7 @@ jobs:
         uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: :docker:standalone:shadowJar
-          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -173,7 +173,7 @@ jobs:
         uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: :docker:aws:shadowJar
-          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
