@@ -296,7 +296,7 @@
   (sql-parser "IN ( col0 * col0 )" :in_predicate_part_2)
 
   (sql-parser "INTERVAL '3 4' DAY TO HOUR" :interval_literal)
-  (sql-parser "DATE_TRUNC('day', TIMESTAMP '2001-02-16 20:38:40')" :datetime_value_function)
+  (sql-parser "SELECT DATE_TRUNC('day', TIMESTAMP '2001-02-16 20:38:40') FROM Foo" :directly_executable_statement)
   (sql-parser "DATE_TRUNC('day', TIMESTAMP '2001-02-16 20:38:40', 'Australia/Sydney')" :datetime_value_function)
   (sql-parser "DATE_TRUNC('hour', INTERVAL '3 4' DAY TO HOUR)" :interval_value_function)
 

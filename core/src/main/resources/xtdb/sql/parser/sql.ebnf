@@ -380,9 +380,9 @@ schema_name
     : [ schema_name <period> ] !#'(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)' identifier
     ;
 
-<qualified_identifier>
-    : identifier
-    ;
+(* Following the lead of regular_identifier here, filtering known function calls *)
+routine_identifier
+    : !#'(?i)(\b(RANK|DENSE_RANK|PERCENT_RANK|CUME_DIST|ROW_NUMBER|NTILE|LEAD|LAG|FIRST_VALUE|LAST_VALUE|NTH_VALUE|VALUE_OF|NULLIF|COALESCE|CAST|POSITION|LENGTH|CHAR_LENGTH|CHARACTER_LENGTH|OCTET_LENGTH|EXTRACT|CARDINALITY|ARRAY_MAX_CARDINALITY|ABS|MOD|LN|EXP|POWER|SQRT|FLOOR|CEIL|CEILING|SUBSTRING|UPPER|LOWER|TRIM|OVERLAY|CURRENT_TIME|LOCALTIME|CURRENT_TIMESTAMP|LOCALTIMESTAMP|END_OF_TIME|TRIM_ARRAY|ARRAY|USING|PERIOD|AVG|MAX|MIN|SUM|EVERY|ANY|SOME|COUNT|STDDEV_POP|STDDEV_SAMP|VAR_SAMP|VAR_POP|ARRAY_AGG|SIN|COS|TAN|SINH|COSH|TANH|ASIN|ACOS|ATAN|LOG|LOG10|LEAST|GREATEST|OBJECT|DATE_TRUNC|AGE|ARROW_TABLE)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*'
 
 <column_name>
     : identifier
@@ -2192,7 +2192,7 @@ routine_invocation
     ;
 
 <routine_name> 
-    : [ schema_name <period> ] <qualified_identifier>
+    : [ schema_name <period> ] routine_identifier
     ;
 
 sql_argument_list 

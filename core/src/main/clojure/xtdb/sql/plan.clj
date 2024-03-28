@@ -1050,11 +1050,11 @@
     ;;=>
     (list 'age (expr dt1) (expr dt2))
 
-    [:routine_invocation [:regular_identifier routine-name] sql-args]
+    [:routine_invocation [:routine_identifier routine-name] sql-args]
     ;;=>
     (routine-invocation nil routine-name sql-args)
     
-    [:routine_invocation [:schema_name schema-name] [:regular_identifier routine-name] sql-args]
+    [:routine_invocation [:schema_name schema-name] [:routine_identifier routine-name] sql-args]
     ;;=>
     (routine-invocation schema-name routine-name sql-args)
 
