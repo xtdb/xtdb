@@ -7,7 +7,9 @@ var props = {
     'data-txs': txs.trim(),
 }
 ---
-<div class:list={[{hidden: hidden}, "relative", "p-1", "bg-gray-100", "dark:bg-gray-800" ,"rounded-md"]}>
-    { systemTime && <div class="absolute top-0 right-1 px-1">{systemTime}</div> }
-    <fiddle-txs {...props} />
+<div class="relative flex flex-col">
+    { systemTime && <div class="px-1 mx-auto max-lg:after:content-[':'] lg:mx-0 lg:absolute lg:top-0 lg:right-0">{systemTime}</div> }
+    <div class:list={[{hidden: hidden}, "p-1", "bg-gray-100", "dark:bg-gray-800" ,"rounded-md"]}>
+        <fiddle-txs {...props} />
+    </div>
 </div>
