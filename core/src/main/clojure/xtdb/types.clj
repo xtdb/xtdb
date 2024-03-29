@@ -6,7 +6,7 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            [java.io Writer]
-           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
+           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            xtdb.Types
            (xtdb.vector.extensions TransitType KeywordType SetType UriType UuidType)))
@@ -99,7 +99,8 @@
   ArrowType$List (<-arrow-type [_] :list)
   SetType (<-arrow-type [_] :set)
   ArrowType$Map (<-arrow-type [arrow-type] [:map {:sorted? (.getKeysSorted arrow-type)}])
-  ArrowType$Union (<-arrow-type [_] :union)
+  ArrowType$Union (<-arrow-type [^ArrowType$Union arrow-type]
+                    (if (= UnionMode/Dense (.getMode arrow-type)) :union :sparse-union))
 
   KeywordType (<-arrow-type [_] :keyword)
   UuidType (<-arrow-type [_] :uuid)
@@ -134,6 +135,7 @@
     :list ArrowType$List/INSTANCE
     :set SetType/INSTANCE
     :union (.getType Types$MinorType/DENSEUNION)
+    :sparse-union (.getType Types$MinorType/UNION)
 
     (case (first col-type)
       :struct ArrowType$Struct/INSTANCE
@@ -142,6 +144,7 @@
       :map (let [[_ {:keys [sorted?]}] col-type]
              (ArrowType$Map. (boolean sorted?)))
       :union (.getType Types$MinorType/DENSEUNION)
+      :sparse-union (.getType Types$MinorType/UNION)
 
       :date (let [[_ date-unit] col-type]
               (ArrowType$Date. (kw->date-unit date-unit)))
