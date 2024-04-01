@@ -152,6 +152,20 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     return MinorType.UNION;
   }
 
+  private void setNewChild(FieldVector newChild) {
+    switch (newChild.getMinorType()) {
+      case STRUCT:
+        structVector = (StructVector) newChild;
+        break;
+      case LIST:
+        listVector = (ListVector) newChild;
+        break;
+      case MAP:
+        mapVector = (MapVector) newChild;
+        break;
+    }
+  }
+
   @Override
   public void initializeChildrenFromFields(List<Field> children) {
     int count = 0;
@@ -166,6 +180,7 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
       typeIds[typeId] = child;
     }
     internalStruct.initializeChildrenFromFields(children);
+    internalStruct.getChildren().forEach(this::setNewChild);
   }
 
   @Override
@@ -1248,6 +1263,7 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     final FieldVector newVector = internalStruct.addOrGet(name, v.getField().getFieldType(), v.getClass());
     v.makeTransferPair(newVector).transfer();
     internalStruct.putChild(name, newVector);
+    setNewChild(newVector);
     if (callBack != null) {
       callBack.doWork();
     }
@@ -1261,6 +1277,7 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     String name = fieldName(v.getMinorType());
     Preconditions.checkState(internalStruct.getChild(name) == null, String.format("%s vector already exists", name));
     internalStruct.putChild(name, v);
+    setNewChild(v);
     if (callBack != null) {
       callBack.doWork();
     }
