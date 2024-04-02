@@ -13,7 +13,7 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector FieldVectorWriters IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
+           (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 

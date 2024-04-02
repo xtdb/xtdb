@@ -13,7 +13,6 @@
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot
            xtdb.operator.IRelationSelector
-           (xtdb.query IRaQuerySource)
            xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)

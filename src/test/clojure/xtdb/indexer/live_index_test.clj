@@ -7,8 +7,7 @@
             xtdb.node.impl
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
            java.time.Duration
            [java.util Random UUID]
