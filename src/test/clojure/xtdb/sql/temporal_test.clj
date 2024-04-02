@@ -19,6 +19,12 @@
            (frequencies
             (query-at-tx
              "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME"
+             tx2))))
+
+    (is (= {{:last-updated "tx1"} 2, {:last-updated "tx2"} 1}
+           (frequencies
+            (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME ALL"
              tx2))))))
 
 (deftest system-time-as-of

@@ -545,7 +545,8 @@
 
 (defn dml-app-time-extents [ag]
   (when-let [atpn (r/find-first (partial r/ctor? :valid_time_period_name) ag)]
-    (if (= (r/znode (r/left atpn)) "ALL")
+    (if (or (= (r/znode (r/left atpn)) "ALL")
+            (= (r/znode (r/right atpn)) "ALL"))
       :all-application-time
       (let [from (-> atpn r/right r/right)]
         {:from from

@@ -70,7 +70,7 @@ UPDATE <table>
   [ WHERE <predicate> ]
 
 for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
-                | FOR ALL VALID_TIME
+                | FOR ALL VALID_TIME | FOR VALID_TIME ALL
 ----
 
 * If `for_valid_time` is not provided, the effective valid-time range of the update depends on the `:default-all-valid-time?` transaction argument.

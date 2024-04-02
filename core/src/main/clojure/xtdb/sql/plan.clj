@@ -1531,6 +1531,9 @@
       [:query_system_time_period_specification "FOR" "ALL" _]
       :all-time
 
+      [:query_system_time_period_specification "FOR" _ "ALL"]
+      :all-time
+
       [:query_system_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
       ;;=>
       [:at (expr point-in-time)]
@@ -1549,6 +1552,10 @@
   (when-let [z (r/find-first (partial r/ctor? :query_valid_time_period_specification) table-primary-ast)]
     (r/zmatch z
       [:query_valid_time_period_specification "FOR" "ALL" _]
+      ;;=>
+      :all-time
+
+      [:query_valid_time_period_specification "FOR" _ "ALL"]
       ;;=>
       :all-time
 

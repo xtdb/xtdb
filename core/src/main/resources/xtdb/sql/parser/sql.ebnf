@@ -1538,6 +1538,15 @@ query_system_time_period_specification
     | 'FOR' 'SYSTEM_TIME' 'BETWEEN' point_in_time_1 'AND' point_in_time_2
     | 'FOR' 'SYSTEM_TIME' 'FROM' point_in_time_1 'TO' point_in_time_2
     | 'FOR' 'ALL' 'SYSTEM_TIME'
+    | 'FOR' 'SYSTEM_TIME' 'ALL'
+    ;
+
+query_valid_time_period_specification
+    : 'FOR' valid_time_period_name 'AS' 'OF' point_in_time_1
+    | 'FOR' valid_time_period_name 'BETWEEN' point_in_time_1 'AND' point_in_time_2
+    | 'FOR' valid_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2
+    | 'FOR' 'ALL' valid_time_period_name
+    | 'FOR' valid_time_period_name 'ALL'
     ;
 
 <point_in_time_1>
@@ -2320,7 +2329,8 @@ target_table
 delete_statement__searched
     : 'DELETE' 'FROM' target_table
       [ ( 'FOR' 'PORTION' 'OF' valid_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2 )
-        | ( 'FOR' 'ALL' valid_time_period_name ) ]
+        | ( 'FOR' 'ALL' valid_time_period_name )
+        | ( 'FOR' valid_time_period_name 'ALL' ) ]
       [ [ 'AS' ] correlation_name ]
       [ 'WHERE' search_condition ]
     ;
@@ -2371,7 +2381,8 @@ from_default
 update_statement__searched
     : 'UPDATE' target_table
       [ ( 'FOR' 'PORTION' 'OF' valid_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2 )
-        | ( 'FOR' 'ALL' valid_time_period_name ) ]
+        | ( 'FOR' 'ALL' valid_time_period_name )
+        | ( 'FOR' valid_time_period_name 'ALL' )]
       [ ( 'AS' correlation_name ) | !#'(?i)(\bSET\b)' correlation_name ]
       'SET' set_clause_list
       [ 'WHERE' search_condition ]
@@ -2645,15 +2656,6 @@ age_source
 
 arrow_table
     : 'ARROW_TABLE' [ <left_paren> character_string_literal <right_paren> ]
-    ;
-
-(* query_valid_time_period_specification, based on SQL:2011  query_system_time_period_specification *)
-
-query_valid_time_period_specification
-    : 'FOR' valid_time_period_name 'AS' 'OF' point_in_time_1
-    | 'FOR' valid_time_period_name 'BETWEEN' point_in_time_1 'AND' point_in_time_2
-    | 'FOR' valid_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2
-    | 'FOR' 'ALL' valid_time_period_name
     ;
 
 (* multiple <direct sql statement> to used for example with files *)

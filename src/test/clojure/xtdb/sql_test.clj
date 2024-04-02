@@ -1572,6 +1572,14 @@
 
   (t/is
    (=plan-file
+    "test-for-all-valid-time-387-query"
+    (plan-sql
+     "SELECT foo.bar
+        FROM foo
+        FOR VALID_TIME ALL")))
+
+  (t/is
+   (=plan-file
     "test-for-all-valid-time-387-update"
     (plan-sql
      "UPDATE users FOR ALL VALID_TIME SET first_name = 'Sue'")))
@@ -1580,7 +1588,13 @@
    (=plan-file
     "test-for-all-valid-time-387-delete"
     (plan-sql
-     "DELETE FROM users FOR ALL VALID_TIME"))))
+     "DELETE FROM users FOR ALL VALID_TIME")))
+
+  (t/is
+   (=plan-file
+    "test-for-all-valid-time-387-delete"
+    (plan-sql
+     "DELETE FROM users FOR VALID_TIME ALL"))))
 
 (deftest test-for-all-system-time-404
   (t/is
@@ -1589,7 +1603,15 @@
     (plan-sql
      "SELECT foo.bar
         FROM foo
-        FOR ALL SYSTEM_TIME"))))
+        FOR ALL SYSTEM_TIME")))
+
+  (t/is
+   (=plan-file
+    "test-for-all-system-time-404"
+    (plan-sql
+     "SELECT foo.bar
+        FROM foo
+        FOR SYSTEM_TIME ALL"))))
 
 (deftest test-period-specs-with-subqueries-407
 

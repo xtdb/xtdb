@@ -38,8 +38,8 @@ relation :: <table_name> [ <for_system_time> ] [ <for_valid_time> ]
           | ( <sub_query> )
           | ( VALUES (<column_name> [ , ... ]) )
 
-for_system_time :: FOR SYSTEM_TIME <temporal_range> | FOR ALL SYSTEM_TIME
-for_valid_time :: FOR VALID_TIME <temporal_range> | FOR ALL VALID_TIME
+for_system_time :: FOR SYSTEM_TIME <temporal_range> | FOR ALL SYSTEM_TIME | FOR SYSTEM_TIME ALL
+for_valid_time :: FOR VALID_TIME <temporal_range> | FOR ALL VALID_TIME | FOR VALID_TIME ALL
 temporal_range :: AS OF <date_time>
                 | FROM <date_time> TO <date_time> -- start inclusive, end exclusive
                 | BETWEEN <date_time> AND <date_time> -- start inclusive, end inclusive
