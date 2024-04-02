@@ -27,4 +27,5 @@ dependencies {
 
 tasks.shadowJar {
     transform(DataReaderTransformer())
+    archiveFileName.set("bench-standalone.jar")
 }

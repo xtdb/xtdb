@@ -1,36 +1,41 @@
-= Auctionmark (WIP)
+= Bench
+== Auctionmark (WIP)
 
-Auctionmark runs in some capacity currently, this guide describes the requirements and steps to use the get-user query as a performance benchmark. Full auctionmark benchmark may or may not be working. Currently the auctionmark dataset is commited to the codebase so you can skip straight to the instructions in xtdb.bench.xtdb.clj
+Auctionmark runs in some capacity currently - this guide describes the requirements and steps to use the get-user query as a performance benchmark.
+Full auctionmark benchmark may or may not be working.
+Currently the auctionmark dataset is committed to the codebase so you can skip straight to the instructions in `xtdb/bench/xtdb2.clj`
 
 - Set up AWS CLI credentials (skip)
-- Run AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark (skip)
-- See comments at bottom of xtdb.bench.xtdb.clj for further instructions.
+- Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
+- See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
 
-= (Deprecated) Bench
+== Running from a standalone JAR
 
-A rudimentary bench adapted from XTDB 1.x. It currently only runs TPC-H, and only runs it ad-hoc (on Fargate) - it doesn't have any of the daily scheduling.
+. Create the standalone JAR: `../../gradlew shadowJar`
+. Running it remotely:
++
+--
+. SCP it somewhere: `scp build/libs/bench-standalone.jar <someone>@<somewhere>`
+. SSH in
+. `screen` / `tmux` etc if you want to leave it running
+--
+. `java -Dclojure.main.report=stderr --add-opens=java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true -cp bench-standalone.jar clojure.main`
++
+* optional: prefix with `rlwrap` (if available) for nicer REPL behaviour
+. `(require '[xtdb.bench.xtdb2 :as bench])`
+. Choose your adventure (values given are defaults):
++
+--
+TPC-H:: `(bench/run-benchmark {:benchmark-type :tpch, :benchmark-opts {:scale-factor 0.01}, :node-opts {:node-dir "/tmp/tpch-node"}})`
+Auctionmark:: `(bench/run-benchmark {:benchmark-type :auctionmark, :benchmark-opts {:duration "PT30S", :scale-factor 0.1, :threads 8}, :node-opts {:node-dir "/tmp/am-node"}})`
+--
 
-Dependencies:
+== Prometheus and Grafana
 
-- AWS CLI (Arch: `aws-cli` or `aws-cli-v2-bin` from the AUR) + credentials set up
-
-All run through scripts in `./bin`:
-
-- `run-cloudformation.sh` - updates the CloudFormation stack (`./cloudformation/bench.yml`)
-- `ecr-login.sh` - logs you in to ECR so that you can push the Docker image
-- `build-docker.sh` - builds the bench Docker image
-- `push-docker.sh` - pushes the bench Docker image
-- `run-bench.sh tpch [--scale-factor 0.01] [--count 1]` - kicks off an ECS job.
-- `run-bench.sh ts-devices [--size <small|med|big>] [--count 1]` - kicks off an ECS job.
-
-You can also run it locally with (e.g.) `clojure -Mxtdb:4gb:bench-tpch --scale-factor 0.05` from the top-level of the core2 repo.
-
-
-=== Prometheus and grafana
-For local node monitoring bring up a prometheus and grafana instance via `docker-compose up`.
-By default the node serves prometheus metrics under `localhost:8080/metrics` which the prometheus scrapes every 2 seconds.
+For local node monitoring, bring up a Prometheus and Grafana instance via `docker-compose up`.
+By default the node serves Prometheus metrics under `localhost:8080/metrics` which Prometheus scrapes every 2 seconds.
 If the metrics are not exposed under `localhost:8080` you need to tweak the `.config/prometheus.yaml` config accordingly.
 
-Under `localhost:3001` you are able to access the grafana UI (`admin` for user and password).
-The XTDB node datasource should be setup and there should be a dashboard available with some basic metrics.
-In case you tweak the dashboard or add a new one you need to save the changes in the corresponding file in `.config/dashboards/dashboard_name.json`.
+Under `localhost:3001` you are able to access the Grafana UI (`admin` for user and password).
+The XTDB node datasource should be setup, and there should be a dashboard available with some basic metrics.
+If you tweak the dashboard or add a new one, save the changes in the corresponding file in `.config/dashboards/dashboard_name.json`.

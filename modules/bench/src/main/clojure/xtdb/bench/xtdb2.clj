@@ -32,13 +32,14 @@
 (defn compact! [node]
   (c/compact-all! node))
 
-(defn ->local-node ^xtdb.api.IXtdb [{:keys [^Path node-dir ^String buffers-dir
+(defn ->local-node ^xtdb.api.IXtdb [{:keys [node-dir ^String buffers-dir
                                             rows-per-chunk log-limit page-limit instant-src]
                                      :or {buffers-dir "objects"}}]
-  (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
-                   :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                   :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
-                                 (into {} (filter val)))}))
+  (let [node-dir (util/->path node-dir)]
+    (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
+                     :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
+                                   (into {} (filter val)))})))
 
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
@@ -96,8 +97,7 @@
    {:node-opts {:node-dir (.toPath node-dir)
                 :instant-src (InstantSource/system)}
     :benchmark-type :auctionmark
-    :benchmark-opts {:duration run-duration :load-phase true
-                     :scale-factor 0.1 :threads 1}})
+    :benchmark-opts {:duration run-duration, :load-phase true, :scale-factor 0.1, :threads 1}})
 
 
   ;;;;;;;;;;;;;
