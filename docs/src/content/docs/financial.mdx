@@ -1,0 +1,143 @@
+---
+title: Financial
+---
+
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import Query from '@components/fiddle/query.astro';
+
+Back in the day we were naive, we bought a bunch of products from people:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2001-01-01"
+       txs="INSERT INTO assets (xt$id, product, amount)
+            VALUES
+            (1, 'my-product-1', 340),
+            (2, 'my-product-2', 10)" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+We put an external price tracking system, and rules for when to buy/sell.
+And we couldn't think of anything else that would be important to keep track so we kept it simple.
+
+---
+
+Fast forward to today and Silicon Valley Bank goes under.
+
+Oh gosh, did we have any products with them?
+
+<Fiddle magicContext="my-context">
+  <Txs hidden={true}
+       txs="INSERT INTO assets (xt$id, product, amount)
+            VALUES
+            (1, 'my-product-1', 625),
+            (2, 'my-product-2', 31),
+            (3, 'my-product-3', 1920),
+            (4, 'my-product-4', 206)" />
+  <Query q="SELECT * FROM assets AS a ORDER BY a.xt$id" />
+</Fiddle>
+
+Why didn't we keep track of who owned what?
+
+This is what interns are for, let's add a table of which products are owned by what:
+
+<Fiddle magicContext="my-context">
+  <Txs txs="INSERT INTO products (xt$id, name, owner)
+            VALUES
+            (1, 'my-product-1', 'Silicon Valley Bank'),
+            (2, 'my-product-2', 'Lloyds'),
+            (3, 'my-product-3', 'Silicon Valley Bank'),
+            (4, 'my-product-4', 'Santander')" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+Now, what do we have to sell?
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT *
+  FROM assets AS a
+  INNER JOIN products AS p ON a.product = p.name
+  WHERE p.owner = 'Silicon Valley Bank'
+  ORDER BY a.xt$id`} />
+</Fiddle>
+
+Ok, that's a lot. But we can manage.
+
+What we can't manage is the boss asking how much we lost compared to if we had sold before they changed ownership.
+We didn't keep track of when that happened!
+
+Let's add that in:
+
+<Fiddle magicContext="my-context">
+  <Txs txs="INSERT INTO products (xt$id, name, owner, xt$valid_from, xt$valid_to)
+            VALUES
+            -- Product 1's history
+            (1, 'my-product-1', 'Lloyds', DATE '1990-01-01', DATE '2000-01-01'),
+            (1, 'my-product-1', 'Other company', DATE '2000-01-01', DATE '2020-01-01'),
+            (1, 'my-product-1', 'Silicon Valley Bank', DATE '2020-01-01', null),
+            -- Product 2's history
+            (2, 'my-product-2', 'Some other company', DATE '1980-01-01', DATE '2010-01-01'),
+            (2, 'my-product-2', 'Lloyds', DATE '2010-01-01', null),
+            -- Product 3's history
+            (3, 'my-product-3', 'Some other company', DATE '1980-01-01', DATE '2010-01-01'),
+            (3, 'my-product-3', 'Other company', DATE '2010-01-01', DATE '2020-01-01'),
+            (3, 'my-product-3', 'Silicon Valley Bank', DATE '2020-01-01', null),
+            -- Product 4's history
+            (4, 'my-product-4', 'Santander', DATE '2000-01-01', null)" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+Ok, just to double check. That's not changed our current day:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT *
+  FROM assets AS a
+  INNER JOIN products AS p ON a.product = p.name
+  WHERE p.owner = 'Silicon Valley Bank'
+  ORDER BY a.xt$id`} />
+</Fiddle>
+
+Nope!
+
+Let's start with figuring out when was each product last not owned by SVP:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT p.name, max(p.xt$valid_from)
+  FROM products FOR ALL VALID_TIME AS p
+  WHERE p.owner <> 'Silicon Valley Bank'
+  GROUP BY p.name
+`} />
+</Fiddle>
+
+Ok, now we know when we should have ideally sold.
+We can combine that with our prices to get how much we lost.
+
+Now we'll keep track when products change ownership so we can more easily answer questions like that later.
+
+---
+
+Another couple of years later, a new investor asks why did we not sell earlier?
+
+Having forgotten the last 5 minutes let's have a query:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT p.xt$id, p.name, p.owner, p.xt$system_from
+  FROM products FOR ALL SYSTEM_TIME AS p
+`} />
+</Fiddle>
+
+Ah, see there.
+We only started recording product owner changes recently.
+No wonder we didn't sell earlier!
+
+:::note
+
+### More Ideas:
+
+Hidden relationships: You own someone who owns SVP
+
+:::
