@@ -80,11 +80,11 @@
                                              end-ms (System/currentTimeMillis)
                                              bf-stats (bp-stats (- end-ms start-ms))]
                                          (b/log-report worker {:stage report-name
-                                                               :start-ms start-ms
-                                                               :end-ms end-ms
+                                                               :time-taken-ms (- end-ms start-ms)
                                                                :buffer-pool-stats bf-stats})))}]))})
 
-(defn benchmark [{:keys [scale-factor seed load-phase] :or {scale-factor 0.01, seed 0, load-phase true}}]
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn benchmark [{:keys [scale-factor seed load-phase], :or {scale-factor 0.01, seed 0, load-phase true}}]
   (log/info {:scale-factor scale-factor})
   {:title "TPC-H (OLAP)"
    :seed seed

@@ -13,8 +13,7 @@
       (let [start-ms (System/currentTimeMillis)]
         (f worker)
         (b/log-report worker {:stage stage,
-                              :start-ms start-ms
-                              :end-ms (System/currentTimeMillis)})))))
+                              :time-taken-ms (- (System/currentTimeMillis) start-ms)})))))
 
 (defn wrap-transaction [{:keys [transaction labels] :as _task} f]
   (let [timer-delay

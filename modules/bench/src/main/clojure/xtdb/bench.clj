@@ -291,8 +291,7 @@
 
         (log-report worker {:benchmark title
                             :system (get-system-info)
-                            :start-ms start-ms
-                            :end-ms (System/currentTimeMillis)})))))
+                            :time-taken-ms (- (System/currentTimeMillis) start-ms)})))))
 
 (comment
   ;; low level benchmark evaluation in process...
