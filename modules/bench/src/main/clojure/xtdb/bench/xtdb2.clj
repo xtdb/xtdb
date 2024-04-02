@@ -1,7 +1,5 @@
 (ns xtdb.bench.xtdb2
   (:require [clojure.java.io :as io]
-            [clojure.tools.cli :as cli]
-            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.bench.measurement :as bm]
@@ -9,21 +7,15 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
-            [xtdb.util :as util]
             [xtdb.query-ra :as ra]
-            [xtdb.metrics :as metrics])
-  (:import (io.micrometer.core.instrument MeterRegistry Timer)
-           (java.io Closeable File)
+            [xtdb.util :as util]
+            [xtdb.compactor :as c])
+  (:import (java.io File)
            (java.nio.file Path)
            (java.time Duration InstantSource)
-           (java.util.concurrent.atomic AtomicLong)
-           (xtdb.api IXtdb TransactionKey)
            (xtdb.indexer IIndexer)))
 
 (set! *warn-on-reflection* false)
-
-(defn finish-chunk! [node]
-  (li/finish-chunk! (util/component node :xtdb.indexer/live-index)))
 
 (defn sync-node
   ([node]
@@ -33,6 +25,12 @@
    @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer)
                    (xtp/latest-submitted-tx node)
                    timeout)))
+
+(defn finish-chunk! [node]
+  (li/finish-chunk! (util/component node :xtdb.indexer/live-index)))
+
+(defn compact! [node]
+  (c/compact-all! node))
 
 (defn ->local-node ^xtdb.api.IXtdb [{:keys [^Path node-dir ^String buffers-dir
                                             rows-per-chunk log-limit page-limit instant-src]
