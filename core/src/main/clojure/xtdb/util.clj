@@ -25,7 +25,7 @@
            (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
            (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
            (org.apache.arrow.vector BaseFixedWidthVector ValueVector VectorLoader VectorSchemaRoot)
-           (org.apache.arrow.vector.complex ListVector)
+           (org.apache.arrow.vector.complex ListVector UnionVector)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
            xtdb.util.NormalForm))
@@ -337,6 +337,10 @@
      ;; see #3088
      (and (instance? ListVector v) (= 0 start-idx len))
      (ListVector/empty (.getName v) (.getAllocator v))
+
+     (and (instance? UnionVector v) (= 0 start-idx len))
+     (doto (UnionVector/empty (.getName v) (.getAllocator v))
+       (.initializeChildrenFromFields (.getChildren (.getField v))))
 
      ;; doesn't preserve nullability otherwise
      (instance? BaseFixedWidthVector v)
