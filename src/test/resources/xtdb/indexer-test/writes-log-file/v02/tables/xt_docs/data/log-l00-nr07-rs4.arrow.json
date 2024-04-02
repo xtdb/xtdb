@@ -40,8 +40,8 @@
       "nullable" : false,
       "type" : {
         "name" : "union",
-        "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "mode" : "Sparse",
+        "typeIds" : [1,0,0]
       },
       "children" : [{
         "name" : "put",
@@ -107,30 +107,29 @@
       "name" : "op",
       "count" : 4,
       "TYPE_ID" : [0,0,1,0],
-      "OFFSET" : [0,1,0,2],
       "children" : [{
         "name" : "put",
-        "count" : 3,
-        "VALIDITY" : [1,1,1],
+        "count" : 4,
+        "VALIDITY" : [1,1,0,1],
         "children" : [{
           "name" : "xt$id",
-          "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "OFFSET" : [0,3,6,9],
-          "DATA" : ["bar","bar","foo"]
+          "count" : 4,
+          "VALIDITY" : [1,1,0,1],
+          "OFFSET" : [0,3,6,6,9],
+          "DATA" : ["bar","bar","","foo"]
         },{
           "name" : "month",
-          "count" : 3,
-          "VALIDITY" : [1,0,0],
-          "OFFSET" : [0,5,5,5],
-          "DATA" : ["april","",""]
+          "count" : 4,
+          "VALIDITY" : [1,0,0,0],
+          "OFFSET" : [0,5,5,5,5],
+          "DATA" : ["april","","",""]
         }]
       },{
         "name" : "delete",
-        "count" : 1
+        "count" : 4
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 4
       }]
     }]
   }]

@@ -40,8 +40,8 @@
       "nullable" : false,
       "type" : {
         "name" : "union",
-        "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "mode" : "Sparse",
+        "typeIds" : [1,0,0]
       },
       "children" : [{
         "name" : "put",
@@ -118,34 +118,33 @@
       "name" : "op",
       "count" : 5,
       "TYPE_ID" : [2,0,1,0,0],
-      "OFFSET" : [0,0,0,1,2],
       "children" : [{
         "name" : "put",
-        "count" : 3,
-        "VALIDITY" : [1,1,1],
+        "count" : 5,
+        "VALIDITY" : [0,1,0,1,1],
         "children" : [{
           "name" : "xt$id",
-          "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "DATA" : ["2","1","1"]
+          "count" : 5,
+          "VALIDITY" : [0,1,0,1,1],
+          "DATA" : ["0","2","0","1","1"]
         },{
           "name" : "bar",
-          "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "DATA" : ["2","2","1"]
+          "count" : 5,
+          "VALIDITY" : [0,1,0,1,1],
+          "DATA" : ["0","2","0","2","1"]
         },{
           "name" : "toto",
-          "count" : 3,
-          "VALIDITY" : [0,1,1],
-          "OFFSET" : [0,0,4,8],
-          "DATA" : ["","toto","toto"]
+          "count" : 5,
+          "VALIDITY" : [0,0,0,1,1],
+          "OFFSET" : [0,0,0,0,4,8],
+          "DATA" : ["","","","toto","toto"]
         }]
       },{
         "name" : "delete",
-        "count" : 1
+        "count" : 5
       },{
         "name" : "erase",
-        "count" : 1
+        "count" : 5
       }]
     }]
   }]

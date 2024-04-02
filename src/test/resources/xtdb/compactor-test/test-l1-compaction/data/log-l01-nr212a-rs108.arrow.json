@@ -40,7 +40,7 @@
       "nullable" : false,
       "type" : {
         "name" : "union",
-        "mode" : "Dense",
+        "mode" : "Sparse",
         "typeIds" : [0,1,2]
       },
       "children" : [{
@@ -102,7 +102,6 @@
       "name" : "op",
       "count" : 22,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21],
       "children" : [{
         "name" : "put",
         "count" : 22,
@@ -115,10 +114,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 22
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 22
       }]
     }]
   },{
@@ -147,7 +146,6 @@
       "name" : "op",
       "count" : 17,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
       "children" : [{
         "name" : "put",
         "count" : 17,
@@ -160,10 +158,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 17
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 17
       }]
     }]
   },{
@@ -192,7 +190,6 @@
       "name" : "op",
       "count" : 14,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13],
       "children" : [{
         "name" : "put",
         "count" : 14,
@@ -205,10 +202,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 14
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 14
       }]
     }]
   },{
@@ -237,7 +234,6 @@
       "name" : "op",
       "count" : 18,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17],
       "children" : [{
         "name" : "put",
         "count" : 18,
@@ -250,10 +246,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 18
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 18
       }]
     }]
   },{
@@ -282,7 +278,6 @@
       "name" : "op",
       "count" : 15,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],
       "children" : [{
         "name" : "put",
         "count" : 15,
@@ -295,10 +290,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 15
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 15
       }]
     }]
   },{
@@ -327,7 +322,6 @@
       "name" : "op",
       "count" : 10,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9],
       "children" : [{
         "name" : "put",
         "count" : 10,
@@ -340,10 +334,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 10
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 10
       }]
     }]
   },{
@@ -372,7 +366,6 @@
       "name" : "op",
       "count" : 24,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
       "children" : [{
         "name" : "put",
         "count" : 24,
@@ -385,10 +378,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 24
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 24
       }]
     }]
   },{
@@ -417,7 +410,6 @@
       "name" : "op",
       "count" : 14,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13],
       "children" : [{
         "name" : "put",
         "count" : 14,
@@ -430,10 +422,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 14
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 14
       }]
     }]
   },{
@@ -462,7 +454,6 @@
       "name" : "op",
       "count" : 20,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],
       "children" : [{
         "name" : "put",
         "count" : 20,
@@ -475,10 +466,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 20
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 20
       }]
     }]
   },{
@@ -507,7 +498,6 @@
       "name" : "op",
       "count" : 23,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],
       "children" : [{
         "name" : "put",
         "count" : 23,
@@ -520,10 +510,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 23
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 23
       }]
     }]
   },{
@@ -552,7 +542,6 @@
       "name" : "op",
       "count" : 14,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13],
       "children" : [{
         "name" : "put",
         "count" : 14,
@@ -565,10 +554,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 14
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 14
       }]
     }]
   },{
@@ -597,7 +586,6 @@
       "name" : "op",
       "count" : 22,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21],
       "children" : [{
         "name" : "put",
         "count" : 22,
@@ -610,10 +598,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 22
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 22
       }]
     }]
   },{
@@ -642,7 +630,6 @@
       "name" : "op",
       "count" : 13,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12],
       "children" : [{
         "name" : "put",
         "count" : 13,
@@ -655,10 +642,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 13
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 13
       }]
     }]
   },{
@@ -687,7 +674,6 @@
       "name" : "op",
       "count" : 16,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
       "children" : [{
         "name" : "put",
         "count" : 16,
@@ -700,10 +686,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 16
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 16
       }]
     }]
   },{
@@ -732,7 +718,6 @@
       "name" : "op",
       "count" : 9,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8],
       "children" : [{
         "name" : "put",
         "count" : 9,
@@ -745,10 +730,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 9
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 9
       }]
     }]
   },{
@@ -777,7 +762,6 @@
       "name" : "op",
       "count" : 13,
       "TYPE_ID" : [0,0,0,0,0,0,0,0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12],
       "children" : [{
         "name" : "put",
         "count" : 13,
@@ -790,10 +774,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 13
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 13
       }]
     }]
   }]

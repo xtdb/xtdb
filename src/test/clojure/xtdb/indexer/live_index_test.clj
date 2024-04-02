@@ -15,9 +15,9 @@
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
            xtdb.IBufferPool
-           xtdb.indexer.live_index.ILiveIndex
            (xtdb.api TransactionKey IndexerConfig)
            xtdb.api.storage.Storage$InMemoryStorageFactory
+           xtdb.indexer.live_index.ILiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
 
@@ -121,10 +121,10 @@
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
+      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+            last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
 
-        (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
-          (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
+        (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))
 
         (tu/finish-chunk! node)
 

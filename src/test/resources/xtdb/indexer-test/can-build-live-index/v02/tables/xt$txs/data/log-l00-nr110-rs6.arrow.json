@@ -40,8 +40,8 @@
       "nullable" : false,
       "type" : {
         "name" : "union",
-        "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "mode" : "Sparse",
+        "typeIds" : [1,0,0]
       },
       "children" : [{
         "name" : "put",
@@ -132,7 +132,6 @@
       "name" : "op",
       "count" : 6,
       "TYPE_ID" : [0,0,0,0,0,0],
-      "OFFSET" : [0,1,2,3,4,5],
       "children" : [{
         "name" : "put",
         "count" : 6,
@@ -161,10 +160,10 @@
         }]
       },{
         "name" : "delete",
-        "count" : 0
+        "count" : 6
       },{
         "name" : "erase",
-        "count" : 0
+        "count" : 6
       }]
     }]
   }]
