@@ -62,11 +62,11 @@
 
 
     (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
-      (->> (fn [conns]
-             (if (identical? conn (get conns cid))
-               (dissoc conns cid)
-               conns))
-           (swap! server-state update :connections)))))
+      (swap! server-state update :connections
+             (fn [conns]
+               (if (identical? conn (get conns cid))
+                 (dissoc conns cid)
+                 conns))))))
 
 (defn stop-connection [conn]
   (let [{:keys [conn-status]} conn]
@@ -722,10 +722,10 @@
       (let [is-running (promise)]
 
         ;; wait for the :running state
-        (->> (fn [_ _ _ ns]
-               (when (= :running ns)
-                 (deliver is-running true)))
-             (add-watch server-status [:accept-watch port]))
+        (add-watch server-status [:accept-watch port]
+                   (fn [_ _ _ ns]
+                     (when (= :running ns)
+                       (deliver is-running true))))
 
         (.start ^Thread accept-thread)
 
