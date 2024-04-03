@@ -1733,9 +1733,7 @@
         ;; the connection is closing right now
         ;; let it close.
         (not= :running @conn-status)
-        (->> {:port port
-              :cid cid}
-             (log/trace "Connection loop exiting (closing)"))
+        (log/trace "Connection loop exiting (closing)" {:port port, :cid cid})
 
         ;; if the server is draining, we may later allow connections to finish their queries
         ;; (consider policy - server has a drain limit but maybe better to be explicit here as well)
@@ -1745,9 +1743,7 @@
              ;; before closing - there probably needs to be limits to this
              ;; (for huge queries / result sets)
              (empty? (:cmd-buf @conn-state)))
-        (do (->> {:port port
-                  :cid cid}
-                 (log/trace "Connection loop exiting (draining)"))
+        (do (log/trace "Connection loop exiting (draining)" {:port port, :cid cid})
             ;; TODO I think I should send an error, but if I do it causes a crash on the client?
             #_(cmd-send-error conn (err-admin-shutdown "draining connections"))
             (compare-and-set! conn-status :running :closing))
@@ -1774,23 +1770,16 @@
         ;; go idle until we receive another msg from the client
         :else
         (let [{:keys [msg-char8, msg-in]} (read-typed-msg @in)
-              msg-var (client-msgs msg-char8)
+              msg-var (client-msgs msg-char8)]
 
-              _
-              (->> {:port port,
-                    :cid cid,
-                    :msg (or msg-var msg-char8)
-                    :char8 msg-char8}
-                   (log/trace "Read client msg"))]
+          (log/trace "Read client msg"
+                     {:port port, :cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
 
           (when (:skip-until-sync @conn-state)
             (if (= msg-var #'msg-sync)
               (cmd-enqueue-cmd conn [#'cmd-sync])
-              (->> {:port port,
-                    :cid cid,
-                    :msg (or msg-var msg-char8)
-                    :char8 msg-char8}
-                   (log/trace "Skipping msg until next sync due to error in extended protocol"))))
+              (log/trace "Skipping msg until next sync due to error in extended protocol"
+                         {:port port, :cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
 
           (when-not msg-var
             (cmd-send-error conn (err-protocol-violation "unknown client message")))
