@@ -23,13 +23,13 @@
          polygon (Polygon.)]
 
      (fn calculate-polygon [^EventRowPointer ev-ptr]
-       (when-not (= skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
-         (when-not (= prev-iid-ptr current-iid-ptr)
+       (when-not (.equals skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
+         (when-not (.equals prev-iid-ptr current-iid-ptr)
            (.reset ceiling)
            (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
          (let [leg (.getOp ev-ptr)]
-           (if (= :erase leg)
+           (if (.equals :erase leg)
              (do
                (.reset ceiling)
                (duplicate-ptr skip-iid-ptr current-iid-ptr)
