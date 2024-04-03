@@ -82,7 +82,8 @@ interface Params {
 
 export function makeEditor({ initialText, parent }: Params) {
     const view = new EditorView({
-        doc: Text.of(initialText.split("\n")),
+        doc: initialText,
+        selection: { anchor: initialText.length },
         extensions: extensions,
         parent: parent,
     });
