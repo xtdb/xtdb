@@ -11,7 +11,7 @@ All of the below commands should be run in the *root* of the XT2 repo.
 
 == Prerequisites
 
-You will need at least JDK 17 installed.
+You will need at least JDK 21 installed.
 
 == Getting started
 

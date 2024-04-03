@@ -3,6 +3,8 @@ package xtdb.api;
 import org.junit.jupiter.api.Test;
 
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +20,7 @@ public class XtdbClientJavaTest {
         try (@SuppressWarnings("unused")
              var server = Xtdb.configure().modules(httpServer()).open();
 
-             var client = XtdbClient.openClient(new URL("http://localhost:3000"))) {
+             var client = XtdbClient.openClient(new URI("http://localhost:3000").toURL())) {
 
             client.submitTx(putDocs("foo", Map.of("xt/id", "jms")));
 
@@ -28,7 +30,7 @@ public class XtdbClientJavaTest {
                 assertEquals(List.of(Map.of("fooId", "jms")), res.toList());
             }
 
-        } catch (MalformedURLException e) {
+        } catch (MalformedURLException | URISyntaxException e) {
             throw new RuntimeException(e);
         }
     }

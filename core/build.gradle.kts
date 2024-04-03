@@ -65,13 +65,13 @@ dependencies {
     testImplementation(project(":modules:xtdb-flight-sql"))
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 tasks.javadoc.get().enabled = false
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
+        jvmTarget.set(JvmTarget.JVM_21)
 
         java {
             freeCompilerArgs.add("-Xjvm-default=all")

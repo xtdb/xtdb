@@ -5,13 +5,14 @@ import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb.openNode
 import xtdb.api.query.Queries.from
 import xtdb.api.tx.TxOps.putDocs
+import java.net.URI
 import java.net.URL
 
 internal class XtdbClientTest {
     @Test
     fun startsRemoteNode() {
         openNode { httpServer() }.use { _ ->
-            XtdbClient.openClient(URL("http://localhost:3000")).use { client ->
+            XtdbClient.openClient(URI("http://localhost:3000").toURL()).use { client ->
                 client.submitTx(putDocs("foo", mapOf("xt/id" to "jms")))
 
                 assertEquals(
