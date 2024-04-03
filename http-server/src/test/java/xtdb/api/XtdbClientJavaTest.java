@@ -23,9 +23,9 @@ public class XtdbClientJavaTest {
             client.submitTx(putDocs("foo", Map.of("xt/id", "jms")));
 
             try (var res = client.openQuery(
-                from("foo").bind("xt/id", "id").build())) {
+                from("foo").bind("xt/id", "fooId").build())) {
 
-                assertEquals(List.of(Map.of("id", "jms")), res.toList());
+                assertEquals(List.of(Map.of("fooId", "jms")), res.toList());
             }
 
         } catch (MalformedURLException e) {

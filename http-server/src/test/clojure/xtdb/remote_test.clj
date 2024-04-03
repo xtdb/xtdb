@@ -103,7 +103,8 @@
                                 :request-method :post
                                 :content-type :transit+json
                                 :form-params {:query '(from :docs [xt/id])
-                                              :basis {:at-tx tx}}
+                                              :basis {:at-tx tx}
+                                              :key-fn #xt/key-fn :kebab-case-keyword}
                                 :transit-opts xtc/transit-opts
                                 :url (http-url "query")})
                  :body
@@ -152,7 +153,8 @@
                               :request-method :post
                               :content-type :transit+json
                               :form-params {:query '(from :docs [xt/id key])
-                                            :basis {:at-tx tx}}
+                                            :basis {:at-tx tx}
+                                            :key-fn #xt/key-fn :kebab-case-keyword}
                               :transit-opts xtc/transit-opts
                               :url (http-url "query")})
                :body
@@ -261,7 +263,8 @@
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:query {"from" "docs", "bind" ["xt/id"]}
-                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}}}
+                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
+                                                          :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body
                  decode-transit*))
@@ -286,7 +289,8 @@
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:query {"sql" "SELECT docs.xt$id FROM docs"}
-                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}}}
+                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
+                                                          :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body
                  decode-transit*))
@@ -436,26 +440,39 @@
                decode-json*))))
 
 (deftest testing-sql-query-with-args-3167
-  (t/is (= [{"xt/column-1" 1, "xt/column-2" 3}]
+  (t/is (= [{"xt$column1" 1, "xt$column2" 3}]
            (-> (http/request {:accept "application/jsonl"
                               :as :string
                               :request-method :post
                               :content-type :json
                               :form-params {:query {"sql" "SELECT LEAST(?,2), LEAST(3,4) FROM (VALUES (1)) x"}
-                                            :queryOpts {:args [1]}}
+                                            :queryOpts {:args [1]
+                                                        :keyFn "CAMEL_CASE_STRING"}}
                               :url (http-url "query")})
                :body
                decode-json*))
         "testing sql query with args"))
 
 (deftest accept-json
-  (xt/submit-tx *node* [[:put-docs :visits {:xt/id 1 :foo "bar"} {:xt/id 2 :foo "bar"}]])
+  (xt/submit-tx *node* [[:put-docs :visits {:xt/id 1 :foo-bar "baz"} {:xt/id 2 :foo-bar "baz"}]])
   (let [{:keys [content-type ^String body]} (http/request {:accept "application/json"
                                                            :as :string
                                                            :request-method :post
                                                            :content-type :json
-                                                           :form-params {:query {"from" "visits", "bind" ["foo"]}}
+                                                           :form-params {:query {"from" "visits", "bind" ["foo_bar"]}}
                                                            :url (http-url "query")})]
     (t/is (= :application/json content-type)
           "content-type is JSON")
-    (t/is (= [{"foo" "bar"} {"foo" "bar"}] (JsonSerde/decode body)))))
+    (t/is (= [{"foo_bar" "baz"} {"foo_bar" "baz"}] (JsonSerde/decode body))))
+
+  (t/testing "camel key-fn"
+    (let [{:keys [content-type ^String body]} (http/request {:accept "application/json"
+                                                             :as :string
+                                                             :request-method :post
+                                                             :content-type :json
+                                                             :form-params {:query {"from" "visits", "bind" ["fooBar"]}
+                                                                           :queryOpts {"keyFn" "CAMEL_CASE_STRING"}}
+                                                             :url (http-url "query")})]
+      (t/is (= :application/json content-type)
+            "content-type is JSON")
+      (t/is (= [{"fooBar" "baz"} {"fooBar" "baz"}] (JsonSerde/decode body))))))

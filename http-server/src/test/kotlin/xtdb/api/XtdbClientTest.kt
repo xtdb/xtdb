@@ -29,6 +29,12 @@ internal class XtdbClientTest {
 
                     client.openQuery("SELECT foo.xt\$id AS foo_id FROM foo").use { it.toList() }
                 )
+
+                assertEquals(
+                    listOf(mapOf("fooId" to "jms")),
+
+                    client.openQuery(from("foo") { bind("xt/id", "fooId") }).use { it.toList() }
+                )
             }
         }
     }

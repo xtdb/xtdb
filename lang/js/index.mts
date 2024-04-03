@@ -26,7 +26,7 @@ type Basis = {
     currentTime?: Date
 }
 
-enum KeyFn {
+export enum KeyFn {
     CamelCase = "CAMEL_CASE_STRING",
     SnakeCase = "SNAKE_CASE_STRING"
 }
@@ -128,6 +128,8 @@ export default class Xtdb {
     async query(query: Query, opts: QueryOpts = {}): Promise<any> {
         // FIXME
         // if (opts.afterTx === undefined) opts = { afterTx: this.latestSubmittedTx, ...opts }
+
+        opts = { keyFn: KeyFn.CamelCase, ...opts }
 
         const req = {
             method: 'POST',

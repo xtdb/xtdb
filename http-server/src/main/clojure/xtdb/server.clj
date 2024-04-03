@@ -267,7 +267,8 @@
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
-                       (-> (xtp/open-query& node query (dissoc query-opts :query))
+                       (-> (xtp/open-query& node query (into {:key-fn :snake-case-string}
+                                                             (dissoc query-opts :query)))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
