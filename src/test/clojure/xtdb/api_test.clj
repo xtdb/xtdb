@@ -721,9 +721,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (set (xt/q tu/*node* '(from :users2 [*]))))))
 
 (t/deftest test-explain-plan-2383
-  (t/is (= '[{:plan [:project [name age]
-                     [:scan {:table people, :for-valid-time nil, :for-system-time nil}
-                      [{xt$id (= xt$id ?pid)} name age]]]}]
+  (t/is (= '[{:plan
+              "[:project
+ [name age]
+ [:scan
+  {:table people, :for-valid-time nil, :for-system-time nil}
+  [{xt$id (= xt$id ?pid)} name age]]]
+"}]
            (xt/q tu/*node*
                  '(from :people [{:xt/id $pid} name age])
                  {:explain? true}))))

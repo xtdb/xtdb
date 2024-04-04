@@ -510,12 +510,12 @@
                                  :node (r/node relation-in)}))))))
 
 (defn remove-names [relation {:keys [project-anonymous-columns?]}]
-  (let [projection (relation-columns relation)
+  (let [named-projection (relation-columns relation)
         relation (binding [*name-counter* (atom 0)]
                    (r/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/vector-zip relation))))
         smap (:smap (meta relation))
-        rename-map (select-keys smap projection)
-        projection (replace smap projection)
+        rename-map (select-keys smap named-projection)
+        projection (replace smap named-projection)
         add-projection-fn (fn [relation]
                             (let [relation (if (= projection (relation-columns relation))
                                              relation
@@ -530,8 +530,10 @@
                                                    (when (= smap-inv (set/map-invert rename-map-2))
                                                      relation-2))
                                                  [:rename smap-inv relation]))]
-                              (with-meta relation {:column->name smap})))]
+                              (with-meta relation {:column->name smap
+                                                   :named-projection named-projection})))]
     (with-meta relation {:column->name smap
+                         :named-projection named-projection
                          :add-projection-fn add-projection-fn})))
 
 (defn expr-symbols [expr]

@@ -2,10 +2,8 @@
   (:require [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
-            [xtdb.sql.plan :as plan]
-            [xtdb.vector.writer :as vw])
-  (:import clojure.lang.MapEntry
-           java.util.HashMap))
+            [xtdb.sql.plan :as plan])
+  (:import java.util.HashMap))
 
 (defn parse-query
   [query]
@@ -25,9 +23,3 @@
            (plan/plan-query query-opts)
            (vary-meta assoc :param-count (sem/param-count ast))
            #_(doto clojure.pprint/pprint))))))
-
-(defn open-args [allocator args]
-  (vw/open-params allocator
-                  (->> args
-                       (into {} (map-indexed (fn [idx v]
-                                               (MapEntry/create (symbol (str "?_" idx)) v)))))))

@@ -1,6 +1,7 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as api]
             xtdb.indexer
             [xtdb.log :as log]
             [xtdb.metrics :as metrics]
@@ -22,7 +23,7 @@
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis IKeyFn QueryOptions XtqlQuery)
            xtdb.indexer.IIndexer
-           (xtdb.query IRaQuerySource)))
+           (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -36,10 +37,33 @@
   (-> opts
       (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface IXtdbInternal
+  (^java.util.concurrent.CompletableFuture prepareQuery [^java.lang.String query, query-opts])
+  (^java.util.concurrent.CompletableFuture prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts]))
+
+(defn- mapify-query-opts-with-defaults [query-opts default-tz latest-submitted-tx default-key-fn]
+  ;;not all callers care about all defaulted query opts returned here
+  (-> (into {:default-tz default-tz,
+             :after-tx latest-submitted-tx
+             :key-fn default-key-fn}
+            query-opts)
+      (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+      (with-after-tx-default)))
+
+(defn- then-execute-prepared-query [prepared-query-fut metrics registry query-opts]
+  (util/then-apply
+    prepared-query-fut
+    (fn [^PreparedQuery prepared-query]
+      (let [bound-query (.bind prepared-query query-opts)]
+        ;;TODO metrics only currently wrapping openQueryAsync results
+        (-> (q/open-cursor-as-stream bound-query query-opts)
+            (metrics/wrap-query (:query-timer metrics) registry))))))
+
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
                  ^Log log
-                 ^IRaQuerySource ra-src, wm-src, scan-emitter
+                 ^IQuerySource q-src, wm-src, scan-emitter
                  default-tz
                  !latest-submitted-tx
                  system, close-fn, registry
@@ -56,51 +80,40 @@
                 (swap! !latest-submitted-tx time/max-tx tx-key)
                 tx-key))))))
 
-  (^CompletableFuture openQueryAsync [_ ^String query, ^QueryOptions query-opts]
-   (let [query-opts (-> (into {:default-tz default-tz,
-                               :after-tx @!latest-submitted-tx
-                               :key-fn #xt/key-fn :snake-case-string}
-                              query-opts)
-                        (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
-                        (with-after-tx-default))]
-     (-> (.awaitTxAsync indexer
-                        (-> (:after-tx query-opts)
-                            (time/max-tx (get-in query-opts [:basis :at-tx])))
-                        (:tx-timeout query-opts))
-         (util/then-apply
-           (fn [_]
-             (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
-                   plan (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
-               (if (:explain? query-opts)
-                 (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
-                 (-> (q/open-query allocator ra-src wm-src plan query-opts)
-                     (metrics/wrap-query (:query-timer metrics) registry)))))))))
+  (^CompletableFuture openQueryAsync [this ^String query, ^QueryOptions query-opts]
+   (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+     (-> (.prepareQuery this query query-opts)
+         (then-execute-prepared-query metrics registry query-opts))))
 
-  (^CompletableFuture openQueryAsync [_ ^XtqlQuery query, ^QueryOptions query-opts]
-   (let [query-opts (-> (into {:default-tz default-tz,
-                               :after-tx @!latest-submitted-tx
-                               :key-fn #xt/key-fn :camel-case-string}
-                              query-opts)
-                        (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
-                        (with-after-tx-default))]
-     (-> (.awaitTxAsync indexer
-                        (-> (:after-tx query-opts)
-                            (time/max-tx (get-in query-opts [:basis :at-tx])))
-                        (:tx-timeout query-opts))
-         (util/then-apply
-           (fn [_]
-             (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
-                   plan (xtql/compile-query query table-info)]
-               (if (:explain? query-opts)
-                 (Stream/of {(.denormalize ^IKeyFn (:key-fn query-opts) "plan") plan})
-                 (-> (q/open-query allocator ra-src wm-src plan query-opts)
-                     (metrics/wrap-query (:query-timer metrics) registry)))))))))
+  (^CompletableFuture openQueryAsync [this ^XtqlQuery query, ^QueryOptions query-opts]
+   (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
+     (-> (.prepareQuery this query query-opts)
+         (then-execute-prepared-query metrics registry query-opts))))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx (xtp/latest-submitted-tx this)})
+
+  IXtdbInternal
+  (^CompletableFuture prepareQuery [_ ^String query, query-opts]
+   (let [{:keys [after-tx tx-timeout] :as query-opts}
+         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+     (-> (.awaitTxAsync indexer after-tx tx-timeout)
+         (util/then-apply
+           (fn [_]
+             (let [plan (.planQuery q-src query wm-src query-opts)]
+               (.prepareRaQuery q-src plan wm-src)))))))
+
+  (^CompletableFuture prepareQuery [_ ^XtqlQuery query, query-opts]
+   (let [{:keys [after-tx tx-timeout] :as query-opts}
+         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
+     (-> (.awaitTxAsync indexer after-tx tx-timeout)
+         (util/then-apply
+           (fn [_]
+             (let [plan (.planQuery q-src query wm-src query-opts)]
+               (.prepareRaQuery q-src plan wm-src)))))))
 
   Closeable
   (close [_]
@@ -116,7 +129,7 @@
           :wm-src (ig/ref :xtdb/indexer)
           :log (ig/ref :xtdb/log)
           :default-tz (ig/ref :xtdb/default-tz)
-          :ra-src (ig/ref :xtdb.query/ra-query-source)
+          :q-src (ig/ref :xtdb.query/query-source)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :registry (ig/ref :xtdb/meter-registry)}
          opts))
@@ -165,7 +178,7 @@
        :xtdb.log/watcher {}
        :xtdb.metadata/metadata-manager {}
        :xtdb.operator.scan/scan-emitter {}
-       :xtdb.query/ra-query-source {}
+       :xtdb.query/query-source {}
        :xtdb/compactor {}
        :xtdb/meter-registry {}
        :xtdb/metrics-server {}
