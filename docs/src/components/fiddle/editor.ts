@@ -29,13 +29,13 @@ let themeObj = {
         borderBottom: "1px solid var(--teal-color)",
         color: "inherit"
     },
-    // only show cursor when focused
+    // Always show the cursor
     ".cm-cursor": {
-        visibility: "hidden"
+        display: "block",
     },
-    "&.cm-focused .cm-cursor": {
-        visibility: "visible"
-    }
+    ".cm-cursorLayer": {
+        animation: "steps(1) cm-blink 1.2s infinite",
+    },
 }
 
 let darkThemeObj = structuredClone(themeObj);
@@ -82,7 +82,8 @@ interface Params {
 
 export function makeEditor({ initialText, parent }: Params) {
     const view = new EditorView({
-        doc: Text.of(initialText.split("\n")),
+        doc: initialText,
+        selection: { anchor: initialText.length },
         extensions: extensions,
         parent: parent,
     });
