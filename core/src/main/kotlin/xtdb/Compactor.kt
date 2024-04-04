@@ -87,6 +87,7 @@ internal fun IntArray.recencyPartitions(
     return res.mapValuesTo(sortedMapOf()) { it.value.toArray() }
 }
 
+@Suppress("unused")
 @JvmOverloads
 fun writeRelation(
     trieWriter: ITrieWriter,
@@ -99,7 +100,8 @@ fun writeRelation(
     val iidReader = relation.readerForName("xt\$iid")
 
     fun writeSubtree(depth: Int, sel: Selection): Int =
-        if (sel.size <= pageLimit) {
+        if (Thread.interrupted()) throw InterruptedException()
+        else if (sel.size <= pageLimit) {
             for (idx in sel) rowCopier.copyRow(idx)
 
             val pos = trieWriter.writeLeaf()

@@ -8,23 +8,26 @@
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
-           [java.util ArrayList Arrays Comparator LinkedList PriorityQueue]
+           [java.util ArrayList Arrays Comparator HashSet LinkedList PriorityQueue]
+           [java.util.concurrent Executors TimeUnit]
+           [java.util.concurrent.locks ReentrantLock]
            (java.util.function Predicate)
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb Compactor IBufferPool)
            xtdb.bitemporal.IPolygonReader
+           (xtdb.metadata IMetadataManager)
            (xtdb.trie EventRowPointer HashTrieKt IDataRel MergePlanTask)
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.IVectorWriter
-           xtdb.vector.RelationReader
-           (xtdb.metadata IMetadataManager)))
+           xtdb.vector.RelationReader))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ICompactor
-  (^void compactAll []))
+  (^void compactAll [])
+  (^void signalBlock []))
 
 (defn- ->reader->copier [^IRelationWriter data-wtr]
   (let [iid-wtr (.colWriter data-wtr "xt$iid")
@@ -65,7 +68,10 @@
                                                                                  len (min path-len (alength page-path))]
                                                                              (Arrays/equals path-filter 0 len
                                                                                             page-path 0 len)))))))
-            :let [mp-nodes (.getMpNodes merge-plan-task)
+            :let [_ (when (Thread/interrupted)
+                      (throw (InterruptedException.)))
+
+                  mp-nodes (.getMpNodes merge-plan-task)
                   ^bytes path (.getPath merge-plan-task)
                   data-rdrs (mapv trie/load-data-page mp-nodes)
                   merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
@@ -110,7 +116,7 @@
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
                             {:keys [page-size]} {:keys [^Path table-path path trie-keys out-trie-key]}]
   (try
-    (log/infof "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
+    (log/debugf "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
 
     (util/with-open [table-metadatas (LinkedList.)
                      data-rels (trie/open-data-rels buffer-pool table-path trie-keys nil)]
@@ -132,7 +138,9 @@
 
             (Compactor/writeRelation trie-wtr (vw/rel-wtr->rdr data-rel-wtr) (vw/vec-wtr->rdr recency-wtr) page-size)))))
 
-    (log/infof "compacted '%s' -> '%s'." table-path out-trie-key)
+    (log/debugf "compacted '%s' -> '%s'." table-path out-trie-key)
+
+    (catch InterruptedException e (throw e))
 
     (catch Throwable t
       (log/error t "Error running compaction job.")
@@ -225,35 +233,110 @@
 (defmethod ig/prep-key :xtdb/compactor [_ opts]
   (into {:allocator (ig/ref :xtdb/allocator)
          :buffer-pool (ig/ref :xtdb/buffer-pool)
-         :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)}
+         :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
+         :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))}
         opts))
 
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^IBufferPool buffer-pool metadata-mgr]}]
-  (let [page-size *page-size*
-        l1-file-size-rows *l1-file-size-rows*]
-    (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
-      (reify ICompactor
-        (compactAll [_]
-          (log/info "compact-all")
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator, ^IBufferPool buffer-pool, metadata-mgr, ^long threads]}]
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
+    (let [page-size *page-size*
+          l1-file-size-rows *l1-file-size-rows*]
+      (letfn [(available-jobs []
+                (for [table-path (.listObjects buffer-pool util/tables-dir)
+                      job (compaction-jobs (trie/list-meta-files buffer-pool table-path)
+                                           {:l1-file-size-rows l1-file-size-rows})]
+                  (assoc job :table-path table-path)))]
 
-          (loop []
-            (let [jobs (for [table-path (.listObjects buffer-pool util/tables-dir)
-                             job (compaction-jobs (trie/list-meta-files buffer-pool table-path)
-                                                  {:l1-file-size-rows l1-file-size-rows})]
-                         (assoc job :table-path table-path))
-                  jobs? (boolean (seq jobs))]
+        (let [lock (ReentrantLock.)
+              job-finished (.newCondition lock)
+              compact-requested (.newCondition lock)
+              !active-jobs (HashSet.)
+              thread-pool (Executors/newThreadPerTaskExecutor (-> (Thread/ofVirtual)
+                                                                  (.name "xtdb.compactor-" 0)
+                                                                  (.factory)))]
 
-              (doseq [job jobs]
-                (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job))
+          (letfn [(available-job []
+                    (let [jobs (shuffle (available-jobs))]
+                      (.lock lock)
+                      (try
+                        (some (fn [{:keys [out-trie-key] :as job}]
+                                (when (.add !active-jobs out-trie-key)
+                                  job))
+                              jobs)
+                        (finally
+                          (.unlock lock)))))
 
-              (when jobs?
-                (recur)))))
-        AutoCloseable
-        (close [_]
-          (util/close allocator))))))
+                  (compactor-loop []
+                    (try
+                      (loop []
+                        (when (Thread/interrupted)
+                          (throw (InterruptedException.)))
+
+                        (if-let [{:keys [out-trie-key] :as job} (available-job)]
+                          (do
+                            (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job)
+                            (.lock lock)
+                            (try
+                              (.remove !active-jobs out-trie-key)
+                              (.signalAll job-finished)
+                              (finally
+                                (.unlock lock))))
+
+                          (do
+                            (.lock lock)
+                            (try
+                              (.await compact-requested 5 TimeUnit/SECONDS)
+                              (catch Throwable t
+                                (throw t))
+                              (finally
+                                (.unlock lock)))))
+
+                        (recur))
+
+                      (catch InterruptedException _)
+                      (catch Throwable t
+                        (log/warn t "uncaught compactor-loop error"))))]
+
+            (dotimes [_ threads]
+              (.execute thread-pool compactor-loop))
+
+            (reify ICompactor
+              (compactAll [_]
+                (log/info "compact-all")
+                (.lock lock)
+                (try
+                  (.signalAll compact-requested)
+                  (finally
+                    (.unlock lock)))
+
+                (loop []
+                  (.lock lock)
+                  (when-not (try
+                              (cond
+                                (not (.isEmpty !active-jobs)) (do (.await job-finished) false)
+                                (not (empty? (available-jobs))) (do (.await job-finished 5 TimeUnit/SECONDS) false)
+                                :else true)
+                              (finally
+                                (.unlock lock)))
+                    (recur))))
+
+              (signalBlock [_]
+                (.lock lock)
+                (try
+                  (.signalAll compact-requested)
+                  (finally
+                    (.unlock lock))))
+
+              AutoCloseable
+              (close [_]
+                (.shutdownNow thread-pool)
+                (when-not (.awaitTermination thread-pool 20 TimeUnit/SECONDS)
+                  (log/warn "could not close compaction thread-pool after 20s"))
+
+                (util/close allocator)))))))))
 
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))
