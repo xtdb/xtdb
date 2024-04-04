@@ -16,10 +16,9 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: Test
-        uses: gradle/gradle-build-action@v2.6.1
+        uses: gradle/actions/setup-gradle@v3
         with:
           arguments: test
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Upload build reports
         if: success() || failure() # i.e. not cancelled
         uses: actions/upload-artifact@v3
@@ -54,10 +53,9 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: Integration Test
-        uses: gradle/gradle-build-action@v2.6.1
+        uses: gradle/actions/setup-gradle@v3
         with:
           arguments: integration-test
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Upload build reports
         if: success() || failure() # i.e. not cancelled
         uses: actions/upload-artifact@v3
@@ -87,10 +85,9 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: SLT 1
-        uses: gradle/gradle-build-action@v2.6.1
+        uses: gradle/actions/setup-gradle@v3
         with:
           arguments: slt-test
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
   slt-2:
     name: SLT 2
@@ -104,10 +101,9 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: SLT 2
-        uses: gradle/gradle-build-action@v2.6.1
+        uses: gradle/actions/setup-gradle@v3
         with:
           arguments: slt-test-2
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
   deploy-standalone-docker:
     name: Deploy XTDB Standalone Docker Image
@@ -127,10 +123,9 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: Build Uberjar
-        uses: gradle/gradle-build-action@v2.6.1
+        uses: gradle/actions/setup-gradle@v3
         with:
           arguments: :docker:standalone:shadowJar
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -170,10 +165,9 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: Build Uberjar
-        uses: gradle/gradle-build-action@v2.6.1
+        uses: gradle/actions/setup-gradle@v3
         with:
           arguments: :docker:aws:shadowJar
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
