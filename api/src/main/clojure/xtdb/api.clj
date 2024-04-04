@@ -162,22 +162,25 @@
    (-> @(q& node q+args opts)
        (rethrowing-cause))))
 
+(defn ->QueryOptions [{:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
+  (-> (QueryOptions/queryOpts)
+      (cond-> (instance? Map args) (.args ^Map args)
+              (sequential? args) (.args ^List args)
+              after-tx (.afterTx after-tx)
+              basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
+              default-tz (.defaultTz default-tz)
+              tx-timeout (.txTimeout tx-timeout)
+              (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
+              (some? explain?) (.explain explain?))
+
+      (.keyFn (serde/read-key-fn key-fn))
+
+      (.build)))
+
 (extend-protocol xtp/PNode
   IXtdb
-  (open-query& [this query {:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
-    (let [query-opts (-> (QueryOptions/queryOpts)
-                         (cond-> (instance? Map args) (.args ^Map args)
-                                 (sequential? args) (.args ^List args)
-                                 after-tx (.afterTx after-tx)
-                                 basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
-                                 default-tz (.defaultTz default-tz)
-                                 tx-timeout (.txTimeout tx-timeout)
-                                 (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
-                                 (some? explain?) (.explain explain?))
-
-                         (.keyFn (serde/read-key-fn key-fn))
-
-                         (.build))]
+  (open-query& [this query clj-query-opts]
+    (let [^QueryOptions query-opts (->QueryOptions clj-query-opts)]
       (if (string? query)
         (.openQueryAsync this ^String query query-opts)
 

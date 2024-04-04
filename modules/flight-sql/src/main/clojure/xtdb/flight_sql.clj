@@ -24,7 +24,7 @@
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
            [xtdb.indexer IIndexer]
-           [xtdb.query BoundQuery IRaQuerySource PreparedQuery]
+           [xtdb.query BoundQuery IQuerySource PreparedQuery]
            [xtdb.vector IVectorReader]))
 
 ;;;; populate-root temporarily copied from test-util
@@ -102,10 +102,9 @@
                                       (while (.next flight-stream)
                                         (write-batch!)))))
 
-(defn- ->fsql-producer [{:keys [allocator node, ^IIndexer idxer, ^IRaQuerySource ra-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
+(defn- ->fsql-producer [{:keys [allocator node, ^IIndexer idxer, ^IQuerySource q-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
   (letfn [(fields->schema ^org.apache.arrow.vector.types.pojo.Schema [fields]
-            (Schema. (for [[col-name field] fields]
-                       (types/field-with-name field (str col-name)))))
+            (Schema. (map #(types/field-with-name (val (first %)) (key (first %))) fields)))
 
           (exec-dml [dml fsql-tx-id]
             (if fsql-tx-id
@@ -160,9 +159,7 @@
                                                                                  (vr/rel-reader 1))]
                                          (doto ps
                                            (some-> (.put :bound-query
-                                                         (.bind prepd-query wm-src
-                                                                {:node node, :params new-params,
-                                                                 :basis {:at-tx (.latestCompletedTx idxer)}}))
+                                                         (.bind prepd-query {:params new-params, :basis {:at-tx (.latestCompletedTx idxer)}}))
                                                    util/try-close))))))
                 (throw (UnsupportedOperationException. "invalid ps-id"))))
 
@@ -182,11 +179,9 @@
       (getFlightInfoStatement [_ cmd _ctx descriptor]
         (let [sql (.toStringUtf8 (.getQueryBytes cmd))
               ticket-handle (new-id)
-              ^BoundQuery bq (-> (.prepareRaQuery ra-src (sql/compile-query sql {}))
+              ^BoundQuery bq (-> (.prepareRaQuery q-src (sql/compile-query sql) wm-src)
                                  ;; HACK need to get the basis from somewhere...
-                                 (.bind wm-src
-                                        {:node node
-                                         :basis {:at-tx (.latestCompletedTx idxer)}}))
+                                 (.bind {:basis {:at-tx (.latestCompletedTx idxer)}}))
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                     (.setStatementHandle ticket-handle))
                                   (.build)
@@ -216,7 +211,7 @@
                                   (.toByteArray)))
 
               ^BoundQuery bound-query (or bound-query
-                                          (.bind prepd-query wm-src {:node node}))]
+                                          (.bind prepd-query {}))]
           (.put ps :bound-query bound-query)
           (FlightInfo. (fields->schema (.columnFields bound-query)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
@@ -235,7 +230,7 @@
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
-                   (not (dml? plan)) (assoc :prepd-query (.prepareRaQuery ra-src plan)))]
+                   (not (dml? plan)) (assoc :prepd-query (.prepareRaQuery q-src plan wm-src)))]
           (.put stmts ps-id (HashMap. ^Map ps))
 
           (.onNext listener
@@ -302,7 +297,7 @@
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [{:keys [allocator indexer ra-src wm-src] :as node}
+(defn open-server [{:keys [allocator indexer q-src wm-src] :as node}
                    ^FlightSqlServer$Factory factory]
   (let [host (.getHost factory)
         port (.getPort factory)
@@ -311,7 +306,7 @@
         tickets (ConcurrentHashMap.)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "flight-sql")
                                server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
-                                                                      (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :ra-src ra-src, :wm-src wm-src
+                                                                      (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :q-src q-src, :wm-src wm-src
                                                                                         :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                                                 #_(doto with-error-logging-middleware)
