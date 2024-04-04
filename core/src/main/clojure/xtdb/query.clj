@@ -208,6 +208,21 @@
                             (apply [_ k]
                               (.denormalize key-fn k))))))))
 
+(defn bind-query [allocator ^IRaQuerySource ra-src, wm-src, plan, query-opts]
+  (let [{:keys [args key-fn]} query-opts
+        key-fn (cache-key-fn key-fn)]
+    (util/with-close-on-catch [args (open-args allocator args)
+                               bound-query (-> (.prepareRaQuery ra-src plan)
+                                               (.bind wm-src (-> query-opts
+                                                                 (assoc :params args, :key-fn key-fn))))
+                               fields (mapv
+                                       #(hash-map
+                                         (str %)
+                                         (get (.columnFields bound-query) %))
+                                       (:named-projection (meta plan)))]
+      {:fields fields
+       :bound-query bound-query})))
+
 (defn open-query ^java.util.stream.Stream [allocator ^IRaQuerySource ra-src, wm-src, plan, query-opts]
   (let [{:keys [args key-fn]} query-opts
         key-fn (cache-key-fn key-fn)]

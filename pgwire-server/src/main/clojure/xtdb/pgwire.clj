@@ -9,7 +9,9 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
+            [xtdb.node.impl]
             [xtdb.protocols :as xtp]
+            [xtdb.query]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
@@ -24,13 +26,15 @@
            [java.nio.charset StandardCharsets]
            [java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime]
            [java.util HashMap List Map]
-           [java.util.concurrent CompletableFuture ExecutorService Executors TimeUnit]
-           [java.util.function BiConsumer]
-           [java.util.stream Stream]
+           [java.util.concurrent ExecutorService Executors TimeUnit]
+           [java.util.function Consumer]
            [org.apache.arrow.vector PeriodDuration]
+           xtdb.query.BoundQuery
            [xtdb.api PgwireServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
-           [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]))
+           xtdb.IResultCursor
+           [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
+           [xtdb.vector RelationReader]))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -38,6 +42,7 @@
 
 (defn- cleanup-connection-resources [conn]
   (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
+
         {:keys [port server-state]} server]
 
     (reset! conn-status :cleaning-up)
@@ -369,6 +374,8 @@
    :sql-state "08P01"
    :message msg})
 
+;;TODO parse errors should return a PSQL parse error
+;;this code is generic, but there are specific ones a well 
 (defn- err-parse [parse-failure]
   (let [lines (str/split-lines (parser/failure->str parse-failure))]
     {:severity "ERROR"
@@ -490,14 +497,9 @@
                   zq (r/$ z 1)]
               (r/zcase zq
                 :query_expression
-                (do
-                  (-> (sem/analyze-query (r/znode z)) sem/or-throw plan/plan-query)
-                  {:statement-type :query
-                   :query sql
-                   :transformed-query sql-trimmed
-                   :projection (->> (sem/projected-columns zq)
-                                    (first)
-                                    (mapv (comp name plan/unqualified-projection-symbol)))})
+                {:statement-type :query
+                 :query sql
+                 :transformed-query sql-trimmed}
 
                 (:insert_statement :delete_statement__searched :update_statement__searched :erase_statement__searched)
                 (do
@@ -806,7 +808,8 @@
         len-wtr (:write io-len)
         el-rdr (:read io-el)
         el-wtr (:write io-el)]
-    {:read (fn [in] (vec (repeatedly (len-rdr in) #(el-rdr in))))
+    {:read (fn [in]
+             (vec (repeatedly (len-rdr in) #(el-rdr in))))
      :write (fn [out coll] (len-wtr out (count coll)) (run! #(el-wtr out %) coll))}))
 
 (def ^:private io-format-code
@@ -1100,6 +1103,20 @@
 
   (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))}))
 
+(defn- close-portal
+  [{:keys [conn-state, cid]} portal-name]
+  (log/trace "Closing portal" {:cid cid, :portal portal-name})
+  (when-some [portal (get-in @conn-state [:portals portal-name])]
+
+    ;; close the portal/boundQuery (specifically any resources opened by binding params)
+    (util/close (:bound-query portal))
+
+    ;; remove portal from stmt
+    (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj portal-name)
+
+    ;; remove from root
+    (swap! conn-state update :portals dissoc portal-name)))
+
 (defn cmd-close
   "Closes a prepared statement or portal that was opened with bind / parse."
   [{:keys [conn-state, cid] :as conn} {:keys [close-type, close-name]}]
@@ -1110,23 +1127,15 @@
       (log/trace "Closing prepared statement" {:cid cid, :stmt close-name})
       (when-some [stmt (get-in @conn-state [:prepared-statements close-name])]
 
-        ;; dissoc associated portals from root (they are addressed there by execute)
-        (doseq [portal (:portals stmt)]
-          (swap! conn-state update :portals dissoc portal))
+        ;; close associated portals
+        (doseq [portal-name (:portals stmt)]
+          (close-portal conn portal-name))
 
         ;; remove from root
         (swap! conn-state update :prepared-statements dissoc close-name)))
 
     :portal
-    (do
-      (log/trace "Closing portal" {:cid cid, :portal close-name})
-      (when-some [portal (get-in @conn-state [:portals close-name])]
-
-        ;; remove portal from stmt
-        (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj close-name)
-
-        ;; remove from root
-        (swap! conn-state update :portals dissoc close-name)))
+    (close-portal conn close-name)
 
     nil)
 
@@ -1164,6 +1173,7 @@
   [conn]
   ;; we might this want to be conditional on a 'working state' to avoid races (if you fire loads of cancels randomly), not sure whether
   ;; to use status instead
+  ;;TODO need to interrupt the thread belonging to the conn
   (swap! (:conn-state conn) assoc :cancel true)
   nil)
 
@@ -1232,134 +1242,77 @@
   (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
 (defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
-                             {:keys [query, projection, ^Stream result-set]}]
-  (let [json-bytes (comp utf8 json/json-str json-clj)
+                             {:keys [query, ^IResultCursor result-cursor fields]}]
+
+  (let [projection (mapv ffirst fields)
+        json-bytes (comp utf8 json/json-str json-clj)
 
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
         closing? #(= :closing @conn-status)
-        result-set (.iterator result-set)]
-    (loop [n-rows-out 0]
-      (cond
-        (cancelled-by-client?)
-        (do (log/trace "Query cancelled by client")
-            (swap! conn-state dissoc :cancel)
-            (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
+        n-rows-out (volatile! 0)]
 
-        (Thread/interrupted)
-        (do
-          (log/trace "query interrupted by server (forced shutdown)")
-          (throw (InterruptedException.)))
 
-        (closing?)
-        (log/trace "query result stream stopping (conn closing)")
+    (.forEachRemaining
+     result-cursor
+     (reify Consumer
+       (accept [_ rel]
+         (cond
+           (cancelled-by-client?)
+           (do (log/trace "Query cancelled by client")
+               (swap! conn-state dissoc :cancel)
+               (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
 
-        (.hasNext result-set)
-        (let [continue
-              (try
-                (cmd-write-msg conn msg-data-row {:vals (mapv (comp json-bytes (.next result-set)) projection)})
-                :continue
-                ;; allow interrupts - this can happen if we are blocking during the row reduce and our conn is forced to close.
-                (catch InterruptedException e
-                  (log/trace e "Interrupt thrown sending query results")
-                  (throw e))
+           (Thread/interrupted)
+           (do
+             (log/trace "query interrupted by server (forced shutdown)")
+             (throw (InterruptedException.)))
 
-                ;; rethrow socket ex without logs (this is expected during any msg transfer
-                ;; might later need to be more specific for storage
-                ;; no point sending an error msg, the conn is probably dead.
-                (catch SocketException e (throw e))
+           (closing?)
+           (log/trace "query result stream stopping (conn closing)")
 
-                ;; consider io error msg from storage (e.g AWS policy limit reached?)
-                ;; not worried now, long term may sit elsewhere, but maybe not.
+           :else
+           (try
+             (dotimes [idx (.rowCount ^RelationReader rel)]
+               (let [row (mapv (fn [col-name] (.getObject (.readerForName ^RelationReader rel col-name) idx)) projection)]
+                 (cmd-write-msg conn msg-data-row {:vals (mapv json-bytes row)})
+                 (vswap! n-rows-out inc)))
 
-                ;; (ideally) unexpected (e.g bug in operator)
-                (catch Throwable e
-                  (log/warn e "An exception was caught during query result set iteration")
-                  (cmd-send-error conn (err-internal "unexpected server error during query execution"))))]
-          (when continue
-            (recur (inc n-rows-out))))
+             ;; allow interrupts - this can happen if we are blocking during the row reduce and our conn is forced to close.
+             (catch InterruptedException e
+               (log/trace e "Interrupt thrown writing query results out")
+               (throw e))
 
-        :else
-        (do
-          (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " n-rows-out)})
-          (when (= :simple (:protocol @conn-state))
-            (cmd-send-ready conn)))))))
+             ;; rethrow socket ex without logs (this is expected during any msg transfer
+             ;; might later need to be more specific for storage
+             ;; no point sending an error msg, the conn is probably dead.
+             (catch SocketException e (throw e))
 
-(defn- close-result-set [{:keys [conn-state] :as conn} fut ^Stream rs]
+             ;; consider io error msg from storage (e.g AWS policy limit reached?)
+             ;; not worried now, long term may sit elsewhere, but maybe not.
+
+             ;; (ideally) unexpected (e.g bug in operator)
+             (catch Throwable e
+               (log/warn e "An exception was caught during query result set iteration")
+               (cmd-send-error conn (err-internal "unexpected server error during query execution"))))))))
+
+      (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " @n-rows-out)})))
+
+(defn- close-result-cursor [conn ^IResultCursor result-cursor]
   (try
-    (.close rs)
-    ;; cleaned up, remove the fut from the :executing set
-    ;; if we fail to close - we keep the fut, if we can address it - somebody else might be able to clean it up.
-    (swap! conn-state update :executing disj fut)
+    (.close result-cursor)
     (catch Throwable e
-      (log/fatal e "Exception caught closing result set, resources may have been leaked - please restart XTDB")
+      (log/fatal e "Exception caught closing result cursor, resources may have been leaked - please restart XTDB")
       (.close ^Closeable conn))))
 
-(defn err-execution-exception
-  "Returns a pg specific error for some execution-time error, such as a bad function call, or divide by zero."
+(defn err-pg-exception
+  "Returns a pg specific error for an XTDB exception"
   [^Throwable ex generic-msg]
-  (if (instance? xtdb.RuntimeException ex)
+  (if (or (instance? xtdb.IllegalArgumentException ex)
+          (instance? xtdb.RuntimeException ex))
     (err-protocol-violation (.getMessage ex))
     (err-internal generic-msg)))
-
-(defn cmd-await-query-result
-  "This command allows us to pre-empt running queries and cancel them."
-  [{:keys [conn-state conn-status] :as conn}
-   {:keys [^CompletableFuture fut, query, iteration, projection], :as cmd}]
-
-  (let [cancelled (:cancel @conn-state)
-        ;; how many times have we awaited
-        iteration (or iteration 0)
-        ;; how long should we sleep for (if not interrupted / done)
-        sleep-time (min 10 (long (* (double iteration) 0.01)))]
-
-    (when cancelled (swap! conn-state dissoc :cancel))
-
-    (when (Thread/interrupted)
-      (log/trace "query interrupted by server (forced shutdown)")
-      (throw (InterruptedException.)))
-
-    ;; naive bounded wait a very short amount only after a few iterations (some queries return quickly!)
-    (when-not (or cancelled (.isDone fut))
-      (Thread/sleep sleep-time))
-
-    (cond
-      ;; queries / operators cannot actually be interrupted right now, so just leave it dangling.
-      cancelled
-      (do
-        (log/trace "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
-        (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
-
-      ;; close happens if conns do not drain in time so we should exit
-      (= :closing @conn-status)
-      (log/trace "query result stream stopping (conn closing)")
-
-      ;; very important done is the first cond state otherwise this cond might race
-      ;; with the futs completion state
-      (and (.isDone fut) (not (.isCompletedExceptionally fut)))
-      (let [rs @fut]
-        (try
-          (cmd-send-query-result conn {:query query, :projection projection :result-set rs})
-          (catch Throwable e
-            (log/warn e "err")
-            (cmd-send-error conn (err-execution-exception e "unexpected server error during query execution")))
-          (finally
-            ;; try and close the result set (to warn on leak!)
-            (close-result-set conn fut rs))))
-
-      ;; we log the ex on the completion handler of the fut, sending the message
-      ;; needs to be done serially as part of the cmd queue so we do it here.
-      (.isCompletedExceptionally fut)
-      (try
-        @fut
-        (catch Throwable ex
-          (log/warn ex "err")
-          (cmd-send-error conn (err-execution-exception ex "unexpected server error during query execution"))))
-
-      ;; otherwise, come back around and wait again
-      ;; by using the buffer we check socket state / draining etc as normal.
-      :else (cmd-enqueue-cmd conn [#'cmd-await-query-result (assoc cmd :iteration (inc iteration))]))))
 
 (def supported-param-oids
   (set (map (comp oids :pg) type-mappings)))
@@ -1375,7 +1328,7 @@
         nil)
       (catch Throwable e
         (log/trace e "Error on submit-tx")
-        (err-execution-exception e "unexpected error on tx submit (report as a bug)")))))
+        (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
 
 (defn- ->xtify-param [{:keys [arg-types param-format]}]
   (fn xtify-param [param-idx param]
@@ -1420,47 +1373,34 @@
                                :update_statement__searched "UPDATE 0"
                                :erase_statement__searched "ERASE 0")})))
 
-(defn- open-query& [node query opts]
-  ;; because we can't with-redefs a protocol fn in the tests 🙄
-  (xtp/open-query& node query opts))
-
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
-  [{:keys [node conn-state] :as conn}
-   {:keys [query transformed-query projection params] :as stmt}]
-  (let [xtify-param (->xtify-param stmt)
-        xt-params (vec (map-indexed xtify-param params))
+  [conn
+   {:keys [query fields bound-query]}]
+  (let [result-cursor
+        (try
+          (.openCursor ^BoundQuery bound-query)
+          (catch InterruptedException e
+            (log/trace e "Interrupt thrown opening result cursor")
+            (throw e))
+          (catch Throwable e
+            (log/warn e)
+            (cmd-send-error conn (err-pg-exception e "unexpected server error opening cursor for portal"))
+            :failed-to-open-cursor))]
 
-        {{:keys [^Clock clock, latest-submitted-tx] :as session} :session
-         {:keys [basis]} :transaction} @conn-state
 
-        default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))
-
-        query-opts {:basis (or basis {:current-time (.instant clock)})
-                    :after-tx latest-submitted-tx
-                    :tx-timeout (Duration/ofSeconds 1)
-                    :default-tz (.getZone clock)
-                    :args xt-params
-                    :default-all-valid-time? default-all-valid-time?
-                    :key-fn :snake-case-string}
-
-        ;; execute the query asynchronously (to enable later enable cancellation mid query)
-        ^CompletableFuture
-        query-fut (try
-                    (open-query& node transformed-query query-opts)
-                    (catch Throwable e (CompletableFuture/failedFuture e)))]
-
-    ;; keep the fut around in case of interrupt exc (for cleanup)
-    (swap! conn-state update :executing (fnil conj #{}) query-fut)
-
-    ;; log and de-reg when done (however that happens)
-    (.whenComplete query-fut
-                   (reify BiConsumer
-                     (accept [_ _ ex]
-                       (when ex (log/trace ex "Error during query open-sql&"))
-                       (swap! conn-state update :executing disj query-fut))))
-
-    (cmd-await-query-result conn {:projection projection, :query query, :iteration 0, :fut query-fut})))
+    (when-not (= result-cursor :failed-to-open-cursor)
+      (try
+        (cmd-send-query-result conn {:query query, :result-cursor result-cursor :fields fields})
+        (catch InterruptedException e
+          (log/trace e "Interrupt thrown sending query results")
+          (throw e))
+        (catch Throwable e
+          (log/warn e)
+          (cmd-send-error conn (err-pg-exception e "unexpected server error during query execution")))
+        (finally
+          ;; try and close the result-cursor (to warn on leak!)
+          (close-result-cursor conn result-cursor))))))
 
 (defn- cmd-send-row-description [conn cols]
   (let [defaults {:column-name ""
@@ -1477,12 +1417,13 @@
             (assoc defaults :column-name col)))
         data {:columns (mapv apply-defaults cols)}]
     (cmd-write-msg conn msg-row-description data)))
+
 (defn cmd-describe-canned-response [conn canned-response]
   (let [{:keys [cols]} canned-response]
     (cmd-send-row-description conn cols)))
 
-(defn cmd-describe-query [conn {:keys [projection]}]
-  (cmd-send-row-description conn projection))
+(defn cmd-describe-portal [conn {:keys [fields]}]
+  (cmd-send-row-description conn (map ffirst fields)))
 
 (defn cmd-begin [{:keys [node conn-state] :as conn} access-mode]
   (swap! conn-state
@@ -1530,16 +1471,20 @@
                  :portal :portals
                  :prepared-stmt :prepared-statements
                  (Object.))
-        {:keys [statement-type canned-response] :as stmt} (get-in @conn-state [coll-k describe-name])]
+        {:keys [statement-type canned-response] :as describe-target} (get-in @conn-state [coll-k describe-name])]
 
     (when (= :prepared-statements describe-type)
-      ;; TODO send param desc
-      )
+      (throw (UnsupportedOperationException.
+              ;;TODO consider if we can send some kind of describe statement for prepared statments
+              ;;Not possible to return accurate param and return types but maybe we can return something
+              ;;generic enough to not upset clients
+              "XTDB does not support describing prepared statements,
+               please bind the statement and describe the portal")))
 
     (case statement-type
       :empty-query (cmd-write-msg conn msg-no-data)
       :canned-response (cmd-describe-canned-response conn canned-response)
-      :query (cmd-describe-query conn stmt)
+      :query (cmd-describe-portal conn describe-target)
       (cmd-write-msg conn msg-no-data))))
 
 (defn cmd-set-session-parameter [conn parameter value]
@@ -1559,34 +1504,6 @@
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} [k v]]
   (swap! conn-state assoc-in [:session k] v)
   (cmd-write-msg conn msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
-
-(defn cmd-exec-stmt
-  "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
-  the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
-  [{:keys [conn-state] :as conn}
-   {:keys [statement-type canned-response access-mode parameter tz value] :as stmt}]
-
-  (when (= :simple (:protocol @conn-state))
-    (case statement-type
-      :canned-response (cmd-describe-canned-response conn canned-response)
-      :query (cmd-describe-query conn stmt)
-      nil))
-
-  (case statement-type
-    :empty-query (cmd-write-msg conn msg-empty-query)
-    :canned-response (cmd-write-canned-response conn canned-response)
-    :set-session-characteristics (cmd-set-session-characteristics conn (first (dissoc stmt :statement-type)))
-    :set-session-parameter (cmd-set-session-parameter conn parameter value)
-    :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
-    :set-time-zone (cmd-set-time-zone conn tz)
-    :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
-    :begin (cmd-begin conn access-mode)
-    :rollback (cmd-rollback conn)
-    :commit (cmd-commit conn)
-    :query (cmd-exec-query conn stmt)
-    :dml (cmd-exec-dml conn stmt)
-
-    (throw (UnsupportedOperationException. (pr-str {:stmt stmt})))))
 
 (defn- permissibility-err
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
@@ -1624,25 +1541,18 @@
       (when (and transaction (= :read-write access-mode))
         (access-mode-error "queries are unsupported in a READ WRITE transaction" :read-only)))))
 
-(defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
-  (let [{:keys [err] :as stmt} (interpret-sql query)]
-    (swap! conn-state assoc :protocol :simple)
-    (if-some [err (or err (permissibility-err conn stmt))]
-      (do
-        (cmd-send-error conn err)
-        (cmd-send-ready conn))
-      (do
-        (cmd-exec-stmt conn stmt)
-        ;; Queries are executed asynchronously and the ready message must be
-        ;; sent after query result are sent.
-        (when (not= :query (:statement-type stmt))
-          (cmd-send-ready conn))))))
-
 (defn cmd-sync
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
   and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
   [{:keys [conn-state] :as conn}]
   ;; TODO commit / rollback should be used here if not in an explicit tx?
+
+  (when-not (:transaction @conn-state)
+    ;;if outside an explicit transaction/transaction block (BEGIN/COMMIT) close any portals
+    ;;as these are implicitly closed/cleaned up at the end of the transcation
+    (doseq [portal-name (keys (:portals @conn-state))]
+      (close-portal conn portal-name)))
+
   (cmd-send-ready conn)
   (swap! conn-state dissoc :skip-until-sync, :protocol))
 
@@ -1655,8 +1565,8 @@
   "Responds to a msg-parse message that creates a prepared-statement."
   [{:keys [conn-state cid server] :as conn}
    {:keys [stmt-name query arg-types]}]
-
   ;; put the conn in the extend protocol
+  ;; TODO if/when simple query mode calls through to this cmd, will need to move this/make it dynamic
   (swap! conn-state assoc :protocol :extended)
 
   (log/trace "Parsing" {:stmt-name stmt-name,
@@ -1677,44 +1587,134 @@
         (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt)
         (cmd-write-msg conn msg-parse-complete)))))
 
-(defn cmd-bind [{:keys [conn-state] :as conn}
-                {:keys [portal-name
-                        stmt-name
-                        param-format
-                        params
-                        result-format]}]
-  (let [stmt (get-in @conn-state [:prepared-statements stmt-name])
-        _ (when-not stmt (cmd-send-error conn (err-protocol-violation "no prepared statement")))
+(defn cmd-bind [{:keys [conn-state ^xtdb.node.impl.IXtdbInternal node] :as conn}
+                {:keys [portal-name stmt-name params] :as bind-msg}]
+  (let [{:keys [statement-type] :as stmt} (get-in @conn-state [:prepared-statements stmt-name])]
+    (if stmt
+      (let [stmt-with-bind-msg
+            ;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during submit-tx.
+            (merge stmt bind-msg)
+            {:keys [portal bind-outcome]}
+            ;;if statement is a query, compile and bind it, else use the statment as a portal
+            (if (= :query statement-type)
+              (let [xtify-param (->xtify-param stmt-with-bind-msg)
+                    xt-params (vec (map-indexed xtify-param params))
 
-        portal
-        (when stmt
-          (assoc stmt :param-format param-format
-                      :stmt-name stmt-name
-                      :params params
-                      :result-format result-format))
+                    {{:keys [^Clock clock, latest-submitted-tx] :as session} :session
+                     {:keys [basis]} :transaction} @conn-state
+
+                    default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))
+
+                    query-opts (xt/->QueryOptions {:basis (or basis {:current-time (.instant clock)})
+                                                   :after-tx latest-submitted-tx ;;TODO any need for this if we are sending explicit basis?
+                                                   :tx-timeout (Duration/ofSeconds 1)
+                                                   :default-tz (.getZone clock)
+                                                   :args xt-params
+                                                   :default-all-valid-time? default-all-valid-time?
+                                                   :key-fn :snake-case-string})
+
+                    ;;TODO explicit basis means its okay to send the same query-opts twice for now, rather than have to check what tables
+                    ;;are reffed by compiled-query and see if they have changed by the time bound-query runs, as these 2 requests are fired in quick
+                    ;;succession. Will nee changing when parse is moved to its own phase.
+
+                    {:keys [compiled-query compilation-outcome]}
+                    (try
+                      {:compiled-query @(.compileQuery node (:transformed-query stmt-with-bind-msg) query-opts)
+                       :compilation-outcome :success}
+                      (catch InterruptedException e
+                        (log/trace e "Interrupt thrown compiling query")
+                        (throw e))
+                      (catch Throwable e
+                        (log/warn e)
+                        (cmd-send-error
+                         conn
+                         (err-pg-exception (.getCause e) "unexpected server error compiling query"))))]
+
+
+                (when (= :success compilation-outcome)
+                  (try
+                    (let [{:keys [fields bound-query]}
+                          @(.bindStatement node compiled-query query-opts)]
+
+                      {:portal (assoc stmt-with-bind-msg :bound-query bound-query :fields fields)
+                       :bind-outcome :success})
+                    (catch InterruptedException e
+                      (log/trace e "Interrupt thrown binding prepared statement")
+                      (throw e))
+                    (catch Throwable e
+                      (log/warn e)
+                      (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement"))))))
+
+              {:portal stmt-with-bind-msg
+               :bind-outcome :success})]
 
         ;; add the portal
-        _
-        (when portal
+        (when (= :success bind-outcome)
           (swap! conn-state assoc-in [:portals portal-name] portal))
 
         ;; track the portal name to the prepared stmt (for close)
-        _
-        (when portal
+        (when (= :success bind-outcome)
           (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name))
 
 
-        _ (when stmt (cmd-write-msg conn msg-bind-complete))]))
+        (if (and (= :success bind-outcome) (= :extended (:protocol @conn-state)))
+          (cmd-write-msg conn msg-bind-complete)
+          bind-outcome))
+
+      (cmd-send-error conn (err-protocol-violation "no prepared statement")))))
 
 (defn cmd-execute
   "Handles a msg-execute to run a previously bound portal (via msg-bind)."
   [{:keys [conn-state] :as conn}
-   {:keys [portal-name
-           limit]}]
-  (if-some [stmt (get-in @conn-state [:portals portal-name])]
-    (cmd-exec-stmt conn (assoc stmt :limit limit))
+   {:keys [portal-name _limit]}]
+  ;;TODO implement limit for queries that return rows
+  (if-some [{:keys [statement-type canned-response access-mode parameter tz value] :as portal} (get-in @conn-state [:portals portal-name])]
+
+    (case statement-type
+      :empty-query (cmd-write-msg conn msg-empty-query)
+      :canned-response (cmd-write-canned-response conn canned-response)
+      :set-session-characteristics (cmd-set-session-characteristics conn (first (dissoc portal :statement-type)))
+      :set-session-parameter (cmd-set-session-parameter conn parameter value)
+      :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
+      :set-time-zone (cmd-set-time-zone conn tz)
+      :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
+      :begin (cmd-begin conn access-mode)
+      :rollback (cmd-rollback conn)
+      :commit (cmd-commit conn)
+      :query (cmd-exec-query conn portal)
+      :dml (cmd-exec-dml conn portal)
+
+      (throw (UnsupportedOperationException. (pr-str {:portal portal}))))
     (cmd-send-error conn (err-protocol-violation "no such portal"))))
 
+(defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
+  (let [{:keys [err statement-type] :as stmt} (interpret-sql query)
+        stmt-name ""
+        portal-name ""]
+    (swap! conn-state assoc :protocol :simple)
+    (if-some [err (or err (permissibility-err conn stmt))]
+      (do
+        (cmd-send-error conn err)
+        (cmd-send-ready conn))
+      (do
+        (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt)
+        (if (= :success (cmd-bind conn {:portal-name portal-name
+                                        :stmt-name stmt-name}))
+
+          (do (when (#{:query :canned-response} statement-type)
+                ;; Client only expects to see a RowDescription (result of cmd-descibe)
+                ;; for certain statement types
+                (cmd-describe conn {:describe-type :portal
+                                    :describe-name portal-name}))
+
+              (cmd-execute conn {:portal-name portal-name})
+              (close-portal conn portal-name)
+
+              (cmd-send-ready conn))
+
+          ;;parse/bind failed, cmd-bind already sent the error message on our behalf
+          ;;so now be ready to accept a new query
+          (cmd-send-ready conn))))))
 
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
@@ -1729,6 +1729,7 @@
     (cmd-startup conn)
 
     (loop []
+
       (cond
         ;; the connection is closing right now
         ;; let it close.

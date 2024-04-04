@@ -1,6 +1,7 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as api]
             xtdb.indexer
             [xtdb.log :as log]
             [xtdb.metrics :as metrics]
@@ -35,6 +36,11 @@
 (defn- with-after-tx-default [opts]
   (-> opts
       (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface IXtdbInternal
+  (^java.util.concurrent.CompletableFuture compileQuery [^java.lang.String query, ^xtdb.api.query.QueryOptions query-opts])
+  (^java.util.concurrent.CompletableFuture bindStatement [^clojure.lang.PersistentVector stmt, ^xtdb.api.query.QueryOptions query-opts]))
 
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
@@ -101,6 +107,39 @@
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx (xtp/latest-submitted-tx this)})
+
+  IXtdbInternal
+  (^CompletableFuture compileQuery [_ ^String query, ^QueryOptions query-opts]
+    (let [query-opts (-> (into {:default-tz default-tz,
+                                :after-tx @!latest-submitted-tx
+                                :key-fn #xt/key-fn :snake-case-string}
+                               query-opts)
+                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+                         (with-after-tx-default))]
+      (-> (.awaitTxAsync indexer
+                         (-> (:after-tx query-opts)
+                             (time/max-tx (get-in query-opts [:basis :at-tx])))
+                         (:tx-timeout query-opts))
+          (util/then-apply
+            (fn [_]
+              (let [table-info (scan/tables-with-cols query-opts wm-src scan-emitter)
+                    plan (sql/compile-query query (-> query-opts (assoc :table-info table-info)))]
+                plan))))))
+
+  (^CompletableFuture bindStatement [_ ^clojure.lang.PersistentVector stmt, ^QueryOptions query-opts]
+    (let [query-opts (-> (into {:default-tz default-tz,
+                                :after-tx @!latest-submitted-tx
+                                :key-fn #xt/key-fn :snake-case-string}
+                               query-opts)
+                         (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
+                         (with-after-tx-default))]
+      (-> (.awaitTxAsync indexer
+                         (-> (:after-tx query-opts)
+                             (time/max-tx (get-in query-opts [:basis :at-tx])))
+                         (:tx-timeout query-opts))
+          (util/then-apply
+            (fn [_]
+              (q/bind-query allocator ra-src wm-src stmt query-opts))))))
 
   Closeable
   (close [_]
