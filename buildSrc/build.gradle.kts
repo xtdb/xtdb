@@ -13,3 +13,5 @@ dependencies {
     implementation(gradleApi())
     implementation("gradle.plugin.com.github.johnrengelman:shadow:7.1.2")
 }
+
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
