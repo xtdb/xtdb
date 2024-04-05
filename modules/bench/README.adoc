@@ -19,6 +19,8 @@ TPC-H::
 AuctionMark::
 `./gradlew auctionmark -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
 
+Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
+
 == Running from a standalone JAR
 
 . Create the standalone JAR: `../../gradlew shadowJar`

@@ -111,7 +111,7 @@ allprojects {
                     val jvmArgs = defaultJvmArgs.toMutableList()
 
                     if (project.hasProperty("yourkit")) {
-                        jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"
+                        jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=app_name=xtdb"
                     }
 
                     if (project.hasProperty("debugJvm")) {
@@ -374,6 +374,10 @@ tasks.create("tpch", JavaExec::class) {
         args.add(scaleFactor)
     }
 
+    if (project.hasProperty("yourkit")) {
+        jvmArgs("-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=on_exit=snapshot,async_sampling_cpu,app_name=xtdb-tpch")
+    }
+
     this.args = args
 }
 
@@ -382,6 +386,10 @@ tasks.create("auctionmark", JavaExec::class) {
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
     val args = mutableListOf("-m", "xtdb.bench.xtdb2", "auctionmark")
+
+    if (project.hasProperty("yourkit")) {
+        jvmArgs("-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=on_exit=snapshot,async_sampling_cpu,app_name=xtdb-auctionmark")
+    }
 
     if (project.hasProperty("duration")) {
         val duration: String by project
