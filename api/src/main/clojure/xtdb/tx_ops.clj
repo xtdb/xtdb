@@ -47,10 +47,7 @@
                             {::err/message "expected doc map", :doc doc})))
   (expect-eid (or (:xt/id doc) (get doc "xt/id")))
 
-  (-> doc
-      (update-keys (fn [k]
-                     (cond-> k
-                       (keyword? k) (-> symbol str))))))
+  doc)
 
 (defn- expect-instant ^java.time.Instant [instant]
   (when-not (s/valid? ::time/datetime-value instant)
