@@ -1,12 +1,12 @@
 (ns xtdb.buffer-pool
   (:require [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.node :as xtn]
             [xtdb.object-store :as os]
-            [xtdb.util :as util]
-            [xtdb.node :as xtn])
+            [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
            [java.io ByteArrayOutputStream Closeable]
            (java.nio ByteBuffer)
-           (java.nio.channels Channels)
+           (java.nio.channels Channels ClosedByInterruptException)
            [java.nio.file FileVisitOption Files LinkOption Path]
            [java.nio.file.attribute FileAttribute]
            [java.util Map NavigableMap TreeMap]
@@ -18,8 +18,8 @@
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            (xtdb IArrowWriter IBufferPool)
+           (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
            xtdb.api.Xtdb$Config
-           (xtdb.api.storage Storage Storage$LocalStorageFactory ObjectStore Storage$RemoteStorageFactory Storage$Factory)
            (xtdb.multipart IMultipartUpload SupportsMultipart)
            xtdb.util.ArrowBufLRU))
 
@@ -210,7 +210,11 @@
                                  aw (ArrowFileWriter. vsr nil file-ch)]
         (.start aw)
         (reify IArrowWriter
-          (writeBatch [_] (.writeBatch aw))
+          (writeBatch [_]
+            (try
+              (.writeBatch aw)
+              (catch ClosedByInterruptException e
+                (throw (InterruptedException.)))))
 
           (end [_]
             (.end aw)
