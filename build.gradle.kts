@@ -362,6 +362,42 @@ createSltTask(
     extraArgs = listOf("--dirs")
 )
 
+tasks.create("tpch", JavaExec::class) {
+    classpath = sourceSets.dev.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    val args = mutableListOf("-m", "xtdb.bench.xtdb2", "tpch")
+
+    if (project.hasProperty("scaleFactor")) {
+        val scaleFactor: String by project
+        args.add("--scale-factor")
+        args.add(scaleFactor)
+    }
+
+    this.args = args
+}
+
+tasks.create("auctionmark", JavaExec::class) {
+    classpath = sourceSets.dev.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    val args = mutableListOf("-m", "xtdb.bench.xtdb2", "auctionmark")
+
+    if (project.hasProperty("duration")) {
+        val duration: String by project
+        args.add("--duration")
+        args.add(duration)
+    }
+
+    if (project.hasProperty("threads")) {
+        val threads: String by project
+        args.add("--threads")
+        args.add(threads)
+    }
+
+    this.args = args
+}
+
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")
     moduleVersion.set("2.0.0-SNAPSHOT")

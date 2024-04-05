@@ -9,6 +9,16 @@ Currently the auctionmark dataset is committed to the codebase so you can skip s
 - Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
 - See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
 
+== Running from Gradle
+
+(from the root of the repo, values given are defaults)
+
+TPC-H::
+`./gradlew tpch -PscaleFactor=0.01`
+
+AuctionMark::
+`./gradlew auctionmark -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
+
 == Running from a standalone JAR
 
 . Create the standalone JAR: `../../gradlew shadowJar`
@@ -19,15 +29,27 @@ Currently the auctionmark dataset is committed to the codebase so you can skip s
 . SSH in
 . `screen` / `tmux` etc if you want to leave it running
 --
-. `java -Dclojure.main.report=stderr --add-opens=java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true -cp bench-standalone.jar clojure.main`
-+
-* optional: prefix with `rlwrap` (if available) for nicer REPL behaviour
-. `(require '[xtdb.bench.xtdb2 :as bench])`
 . Choose your adventure (values given are defaults):
 +
 --
-TPC-H:: `(bench/run-benchmark {:benchmark-type :tpch, :benchmark-opts {:scale-factor 0.01}, :node-opts {:node-dir "/tmp/tpch-node"}})`
-Auctionmark:: `(bench/run-benchmark {:benchmark-type :auctionmark, :benchmark-opts {:duration "PT30S", :scale-factor 0.1, :threads 8}, :node-opts {:node-dir "/tmp/am-node"}})`
+TPC-H::
+[source,bash]
+----
+java -Dclojure.main.report=stderr \
+     --add-opens=java.base/java.nio=ALL-UNNAMED \
+     -Dio.netty.tryReflectionSetAccessible=true \
+     -cp bench-standalone.jar \
+     clojure.main -m xtdb.bench.xtdb2 tpch --scale-factor 0.01
+----
+AuctionMark::
+[source,bash]
+----
+java -Dclojure.main.report=stderr \
+     --add-opens=java.base/java.nio=ALL-UNNAMED \
+     -Dio.netty.tryReflectionSetAccessible=true \
+     -cp bench-standalone.jar \
+     clojure.main -m xtdb.bench.xtdb2 auctionmark --duration PT30S --scale-factor 0.1 --threads 8
+----
 --
 
 == Prometheus and Grafana

@@ -1,5 +1,6 @@
 (ns xtdb.bench.tpch
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.tools.cli :as cli]
+            [clojure.tools.logging :as log]
             [xtdb.bench :as b]
             [xtdb.bench.xtdb2 :as bxt]
             [xtdb.buffer-pool :as bp]
@@ -110,10 +111,3 @@
 
     (queries-stage :hot-queries)]})
 
-(comment
-  (util/with-tmp-dirs #{node-tmp-dir}
-    (bxt/run-benchmark
-     {:node-opts {:node-dir node-tmp-dir
-                  :instant-src (InstantSource/system)}
-      :benchmark-type :tpch
-      :benchmark-opts {:scale-factor 0.05}})))

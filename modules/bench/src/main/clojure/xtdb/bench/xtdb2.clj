@@ -1,15 +1,17 @@
 (ns xtdb.bench.xtdb2
   (:require [clojure.java.io :as io]
+            [clojure.tools.cli :as cli]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.bench.measurement :as bm]
+            [xtdb.compactor :as c]
             [xtdb.indexer]
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.query-ra :as ra]
-            [xtdb.util :as util]
-            [xtdb.compactor :as c])
+            [xtdb.util :as util])
   (:import (java.io File)
            (java.nio.file Path)
            (java.time Duration InstantSource)
@@ -134,3 +136,55 @@
   (time
    (doseq [id (take 1000 (shuffle open-ids))]
      (xt/q node [get-item-query id]))))
+
+(def ^:private tpch-cli-options
+  [["-s" "--scale-factor SCALE_FACTOR" "TPC-H scale factor to use"
+    :parse-fn parse-double
+    :default 0.01]
+
+   ["-h" "--help"]])
+
+(def ^:private auctionmark-cli-options
+  [["-d" "--duration DURATION"
+    :parse-fn #(Duration/parse %)
+    :default #time/duration "PT30S"]
+
+   ["-s" "--scale-factor SCALE_FACTOR"
+    :parse-fn parse-double
+    :default 0.01]
+
+   ["-t" "--threads THREADS"
+    :parse-fn parse-long
+    :default (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))]
+
+   ["-h" "--help"]])
+
+(defn -main [benchmark-type & args]
+  (let [benchmark-type (keyword benchmark-type)
+        {:keys [options errors summary]} (case benchmark-type
+                                           :tpch (cli/parse-opts args tpch-cli-options)
+                                           :auctionmark (cli/parse-opts args auctionmark-cli-options)
+                                           {:errors [(str "Unknown benchmark: " (name benchmark-type))]})]
+    (cond
+      (seq errors) (binding [*out* *err*]
+                     (doseq [error errors]
+                       (println error))
+                     (System/exit 2))
+
+      (:help options) (binding [*out* *err*]
+                        (println summary)
+                        (System/exit 0))
+
+      :else (try
+              (util/with-tmp-dirs #{node-tmp-dir}
+                (run-benchmark
+                 {:node-opts {:node-dir node-tmp-dir
+                              :instant-src (InstantSource/system)}
+                  :benchmark-type benchmark-type
+                  :benchmark-opts options}))
+              (System/exit 0)
+              (catch Throwable t
+                (log/error t "Error running benchmark")
+                (System/exit 1)))))
+
+  (shutdown-agents))

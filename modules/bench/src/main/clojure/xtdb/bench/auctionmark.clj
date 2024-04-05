@@ -461,7 +461,7 @@
                        scale-factor 0.1
                        load-phase true
                        sync false}}]
-  (let [duration (Duration/parse duration)
+  (let [duration (cond-> duration (string? duration) Duration/parse)
         sf scale-factor]
     (log/trace {:scale-factor scale-factor})
     {:title "Auction Mark OLTP"
