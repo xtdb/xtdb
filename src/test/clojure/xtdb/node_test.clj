@@ -574,20 +574,20 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (t/deftest start-node-from-non-map-config
   (t/testing "directly using Xtdb$Config"
-    (let [config-object (Xtdb$Config.)
-          node (xtn/start-node config-object)]
-      (t/is node)
-      (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
-      (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
-               (xt/q node '(from :docs [{:xt/id e} inst]))))))
+    (let [config-object (Xtdb$Config.)]
+      (with-open [node (xtn/start-node config-object)]
+        (t/is node)
+        (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
+        (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
+                 (xt/q node '(from :docs [{:xt/id e} inst])))))))
 
   (t/testing "using file based YAML config"
-    (let [config-file (io/resource "test-config.yaml")
-          node (xtn/start-node (io/file config-file))]
-      (t/is node)
-      (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
-      (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
-               (xt/q node '(from :docs [{:xt/id e} inst])))))))
+    (let [config-file (io/resource "test-config.yaml")]
+      (with-open [node (xtn/start-node (io/file config-file))]
+        (t/is node)
+        (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
+        (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
+                 (xt/q node '(from :docs [{:xt/id e} inst]))))))))
 
 (deftest assert-exists-on-empty-tables-3061
   (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:xt/id :john}])]])
