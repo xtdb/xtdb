@@ -1,0 +1,114 @@
+---
+title: Financial - Fraud Detection
+---
+
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import Query from '@components/fiddle/query.astro';
+
+The normal trading process goes something like this:
+
+1. A trade is booked on a certain day
+2. The same day, the trade is entered into the system
+
+Like so:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-01"
+       txs="INSERT INTO trades (xt$id, volume, of)
+            VALUES
+            (1, 150, 'ABC'),
+            (2, 430, 'XYZ'),
+            (3, 200, 'ABC')" />
+  <Query q="SELECT t.xt$id, t.volume, t.of, t.xt$valid_from AS trade_date
+            FROM trades AS t
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+Sometimes a trade is booked right at the end of the day and isn't entered into the system until later:
+
+Let's say this one was entered the next day:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-02"
+       txs="INSERT INTO trades (xt$id, volume, of)
+            VALUES
+            (4, 320, 'DEF')" />
+  <Query q="SELECT t.xt$id, t.volume, t.of, t.xt$valid_from AS trade_date
+            FROM trades AS t
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+But oh dear, our reports for yesterday are missing the trade:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT *
+            FROM trades AS t
+            WHERE t.xt$valid_from = DATE '2024-01-01'
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+Let's try that again. This time when the trade is entered late we can set the valid-time (business time) to yesterday, essentially backfilling the data:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-02"
+       txs="INSERT INTO trades (xt$id, volume, of, xt$valid_from)
+            VALUES
+            (4, 320, 'DEF', DATE '2024-01-01')" />
+  <Query q="SELECT *
+            FROM trades AS t
+            WHERE t.xt$valid_from = DATE '2024-01-01'
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+Now our reports are working, great!
+
+Can anyone see any potential problems with updating the past like this?
+
+Let's say instead of backfilling a trade to yesterday, someone edits a trade from a *month* ago!
+
+// TODO:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-02"
+       txs="INSERT INTO trades (xt$id, volume, of, xt$valid_from)
+            VALUES
+            (4, 320, 'DEF', DATE '2024-01-01')" />
+  <Query q="SELECT *
+            FROM trades AS t
+            WHERE t.xt$valid_from = DATE '2024-01-01'
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+Now when the auditors come in, they check for changes in the last onth:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT *
+            FROM trades AS t
+            WHERE t.xt$valid_from > DATE '2024-01-01'
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+They can't find the edited trade! Has someone just gotten away with fraud?
+
+If we want to allow editing the timeline, how can we avoid this?
+
+In XTDB we use system-time (aka, wall clock time), an **immutable** timeline that gets added to with every change. In fact our malicious edit from earlier gets caught easily:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT *
+            FROM trades AS t
+            WHERE t.xt$system_from > DATE '2024-01-01'
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+In fact we can even check for suspicious changes, for example changes to valid-time more than 6 hours prior:
+
+<Fiddle magicContext="my-context">
+  <Query q="SELECT *
+            FROM trades AS t
+            WHERE (t.xt$system_from - t.xt$valid_from) > 0
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+Conclusion: As an immutable database, XTDB keeps you safe from your own changes by making sure to record when they happened. Even when reaching into the past!
