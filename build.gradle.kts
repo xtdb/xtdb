@@ -269,31 +269,6 @@ tasks.create("build-codox", JavaExec::class) {
     this.args = args
 }
 
-tasks.create("create-reports", JavaExec::class) {
-    classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("clojure.main")
-    jvmArgs(defaultJvmArgs)
-    val args = mutableListOf(
-        "-m", "xtdb.bench.report"
-    )
-
-    if (project.hasProperty("report0")) {
-        project.property("report0")?.toString()?.let { report ->
-            args.add("--report")
-            args.add(report)
-        }
-    }
-
-    if (project.hasProperty("report1")) {
-        project.property("report1")?.toString()?.let { report ->
-            args.add("--report")
-            args.add(report)
-        }
-    }
-
-    this.args = args
-}
-
 fun createSltTask(
     taskName: String,
     maxFailures: Long = 0,
