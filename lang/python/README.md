@@ -17,10 +17,9 @@ Through localhost connection
 poetry run pytest
 ```
 
-Through Docker
+Through `docker-compose`
 ```shell
-docker-compose up db (wait for node to be ready)
-docker-compose up app --build
+docker-compose up --build --abort-on-container-exit
 ```
 
 

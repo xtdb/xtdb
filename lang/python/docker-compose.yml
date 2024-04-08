@@ -6,6 +6,12 @@ services:
       - "6543:3000" 
     stdin_open: true 
     tty: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/status"]
+      interval: 1s
+      timeout: 1s
+      retries: 10
+      start_period: 30s
   app:
     environment:
         DATABASE_HOST: db
@@ -13,3 +19,6 @@ services:
     build:
         context: .
         dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
