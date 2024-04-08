@@ -1899,6 +1899,7 @@ subquery
     | in_predicate
     | like_predicate
     | regex_like_predicate
+    | postgres_regex_predicate
     | null_predicate
     | quantified_comparison_predicate
     | exists_predicate
@@ -2001,6 +2002,18 @@ regex_like_predicate
 
 regex_like_predicate_part_2
     : [ 'NOT' ] 'LIKE_REGEX' xquery_pattern [ 'FLAG' xquery_option_flag ]
+    ;
+
+(* Postgres infix regex predicates *)
+postgres_regex_predicate
+    : character_value_expression postgres_regex_operator xquery_pattern
+    ;
+
+postgres_regex_operator
+    : '~'
+    | '~*'
+    | '!~'
+    | '!~*'
     ;
 
 (*  8.8        <null predicate> *)
