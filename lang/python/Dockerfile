@@ -6,11 +6,11 @@ RUN pip install poetry
 
 ENV PATH="/root/.poetry/bin:${PATH}"
 
-COPY ./xtdb_juxt ./xtdb_juxt
-COPY ./pyproject.toml .
 COPY ./README.md .
-
+COPY ./pyproject.toml .
 RUN poetry install
+
+COPY ./xtdb_juxt ./xtdb_juxt
 
 
 ENTRYPOINT ["poetry", "run", "pytest", "xtdb_juxt/test"]
