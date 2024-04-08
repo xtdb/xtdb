@@ -11,6 +11,19 @@ To install the dependencies, run:
 poetry install
 ```
 
+## Testing
+Through localhost connection
+```shell
+poetry run pytest
+```
+
+Through Docker
+```shell
+docker-compose up db (wait for node to be ready)
+docker-compose up app --build
+```
+
+
 ## Deployment
 
 You'll need an account on [PyPI](https://pypi.org) to deploy the library.
