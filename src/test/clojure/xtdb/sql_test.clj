@@ -530,6 +530,13 @@
     "foo.a NOT LIKE_REGEX foo.b" '(not (like-regex x1 x2 ""))
     "foo.a NOT LIKE_REGEX foo.b FLAG 'i'" '(not (like-regex x1 x2 "i"))))
 
+(t/deftest test-like-regex-query-case-insensitive
+  (t/is (= [{:match false}]
+           (xt/q tu/*node* "SELECT ('ABC' LIKE_REGEX 'a') as match FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:match true}]
+           (xt/q tu/*node* "SELECT ('ABC' LIKE_REGEX 'a' FLAG 'i') as match FROM (VALUES 1) AS x"))))
+
 (t/deftest test-upper-expr
   (t/is (= '(upper x1) (plan-expr "UPPER(foo.a)"))))
 

@@ -877,7 +877,7 @@
     {:return-type :bool
      :->call-code (fn [[haystack-code needle-code]]
                     `(boolean (re-find ~(if re-literal
-                                          (Pattern/compile re-literal flag-int)
+                                          `(Pattern/compile ~re-literal ~flag-int)
                                           `(Pattern/compile (resolve-string ~needle-code) ~flag-int))
                                        (resolve-string ~haystack-code))))}))
 
