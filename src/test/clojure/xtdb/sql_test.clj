@@ -530,6 +530,60 @@
     "foo.a NOT LIKE_REGEX foo.b" '(not (like-regex x1 x2 ""))
     "foo.a NOT LIKE_REGEX foo.b FLAG 'i'" '(not (like-regex x1 x2 "i"))))
 
+(t/deftest test-like-regex-query-case-insensitive
+  (t/is (= [{:match false}]
+           (xt/q tu/*node* "SELECT ('ABC' LIKE_REGEX 'a') as match FROM (VALUES 1) AS x")))
+
+  (t/is (= [{:match true}]
+           (xt/q tu/*node* "SELECT ('ABC' LIKE_REGEX 'a' FLAG 'i') as match FROM (VALUES 1) AS x"))))
+
+(t/deftest test-postgres-regex-expr
+  (t/are [sql expected] (= expected (plan-expr sql))
+
+    "foo.a ~ foo.b" '(like-regex x1 x2 "")
+    "foo.a ~* foo.b" '(like-regex x1 x2 "i")
+
+    "foo.a !~ foo.b" '(not (like-regex x1 x2 ""))
+    "foo.a !~* foo.b" '(not (like-regex x1 x2 "i"))))
+
+(defn pg-regex-query [val op pattern]
+  (let [query (format "SELECT ('%s' %s '%s') as match FROM (VALUES 1) AS x" val op pattern)
+        [{:keys [match]}] (xt/q tu/*node* query)]
+    match))
+
+(t/deftest test-postgres-regex-query
+  (t/testing "postgres case sensitive match regex"
+    (t/are [expected val op pattern] (= expected (pg-regex-query val op pattern))
+      true "abcd" "~" "abcd"
+      true "abcd" "~" "a.c"
+      false "abcd" "~" "x"
+      false "abcd" "~" "A"
+      false "ABCD" "~" "a"))
+
+  (t/testing "postgres case insensitive match regex"
+    (t/are [expected val op pattern] (= expected (pg-regex-query val op pattern))
+      true "abcd" "~*" "abcd"
+      true "abcd" "~*" "a.c"
+      false "abcd" "~*" "x"
+      true "abcd" "~*" "A"
+      true "ABCD" "~*" "a"))
+
+  (t/testing "postgres case sensitive not match regex"
+    (t/are [expected val op pattern] (= expected (pg-regex-query val op pattern))
+      false "abcd" "!~" "abcd"
+      false "abcd" "!~" "a.c"
+      true "abcd" "!~" "x"
+      true "abcd" "!~" "A"
+      true "ABCD" "!~" "a"))
+
+  (t/testing "postgres case insensitive not match regex"
+    (t/are [expected val op pattern] (= expected (pg-regex-query val op pattern))
+      false "abcd" "!~*" "abcd"
+      false "abcd" "!~*" "a.c"
+      true "abcd" "!~*" "x"
+      false "abcd" "!~*" "A"
+      false "ABCD" "!~*" "a")))
+
 (t/deftest test-upper-expr
   (t/is (= '(upper x1) (plan-expr "UPPER(foo.a)"))))
 

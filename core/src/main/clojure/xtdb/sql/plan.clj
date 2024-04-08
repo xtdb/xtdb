@@ -708,6 +708,19 @@
     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
     (list 'not (list 'like-regex (expr rvp) (expr cp) (expr flag)))
 
+    ;; Treating postgres infix regex operators as alisases for LIKE_REGEX
+    [:postgres_regex_predicate ^:z rvp [:postgres_regex_operator "~"] ^:z cp]
+    (list 'like-regex (expr rvp) (expr cp) "")
+
+    [:postgres_regex_predicate ^:z rvp [:postgres_regex_operator "~*"] ^:z cp]
+    (list 'like-regex (expr rvp) (expr cp) "i")
+
+    [:postgres_regex_predicate ^:z rvp [:postgres_regex_operator "!~"] ^:z cp]
+    (list 'not (list 'like-regex (expr rvp) (expr cp) ""))
+
+    [:postgres_regex_predicate ^:z rvp [:postgres_regex_operator "!~*"] ^:z cp]
+    (list 'not (list 'like-regex (expr rvp) (expr cp) "i"))
+    
     [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp "FOR" ^:z sl]
     ;;=>
     (list 'substring (expr cve) (expr sp) (expr sl))

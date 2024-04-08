@@ -553,6 +553,7 @@
 
       "" "" "i" true
       "A" "a" "i" true
+      "ABCD" "a" "i" true
       "a\nB\nc" "^B$" "" false
       "a\nB\nc" "^B$" "m" true
       "a\nB\nc" "^b$" "m" false
