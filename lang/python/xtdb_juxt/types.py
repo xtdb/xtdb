@@ -17,6 +17,12 @@ class QueryTail:
 class Query:
     def to_json(self): pass
 
+class Sql(Query):
+    def __init__(self, query):
+        self.query = query
+
+    def to_json(self):
+        return {"sql": self.query}
 
 ToQuery = Union[Query, tuple[Query, *List[QueryTail]]]
 ToBindings = Union[str, Dict[str, 'expr.Expr']]

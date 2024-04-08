@@ -1,0 +1,15 @@
+version: '3'
+services:
+  db:
+    image: ghcr.io/xtdb/xtdb-standalone-ea
+    ports:
+      - "6543:3000" 
+    stdin_open: true 
+    tty: true
+  app:
+    environment:
+        DATABASE_HOST: db
+        DATABASE_PORT: 3000
+    build:
+        context: .
+        dockerfile: Dockerfile

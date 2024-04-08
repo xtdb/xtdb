@@ -9,7 +9,14 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 urllib3 = "^2.2.1"
+pytest = "^8.1.1"
+
+[tool.pytest_ini.options]
+testpaths = [
+          "xtdb_juxt/test/"
+]
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
