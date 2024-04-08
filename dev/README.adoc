@@ -50,14 +50,14 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** `./gradlew kafka-test`
 ** `docker-compose down`
 
-=== Auth for testing cloud based resources 
+=== Auth for testing cloud based resources
 
 .*S3* (ensure all of the below are done on a consistent region):
 * Need to ensure the `s3-stack` is setup via CloudFormation
 ** See the README for more info here.
-* Need to log in to the AWS CLI - using `aws configure sso` 
+* Need to log in to the AWS CLI - using `aws configure sso`
 * Need to assume the role on the CLI - `aws sts assume-role --role-arn <ARN of XTDBIamRole> --role-session-name <session-name> --profile <SSO profile>`
-* Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` & `AWS_SESSION_TOKEN` from the output 
+* Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` & `AWS_SESSION_TOKEN` from the output
   of the above, then set AWS_REGION=<region for the cloudformation>
 * Start the Gradle REPL and connect to it, to have all of the AWS creds available.
 
@@ -66,8 +66,8 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** See the README for more info here.
 * Ensure a user/app registration is created with the create `xtdb-custom-role`.
 * Create an access token for said user/app registration.
-* Set `AZURE_CLIENT_ID` & `AZURE_CLIENT_SECRET` from the created access token. 
-* Set `AZURE_TENANT_ID` based on the tenant id on which you created the user/app registration/  
+* Set `AZURE_CLIENT_ID` & `AZURE_CLIENT_SECRET` from the created access token.
+* Set `AZURE_TENANT_ID` based on the tenant id on which you created the user/app registration/
 * Set `AZURE_SUBSCRIPTION_ID` based on whichever subscription you created the stack on.
 * Start the Gradle REPL and connect to it, to have all of the Azure creds available.
 
@@ -97,13 +97,13 @@ See link:RELEASING.adoc[].
 
 == Arrow Fork
 
-We maintain a fork of [Arrow](https://github.com/apache/arrow) to fix a couple of issues in `DenseUnionVector` - see [this diff](https://github.com/apache/arrow/compare/master...juxt:master) for more details.
+We maintain a fork of [Arrow](https://github.com/apache/arrow) to fix a couple of issues in `DenseUnionVector` and commits that haven't made it into an arrow release yet - see [this diff](https://github.com/apache/arrow/compare/master...xtdb:master) for more details.
+Clone the [XTDB fork](https://github.com/xtdb/arrow), add the [Arrow repo](https://github.com/apache/arrow)as as remote.
 
 To upgrade Arrow:
 
-* Usual bump in `project.clj`
-* Clone the [Arrow repo](https://github.com/apache/arrow), add the [JUXT fork](https://github.com/juxt/arrow) as a remote.
-* Rebase `juxt/master` on the upstream tag.
-* In xtdb2, `./bin/rebuild-forked-arrow-files.sh`
+* Usual bump in `build.gradle.kts`. You can skip this if you just want to add some tweaked files to xtdb.
+* Rebase `xtdb/master` on the upstream tag (in the arrow fork).
+* In xtdb, `./bin/rebuild-forked-arrow-files.sh`. You might need to update that script if you tweaked new files.
 * Test
-* Push (`--force-with-lease`) to JUXT fork, and commit to XT2.
+* Push (`--force-with-lease`) to XTDB fork, and commit to xtdb:main.
