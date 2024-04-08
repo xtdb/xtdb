@@ -11,7 +11,7 @@ services:
       interval: 1s
       timeout: 1s
       retries: 10
-      start_period: 30s
+      start_period: 40s
   app:
     environment:
         DATABASE_HOST: db
