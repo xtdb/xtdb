@@ -3,115 +3,34 @@
 
 (*  5.1     <SQL terminal character> *)
 
-<space>
-    : ' '
-    ;
+<space> : ' ' ;
+percent : '%' ;
+ampersand : '&' ;
+<quote> : '\'' ;
+<left_paren> : '(' ;
+<right_paren> : ')' ;
+asterisk : '*' ;
+plus_sign : '+' ;
+<comma> : ',' ;
+minus_sign : '-' ;
+<period> : '.' ;
+solidus : '/' ;
+<colon> : ':' ;
+<semicolon> : ';' ;
+less_than_operator : '<' ;
+equals_operator : '=' ;
+greater_than_operator : '>' ;
+question_mark : '?' ;
 
-percent
-    : '%'
-    ;
-
-ampersand
-    : '&'
-    ;
-
-<quote>
-    : '\''
-    ;
-
-<left_paren>
-    : '('
-    ;
-
-<right_paren>
-    : ')'
-    ;
-
-asterisk
-    : '*'
-    ;
-
-plus_sign
-    : '+'
-    ;
-
-<comma>
-    : ','
-    ;
-
-minus_sign
-    : '-'
-    ;
-
-<period>
-    : '.'
-    ;
-
-solidus
-    : '/'
-    ;
-
-<colon>
-    : ':'
-    ;
-
-<semicolon>
-    : ';'
-    ;
-
-less_than_operator
-    : '<'
-    ;
-
-equals_operator
-    : '='
-    ;
-
-greater_than_operator
-    : '>'
-    ;
-
-question_mark
-    : '?'
-    ;
-
-<left_bracket_or_trigraph>
-    : <left_bracket>
-    | <left_bracket_trigraph>
-    ;
-
-<right_bracket_or_trigraph>
-    : <right_bracket>
-    | <right_bracket_trigraph>
-    ;
-
-<left_bracket>
-    : '['
-    ;
-
-<left_bracket_trigraph>
-    : '??('
-    ;
-
-<right_bracket>
-    : ']'
-    ;
-
-<right_bracket_trigraph>
-    : '??)'
-    ;
-
-vertical_bar
-    : '|'
-    ;
-
-<left_brace>
-    : '{'
-    ;
-
-<right_brace>
-    : '}'
-    ;
+<left_bracket_or_trigraph> : <left_bracket> | <left_bracket_trigraph> ;
+<right_bracket_or_trigraph> : <right_bracket> | <right_bracket_trigraph> ;
+<left_bracket> : '[' ;
+<left_bracket_trigraph> : '??(' ;
+<right_bracket> : ']' ;
+<right_bracket_trigraph> : '??)' ;
+vertical_bar : '|' ;
+<left_brace> : '{' ;
+<right_brace> : '}' ;
 
 (*  5.2     <token> and <separator> *)
 
@@ -119,41 +38,16 @@ regular_identifier
 : !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME|CURRENT_USER|CURRENT_SCHEMA|CURRENT_DATABASE)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*'
     ;
 
-large_object_length_token
-    : #'[0-9]+' multiplier
-    ;
+large_object_length_token : #'[0-9]+' multiplier ;
+multiplier : 'K' | 'M' | 'G' | 'T' | 'P' ;
 
-multiplier
-    : 'K'
-    | 'M'
-    | 'G'
-    | 'T'
-    | 'P'
-    ;
+delimited_identifier : #'"(""|[^"])+"' ;
+not_equals_operator : '<>' ;
+greater_than_or_equals_operator : '>=' ;
+less_than_or_equals_operator : '<=' ;
+concatenation_operator : '||' ;
 
-delimited_identifier
-    : #'"(""|[^"])+"'
-    ;
-
-not_equals_operator
-    : '<>'
-    ;
-
-greater_than_or_equals_operator
-    : '>='
-    ;
-
-less_than_or_equals_operator
-    : '<='
-    ;
-
-concatenation_operator
-    : '||'
-    ;
-
-separator
-    : #'(?<=\s)'
-    ;
+separator : #'(?<=\s)' ;
 
 (*  5.3     <literal> *)
 
@@ -177,133 +71,61 @@ separator
     | null_specification
     ;
 
-character_string_literal
-    : #'\'(\'\'|[^\'])*\''+
-    ;
+character_string_literal : #'\'(\'\'|[^\'])*\''+ ;
 
-character_representation
-    : #'(\'\'|[^\'])*'
-    ;
+character_representation : #'(\'\'|[^\'])*' ;
 
-binary_string_literal
-    : #'X(\'[a-fA-F0-9\s]+\'\s*)+'
-    ;
+binary_string_literal : #'X(\'[a-fA-F0-9\s]+\'\s*)+' ;
 
-signed_numeric_literal
-    : [ sign ] unsigned_numeric_literal
-    ;
+signed_numeric_literal : [ sign ] unsigned_numeric_literal ;
 
 <unsigned_numeric_literal>
     : exact_numeric_literal
     | approximate_numeric_literal
     ;
 
-exact_numeric_literal
-    : #'(\d*\.\d+|\d+\.\d*|\d+)'
-    ;
+exact_numeric_literal : #'(\d*\.\d+|\d+\.\d*|\d+)' ;
 
-<sign>
-    : plus_sign
-    | minus_sign
-    ;
+<sign> : plus_sign | minus_sign ;
 
-approximate_numeric_literal
-    : mantissa 'E' exponent
-    ;
+approximate_numeric_literal : mantissa 'E' exponent ;
+<mantissa> : exact_numeric_literal ;
+<exponent> : signed_integer ;
 
-<mantissa>
-    : exact_numeric_literal
-    ;
+signed_integer : [ sign ] unsigned_integer ;
+unsigned_integer : #'[0-9]+' ;
 
-<exponent>
-    : signed_integer
-    ;
+<datetime_literal> : date_literal | time_literal | timestamp_literal ;
 
-signed_integer
-    : [ sign ] unsigned_integer
-    ;
+date_literal : 'DATE' date_string ;
+time_literal : 'TIME' time_string ;
+timestamp_literal : 'TIMESTAMP' timestamp_string ;
 
-unsigned_integer
-    : #'[0-9]+'
-    ;
-
-<datetime_literal>
-    : date_literal
-    | time_literal
-    | timestamp_literal
-    ;
-
-date_literal
-    : 'DATE' date_string
-    ;
-
-time_literal
-    : 'TIME' time_string
-    ;
-
-timestamp_literal
-    : 'TIMESTAMP' timestamp_string
-    ;
-
-date_string
-    : <quote> unquoted_date_string <quote>
-    ;
-
-time_string
-    : <quote> unquoted_time_string <quote>
-    ;
-
-timestamp_string
-    : <quote> unquoted_timestamp_string <quote>
-    ;
-
-time_zone_interval
-    : sign hours_value <colon> minutes_value
-    ;
-
-date_value
-    : years_value minus_sign months_value minus_sign days_value
-    ;
-
-time_value
-    : hours_value <colon> minutes_value <colon> seconds_value
-    ;
-
-duration_literal
-    : 'DURATION' <quote> unquoted_iso8601_duration_string <quote>
+date_string : <quote> unquoted_date_string <quote> ;
+time_string : <quote> unquoted_time_string <quote> ;
+timestamp_string : <quote> unquoted_timestamp_string <quote> ;
+time_zone_interval : sign hours_value <colon> minutes_value ;
+date_value : years_value minus_sign months_value minus_sign days_value ;
+time_value : hours_value <colon> minutes_value <colon> seconds_value ;
+duration_literal : 'DURATION' <quote> unquoted_iso8601_duration_string <quote> ;
 
 unquoted_iso8601_duration_string
     : <#'P'> unquoted_iso8601_duration_day_string [ ( <#'T'> unquoted_iso8601_duration_time_string ) ]
     ;
 
-unquoted_iso8601_duration_day_string
-    : #'(?:-?(\d+)D)?'
-    ;
+unquoted_iso8601_duration_day_string : #'(?:-?(\d+)D)?' ;
 
 interval_literal
     : 'INTERVAL' [ sign ] interval_string interval_qualifier
     | 'INTERVAL' <quote> unquoted_iso8601_interval_string <quote>
     ;
 
-interval_string
-    : <quote> unquoted_interval_string <quote>
-    ;
+interval_string : <quote> unquoted_interval_string <quote> ;
 
-<unquoted_date_string>
-    : date_value
-    ;
-
-unquoted_time_string
-    : time_value [ #'Z' | ( time_zone_interval [ <#'\['> time_zone_region <#'\]'> ] ) ]
-    ;
-
-unquoted_timestamp_string
-    : unquoted_date_string <( #'(?<= )' | #'T' )> unquoted_time_string
-    ;
-
-unquoted_interval_string
-    : #'[\d\:\-\+\. ]+'
-    ;
+<unquoted_date_string> : date_value ;
+unquoted_time_string : time_value [ #'Z' | ( time_zone_interval [ <#'\['> time_zone_region <#'\]'> ] ) ] ;
+unquoted_timestamp_string : unquoted_date_string <( #'(?<= )' | #'T' )> unquoted_time_string ;
+unquoted_interval_string : #'[\d\:\-\+\. ]+' ;
 
 unquoted_iso8601_interval_string
     : <#'P'> unquoted_iso8601_interval_period_string [ ( <#'T'> unquoted_iso8601_duration_time_string ) ]
@@ -317,88 +139,31 @@ unquoted_iso8601_duration_time_string
     : #'(?:-?(\d+)H)?(?:-?(\d+)M)?(?:-?(\d+(?:\.\d+)?)S)?'
     ;
 
-<years_value>
-    : datetime_value
-    ;
-
-<months_value>
-    : datetime_value
-    ;
-
-<days_value>
-    : datetime_value
-    ;
-
-<hours_value>
-    : datetime_value
-    ;
-
-<minutes_value>
-    : datetime_value
-    ;
-
-seconds_value
-    : seconds_integer_value [ <period> [ seconds_fraction ] ]
-    ;
-
-<seconds_integer_value>
-    : unsigned_integer
-    ;
-
-<seconds_fraction>
-    : unsigned_integer
-    ;
-
-<datetime_value>
-    : unsigned_integer
-    ;
-
-boolean_literal
-    : 'TRUE'
-    | 'FALSE'
-    | 'UNKNOWN'
-    ;
+<years_value> : datetime_value ;
+<months_value> : datetime_value ;
+<days_value> : datetime_value ;
+<hours_value> : datetime_value ;
+<minutes_value> : datetime_value ;
+seconds_value : seconds_integer_value [ <period> [ seconds_fraction ] ] ;
+<seconds_integer_value> : unsigned_integer ;
+<seconds_fraction> : unsigned_integer ;
+<datetime_value> : unsigned_integer ;
+boolean_literal : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
 
 (*  5.4    Names and identifiers *)
 
-<identifier>
-    : actual_identifier
-    ;
+<identifier> : actual_identifier ;
 
-<actual_identifier>
-    : regular_identifier
-    | delimited_identifier
-    ;
+<actual_identifier> : regular_identifier | delimited_identifier ;
 
-schema_name
-    : 'INFORMATION_SCHEMA'
-    | 'PG_CATALOG'
-    | 'PUBLIC'
-    ;
+schema_name : 'INFORMATION_SCHEMA' | 'PG_CATALOG' | 'PUBLIC' ;
+<table_name> : [ schema_name <period> ] !#'(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)' identifier ;
+<column_name> : identifier ;
+correlation_name : identifier ;
 
-<table_name>
-    : [ schema_name <period> ] !#'(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)' identifier
-    ;
-
-<column_name>
-    : identifier
-    ;
-
-correlation_name
-    : identifier
-    ;
-
-<query_name>
-    : identifier
-    ;
-
-<field_name>
-    : identifier
-    ;
-
-<window_name>
-    : identifier
-    ;
+<query_name> : identifier ;
+<field_name> : identifier ;
+<window_name> : identifier ;
 
 (*  6 Scalar expressions *)
 
@@ -474,39 +239,22 @@ approximate_numeric_type
     | 'DOUBLE' 'PRECISION'
     ;
 
-<length>
-    : unsigned_integer
-    ;
+<length> : unsigned_integer ;
+<precision> : unsigned_integer ;
+<scale> : unsigned_integer ;
 
-character_length
-    : length [ char_length_units ]
-    ;
+character_length : length [ char_length_units ] ;
 
 large_object_length
     : length [ multiplier ]
     | large_object_length_token
     ;
 
-character_large_object_length
-    : large_object_length [ char_length_units ]
-    ;
+character_large_object_length : large_object_length [ char_length_units ] ;
 
-char_length_units
-    : 'CHARACTERS'
-    | 'OCTETS'
-    ;
+char_length_units : 'CHARACTERS' | 'OCTETS' ;
 
-<precision>
-    : unsigned_integer
-    ;
-
-<scale>
-    : unsigned_integer
-    ;
-
-boolean_type
-    : 'BOOLEAN'
-    ;
+boolean_type : 'BOOLEAN' ;
 
 datetime_type
     : 'DATE'
@@ -514,52 +262,26 @@ datetime_type
     | 'TIMESTAMP' [ <left_paren> timestamp_precision <right_paren> ] [ with_or_without_time_zone ]
     ;
 
-with_or_without_time_zone
-    : 'WITH' 'TIME' 'ZONE'
-    | 'WITHOUT' 'TIME' 'ZONE'
-    ;
+with_or_without_time_zone : 'WITH' 'TIME' 'ZONE' | 'WITHOUT' 'TIME' 'ZONE' ;
 
-<time_precision>
-    : time_fractional_seconds_precision
-    ;
+<time_precision> : time_fractional_seconds_precision ;
+<timestamp_precision> : time_fractional_seconds_precision ;
+<time_fractional_seconds_precision> : unsigned_integer ;
 
-<timestamp_precision>
-    : time_fractional_seconds_precision
-    ;
+interval_type : 'INTERVAL' [ interval_qualifier ] ;
 
-<time_fractional_seconds_precision>
-    : unsigned_integer
-    ;
+row_type : 'ROW' row_type_body ;
+row_type_body : <left_paren> field_definition [ ( <comma> field_definition )+ ] <right_paren> ;
 
-interval_type
-    : 'INTERVAL' [ interval_qualifier ]
-    ;
+<collection_type> : array_type ;
 
-row_type
-    : 'ROW' row_type_body
-    ;
+array_type : data_type 'ARRAY' [ left_bracket_or_trigraph maximum_cardinality right_bracket_or_trigraph ] ;
 
-row_type_body
-    : <left_paren> field_definition [ ( <comma> field_definition )+ ] <right_paren>
-    ;
-
-<collection_type>
-    : array_type
-    ;
-
-array_type
-    : data_type 'ARRAY' [ left_bracket_or_trigraph maximum_cardinality right_bracket_or_trigraph ]
-    ;
-
-<maximum_cardinality>
-    : unsigned_integer
-    ;
+<maximum_cardinality> : unsigned_integer ;
 
 (*  6.2        <field definition> *)
 
-field_definition
-    : field_name data_type
-    ;
+field_definition : field_name data_type ;
 
 (*  6.3         <value expression primary> *)
 
@@ -568,9 +290,7 @@ field_definition
     | nonparenthesized_value_expression_primary
     ;
 
-<parenthesized_value_expression>
-    : <left_paren> value_expression <right_paren>
-    ;
+<parenthesized_value_expression> : <left_paren> value_expression <right_paren> ;
 
 <nonparenthesized_value_expression_primary>
     : unsigned_value_specification
@@ -603,48 +323,30 @@ field_definition
     | postgres_parameter_specification
     ;
 
-<simple_value_specification>
-    : literal
-    ;
+<simple_value_specification> : literal ;
 
-dynamic_parameter_specification
-    : question_mark
-    ;
+dynamic_parameter_specification : question_mark ;
 
 (*  6.5        <contextually typed value specification> *)
 
-<contextually_typed_value_specification>
-    : implicitly_typed_value_specification
-    ;
+<contextually_typed_value_specification> : implicitly_typed_value_specification ;
 
 <implicitly_typed_value_specification>
     : null_specification
     | empty_specification
     ;
 
-null_specification
-    : 'NULL'
-    ;
-
-empty_specification
-    : 'ARRAY'? <left_bracket_or_trigraph> <right_bracket_or_trigraph>
-    ;
+null_specification : 'NULL' ;
+empty_specification : 'ARRAY'? <left_bracket_or_trigraph> <right_bracket_or_trigraph> ;
 
 (*  6.6        <identifier chain> *)
 
-identifier_chain
-    : identifier ( <period> identifier )?
-    ;
-
-<basic_identifier_chain>
-    : identifier_chain
-    ;
+identifier_chain : identifier ( <period> identifier )? ;
+<basic_identifier_chain> : identifier_chain ;
 
 (*  6.7        <column reference> *)
 
-column_reference
-    : [ schema_name <period> ] basic_identifier_chain
-    ;
+column_reference : [ schema_name <period> ] basic_identifier_chain ;
 
 (*  6.9        <set function specification> *)
 
@@ -654,9 +356,7 @@ column_reference
 
 (*  6.10 <window function> *)
 
-window_function
-    : window_function_type 'OVER' window_name_or_specification
-    ;
+window_function : window_function_type 'OVER' window_name_or_specification ;
 
 window_function_type
     : rank_function_type <left_paren> <right_paren>
@@ -668,79 +368,38 @@ window_function_type
     | nth_value_function
     ;
 
-rank_function_type
-    : 'RANK'
-    | 'DENSE_RANK'
-    | 'PERCENT_RANK'
-    | 'CUME_DIST'
-    ;
+rank_function_type : 'RANK' | 'DENSE_RANK' | 'PERCENT_RANK' | 'CUME_DIST' ;
 
-ntile_function
-    : 'NTILE' <left_paren> number_of_tiles <right_paren>
-    ;
+ntile_function : 'NTILE' <left_paren> number_of_tiles <right_paren> ;
+<number_of_tiles> : simple_value_specification | dynamic_parameter_specification ;
 
-<number_of_tiles>
-    : simple_value_specification
-    | dynamic_parameter_specification
-    ;
+lead_or_lag_function : lead_or_lag <left_paren> lead_or_lag_extent [ <comma> offset [ <comma> default_expression ] ] <right_paren> [ null_treatment ] ;
 
-lead_or_lag_function
-    : lead_or_lag <left_paren> lead_or_lag_extent [ <comma> offset [ <comma> default_expression ] ] <right_paren> [ null_treatment ]
-    ;
+lead_or_lag : 'LEAD' | 'LAG' ;
+<lead_or_lag_extent> : value_expression ;
 
-lead_or_lag
-    : 'LEAD'
-    | 'LAG'
-    ;
+<offset> : exact_numeric_literal ;
+<default_expression> : value_expression ;
+null_treatment : 'RESPECT' 'NULLS' | 'IGNORE' 'NULLS' ;
 
-<lead_or_lag_extent>
-    : value_expression
-    ;
+first_or_last_value_function : first_or_last_value <left_paren> value_expression <right_paren> [ null_treatment ] ;
+first_or_last_value : 'FIRST_VALUE' | 'LAST_VALUE' ;
 
-<offset>
-    : exact_numeric_literal
-    ;
-
-<default_expression>
-    : value_expression
-    ;
-
-null_treatment
-    : 'RESPECT' 'NULLS'
-    | 'IGNORE' 'NULLS'
-    ;
-
-first_or_last_value_function
-    : first_or_last_value <left_paren> value_expression <right_paren> [ null_treatment ]
-    ;
-
-first_or_last_value
-    : 'FIRST_VALUE'
-    | 'LAST_VALUE'
-    ;
-
-nth_value_function
-    : 'NTH_VALUE' <left_paren> value_expression <comma> nth_row <right_paren> [ from_first_or_last ] [ null_treatment ]
-    ;
+nth_value_function : 'NTH_VALUE' <left_paren> value_expression <comma> nth_row <right_paren> [ from_first_or_last ] [ null_treatment ] ;
 
 <nth_row>
     : simple_value_specification
     | dynamic_parameter_specification
     ;
 
-from_first_or_last
-    : 'FROM' 'FIRST'
-    | 'FROM' 'LAST'
-    ;
+from_first_or_last : 'FROM' 'FIRST' | 'FROM' 'LAST' ;
 
 <window_name_or_specification>
     : window_name
     | in_line_window_specification
     ;
 
-<in_line_window_specification>
-    : window_specification
-    ;
+<in_line_window_specification> : window_specification ;
 
 (*  6.11 <nested window function> *)
 
@@ -749,13 +408,8 @@ from_first_or_last
     | value_of_expression_at_row
     ;
 
-nested_row_number_function
-    : 'ROW_NUMBER' <left_paren> row_marker <right_paren>
-    ;
-
-value_of_expression_at_row
-    : 'VALUE_OF' <left_paren> value_expression 'AT' row_marker_expression [ <comma> value_of_default_value ] <right_paren>
-    ;
+nested_row_number_function : 'ROW_NUMBER' <left_paren> row_marker <right_paren> ;
+value_of_expression_at_row : 'VALUE_OF' <left_paren> value_expression 'AT' row_marker_expression [ <comma> value_of_default_value ] <right_paren> ;
 
 row_marker
     : 'BEGIN_PARTITION'
@@ -780,54 +434,25 @@ row_marker_delta
     | dynamic_parameter_specification
     ;
 
-<value_of_default_value>
-    : value_expression
-    ;
+<value_of_default_value> : value_expression ;
 
 (*  6.12 <case expression> *)
 
-<case_expression>
-    : case_abbreviation
-    | case_specification
-    ;
+<case_expression> : case_abbreviation | case_specification ;
 
 case_abbreviation
     : 'NULLIF' <left_paren> value_expression <comma> value_expression <right_paren>
     | 'COALESCE' <left_paren> value_expression ( <comma> value_expression )+ <right_paren>
     ;
 
-<case_specification>
-    : simple_case
-    | searched_case
-    ;
-
-simple_case
-    : 'CASE' case_operand simple_when_clause+ [ else_clause ] 'END'
-    ;
-
-searched_case
-    : 'CASE' searched_when_clause+ [ else_clause ] 'END'
-    ;
-
-simple_when_clause
-    : 'WHEN' when_operand_list 'THEN' result
-    ;
-
-searched_when_clause
-    : 'WHEN' search_condition 'THEN' result
-    ;
-
-else_clause
-    : 'ELSE' result
-    ;
-
-case_operand
-    : row_value_predicand
-    ;
-
-when_operand_list
-    : when_operand [ ( <comma> when_operand )+ ]
-    ;
+<case_specification> : simple_case | searched_case ;
+simple_case : 'CASE' case_operand simple_when_clause+ [ else_clause ] 'END' ;
+searched_case : 'CASE' searched_when_clause+ [ else_clause ] 'END' ;
+simple_when_clause : 'WHEN' when_operand_list 'THEN' result ;
+searched_when_clause : 'WHEN' search_condition 'THEN' result ;
+else_clause : 'ELSE' result ;
+case_operand : row_value_predicand ;
+when_operand_list : when_operand [ ( <comma> when_operand )+ ] ;
 
 <when_operand>
     : row_value_predicand
@@ -841,41 +466,27 @@ when_operand_list
     | quantified_comparison_predicate_part_2
     ;
 
-result
-    : result_expression
-    | 'NULL'
-    ;
-
-<result_expression>
-    : value_expression
-    ;
+result : result_expression | 'NULL' ;
+<result_expression> : value_expression ;
 
 (*  6.13 <cast specification> *)
 
-cast_specification
-    : 'CAST' <left_paren> cast_operand 'AS' cast_target <right_paren>
-    ;
+cast_specification : 'CAST' <left_paren> cast_operand 'AS' cast_target <right_paren> ;
 
 <cast_operand>
     : value_expression
     | implicitly_typed_value_specification
     ;
 
-<cast_target>
-    : data_type
-    ;
+<cast_target> : data_type ;
 
 (*  6.15 <field reference> *)
 
-field_reference
-    : value_expression_primary <period> field_name
-    ;
+field_reference : value_expression_primary <period> field_name ;
 
 (*  6.24 <array element reference> *)
 
-array_element_reference
-    : array_value_expression left_bracket_or_trigraph numeric_value_expression right_bracket_or_trigraph
-    ;
+array_element_reference : array_value_expression left_bracket_or_trigraph numeric_value_expression right_bracket_or_trigraph ;
 
 (*  6.26 <value expression> *)
 
@@ -893,9 +504,7 @@ array_element_reference
     | collection_value_expression
     ;
 
-<collection_value_expression>
-    : array_value_expression
-    ;
+<collection_value_expression> : array_value_expression ;
 
 (*  6.27 <numeric value expression> *)
 
@@ -948,29 +557,15 @@ factor
     | binary_position_expression
     ;
 
-<xquery_pattern>
-    : character_value_expression
-    ;
+<xquery_pattern> : character_value_expression ;
 
-<xquery_option_flag>
-    : character_value_expression
-    ;
+<xquery_option_flag> : character_value_expression ;
 
-character_position_expression
-    : 'POSITION' <left_paren> character_value_expression_1 'IN' character_value_expression_2 [ 'USING' char_length_units ] <right_paren>
-    ;
+character_position_expression : 'POSITION' <left_paren> character_value_expression_1 'IN' character_value_expression_2 [ 'USING' char_length_units ] <right_paren> ;
+<character_value_expression_1> : character_value_expression ;
+<character_value_expression_2> : character_value_expression ;
 
-<character_value_expression_1>
-    : character_value_expression
-    ;
-
-<character_value_expression_2>
-    : character_value_expression
-    ;
-
-binary_position_expression
-    : 'POSITION' <left_paren> binary_value_expression 'IN' binary_value_expression <right_paren>
-    ;
+binary_position_expression : 'POSITION' <left_paren> binary_value_expression 'IN' binary_value_expression <right_paren> ;
 
 <length_expression>
     : char_length_expression
@@ -978,9 +573,7 @@ binary_position_expression
     | generic_length_expression
     ;
 
-generic_length_expression
-    : 'LENGTH' <left_paren> length_value_expression <right_paren>
-    ;
+generic_length_expression : 'LENGTH' <left_paren> length_value_expression <right_paren> ;
 
 <length_value_expression>
     : character_value_expression
@@ -988,90 +581,42 @@ generic_length_expression
     | array_value_expression
     ;
 
-char_length_expression
-    : ( 'CHAR_LENGTH' | 'CHARACTER_LENGTH' ) <left_paren> character_value_expression [ 'USING' char_length_units ] <right_paren>
-    ;
+char_length_expression : ( 'CHAR_LENGTH' | 'CHARACTER_LENGTH' ) <left_paren> character_value_expression [ 'USING' char_length_units ] <right_paren> ;
+octet_length_expression : 'OCTET_LENGTH' <left_paren> string_value_expression <right_paren> ;
 
-octet_length_expression
-    : 'OCTET_LENGTH' <left_paren> string_value_expression <right_paren>
-    ;
-
-
-
-extract_expression
-    : 'EXTRACT' <left_paren> extract_field 'FROM' extract_source <right_paren>
-    ;
+extract_expression : 'EXTRACT' <left_paren> extract_field 'FROM' extract_source <right_paren> ;
 
 <extract_field>
     : primary_datetime_field
     | time_zone_field
     ;
 
-time_zone_field
-    : 'TIMEZONE_HOUR'
-    | 'TIMEZONE_MINUTE'
-    ;
+time_zone_field : 'TIMEZONE_HOUR' | 'TIMEZONE_MINUTE' ;
 
 <extract_source>
     : datetime_value_expression
     | interval_value_expression
     ;
 
-cardinality_expression
-    : 'CARDINALITY' <left_paren> collection_value_expression <right_paren>
-    ;
+cardinality_expression : 'CARDINALITY' <left_paren> collection_value_expression <right_paren> ;
+max_cardinality_expression : 'ARRAY_MAX_CARDINALITY' <left_paren> array_value_expression <right_paren> ;
+absolute_value_expression : 'ABS' <left_paren> numeric_value_expression <right_paren> ;
 
-max_cardinality_expression
-    : 'ARRAY_MAX_CARDINALITY' <left_paren> array_value_expression <right_paren>
-    ;
+modulus_expression : 'MOD' <left_paren> numeric_value_expression_dividend <comma> numeric_value_expression_divisor <right_paren> ;
+<numeric_value_expression_dividend> : numeric_value_expression ;
+<numeric_value_expression_divisor> : numeric_value_expression ;
 
-absolute_value_expression
-    : 'ABS' <left_paren> numeric_value_expression <right_paren>
-    ;
+natural_logarithm : 'LN' <left_paren> numeric_value_expression <right_paren> ;
+exponential_function : 'EXP' <left_paren> numeric_value_expression <right_paren> ;
 
-modulus_expression
-    : 'MOD' <left_paren> numeric_value_expression_dividend <comma> numeric_value_expression_divisor <right_paren>
-    ;
+power_function : 'POWER' <left_paren> numeric_value_expression_base <comma> numeric_value_expression_exponent <right_paren> ;
 
-<numeric_value_expression_dividend>
-    : numeric_value_expression
-    ;
+<numeric_value_expression_base> : numeric_value_expression ;
+<numeric_value_expression_exponent> : numeric_value_expression ;
 
-<numeric_value_expression_divisor>
-    : numeric_value_expression
-    ;
-
-natural_logarithm
-    : 'LN' <left_paren> numeric_value_expression <right_paren>
-    ;
-
-exponential_function
-    : 'EXP' <left_paren> numeric_value_expression <right_paren>
-    ;
-
-power_function
-    : 'POWER' <left_paren> numeric_value_expression_base <comma> numeric_value_expression_exponent <right_paren>
-    ;
-
-<numeric_value_expression_base>
-    : numeric_value_expression
-    ;
-
-<numeric_value_expression_exponent>
-    : numeric_value_expression
-    ;
-
-square_root
-    : 'SQRT' <left_paren> numeric_value_expression <right_paren>
-    ;
-
-floor_function
-    : 'FLOOR' <left_paren> numeric_value_expression <right_paren>
-    ;
-
-ceiling_function
-    : ( 'CEIL' | 'CEILING' ) <left_paren> numeric_value_expression <right_paren>
-    ;
+square_root : 'SQRT' <left_paren> numeric_value_expression <right_paren> ;
+floor_function : 'FLOOR' <left_paren> numeric_value_expression <right_paren> ;
+ceiling_function : ( 'CEIL' | 'CEILING' ) <left_paren> numeric_value_expression <right_paren> ;
 
 (*  6.29 <string value expression> *)
 
@@ -1085,13 +630,9 @@ ceiling_function
     | character_factor
     ;
 
-concatenation
-    : character_value_expression concatenation_operator character_factor
-    ;
+concatenation : character_value_expression concatenation_operator character_factor ;
 
-<character_factor>
-    : character_primary
-    ;
+<character_factor> : character_primary ;
 
 <character_primary>
     : value_expression_primary
@@ -1103,18 +644,14 @@ concatenation
     | binary_factor
     ;
 
-<binary_factor>
-    : binary_primary
-    ;
+<binary_factor> : binary_primary ;
 
 <binary_primary>
     : value_expression_primary
     | string_value_function
     ;
 
-binary_concatenation
-    : binary_value_expression concatenation_operator binary_factor
-    ;
+binary_concatenation : binary_value_expression concatenation_operator binary_factor ;
 
 (*  6.30 <string value function> *)
 
@@ -1135,31 +672,13 @@ character_substring_function
     : 'SUBSTRING' <left_paren> character_value_expression 'FROM' start_position [ 'FOR' string_length ] [ 'USING' char_length_units ] <right_paren>
     ;
 
-fold
-    : ( 'UPPER' | 'LOWER' ) <left_paren> character_value_expression <right_paren>
-    ;
+fold : ( 'UPPER' | 'LOWER' ) <left_paren> character_value_expression <right_paren> ;
 
-trim_function
-    : 'TRIM' <left_paren> trim_operands <right_paren>
-    ;
-
-trim_operands
-    : [ [ trim_specification ] [ trim_character ] 'FROM' ] trim_source
-    ;
-
-<trim_source>
-    : character_value_expression
-    ;
-
-trim_specification
-    : 'LEADING'
-    | 'TRAILING'
-    | 'BOTH'
-    ;
-
-<trim_character>
-    : character_value_expression
-    ;
+trim_function : 'TRIM' <left_paren> trim_operands <right_paren> ;
+trim_operands : [ [ trim_specification ] [ trim_character ] 'FROM' ] trim_source ;
+<trim_source> : character_value_expression ;
+trim_specification : 'LEADING' | 'TRAILING' | 'BOTH' ;
+<trim_character> : character_value_expression ;
 
 character_overlay_function
     : 'OVERLAY' <left_paren> character_value_expression 'PLACING' character_value_expression 'FROM' start_position [ 'FOR' string_length ] [ 'USING' char_length_units ] <right_paren>
@@ -1171,44 +690,30 @@ session_variable_function
     | 'CURRENT_DATABASE'
     ;
 
-
 <binary_value_function>
     : binary_substring_function
     | binary_trim_function
     | binary_overlay_function
     ;
 
-binary_substring_function
-    : 'SUBSTRING' <left_paren> binary_value_expression 'FROM' start_position [ 'FOR' string_length ] <right_paren>
-    ;
+binary_substring_function : 'SUBSTRING' <left_paren> binary_value_expression 'FROM' start_position [ 'FOR' string_length ] <right_paren> ;
 
-binary_trim_function
-    : 'TRIM' <left_paren> binary_trim_operands <right_paren>
-    ;
+binary_trim_function : 'TRIM' <left_paren> binary_trim_operands <right_paren> ;
 
 binary_trim_operands
     : [ [ trim_specification ] [ trim_octet ] 'FROM' ] binary_trim_source
     ;
 
-<binary_trim_source>
-    : binary_value_expression
-    ;
-
-<trim_octet>
-    : binary_value_expression
-    ;
+<binary_trim_source> : binary_value_expression ;
+<trim_octet> : binary_value_expression ;
 
 binary_overlay_function
     : 'OVERLAY' <left_paren> binary_value_expression 'PLACING' binary_value_expression 'FROM' start_position [ 'FOR' string_length ] <right_paren>
     ;
 
-<start_position>
-    : numeric_value_expression
-    ;
+<start_position> : numeric_value_expression ;
 
-<string_length>
-    : numeric_value_expression
-    ;
+<string_length> : numeric_value_expression ;
 
 (*  6.31 <datetime value expression> *)
 
@@ -1219,13 +724,9 @@ datetime_value_expression
     | datetime_value_expression minus_sign interval_term
     ;
 
-<datetime_term>
-    : datetime_factor
-    ;
+<datetime_term> : datetime_factor ;
 
-datetime_factor
-    : datetime_primary
-    ;
+datetime_factor : datetime_primary ;
 
 <datetime_primary>
     : value_expression_primary
@@ -1244,25 +745,11 @@ datetime_factor
     | date_trunc_datetime_function
     ;
 
-current_date_value_function
-    : 'CURRENT_DATE'
-    ;
-
-current_time_value_function
-    : 'CURRENT_TIME' [ <left_paren> time_precision <right_paren> ]
-    ;
-
-current_local_time_value_function
-    : 'LOCALTIME' [ <left_paren> time_precision <right_paren> ]
-    ;
-
-current_timestamp_value_function
-    : 'CURRENT_TIMESTAMP' [ <left_paren> timestamp_precision <right_paren> ]
-    ;
-
-current_local_timestamp_value_function
-    : 'LOCALTIMESTAMP' [ <left_paren> timestamp_precision <right_paren> ]
-    ;
+current_date_value_function : 'CURRENT_DATE' ;
+current_time_value_function : 'CURRENT_TIME' [ <left_paren> time_precision <right_paren> ] ;
+current_local_time_value_function : 'LOCALTIME' [ <left_paren> time_precision <right_paren> ] ;
+current_timestamp_value_function : 'CURRENT_TIMESTAMP' [ <left_paren> timestamp_precision <right_paren> ] ;
+current_local_timestamp_value_function : 'LOCALTIMESTAMP' [ <left_paren> timestamp_precision <right_paren> ] ;
 
 (*  6.33 <interval value expression> *)
 
@@ -1279,26 +766,16 @@ interval_term
     | term asterisk interval_factor
     ;
 
-interval_factor
-    : [ sign ] interval_primary
-    ;
+interval_factor : [ sign ] interval_primary ;
 
 interval_primary
     : value_expression_primary [ interval_qualifier ]
     | interval_value_function
     ;
 
-<interval_value_expression_1>
-    : interval_value_expression
-    ;
-
-<interval_term_1>
-    : interval_term
-    ;
-
-<interval_term_2>
-    : interval_term
-    ;
+<interval_value_expression_1> : interval_value_expression ;
+<interval_term_1> : interval_term ;
+<interval_term_2> : interval_term ;
 
 (*  6.34 <interval value function> *)
 
@@ -1308,79 +785,36 @@ interval_primary
     | age_function
     ;
 
-interval_absolute_value_function
-    : 'ABS' <left_paren> interval_value_expression <right_paren>
-    ;
+interval_absolute_value_function : 'ABS' <left_paren> interval_value_expression <right_paren> ;
 
 (*  6.35 <boolean value expression> *)
 
-boolean_value_expression
-    : boolean_term
-    | boolean_value_expression 'OR' boolean_term
-    ;
+boolean_value_expression : boolean_term | boolean_value_expression 'OR' boolean_term ;
+boolean_term : boolean_factor | boolean_term 'AND' boolean_factor ;
+boolean_factor : [ 'NOT' ] boolean_test ;
+boolean_test : boolean_primary [ 'IS' [ 'NOT' ] truth_value ] ;
+truth_value : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
 
-boolean_term
-    : boolean_factor
-    | boolean_term 'AND' boolean_factor
-    ;
-
-boolean_factor
-    : [ 'NOT' ] boolean_test
-    ;
-
-boolean_test
-    : boolean_primary [ 'IS' [ 'NOT' ] truth_value ]
-    ;
-
-truth_value
-    : 'TRUE'
-    | 'FALSE'
-    | 'UNKNOWN'
-    ;
-
-<boolean_primary>
-    : predicate
-    | boolean_predicand
-    ;
+<boolean_primary> : predicate | boolean_predicand ;
 
 <boolean_predicand>
     : parenthesized_boolean_value_expression
     | nonparenthesized_value_expression_primary
     ;
 
-<parenthesized_boolean_value_expression>
-    : <left_paren> boolean_value_expression <right_paren>
-    ;
+<parenthesized_boolean_value_expression> : <left_paren> boolean_value_expression <right_paren> ;
 
 (*  6.36 <array value expression> *)
 
-<array_value_expression>
-    : array_concatenation
-    | array_primary
-    ;
-
-array_concatenation
-    : array_value_expression_1 concatenation_operator array_primary
-    ;
-
-<array_value_expression_1>
-    : array_value_expression
-    ;
-
-<array_primary>
-    : array_value_function
-    | value_expression_primary
-    ;
+<array_value_expression> : array_concatenation | array_primary ;
+array_concatenation : array_value_expression_1 concatenation_operator array_primary ;
+<array_value_expression_1> : array_value_expression ;
+<array_primary> : array_value_function | value_expression_primary ;
 
 (*  6.37 <array value function> *)
 
-<array_value_function>
-    : trim_array_function
-    ;
-
-trim_array_function
-    : 'TRIM_ARRAY' <left_paren> array_value_expression <comma> numeric_value_expression <right_paren>
-    ;
+<array_value_function> : trim_array_function ;
+trim_array_function : 'TRIM_ARRAY' <left_paren> array_value_expression <comma> numeric_value_expression <right_paren> ;
 
 (*  6.38 <array value constructor> *)
 
@@ -1389,21 +823,13 @@ trim_array_function
     | array_value_constructor_by_query
     ;
 
-array_value_constructor_by_enumeration
-    : 'ARRAY'? <left_bracket_or_trigraph> array_element_list? <right_bracket_or_trigraph>
-    ;
+array_value_constructor_by_enumeration : 'ARRAY'? <left_bracket_or_trigraph> array_element_list? <right_bracket_or_trigraph> ;
 
-array_element_list
-    : array_element [ ( <comma> array_element )+ ]
-    ;
+array_element_list : array_element [ ( <comma> array_element )+ ] ;
 
-<array_element>
-    : value_expression
-    ;
+<array_element> : value_expression ;
 
-array_value_constructor_by_query
-    : 'ARRAY' table_subquery
-    ;
+array_value_constructor_by_query : 'ARRAY' table_subquery ;
 
 (*  7 Query expressions *)
 
@@ -1421,13 +847,8 @@ explicit_row_value_constructor
     | row_subquery
     ;
 
-row_value_constructor_element_list
-    : row_value_constructor_element [ ( <comma> row_value_constructor_element )+ ]
-    ;
-
-row_value_constructor_element
-    : value_expression
-    ;
+row_value_constructor_element_list : row_value_constructor_element [ ( <comma> row_value_constructor_element )+ ] ;
+row_value_constructor_element : value_expression ;
 
 contextually_typed_row_value_constructor
     : common_value_expression
@@ -1481,17 +902,9 @@ contextually_typed_row_value_constructor_element
 
 (*  7.3      <table value constructor> *)
 
-table_value_constructor
-    : 'VALUES' row_value_expression_list
-    ;
-
-row_value_expression_list
-    : table_row_value_expression [ ( <comma> table_row_value_expression )+ ]
-    ;
-
-contextually_typed_table_value_constructor
-    : 'VALUES' contextually_typed_row_value_expression_list
-    ;
+table_value_constructor : 'VALUES' row_value_expression_list ;
+row_value_expression_list : table_row_value_expression [ ( <comma> table_row_value_expression )+ ] ;
+contextually_typed_table_value_constructor : 'VALUES' contextually_typed_row_value_expression_list ;
 
 contextually_typed_row_value_expression_list
     : contextually_typed_row_value_expression [ ( <comma> contextually_typed_row_value_expression )+ ]
@@ -1499,30 +912,18 @@ contextually_typed_row_value_expression_list
 
 (*  7.4      <table expression> *)
 
-table_expression
-    : from_clause [ where_clause ] [ group_by_clause ] [ having_clause ] [ window_clause ]
-    ;
+table_expression : from_clause [ where_clause ] [ group_by_clause ] [ having_clause ] [ window_clause ] ;
 
 (*  7.5        <from clause> *)
 
-from_clause
-    : 'FROM' table_reference_list
-    ;
+from_clause : 'FROM' table_reference_list ;
 
-table_reference_list
-    : table_reference [ ( <comma> table_reference )+ ]
-    ;
+table_reference_list : table_reference [ ( <comma> table_reference )+ ] ;
 
 (*  7.6     <table reference> *)
 
-<table_reference>
-    : table_factor
-    | joined_table
-    ;
-
-<table_factor>
-    : table_primary
-    ;
+<table_reference> : table_factor | joined_table ;
+<table_factor> : table_primary ;
 
 table_primary
     : table_or_query_name [ ( query_system_time_period_specification | query_valid_time_period_specification )+ ] [ correlation_or_recognition ]
@@ -1549,41 +950,20 @@ query_valid_time_period_specification
     | 'FOR' valid_time_period_name 'ALL'
     ;
 
-<point_in_time_1>
-    : point_in_time
-    ;
+<point_in_time_1> : point_in_time ;
+<point_in_time_2> : point_in_time ;
+point_in_time : datetime_value_expression ;
 
-<point_in_time_2>
-    : point_in_time
-    ;
+lateral_derived_table : 'LATERAL' table_subquery ;
 
-point_in_time
-    : datetime_value_expression
-    ;
+collection_derived_table : 'UNNEST' <left_paren> collection_value_expression <right_paren> [ 'WITH' 'ORDINALITY' ] ;
 
-lateral_derived_table
-    : 'LATERAL' table_subquery
-    ;
+<derived_table> : table_subquery ;
 
-collection_derived_table
-    : 'UNNEST' <left_paren> collection_value_expression <right_paren> [ 'WITH' 'ORDINALITY' ]
-    ;
+<table_or_query_name> : table_name ;
 
-<derived_table>
-    : table_subquery
-    ;
-
-<table_or_query_name>
-    : table_name
-    ;
-
-<derived_column_list>
-    : column_name_list
-    ;
-
-column_name_list
-    : column_name [ ( <comma> column_name )+ ]
-    ;
+<derived_column_list> : column_name_list ;
+column_name_list : column_name [ ( <comma> column_name )+ ] ;
 
 <parenthesized_joined_table>
     : <left_paren> parenthesized_joined_table <right_paren>
@@ -1592,238 +972,97 @@ column_name_list
 
 (*  7.7     <joined table> *)
 
-<joined_table>
-    : qualified_join
-    ;
+<joined_table> : qualified_join ;
 
-qualified_join
-    : table_reference [ join_type ] 'JOIN' table_reference join_specification
-    ;
+qualified_join : table_reference [ join_type ] 'JOIN' table_reference join_specification ;
 
-<join_specification>
-    : join_condition
-    | named_columns_join
-    ;
+<join_specification> : join_condition | named_columns_join ;
 
-join_condition
-    : 'ON' search_condition
-    ;
+join_condition : 'ON' search_condition ;
 
-named_columns_join
-    : 'USING' <left_paren> join_column_list <right_paren>
-    ;
+named_columns_join : 'USING' <left_paren> join_column_list <right_paren> ;
 
-join_type
-    : 'INNER'
-    | outer_join_type [ 'OUTER' ]
-    ;
+join_type : 'INNER' | outer_join_type [ 'OUTER' ] ;
+outer_join_type : 'LEFT' | 'RIGHT' | 'FULL' ;
 
-outer_join_type
-    : 'LEFT'
-    | 'RIGHT'
-    | 'FULL'
-    ;
-
-<join_column_list>
-    : column_name_list
-    ;
+<join_column_list> : column_name_list ;
 
 (*  7.8      <where clause> *)
 
-where_clause
-    : 'WHERE' search_condition
-    ;
+where_clause : 'WHERE' search_condition ;
 
 (*  7.9     <group by clause> *)
 
-group_by_clause
-    : 'GROUP' 'BY' [ set_quantifier ] grouping_element_list
-    ;
-
-grouping_element_list
-    : grouping_element [ ( <comma> grouping_element )+ ]
-    ;
+group_by_clause : 'GROUP' 'BY' [ set_quantifier ] grouping_element_list ;
+grouping_element_list : grouping_element [ ( <comma> grouping_element )+ ] ;
 
 <grouping_element>
     : ordinary_grouping_set
     | empty_grouping_set
     ;
 
-<ordinary_grouping_set>
-    : grouping_column_reference
-    ;
+<ordinary_grouping_set> : grouping_column_reference ;
 
-<grouping_column_reference>
-    : column_reference
-    ;
+<grouping_column_reference> : column_reference ;
 
-empty_grouping_set
-    : <left_paren> <right_paren>
-    ;
+empty_grouping_set : <left_paren> <right_paren> ;
 
 (*  7.10 <having clause> *)
 
-having_clause
-    : 'HAVING' search_condition
-    ;
+having_clause : 'HAVING' search_condition ;
 
 (*  7.11 <window clause> *)
 
-window_clause
-    : 'WINDOW' window_definition_list
-    ;
+window_clause : 'WINDOW' window_definition_list ;
+window_definition_list : window_definition [ ( <comma> window_definition )+ ] ;
+window_definition : new_window_name 'AS' window_specification ;
+<new_window_name> : window_name ;
+window_specification : <left_paren> window_specification_details <right_paren> ;
+window_specification_details : [ existing_window_name ] [ window_partition_clause ] [ window_order_clause ] [ window_frame_clause ] ;
+<existing_window_name> : window_name ;
+window_partition_clause : 'PARTITION' 'BY' window_partition_column_reference_list ;
+window_partition_column_reference_list : window_partition_column_reference [ ( <comma> window_partition_column_reference )+ ] ;
+window_partition_column_reference : column_reference ;
+window_order_clause : 'ORDER' 'BY' sort_specification_list ;
+window_frame_clause : window_frame_units window_frame_extent [ window_frame_exclusion ] ;
 
-window_definition_list
-    : window_definition [ ( <comma> window_definition )+ ]
-    ;
+window_frame_units : 'ROWS' | 'RANGE' | 'GROUPS' ;
 
-window_definition
-    : new_window_name 'AS' window_specification
-    ;
+<window_frame_extent> : window_frame_start | window_frame_between ;
 
-<new_window_name>
-    : window_name
-    ;
+window_frame_start : 'UNBOUNDED' 'PRECEDING' | window_frame_preceding | 'CURRENT' 'ROW' ;
+window_frame_preceding : unsigned_value_specification 'PRECEDING' ;
+window_frame_between : 'BETWEEN' window_frame_bound_1 'AND' window_frame_bound_2 ;
+<window_frame_bound_1> : window_frame_bound ;
+<window_frame_bound_2> : window_frame_bound ;
 
-window_specification
-    : <left_paren> window_specification_details <right_paren>
-    ;
+window_frame_bound : window_frame_start | 'UNBOUNDED' 'FOLLOWING' | window_frame_following ;
+window_frame_following : unsigned_value_specification 'FOLLOWING' ;
 
-window_specification_details
-    : [ existing_window_name ] [ window_partition_clause ] [ window_order_clause ] [ window_frame_clause ]
-    ;
-
-<existing_window_name>
-    : window_name
-    ;
-
-window_partition_clause
-    : 'PARTITION' 'BY' window_partition_column_reference_list
-    ;
-
-window_partition_column_reference_list
-    : window_partition_column_reference [ ( <comma> window_partition_column_reference )+ ]
-    ;
-
-window_partition_column_reference
-    : column_reference
-    ;
-
-window_order_clause
-    : 'ORDER' 'BY' sort_specification_list
-    ;
-
-window_frame_clause
-    : window_frame_units window_frame_extent [ window_frame_exclusion ]
-    ;
-
-window_frame_units
-    : 'ROWS'
-    | 'RANGE'
-    | 'GROUPS'
-    ;
-
-<window_frame_extent>
-    : window_frame_start
-    | window_frame_between
-    ;
-
-window_frame_start
-    : 'UNBOUNDED' 'PRECEDING'
-    | window_frame_preceding
-    | 'CURRENT' 'ROW'
-    ;
-
-window_frame_preceding
-    : unsigned_value_specification 'PRECEDING'
-    ;
-
-window_frame_between
-    : 'BETWEEN' window_frame_bound_1 'AND' window_frame_bound_2
-    ;
-
-<window_frame_bound_1>
-    : window_frame_bound
-    ;
-
-<window_frame_bound_2>
-    : window_frame_bound
-    ;
-
-window_frame_bound
-    : window_frame_start
-    | 'UNBOUNDED' 'FOLLOWING'
-    | window_frame_following
-    ;
-
-window_frame_following
-    : unsigned_value_specification 'FOLLOWING'
-    ;
-
-window_frame_exclusion
-    : 'EXCLUDE' 'CURRENT' 'ROW'
-    | 'EXCLUDE' 'GROUP'
-    | 'EXCLUDE' 'TIES'
-    | 'EXCLUDE' 'NO' 'OTHERS'
-    ;
+window_frame_exclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUDE' 'TIES' | 'EXCLUDE' 'NO' 'OTHERS' ;
 
 (*  7.12 <query specification> *)
 
-query_specification
-    : 'SELECT' [ set_quantifier ] select_list table_expression
-    ;
+query_specification : 'SELECT' [ set_quantifier ] select_list table_expression ;
 
-select_list
-    : asterisk
-    | select_sublist [ ( <comma> select_sublist )+ ]
-    ;
+select_list : asterisk | select_sublist [ ( <comma> select_sublist )+ ] ;
+<select_sublist> : derived_column | qualified_asterisk ;
 
-<select_sublist>
-    : derived_column
-    | qualified_asterisk
-    ;
+qualified_asterisk : asterisked_identifier_chain <period> asterisk ;
+asterisked_identifier_chain : asterisked_identifier ;
+<asterisked_identifier> : identifier ;
 
-qualified_asterisk
-    : asterisked_identifier_chain <period> asterisk
-    ;
-
-asterisked_identifier_chain
-    : asterisked_identifier
-    ;
-
-<asterisked_identifier>
-    : identifier
-    ;
-
-derived_column
-    : value_expression [ as_clause ]
-    ;
-
-as_clause
-    : ( 'AS' column_name ) | !#'(?i)(\b(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\b)' column_name
-    ;
+derived_column : value_expression [ as_clause ] ;
+as_clause : ( 'AS' column_name ) | !#'(?i)(\b(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\b)' column_name ;
 
 (*  7.13 <query expression> *)
 
-query_expression
-    : [ with_clause ] query_expression_body [ order_by_clause ] [ result_offset_clause ] [ fetch_first_clause ]
-    ;
+query_expression : [ with_clause ] query_expression_body [ order_by_clause ] [ result_offset_clause ] [ fetch_first_clause ] ;
 
-with_clause
-    : 'WITH' [ 'RECURSIVE' ] with_list
-    ;
-
-with_list
-    : with_list_element [ ( <comma> with_list_element )+ ]
-    ;
-
-with_list_element
-    : query_name [ <left_paren> with_column_list <right_paren> ] 'AS' table_subquery
-    ;
-
-<with_column_list>
-    : column_name_list
-    ;
+with_clause : 'WITH' [ 'RECURSIVE' ] with_list ;
+with_list : with_list_element [ ( <comma> with_list_element )+ ] ;
+with_list_element : query_name [ <left_paren> with_column_list <right_paren> ] 'AS' table_subquery ;
+<with_column_list> : column_name_list ;
 
 query_expression_body
     : query_term
@@ -1831,63 +1070,33 @@ query_expression_body
     | query_expression_body 'EXCEPT' [ 'ALL' | 'DISTINCT' ] query_term
     ;
 
-query_term
-    : query_primary
-    | query_term 'INTERSECT' [ 'ALL' | 'DISTINCT' ] query_primary
-    ;
+query_term : query_primary | query_term 'INTERSECT' [ 'ALL' | 'DISTINCT' ] query_primary ;
 
-query_primary
-    : simple_table
-    | <left_paren> query_expression_body <right_paren>
-    ;
+query_primary : simple_table | <left_paren> query_expression_body <right_paren> ;
 
-<simple_table>
-    : query_specification
-    | table_value_constructor
-    ;
+<simple_table> : query_specification | table_value_constructor ;
 
-order_by_clause
-    : 'ORDER' 'BY' sort_specification_list
-    ;
+order_by_clause : 'ORDER' 'BY' sort_specification_list ;
 
-result_offset_clause
-    : 'OFFSET' offset_row_count ( 'ROW' | 'ROWS' )?
-    ;
+result_offset_clause : 'OFFSET' offset_row_count ( 'ROW' | 'ROWS' )? ;
 
 fetch_first_clause
     : 'FETCH' ( 'FIRST' | 'NEXT' ) [ fetch_first_quantity ] ( 'ROW' | 'ROWS' ) 'ONLY'
     | 'LIMIT' fetch_first_quantity
     ;
 
-<fetch_first_quantity>
-    : fetch_first_row_count
-    ;
+<fetch_first_quantity> : fetch_first_row_count ;
 
-<offset_row_count>
-    : simple_value_specification
-    ;
+<offset_row_count> : simple_value_specification ;
 
-<fetch_first_row_count>
-    : simple_value_specification
-    ;
+<fetch_first_row_count> : simple_value_specification ;
 
 (*  7.15 <subquery> *)
 
-<scalar_subquery>
-    : subquery
-    ;
-
-<row_subquery>
-    : subquery
-    ;
-
-<table_subquery>
-    : subquery
-    ;
-
-subquery
-    : <left_paren> query_expression <right_paren>
-    ;
+<scalar_subquery> : subquery ;
+<row_subquery> : subquery ;
+<table_subquery> : subquery ;
+subquery : <left_paren> query_expression <right_paren> ;
 
 (*  8 Predicates *)
 
@@ -1909,13 +1118,9 @@ subquery
 
 (*  8.2        <comparison predicate> *)
 
-comparison_predicate
-    : row_value_predicand comparison_predicate_part_2
-    ;
+comparison_predicate : row_value_predicand comparison_predicate_part_2 ;
 
-comparison_predicate_part_2
-    : comp_op row_value_predicand
-    ;
+comparison_predicate_part_2 : comp_op row_value_predicand ;
 
 <comp_op>
     : equals_operator
@@ -1928,32 +1133,21 @@ comparison_predicate_part_2
 
 (*  8.3      <between predicate> *)
 
-between_predicate
-    : row_value_predicand between_predicate_part_2
-    ;
+between_predicate : row_value_predicand between_predicate_part_2 ;
 
-between_predicate_part_2
-    : [ 'NOT' ] 'BETWEEN' [ 'ASYMMETRIC' | 'SYMMETRIC' ] row_value_predicand 'AND' row_value_predicand
-    ;
+between_predicate_part_2 : [ 'NOT' ] 'BETWEEN' [ 'ASYMMETRIC' | 'SYMMETRIC' ] row_value_predicand 'AND' row_value_predicand ;
 
 (*  8.4      <in predicate> *)
 
-in_predicate
-    : row_value_predicand in_predicate_part_2
-    ;
-
-in_predicate_part_2
-    : [ 'NOT' ] 'IN' in_predicate_value
-    ;
+in_predicate : row_value_predicand in_predicate_part_2 ;
+in_predicate_part_2 : [ 'NOT' ] 'IN' in_predicate_value ;
 
 in_predicate_value
     : table_subquery
     | <left_paren> in_value_list <right_paren>
     ;
 
-in_value_list
-    : table_row_value_expression [ ( <comma> table_row_value_expression )+ ]
-    ;
+in_value_list : table_row_value_expression [ ( <comma> table_row_value_expression )+ ] ;
 
 (*  8.5        <like predicate> *)
 
@@ -1962,99 +1156,43 @@ in_value_list
     | octet_like_predicate
     ;
 
-character_like_predicate
-    : row_value_predicand character_like_predicate_part_2
-    ;
+character_like_predicate : row_value_predicand character_like_predicate_part_2 ;
+character_like_predicate_part_2 : [ 'NOT' ] 'LIKE' character_pattern [ 'ESCAPE' escape_character ] ;
+<character_pattern> : character_value_expression ;
+<escape_character> : character_value_expression ;
 
-character_like_predicate_part_2
-    : [ 'NOT' ] 'LIKE' character_pattern [ 'ESCAPE' escape_character ]
-    ;
-
-<character_pattern>
-    : character_value_expression
-    ;
-
-<escape_character>
-    : character_value_expression
-    ;
-
-octet_like_predicate
-    : row_value_predicand octet_like_predicate_part_2
-    ;
-
-octet_like_predicate_part_2
-    : [ 'NOT' ] 'LIKE' octet_pattern [ 'ESCAPE' escape_octet ]
-    ;
-
-<octet_pattern>
-    : binary_value_expression
-    ;
-
-<escape_octet>
-    : binary_value_expression
-    ;
+octet_like_predicate : row_value_predicand octet_like_predicate_part_2 ;
+octet_like_predicate_part_2 : [ 'NOT' ] 'LIKE' octet_pattern [ 'ESCAPE' escape_octet ] ;
+<octet_pattern> : binary_value_expression ;
+<escape_octet> : binary_value_expression ;
 
 (*  8.7        <regex like predicate> *)
 
-regex_like_predicate
-    : row_value_predicand regex_like_predicate_part_2
-    ;
-
-regex_like_predicate_part_2
-    : [ 'NOT' ] 'LIKE_REGEX' xquery_pattern [ 'FLAG' xquery_option_flag ]
-    ;
+regex_like_predicate : row_value_predicand regex_like_predicate_part_2 ;
+regex_like_predicate_part_2 : [ 'NOT' ] 'LIKE_REGEX' xquery_pattern [ 'FLAG' xquery_option_flag ] ;
 
 (* Postgres infix regex predicates *)
-postgres_regex_predicate
-    : character_value_expression postgres_regex_operator xquery_pattern
-    ;
 
-postgres_regex_operator
-    : '~'
-    | '~*'
-    | '!~'
-    | '!~*'
-    ;
+postgres_regex_predicate : character_value_expression postgres_regex_operator xquery_pattern ;
+
+postgres_regex_operator : '~' | '~*' | '!~' | '!~*' ;
 
 (*  8.8        <null predicate> *)
 
-null_predicate
-    : row_value_predicand null_predicate_part_2
-    ;
-
-null_predicate_part_2
-    : 'IS' [ 'NOT' ] 'NULL'
-    ;
+null_predicate : row_value_predicand null_predicate_part_2 ;
+null_predicate_part_2 : 'IS' [ 'NOT' ] 'NULL' ;
 
 (*  8.9        <quantified comparison predicate> *)
 
-quantified_comparison_predicate
-    : row_value_predicand quantified_comparison_predicate_part_2
-    ;
-
-quantified_comparison_predicate_part_2
-    : comp_op quantifier table_subquery
-    ;
-
-<quantifier>
-    : all
-    | some
-    ;
-
-all
-    : 'ALL'
-    ;
-
-some
-    : 'SOME'
-    | 'ANY'
-    ;
+quantified_comparison_predicate : row_value_predicand quantified_comparison_predicate_part_2 ;
+quantified_comparison_predicate_part_2 : comp_op quantifier table_subquery ;
+<quantifier> : all | some ;
+all : 'ALL' ;
+some : 'SOME' | 'ANY' ;
 
 (*  8.10 <exists predicate> *)
 
-exists_predicate
-    : 'EXISTS' table_subquery
-    ;
+exists_predicate : 'EXISTS' table_subquery ;
 
 (*  8.20 <period predicate> *)
 
@@ -2068,97 +1206,47 @@ exists_predicate
     | period_immediately_succeeds_predicate
     ;
 
-period_overlaps_predicate
-    : period_predicand_1 period_overlaps_predicate_part_2
-    ;
-
-period_overlaps_predicate_part_2
-    : 'OVERLAPS' period_predicand_2
-    ;
-
-<period_predicand_1>
-    : period_predicand
-    ;
-
-<period_predicand_2>
-    : period_predicand
-    ;
+period_overlaps_predicate : period_predicand_1 period_overlaps_predicate_part_2 ;
+period_overlaps_predicate_part_2 : 'OVERLAPS' period_predicand_2 ;
+<period_predicand_1> : period_predicand ;
+<period_predicand_2> : period_predicand ;
 
 period_predicand
     : column_reference
     | 'PERIOD' <left_paren> period_start_value <comma> period_end_value <right_paren>
     ;
 
-<period_reference>
-    : basic_identifier_chain
-    ;
+<period_reference> : basic_identifier_chain ;
 
-<period_start_value>
-    : datetime_value_expression
-    ;
+<period_start_value> : datetime_value_expression ;
+<period_end_value> : datetime_value_expression ;
 
-<period_end_value>
-    : datetime_value_expression
-    ;
+period_equals_predicate : period_predicand_1 period_equals_predicate_part_2 ;
+period_equals_predicate_part_2 : 'EQUALS' period_predicand_2 ;
 
-period_equals_predicate
-    : period_predicand_1 period_equals_predicate_part_2
-    ;
-
-period_equals_predicate_part_2
-    : 'EQUALS' period_predicand_2
-    ;
-
-period_contains_predicate
-    : period_predicand_1 period_contains_predicate_part_2
-    ;
-
-period_contains_predicate_part_2
-    : 'CONTAINS' period_or_point_in_time_predicand
-    ;
+period_contains_predicate : period_predicand_1 period_contains_predicate_part_2 ;
+period_contains_predicate_part_2 : 'CONTAINS' period_or_point_in_time_predicand ;
 
 <period_or_point_in_time_predicand>
     : period_predicand
     | datetime_value_expression
     ;
 
-period_precedes_predicate
-    : period_predicand_1 period_precedes_predicate_part_2
-    ;
+period_precedes_predicate : period_predicand_1 period_precedes_predicate_part_2 ;
+period_precedes_predicate_part_2 : 'PRECEDES' period_predicand_2 ;
 
-period_precedes_predicate_part_2
-    : 'PRECEDES' period_predicand_2
-    ;
+period_succeeds_predicate : period_predicand_1 period_succeeds_predicate_part_2 ;
+period_succeeds_predicate_part_2 : 'SUCCEEDS' period_predicand_2 ;
 
-period_succeeds_predicate
-    : period_predicand_1 period_succeeds_predicate_part_2
-    ;
+period_immediately_precedes_predicate : period_predicand_1 period_immediately_precedes_predicate_part_2 ;
+period_immediately_precedes_predicate_part_2 : 'IMMEDIATELY' 'PRECEDES' period_predicand_2 ;
 
-period_succeeds_predicate_part_2
-    : 'SUCCEEDS' period_predicand_2
-    ;
-
-period_immediately_precedes_predicate
-    : period_predicand_1 period_immediately_precedes_predicate_part_2
-    ;
-
-period_immediately_precedes_predicate_part_2
-    : 'IMMEDIATELY' 'PRECEDES' period_predicand_2
-    ;
-
-period_immediately_succeeds_predicate
-    : period_predicand_1 period_immediately_succeeds_predicate_part_2
-    ;
-
-period_immediately_succeeds_predicate_part_2
-    : 'IMMEDIATELY' 'SUCCEEDS' period_predicand_2
-    ;
+period_immediately_succeeds_predicate : period_predicand_1 period_immediately_succeeds_predicate_part_2 ;
+period_immediately_succeeds_predicate_part_2 : 'IMMEDIATELY' 'SUCCEEDS' period_predicand_2 ;
 
 (*  8.21 <search condition> *)
 
-search_condition
-    : boolean_value_expression
-    ;
+search_condition : boolean_value_expression ;
 
 (*  postgres access privilege predicates *)
 
@@ -2178,38 +1266,20 @@ has_schema_privilege_predicate
     ;
 
 (* Sometimes specified as pg_catalog.fn, so add parsing for that *)
-pg_catalog_reference
-    : 'PG_CATALOG' <period>
-    ;
 
-user_string
-    : character_value_expression
-    ;
-
-table_string
-    : character_value_expression
-    ;
-
-schema_string
-    : character_value_expression
-    ;
-
-privilege_string
-    : character_value_expression
-    ;
+pg_catalog_reference : 'PG_CATALOG' <period> ;
+user_string : character_value_expression ;
+table_string : character_value_expression ;
+schema_string : character_value_expression ;
+privilege_string : character_value_expression ;
 
 (*  10 Additional common elements *)
 
 (*  10.1 <interval qualifier> *)
 
-interval_qualifier
-    : start_field 'TO' end_field
-    | single_datetime_field
-    ;
+interval_qualifier : start_field 'TO' end_field | single_datetime_field ;
 
-start_field
-    : non_second_primary_datetime_field [ <left_paren> interval_leading_field_precision <right_paren> ]
-    ;
+start_field : non_second_primary_datetime_field [ <left_paren> interval_leading_field_precision <right_paren> ] ;
 
 end_field
     : non_second_primary_datetime_field
@@ -2226,21 +1296,10 @@ primary_datetime_field
     | 'SECOND'
     ;
 
-non_second_primary_datetime_field
-    : 'YEAR'
-    | 'MONTH'
-    | 'DAY'
-    | 'HOUR'
-    | 'MINUTE'
-    ;
+non_second_primary_datetime_field : 'YEAR' | 'MONTH' | 'DAY' | 'HOUR' | 'MINUTE' ;
 
-<interval_fractional_seconds_precision>
-    : unsigned_integer
-    ;
-
-<interval_leading_field_precision>
-    : unsigned_integer
-    ;
+<interval_fractional_seconds_precision> : unsigned_integer ;
+<interval_leading_field_precision> : unsigned_integer ;
 
 (*  10.9 <aggregate function> *)
 
@@ -2250,69 +1309,27 @@ aggregate_function
     | array_aggregate_function
     ;
 
-general_set_function
-    : set_function_type <left_paren> [ set_quantifier ] value_expression <right_paren>
-    ;
+general_set_function : set_function_type <left_paren> [ set_quantifier ] value_expression <right_paren> ;
 
-<set_function_type>
-    : computational_operation
-    ;
+<set_function_type> : computational_operation ;
+computational_operation : 'AVG' | 'MAX' | 'MIN' | 'SUM' | 'EVERY' | 'ANY' | 'SOME' | 'COUNT' | 'STDDEV_POP' | 'STDDEV_SAMP' | 'VAR_SAMP' | 'VAR_POP' ;
+set_quantifier : 'DISTINCT' | 'ALL' ;
 
-computational_operation
-    : 'AVG'
-    | 'MAX'
-    | 'MIN'
-    | 'SUM'
-    | 'EVERY'
-    | 'ANY'
-    | 'SOME'
-    | 'COUNT'
-    | 'STDDEV_POP'
-    | 'STDDEV_SAMP'
-    | 'VAR_SAMP'
-    | 'VAR_POP'
-    ;
-
-set_quantifier
-    : 'DISTINCT'
-    | 'ALL'
-    ;
-
-array_aggregate_function
-    : 'ARRAY_AGG' <left_paren> value_expression [ 'ORDER' 'BY' sort_specification_list ] <right_paren>
-    ;
+array_aggregate_function : 'ARRAY_AGG' <left_paren> value_expression [ 'ORDER' 'BY' sort_specification_list ] <right_paren> ;
 
 (*  10.10 <sort specification list> *)
 
-sort_specification_list
-    : sort_specification [ ( <comma> sort_specification )+ ]
-    ;
-
-sort_specification
-    : sort_key [ ordering_specification ] [ null_ordering ]
-    ;
-
-<sort_key>
-    : value_expression
-    ;
-
-ordering_specification
-    : 'ASC'
-    | 'DESC'
-    ;
-
-null_ordering
-    : 'NULLS' 'FIRST'
-    | 'NULLS' 'LAST'
-    ;
+sort_specification_list : sort_specification [ ( <comma> sort_specification )+ ] ;
+sort_specification : sort_key [ ordering_specification ] [ null_ordering ] ;
+<sort_key> : value_expression ;
+ordering_specification : 'ASC' | 'DESC' ;
+null_ordering : 'NULLS' 'FIRST' | 'NULLS' 'LAST' ;
 
 (*  11 Schema definition and manipulation *)
 
 (*  11.3 <table definition> *)
 
-valid_time_period_name
-    : 'VALID_TIME'
-    ;
+valid_time_period_name : 'VALID_TIME' ;
 
 (*  13.4 <SQL procedure statement> *)
 
@@ -2348,19 +1365,13 @@ delete_statement__searched
       [ 'WHERE' search_condition ]
     ;
 
-erase_statement__searched
-    : 'ERASE' 'FROM' target_table [ [ 'AS' ] correlation_name ] [ 'WHERE' search_condition ]
-    ;
+erase_statement__searched : 'ERASE' 'FROM' target_table [ [ 'AS' ] correlation_name ] [ 'WHERE' search_condition ] ;
 
 (*  14.11 <insert statement> *)
 
-insert_statement
-    : 'INSERT' 'INTO' insertion_target insert_columns_and_source
-    ;
+insert_statement : 'INSERT' 'INTO' insertion_target insert_columns_and_source ;
 
-<insertion_target>
-    : table_name
-    ;
+<insertion_target> : table_name ;
 
 <insert_columns_and_source>
     : from_subquery
@@ -2368,26 +1379,13 @@ insert_statement
     | from_default
     ;
 
-from_subquery
-    : [ <left_paren> insert_column_list <right_paren> ] [ override_clause ] query_expression
-    ;
+from_subquery : [ <left_paren> insert_column_list <right_paren> ] [ override_clause ] query_expression ;
+from_constructor : [ <left_paren> insert_column_list <right_paren> ] [ override_clause ] contextually_typed_table_value_constructor ;
 
-from_constructor
-    : [ <left_paren> insert_column_list <right_paren> ] [ override_clause ] contextually_typed_table_value_constructor
-    ;
+override_clause : 'OVERRIDING' 'USER' 'VALUE' | 'OVERRIDING' 'SYSTEM' 'VALUE' ;
+from_default : 'DEFAULT' 'VALUES' ;
 
-override_clause
-    : 'OVERRIDING' 'USER' 'VALUE'
-    | 'OVERRIDING' 'SYSTEM' 'VALUE'
-    ;
-
-from_default
-    : 'DEFAULT' 'VALUES'
-    ;
-
-<insert_column_list>
-    : column_name_list
-    ;
+<insert_column_list> : column_name_list ;
 
 (*  14.14 <update statement: searched> *)
 
@@ -2403,30 +1401,20 @@ update_statement__searched
 
 (*  14.15 <set clause list> *)
 
-set_clause_list
-    : set_clause [ ( <comma> set_clause )+ ]
-    ;
+set_clause_list : set_clause [ ( <comma> set_clause )+ ] ;
 
-set_clause
-    : set_target equals_operator update_source
-    ;
+set_clause : set_target equals_operator update_source ;
 
-<set_target>
-    : update_target
-    ;
+<set_target> : update_target ;
 
-set_target_list
-    : <left_paren> set_target [ ( <comma> set_target )+ ] <right_paren>
-    ;
+set_target_list : <left_paren> set_target [ ( <comma> set_target )+ ] <right_paren> ;
 
 update_target
     : object_column
     | object_column left_bracket_or_trigraph simple_value_specification right_bracket_or_trigraph
     ;
 
-<object_column>
-    : column_name
-    ;
+<object_column> : column_name ;
 
 <update_source>
     : value_expression
@@ -2435,88 +1423,42 @@ update_target
 
 (*  17.1 <start transaction statement> *)
 
-start_transaction_statement
-    : <('START' 'TRANSACTION' | 'BEGIN')> [ transaction_characteristics ]
-    ;
+start_transaction_statement : <('START' 'TRANSACTION' | 'BEGIN')> [ transaction_characteristics ] ;
 
 (*  17.2 <set transaction statement> *)
 
-set_transaction_statement
-    : 'SET' [ 'LOCAL' ] 'TRANSACTION' transaction_characteristics
-    ;
+set_transaction_statement : 'SET' [ 'LOCAL' ] 'TRANSACTION' transaction_characteristics ;
 
 (*  17.3 <transaction characteristics> *)
 
-transaction_characteristics
-    : [ transaction_mode [ ( <comma> transaction_mode )+ ] ]
-    ;
-
-<transaction_mode>
-    : isolation_level
-    | transaction_access_mode
-    ;
-
-transaction_access_mode
-    : 'READ' 'ONLY'
-    | 'READ' 'WRITE'
-    ;
-
-isolation_level
-    : 'ISOLATION' 'LEVEL' level_of_isolation
-    ;
-
-level_of_isolation
-    : 'READ' 'UNCOMMITTED'
-    | 'READ' 'COMMITTED'
-    | 'REPEATABLE' 'READ'
-    | 'SERIALIZABLE'
-    ;
+transaction_characteristics : [ transaction_mode [ ( <comma> transaction_mode )+ ] ] ;
+<transaction_mode> : isolation_level | transaction_access_mode ;
+transaction_access_mode : 'READ' 'ONLY' | 'READ' 'WRITE' ;
+isolation_level : 'ISOLATION' 'LEVEL' level_of_isolation ;
+level_of_isolation : 'READ' 'UNCOMMITTED' | 'READ' 'COMMITTED' | 'REPEATABLE' 'READ' | 'SERIALIZABLE' ;
 
 (*  17.7 <commit statement> *)
 
-commit_statement
-    : 'COMMIT'
-    ;
-
-rollback_statement
-    : 'ROLLBACK'
-    ;
+commit_statement : 'COMMIT' ;
+rollback_statement : 'ROLLBACK' ;
 
 (*  19.1 <set session characteristics statement> *)
 
-set_session_characteristics_statement
-    : 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' session_characteristic_list
-    ;
-
-session_characteristic_list
-    : session_characteristic [ ( <comma> session_characteristic )+ ]
-    ;
-
-<session_characteristic>
-    : session_transaction_characteristics
-    ;
-
-session_transaction_characteristics
-    : 'TRANSACTION' transaction_mode [ ( <comma> transaction_mode )+ ]
-    ;
+set_session_characteristics_statement : 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' session_characteristic_list ;
+session_characteristic_list : session_characteristic [ ( <comma> session_characteristic )+ ] ;
+<session_characteristic> : session_transaction_characteristics ;
+session_transaction_characteristics : 'TRANSACTION' transaction_mode [ ( <comma> transaction_mode )+ ] ;
 
 (*  19.4 <set local time zone statement> *)
 
-set_local_time_zone_statement
-    : 'SET' 'TIME' 'ZONE' set_time_zone_value
-    ;
-
-<set_time_zone_value>
-    : <#'\''> (time_zone_interval | time_zone_region) <#'\''>
-    ;
+set_local_time_zone_statement : 'SET' 'TIME' 'ZONE' set_time_zone_value ;
+<set_time_zone_value> : <#'\''> (time_zone_interval | time_zone_region) <#'\''> ;
 
 (*  22 Direct invocation of SQL *)
 
 (*  22.1 <direct SQL statement> *)
 
-direct_sql_statement
-    : directly_executable_statement <semicolon>
-    ;
+direct_sql_statement : directly_executable_statement <semicolon> ;
 
 directly_executable_statement
     : direct_sql_data_statement
@@ -2535,9 +1477,7 @@ directly_executable_statement
 
 (*  22.2 <direct select statement: multiple rows> *)
 
-<direct_select_statement__multiple_rows>
-    : query_expression
-    ;
+<direct_select_statement__multiple_rows> : query_expression ;
 
 (* SQL:2016 7.6 <table reference> *)
 
@@ -2547,43 +1487,17 @@ directly_executable_statement
 
 (* SQL:2016 6.30 <numeric value function> *)
 
-trigonometric_function
-    : trigonometric_function_name <left_paren> numeric_value_expression <right_paren>
-    ;
+trigonometric_function : trigonometric_function_name <left_paren> numeric_value_expression <right_paren> ;
+trigonometric_function_name : 'SIN' | 'COS' | 'TAN' | 'SINH' | 'COSH' | 'TANH' | 'ASIN' | 'ACOS' | 'ATAN' ;
 
-trigonometric_function_name
-    : 'SIN'
-    | 'COS'
-    | 'TAN'
-    | 'SINH'
-    | 'COSH'
-    | 'TANH'
-    | 'ASIN'
-    | 'ACOS'
-    | 'ATAN'
-    ;
-
-general_logarithm_function
-    : 'LOG' <left_paren> general_logarithm_base <comma> general_logarithm_argument <right_paren>
-    ;
-
-<general_logarithm_base>
-    : numeric_value_expression
-    ;
-
-<general_logarithm_argument>
-    : numeric_value_expression
-    ;
-
-common_logarithm
-    : 'LOG10' <left_paren> numeric_value_expression <right_paren>
-    ;
+general_logarithm_function : 'LOG' <left_paren> general_logarithm_base <comma> general_logarithm_argument <right_paren> ;
+<general_logarithm_base> : numeric_value_expression ;
+<general_logarithm_argument> : numeric_value_expression ;
+common_logarithm : 'LOG10' <left_paren> numeric_value_expression <right_paren> ;
 
 (* postgres parameters *)
 
-postgres_parameter_specification
-    : #'\$\d+'
-    ;
+postgres_parameter_specification : #'\$\d+' ;
 
 (* <least function> and <greatest function> *)
 
@@ -2607,75 +1521,41 @@ object_constructor
     | <left_brace> [ object_name_and_value ( <comma> object_name_and_value )* ] <right_brace>
     ;
 
-object_name_and_value
-    : object_name <colon> value_expression
-    ;
+object_name_and_value : object_name <colon> value_expression ;
 
-object_name
-    : character_string_literal
-    ;
+object_name : character_string_literal ;
 
 (* END_OF_TIME <datetime value function> *)
 
-end_of_time_value_function
-    : 'END_OF_TIME' [ <left_paren> <right_paren> ]
-    ;
+end_of_time_value_function : 'END_OF_TIME' [ <left_paren> <right_paren> ] ;
 
 (* DATE_TRUNC function *)
-date_trunc_datetime_function
-    : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_datetime_source [ <comma> date_trunc_time_zone ] <right_paren>
-    
-date_trunc_interval_function
-    : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_interval_source <right_paren>
+date_trunc_datetime_function : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_datetime_source [ <comma> date_trunc_time_zone ] <right_paren> ;
 
-<date_trunc_precision_string>
-    : <quote> date_trunc_precision <quote>
+date_trunc_interval_function : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_interval_source <right_paren> ;
 
+<date_trunc_precision_string> : <quote> date_trunc_precision <quote> ;
 date_trunc_precision
-    : 'MICROSECOND' 
-    | 'MILLISECOND' 
-    | 'SECOND' 
-    | 'MINUTE'
-    | 'HOUR'
-    | 'DAY'
-    | 'WEEK'
-    | 'MONTH'
-    | 'QUARTER'
-    | 'YEAR'
-    | 'DECADE'
-    | 'CENTURY'
-    | 'MILLENNIUM'
-    ;
+    : 'MICROSECOND' | 'MILLISECOND' | 'SECOND' | 'MINUTE' | 'HOUR'
+    | 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR' | 'DECADE' | 'CENTURY' | 'MILLENNIUM' ;
 
-date_trunc_datetime_source
-    : datetime_value_expression
-
-date_trunc_interval_source
-    : interval_value_expression
-
-<date_trunc_time_zone>
-    : <quote> time_zone_region <quote>
+date_trunc_datetime_source : datetime_value_expression
+date_trunc_interval_source : interval_value_expression
+<date_trunc_time_zone> : <quote> time_zone_region <quote>
 
 (* AGE function *)
-age_function
-    : 'AGE' <left_paren> age_source <comma> age_source <right_paren>
-    ;
 
-age_source
-    : datetime_value_expression
-    ;
+age_function : 'AGE' <left_paren> age_source <comma> age_source <right_paren> ;
+
+age_source : datetime_value_expression ;
 
 (* ARROW_TABLE <table primary>, based on SQL:2016 JSON_TABLE *)
 
-arrow_table
-    : 'ARROW_TABLE' [ <left_paren> character_string_literal <right_paren> ]
-    ;
+arrow_table : 'ARROW_TABLE' [ <left_paren> character_string_literal <right_paren> ] ;
 
 (* multiple <direct sql statement> to used for example with files *)
 
-direct_sql_statements
-    : direct_sql_statement+
-    ;
+direct_sql_statements : direct_sql_statement+ ;
 
 (* <time zone region> *)
 
