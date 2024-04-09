@@ -344,7 +344,7 @@ fun createBench(benchName: String, properties: Map<String, String>) {
     tasks.create(benchName, JavaExec::class) {
         classpath = sourceSets.dev.get().runtimeClasspath
         mainClass.set("clojure.main")
-        jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+        jvmArgs(defaultJvmArgs + sixGBJvmArgs + listOf("-Darrow.enable_unsafe_memory_access=true"))
         val args = mutableListOf("-m", "xtdb.bench.xtdb2", benchName)
 
         properties.forEach { (k, v) ->
