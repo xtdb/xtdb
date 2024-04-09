@@ -17,8 +17,8 @@ interface IVectorIndirection {
         }
 
         override fun toString(): String {
-            @Suppress("DEPRECATION")
-            return "(Selection {idxs=%s})".formatted(idxs.contentToString())
+            val idxs =  idxs.contentToString()
+            return "(Selection {idxs=$idxs})"
         }
     }
 
