@@ -26,7 +26,7 @@
   (t/is (= 1 (.end (doto (re-matcher p/sql-word-boundary-pattern "-a")
                      (.find)))))
 
-  (t/is (= [:factor [:minus_sign "-"] [:factor [:minus_sign "-"] [:exact_numeric_literal "2"]]]
+  (t/is (= [:factor [:minus_sign "-"] [:factor [:minus_sign "-"] [:unsigned_numeric_literal "2"]]]
            (p/sql-parser "- - 2" :factor)))
 
   (t/is (p/failure? (p/sql-parser "SELECT * FROMfoo" :directly_executable_statement)))

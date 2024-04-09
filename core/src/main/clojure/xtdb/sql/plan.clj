@@ -68,10 +68,8 @@
 
 ;; Expressions.
 
-(defn- interval-expr
-  [e qualifier]
+(defn- interval-expr [e qualifier]
   (r/zmatch qualifier
-
     [:interval_qualifier
      [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]
     ;; =>
@@ -144,68 +142,65 @@
 
 (defn field->opts-map [field]
   (r/zmatch field
-            [_ [:non_second_primary_datetime_field datetime-field]]
-            {:field datetime-field}
+    [_ [:non_second_primary_datetime_field datetime-field]]
+    {:field datetime-field}
 
-            [_ [:non_second_primary_datetime_field datetime-field] [:unsigned_integer leading-precision]]
-            {:field datetime-field
-             :lp (parse-long leading-precision)}
+    [_ [:non_second_primary_datetime_field datetime-field] [:unsigned_integer leading-precision]]
+    {:field datetime-field
+     :lp (parse-long leading-precision)}
 
-            [:end_field "SECOND" [:unsigned_integer fractional-precision]]
-            {:field "SECOND"
-             :fp (parse-long fractional-precision)}
+    [:end_field "SECOND" [:unsigned_integer fractional-precision]]
+    {:field "SECOND"
+     :fp (parse-long fractional-precision)}
 
-            [_ "SECOND"]
-            {:field "SECOND"
-             :fp 6}
+    [_ "SECOND"]
+    {:field "SECOND"
+     :fp 6}
 
-            [_ "SECOND" [:unsigned_integer leading-precision]]
-            {:field "SECOND"
-             :lp (parse-long leading-precision)
-             :fp 6}
+    [_ "SECOND" [:unsigned_integer leading-precision]]
+    {:field "SECOND"
+     :lp (parse-long leading-precision)
+     :fp 6}
 
-            [_ "SECOND" [:unsigned_integer leading-precision] [:unsigned_integer fractional-precision]]
-            {:field "SECOND"
-             :lp (parse-long leading-precision)
-             :fp (parse-long fractional-precision)}
+    [_ "SECOND" [:unsigned_integer leading-precision] [:unsigned_integer fractional-precision]]
+    {:field "SECOND"
+     :lp (parse-long leading-precision)
+     :fp (parse-long fractional-precision)}
 
-            (throw (err/illegal-arg :xtdb.sql/parse-error
-                                    {::err/message (str "Cannot build interval qualifier opts for field: "  (pr-str field))
-                                     :field field}))))
+    (throw (err/illegal-arg :xtdb.sql/parse-error
+                            {::err/message (str "Cannot build interval qualifier opts for field: "  (pr-str field))
+                             :field field}))))
 
 (defn interval-qualifier->map [qualifier]
   (r/zmatch qualifier
-            [:interval_qualifier start-field]
-            ;; =>
-            (let [{:keys [field lp fp]} (field->opts-map start-field)]
-              {:start-field field
-               :end-field nil
-               :leading-precision (or lp 2)
-               :fractional-precision (or fp 0)})
+    [:interval_qualifier start-field]
+    ;; =>
+    (let [{:keys [field lp fp]} (field->opts-map start-field)]
+      {:start-field field
+       :end-field nil
+       :leading-precision (or lp 2)
+       :fractional-precision (or fp 0)})
 
-            [:interval_qualifier start-field "TO" end-field]
-            ;; =>
-            (let [sf-opts (field->opts-map start-field)
-                  ef-opts (field->opts-map end-field)]
-              {:start-field (:field sf-opts)
-               :end-field (:field ef-opts)
-               :leading-precision (or (:lp sf-opts) 2)
-               :fractional-precision (or (:fp ef-opts) 0)})
+    [:interval_qualifier start-field "TO" end-field]
+    ;; =>
+    (let [sf-opts (field->opts-map start-field)
+          ef-opts (field->opts-map end-field)]
+      {:start-field (:field sf-opts)
+       :end-field (:field ef-opts)
+       :leading-precision (or (:lp sf-opts) 2)
+       :fractional-precision (or (:fp ef-opts) 0)})
 
-            (throw (err/illegal-arg :xtdb.sql/parse-error
-                                    {::err/message (str "Cannot build interval qualifier opts for: "  (pr-str qualifier))
-                                     :qualifier qualifier}))))
+    (throw (err/illegal-arg :xtdb.sql/parse-error
+                            {::err/message (str "Cannot build interval qualifier opts for: "  (pr-str qualifier))
+                             :qualifier qualifier}))))
 
-(defn- iso8601-interval-expr [p-str d-str]
-  (IntervalMonthDayNano. (if-not (str/blank? p-str)
-                           (Period/parse (str "P" p-str))
-                           Period/ZERO)
-                         (if d-str
-                           (Duration/parse (str "PT" d-str))
-                           Duration/ZERO)))
-
-(defn- iso8601-duration-expr [day-str time-str]
-  (Duration/parse (str "P" day-str "T" (if time-str time-str "0S"))))
+(defn- parse-duration-literal [d-str]
+  (try
+    (Duration/parse d-str)
+    (catch Exception e
+      (throw (err/illegal-arg :xtdb.sql/parse-error
+                              {::err/message (str "Cannot parse duration: " (.getMessage e))
+                               :str d-str})))))
 
 (defn cast-temporal-with-precision [e type fractional-precision]
   (let [fp (parse-long fractional-precision)]
@@ -213,20 +208,20 @@
 
 (defn cast-expr [e cast-spec]
   (r/zmatch cast-spec
-    [:exact_numeric_type "INTEGER"]
+    [:numeric_type "INTEGER"]
     (list 'cast e :i32)
-    [:exact_numeric_type "INT"]
+    [:numeric_type "INT"]
     (list 'cast e :i32)
-    [:exact_numeric_type "BIGINT"]
+    [:numeric_type "BIGINT"]
     (list 'cast e :i64)
-    [:exact_numeric_type "SMALLINT"]
+    [:numeric_type "SMALLINT"]
     (list 'cast e :i16)
 
-    [:approximate_numeric_type "FLOAT"]
+    [:numeric_type "FLOAT"]
     (list 'cast e :f32)
-    [:approximate_numeric_type "REAL"]
+    [:numeric_type "REAL"]
     (list 'cast e :f32)
-    [:approximate_numeric_type "DOUBLE" "PRECISION"]
+    [:numeric_type "DOUBLE" "PRECISION"]
     (list 'cast e :f64)
             
     [:datetime_type "DATE"]
@@ -350,20 +345,61 @@
                             {::err/message (str "Cannot build expression for: "  (pr-str (r/node z)))
                              :node (r/node z)}))))
 
-(defn seconds-fraction->nanos [seconds-fraction]
-  (* (Long/parseLong seconds-fraction)
-     (long (Math/pow 10 (- 9 (count seconds-fraction))))))
+(defn seconds-fraction->nanos ^long [seconds-fraction]
+  (if seconds-fraction
+    (* (Long/parseLong seconds-fraction)
+       (long (Math/pow 10 (- 9 (count seconds-fraction)))))
+    0))
 
-(defn create-offset-time
-  [hours minutes seconds seconds-fraction offset-hours offset-minutes]
-  (OffsetTime/of
-    (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-    (seconds-fraction->nanos seconds-fraction)
-    (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
+(defn parse-date-literal [d-str]
+  (try
+    (LocalDate/parse d-str)
+    (catch Exception e
+      (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse date: " (.getMessage e))
+                                                     :str d-str})))))
 
-(defn create-local-time ^java.time.LocalTime [hours minutes seconds seconds-fraction]
-  (LocalTime/of (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-                (seconds-fraction->nanos seconds-fraction)))
+(defn parse-time-literal [t-str]
+  (if-let [[_ h m s sf offset-str] (re-matches #"(\d{1,2}):(\d{1,2}):(\d{1,2})(?:\.(\d+))?([+-]\d{2}:\d{2})?" t-str)]
+    (try
+      (let [local-time (LocalTime/of (parse-long h) (parse-long m) (parse-long s) (seconds-fraction->nanos sf))]
+        (if offset-str
+          (OffsetTime/of local-time (ZoneOffset/of ^String offset-str))
+          local-time))
+      (catch Exception e
+        (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse time: " (.getMessage e))
+                                                       :str t-str}))))
+
+    (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse time: " t-str)}))))
+
+(defn parse-timestamp-literal [ts-str]
+  (if-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:(Z|[+-]\d{2}:\d{2})(?:\[([\w\/]+)\])?)?" ts-str)]
+    (try
+      (let [ldt (LocalDateTime/of (parse-long y) (parse-long mons) (parse-long d)
+                                  (parse-long h) (parse-long mins) (parse-long s) (seconds-fraction->nanos sf))]
+        (cond
+          zone (ZonedDateTime/ofLocal ldt (ZoneId/of zone) (ZoneOffset/of offset))
+          offset (ZonedDateTime/of ldt (ZoneOffset/of offset))
+          :else ldt))
+      (catch Exception e
+        (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse timestamp: " (.getMessage e))
+                                                       :str ts-str}))))
+
+    (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse timestamp: " ts-str)}))))
+
+(defn parse-iso-interval-literal [i-str]
+  (if-let [[_ p-str d-str] (re-matches #"P([-\dYMWD]+)?(?:T([-\dHMS\.]+)?)?" i-str)]
+    (try
+      (IntervalMonthDayNano. (if p-str
+                               (Period/parse (str "P" p-str))
+                               Period/ZERO)
+                             (if d-str
+                               (Duration/parse (str "PT" d-str))
+                               Duration/ZERO))
+      (catch Exception e
+        (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse interval: " (.getMessage e))
+                                                       :str i-str}))))
+
+    (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse interval: " i-str)}))))
 
 (defn- plan-period-predicand
   ([period-predicand]
@@ -395,32 +431,16 @@
 
 (defn expr [z]
   (r/zmatch z
-    [:column_reference _]
-    ;;=>
-    (column-reference-symbol (sem/column-reference z))
+    [:column_reference _] (column-reference-symbol (sem/column-reference z))
+    [:column_reference [:schema_name _] _] (column-reference-symbol (sem/column-reference z))
 
-    [:column_reference [:schema_name _] _]
-    ;;=>
-    (column-reference-symbol (sem/column-reference z))
+    [:cast_specification _ ^:z e _ cast-spec] (cast-expr (expr e) cast-spec)
 
-    [:cast_specification _ ^:z e _ cast-spec]
-    (cast-expr (expr e) cast-spec)
+    [:boolean_value_expression ^:z bve _ ^:z bt] (list 'or (expr bve) (expr bt))
+    [:boolean_term ^:z bt _ ^:z bf] (list 'and (expr bt) (expr bf))
+    [:boolean_factor "NOT" ^:z bt] (list 'not (expr bt))
 
-    [:boolean_value_expression ^:z bve _ ^:z bt]
-    ;;=>
-    (list 'or (expr bve) (expr bt))
-
-    [:boolean_term ^:z bt _ ^:z bf]
-    ;;=>
-    (list 'and (expr bt) (expr bf))
-
-    [:boolean_factor "NOT" ^:z bt]
-    ;;=>
-    (list 'not (expr bt))
-
-    [:boolean_test ^:z bp]
-    ;;=>
-    (expr bp)
+    [:boolean_test ^:z bp] (expr bp)
 
     [:boolean_test ^:z bp "IS" [:truth_value truth-value]]
     ;; =>
@@ -442,8 +462,7 @@
       "FALSE" false
       "UNKNOWN" nil)
 
-    [:null_specification _]
-    nil
+    [:null_specification _] nil
 
     [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 [_ co] ^:z rvp-2]]
     ;;=>
@@ -469,17 +488,15 @@
     ;;=>
     (expr unl)
 
-    [:exact_numeric_literal lexeme]
+    [:unsigned_numeric_literal lexeme]
     ;;=>
     (if (str/includes? lexeme ".")
-      (Double/parseDouble lexeme)
-      (Long/parseLong lexeme))
+      (parse-double lexeme)
+      (parse-long lexeme))
 
-    [:unsigned_integer lexeme]
-    ;;=>
-    (Long/parseLong lexeme)
+    [:unsigned_integer lexeme] (parse-long lexeme)
 
-    [:factor [:minus_sign "-"] [:exact_numeric_literal "9223372036854775808"]]
+    [:factor [:minus_sign "-"] [:unsigned_numeric_literal "9223372036854775808"]]
     Long/MIN_VALUE
 
     [:factor [:minus_sign "-"] ^:z np]
@@ -496,173 +513,29 @@
     ;;=>
     (subs lexeme 1 (dec (count lexeme)))
 
-    [:point_in_time ^:z dte]
-    ;;=>
-    (expr dte)
+    [:point_in_time ^:z dte] (expr dte)
 
-    [:timestamp_literal _
-     [:timestamp_string
-      [:unquoted_timestamp_string
-       [:date_value
-        [:unsigned_integer year]
-        [:minus_sign "-"]
-        [:unsigned_integer month]
-        [:minus_sign "-"]
-        [:unsigned_integer day]]
-       ^:z uts]]]
-    ;;=>
-    (let [ld (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))]
-      (letfn [(->lt [tv]
-                (r/zmatch tv
-                  [:time_value [:unsigned_integer hours] [:unsigned_integer minutes] [:seconds_value [:unsigned_integer seconds]]]
-                  (create-local-time hours minutes seconds "0")
+    [:date_literal d-str] (parse-date-literal (expr d-str))
+    [:time_literal t-str] (parse-time-literal (expr t-str))
+    [:timestamp_literal ts-str] (parse-timestamp-literal (expr ts-str))
+    [:interval_literal i-str ^:z iq] (interval-expr (expr i-str) iq)
+    [:interval_literal i-str] (parse-iso-interval-literal (expr i-str))
 
-                  [:time_value [:unsigned_integer hours] [:unsigned_integer minutes]
-                   [:seconds_value [:unsigned_integer seconds] [:unsigned_integer seconds-fraction]]]
-                  (create-local-time hours minutes seconds seconds-fraction)))
+    [:duration_literal d-str] (parse-duration-literal (expr d-str))
 
-              (->zo ^java.time.ZoneOffset [sign offset-hours offset-mins]
-                (ZoneOffset/of (str sign offset-hours ":" offset-mins)))]
+    [:interval_primary ^:z n q] (interval-expr (expr n) q)
 
-        (r/zmatch uts
-          [:unquoted_time_string ^:z tv]
-          (LocalDateTime/of ld (->lt tv))
-
-          [:unquoted_time_string ^:z tv "Z"]
-          (ZonedDateTime/of ld (->lt tv) (ZoneId/of "Z"))
-
-          [:unquoted_time_string ^:z tv
-           [:time_zone_interval [_ sign]
-            [:unsigned_integer offset-hours]
-            [:unsigned_integer offset-mins]]]
-          (ZonedDateTime/of ld (->lt tv) (->zo sign offset-hours offset-mins))
-
-          [:unquoted_time_string ^:z tv
-           [:time_zone_interval [_ sign]
-            [:unsigned_integer offset-hours]
-            [:unsigned_integer offset-mins]]
-           [:time_zone_region region]]
-          (ZonedDateTime/ofLocal (LocalDateTime/of ld (->lt tv))
-                                 (ZoneId/of region)
-                                 (->zo sign offset-hours offset-mins)))))
-
-    [:date_literal _
-     [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
-    ;;=>
-    (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))
-
-    [:time_literal _
-     [:time_string
-      [:unquoted_time_string
-       [:time_value
-        [:unsigned_integer hours]
-        [:unsigned_integer minutes]
-        [:seconds_value
-         [:unsigned_integer seconds]]]]]]
-    ;;=>
-    (create-local-time hours minutes seconds "0")
-
-    [:time_literal _
-     [:time_string
-      [:unquoted_time_string
-       [:time_value
-        [:unsigned_integer hours]
-        [:unsigned_integer minutes]
-        [:seconds_value
-         [:unsigned_integer seconds]
-         [:unsigned_integer seconds-fraction]]]]]]
-    ;;=>
-    (create-local-time hours minutes seconds seconds-fraction)
-
-    [:time_literal _
-     [:time_string
-      [:unquoted_time_string
-       [:time_value
-        [:unsigned_integer hours]
-        [:unsigned_integer minutes]
-        [:seconds_value
-         [:unsigned_integer seconds]]]
-       [:time_zone_interval
-        [_ sign]
-        [:unsigned_integer offset-hours]
-        [:unsigned_integer offset-minutes]]]]]
-    ;;=>
-    (create-offset-time hours minutes seconds "0"
-                        (str sign offset-hours) (str sign offset-minutes))
-
-    [:time_literal _
-     [:time_string
-      [:unquoted_time_string
-       [:time_value
-        [:unsigned_integer hours]
-        [:unsigned_integer minutes]
-        [:seconds_value
-         [:unsigned_integer seconds]
-         [:unsigned_integer seconds-fraction]]]
-       [:time_zone_interval
-        [_ sign]
-        [:unsigned_integer offset-hours]
-        [:unsigned_integer offset-minutes]]]]]
-    ;;=>
-    (create-offset-time hours minutes seconds seconds-fraction
-                        (str sign offset-hours) (str sign offset-minutes))
-
-    [:interval_literal _
-     [:interval_string [:unquoted_interval_string s]] q]
-    ;;=>
-    (interval-expr s q)
-
-    [:interval_primary ^:z n q]
-    ;; =>
-    (interval-expr (expr n) q)
-
-    [:interval_literal _
-     [:unquoted_iso8601_interval_string
-      [:unquoted_iso8601_interval_period_string p]]]
-    ;; =>
-    (iso8601-interval-expr p nil)
-
-    [:interval_literal _
-     [:unquoted_iso8601_interval_string
-      [:unquoted_iso8601_interval_period_string p]
-      [:unquoted_iso8601_duration_time_string d]]]
-    ;; =>
-    (iso8601-interval-expr p d)
-
-    [:duration_literal _
-     [:unquoted_iso8601_duration_string
-      [:unquoted_iso8601_duration_day_string d]]]
-    ;; =>
-    (iso8601-duration-expr d nil)
-
-    [:duration_literal _
-     [:unquoted_iso8601_duration_string
-      [:unquoted_iso8601_duration_day_string d]
-      [:unquoted_iso8601_duration_time_string t]]]
-    ;; =>
-    (iso8601-duration-expr d t)
-
-    [:interval_term ^:z i [:asterisk "*"] ^:z n]
-    ;; =>
-    (list '* (expr i) (expr n))
-
-    [:interval_term ^:z i [:solidus "/"] ^:z n]
-    ;; =>
-    (list '/ (expr i) (expr n))
-
-    [:interval_factor [:minus_sign "-"] ^:z i]
-    ;; =>
-    (list '- (expr i))
-
-    [:interval_factor [:plus_sign "+"] ^:z i]
-    ;; =>
-    (expr i)
+    [:interval_term ^:z i [:asterisk "*"] ^:z n] (list '* (expr i) (expr n))
+    [:interval_term ^:z i [:solidus "/"] ^:z n] (list '/ (expr i) (expr n))
+    [:interval_factor [:minus_sign "-"] ^:z i] (list '- (expr i))
+    [:interval_factor [:plus_sign "+"] ^:z i] (expr i)
 
     [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
     ;; =>
     (list '+ (expr i1) (expr i2))
 
     [:interval_absolute_value_function "ABS" ^:z i]
+    ;; =>
     (list 'abs (expr i))
 
     [:datetime_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
@@ -1049,9 +922,9 @@
     ;;=>
     (list 'date_trunc dtps (expr dte))
 
-    [:date_trunc_datetime_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_datetime_source ^:z dte] [:time_zone_region tzr]]
+    [:date_trunc_datetime_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_datetime_source ^:z dte] ^:z tzr]
     ;;=>
-    (list 'date_trunc dtps (expr dte) tzr)
+    (list 'date_trunc dtps (expr dte) (expr tzr))
 
     [:date_trunc_interval_function "DATE_TRUNC" [:date_trunc_precision dtps] [:date_trunc_interval_source ^:z dte]]
     ;;=>

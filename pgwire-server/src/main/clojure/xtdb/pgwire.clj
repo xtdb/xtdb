@@ -533,8 +533,8 @@
                                                     (cond-> (parse-long offset-mins)
                                                       (= sign "-") -))
 
-                         [:time_zone_region region]
-                         (ZoneId/of region))}
+                         [:character_string_literal region]
+                         (ZoneId/of (subs region 1 (dec (count region)))))}
 
                   [:sql_session_statement
                    [:set_session_characteristics_statement _ _ _ _

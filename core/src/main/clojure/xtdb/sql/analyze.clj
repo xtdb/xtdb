@@ -544,7 +544,7 @@
     nil))
 
 (defn dml-app-time-extents [ag]
-  (when-let [atpn (r/find-first (partial r/ctor? :valid_time_period_name) ag)]
+  (when-let [atpn (r/find-first #(= "VALID_TIME" (r/znode %)) ag)]
     (if (or (= (r/znode (r/left atpn)) "ALL")
             (= (r/znode (r/right atpn)) "ALL"))
       :all-application-time
@@ -964,7 +964,7 @@
 (defn- check-unsigned-integer [label ag]
   (when-not (r/zmatch ag
               [:signed_numeric_literal
-               [:exact_numeric_literal lexeme]]
+               [:unsigned_numeric_literal lexeme]]
               ;;=>
               (not (str/includes? lexeme "."))
 

@@ -22,21 +22,15 @@ equals_operator : '=' ;
 greater_than_operator : '>' ;
 question_mark : '?' ;
 
-<left_bracket_or_trigraph> : <left_bracket> | <left_bracket_trigraph> ;
-<right_bracket_or_trigraph> : <right_bracket> | <right_bracket_trigraph> ;
 <left_bracket> : '[' ;
-<left_bracket_trigraph> : '??(' ;
 <right_bracket> : ']' ;
-<right_bracket_trigraph> : '??)' ;
 vertical_bar : '|' ;
 <left_brace> : '{' ;
 <right_brace> : '}' ;
 
 (*  5.2     <token> and <separator> *)
 
-regular_identifier
-: !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME|CURRENT_USER|CURRENT_SCHEMA|CURRENT_DATABASE)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*'
-    ;
+regular_identifier : !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME|CURRENT_USER|CURRENT_SCHEMA|CURRENT_DATABASE)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*' ;
 
 large_object_length_token : #'[0-9]+' multiplier ;
 multiplier : 'K' | 'M' | 'G' | 'T' | 'P' ;
@@ -64,7 +58,9 @@ separator : #'(?<=\s)' ;
 <general_literal>
     : character_string_literal
     | binary_string_literal
-    | datetime_literal
+    | date_literal
+    | time_literal
+    | timestamp_literal
     | interval_literal
     | duration_literal
     | boolean_literal
@@ -73,88 +69,26 @@ separator : #'(?<=\s)' ;
 
 character_string_literal : #'\'(\'\'|[^\'])*\''+ ;
 
-character_representation : #'(\'\'|[^\'])*' ;
-
 binary_string_literal : #'X(\'[a-fA-F0-9\s]+\'\s*)+' ;
 
 signed_numeric_literal : [ sign ] unsigned_numeric_literal ;
-
-<unsigned_numeric_literal>
-    : exact_numeric_literal
-    | approximate_numeric_literal
-    ;
-
-exact_numeric_literal : #'(\d*\.\d+|\d+\.\d*|\d+)' ;
+unsigned_numeric_literal : #'\d+(\.\d+)?' [ <'E'> signed_integer ] ;
 
 <sign> : plus_sign | minus_sign ;
 
-approximate_numeric_literal : mantissa 'E' exponent ;
-<mantissa> : exact_numeric_literal ;
-<exponent> : signed_integer ;
-
 signed_integer : [ sign ] unsigned_integer ;
-unsigned_integer : #'[0-9]+' ;
+unsigned_integer : #'\d+' ;
 
-<datetime_literal> : date_literal | time_literal | timestamp_literal ;
-
-date_literal : 'DATE' date_string ;
-time_literal : 'TIME' time_string ;
-timestamp_literal : 'TIMESTAMP' timestamp_string ;
-
-date_string : <quote> unquoted_date_string <quote> ;
-time_string : <quote> unquoted_time_string <quote> ;
-timestamp_string : <quote> unquoted_timestamp_string <quote> ;
-time_zone_interval : sign hours_value <colon> minutes_value ;
-date_value : years_value minus_sign months_value minus_sign days_value ;
-time_value : hours_value <colon> minutes_value <colon> seconds_value ;
-duration_literal : 'DURATION' <quote> unquoted_iso8601_duration_string <quote> ;
-
-unquoted_iso8601_duration_string
-    : <#'P'> unquoted_iso8601_duration_day_string [ ( <#'T'> unquoted_iso8601_duration_time_string ) ]
-    ;
-
-unquoted_iso8601_duration_day_string : #'(?:-?(\d+)D)?' ;
-
-interval_literal
-    : 'INTERVAL' [ sign ] interval_string interval_qualifier
-    | 'INTERVAL' <quote> unquoted_iso8601_interval_string <quote>
-    ;
-
-interval_string : <quote> unquoted_interval_string <quote> ;
-
-<unquoted_date_string> : date_value ;
-unquoted_time_string : time_value [ #'Z' | ( time_zone_interval [ <#'\['> time_zone_region <#'\]'> ] ) ] ;
-unquoted_timestamp_string : unquoted_date_string <( #'(?<= )' | #'T' )> unquoted_time_string ;
-unquoted_interval_string : #'[\d\:\-\+\. ]+' ;
-
-unquoted_iso8601_interval_string
-    : <#'P'> unquoted_iso8601_interval_period_string [ ( <#'T'> unquoted_iso8601_duration_time_string ) ]
-    ;
-
-unquoted_iso8601_interval_period_string
-    : #'(?:-?(\d+)Y)?(?:-?(\d+)M)?(?:-?(\d+)W)?(?:-?(\d+)D)?'
-    ;
-
-unquoted_iso8601_duration_time_string
-    : #'(?:-?(\d+)H)?(?:-?(\d+)M)?(?:-?(\d+(?:\.\d+)?)S)?'
-    ;
-
-<years_value> : datetime_value ;
-<months_value> : datetime_value ;
-<days_value> : datetime_value ;
-<hours_value> : datetime_value ;
-<minutes_value> : datetime_value ;
-seconds_value : seconds_integer_value [ <period> [ seconds_fraction ] ] ;
-<seconds_integer_value> : unsigned_integer ;
-<seconds_fraction> : unsigned_integer ;
-<datetime_value> : unsigned_integer ;
+date_literal : <'DATE'> character_string_literal ;
+time_literal : <'TIME'> character_string_literal ;
+timestamp_literal : <'TIMESTAMP'> character_string_literal ;
+duration_literal : <'DURATION'> character_string_literal ;
+interval_literal : <'INTERVAL'> [ sign ] character_string_literal interval_qualifier? ;
 boolean_literal : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
 
 (*  5.4    Names and identifiers *)
 
-<identifier> : actual_identifier ;
-
-<actual_identifier> : regular_identifier | delimited_identifier ;
+<identifier> : regular_identifier | delimited_identifier ;
 
 schema_name : 'INFORMATION_SCHEMA' | 'PG_CATALOG' | 'PUBLIC' ;
 <table_name> : [ schema_name <period> ] !#'(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)' identifier ;
@@ -170,23 +104,16 @@ correlation_name : identifier ;
 (*  6.1     <data type> *)
 
 <data_type>
-    : predefined_type
-    | row_type
-    | collection_type
-    ;
-
-<predefined_type>
     : numeric_type
     | boolean_type
     | datetime_type
     | interval_type
     | character_string_type
-    | duration_type 
+    | duration_type
+    | collection_type
     ;
 
-character_string_type
-    : 'VARCHAR'
-    ;
+character_string_type : 'VARCHAR' ;
 
 (* Currently unsupported character_string_type 
     | 'VARCHAR'  [ <left_paren> character_length <right_paren> ] 
@@ -218,23 +145,12 @@ binary_large_object_string_type
 duration_type
     : 'DURATION' [ <left_paren> time_precision <right_paren> ]
 
-<numeric_type>
-    : exact_numeric_type
-    | approximate_numeric_type
-    ;
-
-exact_numeric_type
+numeric_type
     : 'NUMERIC' [ <left_paren> precision [ <comma> scale ] <right_paren> ]
     | 'DECIMAL' [ <left_paren> precision [ <comma> scale ] <right_paren> ]
     | 'DEC' [ <left_paren> precision [ <comma> scale ] <right_paren> ]
-    | 'SMALLINT'
-    | 'INTEGER'
-    | 'INT'
-    | 'BIGINT'
-    ;
-
-approximate_numeric_type
-    : 'FLOAT' [ <left_paren> precision <right_paren> ]
+    | 'SMALLINT' | 'INTEGER' | 'INT' | 'BIGINT'
+    | 'FLOAT' [ <left_paren> precision <right_paren> ]
     | 'REAL'
     | 'DOUBLE' 'PRECISION'
     ;
@@ -262,20 +178,16 @@ datetime_type
     | 'TIMESTAMP' [ <left_paren> timestamp_precision <right_paren> ] [ with_or_without_time_zone ]
     ;
 
-with_or_without_time_zone : 'WITH' 'TIME' 'ZONE' | 'WITHOUT' 'TIME' 'ZONE' ;
+<time_precision> : unsigned_integer ;
+<timestamp_precision> : unsigned_integer ;
 
-<time_precision> : time_fractional_seconds_precision ;
-<timestamp_precision> : time_fractional_seconds_precision ;
-<time_fractional_seconds_precision> : unsigned_integer ;
+with_or_without_time_zone : 'WITH' 'TIME' 'ZONE' | 'WITHOUT' 'TIME' 'ZONE' ;
 
 interval_type : 'INTERVAL' [ interval_qualifier ] ;
 
-row_type : 'ROW' row_type_body ;
-row_type_body : <left_paren> field_definition [ ( <comma> field_definition )+ ] <right_paren> ;
-
 <collection_type> : array_type ;
 
-array_type : data_type 'ARRAY' [ left_bracket_or_trigraph maximum_cardinality right_bracket_or_trigraph ] ;
+array_type : data_type 'ARRAY' [ left_bracket maximum_cardinality right_bracket ] ;
 
 <maximum_cardinality> : unsigned_integer ;
 
@@ -286,11 +198,9 @@ field_definition : field_name data_type ;
 (*  6.3         <value expression primary> *)
 
 <value_expression_primary>
-    : parenthesized_value_expression
+    : <left_paren> value_expression <right_paren>
     | nonparenthesized_value_expression_primary
     ;
-
-<parenthesized_value_expression> : <left_paren> value_expression <right_paren> ;
 
 <nonparenthesized_value_expression_primary>
     : unsigned_value_specification
@@ -337,7 +247,7 @@ dynamic_parameter_specification : question_mark ;
     ;
 
 null_specification : 'NULL' ;
-empty_specification : 'ARRAY'? <left_bracket_or_trigraph> <right_bracket_or_trigraph> ;
+empty_specification : 'ARRAY'? <left_bracket> <right_bracket> ;
 
 (*  6.6        <identifier chain> *)
 
@@ -378,7 +288,7 @@ lead_or_lag_function : lead_or_lag <left_paren> lead_or_lag_extent [ <comma> off
 lead_or_lag : 'LEAD' | 'LAG' ;
 <lead_or_lag_extent> : value_expression ;
 
-<offset> : exact_numeric_literal ;
+<offset> : unsigned_literal ;
 <default_expression> : value_expression ;
 null_treatment : 'RESPECT' 'NULLS' | 'IGNORE' 'NULLS' ;
 
@@ -486,7 +396,7 @@ field_reference : value_expression_primary <period> field_name ;
 
 (*  6.24 <array element reference> *)
 
-array_element_reference : array_value_expression left_bracket_or_trigraph numeric_value_expression right_bracket_or_trigraph ;
+array_element_reference : array_value_expression <left_bracket> numeric_value_expression <right_bracket> ;
 
 (*  6.26 <value expression> *)
 
@@ -823,7 +733,7 @@ trim_array_function : 'TRIM_ARRAY' <left_paren> array_value_expression <comma> n
     | array_value_constructor_by_query
     ;
 
-array_value_constructor_by_enumeration : 'ARRAY'? <left_bracket_or_trigraph> array_element_list? <right_bracket_or_trigraph> ;
+array_value_constructor_by_enumeration : 'ARRAY'? <left_bracket> array_element_list? <right_bracket> ;
 
 array_element_list : array_element [ ( <comma> array_element )+ ] ;
 
@@ -876,10 +786,7 @@ contextually_typed_row_value_constructor_element
 
 (*  7.2      <row value expression> *)
 
-<row_value_expression>
-    : row_value_special_case
-    | explicit_row_value_constructor
-    ;
+<row_value_expression> : row_value_special_case | explicit_row_value_constructor ;
 
 <table_row_value_expression>
     : row_value_special_case
@@ -896,9 +803,7 @@ contextually_typed_row_value_constructor_element
     | row_value_constructor_predicand
     ;
 
-<row_value_special_case>
-    : nonparenthesized_value_expression_primary
-    ;
+<row_value_special_case> : nonparenthesized_value_expression_primary ;
 
 (*  7.3      <table value constructor> *)
 
@@ -943,11 +848,11 @@ query_system_time_period_specification
     ;
 
 query_valid_time_period_specification
-    : 'FOR' valid_time_period_name 'AS' 'OF' point_in_time_1
-    | 'FOR' valid_time_period_name 'BETWEEN' point_in_time_1 'AND' point_in_time_2
-    | 'FOR' valid_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2
-    | 'FOR' 'ALL' valid_time_period_name
-    | 'FOR' valid_time_period_name 'ALL'
+    : 'FOR' 'VALID_TIME' 'AS' 'OF' point_in_time_1
+    | 'FOR' 'VALID_TIME' 'BETWEEN' point_in_time_1 'AND' point_in_time_2
+    | 'FOR' 'VALID_TIME' 'FROM' point_in_time_1 'TO' point_in_time_2
+    | 'FOR' 'ALL' 'VALID_TIME'
+    | 'FOR' 'VALID_TIME' 'ALL'
     ;
 
 <point_in_time_1> : point_in_time ;
@@ -1325,12 +1230,6 @@ sort_specification : sort_key [ ordering_specification ] [ null_ordering ] ;
 ordering_specification : 'ASC' | 'DESC' ;
 null_ordering : 'NULLS' 'FIRST' | 'NULLS' 'LAST' ;
 
-(*  11 Schema definition and manipulation *)
-
-(*  11.3 <table definition> *)
-
-valid_time_period_name : 'VALID_TIME' ;
-
 (*  13.4 <SQL procedure statement> *)
 
 <sql_transaction_statement>
@@ -1358,9 +1257,9 @@ target_table
 
 delete_statement__searched
     : 'DELETE' 'FROM' target_table
-      [ ( 'FOR' 'PORTION' 'OF' valid_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2 )
-        | ( 'FOR' 'ALL' valid_time_period_name )
-        | ( 'FOR' valid_time_period_name 'ALL' ) ]
+      [ ( 'FOR' 'PORTION' 'OF' 'VALID_TIME' 'FROM' point_in_time_1 'TO' point_in_time_2 )
+        | ( 'FOR' 'ALL' 'VALID_TIME' )
+        | ( 'FOR' 'VALID_TIME' 'ALL' ) ]
       [ [ 'AS' ] correlation_name ]
       [ 'WHERE' search_condition ]
     ;
@@ -1391,9 +1290,9 @@ from_default : 'DEFAULT' 'VALUES' ;
 
 update_statement__searched
     : 'UPDATE' target_table
-      [ ( 'FOR' 'PORTION' 'OF' valid_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2 )
-        | ( 'FOR' 'ALL' valid_time_period_name )
-        | ( 'FOR' valid_time_period_name 'ALL' )]
+      [ ( 'FOR' 'PORTION' 'OF' 'VALID_TIME' 'FROM' point_in_time_1 'TO' point_in_time_2 )
+        | ( 'FOR' 'ALL' 'VALID_TIME' )
+        | ( 'FOR' 'VALID_TIME' 'ALL' )]
       [ ( 'AS' correlation_name ) | !#'(?i)(\bSET\b)' correlation_name ]
       'SET' set_clause_list
       [ 'WHERE' search_condition ]
@@ -1411,7 +1310,7 @@ set_target_list : <left_paren> set_target [ ( <comma> set_target )+ ] <right_par
 
 update_target
     : object_column
-    | object_column left_bracket_or_trigraph simple_value_specification right_bracket_or_trigraph
+    | object_column left_bracket simple_value_specification right_bracket
     ;
 
 <object_column> : column_name ;
@@ -1451,8 +1350,7 @@ session_transaction_characteristics : 'TRANSACTION' transaction_mode [ ( <comma>
 
 (*  19.4 <set local time zone statement> *)
 
-set_local_time_zone_statement : 'SET' 'TIME' 'ZONE' set_time_zone_value ;
-<set_time_zone_value> : <#'\''> (time_zone_interval | time_zone_region) <#'\''> ;
+set_local_time_zone_statement : 'SET' 'TIME' 'ZONE' character_string_literal ;
 
 (*  22 Direct invocation of SQL *)
 
@@ -1530,18 +1428,20 @@ object_name : character_string_literal ;
 end_of_time_value_function : 'END_OF_TIME' [ <left_paren> <right_paren> ] ;
 
 (* DATE_TRUNC function *)
-date_trunc_datetime_function : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_datetime_source [ <comma> date_trunc_time_zone ] <right_paren> ;
 
+date_trunc_datetime_function : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_datetime_source [ <comma> date_trunc_time_zone ] <right_paren> ;
 date_trunc_interval_function : 'DATE_TRUNC' <left_paren> date_trunc_precision_string <comma> date_trunc_interval_source <right_paren> ;
 
 <date_trunc_precision_string> : <quote> date_trunc_precision <quote> ;
+
 date_trunc_precision
     : 'MICROSECOND' | 'MILLISECOND' | 'SECOND' | 'MINUTE' | 'HOUR'
-    | 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR' | 'DECADE' | 'CENTURY' | 'MILLENNIUM' ;
+    | 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR' | 'DECADE' | 'CENTURY' | 'MILLENNIUM'
+    ;
 
-date_trunc_datetime_source : datetime_value_expression
-date_trunc_interval_source : interval_value_expression
-<date_trunc_time_zone> : <quote> time_zone_region <quote>
+date_trunc_datetime_source : datetime_value_expression ;
+date_trunc_interval_source : interval_value_expression ;
+<date_trunc_time_zone> : character_string_literal ;
 
 (* AGE function *)
 
@@ -1557,6 +1457,3 @@ arrow_table : 'ARROW_TABLE' [ <left_paren> character_string_literal <right_paren
 
 direct_sql_statements : direct_sql_statement+ ;
 
-(* <time zone region> *)
-
-time_zone_region : #'([\w\/]+)'
