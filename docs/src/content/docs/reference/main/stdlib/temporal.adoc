@@ -186,7 +186,7 @@ a| Returns true iff `p1` starts before `p2` starts and ends before `p2` ends.
 | `(overlaps? p1 p2)` | `p1 OVERLAPS p2`
 a| Returns true iff `p1` starts before `p2` ends and ends after `p2` starts
 
-* `overlaps?`: `+p1-start < p2-end+`, `+p1-end < p2-start+`
+* `overlaps?`: `+p1-start < p2-end+`, `+p1-end > p2-start+`
 * `strictly-overlaps?`: `+p1-start > p2-start+`, `+p1-end < p2-end+`
 
 | `(precedes? p1 p2)`
