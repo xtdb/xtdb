@@ -18,7 +18,7 @@ class Query:
     def to_json(self): pass
 
 
-ToQuery = Union[Query, tuple[Query, *List[QueryTail]]]
+ToQuery = Union[Query, tuple]
 ToBindings = Union[str, Dict[str, 'expr.Expr']]
 
 
