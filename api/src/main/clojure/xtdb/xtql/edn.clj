@@ -1,17 +1,11 @@
 (ns xtdb.xtql.edn
   (:require [clojure.set :as set]
             [clojure.string :as str]
-            [xtdb.error :as err])
+            [xtdb.error :as err]
+            [xtdb.time :as time])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.api.query Binding Exprs Expr$Null Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param Expr$Get
-                           Expr$LogicVar Expr$Long Expr$Obj Expr$Subquery Expr$Pull Expr$PullMany Expr$SetExpr
-                           Expr$ListExpr Expr$MapExpr
-                           Queries XtqlQuery$Aggregate XtqlQuery$From XtqlQuery$LeftJoin XtqlQuery$Join XtqlQuery$Limit
-                           XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderSpec XtqlQuery$Pipeline XtqlQuery$Offset
-                           XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnionAll XtqlQuery$Where XtqlQuery$With XtqlQuery$Without
-                           XtqlQuery$DocsRelation XtqlQuery$ParamRelation XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$Unnest
-                           TemporalFilters TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
+           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Cast Expr$CastTimestamp Expr$Double Expr$Exists Expr$Get Expr$Let Expr$LetBinding Expr$ListExpr Expr$Local Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs Queries TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilters XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$Return XtqlQuery$Unify XtqlQuery$UnionAll XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)))
 
 ;; TODO inline once the type we support is fixed
 (defn- query-type? [q] (seq? q))
@@ -61,58 +55,127 @@
 (declare parse-arg-specs)
 
 (defn parse-expr ^xtdb.api.query.Expr [expr]
-  (cond
-    (nil? expr) Expr$Null/INSTANCE
-    (true? expr) Expr$Bool/TRUE
-    (false? expr) Expr$Bool/FALSE
-    (int? expr) (Exprs/val (long expr))
-    (double? expr) (Exprs/val (double expr))
-    (symbol? expr) (let [str-expr (str expr)]
-                     (if (str/starts-with? str-expr "$")
-                       (Exprs/param str-expr)
-                       (Exprs/lVar str-expr)))
-    (keyword? expr) (Exprs/val expr)
-    (vector? expr) (Exprs/list ^List (mapv parse-expr expr))
-    (set? expr) (Exprs/set ^List (mapv parse-expr expr))
-    (map? expr) (Exprs/map (into {} (map (juxt (comp #(subs % 1) str key) (comp parse-expr val))) expr))
+  (letfn [(parse-expr* [expr {:keys [locals] :as env}]
+            (cond
+              (nil? expr) Expr$Null/INSTANCE
+              (true? expr) Expr$Bool/TRUE
+              (false? expr) Expr$Bool/FALSE
+              (int? expr) (Exprs/val (long expr))
+              (double? expr) (Exprs/val (double expr))
 
-    (seq? expr) (do
-                  (when (empty? expr)
-                    (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+              (symbol? expr) (if (= 'xtdb/end-of-time expr)
+                               (Exprs/val time/end-of-time)
 
-                  (let [[f & args] expr]
-                    (when-not (symbol? f)
-                      (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+                               (let [str-expr (str expr)]
+                                 (cond
+                                   (contains? locals str-expr) (Expr$Local. str-expr)
 
-                    (case f
-                      .
-                      (do
-                        (when-not (and (= (count args) 2)
-                                       (first args)
-                                       (symbol? (second args)))
-                          (throw (err/illegal-arg :xtql/malformed-get {:expr expr})))
+                                   (or (str/starts-with? str-expr "$")
+                                       (str/starts-with? str-expr "?"))
+                                   (Exprs/param str-expr)
 
-                        (Exprs/get (parse-expr (first args)) (str (second args))))
+                                   :else
+                                   (Exprs/lVar str-expr))))
 
-                      (exists? q pull pull*)
-                      (do
-                        (when-not (and (<= 1 (count args) 2)
-                                       (or (nil? (second args))
-                                           (map? (second args))))
-                          (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr})))
+              (keyword? expr) (Exprs/val expr)
+              (vector? expr) (Exprs/list ^List (mapv #(parse-expr* % env) expr))
+              (set? expr) (Exprs/set ^List (mapv #(parse-expr* % env) expr))
+              (map? expr) (Exprs/map (into {} (map (juxt (comp #(subs % 1) str key) (comp #(parse-expr* % env) val))) expr))
 
-                        (let [[query {:keys [args]}] args
-                              parsed-query (parse-query query)
-                              parsed-args (some-> args (parse-arg-specs expr))]
-                          (case f
-                            exists? (Exprs/exists parsed-query parsed-args)
-                            q (Exprs/q parsed-query parsed-args)
-                            pull (Exprs/pull parsed-query parsed-args)
-                            pull* (Exprs/pullMany parsed-query parsed-args))))
+              (seq? expr) (do
+                            (when (empty? expr)
+                              (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
 
-                      (Exprs/call (str f) ^List (mapv parse-expr args)))))
+                            (let [[f & args] expr]
+                              (when-not (symbol? f)
+                                (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
 
-    :else (Exprs/val expr)))
+                              (case f
+                                .
+                                (do
+                                  (when-not (and (= (count args) 2)
+                                                 (first args)
+                                                 (or (symbol? (second args))
+                                                     (keyword? (second args))))
+                                    (throw (err/illegal-arg :xtql/malformed-get {:expr expr})))
+
+                                  (Exprs/get (parse-expr* (first args) env) (str (symbol (second args)))))
+
+                                ..
+                                (let [[struct & fields] args]
+                                  (when-not (seq fields)
+                                    (throw (err/illegal-arg :xtql/malformed-get
+                                                            {::err/message (str "'..' expects at least 2 args: " (pr-str expr))
+                                                             :expr expr})))
+                                  (when-not (every? #(or (symbol? %) (keyword? %)) fields)
+                                    (throw (err/illegal-arg :xtql/malformed-get
+                                                            {::err/message (str "'..' expects symbol or keyword fields: " (pr-str expr))
+                                                             :expr expr})))
+                                  (reduce (fn [struct-expr field]
+                                            (Exprs/get struct-expr (str field)))
+                                          (parse-expr* struct env)
+                                          (rest args)))
+
+                                if
+                                (do
+                                  (when-not (= (count args) 3)
+                                    (throw (err/illegal-arg :xtql/malformed-if {:expr expr})))
+
+                                  (Exprs/if (parse-expr* (first args) env)
+                                    (parse-expr* (second args) env)
+                                    (parse-expr* (last args) env)))
+
+                                let
+                                (or (when (= (count args) 2)
+                                      (let [[bindings expr] args]
+                                        (when (and (vector? bindings) (even? (count bindings)))
+                                          (let [{:keys [env bindings]} (reduce (fn [{:keys [env bindings]} [k v]]
+                                                                                 (let [k (str k)]
+                                                                                   {:env (-> env (update :locals (fnil conj #{}) k))
+                                                                                    :bindings (conj bindings (Expr$LetBinding. k (parse-expr* v env)))}))
+                                                                               {:env env, :bindings []}
+                                                                               (partition 2 bindings))]
+                                            (Expr$Let. bindings (parse-expr* expr env))))))
+                                    (throw (err/illegal-arg :xtql/malformed-let {:expr expr})))
+
+                                cast
+                                (let [arg-count (count args)]
+                                  (when-not (<= 2 (count args) 3)
+                                    (throw (err/illegal-arg :xtql/malformed-cast {:expr expr})))
+                                  (Expr$Cast. (parse-expr* (first args) env)
+                                              (second args)
+                                              (when (= 3 arg-count)
+                                                (last args))))
+
+                                cast-tstz
+                                (let [arg-count (count args)]
+                                  (when-not (<= 1 (count args) 2)
+                                    (throw (err/illegal-arg :xtql/malformed-cast {:expr expr})))
+                                  (Expr$CastTimestamp. (parse-expr* (first args) env)
+                                                       (when (= 2 arg-count)
+                                                         (second args))))
+
+                                (exists? q pull pull*)
+                                (do
+                                  (when-not (and (<= 1 (count args) 2)
+                                                 (or (nil? (second args))
+                                                     (map? (second args))))
+                                    (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr})))
+
+                                  (let [[query {:keys [args]}] args
+                                        parsed-query (parse-query query)
+                                        parsed-args (some-> args (parse-arg-specs expr))]
+                                    (case f
+                                      exists? (Exprs/exists parsed-query parsed-args)
+                                      q (Exprs/q parsed-query parsed-args)
+                                      pull (Exprs/pull parsed-query parsed-args)
+                                      pull* (Exprs/pullMany parsed-query parsed-args))))
+
+                                (Exprs/call (str f) ^List (mapv #(parse-expr* % env) args)))))
+
+              :else (Exprs/val expr)))]
+
+    (parse-expr* expr {:locals #{}})))
 
 (defprotocol Unparse (unparse [this]))
 (defprotocol UnparseQuery (unparse-query [this]))
