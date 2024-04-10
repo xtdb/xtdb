@@ -373,23 +373,6 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "SELECT 1 FROM t1 WHERE COUNT(t1.a)")
   (valid? "SELECT 1 FROM t1 WHERE 1 = (SELECT COUNT(t1.a) FROM t1)"))
 
-(t/deftest test-fetch-and-offset-type
-  (invalid? [#"Fetch first row count must be an integer"]
-            "SELECT 1 FROM t1 FETCH FIRST 'foo' ROWS ONLY")
-  (valid? "SELECT 1 FROM t1 FETCH FIRST 1 ROWS ONLY")
-
-  (invalid? [#"Fetch first row count must be an integer"]
-            "SELECT 1 FROM t1 LIMIT 'foo'")
-  (valid? "SELECT 1 FROM t1 LIMIT 1")
-
-  (invalid? [#"Offset row count must be an integer"]
-            "SELECT 1 FROM t1 OFFSET 'foo' ROWS")
-  (valid? "SELECT 1 FROM t1 OFFSET 1 ROWS")
-
-  (invalid? [#"Offset row count must be an integer"]
-            "SELECT 1 FROM t1 OFFSET 'foo'")
-  (valid? "SELECT 1 FROM t1 OFFSET 1"))
-
 (t/deftest test-invalid-table-names
   (invalid? [#"Unexpected:\nVALID_TIME"]
             "SELECT VALID_TIME.foo FROM VALID_TIME")

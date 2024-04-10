@@ -963,18 +963,10 @@
 
 (defn- check-unsigned-integer [label ag]
   (when-not (r/zmatch ag
-              [:signed_numeric_literal
-               [:unsigned_numeric_literal lexeme]]
-              ;;=>
-              (not (str/includes? lexeme "."))
-
-              [:host_parameter_name _]
-              ;;=>
-              true
-
-              #"^ROWS?$"
-              ;;=>
-              true)
+              [:numeric_literal lexeme] (not (str/includes? lexeme "."))
+              [:unsigned_integer_literal _] true
+              [:host_parameter_name _] true
+              #"^ROWS?$" true)
     [(format (str label " must be an integer: %s %s")
              (->src-str ag) (->line-info-str ag))]))
 

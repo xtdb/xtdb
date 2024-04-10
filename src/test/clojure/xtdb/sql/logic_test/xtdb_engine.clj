@@ -44,7 +44,7 @@
            [:regular_identifier column]])
 
         [:sort_specification
-         [:unsigned_numeric_literal ordinal]]
+         [:numeric_literal ordinal]]
         ;;=>
         [:sort_specification
          [:column_reference
@@ -52,7 +52,7 @@
            [:regular_identifier (str "col__" ordinal)]]]]
 
         [:sort_specification
-         [:unsigned_numeric_literal ordinal]
+         [:numeric_literal ordinal]
          ordering-spec]
         ;;=>
         [:sort_specification
@@ -62,7 +62,7 @@
          ordering-spec]
 
         [:sort_specification
-         [:unsigned_numeric_literal ordinal]
+         [:numeric_literal ordinal]
          ordering-spec
          null-ordering]
         ;;=>
