@@ -758,8 +758,7 @@
                                        :qualified-column [correlation-name col-name]}
                                       (vary-meta assoc :table table))))))))]
 
-    :insert_statement
-    (projected-columns (r/$ ag -1))
+    :insert_statement (projected-columns (r/$ ag -1))
 
     :from_subquery
     (r/zmatch ag
@@ -798,29 +797,20 @@
       [[{:index 0} {:index 1}]]
       [[{:index 0}]])
 
-    :table_value_constructor
-    (projected-columns (r/$ ag 2))
+    :table_value_constructor (projected-columns (r/$ ag 2))
 
-    (:row_value_expression_list :contextually_typed_row_value_expression_list :in_value_list)
+    (:row_value_expression_list :in_value_list)
     (r/collect-stop
      (fn [ag]
        (r/zcase ag
-         (:row_value_expression_list
-          :contextually_typed_row_value_expression_list)
-         nil
+         :row_value_expression_list nil
 
-         (:explicit_row_value_constructor
-          :contextually_typed_row_value_constructor)
+         :explicit_row_value_constructor
          (let [degree (r/collect-stop
                        (fn [ag]
                          (r/zcase ag
-                           (:row_value_constructor_element
-                            :contextually_typed_row_value_constructor_element)
-                           1
-
-                           :subquery
-                           0
-
+                           :row_value_constructor_element 1
+                           :subquery 0
                            nil))
                        +
                        ag)]
@@ -828,15 +818,13 @@
                    {:index n}))])
 
 
-         :subquery
-         (projected-columns (r/$ ag 1))
+         :subquery (projected-columns (r/$ ag 1))
 
          (when (r/ctor ag)
            [[{:index 0}]])))
      ag)
 
-    (:query_expression_body
-     :query_term)
+    (:query_expression_body :query_term)
     (r/collect-stop
      (fn [ag]
        (r/zcase ag
@@ -850,8 +838,7 @@
          nil))
      ag)
 
-    :subquery
-    (projected-columns (r/$ ag 1))
+    :subquery (projected-columns (r/$ ag 1))
 
     ::r/inherit))
 
