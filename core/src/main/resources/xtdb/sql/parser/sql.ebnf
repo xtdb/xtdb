@@ -31,11 +31,11 @@ vertical_bar : '|' ;
 (*  5.2     <token> and <separator> *)
 
 regular_identifier : !#'(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME|CURRENT_USER|CURRENT_SCHEMA|CURRENT_DATABASE)\b)' #'[a-zA-Z][a-zA-Z0-9_$]*' ;
+delimited_identifier : #'"(""|[^\"])+"' ;
 
 large_object_length_token : #'[0-9]+' multiplier ;
 multiplier : 'K' | 'M' | 'G' | 'T' | 'P' ;
 
-delimited_identifier : #'"(""|[^"])+"' ;
 not_equals_operator : '<>' ;
 greater_than_or_equals_operator : '>=' ;
 less_than_or_equals_operator : '<=' ;
@@ -46,17 +46,8 @@ separator : #'(?<=\s)' ;
 (*  5.3     <literal> *)
 
 <literal>
-    : signed_numeric_literal
-    | general_literal
-    ;
-
-<unsigned_literal>
-    : unsigned_numeric_literal
-    | general_literal
-    ;
-
-<general_literal>
-    : character_string_literal
+    : numeric_literal
+    | character_string_literal
     | binary_string_literal
     | date_literal
     | time_literal
@@ -67,17 +58,13 @@ separator : #'(?<=\s)' ;
     | null_specification
     ;
 
-character_string_literal : #'\'(\'\'|[^\'])*\''+ ;
-
-binary_string_literal : #'X(\'[a-fA-F0-9\s]+\'\s*)+' ;
-
-signed_numeric_literal : [ sign ] unsigned_numeric_literal ;
-unsigned_numeric_literal : #'\d+(\.\d+)?' [ <'E'> signed_integer ] ;
-
+numeric_literal : [ sign ] #'\d+(\.\d+)?' [ exponent ] ;
+unsigned_integer_literal : #'\d+' ;
 <sign> : plus_sign | minus_sign ;
+exponent : <'E'> [ sign ] unsigned_integer_literal ;
 
-signed_integer : [ sign ] unsigned_integer ;
-unsigned_integer : #'\d+' ;
+character_string_literal : #'\'(\'\'|[^\'])*\''+ ;
+binary_string_literal : #'X(\'[a-fA-F0-9\s]+\'\s*)+' ;
 
 date_literal : <'DATE'> character_string_literal ;
 time_literal : <'TIME'> character_string_literal ;
@@ -155,9 +142,9 @@ numeric_type
     | 'DOUBLE' 'PRECISION'
     ;
 
-<length> : unsigned_integer ;
-<precision> : unsigned_integer ;
-<scale> : unsigned_integer ;
+<length> : unsigned_integer_literal ;
+<precision> : unsigned_integer_literal ;
+<scale> : unsigned_integer_literal ;
 
 character_length : length [ char_length_units ] ;
 
@@ -178,8 +165,8 @@ datetime_type
     | 'TIMESTAMP' [ <left_paren> timestamp_precision <right_paren> ] [ with_or_without_time_zone ]
     ;
 
-<time_precision> : unsigned_integer ;
-<timestamp_precision> : unsigned_integer ;
+<time_precision> : unsigned_integer_literal ;
+<timestamp_precision> : unsigned_integer_literal ;
 
 with_or_without_time_zone : 'WITH' 'TIME' 'ZONE' | 'WITHOUT' 'TIME' 'ZONE' ;
 
@@ -189,7 +176,7 @@ interval_type : 'INTERVAL' [ interval_qualifier ] ;
 
 array_type : data_type 'ARRAY' [ left_bracket maximum_cardinality right_bracket ] ;
 
-<maximum_cardinality> : unsigned_integer ;
+<maximum_cardinality> : unsigned_integer_literal ;
 
 (*  6.2        <field definition> *)
 
@@ -203,7 +190,8 @@ field_definition : field_name data_type ;
     ;
 
 <nonparenthesized_value_expression_primary>
-    : unsigned_value_specification
+    : literal
+    | parameter_specification
     | column_reference
     | set_function_specification
     | window_function
@@ -212,30 +200,20 @@ field_definition : field_name data_type ;
     | case_expression
     | cast_specification
     | field_reference
-    | collection_value_constructor
+    | array_value_constructor
     | array_element_reference
-    ;
-
-<collection_value_constructor>
-    : array_value_constructor
     | object_constructor
     ;
 
 (*  6.4     <value specification> and <target specification> *)
 
-<unsigned_value_specification>
-    : unsigned_literal
-    | general_value_specification
-    ;
-
-<general_value_specification>
+<parameter_specification>
     : dynamic_parameter_specification
     | postgres_parameter_specification
     ;
 
-<simple_value_specification> : literal ;
-
 dynamic_parameter_specification : question_mark ;
+postgres_parameter_specification : #'\$\d+' ;
 
 (*  6.5        <contextually typed value specification> *)
 
@@ -281,14 +259,14 @@ window_function_type
 rank_function_type : 'RANK' | 'DENSE_RANK' | 'PERCENT_RANK' | 'CUME_DIST' ;
 
 ntile_function : 'NTILE' <left_paren> number_of_tiles <right_paren> ;
-<number_of_tiles> : simple_value_specification | dynamic_parameter_specification ;
+<number_of_tiles> : unsigned_integer_literal | parameter_specification ;
 
 lead_or_lag_function : lead_or_lag <left_paren> lead_or_lag_extent [ <comma> offset [ <comma> default_expression ] ] <right_paren> [ null_treatment ] ;
 
 lead_or_lag : 'LEAD' | 'LAG' ;
 <lead_or_lag_extent> : value_expression ;
 
-<offset> : unsigned_literal ;
+<offset> : unsigned_integer_literal ;
 <default_expression> : value_expression ;
 null_treatment : 'RESPECT' 'NULLS' | 'IGNORE' 'NULLS' ;
 
@@ -297,10 +275,7 @@ first_or_last_value : 'FIRST_VALUE' | 'LAST_VALUE' ;
 
 nth_value_function : 'NTH_VALUE' <left_paren> value_expression <comma> nth_row <right_paren> [ from_first_or_last ] [ null_treatment ] ;
 
-<nth_row>
-    : simple_value_specification
-    | dynamic_parameter_specification
-    ;
+<nth_row> : unsigned_integer_literal | parameter_specification ;
 
 from_first_or_last : 'FROM' 'FIRST' | 'FROM' 'LAST' ;
 
@@ -330,19 +305,9 @@ row_marker
     | 'END_PARTITION'
     ;
 
-row_marker_expression
-    : row_marker [ row_marker_delta ]
-    ;
-
-row_marker_delta
-    : plus_sign row_marker_offset
-    | minus_sign row_marker_offset
-    ;
-
-<row_marker_offset>
-    : simple_value_specification
-    | dynamic_parameter_specification
-    ;
+row_marker_expression : row_marker [ row_marker_delta ] ;
+row_marker_delta : sign row_marker_offset ;
+<row_marker_offset> : unsigned_integer_literal | parameter_specification ;
 
 <value_of_default_value> : value_expression ;
 
@@ -936,13 +901,13 @@ window_frame_units : 'ROWS' | 'RANGE' | 'GROUPS' ;
 <window_frame_extent> : window_frame_start | window_frame_between ;
 
 window_frame_start : 'UNBOUNDED' 'PRECEDING' | window_frame_preceding | 'CURRENT' 'ROW' ;
-window_frame_preceding : unsigned_value_specification 'PRECEDING' ;
+window_frame_preceding : ( unsigned_integer_literal | parameter_specification ) 'PRECEDING' ;
 window_frame_between : 'BETWEEN' window_frame_bound_1 'AND' window_frame_bound_2 ;
 <window_frame_bound_1> : window_frame_bound ;
 <window_frame_bound_2> : window_frame_bound ;
 
 window_frame_bound : window_frame_start | 'UNBOUNDED' 'FOLLOWING' | window_frame_following ;
-window_frame_following : unsigned_value_specification 'FOLLOWING' ;
+window_frame_following : ( unsigned_integer_literal | parameter_specification ) 'FOLLOWING' ;
 
 window_frame_exclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUDE' 'TIES' | 'EXCLUDE' 'NO' 'OTHERS' ;
 
@@ -986,15 +951,12 @@ order_by_clause : 'ORDER' 'BY' sort_specification_list ;
 result_offset_clause : 'OFFSET' offset_row_count ( 'ROW' | 'ROWS' )? ;
 
 fetch_first_clause
-    : 'FETCH' ( 'FIRST' | 'NEXT' ) [ fetch_first_quantity ] ( 'ROW' | 'ROWS' ) 'ONLY'
-    | 'LIMIT' fetch_first_quantity
+    : 'FETCH' ( 'FIRST' | 'NEXT' ) [ fetch_first_row_count ] ( 'ROW' | 'ROWS' ) 'ONLY'
+    | 'LIMIT' fetch_first_row_count
     ;
 
-<fetch_first_quantity> : fetch_first_row_count ;
-
-<offset_row_count> : simple_value_specification ;
-
-<fetch_first_row_count> : simple_value_specification ;
+<fetch_first_row_count> : unsigned_integer_literal | parameter_specification ;
+<offset_row_count> : unsigned_integer_literal | parameter_specification ;
 
 (*  7.15 <subquery> *)
 
@@ -1203,8 +1165,8 @@ primary_datetime_field
 
 non_second_primary_datetime_field : 'YEAR' | 'MONTH' | 'DAY' | 'HOUR' | 'MINUTE' ;
 
-<interval_fractional_seconds_precision> : unsigned_integer ;
-<interval_leading_field_precision> : unsigned_integer ;
+<interval_fractional_seconds_precision> : unsigned_integer_literal ;
+<interval_leading_field_precision> : unsigned_integer_literal ;
 
 (*  10.9 <aggregate function> *)
 
@@ -1308,10 +1270,7 @@ set_clause : set_target equals_operator update_source ;
 
 set_target_list : <left_paren> set_target [ ( <comma> set_target )+ ] <right_paren> ;
 
-update_target
-    : object_column
-    | object_column left_bracket simple_value_specification right_bracket
-    ;
+update_target : object_column [ left_bracket (unsigned_integer_literal | parameter_specification) right_bracket ] ;
 
 <object_column> : column_name ;
 
@@ -1392,10 +1351,6 @@ general_logarithm_function : 'LOG' <left_paren> general_logarithm_base <comma> g
 <general_logarithm_base> : numeric_value_expression ;
 <general_logarithm_argument> : numeric_value_expression ;
 common_logarithm : 'LOG10' <left_paren> numeric_value_expression <right_paren> ;
-
-(* postgres parameters *)
-
-postgres_parameter_specification : #'\$\d+' ;
 
 (* <least function> and <greatest function> *)
 

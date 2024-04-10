@@ -76,7 +76,7 @@
     (list 'single-field-interval e datetime-field 2 0)
 
     [:interval_qualifier
-     [:single_datetime_field [:non_second_primary_datetime_field datetime-field] [:unsigned_integer leading-precision]]]
+     [:single_datetime_field [:non_second_primary_datetime_field datetime-field] [:unsigned_integer_literal leading-precision]]]
     ;; =>
     (list 'single-field-interval e datetime-field (parse-long leading-precision) 0)
 
@@ -86,12 +86,12 @@
     (list 'single-field-interval e "SECOND" 2 6)
 
     [:interval_qualifier
-     [:single_datetime_field "SECOND" [:unsigned_integer leading-precision]]]
+     [:single_datetime_field "SECOND" [:unsigned_integer_literal leading-precision]]]
     ;; =>
     (list 'single-field-interval e "SECOND" (parse-long leading-precision) 6)
 
     [:interval_qualifier
-     [:single_datetime_field "SECOND" [:unsigned_integer leading-precision] [:unsigned_integer fractional-precision]]]
+     [:single_datetime_field "SECOND" [:unsigned_integer_literal leading-precision] [:unsigned_integer_literal fractional-precision]]]
     ;; =>
     (list 'single-field-interval e "SECOND" (parse-long leading-precision) (parse-long fractional-precision))
 
@@ -103,7 +103,7 @@
     (list 'multi-field-interval e leading-field 2 trailing-field 2)
 
     [:interval_qualifier
-     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer_literal leading-precision]]
      "TO"
      [:end_field [:non_second_primary_datetime_field trailing-field]]]
     ;; =>
@@ -117,23 +117,23 @@
     (list 'multi-field-interval e leading-field 2 "SECOND" 6)
 
     [:interval_qualifier
-     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer_literal leading-precision]]
      "TO"
      [:end_field "SECOND"]]
     ;; =>
     (list 'multi-field-interval e leading-field (parse-long leading-precision) "SECOND" 6)
 
     [:interval_qualifier
-     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer_literal leading-precision]]
      "TO"
-     [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+     [:end_field "SECOND" [:unsigned_integer_literal fractional-precision]]]
     ;; =>
     (list 'multi-field-interval e leading-field (parse-long leading-precision) "SECOND" (parse-long fractional-precision))
 
     [:interval_qualifier
      [:start_field [:non_second_primary_datetime_field leading-field]]
      "TO"
-     [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+     [:end_field "SECOND" [:unsigned_integer_literal fractional-precision]]]
     ;; =>
     (list 'multi-field-interval e leading-field 2 "SECOND" (parse-long fractional-precision))
     (throw (err/illegal-arg :xtdb.sql/parse-error
@@ -145,11 +145,11 @@
     [_ [:non_second_primary_datetime_field datetime-field]]
     {:field datetime-field}
 
-    [_ [:non_second_primary_datetime_field datetime-field] [:unsigned_integer leading-precision]]
+    [_ [:non_second_primary_datetime_field datetime-field] [:unsigned_integer_literal leading-precision]]
     {:field datetime-field
      :lp (parse-long leading-precision)}
 
-    [:end_field "SECOND" [:unsigned_integer fractional-precision]]
+    [:end_field "SECOND" [:unsigned_integer_literal fractional-precision]]
     {:field "SECOND"
      :fp (parse-long fractional-precision)}
 
@@ -157,12 +157,12 @@
     {:field "SECOND"
      :fp 6}
 
-    [_ "SECOND" [:unsigned_integer leading-precision]]
+    [_ "SECOND" [:unsigned_integer_literal leading-precision]]
     {:field "SECOND"
      :lp (parse-long leading-precision)
      :fp 6}
 
-    [_ "SECOND" [:unsigned_integer leading-precision] [:unsigned_integer fractional-precision]]
+    [_ "SECOND" [:unsigned_integer_literal leading-precision] [:unsigned_integer_literal fractional-precision]]
     {:field "SECOND"
      :lp (parse-long leading-precision)
      :fp (parse-long fractional-precision)}
@@ -231,29 +231,29 @@
     (list 'cast e [:time-local :micro])
     [:datetime_type "TIME" [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
     (list 'cast e [:time-local :micro])
-    [:datetime_type "TIME" [:unsigned_integer fractional-precision]]
+    [:datetime_type "TIME" [:unsigned_integer_literal fractional-precision]]
     (cast-temporal-with-precision e :time-local fractional-precision)
-    [:datetime_type "TIME" [:unsigned_integer fractional-precision] [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
+    [:datetime_type "TIME" [:unsigned_integer_literal fractional-precision] [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
     (cast-temporal-with-precision e :time-local fractional-precision)
 
     [:datetime_type "TIMESTAMP"]
     (list 'cast e [:timestamp-local :micro])
     [:datetime_type "TIMESTAMP" [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
     (list 'cast e [:timestamp-local :micro])
-    [:datetime_type "TIMESTAMP" [:unsigned_integer fractional-precision]]
+    [:datetime_type "TIMESTAMP" [:unsigned_integer_literal fractional-precision]]
     (cast-temporal-with-precision e :timestamp-local fractional-precision)
-    [:datetime_type "TIMESTAMP" [:unsigned_integer fractional-precision] [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
+    [:datetime_type "TIMESTAMP" [:unsigned_integer_literal fractional-precision] [:with_or_without_time_zone "WITHOUT" "TIME" "ZONE"]]
     (cast-temporal-with-precision e :timestamp-local fractional-precision)
     
     [:datetime_type "TIMESTAMP" [:with_or_without_time_zone "WITH" "TIME" "ZONE"]]
     (list 'cast-tstz e)
-    [:datetime_type "TIMESTAMP" [:unsigned_integer fractional-precision] [:with_or_without_time_zone "WITH" "TIME" "ZONE"]]
+    [:datetime_type "TIMESTAMP" [:unsigned_integer_literal fractional-precision] [:with_or_without_time_zone "WITH" "TIME" "ZONE"]]
      (let [fp (parse-long fractional-precision)]
        (list 'cast-tstz e {:precision fp :unit (if (<= fp 6) :micro :nano)}))
 
     [:duration_type "DURATION"]
     (list 'cast e [:duration :micro])
-    [:duration_type "DURATION" [:unsigned_integer fractional-precision]]
+    [:duration_type "DURATION" [:unsigned_integer_literal fractional-precision]]
     (cast-temporal-with-precision e :duration fractional-precision)
 
     [:interval_type "INTERVAL"]
@@ -484,19 +484,22 @@
     ;;=>
     (list (symbol op) (expr t) (expr f))
 
-    [:signed_numeric_literal ^:z unl]
-    ;;=>
-    (expr unl)
-
-    [:unsigned_numeric_literal lexeme]
+    [:numeric_literal lexeme]
     ;;=>
     (if (str/includes? lexeme ".")
       (parse-double lexeme)
       (parse-long lexeme))
 
-    [:unsigned_integer lexeme] (parse-long lexeme)
+    [:numeric_literal [_ sign] lexeme]
+    ;;=>
+    (cond-> (if (str/includes? lexeme ".")
+              (parse-double lexeme)
+              (parse-long lexeme))
+      (= "-" sign) -)
 
-    [:factor [:minus_sign "-"] [:unsigned_numeric_literal "9223372036854775808"]]
+    [:unsigned_integer_literal lexeme] (parse-long lexeme)
+
+    [:factor [:minus_sign "-"] [:numeric_literal "9223372036854775808"]]
     Long/MIN_VALUE
 
     [:factor [:minus_sign "-"] ^:z np]
@@ -581,7 +584,7 @@
     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
     (list 'not (list 'like-regex (expr rvp) (expr cp) (expr flag)))
 
-    ;; Treating postgres infix regex operators as alisases for LIKE_REGEX
+    ;; Treating postgres infix regex operators as aliases for LIKE_REGEX
     [:postgres_regex_predicate ^:z rvp [:postgres_regex_operator "~"] ^:z cp]
     (list 'like-regex (expr rvp) (expr cp) "")
 

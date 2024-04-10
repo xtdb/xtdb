@@ -526,8 +526,8 @@
                   {:statement-type :set-time-zone
                    :tz (r/zmatch tz
                          [:time_zone_interval [_ sign]
-                          [:unsigned_integer offset-hours]
-                          [:unsigned_integer offset-mins]]
+                          [:unsigned_integer_literal offset-hours]
+                          [:unsigned_integer_literal offset-mins]]
                          (ZoneOffset/ofHoursMinutes (cond-> (parse-long offset-hours)
                                                       (= sign "-") -)
                                                     (cond-> (parse-long offset-mins)
