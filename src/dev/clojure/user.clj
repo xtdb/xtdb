@@ -4,7 +4,9 @@
             xtdb.serde
             [xtdb.util :as util]
             [xtdb.xray :as xray :refer [xray]])
-  (:import java.io.File))
+  (:import java.io.File
+           [ch.qos.logback.classic Level Logger]
+           org.slf4j.LoggerFactory))
 
 (alter-var-root #'*warn-on-reflection* (constantly true))
 
@@ -27,3 +29,9 @@
 (defn dev []
   (require 'dev)
   (in-ns 'dev))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn set-log-level! [ns level]
+  (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
+             (when level
+               (Level/valueOf (name level)))))
