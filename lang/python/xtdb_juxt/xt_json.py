@@ -1,5 +1,5 @@
 import json
-from .types import Query, QueryTail
+from .types import QueryTail, Query
 from .tx import TxOp
 
 

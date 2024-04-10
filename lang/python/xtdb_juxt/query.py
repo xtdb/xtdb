@@ -6,12 +6,12 @@ from . import expr
 from . import temporal_filter as tf
 from .binding import Binding, to_bindings
 from .temporal_filter import TemporalFilter
-from .types import UnifyClause, QueryTail, Query, ToQuery, Expr, ToBindings, to_query
+from .types import UnifyClause, QueryTail, XtqlQuery, ToQuery, Expr, ToBindings, to_query
 
 Args = List[Binding]
 
 
-class From(UnifyClause, Query):
+class From(UnifyClause, XtqlQuery):
     class TemporalFilterConfigurator:
         def __init__(self, outer: 'From', k: str):
             self.outer = outer
@@ -76,7 +76,7 @@ class Where(UnifyClause, QueryTail):
 
 class Join(UnifyClause):
     def __init__(self, query: ToQuery, args=None):
-        self.query: Query = to_query(query)
+        self.query: XtqlQuery = to_query(query)
         self.args = args if args else []
         self.bindings: List[Binding] = []
 
@@ -98,7 +98,7 @@ class LeftJoin(UnifyClause):
     bindings: list[Any] = []
 
     def __init__(self, query: ToQuery, args: List[Dict[str, 'expr.Expr']]):
-        self.query: Query = to_query(query)
+        self.query: XtqlQuery = to_query(query)
         self.args = args
 
     def binding(self, *bindings: ToBindings) -> 'LeftJoin':
@@ -222,7 +222,7 @@ class Offset(QueryTail):
         return {"offset": self.offset}
 
 
-class Unify(Query):
+class Unify(XtqlQuery):
     def __init__(self, *clauses: UnifyClause):
         self.clauses = list(clauses)
 
