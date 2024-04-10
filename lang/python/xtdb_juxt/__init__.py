@@ -1,4 +1,5 @@
 import json
+from dateutil import parser
 from datetime import datetime
 from typing import Optional
 
@@ -24,7 +25,7 @@ class TxKey:
 def _parse_tx_response(tx_response):
     tx_id = tx_response['txId']
     system_time_iso = tx_response['systemTime']
-    system_time = datetime.fromisoformat(system_time_iso.replace("Z", "+00:00"))
+    system_time = parser.parse(system_time_iso)
 
     return TxKey(tx_id, system_time)
 
