@@ -16,6 +16,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
+           (xtdb.api.query Expr$Bool Expr$Call Expr$Cast Expr$CastTimestamp Expr$Double Expr$Get Expr$If Expr$Let Expr$LetBinding Expr$ListExpr Expr$Local Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$SetExpr)
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.util StringUtil)
@@ -24,127 +25,82 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti parse-list-form
-  (fn [[f & args] env]
-    f)
-  :default ::default)
+(defprotocol FromXtqlExpr
+  (<-Expr [expr env]))
 
-(defn form->expr [form {:keys [col-types param-types locals] :as env}]
-  (cond
-    (symbol? form) (cond
-                     (= 'xtdb/end-of-time form) {:op :literal, :literal time/end-of-time}
-                     (contains? locals form) {:op :local, :local form}
-                     (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
-                     (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}
-                     :else (throw (err/illegal-arg :xtdb.expression/unknown-symbol
-                                                   {::err/message (format "Unknown symbol: '%s'" form)
-                                                    :symbol form})))
+(extend-protocol FromXtqlExpr
+  Expr$Null (<-Expr [_ _] {:op :literal, :literal nil})
+  Expr$Bool (<-Expr [expr _] {:op :literal, :literal (.bool expr)})
+  Expr$Double (<-Expr [expr _] {:op :literal, :literal (.dbl expr)})
+  Expr$Long (<-Expr [expr _] {:op :literal, :literal (.lng expr)})
+  Expr$Obj (<-Expr [expr _] {:op :literal, :literal (.obj expr)})
 
-    (map? form) (do
-                  (when-not (every? keyword? (keys form))
-                    (throw (err/illegal-arg :xtdb.expression/parse-error
-                                            {::err/message (str "keys to struct must be keywords: " (pr-str form))
-                                             :form form})))
-                  {:op :struct,
-                   :entries (->> (for [[k v-form] form]
-                                   (MapEntry/create k (form->expr v-form env)))
-                                 (into {}))})
+  Expr$LogicVar
+  (<-Expr [expr {:keys [col-types]}]
+    (let [variable (symbol (.lv expr))]
+      (if-let [var-type (get col-types variable)]
+        {:op :variable, :variable variable, :var-type var-type}
+        (throw (err/illegal-arg :xtdb.expression/unknown-symbol
+                                {::err/message (format "Unknown symbol: '%s'" variable)
+                                 :symbol variable})))))
 
-    (vector? form) {:op :list, :elements (mapv #(form->expr % env) form)}
-    (set? form) {:op :set, :elements (mapv #(form->expr % env) form)}
+  Expr$Param
+  (<-Expr [expr {:keys [param-types]}]
+    (let [param (symbol (.v expr))]
+      (if-let [param-type (get param-types param)]
+        {:op :param, :param param, :param-type param-type}
+        (throw (err/illegal-arg :xtdb.expression/unknown-symbol
+                                {::err/message (format "Unknown param: '%s'" param)
+                                 :symbol param})))))
 
-    (seq? form) (parse-list-form form env)
+  Expr$Local
+  (<-Expr [expr _]
+    {:op :local, :local (symbol (.local expr))})
 
-    :else {:op :literal, :literal form}))
+  Expr$Call
+  (<-Expr [expr env]
+    {:op :call, :f (keyword (.f expr)), :args (mapv #(<-Expr % env) (.args expr))})
 
-(defmethod parse-list-form 'if [[_ & args :as form] env]
-  (when-not (= 3 (count args))
-    (throw (err/illegal-arg :xtdb.expression/arity-error
-                            {::err/message (str "'if' expects 3 args: " (pr-str form))
-                             :form form})))
+  Expr$Cast
+  (<-Expr [expr env]
+    {:op :call, :f :cast
+     :args [(<-Expr (.expr expr) env)]
+     :target-type (.targetType expr)
+     :cast-opts (.castOpts expr)})
 
-  (let [[pred then else] args]
+  Expr$If
+  (<-Expr [expr env]
     {:op :if,
-     :pred (form->expr pred env),
-     :then (form->expr then env),
-     :else (form->expr else env)}))
+     :pred (<-Expr (.pred expr) env)
+     :then (<-Expr (.then expr) env)
+     :else (<-Expr (.else expr) env)})
 
-(defmethod parse-list-form 'let [[_ & args :as form] env]
-  (when-not (= 2 (count args))
-    (throw (err/illegal-arg :xtdb.expression/arity-error
-                            {::err/message (str "'let' expects 2 args - bindings + body"
-                                                 (pr-str form))
-                             :form form})))
+  Expr$Let
+  (<-Expr [expr env]
+    (reduce (fn [body ^Expr$LetBinding binding]
+              {:op :let
+               :local (symbol (.local binding))
+               :expr (<-Expr (.expr binding) env)
+               :body body})
+            (<-Expr (.expr expr) env)
+            (reverse (.bindings expr))))
 
-  (let [[bindings body] args]
-    (when-not (or (nil? bindings) (sequential? bindings))
-      (throw (err/illegal-arg :xtdb.expression/parse-error
-                              {::err/message (str "'let' expects a sequence of bindings: "
-                                                   (pr-str form))
-                               :form form})))
-
-    (if-let [[local expr-form & more-bindings] (seq bindings)]
-      (do
-        (when-not (symbol? local)
-          (throw (err/illegal-arg :xtdb.expression/parse-error
-                                  {::err/message (str "bindings in `let` should be symbols: "
-                                                       (pr-str local))
-                                   :binding local})))
-        {:op :let
-         :local local
-         :expr (form->expr expr-form env)
-         :body (form->expr (list 'let more-bindings body)
-                           (update env :locals (fnil conj #{}) local))})
-
-      (form->expr body env))))
-
-(defmethod parse-list-form '. [[_ & args :as form] env]
-  (when-not (= 2 (count args))
-    (throw (err/illegal-arg :xtdb.expression/arity-error
-                            {::err/message (str "'.' expects 2 args: " (pr-str form))
-                             :form form})))
-
-  (let [[struct field] args]
-    (when-not (or (symbol? field) (keyword? field))
-      (throw (err/illegal-arg :xtdb.expression/arity-error
-                              {::err/message (str "'.' expects symbol or keyword fields: " (pr-str form))
-                               :form form})))
-
+  Expr$Get
+  (<-Expr [expr env]
     {:op :call
      :f :get-field
-     :args [(form->expr struct env)]
-     :field (symbol field)}))
+     :args [(<-Expr (.expr expr) env)]
+     :field (symbol (.field expr))})
 
-(defmethod parse-list-form '.. [[_ & args :as form] env]
-  (let [[struct & fields] args]
-    (when-not (seq fields)
-      (throw (err/illegal-arg :xtdb.expression/arity-error
-                              {::err/message (str "'..' expects at least 2 args: " (pr-str form))
-                               :form form})))
-    (when-not (every? #(or (symbol? %) (keyword? %)) fields)
-      (throw (err/illegal-arg :xtdb.expression/parse-error
-                              {::err/message (str "'..' expects symbol or keyword fields: " (pr-str form))
-                               :form form})))
-    (reduce (fn [struct-expr field]
-              {:op :call
-               :f :get-field
-               :args [struct-expr]
-               :field (symbol field)})
-            (form->expr struct env)
-            (rest args))))
+  Expr$ListExpr (<-Expr [expr env] {:op :list, :elements (mapv #(<-Expr % env) (.elements expr))})
+  Expr$SetExpr (<-Expr [expr env] {:op :set, :elements (mapv #(<-Expr % env) (.elements expr))})
 
-(defmethod parse-list-form 'cast [[_ expr target-type cast-opts] env]
-  {:op :call
-   :f :cast
-   :args [(form->expr expr env)]
-   :target-type target-type
-   :cast-opts cast-opts})
-
-(defmethod parse-list-form ::default [[f & args] env]
-  {:op :call
-   :f (keyword (namespace f) (name f))
-   :args (mapv #(form->expr % env) args)})
+  Expr$MapExpr
+  (<-Expr [expr env]
+    {:op :struct,
+     :entries (->> (.elements expr)
+                   (mapv (fn [[k v]]
+                           [(keyword k) (<-Expr v env)])))}))
 
 (defn with-tag [sym tag]
   (-> sym
@@ -322,7 +278,7 @@
   ;; if literal, we can just yield a long directly
   (if (instance? LocalDate code)
     (.toEpochDay ^LocalDate code)
-    `(.toEpochDay ~code)))
+    `(.toEpochDay ~(with-tag code LocalDate))))
 
 ;; we emit these to PDs until the EE uses these types directly
 (defmethod emit-value IntervalYearMonth [_ code]

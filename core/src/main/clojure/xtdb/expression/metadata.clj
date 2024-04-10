@@ -5,7 +5,8 @@
             [xtdb.metadata :as meta]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.xtql.edn :as edn])
   (:import java.util.function.IntPredicate
            (xtdb.metadata IMetadataPredicate ITableMetadata)
            (xtdb.vector IVectorReader RelationReader)))
@@ -196,8 +197,8 @@
 
 (defn ->metadata-selector ^xtdb.metadata.IMetadataPredicate [form col-types params]
   (let [param-types (expr/->param-types params)
-        {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
-                                                                   :col-types col-types})
+        {:keys [expr f]} (compile-meta-expr (-> (edn/parse-expr form)
+                                                (expr/<-Expr {:param-types param-types, :col-types col-types}))
                                             {:param-types param-types
                                              :col-types col-types
                                              :extract-vecs-from-rel? false})

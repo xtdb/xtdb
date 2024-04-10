@@ -8,7 +8,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.xtql.edn :as edn])
   (:import clojure.lang.MapEntry
            (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
@@ -82,7 +83,7 @@
 
         (doseq [[k v] row
                 :let [k-sym (symbol k)]]
-          (let [expr (expr/form->expr v (assoc opts :param-types param-types))
+          (let [expr (expr/<-Expr (edn/parse-expr v) (assoc opts :param-types param-types))
                 ^Set field-set (.computeIfAbsent field-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
             (case (:op expr)
               :literal (do
@@ -100,7 +101,7 @@
               ;; HACK: this is quite heavyweight to calculate a single value -
               ;; the EE doesn't yet have an efficient means to do so...
               (let [input-types (assoc opts :param-types param-types)
-                    expr (expr/form->expr v input-types)
+                    expr (expr/<-Expr (edn/parse-expr v) input-types)
                     projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
                 (.add field-set (types/col-type->field (.getColumnType projection-spec)))
                 (.put out-row k (fn [{:keys [allocator params]}]

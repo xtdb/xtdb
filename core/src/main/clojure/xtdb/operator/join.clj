@@ -12,7 +12,8 @@
             [xtdb.operator.scan :as scan]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.xtql.edn :as edn])
   (:import [clojure.lang IFn]
            (java.util ArrayList Iterator List)
            (java.util.function Consumer IntConsumer)
@@ -20,8 +21,8 @@
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
            (org.apache.arrow.vector.types.pojo Field)
-           org.roaringbitmap.RoaringBitmap
            (org.roaringbitmap.buffer MutableRoaringBitmap)
+           org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
            (xtdb.expression.map IRelationMap)
            (xtdb.operator IProjectionSpec)
@@ -384,7 +385,7 @@
                       input-types {:col-types (update-vals fields types/field->col-type)
                                    :param-types (update-vals param-fields types/field->col-type)}]
                   {:key-col-name col-name
-                   :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
+                   :projection (expr/->expression-projection-spec col-name (expr/<-Expr (edn/parse-expr form) input-types)
                                                                   input-types)})))]
 
       {:left (equi-projection :left left-expr left-fields)

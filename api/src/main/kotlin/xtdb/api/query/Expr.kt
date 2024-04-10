@@ -38,7 +38,9 @@ internal object ExprSerde : JsonContentPolymorphicSerializer<Expr>(Expr::class) 
             "xt:lvar" in element -> Expr.LogicVar.serializer()
             "xt:param" in element -> Expr.Param.serializer()
             "xt:call" in element -> Expr.Call.serializer()
-            "xt:get " in element -> Expr.Get.serializer()
+            "xt:if" in element -> Expr.If.serializer()
+            "xt:let" in element -> Expr.Let.serializer()
+            "xt:get" in element -> Expr.Get.serializer()
             "xt:q" in element -> Expr.Subquery.serializer()
             "xt:exists" in element -> Expr.Exists.serializer()
             "xt:pull" in element -> Expr.Pull.serializer()
@@ -153,11 +155,42 @@ sealed interface Expr {
     data class Call(@JvmField @SerialName("xt:call") val f: String, @JvmField val args: List<Expr>) : Expr
 
     @Serializable
+    data class Cast(
+        @JvmField @SerialName("xt:cast") val expr: Expr,
+        @JvmField val targetType: Any,
+        @JvmField val castOpts: Any? = null,
+    ) : Expr
+
+    @Serializable
+    data class CastTimestamp(
+        @JvmField @SerialName("xt:castTimestamp") val expr: Expr,
+        @JvmField val castOpts: Any? = null,
+    ) : Expr
+
+    @Serializable
+    data class If(
+        @JvmField @SerialName("xt:if") val pred: Expr,
+        @JvmField val then: Expr,
+        @JvmField val `else`: Expr,
+    ) : Expr
+
+    @Serializable
+    data class LetBinding(@JvmField val local: String, @JvmField val expr: Expr)
+
+    @Serializable
+    data class Let(@JvmField @SerialName("xt:let") val bindings: List<LetBinding>, @JvmField val expr: Expr) : Expr
+
+    @Serializable
+    data class Local(@JvmField @SerialName("xt:local") val local: String) : Expr
+
+    @Serializable
     data class Get(@JvmField @SerialName("xt:get") val expr: Expr, @JvmField val field: String) : Expr
 
     @Serializable
-    data class Subquery(@JvmField @SerialName("xt:q") val query: XtqlQuery, @JvmField val args: List<Binding>? = null) :
-        Expr
+    data class Subquery(
+        @JvmField @SerialName("xt:q") val query: XtqlQuery,
+        @JvmField val args: List<Binding>? = null,
+    ) : Expr
 
     @Serializable
     data class Exists(
@@ -272,6 +305,9 @@ object Exprs {
     fun get(expr: Expr, field: String) = Expr.Get(expr, field)
 
     @JvmStatic
+    fun `if`(pred: Expr, then: Expr, `else`: Expr) = Expr.If(pred, then, `else`)
+
+    @JvmStatic
     fun q(query: XtqlQuery, args: List<Binding>? = null) = Expr.Subquery(query, args)
 
     @JvmStatic
@@ -301,7 +337,7 @@ object Exprs {
     @JvmSynthetic
     fun map(vararg elements: Pair<String, Expr>) = map(elements.toMap())
 
-    class Builder internal constructor(){
+    class Builder internal constructor() {
         operator fun String.invoke(vararg args: Expr) = call(this, *args)
 
         val `null` = Null

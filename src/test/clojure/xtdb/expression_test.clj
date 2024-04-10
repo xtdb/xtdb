@@ -9,7 +9,8 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.xtql.edn :as edn])
   (:import (java.nio ByteBuffer)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
@@ -31,7 +32,7 @@
   (with-open [in-rel (tu/open-rel (->data-vecs))]
     (letfn [(project [form]
               (let [input-types {:col-types {'a :f64, 'b :f64, 'd :i64}, :param-types {}}
-                    expr (expr/form->expr form input-types)]
+                    expr (expr/<-Expr (edn/parse-expr form) input-types)]
                 (with-open [project-col (.project (expr/->expression-projection-spec "c" expr input-types)
                                                   tu/*allocator* in-rel
                                                   vw/empty-params)]
@@ -42,10 +43,6 @@
 
       (t/is (= (mapv (comp double -) (range 1000) (map (partial * 2) (range 1000)))
                (project '(- a (* 2.0 b)))))
-
-      (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
-               (project '(:+ a (:+ b 2))))
-            "support keywords")
 
       (t/is (= (mapv + (repeat 2) (range 1000))
                (project '(+ 2 d)))
@@ -71,7 +68,7 @@
     (letfn [(select-relation [form col-types params-map]
               (with-open [param-rel (tu/open-params params-map)]
                 (let [input-types {:col-types col-types, :param-types (expr/->param-types param-rel)}]
-                  (alength (.select (expr/->expression-relation-selector (expr/form->expr form input-types) input-types)
+                  (alength (.select (expr/->expression-relation-selector (expr/<-Expr (edn/parse-expr form) input-types) input-types)
                                     tu/*allocator* in-rel param-rel)))))]
 
       (t/testing "selector"
@@ -84,7 +81,7 @@
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
-           (-> (.select (expr/->expression-relation-selector (expr/form->expr '(and true nil) {}) {})
+           (-> (.select (expr/->expression-relation-selector (expr/<-Expr (edn/parse-expr '(and true nil)) {}) {})
                         tu/*allocator* (vr/rel-reader [] 1) vw/empty-params)
                (alength)))))
 
@@ -320,7 +317,7 @@
                        (into {} (map (juxt #(symbol (.getName ^IVectorReader %))
                                            #(types/field->col-type (.getField ^IVectorReader %))))))
         input-types {:col-types col-types, :param-types {}}
-        expr (expr/form->expr form input-types)]
+        expr (expr/<-Expr (edn/parse-expr form) input-types)]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
                                    tu/*allocator* rel vw/empty-params)]
       {:res (tu/<-reader out-ivec)
