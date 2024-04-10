@@ -122,7 +122,10 @@
       (util/with-close-on-catch [write-ch (Channels/newChannel baos)
                                  aw (ArrowFileWriter. vsr nil write-ch)]
 
-        (.start aw)
+        (try
+          (.start aw)
+          (catch ClosedByInterruptException e
+            (throw (InterruptedException.))))
 
         (reify IArrowWriter
           (writeBatch [_] (.writeBatch aw))
@@ -208,7 +211,11 @@
     (let [tmp-path (create-tmp-path disk-store)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  aw (ArrowFileWriter. vsr nil file-ch)]
-        (.start aw)
+        (try
+          (.start aw)
+          (catch ClosedByInterruptException e
+            (throw (InterruptedException.))))
+
         (reify IArrowWriter
           (writeBatch [_]
             (try
@@ -356,7 +363,10 @@
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  aw (ArrowFileWriter. vsr nil file-ch)]
 
-        (.start aw)
+        (try
+          (.start aw)
+          (catch ClosedByInterruptException e
+            (throw (InterruptedException.))))
 
         (reify IArrowWriter
           (writeBatch [_] (.writeBatch aw))
