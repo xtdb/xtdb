@@ -1,7 +1,6 @@
 (ns xtdb.expression
   (:require [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
-            [xtdb.expression.walk :as walk]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -345,18 +344,9 @@
                  (f return-type (emit-value literal-type literal)))
      :literal literal}))
 
-(defn lit->param [{:keys [op] :as expr}]
-  (if (= op :literal)
-    (let [{:keys [literal]} expr]
-      {:op :param, :param (gensym 'lit),
-       :param-type (vw/value->col-type literal)
-       :literal literal})
-    expr))
-
 (defn prepare-expr [expr]
   (->> expr
-       (macro/macroexpand-all)
-       (walk/postwalk-expr lit->param)))
+       (macro/macroexpand-all)))
 
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
   (zmatch return-type
@@ -409,18 +399,9 @@
                     (.setPosition ~vpos-sym ~idx)
                     ~(continue-read f col-type var-rdr-sym)))}))
 
-(defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param-types]}]
-  (if-let [[_ literal] (find expr :literal)]
-    (let [lit-type (vw/value->col-type literal)
-          lit-class (class literal)]
-      (into {:return-type lit-type
-             :batch-bindings [[param (emit-value lit-class literal)]]
-             :continue (fn [f]
-                         (f lit-type param))}
-            (select-keys expr #{:literal})))
-
-    (codegen-expr {:op :variable, :variable param, :rel params-sym, :idx 0}
-                  {:var->col-type {param (get param-types param)}})))
+(defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
+  (codegen-expr {:op :variable, :variable param, :rel params-sym, :idx 0}
+                {:var->col-type {param (get param-types param)}}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
   (let [{p-cont :continue, :as emitted-p} (codegen-expr {:op :call, :f :boolean, :args [pred]} opts)
@@ -1506,7 +1487,6 @@
    assumption wouldn't hold if macroexpansion created new variable exprs, for example.
    macroexpansion is non-deterministic (gensym), so busts the memo cache."
   (-> (fn [expr opts]
-        ;; TODO should lit->param be outside the memoize, s.t. we don't have a cache entry for each literal value?
         (let [expr (prepare-expr expr)
               {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]

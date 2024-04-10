@@ -4,7 +4,8 @@
             [xtdb.expression.walk :as ewalk]
             [xtdb.metadata :as meta]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import java.util.function.IntPredicate
            (xtdb.metadata IMetadataPredicate ITableMetadata)
            (xtdb.vector IVectorReader RelationReader)))
@@ -23,9 +24,9 @@
 (def ^:private bool-metadata-types #{:null :bool :fixed-size-binary :transit})
 
 (defn call-meta-expr [{:keys [f args] :as expr} {:keys [col-types] :as opts}]
-  (letfn [(var-param-expr [f meta-value field {:keys [param-type] :as param-expr}]
+  (letfn [(var-value-expr [f meta-value field value-type value-expr]
             ;; TODO adapt for boolean metadata writer
-            (when-not (contains? bool-metadata-types param-type)
+            (when-not (contains? bool-metadata-types value-type)
               (let [base-col-types (-> (get col-types field)
                                        types/flatten-union-types)]
                 (simplify-and-or-expr
@@ -35,33 +36,45 @@
                   ;; of the polymorphic expr patterns?
                   :args (vec
                          (for [col-type (cond
-                                          (isa? types/col-type-hierarchy param-type :num)
+                                          (isa? types/col-type-hierarchy value-type :num)
                                           (filterv types/num-types base-col-types)
 
-                                          (and (vector? param-type) (isa? types/col-type-hierarchy (first param-type) :date-time))
+                                          (and (vector? value-type) (isa? types/col-type-hierarchy (first value-type) :date-time))
                                           (filterv (comp types/date-time-types types/col-type-head) base-col-types)
 
-                                          (contains? base-col-types param-type)
-                                          [param-type])]
+                                          (contains? base-col-types value-type)
+                                          [value-type])]
 
-                           {:op :metadata-vp-call,
+                           {:op :test-metadata,
                             :f f
                             :meta-value meta-value
                             :col-type col-type
                             :field field,
-                            :param-expr param-expr
+                            :value-expr value-expr
                             :bloom-hash-sym (when (= meta-value :bloom-filter)
                                               (gensym 'bloom-hashes))}))}))))
 
-          (bool-expr [var-param-f var-param-meta-fn
-                      param-var-f param-var-meta-fn]
+          (bool-expr [var-value-f var-value-meta-fn
+                      value-var-f value-var-meta-fn]
             (let [[{x-op :op, :as x-arg} {y-op :op, :as y-arg}] args]
               (case [x-op y-op]
-                [:param :param] expr
-                [:variable :param] (var-param-expr var-param-f var-param-meta-fn
-                                                   (:variable x-arg) y-arg)
-                [:param :variable] (var-param-expr param-var-f param-var-meta-fn
-                                                   (:variable y-arg) x-arg)
+                ([:param :param]
+                 [:literal :literal]
+                 [:literal :param]
+                 [:param :literal]) expr
+
+                [:variable :literal] (var-value-expr var-value-f var-value-meta-fn (:variable x-arg)
+                                                     (vw/value->col-type (:literal y-arg)) y-arg)
+
+                [:variable :param] (var-value-expr var-value-f var-value-meta-fn (:variable x-arg)
+                                                   (:param-type y-arg) y-arg)
+
+                [:literal :variable] (var-value-expr var-value-f var-value-meta-fn (:variable x-arg)
+                                                     (vw/value->col-type (:literal y-arg)) y-arg)
+
+                [:param :variable] (var-value-expr value-var-f value-var-meta-fn (:variable y-arg)
+                                                   (:param-type x-arg) x-arg)
+
                 nil)))]
 
     (or (case f
@@ -102,9 +115,9 @@
 
 (defn- ->bloom-hashes [expr ^RelationReader params]
   (vec
-    (for [{:keys [param-expr col-type]} (->> (ewalk/expr-seq expr)
+    (for [{:keys [value-expr col-type]} (->> (ewalk/expr-seq expr)
                                              (filter :bloom-hash-sym))]
-      (bloom/literal-hashes params param-expr col-type))))
+      (bloom/literal-hashes params value-expr col-type))))
 
 (def ^:private table-metadata-sym (gensym "table-metadata"))
 (def ^:private metadata-rdr-sym (gensym "metadata-rdr"))
@@ -115,7 +128,7 @@
 (def ^:private bloom-rdr-sym (gensym "bloom-rdr"))
 
 
-(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
+(defmethod expr/codegen-expr :test-metadata [{:keys [f meta-value field value-expr col-type bloom-hash-sym]} opts]
   (let [field-name (util/str->normal-form-str (str field))
 
         idx-code `(.rowIndex ~table-metadata-sym ~field-name ~page-idx-sym)]
@@ -137,7 +150,7 @@
             (expr/codegen-expr {:op :call, :f :boolean
                                 :args [{:op :if-some, :local val-sym, :expr {:op :variable, :variable col-sym}
                                         :then {:op :call, :f f
-                                               :args [{:op :local, :local val-sym}, param-expr]}
+                                               :args [{:op :local, :local val-sym}, value-expr]}
                                         :else {:op :literal, :literal false}}]}
                                (-> opts
                                    (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
@@ -152,10 +165,10 @@
                               (when-let [~expr/idx-sym ~idx-code]
                                 ~(continue (fn [_ code] code))))))}))))
 
-(defmethod ewalk/walk-expr :metadata-vp-call [inner outer expr]
-  (outer (-> expr (update :param-expr inner))))
+(defmethod ewalk/walk-expr :test-metadata [inner outer expr]
+  (outer (-> expr (update :value-expr inner))))
 
-(defmethod ewalk/direct-child-exprs :metadata-vp-call [{:keys [param-expr]}] #{param-expr})
+(defmethod ewalk/direct-child-exprs :test-metadata [{:keys [value-expr]}] #{value-expr})
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]

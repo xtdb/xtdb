@@ -86,13 +86,15 @@
      acc)))
 
 (def literal-hasher
-  (-> (fn [{:keys [param param-type] :as param-expr} target-col-type]
+  (-> (fn [value-expr target-col-type]
         (let [{:keys [return-type continue] :as emitted-expr}
               (expr/codegen-expr {:op :call
                                   :f :cast
-                                  :args [param-expr]
+                                  :args [value-expr]
                                   :target-type target-col-type}
-                                 {:param-types {param param-type}})
+                                 {:param-types (when (= :param (:op value-expr))
+                                                 (let [{:keys [param param-type]} value-expr]
+                                                   {param param-type}))})
               {:keys [writer-bindings write-value-out!]} (expr/write-value-out-code return-type)]
           (-> `(fn [~(-> expr/params-sym (expr/with-tag RelationReader))
                     ~(-> expr/out-vec-sym (expr/with-tag ValueVector))]
@@ -106,8 +108,8 @@
               (eval))))
       (util/lru-memoize)))
 
-(defn literal-hashes ^ints [params param-expr target-col-type]
-  (let [f (literal-hasher param-expr target-col-type)]
+(defn literal-hashes ^ints [params value-expr target-col-type]
+  (let [f (literal-hasher value-expr target-col-type)]
     (with-open [allocator (RootAllocator.)
                 tmp-vec (-> (types/col-type->field target-col-type)
                             (.createVector allocator))]
