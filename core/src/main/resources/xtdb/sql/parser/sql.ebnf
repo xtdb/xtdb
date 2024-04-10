@@ -4,27 +4,34 @@
 (*  5.1     <SQL terminal character> *)
 
 <space> : ' ' ;
-percent : '%' ;
-ampersand : '&' ;
+<percent> : '%' ;
+<ampersand> : '&' ;
 <quote> : '\'' ;
 <left_paren> : '(' ;
 <right_paren> : ')' ;
 asterisk : '*' ;
-plus_sign : '+' ;
+<plus_sign> : '+' ;
 <comma> : ',' ;
-minus_sign : '-' ;
+<minus_sign> : '-' ;
 <period> : '.' ;
-solidus : '/' ;
+<solidus> : '/' ;
 <colon> : ':' ;
 <semicolon> : ';' ;
-less_than_operator : '<' ;
-equals_operator : '=' ;
-greater_than_operator : '>' ;
+
+<less_than_operator> : '<' ;
+<equals_operator> : '=' ;
+<greater_than_operator> : '>' ;
+<not_equals_operator> : '<>' ;
+<greater_than_or_equals_operator> : '>=' ;
+<less_than_or_equals_operator> : '<=' ;
+
+<concatenation_operator> : '||' ;
+
 question_mark : '?' ;
 
 <left_bracket> : '[' ;
 <right_bracket> : ']' ;
-vertical_bar : '|' ;
+<vertical_bar> : '|' ;
 <left_brace> : '{' ;
 <right_brace> : '}' ;
 
@@ -35,11 +42,6 @@ delimited_identifier : #'"(""|[^\"])+"' ;
 
 large_object_length_token : #'[0-9]+' multiplier ;
 multiplier : 'K' | 'M' | 'G' | 'T' | 'P' ;
-
-not_equals_operator : '<>' ;
-greater_than_or_equals_operator : '>=' ;
-less_than_or_equals_operator : '<=' ;
-concatenation_operator : '||' ;
 
 separator : #'(?<=\s)' ;
 

@@ -464,7 +464,7 @@
 
     [:null_specification _] nil
 
-    [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 [_ co] ^:z rvp-2]]
+    [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 co ^:z rvp-2]]
     ;;=>
     (list (symbol co) (expr rvp-1) (expr rvp-2))
 
@@ -476,11 +476,15 @@
     ;;=>
     (list 'not (list 'nil? (expr rvp)))
 
-    [:numeric_value_expression ^:z nve [_ op] ^:z t]
+    [:numeric_value_expression ^:z nve op ^:z t]
     ;;=>
     (list (symbol op) (expr nve) (expr t))
 
     [:term ^:z t [_ op] ^:z f]
+    ;;=>
+    (list (symbol op) (expr t) (expr f))
+
+    [:term ^:z t op ^:z f]
     ;;=>
     (list (symbol op) (expr t) (expr f))
 
@@ -490,7 +494,7 @@
       (parse-double lexeme)
       (parse-long lexeme))
 
-    [:numeric_literal [_ sign] lexeme]
+    [:numeric_literal sign lexeme]
     ;;=>
     (cond-> (if (str/includes? lexeme ".")
               (parse-double lexeme)
@@ -499,16 +503,16 @@
 
     [:unsigned_integer_literal lexeme] (parse-long lexeme)
 
-    [:factor [:minus_sign "-"] [:numeric_literal "9223372036854775808"]]
+    [:factor "-" [:numeric_literal "9223372036854775808"]]
     Long/MIN_VALUE
 
-    [:factor [:minus_sign "-"] ^:z np]
+    [:factor "-" ^:z np]
     (let [np-expr (expr np)]
       (if (number? np-expr)
         (- np-expr)
         (list '- np-expr)))
 
-    [:factor [:plus_sign "+"] ^:z np]
+    [:factor "+" ^:z np]
     ;;=>
     (expr np)
 
@@ -529,11 +533,11 @@
     [:interval_primary ^:z n q] (interval-expr (expr n) q)
 
     [:interval_term ^:z i [:asterisk "*"] ^:z n] (list '* (expr i) (expr n))
-    [:interval_term ^:z i [:solidus "/"] ^:z n] (list '/ (expr i) (expr n))
-    [:interval_factor [:minus_sign "-"] ^:z i] (list '- (expr i))
-    [:interval_factor [:plus_sign "+"] ^:z i] (expr i)
+    [:interval_term ^:z i "/" ^:z n] (list '/ (expr i) (expr n))
+    [:interval_factor "-" ^:z i] (list '- (expr i))
+    [:interval_factor "+" ^:z i] (expr i)
 
-    [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
+    [:interval_value_expression ^:z i1 "+" ^:z i2]
     ;; =>
     (list '+ (expr i1) (expr i2))
 
@@ -541,15 +545,15 @@
     ;; =>
     (list 'abs (expr i))
 
-    [:datetime_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
+    [:datetime_value_expression ^:z i1 "+" ^:z i2]
     ;; =>
     (list '+ (expr i1) (expr i2))
 
-    [:interval_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
+    [:interval_value_expression ^:z i1 "-" ^:z i2]
     ;; =>
     (list '- (expr i1) (expr i2))
 
-    [:datetime_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
+    [:datetime_value_expression ^:z i1 "-" ^:z i2]
     ;; =>
     (list '- (expr i1) (expr i2))
 
@@ -1085,7 +1089,7 @@
          :column->param column->param
          :sym exists-symbol})
 
-      [:quantified_comparison_predicate ^:z rvp [:quantified_comparison_predicate_part_2 [_ co] [quantifier _] [:subquery ^:z qe]]]
+      [:quantified_comparison_predicate ^:z rvp [:quantified_comparison_predicate_part_2 co [quantifier _] [:subquery ^:z qe]]]
       (let [exists-symbol (exists-symbol qe)
             projection-symbol (first (subquery-projection-symbols qe))
             predicate (list (symbol co) (expr rvp) projection-symbol)
