@@ -1,11 +1,11 @@
-import uuid
+from uuid import UUID
 from datetime import datetime
 from typing import List, Optional, Union, Dict, Any, TypedDict
 from .expr import Expr, Date as dateExpr
 from .binding import Binding, to_bindings
 from .types import UnifyClause, Query, ToBindings
 
-EntityId = Union[int, str, uuid]
+EntityId = Union[int, str, UUID]
 
 
 class TxOp:
