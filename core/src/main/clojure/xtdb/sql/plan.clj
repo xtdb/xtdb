@@ -462,7 +462,7 @@
       "FALSE" false
       "UNKNOWN" nil)
 
-    [:null_specification _] nil
+    [:null_literal _] nil
 
     [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 co ^:z rvp-2]]
     ;;=>
@@ -1549,23 +1549,14 @@
      (r/collect-stop
       (fn [z]
         (r/zcase z
-          (:row_value_expression_list
-           :contextually_typed_row_value_expression_list
-           :in_value_list)
-          nil
+          (:row_value_expression_list :in_value_list) nil
 
-          (:explicit_row_value_constructor
-           :contextually_typed_row_value_constructor)
+          :explicit_row_value_constructor
           (let [vs (r/collect-stop
                     (fn [z]
                       (r/zcase z
-                        (:row_value_constructor_element
-                         :contextually_typed_row_value_constructor_element)
-                        [(expr (r/$ z 1))]
-
-                        :subquery
-                        [(expr z)]
-
+                        :row_value_constructor_element [(expr (r/$ z 1))]
+                        :subquery [(expr z)]
                         nil))
                     z)]
             [(zipmap ks vs)])
@@ -1854,9 +1845,6 @@
     [:table_value_constructor _ ^:z rvel]
     (build-values-list rvel)
 
-    [:contextually_typed_table_value_constructor _ ^:z cttvl]
-    (build-values-list cttvl) 
-    
     (r/zcase z
       :query_expression (plan-query-expr z)
       :in_value_list (build-values-list z)

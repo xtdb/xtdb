@@ -57,7 +57,7 @@ separator : #'(?<=\s)' ;
     | interval_literal
     | duration_literal
     | boolean_literal
-    | null_specification
+    | null_literal
     ;
 
 numeric_literal : [ sign ] #'\d+(\.\d+)?' [ exponent ] ;
@@ -74,6 +74,7 @@ timestamp_literal : <'TIMESTAMP'> character_string_literal ;
 duration_literal : <'DURATION'> character_string_literal ;
 interval_literal : <'INTERVAL'> [ sign ] character_string_literal interval_qualifier? ;
 boolean_literal : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
+null_literal : 'NULL' ;
 
 (*  5.4    Names and identifiers *)
 
@@ -217,18 +218,6 @@ field_definition : field_name data_type ;
 dynamic_parameter_specification : question_mark ;
 postgres_parameter_specification : #'\$\d+' ;
 
-(*  6.5        <contextually typed value specification> *)
-
-<contextually_typed_value_specification> : implicitly_typed_value_specification ;
-
-<implicitly_typed_value_specification>
-    : null_specification
-    | empty_specification
-    ;
-
-null_specification : 'NULL' ;
-empty_specification : 'ARRAY'? <left_bracket> <right_bracket> ;
-
 (*  6.6        <identifier chain> *)
 
 identifier_chain : identifier ( <period> identifier )? ;
@@ -350,10 +339,7 @@ result : result_expression | 'NULL' ;
 
 cast_specification : 'CAST' <left_paren> cast_operand 'AS' cast_target <right_paren> ;
 
-<cast_operand>
-    : value_expression
-    | implicitly_typed_value_specification
-    ;
+<cast_operand> : value_expression ;
 
 <cast_target> : data_type ;
 
@@ -378,10 +364,8 @@ array_element_reference : array_value_expression <left_bracket> numeric_value_ex
     | string_value_expression
     | datetime_value_expression
     | interval_value_expression
-    | collection_value_expression
+    | array_value_expression
     ;
-
-<collection_value_expression> : array_value_expression ;
 
 (*  6.27 <numeric value expression> *)
 
@@ -475,7 +459,7 @@ time_zone_field : 'TIMEZONE_HOUR' | 'TIMEZONE_MINUTE' ;
     | interval_value_expression
     ;
 
-cardinality_expression : 'CARDINALITY' <left_paren> collection_value_expression <right_paren> ;
+cardinality_expression : 'CARDINALITY' <left_paren> array_value_expression <right_paren> ;
 max_cardinality_expression : 'ARRAY_MAX_CARDINALITY' <left_paren> array_value_expression <right_paren> ;
 absolute_value_expression : 'ABS' <left_paren> numeric_value_expression <right_paren> ;
 
@@ -727,24 +711,6 @@ explicit_row_value_constructor
 row_value_constructor_element_list : row_value_constructor_element [ ( <comma> row_value_constructor_element )+ ] ;
 row_value_constructor_element : value_expression ;
 
-contextually_typed_row_value_constructor
-    : common_value_expression
-    | boolean_value_expression
-    | contextually_typed_value_specification
-    | <left_paren> contextually_typed_value_specification <right_paren>
-    | <left_paren> contextually_typed_row_value_constructor_element <comma> contextually_typed_row_value_constructor_element_list <right_paren>
-    | 'ROW' <left_paren> contextually_typed_row_value_constructor_element_list <right_paren>
-    ;
-
-contextually_typed_row_value_constructor_element_list
-    : contextually_typed_row_value_constructor_element [ ( <comma> contextually_typed_row_value_constructor_element )+ ]
-    ;
-
-contextually_typed_row_value_constructor_element
-    : value_expression
-    | contextually_typed_value_specification
-    ;
-
 <row_value_constructor_predicand>
     : common_value_expression
     | boolean_predicand
@@ -760,11 +726,6 @@ contextually_typed_row_value_constructor_element
     | row_value_constructor
     ;
 
-<contextually_typed_row_value_expression>
-    : row_value_special_case
-    | contextually_typed_row_value_constructor
-    ;
-
 <row_value_predicand>
     : row_value_special_case
     | row_value_constructor_predicand
@@ -776,11 +737,6 @@ contextually_typed_row_value_constructor_element
 
 table_value_constructor : 'VALUES' row_value_expression_list ;
 row_value_expression_list : table_row_value_expression [ ( <comma> table_row_value_expression )+ ] ;
-contextually_typed_table_value_constructor : 'VALUES' contextually_typed_row_value_expression_list ;
-
-contextually_typed_row_value_expression_list
-    : contextually_typed_row_value_expression [ ( <comma> contextually_typed_row_value_expression )+ ]
-    ;
 
 (*  7.4      <table expression> *)
 
@@ -828,7 +784,7 @@ point_in_time : datetime_value_expression ;
 
 lateral_derived_table : 'LATERAL' table_subquery ;
 
-collection_derived_table : 'UNNEST' <left_paren> collection_value_expression <right_paren> [ 'WITH' 'ORDINALITY' ] ;
+collection_derived_table : 'UNNEST' <left_paren> array_value_expression <right_paren> [ 'WITH' 'ORDINALITY' ] ;
 
 <derived_table> : table_subquery ;
 
@@ -1243,7 +1199,7 @@ insert_statement : 'INSERT' 'INTO' insertion_target insert_columns_and_source ;
     ;
 
 from_subquery : [ <left_paren> insert_column_list <right_paren> ] [ override_clause ] query_expression ;
-from_constructor : [ <left_paren> insert_column_list <right_paren> ] [ override_clause ] contextually_typed_table_value_constructor ;
+from_constructor : [ <left_paren> insert_column_list <right_paren> ] [ override_clause ] table_value_constructor ;
 
 override_clause : 'OVERRIDING' 'USER' 'VALUE' | 'OVERRIDING' 'SYSTEM' 'VALUE' ;
 from_default : 'DEFAULT' 'VALUES' ;
@@ -1276,10 +1232,7 @@ update_target : object_column [ left_bracket (unsigned_integer_literal | paramet
 
 <object_column> : column_name ;
 
-<update_source>
-    : value_expression
-    | contextually_typed_value_specification
-    ;
+<update_source> : value_expression ;
 
 (*  17.1 <start transaction statement> *)
 
