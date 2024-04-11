@@ -7,8 +7,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql.edn :as edn])
+            [xtdb.vector.writer :as vw])
   (:import (java.util.function Consumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
@@ -233,7 +232,7 @@
                            (let [[_col-name form] (first (:mark-join mark-spec))
                                  input-types {:col-types (update-vals dependent-fields types/field->col-type)
                                               :param-types (update-vals param-fields types/field->col-type)}
-                                 projection-spec (expr/->expression-projection-spec "_expr" (-> (edn/parse-expr form) (expr/<-Expr input-types)) input-types)]
+                                 projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
                              (fn [{:keys [allocator params] :as query-opts}]
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                  (reify ICursor

@@ -6,7 +6,7 @@
             [xtdb.util :as util]
             [xtdb.expression :as expr])
   (:import (clojure.lang MapEntry)
-           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$If Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
+           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
                            Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs
                            Queries XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset
                            XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline
@@ -148,16 +148,6 @@
   (plan-expr [this] (.dbl this))
   (required-vars [_] #{})
 
-  Expr$If
-  (plan-expr [expr]
-    (let [pred (plan-expr (.pred expr))
-          then-expr (plan-expr (.then expr))
-          else-expr (plan-expr (.else expr))]
-      (list 'if pred then-expr else-expr)))
-
-  (required-vars [expr]
-    (into #{} (mapcat required-vars) [(.pred expr) (.then expr) (.else expr)]))
-
   Expr$Call
   (plan-expr [call]
     (let [fn (symbol (.f call))
@@ -169,7 +159,6 @@
             placeholder)
 
         (list* (symbol (.f call)) (mapv plan-expr (.args call))))))
-
   (required-vars [call]
     (if (aggregate-fn? (symbol (.f call)))
       #{} ;; required vars should not traverse into aggregate fns, agg-fn sub-exprs are planned independently
@@ -192,9 +181,7 @@
                      :subquery ra-plan}
                     (plan-arg-bindings (.args this))))
       placeholder))
-
   (required-vars [this] (expr-subquery-required-vars (.args this)))
-
   Expr$Subquery
   (plan-expr [this]
     (when-not *subqueries*
@@ -214,9 +201,7 @@
                                 ra-plan]}
                     (plan-arg-bindings (.args this))))
       placeholder))
-
   (required-vars [this] (expr-subquery-required-vars (.args this)))
-
   Expr$Pull
   (plan-expr [this]
     (when-not *subqueries*
@@ -231,9 +216,7 @@
                                 ra-plan]}
                     (plan-arg-bindings (.args this))))
       placeholder))
-
   (required-vars [this] (expr-subquery-required-vars (.args this)))
-
   Expr$PullMany
   (plan-expr [this]
     (when-not *subqueries*
@@ -250,9 +233,7 @@
                                  ra-plan]]}
                     (plan-arg-bindings (.args this))))
       placeholder))
-
   (required-vars [this] (expr-subquery-required-vars (.args this)))
-
   nil
   (plan-expr [_] nil)
   (required-vars [_] nil))

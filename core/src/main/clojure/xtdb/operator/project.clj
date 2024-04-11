@@ -6,8 +6,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql.edn :as edn])
+            [xtdb.vector.writer :as vw])
   (:import java.time.Clock
            java.util.ArrayList
            java.util.function.Consumer
@@ -158,7 +157,7 @@
                                            :extend (let [[col-name form] (first arg)
                                                          input-types {:col-types (update-vals inner-fields types/field->col-type)
                                                                       :param-types (update-vals param-fields types/field->col-type)}
-                                                         expr (expr/<-Expr (edn/parse-expr form) input-types)]
+                                                         expr (expr/form->expr form input-types)]
                                                      (expr/->expression-projection-spec col-name expr input-types)))))]
           {:fields (->> projection-specs
                         (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)

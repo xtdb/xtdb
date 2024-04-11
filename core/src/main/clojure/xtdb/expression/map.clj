@@ -4,8 +4,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql.edn :as edn])
+            [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            java.util.function.IntBinaryOperator
            java.util.List
@@ -118,7 +117,7 @@
 
 (defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
   (let [col-types (update-vals (merge build-fields probe-fields) types/field->col-type)
-        f (build-comparator (->> (expr/<-Expr (edn/parse-expr theta-expr) {:col-types col-types, :param-types param-types})
+        f (build-comparator (->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
                                  (expr/prepare-expr)
                                  (ewalk/postwalk-expr (fn [{:keys [op] :as expr}]
                                                         (cond-> expr

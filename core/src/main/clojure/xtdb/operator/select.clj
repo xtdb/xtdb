@@ -3,9 +3,8 @@
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.xtql.edn :as edn])
+            [xtdb.types :as types])
   (:import java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            xtdb.ICursor
@@ -42,7 +41,7 @@
     (fn [inner-fields]
       (let [input-types {:col-types (update-vals inner-fields types/field->col-type)
                          :param-types (update-vals param-fields types/field->col-type)}
-            selector (expr/->expression-relation-selector (expr/<-Expr (edn/parse-expr predicate) input-types) input-types)]
+            selector (expr/->expression-relation-selector (expr/form->expr predicate input-types) input-types)]
         {:fields inner-fields
          :->cursor (fn [{:keys [allocator params]} in-cursor]
                      (-> (SelectCursor. allocator in-cursor selector params)

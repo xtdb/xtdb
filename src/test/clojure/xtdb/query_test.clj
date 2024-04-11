@@ -343,7 +343,7 @@
 
 (t/deftest test-empty-rel-still-throws-149
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Unknown param: '\?x13'"
+                          #"Unknown symbol: '\?x13'"
                           (tu/query-ra '[:select (= ?x13 x4)
                                          [:table []]]
                                        {}))))

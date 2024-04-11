@@ -12,7 +12,6 @@
            [java.util Map]
            (org.apache.arrow.vector PeriodDuration)
            [xtdb DateTruncator]
-           xtdb.api.query.Expr$CastTimestamp
            [xtdb.vector IValueReader ValueBox]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -450,16 +449,14 @@
                        (.toString)
                        (string->byte-buffer)))})
 
-(extend-protocol expr/FromXtqlExpr
-  Expr$CastTimestamp
-  (<-Expr [expr env]
-    (let [opts (.castOpts expr)
-          unit (or (:unit opts) :micro)]
-      {:op :call
-       :f :cast
-       :args [(expr/<-Expr (.expr expr) env)]
-       :target-type [:timestamp-tz unit (str (.getZone expr/*clock*))]
-       :cast-opts opts})))
+;; TODO - finish this
+(defmethod expr/parse-list-form  'cast-tstz [[_ expr opts] env]
+  (let [unit (or (:unit opts) :micro)]
+    {:op :call
+     :f :cast
+     :args [(expr/form->expr expr env)]
+     :target-type [:timestamp-tz unit (str (.getZone expr/*clock*))]
+     :cast-opts opts}))
 
 (defmethod expr/codegen-cast [:utf8 :duration] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
   (when precision (ensure-fractional-precision-valid precision))

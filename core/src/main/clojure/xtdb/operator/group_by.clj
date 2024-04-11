@@ -8,8 +8,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql.edn :as edn])
+            [xtdb.vector.writer :as vw])
   (:import (java.io Closeable)
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.function Consumer IntConsumer)
@@ -246,7 +245,7 @@
             (close [_] (.close out-vec))))))))
 
 (defn- ->projector ^xtdb.operator.IProjectionSpec [col-name form input-types]
-  (expr/->expression-projection-spec col-name (expr/<-Expr (edn/parse-expr form) input-types) input-types))
+  (expr/->expression-projection-spec col-name (expr/form->expr form input-types) input-types))
 
 (defmethod ->aggregate-factory :sum [{:keys [from-name from-type] :as agg-opts}]
   (let [to-type (->> (types/flatten-union-types from-type)

@@ -50,11 +50,11 @@
     (letfn [(test-cast
               ([src-value tgt-type] (test-cast src-value tgt-type {}))
               ([src-value tgt-type {:keys [default-tz], :or {default-tz ZoneOffset/UTC}}]
-               (-> (tu/query-ra [:project [{'res `(~'cast ~'?arg ~tgt-type)}]
+               (-> (tu/query-ra [:project [{'res `(~'cast ~'arg ~tgt-type)}]
                                  [:table [{}]]]
                                 {:basis {:current-time current-time}
                                  :default-tz default-tz
-                                 :params {'?arg src-value}})
+                                 :params {'arg src-value}})
                    first :res)))]
 
       (t/testing "date ->"
@@ -735,10 +735,10 @@
   (letfn [(test-arithmetic
             ([f x y] (test-arithmetic f x y {}))
             ([f x y {:keys [default-tz], :or {default-tz #time/zone "America/Los_Angeles"}}]
-             (-> (tu/query-ra [:project [{'res `(~f ~'?x ~'?y)}]
+             (-> (tu/query-ra [:project [{'res `(~f ~'x ~'y)}]
                                [:table [{}]]]
                               {:default-tz default-tz
-                               :params {'?x x, '?y y}})
+                               :params {'x x, 'y y}})
                  first :res)))]
 
     (t/testing "(+ datetime duration)"
