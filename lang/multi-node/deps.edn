@@ -1,0 +1,14 @@
+{:paths ["src"]
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+
+        ;; HTTP
+        ring/ring {:mvn/version "1.10.0"}
+        ring/ring-jetty-adapter {:mvn/version "1.10.0"}
+        metosin/reitit {:mvn/version "0.7.0-alpha5"}
+        clj-http/clj-http {:mvn/version "3.12.3"}
+        integrant/integrant {:mvn/version "0.8.0"}}
+ :aliases
+ {:prod
+  {:exec-fn multi-node.core/-main
+   :jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
+              "-Dio.netty.tryReflectionSetAccessible=true"]}}}
