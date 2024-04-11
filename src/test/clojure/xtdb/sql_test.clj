@@ -1111,16 +1111,14 @@
               z.baz = y.biz
               )"))))
 
-(defn- ldt [s] (LocalDateTime/parse s))
-
 (deftest test-timestamp-literal
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
-    "TIMESTAMP '3000-03-15 20:40:31'" (ldt "3000-03-15T20:40:31")
-    "TIMESTAMP '3000-03-15 20:40:31.11'" (ldt "3000-03-15T20:40:31.11")
-    "TIMESTAMP '3000-03-15 20:40:31.2222'" (ldt "3000-03-15T20:40:31.2222")
-    "TIMESTAMP '3000-03-15 20:40:31.44444444'" (ldt "3000-03-15T20:40:31.44444444")
+    "TIMESTAMP '3000-03-15 20:40:31'" #time/date-time "3000-03-15T20:40:31"
+    "TIMESTAMP '3000-03-15 20:40:31.11'" #time/date-time "3000-03-15T20:40:31.11"
+    "TIMESTAMP '3000-03-15 20:40:31.2222'" #time/date-time "3000-03-15T20:40:31.2222"
+    "TIMESTAMP '3000-03-15 20:40:31.44444444'" #time/date-time "3000-03-15T20:40:31.44444444"
     "TIMESTAMP '3000-03-15 20:40:31+03:44'" #time/zoned-date-time "3000-03-15T20:40:31+03:44"
     "TIMESTAMP '3000-03-15 20:40:31.12345678+13:12'" #time/zoned-date-time "3000-03-15T20:40:31.123456780+13:12"
     "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #time/zoned-date-time"3000-03-15T20:40:31.123456780-14:00"
@@ -1128,7 +1126,12 @@
     "TIMESTAMP '3000-03-15 20:40:31-11:44'" #time/zoned-date-time "3000-03-15T20:40:31-11:44"
     "TIMESTAMP '3000-03-15T20:40:31-11:44'" #time/zoned-date-time "3000-03-15T20:40:31-11:44"
     "TIMESTAMP '3000-03-15T20:40:31Z'" #time/zoned-date-time "3000-03-15T20:40:31Z"
-    "TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]'" #time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"))
+
+    "TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]'" #time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
+    ;; corrects the offset to the zone's offset
+    "TIMESTAMP '3000-04-15T20:40:31+05:00[Europe/London]'" #time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
+    ;; provides the correct offset for the zone
+    "TIMESTAMP '3000-04-15T20:40:31[Europe/London]'" #time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"))
 
 (deftest test-time-literal
   (t/are

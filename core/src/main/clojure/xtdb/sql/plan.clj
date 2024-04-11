@@ -372,12 +372,12 @@
     (throw (err/illegal-arg :xtql.sql/parse-error {::err/message (str "Cannot parse time: " t-str)}))))
 
 (defn parse-timestamp-literal [ts-str]
-  (if-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:(Z|[+-]\d{2}:\d{2})(?:\[([\w\/]+)\])?)?" ts-str)]
+  (if-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?(?:\[([\w\/]+)\])?" ts-str)]
     (try
       (let [ldt (LocalDateTime/of (parse-long y) (parse-long mons) (parse-long d)
                                   (parse-long h) (parse-long mins) (parse-long s) (seconds-fraction->nanos sf))]
         (cond
-          zone (ZonedDateTime/ofLocal ldt (ZoneId/of zone) (ZoneOffset/of offset))
+          zone (ZonedDateTime/ofLocal ldt (ZoneId/of zone) (some-> offset ZoneOffset/of))
           offset (ZonedDateTime/of ldt (ZoneOffset/of offset))
           :else ldt))
       (catch Exception e
