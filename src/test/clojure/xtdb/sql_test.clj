@@ -1989,3 +1989,13 @@
 
     (t/is (= [{:x 3}]
              (xt/q tu/*node* "SELECT docs.x FROM docs WHERE has_table_privilege('docs', 'select') ")))))
+
+(t/deftest test-select-without-from
+  (t/is (= [{:xt/column-1 1}]
+           (xt/q tu/*node* "SELECT 1")))
+  
+  (t/is (= [{:xt/column-1 1 :xt/column-2 2}]
+           (xt/q tu/*node* "SELECT 1, 2")))
+  
+  (t/is (= [{:xt/column-1 "xtdb"}]
+           (xt/q tu/*node* "SELECT current_user"))))

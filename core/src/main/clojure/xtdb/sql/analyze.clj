@@ -718,7 +718,7 @@
                      {:ref ag})])
 
                 nil))]
-      (let [sl (r/$ ag -2)
+      (let [sl (r/find-first (partial r/ctor? :select_list) ag)
             projections (r/collect-stop calculate-select-list sl)]
         [(->> projections
               (generate-unique-column-names)

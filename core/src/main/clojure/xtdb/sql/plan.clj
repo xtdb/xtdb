@@ -1388,7 +1388,7 @@
                                        (qualified-projection-symbol (cond-> column
                                                                       inner-name (assoc :identifier inner-name)))}
                                       {outer-projection-symbol (expr (r/$ derived-column 1))})))
-        relation (wrap-with-apply sl (plan te))]
+        relation (wrap-with-apply sl (if te (plan te) [:table [] [{}]]))]
     [:project qualified-projection relation]))
 
 (defn- build-set-op
@@ -1695,6 +1695,10 @@
 
     [:from_subquery ^:z query-expression]
     (plan query-expression)
+
+    [:query_specification _ ^:z sl]
+    ;;=>
+    (build-query-specification sl nil)
 
     [:query_specification _ ^:z sl ^:z te]
     ;;=>
