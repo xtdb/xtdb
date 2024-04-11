@@ -12,8 +12,8 @@
     "build-api-docs-when-java-works": "mkdir -p public/drivers/clojure && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox dokkaHtmlMultiModule dokkaJavadocCollector"
   },
   "dependencies": {
-    "@astrojs/sitemap": "3.0.3",
-    "@astrojs/starlight": "^0.15.0",
+    "@astrojs/sitemap": "3.1.2",
+    "@astrojs/starlight": "^0.21.5",
     "@astrojs/starlight-tailwind": "^2.0.1",
     "@astrojs/tailwind": "^5.0.3",
     "@codemirror/autocomplete": "^6.14.0",
@@ -23,7 +23,7 @@
     "@codemirror/view": "^6.25.1",
     "astro": "^4.0.1",
     "astro-heroicons": "^2.1.1",
-    "date-fns": "^2.29.3",
+    "date-fns": "^3.6.0",
     "highlight.js": "^11.9.0",
     "rehype-highlight": "^6.0.0",
     "sharp": "^0.32.5",
