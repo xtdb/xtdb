@@ -1,11 +1,12 @@
 (ns xtdb.test-util
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
-            [xtdb.log :as log]
+            [xtdb.log :as xtdb.log]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -19,6 +20,8 @@
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            java.net.ServerSocket
+           (java.io ByteArrayOutputStream FileOutputStream)
+           (java.nio.channels Channels)
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource Period)
@@ -28,6 +31,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
+           (org.apache.arrow.vector.ipc ArrowFileWriter)
            org.slf4j.LoggerFactory
            (xtdb ICursor)
            (xtdb.api IXtdb TransactionKey)
@@ -248,10 +252,10 @@
                 (ig/init))]
     (reify IXtdb
       (submitTxAsync [_ tx-opts tx-ops]
-        (log/submit-tx& {:allocator (:xtdb/allocator sys)
-                         :log (:xtdb/log sys)
-                         :default-tz (:xtdb/default-tz sys)}
-                        (vec tx-ops) tx-opts))
+        (xtdb.log/submit-tx& {:allocator (:xtdb/allocator sys)
+                              :log (:xtdb/log sys)
+                              :default-tz (:xtdb/default-tz sys)}
+                             (vec tx-ops) tx-opts))
       (close [_]
         (ig/halt! sys)))))
 
@@ -366,6 +370,50 @@
       (.syncRowCount meta-wtr))
 
     meta-root))
+
+(defn write-arrow-data-file ^org.apache.arrow.vector.VectorSchemaRoot
+  [^BufferAllocator al, page-idx->documents, ^Path data-file-path]
+  (letfn [(normalize-doc [doc]
+            (-> (dissoc doc :xt/system-from :xt/valid-from :xt/valid-to)
+                (update-keys util/kw->normal-form-kw)))]
+    (let [data-schema (->> page-idx->documents vals (apply concat) (filter #(= :put (first %)))
+                           (map (comp vw/value->col-type normalize-doc second))
+                           (apply types/merge-col-types))]
+      (util/with-open [data-vsr (VectorSchemaRoot/create (trie/data-rel-schema data-schema) al)
+                       data-wtr (vw/root->writer data-vsr)
+                       os (FileOutputStream. (.toFile data-file-path))
+                       write-ch (Channels/newChannel os)
+                       aw (ArrowFileWriter. data-vsr nil write-ch)]
+        (.start aw)
+        (let [!last-iid (atom nil)
+              iid-wtr (.colWriter data-wtr "xt$iid")
+              system-from-wtr (.colWriter data-wtr "xt$system_from")
+              valid-from-wtr (.colWriter data-wtr "xt$valid_from")
+              valid-to-wtr (.colWriter data-wtr "xt$valid_to")
+              op-wtr (.colWriter data-wtr "op")
+              put-wtr (.legWriter op-wtr :put)
+              max-page-id (-> (keys page-idx->documents) sort last)]
+          (doseq [i (range (inc max-page-id))]
+            (doseq [[op doc] (get page-idx->documents i)]
+              (case op
+                :put (let [iid-bytes (trie/->iid (:xt/id doc))]
+                       (when (and @!last-iid (> (util/compare-nio-buffers-unsigned @!last-iid iid-bytes) 0))
+                         (log/error "IID's not in required order!" (:xt/id doc)))
+                       (.startRow data-wtr)
+                       (.writeObject iid-wtr iid-bytes)
+                       (.writeLong system-from-wtr (or (:xt/system-from doc) 0))
+                       (.writeLong valid-from-wtr (or (:xt/valid-from doc) 0))
+                       (.writeLong valid-to-wtr (or (:xt/valid-to doc) Long/MAX_VALUE))
+                       (.writeObject put-wtr (normalize-doc doc))
+                       (.endRow data-wtr)
+                       (reset! !last-iid iid-bytes))
+                (:delete :erase) (throw (UnsupportedOperationException.))))
+            (.syncRowCount data-wtr)
+            (.writeBatch aw)
+            (.clear data-wtr)
+            (.clear data-vsr))
+          (.end aw)))
+      data-file-path)))
 
 (defn open-live-table [table-name]
   (li/->live-table *allocator* nil (RowCounter. 0) table-name))

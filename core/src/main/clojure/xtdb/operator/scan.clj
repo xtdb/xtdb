@@ -350,7 +350,7 @@
                   (MutableRoaringBitmap/intersects pushdown-bloom
                                                    (bloom/bloom->bitmap bloom-rdr bloom-vec-idx))))))))))
 
-(defn- ->path-pred [^ArrowBuf iid-arrow-buf]
+(defn ->path-pred [^ArrowBuf iid-arrow-buf]
   (when iid-arrow-buf
     (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-arrow-buf))]
       (reify Predicate
