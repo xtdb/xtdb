@@ -9,6 +9,7 @@ public/drivers/clojure/codox
 
 # dependencies
 node_modules/
+.yarn/install-state.gz
 
 # logs
 npm-debug.log*
@@ -25,3 +26,4 @@ pnpm-debug.log*
 .DS_Store
 
 .vscode
+
