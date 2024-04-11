@@ -1,23 +1,15 @@
 ---
 title: SQL Queries
 ---
+:icon: /images/icons
+:clojure: /drivers/clojure/sql.html
+:kotlin: /drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/open-query.html
 
-SQL queries are submitted through `xtdb.api/q`:
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
 
-* `(xt/q <node> <query> <opts>?)` returns the query results as a vector of maps.
-** `opts`: map of query options
-*** `:args`: vector of query arguments
-*** `:basis`, `:tx-timeout`, `:default-all-valid-time?`: see link:../xtql/queries#basis[XTQL]
-    By default, `:default-all-valid-time?` is false, unlike the SQL:2011 specification - to maintain SQL spec compatibility, specify `:default-all-valid-time? true`.
-* `(xt/q& <node> <query> <opts>?)`: returns a `CompletableFuture` of the query results.
-
-For example:
-
-[source,clojure]
-----
-(xt/q node "SELECT u.first_name, u.last_name FROM users u WHERE xt$id = ?"
-      {:args ["James"], :default-all-valid-time? true})
-----
+For examples on how to run SQL queries in each client library, see the individual driver documentation:
 
 Fuller SQL reference documentation will follow shortly.
 
