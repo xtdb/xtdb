@@ -839,6 +839,8 @@
      ag)
 
     :subquery (projected-columns (r/$ ag 1))
+    :nest_one_subquery [[{:identifier "xt$nest_one"}]]
+    :nest_many_subquery [[{:identifier "xt$nest_many"}]]
 
     ::r/inherit))
 
@@ -1097,9 +1099,11 @@
 
 (defn subquery-type [ag]
   (r/zcase ag
-    (:query_expression
-     :in_value_list)
+    (:query_expression :in_value_list)
     {:type :scalar_subquery :single? true}
+
+    :nest_one_subquery {:type :nest_one_subquery :single? true}
+    :nest_many_subquery {:type :nest_many_subquery}
 
     :array_value_constructor_by_query
     {:type :table_subquery :single? true}

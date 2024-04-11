@@ -8,7 +8,8 @@
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.util :as util])
-  (:import (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
+  (:import clojure.lang.MapEntry
+           (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
            (xtdb.types IntervalMonthDayNano)))
 
 ;; Attribute grammar for transformation into logical plan.
@@ -782,6 +783,9 @@
     ;;=>
     (aggregate-symbol agg-out-prefix z)
 
+    [:nest_one_subquery _] (first (subquery-projection-symbols z))
+    [:nest_many_subquery _] (first (subquery-projection-symbols z))
+
     [:subquery ^:z qe]
     ;;=>
     (let [subquery-type (sem/subquery-type z)]
@@ -1026,6 +1030,11 @@
     (map
       #(->> % (name) (str "?") (symbol)) columns)))
 
+(defn- nest-obj-expr [qe]
+  (->> (for [{:keys [identifier]} (first (sem/projected-columns qe))]
+         (MapEntry/create (keyword identifier) (symbol identifier)))
+       (into {})))
+
 (defn- interpret-subquery
   "Returns a map of data about the given subquery AST zipper.
 
@@ -1040,6 +1049,29 @@
       (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
             column->param (correlated-column->param qe scope-id joined-tables)]
         {:type :subquery
+         :subquery-type (:type (sem/subquery-type sq))
+         :plan subquery-plan
+         :column->param column->param})
+
+      [:nest_one_subquery
+       [:subquery ^:z qe]]
+      (let [subquery-plan [:rename (subquery-reference-symbol sq)
+                           [:project [{'xt$nest_one (nest-obj-expr qe)}]
+                            (plan qe)]]
+            column->param (correlated-column->param qe scope-id joined-tables)]
+        {:type :nest-one
+         :subquery-type (:type (sem/subquery-type sq))
+         :plan subquery-plan
+         :column->param column->param})
+
+      [:nest_many_subquery
+       [:subquery ^:z qe]]
+      (let [subquery-plan [:rename (subquery-reference-symbol sq)
+                           [:group-by [{'xt$nest_many (list 'array_agg 'xt$nest_one)}]
+                            [:project [{'xt$nest_one (nest-obj-expr qe)}]
+                             (plan qe)]]]
+            column->param (correlated-column->param qe scope-id joined-tables)]
+        {:type :nest-many
          :subquery-type (:type (sem/subquery-type sq))
          :plan subquery-plan
          :column->param column->param})
@@ -1134,28 +1166,29 @@
     (case type
       :quantified-comparison (if (= quantifier :some)
                                (build-apply
-                                 (w/postwalk-replace column->param {:mark-join {sym predicate}})
-                                 column->param
-                                 relation plan)
+                                (w/postwalk-replace column->param {:mark-join {sym predicate}})
+                                column->param
+                                relation plan)
 
                                (let [comparator-result-sym (symbol (str sym "_comp_result$"))]
                                  [:map
                                   [{sym (list 'not comparator-result-sym)}]
                                   (build-apply
-                                    (w/postwalk-replace
-                                      column->param
-                                      {:mark-join
-                                       (let [[co x y] predicate]
-                                         {comparator-result-sym `(~(flip-comparison co) ~x ~y)})})
+                                   (w/postwalk-replace
                                     column->param
-                                    relation plan)]))
+                                    {:mark-join
+                                     (let [[co x y] predicate]
+                                       {comparator-result-sym `(~(flip-comparison co) ~x ~y)})})
+                                   column->param
+                                   relation plan)]))
 
       :exists (build-apply :cross-join column->param relation (wrap-with-exists sym plan))
 
-      :subquery (build-apply (case subquery-type
-                               (:scalar_subquery :row_subquery) :single-join
-                               :cross-join)
-                             column->param relation plan)
+      (:subquery :nest-one :nest-many)
+      (build-apply (case subquery-type
+                     (:scalar_subquery :row_subquery :nest_one_subquery :nest_many_subquery) :single-join
+                     :cross-join)
+                   column->param relation plan)
 
       (build-apply :cross-join column->param relation plan))))
 
@@ -1232,7 +1265,14 @@
 
 (defn- find-sub-queries [z]
   (r/collect-stop
-    (fn [z] (r/zcase z (:subquery :exists_predicate :in_predicate :quantified_comparison_predicate :array_value_constructor_by_query) [z] nil))
+    (fn [z]
+      (r/zcase z
+        (:subquery
+         :exists_predicate :in_predicate
+         :quantified_comparison_predicate
+         :array_value_constructor_by_query
+         :nest_one_subquery :nest_many_subquery)
+        [z] nil))
     z))
 
 ;; TODO: deal with row subqueries.

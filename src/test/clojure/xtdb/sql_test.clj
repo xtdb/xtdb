@@ -2002,3 +2002,42 @@
   
   (t/is (= [{:xt/column-1 "xtdb"}]
            (xt/q tu/*node* "SELECT current_user"))))
+
+(t/deftest test-nest
+  (t/is (=plan-file "test-nest-one"
+          (plan-sql "SELECT o.xt$id AS order_id, o.value,
+                            NEST_ONE(SELECT c.name FROM customers c WHERE c.xt$id = o.customer_id) AS customer
+                     FROM orders o")))
+
+  (t/is (=plan-file "test-nest-many"
+          (plan-sql "SELECT c.xt$id AS customer_id, c.name,
+                            NEST_MANY(SELECT o.xt$id AS order_id, o.value
+                                      FROM orders o
+                                      WHERE o.customer_id = c.xt$id)
+                              AS orders
+                     FROM customers c")))
+
+  (xt/submit-tx tu/*node* [[:put-docs :customers {:xt/id 0, :name "bob"}]
+                           [:put-docs :customers {:xt/id 1, :name "alice"}]
+                           [:put-docs :orders {:xt/id 0, :customer-id 0, :value 26.20}]
+                           [:put-docs :orders {:xt/id 1, :customer-id 0, :value 8.99}]
+                           [:put-docs :orders {:xt/id 2, :customer-id 1, :value 12.34}]])
+
+
+  (t/is (= #{{:customer {:name "bob"}, :order-id 0, :value 26.20}
+             {:customer {:name "bob"}, :order-id 1, :value 8.99}
+             {:customer {:name "alice"}, :order-id 2, :value 12.34}}
+           (set (xt/q tu/*node*
+                      "SELECT o.xt$id AS order_id, o.value,
+                              NEST_ONE(SELECT c.name FROM customers c WHERE c.xt$id = o.customer_id) AS customer
+                       FROM orders o"))))
+
+  (t/is (= #{{:orders [{:order-id 1, :value 8.99} {:order-id 0, :value 26.20}], :name "bob", :customer-id 0}
+             {:orders [{:order-id 2, :value 12.34}], :name "alice", :customer-id 1}}
+           (set (xt/q tu/*node*
+                      "SELECT c.xt$id AS customer_id, c.name,
+                              NEST_MANY(SELECT o.xt$id AS order_id, o.value
+                                        FROM orders o
+                                        WHERE o.customer_id = c.xt$id)
+                                AS orders
+                       FROM customers c")))))

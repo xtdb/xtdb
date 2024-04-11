@@ -200,6 +200,7 @@ field_definition : field_name data_type ;
     | window_function
     | nested_window_function
     | scalar_subquery
+    | nest_subquery
     | case_expression
     | cast_specification
     | field_reference
@@ -919,6 +920,11 @@ fetch_first_clause
 (*  7.15 <subquery> *)
 
 <scalar_subquery> : subquery ;
+
+<nest_subquery> : nest_one_subquery | nest_many_subquery  ;
+nest_one_subquery : <'NEST_ONE'> subquery ;
+nest_many_subquery : <'NEST_MANY'> subquery ;
+
 <row_subquery> : subquery ;
 <table_subquery> : subquery ;
 subquery : <left_paren> query_expression <right_paren> ;

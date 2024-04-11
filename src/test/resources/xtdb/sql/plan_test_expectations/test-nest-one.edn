@@ -1,0 +1,17 @@
+[:rename
+ {x1 order_id, x2 value, x8 customer}
+ [:project
+  [x1 x2 x8]
+  [:apply
+   :single-join
+   {x3 ?x9}
+   [:rename
+    {xt$id x1, value x2, customer_id x3}
+    [:scan {:table orders} [xt$id value customer_id]]]
+   [:project
+    [{x8 {:name x5}}]
+    [:project
+     [x5]
+     [:rename
+      {name x5, xt$id x6}
+      [:scan {:table customers} [name {xt$id (= xt$id ?x9)}]]]]]]]]

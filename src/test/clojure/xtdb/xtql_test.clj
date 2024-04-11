@@ -2131,27 +2131,27 @@
 (deftest test-pull
   (xt/submit-tx tu/*node* [[:put-docs :customers {:xt/id 0, :name "bob"}]
                            [:put-docs :customers {:xt/id 1, :name "alice"}]
-                           [:put-docs :orders {:xt/id 0, :customer-id 0}]
-                           [:put-docs :orders {:xt/id 1, :customer-id 0}]
-                           [:put-docs :orders {:xt/id 2, :customer-id 1}]])
+                           [:put-docs :orders {:xt/id 0, :customer-id 0, :value 26.20}]
+                           [:put-docs :orders {:xt/id 1, :customer-id 0, :value 8.99}]
+                           [:put-docs :orders {:xt/id 2, :customer-id 1, :value 12.34}]])
 
 
-  (t/is (=
-         #{{:customer-id 1, :customer {:name "alice"}, :id 2}
-           {:customer-id 0, :customer {:name "bob"}, :id 1}
-           {:customer-id 0, :customer {:name "bob"}, :id 0}}
-         (set (xt/q tu/*node*
-                    '(-> (from :orders [{:xt/id id} customer-id])
-                         (with {:customer (pull (from :customers [name {:xt/id $customer-id}])
-                                                {:args [customer-id]})}))))))
+  (t/is (= #{{:customer-id 0, :customer {:name "bob"}, :order-id 0, :value 26.20}
+             {:customer-id 0, :customer {:name "bob"}, :order-id 1, :value 8.99}
+             {:customer-id 1, :customer {:name "alice"}, :order-id 2, :value 12.34}}
 
-  (t/is (=
-         #{{:orders [{:id 1} {:id 0}], :name "bob", :id 0}
-           {:orders [{:id 2}], :name "alice", :id 1}}
-         (set (xt/q tu/*node*
-                    '(-> (from :customers [{:xt/id id} name])
-                         (with {:orders (pull* (from :orders [{:customer-id $c-id} {:xt/id id}])
-                                               {:args [{:c-id id}]})}))))))
+           (set (xt/q tu/*node*
+                      '(-> (from :orders [{:xt/id order-id} customer-id value])
+                           (with {:customer (pull (from :customers [name {:xt/id $customer-id}])
+                                                  {:args [customer-id]})}))))))
+
+  (t/is (= #{{:orders [{:id 1, :value 8.99} {:id 0, :value 26.20}], :name "bob", :id 0}
+             {:orders [{:id 2, :value 12.34}], :name "alice", :id 1}}
+           (set (xt/q tu/*node*
+                      '(-> (from :customers [{:xt/id id} name])
+                           (with {:orders (pull* (from :orders [{:customer-id $c-id} {:xt/id id} value])
+                                                 {:args [{:c-id id}]})}))))))
+
   (t/is (= [{}]
            (xt/q tu/*node* '(unify (with {orders (pull (rel [] []))})))))
 

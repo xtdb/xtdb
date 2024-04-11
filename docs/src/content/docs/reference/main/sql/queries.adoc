@@ -47,11 +47,87 @@ predicate :: <value> <binary_op> <value>
 
 value :: <predicate>
        | <function> ( [ <arg> [ , ... ] ])
-       | <query>
+       | (<query>)
+       | NEST_ONE(<query>)
+       | NEST_MANY(<query>)
 ----
 
 * Temporarily, column names in XTDB SQL must be qualified - e.g. `SELECT u.first_name, u.last_name FROM users u`
 * Predicates and functions are taken from the XT 'standard library'.
+
+== Nested sub-queries
+
+Nested sub-queries allow you to easily create tree-shaped results, using `NEST_MANY` and `NEST_ONE`:
+
+* For example, if you have a one-to-many relationship (e.g. customers -> orders), you can write a query that, for each customer, returns an array of their orders as nested objects:
++
+--
+[source,sql]
+----
+SELECT c.xt$id AS customer_id, c.name,
+       NEST_MANY(SELECT o.xt$id AS order_id, o.value
+                 FROM orders o
+                 WHERE o.customer_id = c.xt$id
+                 ORDER BY o.xt$id)
+         AS orders
+FROM customers c"
+----
+
+=>
+
+[source,json]
+----
+[
+  {
+    "customerId": 0,
+    "name": "bob",
+    "orders": [ { "orderId": 0, "value": 26.20 }, { "orderId": 1, "value": 8.99 } ]
+  },
+  {
+    "customerId": 1,
+    "name": "alice",
+    "orders": [ { "orderId": 2, "value": 12.34 } ]
+  }
+]
+----
+--
+* In the other direction (many-to-one) - for each order, additionally return details about the customer - use `NEST_ONE` to get a single nested object:
++
+--
+[source,sql]
+----
+SELECT o.xt$id AS order_id, o.value,
+       NEST_ONE(SELECT c.name FROM customers c
+                WHERE c.xt$id = o.customer_id)
+         AS customer
+FROM orders o
+ORDER BY o.xt$id
+----
+
+=>
+
+[source,json]
+----
+[
+  {
+    "orderId": 0,
+    "value": 26.20,
+    "customer": { "name": "bob" }
+  },
+  {
+    "order-id": 1,
+    "value": 8.99,
+    "customer": { "name": "bob" }
+  },
+  {
+    "order-id": 2,
+    "value": 12.34,
+    "customer": { "name": "alice" }
+  }
+]
+----
+--
+
 
 [NOTE]
 ====
