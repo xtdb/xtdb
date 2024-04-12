@@ -24,8 +24,8 @@
            (java.io Closeable)
            java.nio.ByteBuffer
            (java.nio.file Path)
-           (java.util ArrayList Comparator HashMap Iterator LinkedList Map PriorityQueue)
-           (java.util.function IntPredicate Predicate)
+           (java.util ArrayList Comparator HashMap Iterator LinkedList Map PriorityQueue Stack)
+           (java.util.function BiFunction IntPredicate Predicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
@@ -203,18 +203,35 @@
                     (recur (inc mid) right)))))
             (int-array 0)))))))
 
-(defrecord VSRCache [^IBufferPool buffer-pool, ^BufferAllocator allocator, ^Map cache]
+
+(defrecord VSRCache [^IBufferPool buffer-pool, ^BufferAllocator allocator, ^Map free, ^Map used]
   Closeable
-  (close [_] (util/close cache)))
+  (close [_]
+    (util/close free)
+    (util/close used)))
 
 (defn ->vsr-cache [buffer-pool allocator]
-  (->VSRCache buffer-pool allocator (HashMap.)))
+  (->VSRCache buffer-pool allocator (HashMap.) (HashMap.)))
 
-(defn cache-vsr [{:keys [^Map cache, buffer-pool, allocator]} ^Path trie-leaf-file]
-  (.computeIfAbsent cache trie-leaf-file
-                    (util/->jfn
-                      (fn [trie-leaf-file]
-                        (bp/open-vsr buffer-pool trie-leaf-file allocator)))))
+(defn reset-vsr-cache [{:keys [^Map free, ^Map used]}]
+  (doseq [^MapEntry entry (.entrySet used)]
+    (.merge free (key entry) (val entry) (reify BiFunction
+                                           (apply [_ free-entries used-entries]
+                                             (.addAll ^Stack free-entries ^Stack used-entries)
+                                             free-entries))))
+  (.clear used))
+
+(defn cache-vsr [{:keys [^Map free, ^Map used, buffer-pool, allocator]} ^Path trie-leaf-file]
+  (let [vsr (let [^Stack free-entries (.get free trie-leaf-file)]
+              (if (and free-entries (> (.size free-entries) 0))
+                (.pop free-entries)
+                (bp/open-vsr buffer-pool trie-leaf-file allocator)))
+        ^Stack used-entries (.computeIfAbsent used trie-leaf-file
+                                              (util/->jfn
+                                                (fn [_]
+                                                  (Stack.))))]
+    (.push used-entries vsr)
+    vsr))
 
 (defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache ^Path table-path [leaf-tag & leaf-args]]
   (case leaf-tag
@@ -240,6 +257,7 @@
     (if (.hasNext merge-tasks)
       (let [{:keys [leaves path]} (.next merge-tasks)
             is-valid-ptr (ArrowBufPointer.)]
+        ;; (reset-vsr-cache vsr-cache)
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn #(.ev_ptr ^LeafPointer %)) (EventRowPointer/comparator)))
