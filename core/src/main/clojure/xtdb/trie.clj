@@ -15,8 +15,9 @@
            (java.util.function IntConsumer Supplier)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           org.apache.arrow.vector.ipc.message.ArrowFooter
            org.apache.arrow.vector.types.UnionMode
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            xtdb.IBufferPool
            (xtdb.trie MergePlanNode ArrowHashTrie$Leaf HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf ISegment)
            (xtdb.vector IVectorReader RelationReader)
@@ -356,26 +357,24 @@
   (^xtdb.vector.RelationReader loadPage [trie-leaf]))
 
 (deftype ArrowDataRel [^ArrowBuf buf
-                       ^VectorSchemaRoot root
-                       ^VectorLoader loader
+                       ^ArrowFooter footer
                        ^List arrow-blocks
-                       ^:unsynchronized-mutable ^int current-page-idx]
+                       ^List vsrs-to-close]
   IDataRel
-  (getSchema [_] (.getSchema root))
+  (getSchema [_] (.getSchema footer))
 
-  (loadPage [this trie-leaf]
-    (let [page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-leaf)]
-      (when-not (= page-idx current-page-idx)
-        (set! (.current-page-idx this) page-idx)
+  (loadPage [_ trie-leaf]
+    (let [page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-leaf)
+          {:keys [root ^VectorLoader loader]} (util/arrow-buf->root+loader buf)]
+      (.add vsrs-to-close root)
+      (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) buf)]
+        (.load loader rb))
 
-        (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) buf)]
-          (.load loader rb))))
-
-    (vr/<-root root))
+      (vr/<-root root)))
 
   AutoCloseable
   (close [_]
-    (util/close root)
+    (util/close vsrs-to-close)
     (util/close buf)))
 
 (deftype LiveDataRel [^RelationReader live-rel]
@@ -398,9 +397,8 @@
                                (mapv (fn [trie-key]
                                        (.add data-bufs @(.getBuffer buffer-pool (->table-data-file-path table-path trie-key)))
                                        (let [data-buf (.get data-bufs (dec (.size data-bufs)))
-                                             {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf data-buf)]
-
-                                         (ArrowDataRel. data-buf root loader arrow-blocks -1)))))]
+                                             arrow-footer (util/read-arrow-footer data-buf)]
+                                         (ArrowDataRel. data-buf arrow-footer (.getRecordBatches arrow-footer) (ArrayList.))))))]
       (cond-> arrow-data-rels
         live-table-wm (conj (->LiveDataRel (.liveRelation live-table-wm)))))))
 

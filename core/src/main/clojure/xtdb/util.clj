@@ -481,6 +481,12 @@
      :root root
      :loader (VectorLoader. root CommonsCompressionFactory/INSTANCE)}))
 
+(defn arrow-buf->root+loader [^ArrowBuf ipc-file-format-buffer]
+  (let [footer (read-arrow-footer ipc-file-format-buffer)
+        root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
+    {:root root
+     :loader (VectorLoader. root CommonsCompressionFactory/INSTANCE)}))
+
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)
         rem-y (.remaining y)
