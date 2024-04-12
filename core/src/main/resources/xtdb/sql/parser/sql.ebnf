@@ -871,7 +871,7 @@ window_frame_exclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUD
 
 (*  7.12 <query specification> *)
 
-query_specification : 'SELECT' [ set_quantifier ] select_list table_expression ;
+query_specification : 'SELECT' [ set_quantifier ] select_list [ table_expression ] ;
 
 select_list : asterisk | select_sublist [ ( <comma> select_sublist )+ ] ;
 <select_sublist> : derived_column | qualified_asterisk ;
