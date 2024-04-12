@@ -7,7 +7,7 @@ import os
 import pytest
 
 database_host = os.getenv('DATABASE_HOST', 'localhost')
-database_port = os.getenv('DATABASE_PORT', '3000')
+database_port = os.getenv('DATABASE_PORT', '3300')
 
 client = Xtdb(f"http://{database_host}:{database_port}")
 

@@ -17,8 +17,8 @@ project(":http-server").name = "xtdb-http-server"
 project(":http-client-jvm").name = "xtdb-http-client-jvm"
 project(":pgwire-server").name = "xtdb-pgwire-server"
 
-include("lang:multi-node")
-project(":lang:multi-node").name = "multi-node"
+include("lang:http-proxy")
+project(":lang:http-proxy").name = "http-proxy"
 
 include("docker:standalone","docker:aws")
 

@@ -1,10 +1,14 @@
-(ns multi-node.core
+(ns http-proxy.core
   (:require
+   [clojure.string :as str]
    [juxt.clojars-mirrors.integrant.core :as ig]
    [reitit.ring :as ring]
    [ring.adapter.jetty9 :refer [run-jetty]]
+   [ring.util.request :refer [body-string]]
    [xtdb.server :as xts]
-   [xtdb.node :as xtn]))
+   [xtdb.node :as xtn])
+  (:import
+   [org.eclipse.jetty.server Request Response SecureRequestCustomizer]))
 
 (defonce system
   {::server {:join false
@@ -13,11 +17,12 @@
 ;; TODO: Make this a component & close all the nodes
 (defonce token->handler (atom {}))
 
-(defn default-handler [{token :query-string :as request}]
-  (let [handler (:handler (get @token->handler token))]
+(defn default-handler [request]
+  (let [[_ token & rest-uri] (str/split (:uri request) #"\/")
+        query (str "/" (str/join "/" rest-uri))
+        handler (:handler (get @token->handler token))]
     (if handler
-      ;; TODO: Remove :token query from query-params
-      (handler request)
+      (handler (assoc request :uri query))
       {:status 404})))
 
 (defn setup-handler [{token :query-string}]
@@ -44,8 +49,8 @@
 
 (defmethod ig/init-key ::server [_ {:keys [port join] :or {port 3300}}]
   (let [server (run-jetty (ring/ring-handler
-                            router
-                            default-handler)
+                           router
+                           #'default-handler)
                           {:port port :join? join})]
     server))
 
@@ -56,8 +61,9 @@
   (ig/init system)
   @(delay))
 
+
 (comment
-  ; start
+                                        ; start
   (def sys (ig/init system))
-  ; stop
+                                        ; stop
   (ig/halt! sys))
