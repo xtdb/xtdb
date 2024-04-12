@@ -2,13 +2,10 @@
   (:require [clojure.set :as set]
             [xtdb.types :as types])
   (:import clojure.lang.MapEntry
-           (com.carrotsearch.hppc IntArrayList)
-           (java.util ArrayList)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            xtdb.api.query.IKeyFn
-           (xtdb.vector IVectorReader RelationReader ValueVectorReadersKt IMultiVectorRelationFactory
-                        IVectorIndirection$Selection IndirectMultiVectorReader)))
+           (xtdb.vector IVectorReader RelationReader ValueVectorReadersKt)))
 
 (defn vec->reader ^IVectorReader [^ValueVector v]
   (ValueVectorReadersKt/from v))

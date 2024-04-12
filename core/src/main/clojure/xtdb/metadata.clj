@@ -23,12 +23,16 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector FieldVector)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date
+                                               ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int
+                                               ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct
+                                               ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union
+                                               ArrowType$Utf8 Field FieldType)
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.vector IVectorReader IVectorWriter RelationReader)
-           (xtdb.vector.extensions TransitType KeywordType SetType UriType UuidType)))
+           (xtdb.vector.extensions KeywordType SetType TransitType UriType UuidType)))
 
 (def arrow-read-handlers
   {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
