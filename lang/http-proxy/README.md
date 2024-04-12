@@ -9,17 +9,10 @@
 
 - Client must set up a node before use and client should tear down after use
 
-## To Go Understand
-
-- How do we set up an HTTP node in code
-
-- Deferring to the XT HTTP server code when connection being handled
-
 ## Test Requirements
 
-- Set up two different nodes and show they can process different queries/transactions independently
-
 - Verify routing
+- Mock requests
 
 ## Pseudo-Code Examples
 

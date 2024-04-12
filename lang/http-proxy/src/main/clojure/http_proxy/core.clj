@@ -4,11 +4,8 @@
    [juxt.clojars-mirrors.integrant.core :as ig]
    [reitit.ring :as ring]
    [ring.adapter.jetty9 :refer [run-jetty]]
-   [ring.util.request :refer [body-string]]
    [xtdb.server :as xts]
-   [xtdb.node :as xtn])
-  (:import
-   [org.eclipse.jetty.server Request Response SecureRequestCustomizer]))
+   [xtdb.node :as xtn]))
 
 (defonce system
   {::server {:join false
