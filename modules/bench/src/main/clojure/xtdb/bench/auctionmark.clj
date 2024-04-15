@@ -90,7 +90,7 @@
            ;; current bid/max
            {:keys [curr_bid, curr_max]}
            (when imb_ib_id
-             (-> (q '(from :item-bid [{:ib_id $imb_ib_id, :ib_bid curr_bid, :ib_max_bid curr_max}])
+             (-> (q '(from :item-bid [{:xt/id $imb_ib_id, :ib_bid curr_bid, :ib_max_bid curr_max}])
                     {:args {:imb_ib_id imb_ib_id}})
                  first))
 
