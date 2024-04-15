@@ -58,6 +58,13 @@ export default defineConfig({
                                 { label: '4) Changing an immutable database', link: '/tutorials/immutability-walkthrough/part-4' },
                             ],
                         },
+                        {
+                            label: 'Financial Use-cases',
+                            collapsed: false,
+                            items: [
+                                { label: '1) Counterfactual PnL exploration', link: '/tutorials/financial-usecase/part-1' },
+                            ],
+                        },
                     ],
                 },
 
