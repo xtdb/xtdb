@@ -244,6 +244,8 @@ function gensym() {
                 query = this.query.state.doc.toString();
             }
 
+            query = query.replace(/;\s*$/, ""); // remove last semi-colon
+
             query = JSON.stringify(query);
 
             try {
