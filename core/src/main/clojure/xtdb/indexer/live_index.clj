@@ -395,11 +395,10 @@
             (set! (.shared-wm this) nil)
             (.close shared-wm))
 
+          (util/close tables)
+          (.clear tables)
           (finally
             (.unlock wm-lock wm-lock-stamp))))
-
-      (util/close tables)
-      (.clear tables)
 
       (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
 
@@ -412,8 +411,8 @@
 
   AutoCloseable
   (close [_]
-    (util/close tables)
     (some-> shared-wm .close)
+    (util/close tables)
     (if-not (.tryClose wm-cnt (Duration/ofMinutes 1))
       (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
       (util/close allocator))))
