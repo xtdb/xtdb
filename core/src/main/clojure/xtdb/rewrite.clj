@@ -426,8 +426,9 @@
       (when (vector? node)
         (.nth ^IPersistentVector node 0 nil)))))
 
-(defn ctor? [kw ag]
-  (= kw (ctor ag)))
+(defn ctor?
+  ([kw] (fn [ag] (ctor? kw ag)))
+  ([kw ag] (= kw (ctor ag))))
 
 (defmacro vector-zip [x]
   `(->zipper ~x))

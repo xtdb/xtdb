@@ -1416,7 +1416,7 @@
       [:project base-projection order-by]
       order-by)))
 
-(defn- plan-select-clause [z relation]
+(defn- plan-outer-projection [z relation]
   (let [projection (first (sem/projected-columns z))
         qualified-projection (vec (for [{:keys [qualified-column outer-name inner-name] :as column} projection
                                         :let [derived-column (:ref (meta column))
@@ -1432,28 +1432,29 @@
         project-op [:project qualified-projection
                     relation]]
 
-    (if (when-let [z (r/find-first (partial r/ctor? :set_quantifier) z)]
+    (if (when-let [z (some->> (r/find-first (r/ctor? :select_clause) z)
+                              (r/find-first (r/ctor? :set_quantifier)))]
           (= "DISTINCT" (r/lexeme z 1)))
       [:distinct project-op]
       project-op)))
 
 #_{:clj-kondo/ignore [:unused-private-var]}
 (defn- build-query-specification [z]
-  (let [select-clause (r/$ z 1)
-        from-clause (r/find-first (partial r/ctor? :from_clause) z)
-        where-sc (some-> (r/find-first (partial r/ctor? :where_clause) z)
+  (let [select-clause (r/find-first (r/ctor? :select_clause) z)
+        from-clause (r/find-first (r/ctor? :from_clause) z)
+        where-sc (some-> (r/find-first (r/ctor? :where_clause) z)
                          (r/$ 1))
-        having-sc (some-> (r/find-first (partial r/ctor? :having_clause) z)
-                          (r/$ 1))
-        table-plan (cond->> (if from-clause
-                              (plan from-clause)
-                              [:table [] [{}]])
-                     where-sc (wrap-with-select where-sc)
-                     (needs-group-by? z) (wrap-with-group-by z)
-                     having-sc (wrap-with-select having-sc))
+        having-sc (some-> (r/find-first (r/ctor? :having_clause) z)
+                          (r/$ 1))]
 
-        relation (wrap-with-apply select-clause table-plan)]
-    (plan-select-clause select-clause relation)))
+    (->> (cond-> (if from-clause
+                   (plan from-clause)
+                   [:table [] [{}]])
+           where-sc (->> (wrap-with-select where-sc))
+           (needs-group-by? z) (->> (wrap-with-group-by z))
+           having-sc (->> (wrap-with-select having-sc))
+           select-clause (->> (wrap-with-apply select-clause)))
+         (plan-outer-projection z))))
 
 (defn- build-set-op
   ([set-op lhs rhs] (build-set-op set-op lhs rhs false))

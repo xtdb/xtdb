@@ -150,7 +150,7 @@
              :table-catalog "xtdb",
              :table-schema "public"}]
            (xt/q tu/*node*
-                 "SELECT * FROM information_schema.columns AS c LIMIT 1"))))
+                 "FROM information_schema.columns LIMIT 1"))))
 
 (deftest test-selection-and-projection
   (xt/submit-tx tu/*node* [[:put-docs :beanie {:xt/id :foo, :col1 "foo1"}]

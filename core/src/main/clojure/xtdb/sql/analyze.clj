@@ -570,23 +570,26 @@
        (mapcat expand-underlying-column-references)))
 
 (defn all-select-asterisk-references [ag]
-  (r/collect-stop
-   (fn [ag]
-     (r/zcase ag
-       :select_list
-       (r/collect-stop
-        (fn [ag]
-          (r/zcase ag
-            :qualified_asterisk
-            (identifiers (r/$ ag 1))
-            :asterisk
-            ["*"]
-            :subquery []
-            nil))
-        ag)
-       :subquery []
-       nil))
-   ag))
+  (if (r/find-first (r/ctor? :select_clause) ag)
+    (r/collect-stop
+     (fn [ag]
+       (r/zcase ag
+         :select_list
+         (r/collect-stop
+          (fn [ag]
+            (r/zcase ag
+              :qualified_asterisk
+              (identifiers (r/$ ag 1))
+              :asterisk
+              ["*"]
+              :subquery []
+              nil))
+          ag)
+         :subquery []
+         nil))
+     ag)
+
+    ["*"]))
 
 (defn generate-unique-column-names [projections]
   (->> projections
@@ -690,18 +693,25 @@
           projections)]))
 
     :query_specification
-    (projected-columns (r/$ ag 1))
+    (if-let [select-clause (r/find-first (r/ctor? :select_clause) ag)]
+      (projected-columns select-clause)
+
+      [(->> (r/collect-stop expand-asterisk ag)
+            (generate-unique-column-names)
+            (map-indexed
+             (fn [idx projection]
+               (assoc projection :index idx))))])
 
     :select_clause
     (letfn [(calculate-select-list [ag]
               (r/zcase ag
                 :asterisk
-                (let [query-specification (r/parent (r/parent (r/parent ag)))]
+                (let [query-specification (scope-element ag)]
                   (r/collect-stop expand-asterisk query-specification))
 
                 :qualified_asterisk
                 (let [identifiers (identifiers (r/$ ag 1))
-                      query-specification (r/parent (r/parent (r/parent ag)))]
+                      query-specification (scope-element ag)]
                   (for [{:keys [qualified-column] :as projection} (r/collect-stop expand-asterisk query-specification)
                         :when (= identifiers (butlast qualified-column))]
                     projection))

@@ -408,32 +408,47 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
            (set (xt/q tu/*node* "SELECT * FROM foo"))))
 
-  (t/is (=
-         #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-           {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-           {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-           {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-         (set (xt/q tu/*node* "SELECT * FROM foo, bar"))))
+  (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
+           (set (xt/q tu/*node* "FROM foo"))))
 
-  (t/is (=
-         #{{:xt/id 1, :a 3, :xt/id:1 1, :a:1 1}
-           {:xt/id 2, :b 4, :xt/id:1 1, :a:1 1}
-           {:xt/id 1, :a 3, :xt/id:1 2, :b:1 2}
-           {:xt/id 2, :b 4, :xt/id:1 2, :b:1 2}}
-         (set (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar"))))
+  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
+             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
+             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
+             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
+           (set (xt/q tu/*node* "SELECT * FROM foo, bar"))))
 
-  (t/is (=
-         #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-           {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-           {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-           {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-         (set (xt/q tu/*node* "SELECT * FROM (SELECT * FROM foo, bar) AS baz"))))
+  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
+             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
+             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
+             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
+           (set (xt/q tu/*node* "FROM foo, bar"))))
+
+  (t/is (= #{{:xt/id 1, :a 3, :xt/id:1 1, :a:1 1}
+             {:xt/id 2, :b 4, :xt/id:1 1, :a:1 1}
+             {:xt/id 1, :a 3, :xt/id:1 2, :b:1 2}
+             {:xt/id 2, :b 4, :xt/id:1 2, :b:1 2}}
+           (set (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar"))))
+
+  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
+             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
+             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
+             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
+           (set (xt/q tu/*node* "SELECT * FROM (SELECT * FROM foo, bar) AS baz"))))
+
+  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
+             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
+             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
+             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
+           (set (xt/q tu/*node* "FROM (SELECT * FROM foo, bar) AS baz"))))
 
   (xt/submit-tx tu/*node*
                 [[:sql "INSERT INTO bing (SELECT * FROM foo)"]])
 
   (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
-           (set (xt/q tu/*node* "SELECT * FROM bing")))))
+           (set (xt/q tu/*node* "SELECT * FROM bing"))))
+
+  (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
+           (set (xt/q tu/*node* "FROM bing")))))
 
 (deftest test-scan-all-table-col-names
   (t/testing "testing scan.allTableColNames combines table info from both live and past chunks"
@@ -449,10 +464,18 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
     (t/is (= #{{:a 1, :xt/id "foo1"} {:xt/id "foo2", :c 3}}
              (set (xt/q tu/*node* "SELECT * FROM foo"))))
+    (t/is (= #{{:a 1, :xt/id "foo1"} {:xt/id "foo2", :c 3}}
+             (set (xt/q tu/*node* "FROM foo"))))
+
     (t/is (= #{{:xt/id "bar1"} {:b 2, :xt/id "bar2"}}
              (set (xt/q tu/*node* "SELECT * FROM bar"))))
+    (t/is (= #{{:xt/id "bar1"} {:b 2, :xt/id "bar2"}}
+             (set (xt/q tu/*node* "FROM bar"))))
+
     (t/is (= #{{:a 4, :xt/id "foo1"}}
-             (set (xt/q tu/*node* "SELECT * FROM baz"))))))
+             (set (xt/q tu/*node* "SELECT * FROM baz"))))
+    (t/is (= #{{:a 4, :xt/id "foo1"}}
+             (set (xt/q tu/*node* "FROM baz"))))))
 
 (deftest test-erase-after-delete-2607
   (t/testing "general case"

@@ -92,8 +92,18 @@
           (plan-sql "SELECT * FROM StarsIn AS si(name)")))
 
   (t/is (=plan-file
+          "basic-query-11"
+          (plan-sql "FROM StarsIn AS si(name)"))
+        "implicit SELECT *")
+
+  (t/is (=plan-file
           "basic-query-12"
           (plan-sql "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)")))
+
+  (t/is (=plan-file
+          "basic-query-12"
+          (plan-sql "FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"))
+        "implicit SELECT *")
 
   (t/is (=plan-file
          "basic-query-13"
@@ -168,8 +178,19 @@
           (plan-sql "SELECT * FROM StarsIn AS si(films), UNNEST(si.films) AS film")))
 
   (t/is (=plan-file
+          "basic-query-30"
+          (plan-sql "FROM StarsIn AS si(films), UNNEST(si.films) AS film"))
+
+        "implicit SELECT *")
+
+  (t/is (=plan-file
           "basic-query-31"
           (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film" {:table-info {"stars_in" #{"films"}}})))
+
+  (t/is (=plan-file
+          "basic-query-31"
+          (plan-sql "FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film" {:table-info {"stars_in" #{"films"}}}))
+        "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-32"
@@ -190,8 +211,18 @@
           (plan-sql "SELECT * FROM t1 AS t1(a) WHERE t1.a IS NULL")))
 
   (t/is (=plan-file
+          "basic-query-35"
+          (plan-sql "FROM t1 AS t1(a) WHERE t1.a IS NULL"))
+        "implicit SELECT *")
+
+  (t/is (=plan-file
           "basic-query-36"
           (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL" {:table-info {"t1" #{"a"}}})))
+
+  (t/is (=plan-file
+          "basic-query-36"
+          (plan-sql "FROM t1 WHERE t1.a IS NOT NULL" {:table-info {"t1" #{"a"}}}))
+        "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-37"
@@ -1829,7 +1860,10 @@
                            [:put-docs :bar {:xt/id 2 :a "one"}]])
 
   (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
-           (xt/q tu/*node* "SELECT * FROM foo JOIN bar ON true"))))
+           (xt/q tu/*node* "SELECT * FROM foo JOIN bar ON true")))
+
+  (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
+           (xt/q tu/*node* "FROM foo JOIN bar ON true"))))
 
 (deftest test-expand-asterisk-parenthesized-joined-table
   ;;Parens in the place of a table primary creates a parenthesized_joined_table

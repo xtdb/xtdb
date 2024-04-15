@@ -870,7 +870,7 @@ window_frame_exclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUD
 
 (*  7.12 <query specification> *)
 
-query_specification : select_clause from_clause? where_clause? group_by_clause? having_clause? window_clause? ;
+query_specification : ( select_clause from_clause? | from_clause ) where_clause? group_by_clause? having_clause? window_clause? ;
 
 select_clause : 'SELECT' [ set_quantifier ] select_list ;
 
