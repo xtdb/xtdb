@@ -1,5 +1,5 @@
 ---
-title: Understanding changes to your PnL
+title: Counterfactual PnL exploration
 ---
 
 import Fiddle from '@components/fiddle.astro';
@@ -14,55 +14,54 @@ Over the course of the day your colleagues have made the following trades:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-04-01"
-       txs="
-INSERT INTO commodity_trades (xt$id, ticker_symbol, quantity, price, xt$valid_from, trader_name)
+       txs={`
+INSERT INTO commodity_trades
+(xt$id, symbol, quantity, price, xt$valid_from, trader_name)
 VALUES
-(1, 'XAUUSD:CUR', 100, 1800.50, TIMESTAMP '2024-03-08T10:00:00Z', 'John Doe'),   -- Gold
-(2, 'XAGUSD:CUR', 500, 25.30, TIMESTAMP '2024-03-08T11:00:00Z', 'Jane Smith'),   -- Silver
-(3, 'CL1:COM', 300, 60.00, TIMESTAMP '2024-03-08T11:30:00Z', 'Mike Johnson'),    -- Crude Oil
-(4, 'NG1:COM', 400, 3.10, TIMESTAMP '2024-03-08T12:45:00Z', 'Emily White'),      -- Natural Gas
-(5, 'W1:COM', 250, 5.20, TIMESTAMP '2024-03-08T13:05:00Z', 'Alex Green')         -- Wheat
-"
-       />
-  <Query q="
-  SELECT t.xt$id, t.ticker_symbol, t.quantity, t.price, t.xt$valid_from, t.trader_name
-  FROM commodity_trades as t
-  ORDER BY t.xt$id
-" />
+(1, 'XAU:CUR', 100, 1800.50, TIMESTAMP '2024-03-08 10:00:00', 'John Doe'),   -- Gold
+(2, 'XAG:CUR', 500, 25.30, TIMESTAMP '2024-03-08 11:00:00', 'Jane Smith'),   -- Silver
+(3, 'CL1:COM', 300, 60.00, TIMESTAMP '2024-03-08 11:30:00', 'Mike Johnson'), -- Crude Oil
+(4, 'NG1:COM', 400, 3.10, TIMESTAMP '2024-03-08 12:45:00', 'Emily White'),   -- Natural Gas
+(5, 'W1:COM', 250, 5.20, TIMESTAMP '2024-03-08 13:05:00', 'Alex Green')      -- Wheat
+`} />
+  <Query q={`
+SELECT t.*, t.xt$valid_from
+FROM commodity_trades as t
+ORDER BY t.xt$id
+`} />
 </Fiddle>
 
 At the end of the day, the market closes with the following prices:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-04-01"
-       txs="
-INSERT INTO commodity_spot_prices (xt$id, spot_price, xt$valid_from)
+       txs={`
+INSERT INTO commodity_spot_prices
+(xt$id, spot_price, xt$valid_from)
 VALUES
-('XAUUSD:CUR', 1805.50, TIMESTAMP '2024-03-08T17:00:00Z'),
-('XAGUSD:CUR', 25.35, TIMESTAMP '2024-03-08T17:00:00Z'),
+('XAU:CUR', 1805.50, TIMESTAMP '2024-03-08T17:00:00Z'),
+('XAG:CUR', 25.35, TIMESTAMP '2024-03-08T17:00:00Z'),
 ('CL1:COM', 61.00, TIMESTAMP '2024-03-08T17:00:00Z'),
 ('NG1:COM', 3.15, TIMESTAMP '2024-03-08T17:00:00Z'),
 ('W1:COM', 5.25, TIMESTAMP '2024-03-08T17:00:00Z')
-"
-       />
-  <Query q="
-  SELECT p.xt$id, p.spot_price, p.xt$valid_from
-  FROM commodity_spot_prices as p
-" />
+`} />
+  <Query q={`
+SELECT p.xt$id, p.spot_price, p.xt$valid_from
+FROM commodity_spot_prices as p
+`} />
 </Fiddle>
 
 Now we want to price our risk and PnL for the end of this week.
 Let's extract the information we need to calculate our PnL:
 
 <Fiddle magicContext="my-context">
-  <Query q="
+  <Query q={`
 SELECT
     ct.xt$id as trade_id,
-    ct.ticker_symbol,
+    ct.symbol,
     ct.quantity,
     ct.price as trade_price,
     csp.spot_price,
-    (csp.spot_price - ct.price) * ct.quantity as pnl,
     ct.xt$valid_from as trade_timestamp,
     ct.trader_name,
     csp.xt$valid_from as spot_price_timestamp
@@ -71,15 +70,15 @@ FROM
 INNER JOIN
     commodity_spot_prices csp
 ON
-    ct.ticker_symbol = csp.xt$id
-" />
+    ct.symbol = csp.xt$id
+`} />
 </Fiddle>
 
 For the purposes of this simple example, we'll just use SQL to calculate the PnL.
-However, in the 'real world', we'd usually have much more complex objects (curves, etc.) and would use a financial pricing quant library.
+However, in the 'real world', we'd usually have much more complex objects (yield curves, etc.) and would use a quant pricing library.
 
 <Fiddle magicContext="my-context">
-  <Query q="
+  <Query q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
 FROM
@@ -87,54 +86,52 @@ FROM
 INNER JOIN
     commodity_spot_prices csp
 ON
-    ct.ticker_symbol = csp.xt$id
-" />
+    ct.symbol = csp.xt$id
+`} />
 </Fiddle>
 
 So far so good.
 
-On the Monday morning, after a pleasant weekend's break, you come back into the the trading floor.
+On the Monday morning, after a pleasant weekend's break, you come back into the trading floor.
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-04-01"
-       txs="
-INSERT INTO commodity_trades (xt$id, ticker_symbol, quantity, price, xt$valid_from, trader_name)
+       txs={`
+INSERT INTO commodity_trades (xt$id, symbol, quantity, price, xt$valid_from, trader_name)
 VALUES
-(6, 'XAUUSD:CUR', 1000, 2590.40, TIMESTAMP '2024-03-11T10:00:00Z', 'John Doe'),
-(7, 'XAGUSD:CUR', 30, 27.30, TIMESTAMP '2024-03-11T11:00:00Z', 'Jane Smith')
-"
-       />
-  <Query q="
-  SELECT t.xt$id, t.ticker_symbol, t.quantity, t.price, t.xt$valid_from, t.trader_name
-  FROM commodity_trades as t
-  ORDER BY t.xt$id
-" />
+(6, 'XAU:CUR', 1000, 2590.40, TIMESTAMP '2024-03-11 10:00:00', 'John Doe'),
+(7, 'XAG:CUR', 30, 27.30, TIMESTAMP '2024-03-11 11:00:00', 'Jane Smith')
+`} />
+  <Query q={`
+SELECT t.*, t.xt$valid_from
+FROM commodity_trades as t
+ORDER BY t.xt$id
+`} />
 </Fiddle>
 
 At the end of this Monday trading day, the market closes with the following prices:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-04-01"
-       txs="
+       txs={`
 INSERT INTO commodity_spot_prices (xt$id, spot_price, xt$valid_from)
 VALUES
-('XAUUSD:CUR', 2010.50, TIMESTAMP '2024-03-11T17:00:00Z'),
-('XAGUSD:CUR', 25.25, TIMESTAMP '2024-03-11T17:00:00Z'),
-('CL1:COM', 62.00, TIMESTAMP '2024-03-11T17:00:00Z'),
-('NG1:COM', 3.17, TIMESTAMP '2024-03-11T17:00:00Z'),
-('W1:COM', 5.27, TIMESTAMP '2024-03-11T17:00:00Z')
-"
-       />
-  <Query q="
-  SELECT p.xt$id, p.spot_price, p.xt$valid_from
-  FROM commodity_spot_prices as p
-" />
+('XAU:CUR', 2010.50, TIMESTAMP '2024-03-11 17:00:00'),
+('XAG:CUR', 25.25, TIMESTAMP '2024-03-11 17:00:00'),
+('CL1:COM', 62.00, TIMESTAMP '2024-03-11 17:00:00'),
+('NG1:COM', 3.17, TIMESTAMP '2024-03-11 17:00:00'),
+('W1:COM', 5.27, TIMESTAMP '2024-03-11 17:00:00')
+`} />
+  <Query q={`
+SELECT p.xt$id, p.spot_price, p.xt$valid_from
+FROM commodity_spot_prices as p
+`} />
 </Fiddle>
 
 We now recalculate our new PnL:
 
 <Fiddle magicContext="my-context">
-  <Query q="
+  <Query q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
 FROM
@@ -142,8 +139,8 @@ FROM
 INNER JOIN
     commodity_spot_prices csp
 ON
-    ct.ticker_symbol = csp.xt$id
-" />
+    ct.symbol = csp.xt$id
+`} />
 </Fiddle>
 
 Oh no!
@@ -151,14 +148,16 @@ Oh no!
 What if we could ignore the today's trades, and just see what our closing position on Friday would have looked like in the market at the end of today.
 
 <Fiddle magicContext="my-context">
-  <Query q="
+  <Query q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
 FROM
-    commodity_trades FOR VALID_TIME AS OF TIMESTAMP '2024-03-08 17:00:00Z' ct
+    commodity_trades FOR VALID_TIME AS OF TIMESTAMP '2024-03-08 17:00:00' ct
 INNER JOIN
     commodity_spot_prices csp
 ON
-    ct.ticker_symbol = csp.xt$id
-" />
+    ct.symbol = csp.xt$id
+`} />
 </Fiddle>
+
+We have now established that today's trades must be causing the dramatic PnL change.
