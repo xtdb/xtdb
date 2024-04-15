@@ -1,24 +1,19 @@
+---
 version: '3'
 services:
   db:
-    image: ghcr.io/xtdb/xtdb-standalone-ea
-    ports:
-      - "6543:3000" 
-    stdin_open: true 
-    tty: true
+    image: http-proxy:latest
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/status"]
-      interval: 1s
+      test: ["CMD", "curl", "-f", "http://localhost:3300/healthcheck"]
       timeout: 1s
       retries: 10
-      start_period: 40s
   app:
     environment:
-        DATABASE_HOST: db
-        DATABASE_PORT: 3000
+      DATABASE_HOST: db
+      DATABASE_PORT: 3300
     build:
-        context: .
-        dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile
     depends_on:
       db:
         condition: service_healthy

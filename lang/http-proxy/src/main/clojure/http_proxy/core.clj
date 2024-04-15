@@ -42,9 +42,11 @@
 
 (def router
   (ring/router [["/setup" {:get {:handler #'setup-handler}}]
-                ["/teardown" {:get {:handler #'tear-down-handler}}]]))
+                ["/teardown" {:get {:handler #'tear-down-handler}}]
+                ["/healthcheck" {:get {:handler (fn [_] {:status 200})}}]]))
 
 (defmethod ig/init-key ::server [_ {:keys [port join] :or {port 3300}}]
+  (println "Starting server on port" port)
   (let [server (run-jetty (ring/ring-handler
                            router
                            #'default-handler)

@@ -1,3 +1,18 @@
+# http-proxy
+
+## Building
+
+To build the jar:
+```sh
+./gradlew :lang:http-proxy:shadowJar
+```
+
+To build the docker image (& jar):
+```sh
+./lang/http-proxy/build.sh
+# To force a re-build of the jar:
+./lang/http-proxy/build.sh --clean
+```
 
 ## Requirements
 

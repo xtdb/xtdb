@@ -1,29 +1,38 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import xtdb.DataReaderTransformer
 
 plugins {
-    `java-library`
+    java
+    application
     id("dev.clojurephant.clojure")
-    //`maven-publish`
-    //signing
-    kotlin("jvm")
-    kotlin("plugin.serialization")
-    //id("org.jetbrains.dokka")
+    id("com.github.johnrengelman.shadow")
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-
 dependencies {
-    api(project(":xtdb-api"))
-    api(project(":xtdb-core"))
-    api(project(":xtdb-http-server"))
+    implementation(project(":xtdb-api"))
+    implementation(project(":xtdb-core"))
+    implementation(project(":xtdb-http-server"))
 
-    api("ring", "ring-core", "1.10.0")
-    api("info.sunng", "ring-jetty9-adapter", "0.22.4")
-    api("org.eclipse.jetty", "jetty-alpn-server", "10.0.15")
-    api("metosin", "reitit-core", "0.5.15")
-    api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
+    implementation("ring", "ring-core", "1.10.0")
+    implementation("info.sunng", "ring-jetty9-adapter", "0.22.4")
+    implementation("org.eclipse.jetty", "jetty-alpn-server", "10.0.15")
+    implementation("metosin", "reitit-core", "0.5.15")
+    implementation("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
 
     //testImplementation("cheshire", "cheshire", "5.12.0")
 }
 
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+
 tasks.javadoc.get().enabled = false
+
+application {
+    mainClass.set("clojure.main")
+}
+
+tasks.shadowJar {
+    archiveBaseName.set("http-proxy")
+    archiveVersion.set("")
+    archiveClassifier.set("")
+    mergeServiceFiles()
+    transform(DataReaderTransformer())
+}
