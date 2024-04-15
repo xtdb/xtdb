@@ -15,7 +15,7 @@ let themeObj = {
     ".cm-content": {
         whiteSpace: "pre-wrap",
         padding: "5px 0",
-        flex: "1 1 0"
+        flex: "1 0 1"
     },
     "&.cm-focused": {
         outline: "0 !important"
