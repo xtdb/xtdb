@@ -63,6 +63,8 @@ export default defineConfig({
                             collapsed: false,
                             items: [
                                 { label: '1) Counterfactual PnL exploration', link: '/tutorials/financial-usecase/part-1' },
+                                { label: '2) Late trade adjustments', link: '/tutorials/financial-usecase/part-2' },
+                                { label: '3) Tracking corporate actions', link: '/tutorials/financial-usecase/part-3' },
                             ],
                         },
                     ],
