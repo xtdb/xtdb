@@ -344,8 +344,9 @@
       (reify IntPredicate
         (test [_ page-idx]
           (boolean
-           (when-let [bloom-vec-idx (.rowIndex table-metadata col-name page-idx)]
-             (and (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
+           (let [bloom-vec-idx (.rowIndex table-metadata col-name page-idx)]
+             (and (>= bloom-vec-idx 0)
+                  (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
                   (MutableRoaringBitmap/intersects pushdown-bloom
                                                    (bloom/bloom->bitmap bloom-rdr bloom-vec-idx))))))))))
 

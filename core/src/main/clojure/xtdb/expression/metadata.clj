@@ -139,8 +139,9 @@
        :continue (fn [cont]
                    (cont :bool
                          `(boolean
-                           (when-let [~expr/idx-sym ~idx-code]
-                             (bloom/bloom-contains? ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)))))}
+                           (let [~expr/idx-sym ~idx-code]
+                             (when (>= ~expr/idx-sym 0)
+                               (bloom/bloom-contains? ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym))))))}
 
       (let [col-sym (gensym 'meta_col)
             col-field (types/col-type->field col-type)
@@ -163,8 +164,9 @@
          :continue (fn [cont]
                      (cont :bool
                            `(when ~col-sym
-                              (when-let [~expr/idx-sym ~idx-code]
-                                ~(continue (fn [_ code] code))))))}))))
+                              (let [~expr/idx-sym ~idx-code]
+                                (when (>= ~expr/idx-sym 0)
+                                  ~(continue (fn [_ code] code)))))))}))))
 
 (defmethod ewalk/walk-expr :test-metadata [inner outer expr]
   (outer (-> expr (update :value-expr inner))))

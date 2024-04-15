@@ -462,10 +462,10 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id "foo2" :c 3}]
                              [:put-docs :baz {:xt/id "foo1" :a 4}]])
 
-    (t/is (= #{{:a 1, :xt/id "foo1"} {:xt/id "foo2", :c 3}}
-             (set (xt/q tu/*node* "SELECT * FROM foo"))))
-    (t/is (= #{{:a 1, :xt/id "foo1"} {:xt/id "foo2", :c 3}}
-             (set (xt/q tu/*node* "FROM foo"))))
+    (t/is (= #{{:xt/id "foo2", :c 3}}
+             (set (xt/q tu/*node* "SELECT * FROM foo WHERE foo.c = 3"))))
+    (t/is (= #{{:xt/id "foo2", :c 3}}
+             (set (xt/q tu/*node* "FROM foo WHERE foo.c = 3"))))
 
     (t/is (= #{{:xt/id "bar1"} {:b 2, :xt/id "bar2"}}
              (set (xt/q tu/*node* "SELECT * FROM bar"))))

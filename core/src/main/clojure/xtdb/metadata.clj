@@ -342,7 +342,7 @@
   ITableMetadata
   (metadataReader [_] metadata-leaf-rdr)
   (columnNames [_] col-names)
-  (rowIndex [_ col-name page-idx] (.get page-idx-cache (->PageIndexKey col-name page-idx)))
+  (rowIndex [_ col-name page-idx] (.getOrDefault page-idx-cache (->PageIndexKey col-name page-idx) -1))
   (iidBloomBitmap [_ page-idx]
     (let [bloom-rdr (-> (.structKeyReader metadata-leaf-rdr "columns")
                         (.listElementReader)
