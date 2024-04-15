@@ -438,13 +438,10 @@
 (defn- dclo [ag]
   (r/zcase ag
     :query_specification
-    (dclo (r/$ ag -1))
+    (dclo (r/find-first (partial r/ctor? :from_clause) ag))
 
     (:delete_statement__searched :update_statement__searched :erase_statement__searched)
     (dclo (r/find-first (partial r/ctor? :target_table) ag))
-
-    :table_expression
-    (dclo (r/$ ag 1))
 
     :from_clause
     (dclo (r/$ ag 2))
@@ -693,16 +690,19 @@
           projections)]))
 
     :query_specification
+    (projected-columns (r/$ ag 1))
+
+    :select_clause
     (letfn [(calculate-select-list [ag]
               (r/zcase ag
                 :asterisk
-                (let [table-expression (r/right (r/parent ag))]
-                  (r/collect-stop expand-asterisk table-expression))
+                (let [query-specification (r/parent (r/parent (r/parent ag)))]
+                  (r/collect-stop expand-asterisk query-specification))
 
                 :qualified_asterisk
                 (let [identifiers (identifiers (r/$ ag 1))
-                      table-expression (r/right (r/parent ag))]
-                  (for [{:keys [qualified-column] :as projection} (r/collect-stop expand-asterisk table-expression)
+                      query-specification (r/parent (r/parent (r/parent ag)))]
+                  (for [{:keys [qualified-column] :as projection} (r/collect-stop expand-asterisk query-specification)
                         :when (= identifiers (butlast qualified-column))]
                     projection))
 

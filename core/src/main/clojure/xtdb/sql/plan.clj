@@ -1416,20 +1416,44 @@
       [:project base-projection order-by]
       order-by)))
 
-(defn- build-query-specification [sl te]
-  (let [projection (first (sem/projected-columns sl))
+(defn- plan-select-clause [z relation]
+  (let [projection (first (sem/projected-columns z))
         qualified-projection (vec (for [{:keys [qualified-column outer-name inner-name] :as column} projection
                                         :let [derived-column (:ref (meta column))
                                               outer-projection-symbol (unqualified-projection-symbol
-                                                                        (cond-> column
-                                                                          outer-name (assoc :identifier outer-name)))]]
+                                                                       (cond-> column
+                                                                         outer-name (assoc :identifier outer-name)))]]
                                     (if qualified-column
                                       {outer-projection-symbol
                                        (qualified-projection-symbol (cond-> column
                                                                       inner-name (assoc :identifier inner-name)))}
                                       {outer-projection-symbol (expr (r/$ derived-column 1))})))
-        relation (wrap-with-apply sl (if te (plan te) [:table [] [{}]]))]
-    [:project qualified-projection relation]))
+
+        project-op [:project qualified-projection
+                    relation]]
+
+    (if (when-let [z (r/find-first (partial r/ctor? :set_quantifier) z)]
+          (= "DISTINCT" (r/lexeme z 1)))
+      [:distinct project-op]
+      project-op)))
+
+#_{:clj-kondo/ignore [:unused-private-var]}
+(defn- build-query-specification [z]
+  (let [select-clause (r/$ z 1)
+        from-clause (r/find-first (partial r/ctor? :from_clause) z)
+        where-sc (some-> (r/find-first (partial r/ctor? :where_clause) z)
+                         (r/$ 1))
+        having-sc (some-> (r/find-first (partial r/ctor? :having_clause) z)
+                          (r/$ 1))
+        table-plan (cond->> (if from-clause
+                              (plan from-clause)
+                              [:table [] [{}]])
+                     where-sc (wrap-with-select where-sc)
+                     (needs-group-by? z) (wrap-with-group-by z)
+                     having-sc (wrap-with-select having-sc))
+
+        relation (wrap-with-apply select-clause table-plan)]
+    (plan-select-clause select-clause relation)))
 
 (defn- build-set-op
   ([set-op lhs rhs] (build-set-op set-op lhs rhs false))
@@ -1736,22 +1760,6 @@
     [:from_subquery ^:z query-expression]
     (plan query-expression)
 
-    [:query_specification _ ^:z sl]
-    ;;=>
-    (build-query-specification sl nil)
-
-    [:query_specification _ ^:z sl ^:z te]
-    ;;=>
-    (build-query-specification sl te)
-
-    [:query_specification _ [:set_quantifier "ALL"] ^:z sl ^:z te]
-    ;;=>
-    (build-query-specification sl te)
-
-    [:query_specification _ [:set_quantifier "DISTINCT"] ^:z sl ^:z te]
-    ;;=>
-    [:distinct (build-query-specification sl te)]
-
     [:query_expression_body ^:z qeb "UNION" ^:z qt]
     [:distinct (build-set-op :union-all qeb qt)]
 
@@ -1778,47 +1786,6 @@
 
     [:query_term ^:z qt "INTERSECT" "DISTINCT" ^:z qp]
     [:distinct (build-set-op :intersect qt qp)]
-
-    [:table_expression ^:z fc]
-    ;;=>
-    (cond->> (plan fc)
-      (needs-group-by? z) (wrap-with-group-by z))
-
-    [:table_expression ^:z fc [:group_by_clause _ _ _]]
-    ;;=>
-    (wrap-with-group-by z (plan fc))
-
-    [:table_expression ^:z fc [:where_clause _ ^:z sc]]
-    ;;=>
-    (cond->> (wrap-with-select sc (plan fc))
-      (needs-group-by? z) (wrap-with-group-by z))
-
-    [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _]]
-    ;;=>
-    (->> (wrap-with-select sc (plan fc))
-         (wrap-with-group-by z))
-
-    [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
-    ;;=>
-    (->> (wrap-with-select sc (plan fc))
-         (wrap-with-group-by z)
-         (wrap-with-select hsc))
-
-    [:table_expression ^:z fc [:where_clause _ ^:z sc] [:having_clause _ ^:z hsc]]
-    ;;=>
-    (->> (wrap-with-select sc (plan fc))
-         (wrap-with-group-by z)
-         (wrap-with-select hsc))
-
-    [:table_expression ^:z fc [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
-    ;;=>
-    (->> (wrap-with-group-by z (plan fc))
-         (wrap-with-select hsc))
-
-    [:table_expression ^:z fc [:having_clause _ ^:z hsc]]
-    ;;=>
-    (->> (wrap-with-group-by z (plan fc))
-         (wrap-with-select hsc))
 
     [:table_primary [:collection_derived_table _ _] _]
     ;;=>
@@ -1891,6 +1858,7 @@
 
     (r/zcase z
       :query_expression (plan-query-expr z)
+      :query_specification (build-query-specification z)
       :in_value_list (build-values-list z)
       :delete_statement__searched (plan-dml :delete z)
       :update_statement__searched (plan-dml :update z)

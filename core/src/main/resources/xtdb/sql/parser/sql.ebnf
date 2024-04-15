@@ -739,9 +739,7 @@ row_value_constructor_element : value_expression ;
 table_value_constructor : 'VALUES' row_value_expression_list ;
 row_value_expression_list : table_row_value_expression [ ( <comma> table_row_value_expression )+ ] ;
 
-(*  7.4      <table expression> *)
-
-table_expression : from_clause [ where_clause ] [ group_by_clause ] [ having_clause ] [ window_clause ] ;
+(*  7.4 <table expression> inlined in query_specification *)
 
 (*  7.5        <from clause> *)
 
@@ -818,7 +816,7 @@ outer_join_type : 'LEFT' | 'RIGHT' | 'FULL' ;
 
 (*  7.8      <where clause> *)
 
-where_clause : 'WHERE' search_condition ;
+where_clause : <'WHERE'> search_condition ;
 
 (*  7.9     <group by clause> *)
 
@@ -838,7 +836,7 @@ empty_grouping_set : <left_paren> <right_paren> ;
 
 (*  7.10 <having clause> *)
 
-having_clause : 'HAVING' search_condition ;
+having_clause : <'HAVING'> search_condition ;
 
 (*  7.11 <window clause> *)
 
@@ -872,7 +870,9 @@ window_frame_exclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUD
 
 (*  7.12 <query specification> *)
 
-query_specification : 'SELECT' [ set_quantifier ] select_list [ table_expression ] ;
+query_specification : select_clause from_clause? where_clause? group_by_clause? having_clause? window_clause? ;
+
+select_clause : 'SELECT' [ set_quantifier ] select_list ;
 
 select_list : asterisk | select_sublist [ ( <comma> select_sublist )+ ] ;
 <select_sublist> : derived_column | qualified_asterisk ;
@@ -1372,4 +1372,3 @@ arrow_table : 'ARROW_TABLE' [ <left_paren> character_string_literal <right_paren
 (* multiple <direct sql statement> to used for example with files *)
 
 direct_sql_statements : direct_sql_statement+ ;
-
