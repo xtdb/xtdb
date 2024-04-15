@@ -11,7 +11,7 @@ In [part 3](/tutorials/immutability-walkthrough/part-3), we learned how to inser
 
 In this part, we will understand how to update past data, but we will also learn how to access the raw, un-changed data also.
 
-First, let's insert three versions of the same product into different points in the past:
+First, let's insert three versions of the same product into different points in the past with three different prices:
 
 <Fiddle magicContext="my-context">
   <Txs txs="INSERT INTO product (xt$id, name, price, xt$valid_from)
@@ -70,7 +70,7 @@ The answer is no. We have been updating the `VALID_TIME` line. But our XTDB data
 
 Using a query against `SYSTEM_TIME`, we can query the database exactly how it was at a point in database-time.
 
-No updates to this line are possible, we can only add to the end of the timeline. We call this append-only.
+No updates to this line are possible, we can only add to the end of the timeline. We call this append-only, and it is very useful for auditing all changes made to the database.
 
 For example, querying against SYSTEM_TIME, we should see the original, unmutated data:
 

@@ -36,11 +36,11 @@ We should NOT see any data, because the product was inserted into the database o
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2023-01-01'" />
 </Fiddle>
 
-## Inserting Historical Data
+## Inserting historical data
 
 But let's say, we want to insert some historical data into our database, all the way back in **2022**.
 
-This could an import from another system, into our XTDB golden store.
+This could be an import of historical product prices from another system into our XTDB golden store.
 
 We achieve this in XT by setting the `xt$valid_from` and `xt$valid_to` column
 
