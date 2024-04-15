@@ -128,7 +128,8 @@ function gensym() {
         for (const row of rows) {
             var rowCols = "";
             for (const key of allKeys) {
-                let highlight = hljs.highlight(JSON.stringify(row[key]), {language: 'json'});
+                let value = row[key] || null;
+                let highlight = hljs.highlight(JSON.stringify(value), {language: 'json'});
                 rowCols += `<td class="text-left p-1">${highlight.value}</Code></td>`;
             }
             bodyRows += `<tr class="border-gray-300 border-t">${rowCols}</tr>`;
@@ -257,8 +258,25 @@ function gensym() {
                         query: query
                     })
                 });
-                var json = await response.json();
+            } catch (e) {
+                console.error(e);
+                this.results_el.innerHTML = makeError(
+                    "Network Error",
+                    "Uh oh! A network error. Please try again.",
+                );
+            }
 
+            try {
+                var json = await response.json();
+            } catch (e) {
+                console.error(e);
+                this.results_el.innerHTML = makeError(
+                    "Result Error",
+                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
+                );
+            }
+
+            try {
                 if (response.ok) {
                     this.results_el.innerHTML = makeTable(json);
                 } else {
@@ -271,8 +289,8 @@ function gensym() {
             } catch (e) {
                 console.error(e);
                 this.results_el.innerHTML = makeError(
-                    "Network Error",
-                    "Uh oh! A network error. Please try again.",
+                    "Result Error",
+                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
                 );
             }
         }
