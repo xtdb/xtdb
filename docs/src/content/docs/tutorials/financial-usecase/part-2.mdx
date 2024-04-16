@@ -78,7 +78,7 @@ They can't find the trade we sneaked into last month! Has someone just gotten aw
 
 If we want to allow editing the timeline, how can we avoid this?
 
-In XTDB we use system-time (a.k.a. wall-clock time), an **immutable** timeline that gets appended to with every change. In fact our malicious edit from earlier gets caught easily:
+In XTDB we use system-time (a.k.a. wall-clock time), an **immutable** timeline that gets appended to with every change. This means our fraudulent/malicious/accidental edit from earlier gets caught easily:
 
 <Fiddle magicContext="my-context">
   <Query q="SELECT *
