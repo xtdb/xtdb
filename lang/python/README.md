@@ -2,6 +2,7 @@
 
 This is the Python SDK for the [XTDB](https://xtdb.com) database.
 
+
 ## Development
 
 This library uses [Poetry](https://python-poetry.org/) for dependency management. 
@@ -11,15 +12,20 @@ To install the dependencies, run:
 poetry install
 ```
 
+
 ## Testing
-Through localhost connection
+
+See the test harness README for how to nodes are spun up and down.
+
+You can run the http-proxy locally via the test harness:
+
+`./gradlew :lang:test-harness:httpProxy`
+
+This will run the http-proxy server on `http://localhost:3300`.
+You can then run the tests via:
+
 ```shell
 poetry run pytest
-```
-
-Through `docker-compose`
-```shell
-docker-compose up --build --abort-on-container-exit
 ```
 
 

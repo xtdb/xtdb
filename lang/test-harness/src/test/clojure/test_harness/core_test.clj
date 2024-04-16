@@ -1,28 +1,20 @@
-(ns http-proxy.core-test
+(ns test-harness.core-test
   (:require [clojure.test :refer [deftest use-fixtures testing is]]
-            [juxt.clojars-mirrors.integrant.core :as ig]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as http]
-            [http-proxy.core :as core]))
+            [test-harness.core :as core]
+            [test-harness.test-utils :as tu]))
 
-(def system (atom :unset))
-
-(defn with-system [f]
-  (reset! system (ig/init core/system))
-  (f)
-  (ig/halt! @system)
-  (reset! system :unset))
-
-(use-fixtures :each with-system)
+(use-fixtures :each tu/with-system)
 
 (deftest new-node!-test
-  (let [node-store (::core/node-store @system)]
+  (let [node-store (::core/node-store @tu/system)]
     (is (core/new-node! node-store "token"))
     (is (= 1 (count @node-store)))
     (is (not (core/new-node! node-store "token")))
     (is (= 1 (count @node-store)))))
 
 (deftest remove-node!-test
-  (let [node-store (::core/node-store @system)]
+  (let [node-store (::core/node-store @tu/system)]
     (is (core/new-node! node-store "token"))
     (is (= 1 (count @node-store)))
     (is (core/remove-node! node-store "token"))

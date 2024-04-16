@@ -1,10 +1,8 @@
-import xtdb.DataReaderTransformer
+import org.gradle.api.tasks.JavaExec
 
 plugins {
-    java
-    application
+    `java-library`
     id("dev.clojurephant.clojure")
-    id("com.github.johnrengelman.shadow")
 }
 
 dependencies {
@@ -27,14 +25,14 @@ java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 tasks.javadoc.get().enabled = false
 
-application {
-    mainClass.set("clojure.main")
+tasks.withType<Test> {
+    // Always run the tests
+    // Otherwise changes to the python code don't trigger the tests
+    outputs.upToDateWhen { false }
 }
 
-tasks.shadowJar {
-    archiveBaseName.set("http-proxy")
-    archiveVersion.set("")
-    archiveClassifier.set("")
-    mergeServiceFiles()
-    transform(DataReaderTransformer())
+tasks.register<JavaExec>("httpProxy") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    this.args = listOf("-m", "test-harness.core")
 }

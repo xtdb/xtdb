@@ -1,4 +1,4 @@
-(ns http-proxy.core
+(ns test-harness.core
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
