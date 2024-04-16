@@ -25,7 +25,7 @@
            java.nio.ByteBuffer
            (java.nio.file Path)
            (java.util ArrayList Comparator HashMap Iterator LinkedList Map PriorityQueue Stack)
-           (java.util.function BiFunction IntPredicate Predicate)
+           (java.util.function IntPredicate Predicate BiFunction)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
@@ -40,7 +40,8 @@
            xtdb.operator.IRelationSelector
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
-           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorIndirection$Selection IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
+           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorIndirection$Selection IVectorReader
+                        IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -233,11 +234,10 @@
     (.push used-entries vsr)
     vsr))
 
-(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache ^Path table-path [leaf-tag & leaf-args]]
+(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache [leaf-tag & leaf-args]]
   (case leaf-tag
     :arrow
-    (let [[{:keys [trie-key]} page-idx] leaf-args
-          data-file-path (trie/->table-data-file-path table-path trie-key)]
+    (let [[{:keys [data-file-path]} page-idx] leaf-args]
       (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
         (let [vsr (cache-vsr vsr-cache data-file-path)
               loader (VectorLoader. vsr)]
@@ -249,7 +249,7 @@
 (defrecord LeafPointer [ev-ptr rel-idx])
 
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks, ^IRelationWriter out-rel
-                     ^Path table-path, col-names, ^Map col-preds,
+                     col-names, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
                      params, vsr-cache, buffer-pool]
   ICursor
@@ -264,7 +264,7 @@
                 calculate-polygon (bitemp/polygon-calculator temporal-bounds)
                 bitemp-consumer (->bitemporal-consumer out-rel col-names)
                 leaf-rdrs (for [leaf leaves
-                                :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)]]
+                                :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache leaf)]]
                             (cond-> data-rdr
                               iid-pred (.select (.select iid-pred allocator data-rdr params))))
                 [temporal-cols content-cols] ((juxt filter remove) temporal-column? col-names)
@@ -359,7 +359,7 @@
 
 (defn- ->merge-tasks
   "segments :: [Segment]
-    Segment :: {:keys [meta-file trie-key table-metadata page-idx-pred]} ;; for Arrow tries
+    Segment :: {:keys [meta-file data-file-path table-metadata page-idx-pred]} ;; for Arrow tries
              | {:keys [trie live-rel]} ;; for live tries
 
    return :: (seq {:keys [path leaves]})"
@@ -517,7 +517,8 @@
                                                                                   (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
                                                                                     (.add table-metadatas table-metadata)
                                                                                     (into (trie/->Segment trie)
-                                                                                          {:trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
+                                                                                          {:data-file-path (trie/->table-data-file-path table-path (:trie-key (trie/parse-trie-file-path meta-file-path)))
+
                                                                                            :table-metadata table-metadata
                                                                                            :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                                     (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
@@ -537,7 +538,7 @@
                                                                                  (for [^Field field (vals fields)]
                                                                                    (vw/->writer (.createVector field allocator))))]
                                (->TrieCursor allocator (.iterator ^Iterable merge-tasks) out-rel
-                                             table-path col-names col-preds
+                                             col-names col-preds
                                              (->temporal-bounds params basis scan-opts)
                                              params
                                              (->vsr-cache buffer-pool allocator)
