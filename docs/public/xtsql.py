@@ -82,24 +82,23 @@ def remove_none_and_empty_dict_values(d):
 
 class AbstractXtdb:
     def _from_json_ld(self, obj):
-        match obj.get('@type', None):
-            case 'xt:timestamp':
-                return parse_iso_datetime(obj['@value'])
-            case 'xt:timestamptz':
-                return parse_iso_datetime(obj['@value'].replace("[UTC]", ""))
-            case 'xt:date':
-                return date.fromisoformat(obj['@value'])
-            case _:
-                return obj.get('@graph', obj)
+        obj_type = obj.get('@type', None)
+        if obj_type == 'xt:timestamp':
+            return parse_iso_datetime(obj['@value'])
+        elif obj_type == 'xt:timestamptz':
+            return parse_iso_datetime(obj['@value'].replace("[UTC]", ""))
+        elif obj_type == 'xt:date':
+            return date.fromisoformat(obj['@value'])
+        else:
+            return obj.get('@graph', obj)
 
     def _to_json_ld(self, obj):
-        match obj:
-            case datetime():
-                 return {'@value': datetime.isoformat(obj), '@type': 'xt:timestamp'}
-            case date():
-                 return {'@value': date.isoformat(obj), '@type': 'xt:date'}
-            case _:
-                 raise TypeError
+        if isinstance(obj, datetime):
+            return {'@value': obj.isoformat(), '@type': 'xt:timestamp'}
+        elif isinstance(obj, date):
+            return {'@value': obj.isoformat(), '@type': 'xt:date'}
+        else:
+            raise TypeError("Unsupported type for JSON-LD serialization")
 
 class Xtdb(AbstractXtdb):
     """
