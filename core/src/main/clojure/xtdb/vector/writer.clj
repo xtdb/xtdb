@@ -111,7 +111,7 @@
   (value->col-type [v]
     (if (or (every? keyword? (keys v)) (every? string? (keys v)))
       [:struct (->> v
-                    (into {} (map (juxt (comp symbol key)
+                    (into {} (map (juxt (comp util/symbol->normal-form-symbol symbol key)
                                         (comp value->col-type val)))))]
 
       #_[:map
