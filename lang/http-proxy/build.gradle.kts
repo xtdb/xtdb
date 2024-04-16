@@ -18,7 +18,9 @@ dependencies {
     implementation("metosin", "reitit-core", "0.5.15")
     implementation("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
 
-    //testImplementation("cheshire", "cheshire", "5.12.0")
+    testImplementation("pro.juxt.clojars-mirrors.hato", "hato", "0.8.2")
+    // hato uses cheshire for application/json encoding
+    testImplementation("cheshire", "cheshire", "5.12.0")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

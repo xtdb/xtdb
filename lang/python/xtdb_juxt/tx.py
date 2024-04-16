@@ -95,7 +95,7 @@ class Sql(TxOp):
     def to_json(self):
         return {
             "sql": self.sql,
-            "args": self.arg_rows
+            "argRows": self.arg_rows
         }
 
 
