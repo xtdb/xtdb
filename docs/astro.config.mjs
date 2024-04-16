@@ -221,6 +221,14 @@ export default defineConfig({
             customCss: ['./src/styles/tailwind.css'],
             head: [
                 {
+                    tag: 'script',
+                    attrs: {
+                        src: 'https://bunseki.juxt.pro/umami.js',
+                        'data-website-id': '2ff1e11e-b8fb-49d2-a3b2-9e77fead4b65',
+                        defer: true,
+                    },
+                },
+                {
                     tag: 'link',
                     attrs: {
                         id: 'hl-light',
