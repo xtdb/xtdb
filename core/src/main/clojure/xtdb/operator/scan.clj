@@ -257,7 +257,7 @@
     (if (.hasNext merge-tasks)
       (let [{:keys [leaves path]} (.next merge-tasks)
             is-valid-ptr (ArrowBufPointer.)]
-        ;; (reset-vsr-cache vsr-cache)
+        (reset-vsr-cache vsr-cache)
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn #(.ev_ptr ^LeafPointer %)) (EventRowPointer/comparator)))
