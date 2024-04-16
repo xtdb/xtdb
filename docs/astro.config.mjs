@@ -20,7 +20,7 @@ export default defineConfig({
             favicon: '/shared/favicon.svg',
 
             logo: {
-                src: '/shared/public/images/logo-core2.svg',
+                src: '/shared/public/images/logo-text.svg',
                 replacesTitle: true
             },
 
