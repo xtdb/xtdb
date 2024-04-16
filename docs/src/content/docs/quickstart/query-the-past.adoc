@@ -8,9 +8,9 @@ XTDB automatically records all versions and changes to individual rows across yo
 
 The `xtsql` console behaves as an ordinary client of an XTDB server, and it operates by sending stateless JSON payloads over HTTP as the transport layer. HTTP as a transport layer offers many operational advantages, but it also means transactions are inherently non-interactive (i.e. there is no stateful connection/session in place).
 
-Consequently, transactions in XTDB are durable (link:https://en.wikipedia.org/wiki/ACID[ACID]) requests which are processed serially and asynchronously, i.e. if you wait a few milliseconds for the processing of a newly submitted to finish, you can generally then read that same data in your next query (a.k.a. "read your writes"). However, `xtsql` and all XTDB language drivers will, by default, implicitly wait for any recently submitted transactions to be processed before subsequent queries are executed. To achieve this, all transactions are uniquely identified with an `xt$id`.
+Consequently, transactions in XTDB are durable (link:https://en.wikipedia.org/wiki/ACID[ACID]) requests which are processed serially and asynchronously, i.e. if you wait a few milliseconds for the processing of a newly submitted transaction to finish, you can generally then read the data from that transaction in your next query (a.k.a. "read your writes"). However, `xtsql` and all XTDB language drivers will, by default, implicitly wait for any recently submitted transactions to be processed before subsequent queries are executed. To achieve this, all transactions are uniquely identified with an `xt$id`.
 
-For convenience, you can easily see history and of prior transactions within `xtsql` by using the `recent_transactions` command:
+For convenience, you can easily see the history of prior transactions within `xtsql` by using the `recent_transactions` command:
 
 [source,text]
 ----
@@ -32,7 +32,7 @@ SELECT * FROM xt$txs;
 
 Unlike in typical SQL database, `UPDATE` and `DELETE` operations in XTDB are non-destructive, meaning previous versions of records are retained automatically and previous states of the entire database can be readily accessed.
 
-For example, despite having _seemingly_ just updated the original version of the `fred` record that was inserted initially (`SELECT * FROM people` will only show the 'current' version of everything by default), the original version was not lost can be retrieved using a couple of methods.
+For example, despite having _seemingly_ just updated the original version of the `fred` record that was inserted initially (`SELECT * FROM people` will only show the 'current' version of everything by default), the original version was not lost and can be retrieved using a couple of methods.
 
 The simplest way to observe the prior version of the `fred` record is to re-run the exact same query against an earlier 'basis'.
 
