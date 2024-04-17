@@ -249,6 +249,21 @@
   (when (path-exists dir)
     (Files/walkFileTree dir file-deletion-visitor)))
 
+(defn- file-creation-visitor [^Path source ^Path target]
+  (let [^"[Ljava.nio.file.CopyOption;" copy-options (make-array CopyOption 1)]
+    (aset copy-options 0 StandardCopyOption/REPLACE_EXISTING)
+    (proxy [SimpleFileVisitor] []
+      (preVisitDirectory [dir _]
+        (Files/createDirectories (.resolve target (.relativize source dir)) (make-array FileAttribute 0))
+        FileVisitResult/CONTINUE)
+
+      (visitFile [file _]
+        (Files/copy ^Path file (.resolve target (.relativize source file)) copy-options)
+        FileVisitResult/CONTINUE))))
+
+(defn copy-dir [^Path source, ^Path target]
+  (Files/walkFileTree source (file-creation-visitor source target)))
+
 (defn delete-file [^Path file]
   (Files/deleteIfExists file))
 
