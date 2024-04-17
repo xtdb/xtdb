@@ -163,3 +163,14 @@ ON
 </Fiddle>
 
 We have now established that today's trades must be causing the dramatic PnL change.
+
+## Reasoning about cross-effects in high dimensions
+
+In the abstract, traders need to be able to reason about situations quickly and hedge against unexpected situations.
+
+Navigating the relationships between portfolio positions and price volatilities ([the Greeks](https://en.wikipedia.org/wiki/Greeks_(finance))) is generally only possible with the aid of sophisticated pricing and risk models.
+For institutions with large portfolios, distributed teams and complex positions, equipping individual traders with the tools to understand the dynamics surrounding their own trades is essential.
+
+With ubiquitous as-of querying, XTDB provides an essential mechanism to validate the impacts of different dimensions of change as applied to subsets of a portfolio, and without the need for snapshots or other expensive operations.
+
+This general approach to the problem of financial risk was pioneered by SecDB in the 1990s and has been repeated across many subsequent systems.
