@@ -253,6 +253,14 @@
                      (-> (.getPath factory)
                          (.resolve storage-root))))
 
+(defn dir->buffer-pool
+  "Creates a local storage buffer pool from the given directory."
+  ^xtdb.IBufferPool [^BufferAllocator allocator, ^Path dir]
+  (let [bp-path (util/tmp-dir "tmp-buffer-pool")
+        storage-root (.resolve bp-path storage-root)]
+    (util/copy-dir dir storage-root)
+    (.openStorage (Storage/localStorage bp-path) allocator)))
+
 (defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
   (.storage config (cond-> (Storage/localStorage (util/->path path))
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
