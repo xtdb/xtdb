@@ -1,5 +1,5 @@
 ---
-title: Counterfactual PnL exploration
+title: Understanding PnL and Risk
 ---
 
 import Fiddle from '@components/fiddle.astro';
@@ -8,9 +8,11 @@ import Query from '@components/fiddle/query.astro';
 
 Let's imagine you're a commodities trader.
 
-Every day, you arrive at your desk and look at your Risk and PnL reports, telling you the value and risk of your trading positions.
+Every day you arrive at your desk and look at your Risk and PnL reports, telling you the value and risk of your trading positions.
 
-Over the course of the day your colleagues have made the following trades:
+Whenever something in those reports doesn't look quite like what you were expecting you have to do some counterfactual exploration of all the various inputs to understand what's happened.
+
+For example, let's assume that over the course of the day your colleagues have made the following trades:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-04-01"
