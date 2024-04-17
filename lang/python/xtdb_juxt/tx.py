@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional, Union, Dict, Any, TypedDict
 from .expr import Expr, Date as dateExpr
 from .binding import Binding, to_bindings
-from .types import UnifyClause, Query, ToBindings
+from .types import UnifyClause, Query, ToBindings, XtqlQuery
 
 EntityId = Union[int, str, UUID]
 
@@ -103,7 +103,7 @@ ArgRow = Dict[str, Any]
 
 
 class Insert(TxOp):
-    def __init__(self, insert_into: str, query: Query):
+    def __init__(self, insert_into: str, query: XtqlQuery):
         self.insert_into = insert_into
         self.query = query
         self.arg_rows: Optional[List[ArgRow]] = None
@@ -265,7 +265,7 @@ class Erase(TxOp):
 
 
 class AssertExists(TxOp):
-    def __init__(self, assert_exists: Query):
+    def __init__(self, assert_exists: XtqlQuery):
         self.assert_exists = assert_exists
         self.arg_rows: Optional[List[ArgRow]] = None
 
@@ -281,7 +281,7 @@ class AssertExists(TxOp):
 
 
 class AssertNotExists(TxOp):
-    def __init__(self, assert_not_exists: Query):
+    def __init__(self, assert_not_exists: XtqlQuery):
         self.assert_not_exists = assert_not_exists
         self.arg_rows: Optional[List[ArgRow]] = None
 

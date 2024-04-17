@@ -17,19 +17,23 @@ class QueryTail:
 class Query:
     def to_json(self): pass
 
+    
+class XtqlQuery(Query):
+    def to_json(self): pass
+
 class Sql(Query):
-    def __init__(self, query):
-        self.query = query
+    def __init__(self, sql: str):
+        self.sql = sql
 
     def to_json(self):
-        return {"sql": self.query}
+        return {"sql": self.sql}
 
 ToQuery = Union[Query, tuple]
 ToBindings = Union[str, Dict[str, 'expr.Expr']]
 
 
-class Pipeline(Query):
-    def __init__(self, q: Query, *qs: QueryTail):
+class Pipeline(XtqlQuery):
+    def __init__(self, q: XtqlQuery, *qs: QueryTail):
         self.q = q
         self.qs = qs
 
@@ -37,7 +41,7 @@ class Pipeline(Query):
         return [self.q.to_json(), *[qt.to_json() for qt in self.qs]]
 
 
-def to_query(q: ToQuery) -> Query:
+def to_query(q: ToQuery) -> XtqlQuery:
     if isinstance(q, Query):
         return q
 
