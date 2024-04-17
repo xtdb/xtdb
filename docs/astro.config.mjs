@@ -58,14 +58,21 @@ export default defineConfig({
                                 { label: '4) Changing an immutable database', link: '/tutorials/immutability-walkthrough/part-4' },
                             ],
                         },
+                    ],
+                },
+
+                {
+                    label: 'Industry Use-cases',
+                    collapsed: true,
+                    items: [
                         {
-                            label: 'Financial Use-cases',
+                            label: 'Financial Services',
                             collapsed: false,
                             items: [
-                                { label: '1) Counterfactual PnL exploration', link: '/tutorials/financial-usecase/part-1' },
-                                { label: '2) Late trade adjustments', link: '/tutorials/financial-usecase/part-2' },
-                                { label: '3) Tracking corporate actions', link: '/tutorials/financial-usecase/part-3' },
-                                { label: '4) Backtesting', link: '/tutorials/financial-usecase/part-4' },				
+                                { label: 'Front-office Reporting: Understanding PnL and Risk', link: '/tutorials/financial-usecase/part-1' },
+                                { label: 'Back-office Compliance: Late trade adjustments', link: '/tutorials/financial-usecase/part-2' },
+                                { label: 'Strategist: Tracking corporate actions', link: '/tutorials/financial-usecase/part-3' },
+                                { label: 'Quantitative Analyst: Model backtesting', link: '/tutorials/financial-usecase/part-4' },				
                             ],
                         },
                     ],
