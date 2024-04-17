@@ -55,10 +55,10 @@ class Xtdb:
             resp = self._http.request(
                 'GET',
                 f"{self._url}/status",
-                headers={"accept": "application/json"}
+                headers={"accept": "application/json",}
             )
             resp_data = json.loads(resp.data.decode('utf-8'))
-
+            
             if resp.status != 200:
                 raise Exception(f"Error getting status: {resp.status} ({resp.reason}): {resp_data}")
 

@@ -17,6 +17,9 @@ project(":http-server").name = "xtdb-http-server"
 project(":http-client-jvm").name = "xtdb-http-client-jvm"
 project(":pgwire-server").name = "xtdb-pgwire-server"
 
+include("lang:test-harness")
+project(":lang:test-harness").name = "test-harness"
+
 include("docker:standalone","docker:aws")
 
 include("modules:jdbc", "modules:kafka", "modules:s3", "modules:azure", "modules:google-cloud")

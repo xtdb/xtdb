@@ -344,14 +344,17 @@
   {:enter (fn [ctx]
             (update ctx :request merge opts))})
 
+(defn handler [node]
+  (http/ring-handler router
+                     (r.ring/create-default-handler)
+                     {:executor r.sieppari/executor
+                      :interceptors [[with-opts {:node node}]]}))
+
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-server [node ^HttpServer$Factory module]
   (let [port (.getPort module)
-        ^Server server (j/run-jetty (http/ring-handler router
-                                                       (r.ring/create-default-handler)
-                                                       {:executor r.sieppari/executor
-                                                        :interceptors [[with-opts {:node node}]]})
-
+        ^Server server (j/run-jetty (handler node)
                                     (merge {:port port, :h2c? true, :h2? true}
                                            #_jetty-opts
                                            {:async? true, :join? false}))]
