@@ -29,7 +29,7 @@
                                                ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union
                                                ArrowType$Utf8 Field FieldType)
            xtdb.IBufferPool
-           (xtdb.metadata ITableMetadata)
+           (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.vector IVectorReader IVectorWriter RelationReader)
            (xtdb.vector.extensions KeywordType SetType TransitType UriType UuidType)))
@@ -325,7 +325,7 @@
                   col-name (str (.getObject column-name-rdr cols-data-idx))]
               (.add col-names col-name)
               (when (.getBoolean root-col-rdr cols-data-idx)
-                (.put page-idx-cache (str col-name data-page-idx) cols-data-idx)))))))
+                (.put page-idx-cache (PageIndexKey. col-name data-page-idx) cols-data-idx)))))))
 
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache}))
@@ -340,13 +340,13 @@
   ITableMetadata
   (metadataReader [_] metadata-leaf-rdr)
   (columnNames [_] col-names)
-  (rowIndex [_ col-name page-idx] (.getOrDefault page-idx-cache (str col-name page-idx) -1))
+  (rowIndex [_ col-name page-idx] (.getOrDefault page-idx-cache (PageIndexKey. col-name page-idx) -1))
   (iidBloomBitmap [_ page-idx]
     (let [bloom-rdr (-> (.structKeyReader metadata-leaf-rdr "columns")
                         (.listElementReader)
                         (.structKeyReader "bloom"))]
 
-      (when-let [bloom-vec-idx (.get page-idx-cache (str "xt$iid" page-idx))]
+      (when-let [bloom-vec-idx (.get page-idx-cache (PageIndexKey. "xt$iid" page-idx))]
         (when (.getObject bloom-rdr bloom-vec-idx)
           (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))
 

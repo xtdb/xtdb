@@ -9,3 +9,5 @@ interface ITableMetadata {
    fun rowIndex(columnName: String, pageIdx: Int) : Long
    fun iidBloomBitmap(pageIdx: Int) : ImmutableRoaringBitmap
 }
+
+data class PageIndexKey(val columnName: String, val pageIdx: Int)
