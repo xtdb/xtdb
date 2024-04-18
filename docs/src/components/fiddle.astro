@@ -40,7 +40,6 @@ function gensym() {
 </fiddle-embed>
 
 <script>
-    import { makeEditor } from "./fiddle/editor.ts"
     import hljs from "highlight.js/lib/core"
     import hljsJson from "highlight.js/lib/languages/json"
     import { getTheme, onThemeChange } from "../utils.ts"
@@ -146,69 +145,24 @@ function gensym() {
             super();
             this.results_el = this.querySelector('[data-id="results"]');
 
-            // A list of objects with the following keys:
-            // - system-time ( the system time or null)
-            // - txs (the transaction text)
-            // - editor (the transaction text)
-            // Either txs or editor will be set
-            this.txs = [];
-
             // Magic Context
-            if (this.dataset.magicContext) {
-                let ctx = this.dataset.magicContext;
-                let my_id = this.dataset.id;
-                // Only consider elements with the same "magic-context"
-                const context_els = document.querySelectorAll(`fiddle-embed[data-magic-context="${ctx}"]`);
-                for (const fiddle_el of context_els) {
-                    // Only consider elements above me
-                    if (fiddle_el.dataset.id == my_id) {
-                        break;
-                    }
-                    for (const tx_el of fiddle_el.querySelectorAll('fiddle-txs')) {
-                        this.txs.push({
-                            txs: tx_el.dataset.txs,
-                            'system-time': tx_el.dataset.systemTime,
-                        })
-                    }
+            this.magic_txs = [];
+            for (const fiddle_el of this.magicElements()) {
+                for (const tx_el of fiddle_el.txs) {
+                    this.magic_txs.push(tx_el)
                 }
             }
 
             // Transactions present the current element
+            this.txs = [];
             for (const tx_el of this.querySelectorAll('fiddle-txs')) {
-                if (tx_el.dataset.hidden) {
-                    this.txs.push({
-                        txs: tx_el.dataset.txs,
-                        'system-time': tx_el.dataset.systemTime,
-                    });
-                } else {
-                    var editor = makeEditor({
-                        initialText: tx_el.dataset.txs,
-                        parent: tx_el,
-                    });
-                    this.txs.push({
-                        editor: editor,
-                        'system-time': tx_el.dataset.systemTime,
-                    });
-                }
+                this.txs.push(tx_el);
             }
 
-            // This is either:
-            // - A CodeMirror editor instance
-            // - A string containing the query
-            this.query = undefined;
-            var q_els = this.querySelectorAll('fiddle-query');
-            if (q_els.length === 0) {
+            // Query
+            this.query = this.querySelector('fiddle-query');
+            if (this.query == null) {
                 throw "No query element found!";
-            }
-            // We only care about the last query element
-            var q_el = q_els[q_els.length - 1];
-            if (q_el.dataset.hidden) {
-                this.query = q_el.dataset.query;
-            } else {
-                this.query = makeEditor({
-                    initialText: q_el.dataset.query,
-                    parent: q_el,
-                });
             }
 
             const myThis = this;
@@ -222,33 +176,44 @@ function gensym() {
             edit_button.addEventListener('click', () => myThis.openInFiddle());
         }
 
-        async run() {
-            var txs = [];
-            for (const tx of this.txs) {
-                if ('txs' in tx) {
-                    txs.push({
-                        txs: parseSQLTxs(tx.txs),
-                        'system-time': tx['system-time'] || null,
-                    });
-                } else {
-                    txs.push({
-                        txs: parseSQLTxs(tx.editor.state.doc.toString()),
-                        'system-time': tx['system-time'] || null,
-                    });
+        // Generator function that gets elements with the same magic context higher in the page
+        *magicElements() {
+            if (this.dataset.magicContext) {
+                let ctx = this.dataset.magicContext;
+                let my_id = this.dataset.id;
+                // Only consider elements with the same "magic-context"
+                const context_els = document.querySelectorAll(`fiddle-embed[data-magic-context="${ctx}"]`);
+                for (const fiddle_el of context_els) {
+                    // Only consider elements above me
+                    if (fiddle_el.dataset.id == my_id) {
+                        break;
+                    }
+                    yield fiddle_el;
                 }
             }
+        }
 
-            var query = undefined;
-            if (typeof this.query === 'string') {
-                query = this.query;
-            } else {
-                query = this.query.state.doc.toString();
+        async run() {
+            var txs = [];
+            // We use the original txs from the magic context
+            for (const tx of this.magic_txs) {
+                txs.push({
+                    txs: parseSQLTxs(tx.originalTxs),
+                    'system-time': tx.dataset.systemTime || null,
+                });
+            }
+            for (const tx of this.txs) {
+                txs.push({
+                    txs: parseSQLTxs(tx.txs),
+                    'system-time': tx.dataset.systemTime || null,
+                });
             }
 
+            var query = this.query.query;
             query = query.replace(/;\s*$/, ""); // remove last semi-colon
-
             query = JSON.stringify(query);
 
+            // Run the given txs and query
             try {
                 var response = await fetch(`${fiddle_url}/db-run`,{
                     method: 'POST',
@@ -266,6 +231,7 @@ function gensym() {
                 );
             }
 
+            // Parse the response
             try {
                 var json = await response.json();
             } catch (e) {
@@ -276,6 +242,7 @@ function gensym() {
                 );
             }
 
+            // Present the response
             try {
                 if (response.ok) {
                     this.results_el.innerHTML = makeTable(json);
@@ -297,31 +264,28 @@ function gensym() {
 
         openInFiddle() {
             var txs = [];
+            // We use the original txs from the magic context
+            for (const tx of this.magic_txs) {
+                txs.push({
+                    txs: tx.originalTxs,
+                    'system-time': tx.dataset.systemTime || null,
+                });
+            }
             for (const tx of this.txs) {
-                if ('txs' in tx) {
-                    txs.push({
-                        txs: tx.txs,
-                        'system-time': tx['system-time'] || null,
-                    });
-                } else {
-                    txs.push({
-                        txs: tx.editor.state.doc.toString(),
-                        'system-time': tx['system-time'] || null,
-                    });
-                }
+                txs.push({
+                    txs: tx.txs,
+                    'system-time': tx.dataset.systemTime || null,
+                });
             }
 
-            var query = undefined;
-            if (typeof this.query === 'string') {
-                query = this.query;
-            } else {
-                query = this.query.state.doc.toString();
-            }
+            var query = this.query.query;
 
+            // Create the fiddle URL
             var url = new URL(fiddle_url);
             url.searchParams.append('type', 'sql');
             url.searchParams.append('txs', btoa(JSON.stringify(txs)));
             url.searchParams.append('query', btoa(query));
+
             window.open(url);
         }
     }

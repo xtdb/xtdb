@@ -13,3 +13,33 @@ var props = {
         <fiddle-txs {...props} />
     </div>
 </div>
+
+<script>
+    import { makeEditor } from "./editor.ts"
+
+    class FiddleTxs extends HTMLElement {
+        constructor() {
+            super();
+            if (!this.dataset.hidden) {
+                this.editor = makeEditor({
+                    initialText: this.dataset.txs,
+                    parent: this,
+                });
+            }
+        }
+
+        get originalTxs() {
+            return this.dataset.txs;
+        }
+
+        get txs() {
+            if (this.editor) {
+                return this.editor.state.doc.toString();
+            } else {
+                return this.dataset.txs;
+            }
+        }
+    }
+
+    customElements.define('fiddle-txs', FiddleTxs);
+</script>

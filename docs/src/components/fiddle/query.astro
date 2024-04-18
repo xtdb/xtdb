@@ -9,3 +9,29 @@ var props = {
 <div class:list={[{hidden: hidden}, "p-1", "bg-gray-100", "dark:bg-gray-800", "rounded-md"]}>
     <fiddle-query {...props} />
 </div>
+
+<script>
+    import { makeEditor } from "./editor.ts"
+
+    class FiddleQuery extends HTMLElement {
+        constructor() {
+            super();
+            if (!this.dataset.hidden) {
+                this.editor = makeEditor({
+                    initialText: this.dataset.query,
+                    parent: this,
+                });
+            }
+        }
+
+        get query() {
+            if (this.editor) {
+                return this.editor.state.doc.toString();
+            } else {
+                return this.dataset.query;
+            }
+        }
+    }
+
+    customElements.define('fiddle-query', FiddleQuery);
+</script>
