@@ -1383,31 +1383,34 @@
    #'decorrelate-apply-rule-8
    #'decorrelate-apply-rule-9])
 
-(defn rewrite-plan [plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}, :as opts}]
-  (let [!fired-rules (atom [])]
-    (binding [*gensym* (util/seeded-gensym "_" 0)]
-      (letfn [(instrument-rule [f]
-                (fn [z]
-                  (when-let [successful-rewrite (f z)]
-                    (swap! !fired-rules conj
-                           [(name (.toSymbol ^Var f))
-                            (r/znode z)
-                            successful-rewrite
-                            "=================="])
-                    successful-rewrite)))
-              (instrument-rules [rules]
-                (->> rules
-                     (mapv (if instrument-rules? instrument-rule deref))
-                     (apply some-fn)))]
-        (-> (->> plan
-                 (r/vector-zip)
-                 (#(if decorrelate?
-                     (r/innermost (r/mono-tp (instrument-rules decorrelate-plan-rules)) %)
-                     %))
-                 (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
-                 (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
-                 (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
-                 (r/node)))))))
+(defn rewrite-plan
+  ([plan] (rewrite-plan plan {}))
+
+  ([plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}, :as opts}]
+   (let [!fired-rules (atom [])]
+     (binding [*gensym* (util/seeded-gensym "_" 0)]
+       (letfn [(instrument-rule [f]
+                 (fn [z]
+                   (when-let [successful-rewrite (f z)]
+                     (swap! !fired-rules conj
+                            [(name (.toSymbol ^Var f))
+                             (r/znode z)
+                             successful-rewrite
+                             "=================="])
+                     successful-rewrite)))
+               (instrument-rules [rules]
+                 (->> rules
+                      (mapv (if instrument-rules? instrument-rule deref))
+                      (apply some-fn)))]
+         (-> (->> plan
+                  (r/vector-zip)
+                  (#(if decorrelate?
+                      (r/innermost (r/mono-tp (instrument-rules decorrelate-plan-rules)) %)
+                      %))
+                  (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
+                  (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
+                  (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
+                  (r/node))))))))
 
 (defn validate-plan [plan]
   (when-not (s/valid? ::logical-plan plan)
