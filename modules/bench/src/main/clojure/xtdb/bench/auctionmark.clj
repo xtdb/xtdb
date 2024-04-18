@@ -217,9 +217,9 @@
                                     first
                                     :new_item_comment_id
                                     item-comment-id)]
-    (xt/submit-tx sut [[:sql "INSERT INTO item_comment (xt$id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
+    (xt/execute-tx sut [[:sql "INSERT INTO item_comment (xt$id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
                               VALUES (?, ?, ?, ?, ?, ?, ?)"
-                        [ic_id ic_id i_id seller_id buyer_id now question]]])))
+                         [ic_id ic_id i_id seller_id buyer_id now question]]])))
 
 (defn proc-new-comment-response [{:keys [sut] :as worker}]
   (let [ic_id (b/sample-flat worker item-comment-id)
@@ -228,9 +228,9 @@
         {item_id :ic_i_id seller_id :ic_u_id} (first (xt/q sut "SELECT * FROM item_comment AS ic WHERE ic.xt$id = ?"
                                                            {:args [ic_id]
                                                             :key-fn :snake-case-keyword}))]
-    (xt/submit-tx sut [[:sql "UPDATE item_comment AS ic SET ic_response = ?
+    (xt/execute-tx sut [[:sql "UPDATE item_comment AS ic SET ic_response = ?
                               WHERE ic.xt$id = ? AND ic.ic_i_id = ? AND ic.ic_u_id = ?"
-                        [comment ic_id item_id seller_id]]])))
+                         [comment ic_id item_id seller_id]]])))
 
 (defn proc-new-purchase [{:keys [sut] :as worker}]
   (let [{:keys [i_id i_u_id]} (random-item worker :status :waiting-for-purchase)

@@ -1,13 +1,15 @@
 [:insert
- {:table foo}
+ {:table users}
  [:project
   [{xt$id xt$id}
+   {name name}
    {xt$valid_from (cast xt$valid_from [:timestamp-tz :micro "UTC"])}]
   [:project
    [{xt$id xt.values.1/xt$id}
+    {name xt.values.1/name}
     {xt$valid_from xt.values.1/xt$valid_from}]
    [:rename
     xt.values.1
     [:table
-     [xt$id xt$valid_from]
-     [{:xt$id "foo", :xt$valid_from #time/date "2018-01-01"}]]]]]]
+     [xt$id name xt$valid_from]
+     [{:xt$id ?_0, :name ?_1, :xt$valid_from ?_2}]]]]]]

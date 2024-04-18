@@ -1,12 +1,13 @@
 (ns xtdb.node-test
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.util :as util]
-            [xtdb.serde :as serde])
+            [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
            [xtdb.api.tx TxOps]
            [xtdb.query IQuerySource]))
@@ -257,7 +258,9 @@ WHERE foo.xt$id = 1"]])]
                (q2 {:basis {:at-tx tx2}, :default-all-valid-time? true}))))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, xt$valid_from) VALUES (1, '2018-01-01')"]])
+  (t/is (= (serde/->tx-aborted 0 (time/->instant #inst "2020-01-01")
+                               #xt/runtime-err [:xtdb.expression/invalid-temporal-string "String '2018-01-01' has invalid format for type timestamp with timezone" {}])
+           (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, xt$valid_from) VALUES (1, '2018-01-01')"]])))
 
   ;; TODO check the rollback error when it's available, #401
   (t/is (= [] (xt/q tu/*node* "SELECT foo.xt$id FROM foo"))))
@@ -269,7 +272,6 @@ WHERE foo.xt$id = 1"]])]
   (t/is (= [{:a [["hello"] "world"]}]
            (xt/q tu/*node* "SELECT a.a FROM (VALUES (ARRAY [['hello'], 'world'])) a (a)"))))
 
-#_ ;TODO
 (t/deftest test-double-quoted-col-refs
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, \"kebab-case-col\") VALUES (1, 'kebab-case-value')"]])
   (t/is (= [{:xt/id 1, :kebab-case-col "kebab-case-value"}]
@@ -510,18 +512,18 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     #_(t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL SYSTEM_TIME")))))
 
 (t/deftest test-explain-plan-sql
-  (t/is (= [{:plan
-             "[:rename
- {x1 xt$id, x2 foo}
- [:project
-  [x1 x2]
-  [:rename
-   {xt$id x1, foo x2, a x3, b x4}
-   [:select (= (+ a b) 12) [:scan {:table users} [xt$id foo a b]]]]]]
-"}]
-           (xt/q tu/*node*
-                 "SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"
-                 {:explain? true}))))
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users (xt$id, foo, a, b) VALUES (1, 2, 3, 4)"]])
+  (t/is (= [{:plan (str/trim "
+[:project
+ [{xt$id u.1/xt$id} {foo u.1/foo}]
+ [:rename
+  u.1
+  [:select (= (+ a b) 12) [:scan {:table users} [b foo a xt$id]]]]]
+")}]
+           (-> (xt/q tu/*node*
+                     "SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"
+                     {:explain? true})
+               (update-in [0 :plan] str/trim)))))
 
 (t/deftest test-normalising-nested-cols-2483
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo {:a/b "foo"}}]])

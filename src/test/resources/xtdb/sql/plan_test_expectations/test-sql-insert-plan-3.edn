@@ -1,0 +1,21 @@
+[:insert
+ {:table users}
+ [:project
+  [{xt$id xt$id}
+   {name name}
+   {xt$valid_from (cast xt$valid_from [:timestamp-tz :micro "UTC"])}]
+  [:rename
+   {bar.2/xt$id xt$id,
+    bar.2/name name,
+    bar.2/xt$valid_from xt$valid_from}
+   [:rename
+    bar.2
+    [:project
+     [{xt$id xt.values.1/xt$id}
+      {name xt.values.1/name}
+      {xt$valid_from xt.values.1/xt$valid_from}]
+     [:rename
+      xt.values.1
+      [:table
+       [xt$id name xt$valid_from]
+       [{:xt$id ?_0, :name ?_1, :xt$valid_from ?_2}]]]]]]]]

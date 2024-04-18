@@ -11,6 +11,7 @@
             [xtdb.operator.scan :as scan]
             [xtdb.query :as q]
             [xtdb.rewrite :refer [zmatch]]
+            [xtdb.rewrite :as r]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
@@ -301,7 +302,7 @@
               valid-from-rdr (.readerForName in-rel "xt$valid_from")
               valid-to-rdr (.readerForName in-rel "xt$valid_to")
 
-              live-idx-table (.liveTable live-idx-tx table)
+              live-idx-table (.liveTable live-idx-tx (str table))
               live-idx-table-copier (-> (.docWriter live-idx-table)
                                         (.rowCopier content-rel))]
 
@@ -344,7 +345,7 @@
                                       {:valid-from (time/micros->instant valid-from)
                                        :valid-to (time/micros->instant valid-to)})))
 
-            (-> (.liveTable live-idx-tx table)
+            (-> (.liveTable live-idx-tx (str table))
                 (.logDelete iid valid-from valid-to))))))))
 
 (defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
@@ -354,7 +355,7 @@
             iid-rdr (.readerForName in-rel "xt$iid")]
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)]
-            (-> (.liveTable live-idx-tx table)
+            (-> (.liveTable live-idx-tx (str table))
                 (.logErase iid))))))))
 
 (defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?]} query-opts]
@@ -418,7 +419,7 @@
               compiled-query (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
               param-count (:param-count (meta compiled-query))]
           ;; TODO handle error
-          (zmatch compiled-query
+          (zmatch (r/vector-zip compiled-query)
             [:insert query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
                              (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)

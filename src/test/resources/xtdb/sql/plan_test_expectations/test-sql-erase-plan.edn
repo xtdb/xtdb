@@ -1,0 +1,12 @@
+[:erase
+ {:table users}
+ [:distinct
+  [:project
+   [{xt$iid u.1/xt$iid}]
+   [:rename
+    u.1
+    [:scan
+     {:table users,
+      :for-system-time :all-time,
+      :for-valid-time :all-time}
+     [{id (= id ?_0)} xt$iid]]]]]]

@@ -809,22 +809,18 @@
                 AND foo.VALID_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"))))
 
 (deftest test-sql-insert-plan
-  (t/is (= '[:insert
-             {:table "users"}
-             [:rename
-              {x1 xt$id, x2 name, x5 xt$valid_from}
-              [:project
-               [x1 x2 {x5 (cast-tstz x3)}]
-               [:table [x1 x2 x3] [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]]
-           (plan-sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)")
-           (plan-sql
-            "INSERT INTO users
-             SELECT bar.xt$id, bar.name, bar.xt$valid_from
-             FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")
-           (plan-sql
-            "INSERT INTO users (xt$id, name, xt$valid_from)
-             SELECT bar.xt$id, bar.name, bar.xt$valid_from
-             FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")))
+  (t/is (=plan-file "test-sql-insert-plan-1"
+                    (plan-sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)")))
+
+  (t/is (=plan-file "test-sql-insert-plan-2"
+                    (plan-sql "INSERT INTO users
+                               SELECT bar.xt$id, bar.name, bar.xt$valid_from
+                               FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")))
+
+  (t/is (=plan-file "test-sql-insert-plan-3"
+                    (plan-sql "INSERT INTO users (xt$id, name, xt$valid_from)
+                               SELECT bar.xt$id, bar.name, bar.xt$valid_from
+                               FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")))
 
   (t/is (=plan-file "test-sql-insert-plan-309"
                     (plan-sql "INSERT INTO customer (xt$id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
@@ -835,31 +831,50 @@
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
-                    (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"))))
+                    (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"
+                              {:table-info {"users" #{"id"}}}))))
+
+(deftest test-sql-erase-plan
+  (t/is (=plan-file "test-sql-erase-plan"
+                    (plan-sql "ERASE FROM users AS u WHERE u.id = ?"
+                              {:table-info {"users" #{"id"}}}))))
 
 (deftest test-sql-update-plan
   (t/is (=plan-file "test-sql-update-plan"
-                    (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO END_OF_TIME AS u SET first_name = 'Sue' WHERE u.id = ?")))
+                    (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO END_OF_TIME AS u SET first_name = 'Sue' WHERE u.id = ?"
+                              {:table-info {"users" #{"id" "first_name" "last_name"}}})))
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"
                     (plan-sql "UPDATE foo SET bar = foo.baz"
-                              {:default-all-valid-time? true})))
+                              {:table-info {"foo" #{"bar" "baz" "quux"}}
+                               :default-all-valid-time? true})))
 
   (t/is (=plan-file "test-sql-update-plan-with-period-references"
                     (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.VALID_TIME)"
-                              {:default-all-valid-time? true}))))
+                              {:table-info {"foo" #{"bar" "baz"}}
+                               :default-all-valid-time? true}))))
 
-(deftest dml-target-table-alises
-  (t/is (= (plan-sql "UPDATE t1 AS u SET col1 = 30")
-           (plan-sql "UPDATE t1 AS SET SET col1 = 30")
-           (plan-sql "UPDATE t1 u SET col1 = 30")
-           (plan-sql "UPDATE t1 SET col1 = 30"))
-        "UPDATE")
+(deftest dml-target-table-aliases
+  (let [opts {:table-info {"t1" #{"col1"}}}]
+    (t/testing "UPDATE"
+      (t/is (=plan-file "update-target-table-aliases-1"
+                        (plan-sql "UPDATE t1 AS u SET col1 = 30" opts)))
 
-  (t/is (= (plan-sql "DELETE FROM t1 AS u WHERE u.col1 = 30")
-           (plan-sql "DELETE FROM t1 u WHERE u.col1 = 30")
-           (plan-sql "DELETE FROM t1 WHERE t1.col1 = 30"))
-        "DELETE"))
+      (t/is (=plan-file "update-target-table-aliases-1"
+                        (plan-sql "UPDATE t1 u SET col1 = 30" opts)))
+
+      (t/is (=plan-file "update-target-table-aliases-2"
+                        (plan-sql "UPDATE t1 SET col1 = 30" opts))))
+
+    (t/testing "DELETE"
+      (t/is (=plan-file "delete-target-table-aliases-1"
+                        (plan-sql "DELETE FROM t1 AS u WHERE u.col1 = 30" opts)))
+
+      (t/is (=plan-file "delete-target-table-aliases-1"
+                        (plan-sql "DELETE FROM t1 u WHERE u.col1 = 30" opts)))
+
+      (t/is (=plan-file "delete-target-table-aliases-2"
+                        (plan-sql "DELETE FROM t1 WHERE t1.col1 = 30" opts))))))
 
 (deftest test-system-time-period-predicate
   (t/is
@@ -999,7 +1014,7 @@
   (t/is (=plan-file
           "test-delimited-identifiers-in-insert-column-list-2549"
           (plan-sql
-            "INSERT INTO posts (\"xt$id\", \"user_id\") VALUES (1234, 5678)"))))
+            "INSERT INTO posts (\"xt$id\", \"user-id\") VALUES (1234, 5678)"))))
 
 (deftest test-table-period-specification-ordering-2260
   (let [opts {:table-info {"foo" #{"bar"}}}
@@ -1458,3 +1473,8 @@
   
   (t/is (= [{:x 2}, {:x 1}]
            (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON bar.x = (SELECT baz.x FROM baz WHERE baz.x = foo.x)"))))
+
+(deftest test-erase-with-subquery
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo :bar 1}]])
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "ERASE FROM docs WHERE docs.xt$id IN (SELECT docs.xt$id FROM docs WHERE docs.bar = 1)"]])))
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))

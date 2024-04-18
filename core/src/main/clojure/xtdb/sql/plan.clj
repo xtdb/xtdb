@@ -11,7 +11,7 @@
            (java.util Collection HashMap LinkedHashSet Map SequencedSet)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
-           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$SearchedWhenClauseContext SqlParser$SimpleWhenClauseContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)))
 
 (defn- ->insertion-ordered-set [coll]
@@ -1248,6 +1248,10 @@
   (error-string [_] 
     (format "Column count mismatch on %s set operation: lhs column count %s, rhs column count %s" operation-type lhs-count rhs-count)))
 
+(defrecord InsertWithoutXtId []
+  PlanError
+  (error-string [_] "INSERT does not contain mandatory xt$id column"))
+
 (defrecord QueryPlanVisitor [env scope]
   SqlVisitor
   (visitWrappedQuery [this ctx] (-> (.queryExpressionBody ctx) (.accept this)))
@@ -1359,7 +1363,7 @@
           {:keys [plan col-syms] :as query-expr}
 
         (if out-col-syms
-          (->QueryExpr [:rename (zipmap out-col-syms col-syms)
+          (->QueryExpr [:rename (zipmap col-syms out-col-syms)
                         plan]
                        out-col-syms)
           query-expr)
@@ -1416,16 +1420,279 @@
                           (mapv #(.accept ^ParserRuleContext % row-visitor)))]]
 
                    (->> col-syms
-                        (mapv #(symbol (str unique-table-alias) (str %)))))))
+                        (mapv #(->col-sym (str unique-table-alias) (str %)))))))
 
-  (visitSubquery [this ctx] (-> (.queryExpression ctx) (.accept this))))
+  (visitSubquery [this ctx] (-> (.queryExpression ctx) (.accept this)))
+
+  (visitInsertValues [this ctx]
+    (let [out-col-syms (->> (.columnName (.columnNameList ctx))
+                            (mapv identifier-sym))]
+      (as-> (-> (.tableValueConstructor ctx)
+                (.accept (assoc this :out-col-syms out-col-syms)))
+          {:keys [plan col-syms] :as query-expr}
+
+        (remove-ns-qualifiers query-expr)
+
+        (if (some (comp types/temporal-column? str) col-syms)
+          (->QueryExpr [:project (mapv (fn [col-sym]
+                                         {col-sym
+                                          (if (types/temporal-column? (str col-sym))
+                                            (list 'cast col-sym types/temporal-col-type)
+                                            col-sym)})
+                                       col-syms)
+                        plan]
+                       col-syms)
+
+          query-expr))))
+
+  (visitInsertFromSubquery [this ctx]
+    (let [out-col-syms (some->> (.columnNameList ctx) .columnName
+                                (mapv identifier-sym))
+          {:keys [plan col-syms] :as inner} (-> (.queryExpression ctx)
+                                                (.accept (cond-> this
+                                                           out-col-syms (assoc :out-col-syms out-col-syms))))]
+      (if (some (comp types/temporal-column? str) col-syms)
+        (->QueryExpr [:project (mapv (fn [col-sym]
+                                       {col-sym
+                                        (if (types/temporal-column? (str col-sym))
+                                          (list 'cast col-sym types/temporal-col-type)
+                                          col-sym)})
+                                     col-syms)
+                      plan]
+                     col-syms)
+        inner))))
+
+(defrecord DmlTableRef [env table-name table-alias unique-table-alias for-valid-time cols ^Map !reqd-cols]
+  Scope
+  (available-cols [_ chain]
+    (when-not (and chain (not= chain [table-alias]))
+      cols))
+
+  (find-decls [_ [col-name table-name]]
+    (when (and (or (nil? table-name) (= table-name table-alias))
+               (or (contains? cols col-name) (types/temporal-column? col-name)))
+      [(.computeIfAbsent !reqd-cols (->col-sym col-name)
+                         (reify Function
+                           (apply [_ col]
+                             (->col-sym (str unique-table-alias) (str col)))))]))
+
+  TableRef
+  (plan-table-ref [_]
+    [:rename unique-table-alias
+     [:scan (cond-> {:table (symbol table-name)}
+              for-valid-time (assoc :for-valid-time for-valid-time))
+      (vec (.keySet !reqd-cols))]]))
+
+(def ^:private vf-col (->col-sym "xt$valid_from"))
+(def ^:private vt-col (->col-sym "xt$valid_to"))
+
+(defrecord DmlValidTimeExtentsVisitor [env scope]
+  SqlVisitor
+  (visitDmlStatementValidTimeExtents [this ctx] (-> (.getChild ctx 0) (.accept this)))
+
+  (visitDmlStatementValidTimeAll [_ _]
+    {:for-valid-time :all-time,
+     :projection [vf-col vt-col]})
+
+  (visitDmlStatementValidTimePortion [{{:keys [default-all-valid-time?]} :env} ctx]
+    (let [expr-visitor (->ExprPlanVisitor env scope)
+          from-expr (-> (.expr ctx 0) (.accept expr-visitor))
+          to-expr (-> (.expr ctx 1) (.accept expr-visitor))]
+      {:for-valid-time [:between from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
+       :projection [{vf-col (cond
+                              from-expr (list 'greatest vf-col (list 'cast from-expr types/temporal-col-type))
+                              default-all-valid-time? vf-col
+                              :else (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type)))}
+
+                    {vt-col (if to-expr
+                              (list 'least vt-col (list 'cast to-expr types/temporal-col-type))
+                              vt-col)}]})))
+
+(defn- default-vt-extents-projection [{:keys [default-all-valid-time?]}]
+  [(if default-all-valid-time?
+     vf-col
+     {vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))})
+   vt-col])
+
+(defrecord EraseTableRef [env table-name table-alias unique-table-alias cols ^Map !reqd-cols]
+  Scope
+  (available-cols [_ chain]
+    (when-not (and chain (not= chain [table-alias]))
+      cols))
+
+  (find-decls [_ [col-name table-name :as chain]]
+    (when (and (or (nil? table-name) (= table-name table-alias))
+               (or (contains? cols col-name) (types/temporal-column? col-name)))
+      [(.computeIfAbsent !reqd-cols (->col-sym col-name)
+                         (reify Function
+                           (apply [_ col]
+                             (->col-sym (str unique-table-alias) (str col)))))]))
+
+  TableRef
+  (plan-table-ref [_]
+    [:rename unique-table-alias
+     [:scan {:table (symbol table-name)
+             :for-system-time :all-time
+             :for-valid-time :all-time}
+      (vec (.keySet !reqd-cols))]]))
+
+(defrecord InsertStmt [table query-plan]
+  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
+
+(defrecord UpdateStmt [table query-plan]
+  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
+
+(defrecord DeleteStmt [table query-plan]
+  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
+
+(defrecord EraseStmt [table query-plan]
+  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
 (defrecord StmtVisitor [env scope]
   SqlVisitor
   (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
   (visitDirectlyExecutableStatement [this ctx] (-> (.getChild ctx 0) (.accept this)))
 
-  (visitQueryExpression [_ ctx] (-> ctx (.accept (->QueryPlanVisitor env scope)))))
+  (visitQueryExpression [_ ctx] (-> ctx (.accept (->QueryPlanVisitor env scope))))
+
+  (visitInsertStatement [_ ctx]
+    (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
+                                                 (.accept (->QueryPlanVisitor env scope)))]
+      (when-not (contains? (set col-syms) 'xt$id)
+        (add-err! env (->InsertWithoutXtId)))
+
+      (->InsertStmt (identifier-sym (.tableName ctx)) insert-plan)))
+
+  (visitUpdateStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
+    (let [internal-cols (mapv ->col-sym '[xt$iid xt$valid_from xt$valid_to])
+          table-name (identifier-sym (.tableName ctx))
+          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+          aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
+
+          {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
+                                                                      (.accept (->DmlValidTimeExtentsVisitor env scope)))
+
+          table-cols (if-let [cols (get table-info table-name)]
+                       cols
+                       (do
+                         (add-warning! env (->BaseTableNotFound nil table-name))
+                         #{}))
+
+          dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
+                                   (HashMap. ^Map (apply merge aliased-cols)))
+
+          expr-visitor (->ExprPlanVisitor env dml-scope)
+
+          set-clauses (for [^SqlParser$SetClauseContext set-clause (->> (.setClauseList ctx) (.setClause))
+                            :let [set-target (.setTarget set-clause)]]
+                        {(identifier-sym (.columnName set-target))
+                         (.accept (.expr (.updateSource set-clause)) expr-visitor)})
+          set-clauses-cols (set (mapv ffirst set-clauses))
+
+          where-selection (when-let [search-clause (.searchCondition ctx)]
+                            (let [!subqs (HashMap.)]
+                              {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
+                               :subqs (not-empty (into {} !subqs))}))
+
+          all-non-set-cols (filter (fn [col] 
+                                     (not (contains? set-clauses-cols col))) 
+                                   (available-cols dml-scope nil))
+
+          col-projections (for [col all-non-set-cols
+                                :let [col-sym (->col-sym col)]]
+                            {col-sym (find-decl dml-scope [col-sym])})
+
+          outer-projection (vec (concat '[xt$iid]
+                                        (or vt-projection (default-vt-extents-projection env))
+                                        set-clauses-cols
+                                        (map ffirst col-projections)))]
+
+      (->UpdateStmt (symbol table-name)
+                    (->QueryExpr [:project outer-projection
+                                  (as-> (plan-table-ref dml-scope) plan
+                    
+                                    (if-let [{:keys [predicate subqs]} where-selection]
+                                      (-> plan
+                                          (apply-sqs subqs)
+                                          (wrap-predicates predicate))
+                                      plan)
+                    
+                                    [:project (concat aliased-cols set-clauses col-projections) plan])]
+                                 (vec (concat internal-cols set-clauses-cols all-non-set-cols))))))
+
+  (visitDeleteStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
+    (let [internal-cols (mapv ->col-sym '[xt$iid xt$valid_from xt$valid_to])
+          table-name (identifier-sym (.tableName ctx))
+          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+          aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
+
+          {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
+                                                                      (.accept (->DmlValidTimeExtentsVisitor env scope)))
+
+          table-cols (if-let [cols (get table-info table-name)]
+                       cols
+                       (do
+                         (add-warning! env (->BaseTableNotFound nil table-name))
+                         #{}))
+
+          dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
+                                   (HashMap. ^Map (into {} aliased-cols)))
+
+          where-selection (when-let [search-clause (.searchCondition ctx)]
+                            (let [!subqs (HashMap.)]
+                              {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
+                               :subqs (not-empty (into {} !subqs))}))
+
+          projection (into '[xt$iid] (or vt-projection (default-vt-extents-projection env)))]
+      (->DeleteStmt (symbol table-name)
+                    (->QueryExpr [:project projection
+                                  (as-> (plan-table-ref dml-scope) plan
+                                    
+                                    (if-let [{:keys [predicate subqs]} where-selection]
+                                      (-> plan
+                                          (apply-sqs subqs)
+                                          (wrap-predicates predicate))
+                                      plan)
+                                    
+                                    [:project aliased-cols plan])]
+                                 internal-cols)))) 
+
+  (visitEraseStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
+    (let [internal-cols '[xt$iid]
+          table-name (identifier-sym (.tableName ctx))
+          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+          aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
+
+          table-cols (if-let [cols (get table-info table-name)]
+                       cols
+                       (do
+                         (add-warning! env (->BaseTableNotFound nil table-name))
+                         #{}))
+
+          dml-scope (->EraseTableRef env table-name table-alias unique-table-alias table-cols
+                                     (HashMap. ^Map (apply merge aliased-cols)))
+
+          where-selection (when-let [search-clause (.searchCondition ctx)]
+                            (let [!subqs (HashMap.)]
+                              {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
+                               :subqs (not-empty (into {} !subqs))}))]
+
+      (->EraseStmt (symbol table-name)
+                   (->QueryExpr [:distinct
+                                 [:project internal-cols
+                                  (as-> (plan-table-ref dml-scope) plan
+                                  
+                                    (if-let [{:keys [predicate subqs]} where-selection]
+                                      (-> plan
+                                          (apply-sqs subqs)
+                                          (wrap-predicates predicate))
+                                      plan)
+                                  
+                                    [:project aliased-cols plan])]]
+                                internal-cols)))))
 
 (defn add-throwing-error-listener [^Recognizer x]
   (doto x
@@ -1495,7 +1762,27 @@
   (->logical-plan [stmt]))
 
 (extend-protocol AdaptPlan
-  QueryExpr (->logical-plan [{:keys [plan]}] plan))
+  QueryExpr (->logical-plan [{:keys [plan]}] plan)
+
+  InsertStmt
+  (->logical-plan [{:keys [table query-plan]}]
+    [:insert {:table table}
+     (->logical-plan query-plan)])
+
+  UpdateStmt
+  (->logical-plan [{:keys [table query-plan]}]
+    [:update {:table table}
+     (->logical-plan query-plan)])
+
+  DeleteStmt
+  (->logical-plan [{:keys [table query-plan]}]
+    [:delete {:table table}
+     (->logical-plan query-plan)])
+
+  EraseStmt
+  (->logical-plan [{:keys [table query-plan]}]
+    [:erase {:table table}
+     (->logical-plan query-plan)]))
 
 (defn parse-statement ^SqlParser$DirectSqlStatementContext [sql]
   (let [parser (->parser sql)]
@@ -1532,6 +1819,6 @@
              (vary-meta assoc :param-count @!param-count)))))))
 
 (comment
-  (plan-statement "SELECT bar, EXISTS (SELECT quux FROM bar WHERE quux = baz) FROM foo"
+  (plan-statement "UPDATE foo SET bar = baz WHERE baz = 4"
                   {:table-info {"foo" #{"bar" "baz"}
                                 "bar" #{"baz" "quux"}}}))

@@ -186,7 +186,8 @@
         (bxt2/generate worker :gag am/generate-global-attribute-group 10)
         (bxt2/generate worker :gav am/generate-global-attribute-value 100)
         (bxt2/generate worker :item am/generate-item 1)
-        (am/proc-new-comment worker)
+        
+        (t/is (:committed? (am/proc-new-comment worker)))
 
         (t/is (= [{:ic_id "ic_0"}]
                  (xt/q *node* '(from :item-comment [ic_id])
@@ -197,7 +198,7 @@
                           first
                           (contains? :ic_response))))
 
-        (am/proc-new-comment-response worker)
+        (t/is (:committed? (am/proc-new-comment-response worker))) 
 
         (t/is (true? (-> (xt/q *node* '(from :item-comment [{:xt/id "ic_0"} ic_response])
                                {:key-fn :snake-case-keyword})
