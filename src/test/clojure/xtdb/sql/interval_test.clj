@@ -6,7 +6,7 @@
 (t/use-fixtures :each tu/with-node)
 
 (defn- q [expr]
-  (-> (xt/q tu/*node* (format "SELECT %s r FROM (VALUES ('a')) a" expr) {})
+  (-> (xt/q tu/*node* (format "SELECT %s r" expr) {})
       first :r))
 
 (t/deftest test-interval-literals
