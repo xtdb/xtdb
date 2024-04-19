@@ -2075,3 +2075,8 @@
                                         WHERE o.customer_id = c.xt$id)
                                 AS orders
                        FROM customers c")))))
+
+(deftest test-invalid-xt-id-in-query-3324
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0 :name "bob"}]])
+  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo.xt$id = NULL")))
+  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo.xt$id = ?" {:args [nil]}))))
