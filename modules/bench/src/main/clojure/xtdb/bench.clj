@@ -114,6 +114,9 @@
     (let [idx (.nextInt (rng worker) (count coll))]
       (nth coll idx nil))))
 
+(defn random-bool [worker]
+  (.nextBoolean (rng worker)))
+
 (defn get-system-info
   "Returns data about the JVM, hardware / OS running this JVM."
   []
