@@ -7,6 +7,7 @@ from xtdb_juxt.types import Sql
 import os
 import pytest
 import requests
+import uuid
 
 database_host = os.getenv('DATABASE_HOST', 'localhost')
 database_port = os.getenv('DATABASE_PORT', '3300')
@@ -67,7 +68,6 @@ def test_sql_tx_and_query(client):
 
     assert client.query(query) == [{"xt$id": "Alice"}]
 
-
 def test_independent_processing(make_client):
     client1 = make_client()
     client2 = make_client()
@@ -80,3 +80,10 @@ def test_independent_processing(make_client):
 
     assert client1.query(query) == [{"xt$id": "Alice"}]
     assert client2.query(query) == []
+
+def test_uuid_encoding_3327(client):
+    sample_uuid = uuid.uuid4()
+    client.submit_tx([PutDocs("uuid_test", {"xt$id": sample_uuid})])
+    query = From("uuid_test", None, None, True)
+    assert client.query(query) == [{"xt$id": sample_uuid}]
+
