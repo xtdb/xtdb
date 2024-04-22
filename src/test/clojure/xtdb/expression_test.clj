@@ -1218,6 +1218,10 @@
       (t/is (= #time/date-time "2020-08-01T15:09:00"
                (run-test '(least x y) #time/date-time "2020-08-01T15:09:00" #time/date "2020-08-02"))))))
 
+(t/deftest test-random
+  (t/is (= [true] (project '(<= 0.0 (random)) [{}])))
+  (t/is (= [true] (project '(< (random) 1.0) [{}]))))
+
 (t/deftest can-return-string-multiple-times
   (with-open [rel (tu/open-rel [(tu/open-vec "x" [1 2 3])])]
     (t/is (= {:res ["foo" "foo" "foo"]
