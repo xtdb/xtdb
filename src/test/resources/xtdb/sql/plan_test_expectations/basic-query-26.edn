@@ -1,14 +1,8 @@
-[:rename
- {x1 movie_title}
- [:project
-  [x1]
-  [:order-by
-   [[x4 {:direction :desc, :null-ordering :nulls-last}]
-    [x1 {:direction :asc, :null-ordering :nulls-last}]]
-   [:project
-    [x1 x4]
-    [:map
-     [{x4 (= x2 "foo")}]
-     [:rename
-      {movie_title x1, year x2}
-      [:scan {:table stars_in} [movie_title year]]]]]]]]
+[:project
+ [{movie_title si.1/movie_title}]
+ [:order-by
+  [[xt$ob2 {:direction :desc, :null-ordering :nulls-first}]
+   [si.1/movie_title {:direction :asc, :null-ordering :nulls-last}]]
+  [:project
+   [si.1/movie_title {xt$ob2 (= si.1/year "foo")}]
+   [:rename si.1 [:scan {:table stars_in} [year movie_title]]]]]]

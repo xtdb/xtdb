@@ -1,8 +1,10 @@
-[:rename
- {x1 name}
- [:order-by
-  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
-  [:distinct
-   [:union-all
-    [:rename {name x1} [:scan {:table stars_in} [name]]]
-    [:rename {name x1} [:scan {:table stars_in} [name]]]]]]]
+[:order-by
+ [[name {:direction :asc, :null-ordering :nulls-last}]]
+ [:distinct
+  [:union-all
+   [:project
+    [{name si.1/name}]
+    [:rename si.1 [:scan {:table stars_in} [name]]]]
+   [:project
+    [{name si.2/name}]
+    [:rename si.2 [:scan {:table stars_in} [name]]]]]]]

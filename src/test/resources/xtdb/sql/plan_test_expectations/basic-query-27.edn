@@ -1,9 +1,7 @@
-[:rename
- {x1 movie_title}
- [:project
-  [x1]
-  [:order-by
-   [[x2 {:direction :asc, :null-ordering :nulls-last}]]
-   [:rename
-    {movie_title x1, year x2}
-    [:scan {:table stars_in} [movie_title year]]]]]]
+[:project
+ [{movie_title si.1/movie_title}]
+ [:order-by
+  [[xt$ob2 {:direction :asc, :null-ordering :nulls-last}]]
+  [:project
+   [si.1/movie_title {xt$ob2 si.1/year}]
+   [:rename si.1 [:scan {:table stars_in} [year movie_title]]]]]]

@@ -1,7 +1,7 @@
-[:rename
- {x3 xt$column_1}
+[:project
+ [{xt$column_1 xt$column_1}]
  [:order-by
-  [[x3 {:direction :asc, :null-ordering :nulls-last}]]
+  [[xt$ob2 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [{x3 (= x1 "foo")}]
-   [:rename {year x1} [:scan {:table stars_in} [year]]]]]]
+   [{xt$column_1 (= si.1/year "foo")} {xt$ob2 (= si.1/year "foo")}]
+   [:rename si.1 [:scan {:table stars_in} [year]]]]]]

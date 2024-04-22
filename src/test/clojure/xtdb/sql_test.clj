@@ -182,7 +182,7 @@
 
   (t/is (=plan-file
           "basic-query-26"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.\"year\" = 'foo' DESC, movieTitle"
                     {:table-info {"stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
@@ -1063,7 +1063,12 @@
            (set (xt/q tu/*node* "SELECT * FROM docs ORDER BY 1 + 1"))))
 
   (t/is (= [{:xt/id 3} {:xt/id 2} {:xt/id 1}]
-           (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY docs.x"))))
+           (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY docs.x"))
+        "projected away order col")
+
+  (t/is (= [{:xt/id 1} {:xt/id 2} {:xt/id 3}]
+           (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY 1"))
+        "order by column idx"))
 
 (deftest test-order-by-unqualified-derived-column-refs
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3}]
@@ -1071,14 +1076,14 @@
                            [:put-docs :docs {:xt/id 3 :x 1}]])
 
   (t/is (= [{:b 2} {:b 3} {:b 4}]
-             (xt/q tu/*node* "SELECT (docs.x + 1) AS b FROM docs ORDER BY b")))
+           (xt/q tu/*node* "SELECT (docs.x + 1) AS b FROM docs ORDER BY b")))
   (t/is (= [{:b 1} {:b 2} {:b 3}]
            (xt/q tu/*node* "SELECT docs.x AS b FROM docs ORDER BY b")))
   (t/is (= [{:x 1} {:x 2} {:x 3}]
            (xt/q tu/*node* "SELECT y.x FROM docs AS y ORDER BY x")))
 
-  ;; Postgres doesn't allow deliminated col refs in order-by exprs but mysql/sqlite do
-  #_(t/is (= [{:b 1} {:b 2} {:b 3}]
+  #_ ; TODO error - can't take an output and _then_ re-project (Postgres bans it, fwiw)
+  (t/is (= [{:b 1} {:b 2} {:b 3}]
            (xt/q tu/*node* "SELECT docs.x AS b FROM docs ORDER BY (b + 2)"))))
 
 (deftest test-select-star-projections

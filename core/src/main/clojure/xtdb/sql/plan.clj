@@ -8,7 +8,7 @@
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.util Collection HashMap LinkedHashSet Map SequencedSet)
+           (java.util Collection HashMap LinkedHashSet Map SequencedSet Set)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
            (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
@@ -367,6 +367,10 @@
     < '>=, > '<=
     <= '>, >= '<))
 
+(defrecord InvalidOrderByOrdinal [out-cols ordinal]
+  PlanError
+  (error-string [_] (format "Invalid order by ordinal: %s - out-cols: %s" ordinal out-cols)))
+
 (defrecord TableRefVisitor [env scope]
   SqlVisitor
   (visitBaseTable [{{:keys [!id-count table-info]} :env} ctx]
@@ -443,6 +447,7 @@
   (visitSelectClause [_ ctx]
     (let [sl-ctx (.selectList ctx)
           !subqs (HashMap.)]
+
       {:projected-cols (if (.ASTERISK sl-ctx)
                          (vec (for [col-name (available-cols scope nil)
                                     :let [sym (find-decl scope [col-name])]]
@@ -465,6 +470,7 @@
                                                              (let [[table-name schema-name] (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
                                                                (when schema-name
                                                                  (throw (UnsupportedOperationException. "schema not supported")))
+
                                                                (if-let [table-cols (available-cols scope table-name)]
                                                                  (for [col-name table-cols
                                                                        :let [sym (find-decl scope [col-name table-name])]]
@@ -691,13 +697,15 @@
 
   (visitColumnExpr [this ctx] (-> (.columnReference ctx) (.accept this)))
 
-  (visitColumnReference [_ ctx]
+  (visitColumnReference [{:keys [^Set !ob-col-refs]} ctx]
     (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))
           matches (find-decls scope chain)]
-      (case (count matches)
-        0 (add-warning! env (->ColumnNotFound chain))
-        1 (first matches)
-        (add-err! env (->AmbiguousColumnReference chain)))))
+      (when-let [sym (case (count matches)
+                       0 (add-warning! env (->ColumnNotFound chain))
+                       1 (first matches)
+                       (add-err! env (->AmbiguousColumnReference chain)))]
+        (some-> !ob-col-refs (.add sym))
+        sym)))
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
@@ -1209,7 +1217,17 @@
                         {:sq-type :quantified-comparison
                          :expr pt1
                          :op '=})
-        (boolean (.NOT ctx)) (list 'not)))))
+        (boolean (.NOT ctx)) (list 'not))))
+
+  (visitFetchFirstRowCount [this ctx]
+    (if-let [ps (.parameterSpecification ctx)]
+      (.accept ps this)
+      (parse-long (.getText ctx))))
+
+  (visitOffsetRowCount [this ctx]
+    (if-let [ps (.parameterSpecification ctx)]
+      (.accept ps this)
+      (parse-long (.getText ctx)))))
 
 (defn- wrap-predicates [plan predicate]
   (or (when (list? predicate)
@@ -1229,6 +1247,83 @@
 
 (defrecord QueryExpr [plan col-syms]
   OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
+
+(defn- plan-order-by [^SqlParser$OrderByClauseContext ctx
+                      {:keys [!id-count] :as env} inner-scope outer-col-syms]
+  (let [available-cols (set outer-col-syms)
+        ob-expr-visitor (->ExprPlanVisitor env
+                                           (reify Scope
+                                             (available-cols [_ chain]
+                                               (set/union (available-cols inner-scope chain)
+                                                          (when (empty? chain) available-cols)))
+
+                                             (find-decls [_ [col-name :as chain]]
+                                               (or (when (= 1 (count chain))
+                                                     (when-let [sym (get available-cols col-name)]
+                                                       [sym]))
+                                                   (find-decls inner-scope chain)))))]
+
+    (-> (.sortSpecificationList ctx)
+        (.sortSpecification)
+        (->> (mapv (fn [^SqlParser$SortSpecificationContext sort-spec-ctx]
+                     (let [expr (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
+                           dir (or (some-> (.orderingSpecification sort-spec-ctx)
+                                           (.getText)
+                                           str/lower-case
+                                           keyword)
+                                   :asc)
+
+                           ob-opts {:direction dir
+
+                                    :null-ordering (or (when-let [null-order (.nullOrdering sort-spec-ctx)]
+                                                         (case (-> (.getChild null-order 1)
+                                                                   (.getText)
+                                                                   str/lower-case)
+                                                           "first" :nulls-first
+                                                           "last" :nulls-last))
+
+                                                       ;; postgres sorts nulls high - so last on asc and first on desc
+                                                       (case dir :asc :nulls-last, :desc :nulls-first))}]
+
+                       ;; we could potentially try to avoid this extra projection for simple cols
+                       (cond
+                         (integer? expr) (if (<= 1 (long expr) (count outer-col-syms))
+                                           {:order-by-spec [(nth outer-col-syms (dec expr)) ob-opts]}
+                                           (add-err! env (->InvalidOrderByOrdinal outer-col-syms expr)))
+
+                         (contains? available-cols expr) {:order-by-spec [expr ob-opts]}
+
+                         :else (let [in-sym (->col-sym (str "xt$ob" (swap! !id-count inc)))]
+                                 {:order-by-spec [in-sym ob-opts]
+                                  :in-projection {in-sym expr}})))))))))
+
+(defn- wrap-isolated-ob [plan outer-col-syms ob-specs]
+  (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
+    (as-> plan plan
+      (if in-projs
+        [:map in-projs plan]
+        plan)
+
+      [:order-by (mapv :order-by-spec ob-specs)
+       plan]
+
+      (if in-projs
+        [:project outer-col-syms plan]
+        plan))))
+
+(defn- wrap-integrated-ob [plan projected-cols ob-specs]
+  (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
+    (as-> plan plan
+      [:project (into (mapv :projection projected-cols)
+                      in-projs)
+       plan]
+
+      [:order-by (mapv :order-by-spec ob-specs)
+       plan]
+
+      (if in-projs
+        [:project (mapv :col-sym projected-cols) plan]
+        plan))))
 
 (defn- remove-ns-qualifiers [{:keys [plan col-syms]}]
   (let [out-projections (->> col-syms
@@ -1257,8 +1352,42 @@
   (visitWrappedQuery [this ctx] (-> (.queryExpressionBody ctx) (.accept this)))
 
   (visitQueryExpression [this ctx]
-    (-> (.accept (.queryExpressionBody ctx) this)
-        (remove-ns-qualifiers)))
+    (let [order-by-ctx (.orderByClause ctx)
+
+          qeb-ctx (.queryExpressionBody ctx)
+
+          ;; see SQL:2011 §7.13, syntax rule 28c
+          simple-table-query? (when (instance? SqlParser$QueryBodyTermContext qeb-ctx)
+                                (instance? SqlParser$QuerySpecificationContext (.queryTerm ^SqlParser$QueryBodyTermContext qeb-ctx)))]
+
+      (as-> (.accept qeb-ctx (cond-> (assoc this :scope scope)
+                               simple-table-query? (assoc :order-by-ctx order-by-ctx)))
+          {:keys [plan col-syms] :as query-expr}
+
+        (if (and order-by-ctx (not simple-table-query?))
+          (->QueryExpr (-> plan
+                           (wrap-isolated-ob col-syms (plan-order-by order-by-ctx env nil col-syms)))
+                       col-syms)
+
+          query-expr)
+
+        (remove-ns-qualifiers query-expr)
+
+        (let [offset-clause (.resultOffsetClause ctx)
+              limit-clause (.fetchFirstClause ctx)]
+          (cond-> query-expr
+            (or offset-clause limit-clause)
+            (update :plan (fn [plan]
+                            (let [expr-visitor (->ExprPlanVisitor env scope)]
+                              [:top {:offset (some-> offset-clause
+                                                     (.offsetRowCount)
+                                                     (.accept expr-visitor))
+
+                                     :limit (when limit-clause
+                                              (or (some-> (.fetchFirstRowCount limit-clause)
+                                                          (.accept expr-visitor))
+                                                  1))}
+                               plan]))))))))
 
   (visitQueryBodyTerm [this ctx] (.accept (.queryTerm ctx) this))
 
@@ -1326,7 +1455,7 @@
                      plan)
                    l-col-syms)))
 
-  (visitQuerySpecification [{:keys [out-col-syms]} ctx]
+  (visitQuerySpecification [{:keys [out-col-syms order-by-ctx]} ctx]
     (let [qs-scope (->QuerySpecificationScope scope
                                               (when-let [from (.fromClause ctx)]
                                                 (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
@@ -1344,9 +1473,14 @@
 
           select-clause (.selectClause ctx)
 
-          select-plan (if select-clause
-                        (.accept select-clause (->SelectClauseProjectedCols env qs-scope))
-                        (project-all-cols qs-scope))
+          {:keys [projected-cols] :as select-plan} (if select-clause
+                                                     (.accept select-clause (->SelectClauseProjectedCols env scope))
+                                                     (project-all-cols scope))
+
+          distinct? (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
+
+          ob-specs (some-> order-by-ctx
+                           (plan-order-by env qs-scope (mapv :col-sym projected-cols)))
 
           plan (as-> (plan-table-ref qs-scope) plan
                  (if-let [{:keys [predicate subqs]} where-plan]
@@ -1355,9 +1489,14 @@
                        (wrap-predicates predicate))
                    plan)
 
-                 (let [{:keys [projected-cols subqs]} select-plan]
+                 (-> plan (apply-sqs (:subqs select-plan)))
+
+                 (if order-by-ctx
+                   (-> plan
+                       (wrap-integrated-ob projected-cols ob-specs))
+
                    [:project (mapv :projection projected-cols)
-                    (-> plan (apply-sqs subqs))]))]
+                    plan]))]
 
       (as-> (->QueryExpr plan (mapv :col-sym (:projected-cols select-plan)))
           {:keys [plan col-syms] :as query-expr}
@@ -1368,7 +1507,7 @@
                        out-col-syms)
           query-expr)
 
-        (if (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
+        (if distinct?
           (->QueryExpr [:distinct plan]
                        col-syms)
           query-expr))))
@@ -1819,6 +1958,6 @@
              (vary-meta assoc :param-count @!param-count)))))))
 
 (comment
-  (plan-statement "UPDATE foo SET bar = baz WHERE baz = 4"
+  (plan-statement "SELECT bar + 1 as inc_bar FROM foo ORDER by inc_bar, 1, baz"
                   {:table-info {"foo" #{"bar" "baz"}
                                 "bar" #{"baz" "quux"}}}))
