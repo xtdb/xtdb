@@ -142,7 +142,7 @@
                                      {:xt/id :foo-doc, :last-updated "2001" }]
 
                                     [:put-docs {:into :bar, :valid-from #inst "2002", :valid-to #inst "2003"}
-                                     {:xt/id :bar-doc, :l_updated "2003" }]])]
+                                     {:xt/id :bar-doc, :l_updated "2003" :name "test"}]])]
 
     (is (= [{:last-updated "2001"}]
            (query-at-tx

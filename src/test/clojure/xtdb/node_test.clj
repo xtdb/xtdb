@@ -150,7 +150,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
 (t/deftest test-interval-literal-cce-271
   (t/is (= [{:a #xt/interval-ym "P12M"}]
-           (xt/q tu/*node* "select a.a from (values (1 year)) a (a)"))))
+           (xt/q tu/*node* "select a.a from (values (INTERVAL '1' YEAR)) a (a)"))))
 
 (t/deftest test-overrides-range
   (xt/submit-tx tu/*node* [[:sql "
@@ -319,7 +319,7 @@ WHERE foo.xt$id = 1"]])]
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id) VALUES(1)"]])
 
   (t/is (= [{:col [{:foo 5} {:foo 5}]}]
-           (xt/q tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] AS col FROM t1"))))
+           (xt/q tu/*node* "SELECT ARRAY [OBJECT(foo: 5), OBJECT(foo: 5)] AS col FROM t1"))))
 
 (t/deftest test-differing-length-lists-441
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES (1, [2, 3])"]
@@ -337,11 +337,11 @@ WHERE foo.xt$id = 1"]])]
 (t/deftest test-cross-join-ioobe-2343
   (xt/submit-tx tu/*node* [[:sql "
 INSERT INTO t2(xt$id, data)
-VALUES(2, OBJECT ('foo': OBJECT('bibble': false), 'bar': OBJECT('baz': 1002)))"]
+VALUES(2, OBJECT (foo: OBJECT(bibble: false), bar: OBJECT(baz: 1002)))"]
 
                            [:sql "
 INSERT INTO t1(xt$id, data)
-VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]])
+VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:t2d {:foo {:bibble false}, :bar {:baz 1002}},
              :t1d {:foo {:bibble true}, :bar {:baz 1001}}}]
@@ -529,7 +529,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   (t/is (= [{:a/b "foo"}] (xt/q tu/*node* "SELECT docs.foo.a$b FROM docs"))))
 
 (t/deftest non-namespaced-keys-for-structs-2418
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, OBJECT('c$d': 'bar'))"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, OBJECT(c$d: 'bar'))"]])
   (t/is (= [{:bar {:c/d "bar"}}]
            (xt/q tu/*node* '(from :foo [bar])))))
 
@@ -556,10 +556,10 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
 
 (t/deftest test-nested-field-normalisation
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES(1, OBJECT ('field-name1': OBJECT('field-name2': true),
-                                                                                'field/name3': OBJECT('baz': -4113466)))"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES(1, OBJECT (fieldName1: OBJECT(fieldName2: true),
+                                                                                fieldName3: OBJECT(baz: -4113466)))"]])
 
-  (t/is (= [{:data {:field/name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
+  (t/is (= [{:data {:field-name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
            (xt/q tu/*node* "SELECT t1.data FROM t1"))
         "testing insert worked")
 
@@ -570,7 +570,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (t/deftest test-get-field-on-duv-with-struct-2425
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t2(xt$id, data) VALUES(1, 'bar')"]
-                           [:sql "INSERT INTO t2(xt$id, data) VALUES(2, OBJECT('foo': 2))"]])
+                           [:sql "INSERT INTO t2(xt$id, data) VALUES(2, OBJECT(foo: 2))"]])
 
   (t/is (= [{:foo 2} {}]
            (xt/q tu/*node* "SELECT t2.data.foo FROM t2"))))

@@ -7,10 +7,12 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
+           (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.util Collection HashMap LinkedHashSet Map SequencedSet)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
-           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlVisitor)))
+           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$SearchedWhenClauseContext SqlParser$SimpleWhenClauseContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           (xtdb.types IntervalMonthDayNano)))
 
 (defn- ->insertion-ordered-set [coll]
   (LinkedHashSet. ^Collection (vec coll)))
@@ -46,6 +48,7 @@
                      (visitTableName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitTableAlias [this ctx] (-> (.correlationName ctx) (.accept this)))
                      (visitColumnName [this ctx] (-> (.identifier ctx) (.accept this)))
+                     (visitFieldName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitCorrelationName [this ctx] (-> (.identifier ctx) (.accept this)))
 
                      (visitRegularIdentifier [_ ctx] (symbol (util/str->normal-form-str (.getText ctx))))
@@ -358,6 +361,176 @@
              :let [sym (find-decl scope [col-name])]]
          (->ProjectedCol sym sym))))
 
+(defn seconds-fraction->nanos ^long [seconds-fraction]
+  (if seconds-fraction
+    (* (Long/parseLong seconds-fraction)
+       (long (Math/pow 10 (- 9 (count seconds-fraction)))))
+    0))
+
+(defrecord CannotParseDate [d-str msg] 
+  PlanError
+  (error-string [_] (format "Cannot parse date: %s - failed with message %s" d-str msg)))
+
+(defn parse-date-literal [d-str env]
+  (try
+    (LocalDate/parse d-str)
+    (catch Exception e
+      (add-err! env (->CannotParseDate d-str (.getMessage e))))))
+
+(defrecord CannotParseTime [t-str msg]
+  PlanError
+  (error-string [_] (format "Cannot parse time: %s - failed with message %s" t-str msg)))
+
+(defn parse-time-literal [t-str env]
+  (if-let [[_ h m s sf offset-str] (re-matches #"(\d{1,2}):(\d{1,2}):(\d{1,2})(?:\.(\d+))?([+-]\d{2}:\d{2})?" t-str)]
+    (try
+      (let [local-time (LocalTime/of (parse-long h) (parse-long m) (parse-long s) (seconds-fraction->nanos sf))]
+        (if offset-str
+          (OffsetTime/of local-time (ZoneOffset/of ^String offset-str))
+          local-time))
+      (catch Exception e
+        (add-err! env (->CannotParseTime t-str (.getMessage e)))))
+
+    (add-err! env (->CannotParseTime t-str nil))))
+
+(defrecord CannotParseTimestamp [ts-str msg]
+  PlanError
+  (error-string [_] (format "Cannot parse timestamp: %s - failed with message %s" ts-str msg)))
+
+(defn parse-timestamp-literal [ts-str env]
+  (if-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?(?:\[([\w\/]+)\])?" ts-str)]
+    (try
+      (let [ldt (LocalDateTime/of (parse-long y) (parse-long mons) (parse-long d)
+                                  (parse-long h) (parse-long mins) (parse-long s) (seconds-fraction->nanos sf))]
+        (cond
+          zone (ZonedDateTime/ofLocal ldt (ZoneId/of zone) (some-> offset ZoneOffset/of))
+          offset (ZonedDateTime/of ldt (ZoneOffset/of offset))
+          :else ldt))
+      (catch Exception e
+        (add-err! env (->CannotParseTimestamp ts-str (.getMessage e)))))
+
+    (add-err! env (->CannotParseTimestamp ts-str nil))))
+
+(defrecord CannotParseInterval [i-str msg]
+  PlanError
+  (error-string [_] (format "Cannot parse interval: %s - failed with message %s" i-str msg)))
+
+(defn parse-iso-interval-literal [i-str env]
+  (if-let [[_ p-str d-str] (re-matches #"P([-\dYMWD]+)?(?:T([-\dHMS\.]+)?)?" i-str)]
+    (try
+      (IntervalMonthDayNano. (if p-str
+                               (Period/parse (str "P" p-str))
+                               Period/ZERO)
+                             (if d-str
+                               (Duration/parse (str "PT" d-str))
+                               Duration/ZERO))
+      (catch Exception e
+        (add-err! env (->CannotParseInterval i-str (.getMessage e)))))
+
+    (add-err! env (->CannotParseInterval i-str nil))))
+
+(defrecord CannotParseDuration [d-str msg]
+  PlanError
+  (error-string [_] (format "Cannot parse duration: %s - failed with message %s" d-str msg)))
+
+(defn- parse-duration-literal [d-str env]
+  (try
+    (Duration/parse d-str)
+    (catch Exception e
+      (add-err! env (->CannotParseDuration d-str (.getMessage e))))))
+
+(defn fn-with-precision [fn-symbol ^ParserRuleContext precision-ctx]
+  (if-let [precision (some-> precision-ctx (.getText) (parse-long))]
+    (list fn-symbol precision)
+    (list fn-symbol)))
+
+(defn ->interval-expr [ve {:keys [start-field end-field leading-precision fractional-precision]}]
+  (if end-field
+    (list 'multi-field-interval ve start-field leading-precision end-field fractional-precision)
+    (list 'single-field-interval ve start-field leading-precision fractional-precision)))
+
+(defn iq-context->iq-map [^SqlParser$IntervalQualifierContext ctx]
+  (if-let [sdf (.singleDatetimeField ctx)]
+    (let [field (-> (.getChild sdf 0) (.getText) (str/upper-case))
+          fp (some-> (.intervalFractionalSecondsPrecision sdf) (.getText) (parse-long))]
+      {:start-field field
+       :end-field nil
+       :leading-precision 2
+       :fractional-precision (or fp 6)})
+
+    (let [start-field (-> (.startField ctx) (.nonSecondPrimaryDatetimeField) (.getText) (str/upper-case))
+          ef (-> (.endField ctx) (.singleDatetimeField))
+          end-field (if-let [non-sec-ef (.nonSecondPrimaryDatetimeField ef)]
+                      (-> (.getText non-sec-ef) (str/upper-case))
+                      "SECOND")
+          fp (some-> (.intervalFractionalSecondsPrecision ef) (.getText) (parse-long))]
+      {:start-field start-field
+       :end-field end-field
+       :leading-precision 2
+       :fractional-precision (or fp 6)})))
+
+(defn- trim-quotes-from-string [string]
+  (subs string 1 (dec (count string))))
+
+(defrecord CastArgsVisitor [env]
+  SqlVisitor
+  (visitIntegerType [_ ctx]
+    {:cast-type (case (str/lower-case (.getText ctx))
+                  "smallint" :i16
+                  ("int" "integer") :i32
+                  "bigint" :i64)})
+
+  (visitFloatType [_ _] {:cast-type :f32})
+  (visitRealType [_ _] {:cast-type :f32})
+  (visitDoubleType [_ _] {:cast-type :f64})
+
+  (visitDateType [_ _] {:cast-type [:date :day]})
+  (visitTimeType [_ ctx]
+    (let [precision (some-> (.precision ctx) (.getText) (parse-long))
+          time-unit (if precision
+                      (if (<= precision 6) :micro :nano)
+                      :micro)]
+      (if (instance? SqlParser$WithTimeZoneContext
+                     (.withOrWithoutTimeZone ctx))
+        {:->cast-fn (fn [ve]
+                      (list* 'cast-tstz ve
+                             (when precision
+                               [{:precision precision :unit time-unit}])))}
+
+        {:cast-type [:time-local time-unit]
+         :cast-opts (when precision
+                      {:precision precision})})))
+
+  (visitTimestampType [_ ctx]
+    (let [precision (some-> (.precision ctx) (.getText) (parse-long))
+          time-unit (if precision
+                      (if (<= precision 6) :micro :nano)
+                      :micro)]
+      (if (instance? SqlParser$WithTimeZoneContext
+                     (.withOrWithoutTimeZone ctx))
+        {:->cast-fn (fn [ve]
+                      (list* 'cast-tstz ve
+                             [{:precision precision :unit time-unit}]))}
+
+        {:cast-type [:timestamp-local time-unit]
+         :cast-opts (when precision
+                      {:precision precision})})))
+
+  (visitDurationType [_ ctx]
+    (let [precision (some-> (.precision ctx) (.getText) (parse-long))
+          time-unit (if precision
+                      (if (<= precision 6) :micro :nano)
+                      :micro)]
+      {:cast-type [:duration time-unit]
+       :cast-opts (when precision {:precision precision})}))
+
+  (visitIntervalType [_ ctx]
+    (let [interval-qualifier (.intervalQualifier ctx)]
+      {:cast-type :interval
+       :cast-opts (when interval-qualifier (iq-context->iq-map interval-qualifier))}))
+
+  (visitCharacterStringType [_ _] {:cast-type :utf8}))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (-> (.expr ctx) (.accept this)))
@@ -372,8 +545,23 @@
   (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
 
   (visitCharacterString [_ ctx]
-    (let [str (.getText ctx)]
-      (subs str 1 (dec (count str)))))
+    (trim-quotes-from-string (.getText ctx)))
+
+  (visitDateLiteral [this ctx] (parse-date-literal (.accept (.characterString ctx) this) env))
+  (visitTimeLiteral [this ctx] (parse-time-literal (.accept (.characterString ctx) this) env))
+  (visitTimestampLiteral [this ctx] (parse-timestamp-literal (.accept (.characterString ctx) this) env))
+
+  (visitIntervalLiteral [this ctx]
+    (let [csl (some-> (.characterString ctx) (.accept this))
+          iq-map (some-> (.intervalQualifier ctx) (iq-context->iq-map))
+          interval-expr (if iq-map
+                          (->interval-expr csl iq-map)
+                          (parse-iso-interval-literal csl env))]
+      (if (.MINUS ctx)
+        (list '- interval-expr)
+        interval-expr)))
+
+  (visitDurationLiteral [this ctx] (parse-duration-literal (.accept (.characterString ctx) this) env))
 
   (visitBooleanLiteral [_ ctx]
     (case (-> (.getText ctx) str/lower-case)
@@ -405,8 +593,30 @@
                             (dec param-idx))))
         (vary-meta assoc :param? true)))
 
+  (visitFieldAccess [this ctx]
+    (let [ve (-> (.exprPrimary ctx) (.accept this))
+          field-name (identifier-sym (.fieldName ctx))]
+      (-> (list '. ve (keyword field-name))
+          (vary-meta assoc :identifier field-name))))
+
+  (visitArrayAccess [this ctx]
+    (let [ve (-> (.exprPrimary ctx) (.accept this))
+          n (-> (.expr ctx) (.accept this))]
+      (list 'nth ve (if (integer? n)
+                      (dec n)
+                      (list '- n 1)))))
+
   (visitUnaryPlusExpr [this ctx] (-> (.numericExpr ctx) (.accept this)))
-  (visitUnaryMinusExpr [this ctx] (list '- (-> (.numericExpr ctx) (.accept this))))
+
+  (visitUnaryMinusExpr [this ctx]
+    (if (= (.getText ctx) (str Long/MIN_VALUE))
+      Long/MIN_VALUE
+
+      (let [expr (-> (.numericExpr ctx)
+                     (.accept this))]
+        (if (number? expr)
+          (- expr)
+          (list '- expr)))))
 
   (visitNumericTermExpr [this ctx]
     (list (cond
@@ -423,6 +633,112 @@
             :else (throw (IllegalStateException.)))
           (-> (.numericExpr ctx 0) (.accept this))
           (-> (.numericExpr ctx 1) (.accept this))))
+
+  (visitConcatExpr [this ctx]
+    (list 'concat
+          (-> (.exprPrimary ctx 0) (.accept this))
+          (-> (.exprPrimary ctx 1) (.accept this))))
+
+  (visitIsBooleanValueExpr [this ctx]
+    (let [boolean-value (-> (.booleanValue ctx) (.getText) (str/upper-case))
+          expr (-> (.expr ctx) (.accept this))
+          boolean-fn (case boolean-value
+                       "TRUE" (list 'true? expr)
+                       "FALSE" (list 'false? expr)
+                       "UNKNOWN" (list 'nil? expr))]
+      (if (.NOT ctx)
+        (list 'not boolean-fn)
+        boolean-fn)))
+  
+  (visitExtractFunction [this ctx]
+    (let [extract-field (-> (.extractField ctx) (.getText) (str/upper-case))
+          extract-source (-> (.extractSource ctx) (.expr) (.accept this))]
+      (list 'extract extract-field extract-source)))
+
+  (visitPositionFunction [this ctx]
+    (let [needle (-> (.expr ctx 0) (.accept this))
+          haystack (-> (.expr ctx 1) (.accept this))
+          units (or (some-> (.charLengthUnits ctx) (.getText)) "CHARACTERS")]
+      (list (case units
+              "CHARACTERS" 'position
+              "OCTETS" 'octet-position)
+            needle haystack)))
+
+  (visitCharacterLengthFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))
+          units (or (some-> (.charLengthUnits ctx) (.getText)) "CHARACTERS")]
+      (list (case units
+              "CHARACTERS" 'character-length
+              "OCTETS" 'octet-length)
+            nve)))
+
+  (visitOctetLengthFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'octet-length nve)))
+
+  (visitLengthFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.getChild 0) (.accept this))]
+      (list 'length nve)))
+
+  (visitCardinalityFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'cardinality nve)))
+
+  (visitAbsFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'abs nve)))
+
+  (visitModFunction [this ctx]
+    (let [nve1 (-> (.expr ctx 0) (.accept this))
+          nve2 (-> (.expr ctx 1) (.accept this))]
+      (list 'mod nve1 nve2)))
+
+  (visitTrigonometricFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))
+          fn-name (-> (.trigonometricFunctionName ctx) (.getText) (str/lower-case))]
+      (list (symbol fn-name) nve)))
+
+  (visitLogFunction [this ctx]
+    (let [nve1 (-> (.generalLogarithmBase ctx) (.expr) (.accept this))
+          nve2 (-> (.generalLogarithmArgument ctx) (.expr) (.accept this))]
+      (list 'log nve1 nve2)))
+
+  (visitLog10Function [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'log10 nve)))
+
+  (visitLnFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'ln nve)))
+
+  (visitExpFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'exp nve)))
+
+  (visitPowerFunction [this ctx]
+    (let [nve1 (-> (.expr ctx 0) (.accept this))
+          nve2 (-> (.expr ctx 1) (.accept this))]
+      (list 'power nve1 nve2)))
+
+  (visitSqrtFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'sqrt nve)))
+
+  (visitFloorFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'floor nve)))
+
+  (visitCeilingFunction [this ctx]
+    (let [nve (-> (.expr ctx) (.accept this))]
+      (list 'ceil nve)))
+
+  (visitLeastFunction [this ctx]
+    (let [nves (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))]
+      (list* 'least nves)))
+
+  (visitGreatestFunction [this ctx]
+    (let [nves (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))]
+      (list* 'greatest nves)))
 
   (visitOrExpr [this ctx]
     (list 'or
@@ -441,11 +757,278 @@
           (-> (.expr ctx 0) (.accept this))
           (-> (.expr ctx 1) (.accept this))))
 
+  (visitComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
+    (list (symbol (.getText (.compOp ctx)))
+          pt1
+          (-> (.expr ctx) (.accept (dissoc this :pt1)))))
+
   (visitNullPredicate [this ctx]
-    (as-> (list 'nil? (-> (.expr ctx) (.accept this))) expr
-       (if (.NOT ctx)
+    (let [expr (list 'nil? (-> (.expr ctx) (.accept this)))]
+      (if (.NOT ctx)
         (list 'not expr)
-        expr))))
+        expr)))
+
+  (visitNullPredicatePart2 [{:keys [pt1]} ctx]
+    (let [expr (list 'nil? pt1)]
+      (if (.NOT ctx)
+        (list 'not expr)
+        expr)))
+
+  (visitBetweenPredicate [this ctx]
+    (let [between-expr (list (cond
+                               (.SYMMETRIC ctx) 'between-symmetric
+                               (.ASYMMETRIC ctx) 'between
+                               :else 'between)
+                             (-> (.numericExpr ctx 0) (.accept this))
+                             (-> (.numericExpr ctx 1) (.accept this))
+                             (-> (.numericExpr ctx 2) (.accept this)))]
+      (if (.NOT ctx)
+        (list 'not between-expr)
+        between-expr)))
+
+  (visitBetweenPredicatePart2 [{:keys [pt1] :as this} ctx]
+    (let [between-expr (list (cond
+                               (.SYMMETRIC ctx) 'between-symmetric
+                               (.ASYMMETRIC ctx) 'between
+                               :else 'between)
+                             pt1
+                             (-> (.expr ctx 0) (.accept this))
+                             (-> (.expr ctx 1) (.accept this)))]
+      (if (.NOT ctx)
+        (list 'not between-expr)
+        between-expr)))
+
+  (visitLikePredicate [this ctx]
+    (let [like-expr (list 'like
+                          (-> (.expr ctx) (.accept this))
+                          (-> (.likePattern ctx) (.exprPrimary) (.accept this)))]
+      (if (.NOT ctx)
+        (list 'not like-expr)
+        like-expr)))
+
+  (visitLikePredicatePart2 [{:keys [pt1] :as this} ctx]
+    (let [cp (-> (.likePattern ctx) (.exprPrimary) (.accept (dissoc this :pt1)))]
+      (if (.NOT ctx)
+        (list 'not (list 'like pt1 cp))
+        (list 'like pt1 cp))))
+
+  (visitLikeRegexPredicate [this ctx]
+    (let [like-expr (list 'like-regex (.accept (.expr ctx) this)
+                          (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
+                          (or (some-> (.xqueryOptionFlag ctx) (.exprPrimary) (.accept this)) ""))]
+      (if (.NOT ctx)
+        (list 'not like-expr)
+        like-expr)))
+
+  (visitLikeRegexPredicatePart2 [{:keys [pt1] :as this} ctx]
+    (let [like-expr (list 'like-regex pt1
+                          (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
+                          (or (some-> (.xqueryOptionFlag ctx) (.exprPrimary) (.accept this)) ""))]
+      (if (.NOT ctx)
+        (list 'not like-expr)
+        like-expr)))
+
+  (visitPostgresRegexPredicate [this ctx]
+    (let [pro (-> (.postgresRegexOperator ctx) (.getText))
+          expr (list 'like-regex (.accept (.expr ctx) this)
+                     (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
+                     (if (#{"~*" "!~*"} pro) "i" ""))]
+      (if (#{"!~" "!~*"} pro)
+        (list 'not expr)
+        expr)))
+
+  (visitPostgresRegexPredicatePart2 [{:keys [pt1] :as this} ctx]
+    (let [pro (-> (.postgresRegexOperator ctx) (.getText))
+          expr (list 'like-regex pt1
+                     (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
+                     (if (#{"~*" "!~*"} pro) "i" ""))]
+      (if (#{"!~" "!~*"} pro)
+        (list 'not expr)
+        expr)))
+
+  ;; TODO
+  ;; (visitInPredicate [this ctx])
+  ;; (visitQuantifiedComparisonPredicate [this ctx])
+  ;; (visitExistsPredicate [this ctx])
+
+  (visitPeriodOverlapsPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
+          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+      (list 'and (list '< (:from p1) (:to p2)) (list '> (:to p1) (:from p2)))))
+
+  (visitPeriodEqualsPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
+          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+      (list 'and (list '= (:from p1) (:from p2)) (list '= (:to p1) (:to p2)))))
+
+  (visitPeriodContainsPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx) (.accept this))
+          p2 (-> (.periodOrPointInTimePredicand ctx) (.accept this))]
+      (list 'and (list '<= (:from p1) (:from p2)) (list '>= (:to p1) (:to p2)))))
+
+  (visitPeriodPrecedesPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
+          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+      (list '<= (:to p1) (:from p2))))
+
+  (visitPeriodSucceedsPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
+          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+      (list '>= (:from p1) (:to p2))))
+
+  (visitPeriodImmediatelyPrecedesPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
+          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+      (list '= (:to p1) (:from p2))))
+
+  (visitPeriodImmediatelySucceedsPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
+          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+      (list '= (:from p1) (:to p2))))
+
+  (visitPeriodColumnReference [_ ctx]
+    (let [tn (identifier-sym (.tableName ctx))
+          pcn (-> (.periodColumnName ctx) (.getText) (str/upper-case))]
+      (case pcn
+        "VALID_TIME" {:from (find-decl scope ['xt$valid_from tn])
+                      :to (find-decl scope ['xt$valid_to tn])}
+        "SYSTEM_TIME" {:from (find-decl scope ['xt$system_from tn])
+                       :to (find-decl scope ['xt$system_to tn])})))
+
+  (visitPeriodValueConstructor [this ctx]
+    (let [sv (some-> (.periodStartValue ctx) (.expr) (.accept this))
+          ev (some-> (.periodEndValue ctx) (.expr) (.accept this))]
+      {:from sv :to ev}))
+
+  (visitPeriodOrPointInTimePredicand [this ctx] (.accept (.getChild ctx 0) this))
+
+  (visitPointInTimePredicand [this ctx]
+    (let [pit (-> (.expr ctx) (.accept this))]
+      {:from pit :to pit}))
+
+  (visitHasTablePrivilegePredicate [_ _] true)
+  (visitHasSchemaPrivilegePredicate [_ _23] true)
+
+  (visitCurrentDateFunction [_ _] '(current-date))
+  (visitCurrentTimeFunction [_ ctx] (fn-with-precision 'current-time (.precision ctx)))
+  (visitCurrentTimestampFunction [_ ctx] (fn-with-precision 'current-timestamp (.precision ctx)))
+  (visitLocalTimeFunction [_ ctx] (fn-with-precision 'local-time (.precision ctx)))
+  (visitLocalTimestampFunction [_ ctx] (fn-with-precision 'local-timestamp (.precision ctx)))
+  (visitEndOfTimeFunction [_ _] 'xtdb/end-of-time)
+
+  (visitDateTruncFunction [this ctx]
+    (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))
+          dts (-> (.dateTruncSource ctx) (.expr) (.accept this))
+          dt-tz (some-> (.dateTruncTimeZone ctx) (.characterString) (.accept this))]
+      (if dt-tz
+        (list 'date_trunc dtp dts dt-tz)
+        (list 'date_trunc dtp dts))))
+
+  (visitAgeFunction [this ctx]
+    (let [ve1 (-> (.expr ctx 0) (.accept this))
+          ve2 (-> (.expr ctx 1) (.accept this))]
+      (list 'age ve1 ve2)))
+
+  (visitObjectExpr [this ctx] (.accept (.objectConstructor ctx) this))
+
+  (visitObjectConstructor [this ctx]
+    (->> (for [^SqlParser$ObjectNameAndValueContext kv (.objectNameAndValue ctx)]
+           (MapEntry/create (keyword (-> (.objectName kv) (.accept this)))
+                            (-> (.expr kv) (.accept this))))
+         (into {})))
+
+  (visitObjectName [_ ctx] (identifier-sym (.identifier ctx)))
+
+  (visitArrayExpr [this ctx] (.accept (.arrayValueConstructor ctx) this))
+
+  (visitArrayValueConstructorByEnumeration [this ctx]
+    (mapv #(.accept ^ParserRuleContext % this) (.expr ctx)))
+
+  (visitTrimArrayFunction [this ctx]
+    (let [ve-1 (-> (.expr ctx 0) (.accept this))
+          ve-2 (-> (.expr ctx 1) (.accept this))]
+      (list 'trim-array ve-1 ve-2)))
+
+  (visitCharacterSubstringFunction [this ctx]
+    (let [cve (-> (.expr ctx) (.accept this))
+          sp (-> (.startPosition ctx) (.expr) (.accept this))
+          sl (some-> (.stringLength ctx) (.expr) (.accept this))]
+      (if sl
+        (list 'substring cve sp sl)
+        (list 'substring cve sp))))
+
+  (visitLowerFunction [this ctx] (list 'lower (-> (.expr ctx) (.accept this))))
+  (visitUpperFunction [this ctx] (list 'upper (-> (.expr ctx) (.accept this))))
+
+  (visitTrimFunction [this ctx]
+    (let [trim-fn (case (some-> (.trimSpecification ctx) (.getText) (str/upper-case))
+                    "LEADING" 'trim-leading
+                    "TRAILING" 'trim-trailing
+                    'trim)
+          trim-char (some-> (.trimCharacter ctx) (.expr) (.accept this))
+          nve (-> (.trimSource ctx) (.expr) (.accept this))]
+      (list trim-fn nve (or trim-char " "))))
+
+  (visitOverlayFunction [this ctx]
+    (let [target (-> (.expr ctx 0) (.accept this))
+          placing (-> (.expr ctx 1) (.accept this))
+          pos (-> (.startPosition ctx) (.expr) (.accept this))
+          len (some-> (.stringLength ctx) (.expr) (.accept this))]
+      (if len
+        (list 'overlay target placing pos len)
+        (list 'overlay target placing pos (list 'default-overlay-length placing)))))
+
+  (visitCurrentUserFunction [_ _] '(current-user))
+  (visitCurrentSchemaFunction [_ _] '(current-schema))
+  (visitCurrentDatabaseFunction [_ _] '(current-database))
+
+  (visitSimpleCaseExpr [this ctx]
+    (let [case-operand (-> (.expr ctx) (.accept this))
+          when-clauses (->> (.simpleWhenClause ctx)
+                            (mapv #(.accept ^SqlParser$SimpleWhenClauseContext % this))
+                            (reduce into []))
+          else-clause (some-> (.elseClause ctx) (.accept this))]
+      (list* 'case case-operand (cond-> when-clauses
+                                  else-clause (conj else-clause)))))
+
+  (visitSearchedCaseExpr [this ctx]
+    (let [when-clauses (->> (.searchedWhenClause ctx)
+                            (mapv #(.accept ^SqlParser$SearchedWhenClauseContext % this))
+                            (reduce into []))
+          else-clause (some-> (.elseClause ctx) (.accept this))]
+      (list* 'cond (cond-> when-clauses
+                     else-clause (conj else-clause)))))
+
+  (visitSimpleWhenClause [this ctx]
+    (let [when-operands (-> (.whenOperandList ctx) (.whenOperand))
+          when-exprs (mapv #(.accept (.getChild ^SqlParser$WhenOperandContext % 0) this) when-operands)
+          then-expr (-> (.expr ctx) (.accept this))]
+      (->> (for [when-expr when-exprs]
+             [when-expr then-expr])
+           (reduce into []))))
+
+  (visitSearchedWhenClause [this ctx]
+    (let [expr1 (-> (.expr ctx 0) (.accept this))
+          expr2 (-> (.expr ctx 1) (.accept this))]
+      [expr1 expr2]))
+
+  (visitElseClause [this ctx] (-> (.expr ctx) (.accept this)))
+
+  (visitNullIfExpr [this ctx]
+    (list 'nullif
+          (-> (.expr ctx 0) (.accept this))
+          (-> (.expr ctx 1) (.accept this))))
+
+  (visitCoalesceExpr [this ctx]
+    (list* 'coalesce (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))))
+
+  (visitCastExpr [this ctx]
+    (let [ve (-> (.expr ctx) (.accept this))
+          {:keys [cast-type cast-opts ->cast-fn]} (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
+      (if ->cast-fn
+        (->cast-fn ve)
+        (cond-> (list 'cast ve cast-type)
+          (not-empty cast-opts) (concat [cast-opts]))))))
 
 (defn- wrap-predicates [plan predicate]
   (or (when (list? predicate)

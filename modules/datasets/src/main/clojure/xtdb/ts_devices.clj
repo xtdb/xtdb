@@ -111,7 +111,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (def query-min-max-battery-levels-per-hour
-  ;; SELECT DATE_TRUNC('hour', time) "hour",
+  ;; SELECT DATE_TRUNC(hour, time) "hour",
   ;;        MIN(battery_level) min_battery_level,
   ;;        MAX(battery_level) max_battery_level
   ;; FROM readings r

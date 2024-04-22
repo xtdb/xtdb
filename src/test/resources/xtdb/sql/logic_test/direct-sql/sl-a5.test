@@ -38,8 +38,8 @@ Hello World!
 statement ok
 INSERT INTO people (xt$id, name, friends)
 	VALUES (5678, 'Sarah',
-			[{'user': 'Dan'},
-			 {'user': 'Kath'}])
+			[{user: 'Dan'},
+			 {user: 'Kath'}])
 
 query T nosort
 SELECT people.friends FROM people
