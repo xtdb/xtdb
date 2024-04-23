@@ -1,0 +1,8 @@
+[:project
+ [{a1 a.1/a1} {a2 a.1/a2} {b1 b.2/b1}]
+ [:project
+  [a.1/a1 a.1/a2 b.2/b1]
+  [:mega-join
+   []
+   [[:rename a.1 [:scan {:table a} [a2 a1]]]
+    [:rename b.2 [:scan {:table b} [b1]]]]]]]

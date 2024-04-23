@@ -5,16 +5,16 @@
             [xtdb.logical-plan :as lp]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
+            [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu])
 
-  (:import (java.time LocalDateTime)
-           (java.time.zone ZoneRulesException)))
+  (:import (java.time.zone ZoneRulesException)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (defn plan-sql
-  ([sql opts] (sql/compile-query sql (into {:default-all-valid-time? true} opts)))
-  ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true})))
+  ([sql opts] (sql/compile-query sql opts))
+  ([sql] (plan-sql sql {})))
 
 (def regen-expected-files? false) ;; <<no-commit>>
 
@@ -48,150 +48,198 @@
             {:type :error, :message "Missing Expectation File"
              :expected exp-plan-file-path#  :actual (Exception. "Missing Expectation File")}))))))
 
+(defn plan-expr-with-foo [expr]
+  (plan/plan-expr expr {:scopes 
+                        (list (plan/->Scope {"foo" (plan/->BaseTable nil nil "foo" "foo" #{"a" "b"} (atom #{}))}))}))
+
 (deftest test-basic-queries
   (t/is (=plan-file
           "basic-query-1"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960"
+                    {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
+                                  "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-2"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950"
+                    {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
+                                  "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-3"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'"
+                    {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
+                                  "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-4"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"
+                    {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
+                                  "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-5"
-          (plan-sql "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
+          (plan-sql "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"
+                    {:table-info {"movie" #{"title" "movie_year"}
+                                  "stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-6"
-          (plan-sql "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
+          (plan-sql "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"
+                    {:table-info {"movie" #{"title" "movie_year"}
+                                  "stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-7"
-          (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)")))
+          (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)"
+                    {:table-info {"movie" #{"title"}
+                                  "stars_in" #{"title"}}})))
 
   (t/is (=plan-file
           "basic-query-8"
-          (plan-sql "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)")))
+          (plan-sql "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)"
+                    {:table-info {"movie" #{"title"}
+                                  "stars_in" #{"title"}}})))
 
   (t/is (=plan-file
           "basic-query-9"
-          (plan-sql "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930")))
+          (plan-sql "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930"
+                    {:table-info {"movie_exec" #{"name" "cert"}
+                                  "movie" #{"producer" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-10"
-          (plan-sql "SELECT SUM(m.length) FROM Movie AS m")))
+          (plan-sql "SELECT SUM(m.length) FROM Movie AS m"
+                    {:table-info {"movie" #{"length"}}})))
 
   (t/is (=plan-file
           "basic-query-11"
-          (plan-sql "SELECT * FROM StarsIn AS si(name)")))
+          (plan-sql "SELECT * FROM StarsIn AS si(name)"
+                    {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
           "basic-query-11"
-          (plan-sql "FROM StarsIn AS si(name)"))
+          (plan-sql "FROM StarsIn AS si(name)"
+                    {:table-info {"stars_in" #{"name"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-12"
-          (plan-sql "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)")))
+          (plan-sql "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"
+                    {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
           "basic-query-12"
-          (plan-sql "FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"))
+          (plan-sql "FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"
+                    {:table-info {"stars_in" #{"name"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
          "basic-query-13"
-         (plan-sql "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname" {:table-info {"stars_in" #{"name" "lastname"}}})))
+         (plan-sql "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname"
+                   {:table-info {"stars_in" #{"name" "lastname"}}})))
 
   (t/is (=plan-file
           "basic-query-14"
-           (plan-sql "SELECT DISTINCT si.movieTitle FROM StarsIn AS si")))
+           (plan-sql "SELECT DISTINCT si.movieTitle FROM StarsIn AS si"
+                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-15"
-          (plan-sql "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si")))
+          (plan-sql "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si"
+                    {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
           "basic-query-16"
-           (plan-sql "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si")))
+           (plan-sql "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si"
+                     {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
           "basic-query-17"
-          (plan-sql "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si")))
+          (plan-sql "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si"
+                    {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
           "basic-query-18"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si"
+                    {:table-info {"stars_in" #{"movie_title" "name"}}})))
 
   (t/is (=plan-file
           "basic-query-19"
-          (plan-sql "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name")))
+          (plan-sql "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name"
+                    {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
           "basic-query-20"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-21"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-22"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 LIMIT 10")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 LIMIT 10"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-23"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-24"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-25"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-26"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle"
+                    {:table-info {"stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-27"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year"
+                    {:table-info {"stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-28"
-           (plan-sql "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'")))
+           (plan-sql "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'"
+                     {:table-info {"stars_in" #{"year"}}})))
 
   (t/is (=plan-file
           "basic-query-29"
-          (plan-sql "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)")))
+          (plan-sql "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)"
+                    {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-30"
-          (plan-sql "SELECT * FROM StarsIn AS si(films), UNNEST(si.films) AS film")))
+          (plan-sql "SELECT * FROM StarsIn AS si(films), UNNEST(si.films) AS film"
+                    {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-30"
-          (plan-sql "FROM StarsIn AS si(films), UNNEST(si.films) AS film"))
+          (plan-sql "FROM StarsIn, UNNEST(films) AS film"
+                    {:table-info {"stars_in" #{"films"}}}))
 
         "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-31"
-          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film" {:table-info {"stars_in" #{"films"}}})))
+          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
+                    {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-31"
-          (plan-sql "FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film" {:table-info {"stars_in" #{"films"}}}))
+          (plan-sql "FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
+                    {:table-info {"stars_in" #{"films"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
@@ -206,29 +254,48 @@
           "basic-query-34"
           (plan-sql "SELECT CASE t1.a + 1 WHEN t1.b THEN 111 WHEN t1.c THEN 222 WHEN t1.d THEN 333 WHEN t1.e THEN 444 ELSE 555 END,
                     CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END,
-                    CASE t1.a + 1 WHEN t1.b, t1.c THEN 222 WHEN t1.d, t1.e + 1 THEN 444 ELSE 555 END FROM t1")))
+                    CASE t1.a + 1 WHEN t1.b, t1.c THEN 222 WHEN t1.d, t1.e + 1 THEN 444 ELSE 555 END FROM t1"
+                    {:table-info {"t1" #{"a" "b" "c" "d" "e"}}})))
 
   (t/is (=plan-file
           "basic-query-35"
-          (plan-sql "SELECT * FROM t1 AS t1(a) WHERE t1.a IS NULL")))
+          (plan-sql "SELECT * FROM t1 AS t1(a) WHERE t1.a IS NULL"
+                    {:table-info {"t1" #{"a"}}})))
 
   (t/is (=plan-file
           "basic-query-35"
-          (plan-sql "FROM t1 AS t1(a) WHERE t1.a IS NULL"))
+          (plan-sql "FROM t1 AS t1(a) WHERE t1.a IS NULL"
+                    {:table-info {"t1" #{"a"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-36"
-          (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL" {:table-info {"t1" #{"a"}}})))
+          (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL"
+                    {:table-info {"t1" #{"a"}}})))
 
   (t/is (=plan-file
           "basic-query-36"
-          (plan-sql "FROM t1 WHERE t1.a IS NOT NULL" {:table-info {"t1" #{"a"}}}))
+          (plan-sql "FROM t1 WHERE t1.a IS NOT NULL"
+                    {:table-info {"t1" #{"a"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-37"
-          (plan-sql "SELECT NULLIF(t1.a, t1.b) FROM t1"))))
+          (plan-sql "SELECT NULLIF(t1.a, t1.b) FROM t1"
+                    {:table-info {"t1" #{"a" "b"}}}))))
+
+(deftest test-cross-join
+  (t/is (=plan-file
+         "cross-join-1"
+         (plan-sql "SELECT * FROM a CROSS JOIN b"
+                   {:table-info {"a" #{"a1" "a2"}
+                                 "b" #{"b1"}}})))
+  (t/is (=plan-file
+         "cross-join-2"
+         (plan-sql "SELECT c1 FROM a, b CROSS JOIN c"
+                   {:table-info {"a" #{"a1" "a2"}
+                                 "b" #{"b1"}
+                                 "c" #{"c1"}}}))))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?
@@ -238,91 +305,124 @@
   (t/testing "Scalar subquery in SELECT"
     (t/is (=plan-file
             "scalar-subquery-in-select"
-            (plan-sql "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"))))
+            (plan-sql "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
+                      {:table-info {"x" #{"y"}
+                                    "foo" #{"bar"}}}))))
 
   (t/testing "Scalar subquery in WHERE"
     (t/is (=plan-file
             "scalar-subquery-in-where"
-            (plan-sql "SELECT x.y AS some_column FROM x WHERE x.y = (SELECT MAX(foo.bar) FROM foo)"))))
+            (plan-sql "SELECT x.y AS some_column FROM x WHERE x.y = (SELECT MAX(foo.bar) FROM foo)"
+                      {:table-info {"x" #{"y"}
+                                    "foo" #{"bar"}}}))))
 
   (t/testing "Correlated scalar subquery in SELECT"
     (t/is (=plan-file
             "correlated-scalar-subquery-in-select"
-            (plan-sql "SELECT (1 = (SELECT foo.bar = x.y FROM foo)) AS some_column FROM x WHERE x.y = 1"))))
+            (plan-sql "SELECT (1 = (SELECT bar = z FROM foo)) AS some_column FROM x WHERE y = 1"
+                      {:table-info {"x" #{"y" "z"}
+                                    "foo" #{"bar"}}}))))
 
   (t/testing "EXISTS in WHERE"
     (t/is (=plan-file
             "exists-in-where"
-             (plan-sql "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10.0"))))
+             (plan-sql "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10.0"
+                       {:table-info {"x" #{"y" "z"}
+                                     "y" #{"z"}}}))))
 
   (t/testing "EXISTS as expression in SELECT"
     (t/is (=plan-file
             "exists-as-expression-in-select"
-            (plan-sql "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"))))
+            (plan-sql "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
+                      {:table-info {"x" #{"y" "z"}
+                                    "y" #{"z"}}}))))
 
   (t/testing "NOT EXISTS in WHERE"
     (t/is (=plan-file
             "not-exists-in-where"
-            (plan-sql "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"))))
+            (plan-sql "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
+                      {:table-info {"x" #{"y" "z"}
+                                    "y" #{"z"}}}))))
 
   (t/testing "IN in WHERE"
     (t/is (=plan-file
             "in-in-where-select"
-            (plan-sql "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)")))
+            (plan-sql "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)"
+                      {:table-info {"x" #{"y" "z"}
+                                    "y" #{"z"}}})))
 
     (t/is (=plan-file
             "in-in-where-set"
-            (plan-sql "SELECT x.y FROM x WHERE x.z IN (1, 2)"))))
+            (plan-sql "SELECT x.y FROM x WHERE x.z IN (1, 2)"
+                      {:table-info {"x" #{"y" "z"}}}))))
 
   (t/testing "NOT IN in WHERE"
     (t/is (=plan-file
             "not-in-in-where"
-            (plan-sql "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"))))
+            (plan-sql "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"
+                      {:table-info {"x" #{"y" "z"}
+                                    "y" #{"z"}}}))))
 
   (t/testing "ALL in WHERE"
     (t/is (=plan-file
             "all-in-where"
-            (plan-sql "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"))))
+            (plan-sql "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"
+                      {:table-info {"x" #{"y" "z"}
+                                    "y" #{"z"}}}))))
 
   (t/testing "ANY in WHERE"
     (t/is (=plan-file
             "any-in-where"
-            (plan-sql "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"))))
+            (plan-sql "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"
+                      {:table-info {"x" #{"y" "z"}
+                                    "y" #{"z"}}}))))
 
   (t/testing "ALL as expression in SELECT"
     (t/is (=plan-file
             "all-as-expression-in-select"
-            (plan-sql "SELECT x.z <= ALL (SELECT y.z FROM y) FROM x"))))
+            (plan-sql "SELECT x.z <= ALL (SELECT y.z FROM y) FROM x"
+                      {:table-info {"x" #{"y" "z"}
+                                    "y" #{"z"}}}))))
 
   (t/testing "LATERAL derived table"
     (t/is (=plan-file
             "lateral-derived-table-1"
-            (plan-sql "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y")))
+            (plan-sql "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
+                      {:table-info {"x" #{"y"}
+                                    "z" #{"z"}}})))
 
     (t/is (=plan-file
             "lateral-derived-table-2"
-            (plan-sql "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"))))
+            (plan-sql "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"
+                      {:table-info {"z" #{"z"}}}))))
 
   (t/testing "decorrelation"
     ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf "Orthogonal Optimization of Subqueries and Aggregation"
     (t/is (=plan-file
             "decorrelation-1"
             (plan-sql "SELECT c.custkey FROM customer c
-                      WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)")))
+                      WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)"
+                      {:table-info {"customer" #{"custkey"}
+                                    "orders" #{"custkey" "totalprice"}}})))
 
     ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
     (t/is (=plan-file
             "decorrelation-2"
             (plan-sql "SELECT * FROM customers AS customers(country, custno)
                       WHERE customers.country = 'Mexico' AND
-                      EXISTS (SELECT * FROM orders AS orders(custno) WHERE customers.custno = orders.custno)")))
+                      EXISTS (SELECT * FROM orders AS orders(custno) WHERE customers.custno = orders.custno)"
+                      {:table-info {"customers" #{"country" "custno"}
+                                    "orders" #{"custno"}}})))
 
     ;; NOTE: these below simply check what's currently being produced,
     ;; not necessarily what should be produced.
     (t/is (=plan-file
             "decorrelation-3"
             (plan-sql "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
-                      FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)")))
+                      FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)"
+                      {:table-info {"customers" #{"name" "custno" "country"}
+                                    "orders" #{"custno"}
+                                    "salesp" #{"country"}}})))
 
     ;; https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf "Unnesting Arbitrary Queries"
     (t/is (=plan-file
@@ -332,7 +432,9 @@
                       WHERE s.id = e.sid AND
                       e.grade = (SELECT MIN(e2.grade)
                       FROM exams e2
-                      WHERE s.id = e2.sid)")))
+                      WHERE s.id = e2.sid)"
+                      {:table-info {"students" #{"id"}
+                                    "exams" #{"sid" "grade" "course"}}})))
 
     (t/is (=plan-file
             "decorrelation-5"
@@ -345,7 +447,9 @@
               FROM exams e2
               WHERE s.id = e2.sid OR
               (e2.curriculum = s.major AND
-              s.year > e2.date))")))
+              s.year > e2.date))"
+              {:table-info {"students" #{"id" "major" "name" "year"}
+                            "exams" #{"sid" "grade" "course" "curriculum" "date"}}})))
 
 
     (t/testing "Subqueries in join conditions"
@@ -373,7 +477,6 @@
          true '[:table [{x6 ?x8}]] '{x2 ?x8}
          false '[:table [{x6 ?x4}]] '{x2 ?x8}))
 
-
 (deftest non-semi-join-subquery-optimizations-test
   (t/is (=plan-file
           "non-semi-join-subquery-optimizations-test-1"
@@ -389,7 +492,8 @@
           "multiple-ins-in-where-clause"
           (plan-sql "select f.a from foo f where f.a in (1,2) AND f.a = 42 AND f.b in (3,4)"))))
 
-(deftest deeply-nested-correlated-query ;;TODO broken
+#_ ; FIXME broken
+(deftest deeply-nested-correlated-query
   (t/is (=plan-file
           "deeply-nested-correlated-query"
           (plan-sql "SELECT R1.A, R1.B
@@ -405,11 +509,13 @@
 (t/deftest test-array-element-reference-107
   (t/is (=plan-file
           "test-array-element-reference-107-1"
-          (plan-sql "SELECT u.a[1] AS first_el FROM u")))
+          (plan-sql "SELECT u.a[1] AS first_el FROM u"
+                    {:table-info {"u" #{"a"}}})))
 
   (t/is (=plan-file
           "test-array-element-reference-107-2"
-          (plan-sql "SELECT u.b[u.a[1]] AS dyn_idx FROM u"))))
+          (plan-sql "SELECT u.b[u.a[1]] AS dyn_idx FROM u"
+                    {:table-info {"u" #{"a" "b"}}}))))
 
 (t/deftest test-current-time-111
   (t/is (=plan-file
@@ -422,63 +528,77 @@
                     LOCALTIME, LOCALTIME(6),
                     LOCALTIMESTAMP, LOCALTIMESTAMP(9),
                     END_OF_TIME, END_OF_TIME()
-                    FROM u"))))
+                    FROM u"
+                    {:table-info {"u" #{"a"}}}))))
 
 (t/deftest test-dynamic-parameters-103
   (t/is (=plan-file
          "test-dynamic-parameters-103-1"
-         (plan-sql "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?")))
+         (plan-sql "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?"
+                   {:table-info {"foo" #{"a" "b" "c"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-2"
          (plan-sql "SELECT foo.a
                     FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
-                    WHERE foo.b = ? AND foo.c = ?")))
+                    WHERE foo.b = ? AND foo.c = ?"
+                   {:table-info {"foo" #{"a" "b" "c"}
+                                 "bar" #{"b" "c"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-subquery-project"
-         (plan-sql "SELECT t1.col1, (SELECT ? FROM bar WHERE bar.col1 = 4) FROM t1")))
+         (plan-sql "SELECT t1.col1, (SELECT ? FROM bar WHERE bar.col1 = 4) FROM t1"
+                   {:table-info {"t1" #{"col1"}
+                                 "bar" #{"col1"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-top-level-project"
-         (plan-sql "SELECT t1.col1, ? FROM t1")))
+         (plan-sql "SELECT t1.col1, ? FROM t1"
+                   {:table-info {"t1" #{"col1"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-update-set-value"
-         (plan-sql "UPDATE t1 SET col1 = ?")))
+         (plan-sql "UPDATE t1 SET col1 = ?"
+                   {:table-info {"t1" #{"col1"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-table-values"
-         (plan-sql "SELECT bar.foo FROM (VALUES (?)) AS bar(foo)")))
+         (plan-sql "SELECT bar.foo FROM (VALUES (?)) AS bar(foo)"
+                   {:table-info {"bar" #{"foo"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-update-app-time"
-         (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"))))
+         (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"
+                   {:table-info {"users" #{"first_name" "id"}}}))))
 
 (t/deftest test-dynamic-temporal-filters-3068
   (t/testing "AS OF"
     (t/is
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-as-of"
-      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME AS OF ?"))))
+      (plan-sql "SELECT bar FROM foo FOR VALID_TIME AS OF ?"
+                {:table-info {"foo" #{"bar"}}}))))
 
   (t/testing "FROM A to B"
     (t/is
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-from-to"
-      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME FROM ? TO ?"))))
+      (plan-sql "SELECT bar FROM foo FOR VALID_TIME FROM ? TO ?"
+                {:table-info {"foo" #{"bar"}}}))))
 
   (t/testing "BETWEEN A AND B"
     (t/is
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-between"
-      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME BETWEEN ? AND ?"))))
+      (plan-sql "SELECT bar FROM foo FOR VALID_TIME BETWEEN ? AND ?"
+                {:table-info {"foo" #{"bar"}}}))))
   
   (t/testing "AS OF SYSTEM TIME"
     (t/is
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-as-of-system-time"
-      (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF ?"))))
+      (plan-sql "SELECT bar FROM foo FOR SYSTEM_TIME AS OF ?"
+                {:table-info {"foo" #{"bar"}}}))))
 
   (t/testing "using dynamic AS OF in a query"
     (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015"}
@@ -492,11 +612,13 @@
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file
          "test-order-by-null-handling-159-1"
-         (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS FIRST")))
+         (plan-sql "SELECT a FROM foo ORDER BY a NULLS FIRST"
+                   {:table-info {"foo" #{"a"}}})))
 
   (t/is (=plan-file
          "test-order-by-null-handling-159-2"
-         (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))
+         (plan-sql "SELECT a FROM foo ORDER BY a NULLS LAST"
+                   {:table-info {"foo" #{"a"}}}))))
 
 (t/deftest test-arrow-table
   (t/is (=plan-file
@@ -507,61 +629,52 @@
           "test-arrow-table-2"
           (plan-sql "SELECT * FROM ARROW_TABLE('test.arrow') AS foo (a, b)"))))
 
-(defn- plan-expr [sql]
-  (let [plan (plan-sql (format "SELECT %s t FROM foo WHERE foo.a = 42" sql))
-        expr (some (fn [form]
-                       (when (and (vector? form) (= :project (first form)))
-                         (let [[_ projections] form]
-                           (val (ffirst projections)))))
-                     (tree-seq seqable? seq plan))]
-    expr))
-
 (t/deftest test-trim-expr
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan-expr-with-foo sql))
 
-    "TRIM(foo.a)" '(trim x1 " ")
+    "TRIM(foo.a)" '(trim a " ")
 
-    "TRIM(LEADING FROM foo.a)" '(trim-leading x1 " ")
-    "TRIM(LEADING '$' FROM foo.a)" '(trim-leading x1 "$")
-    "TRIM(LEADING foo.b FROM foo.a)" '(trim-leading x2 x1)
+    "TRIM(LEADING FROM foo.a)" '(trim-leading a " ")
+    "TRIM(LEADING '$' FROM foo.a)" '(trim-leading a "$")
+    "TRIM(LEADING foo.b FROM foo.a)" '(trim-leading a b)
 
-    "TRIM(TRAILING FROM foo.a)" '(trim-trailing x1 " ")
-    "TRIM(TRAILING '$' FROM foo.a)" '(trim-trailing x1 "$")
-    "TRIM(TRAILING foo.b FROM foo.a)" '(trim-trailing x2 x1)
+    "TRIM(TRAILING FROM foo.a)" '(trim-trailing a " ")
+    "TRIM(TRAILING '$' FROM foo.a)" '(trim-trailing a "$")
+    "TRIM(TRAILING foo.b FROM foo.a)" '(trim-trailing a b)
 
-    "TRIM(BOTH FROM foo.a)" '(trim x1 " ")
-    "TRIM(BOTH '$' FROM foo.a)" '(trim x1 "$")
-    "TRIM(BOTH foo.b FROM foo.a)" '(trim x2 x1)
+    "TRIM(BOTH FROM foo.a)" '(trim a " ")
+    "TRIM(BOTH '$' FROM foo.a)" '(trim a "$")
+    "TRIM(BOTH foo.b FROM foo.a)" '(trim a b)
 
-    "TRIM(BOTH '😎' FROM foo.a)" '(trim x1 "😎")
+    "TRIM(BOTH '😎' FROM foo.a)" '(trim a "😎")
 
-    "TRIM('$' FROM foo.a)" '(trim x1 "$")))
+    "TRIM('$' FROM foo.a)" '(trim a "$")))
 
 (t/deftest test-like-expr
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan-expr-with-foo sql))
 
-    "foo.a LIKE ''" '(like x1 "")
-    "foo.a LIKE foo.b" '(like x1 x2)
-    "foo.a LIKE 'foo%'" '(like x1 "foo%")
+    "foo.a LIKE ''" '(like a "")
+    "foo.a LIKE foo.b" '(like a b)
+    "foo.a LIKE 'foo%'" '(like a "foo%")
 
-    "foo.a NOT LIKE ''" '(not (like x1 ""))
-    "foo.a NOT LIKE foo.b" '(not (like x1 x2))
-    "foo.a NOT LIKE 'foo%'" '(not (like x1 "foo%"))
+    "foo.a NOT LIKE ''" '(not (like a ""))
+    "foo.a NOT LIKE foo.b" '(not (like a b))
+    "foo.a NOT LIKE 'foo%'" '(not (like a "foo%"))
 
     ;; no support for ESCAPE (or default escapes), see #157
     ))
 
 (t/deftest test-like-regex-expr
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan-expr-with-foo sql))
 
-    "foo.a LIKE_REGEX foo.b" '(like-regex x1 x2 "")
-    "foo.a LIKE_REGEX foo.b FLAG 'i'" '(like-regex x1 x2 "i")
+    "foo.a LIKE_REGEX foo.b" '(like-regex a b "")
+    "foo.a LIKE_REGEX foo.b FLAG 'i'" '(like-regex a b "i")
 
-    "foo.a NOT LIKE_REGEX foo.b" '(not (like-regex x1 x2 ""))
-    "foo.a NOT LIKE_REGEX foo.b FLAG 'i'" '(not (like-regex x1 x2 "i"))))
+    "foo.a NOT LIKE_REGEX foo.b" '(not (like-regex a b ""))
+    "foo.a NOT LIKE_REGEX foo.b FLAG 'i'" '(not (like-regex a b "i"))))
 
 (t/deftest test-like-regex-query-case-insensitive
   (t/is (= [{:match false}]
@@ -571,13 +684,13 @@
            (xt/q tu/*node* "SELECT ('ABC' LIKE_REGEX 'a' FLAG 'i') as match"))))
 
 (t/deftest test-postgres-regex-expr
-  (t/are [sql expected] (= expected (plan-expr sql))
+  (t/are [sql expected] (= expected (plan-expr-with-foo sql))
 
-    "foo.a ~ foo.b" '(like-regex x1 x2 "")
-    "foo.a ~* foo.b" '(like-regex x1 x2 "i")
+    "foo.a ~ foo.b" '(like-regex a b "")
+    "foo.a ~* foo.b" '(like-regex a b "i")
 
-    "foo.a !~ foo.b" '(not (like-regex x1 x2 ""))
-    "foo.a !~* foo.b" '(not (like-regex x1 x2 "i"))))
+    "foo.a !~ foo.b" '(not (like-regex a b ""))
+    "foo.a !~* foo.b" '(not (like-regex a b "i"))))
 
 (defn pg-regex-query [val op pattern]
   (let [query (format "SELECT ('%s' %s '%s') as match" val op pattern)
@@ -618,38 +731,45 @@
       false "ABCD" "!~*" "a")))
 
 (t/deftest test-upper-expr
-  (t/is (= '(upper x1) (plan-expr "UPPER(foo.a)"))))
+  (t/is (= '(upper a) (plan-expr-with-foo "UPPER(foo.a)"))))
 
 (t/deftest test-lower-expr
-  (t/is (= '(lower x1) (plan-expr "LOWER(foo.a)"))))
+  (t/is (= '(lower a) (plan-expr-with-foo "LOWER(foo.a)"))))
+
+(t/deftest test-substring-expr
+  (t/are
+   [sql expected] (= expected (plan-expr-with-foo sql))
+    "SUBSTRING(foo.a FROM 1)" '(substring a 1)
+    "SUBSTRING(foo.a FROM 1 FOR 2)" '(substring a 1 2)
+    "SUBSTRING(foo.a FROM 1 USING 'CHARACTERS')" '(substring a 1)))
 
 (t/deftest test-concat-expr
-  (t/is (= '(concat x1 x2) (plan-expr "foo.a || foo.b")))
-  (t/is (= '(concat "a" x1) (plan-expr "'a' || foo.b")))
-  (t/is (= '(concat (concat x1 "a") "b") (plan-expr "foo.a || 'a' || 'b'"))))
+  (t/is (= '(concat a b) (plan-expr-with-foo "foo.a || foo.b")))
+  (t/is (= '(concat "a" b) (plan-expr-with-foo "'a' || foo.b")))
+  (t/is (= '(concat (concat a "a") "b") (plan-expr-with-foo "foo.a || 'a' || 'b'"))))
 
 (t/deftest test-character-length-expr
-  (t/is (= '(character-length x1) (plan-expr "CHARACTER_LENGTH(foo.a)")))
-  (t/is (= '(character-length x1) (plan-expr "CHARACTER_LENGTH(foo.a USING CHARACTERS)")))
-  (t/is (= '(octet-length x1) (plan-expr "CHARACTER_LENGTH(foo.a USING OCTETS)"))))
+  (t/is (= '(character-length a) (plan-expr-with-foo "CHARACTER_LENGTH(foo.a)")))
+  (t/is (= '(character-length a) (plan-expr-with-foo "CHARACTER_LENGTH(foo.a USING CHARACTERS)")))
+  (t/is (= '(octet-length a) (plan-expr-with-foo "CHARACTER_LENGTH(foo.a USING OCTETS)"))))
 
 (t/deftest test-char-length-alias
-  (t/is (= '(character-length x1) (plan-expr "CHAR_LENGTH(foo.a)")) "CHAR_LENGTH alias works")
-  (t/is (= '(character-length x1) (plan-expr "CHAR_LENGTH(foo.a USING CHARACTERS)")) "CHAR_LENGTH alias works")
-  (t/is (= '(octet-length x1) (plan-expr "CHAR_LENGTH(foo.a USING OCTETS)")) "CHAR_LENGTH alias works"))
+  (t/is (= '(character-length a) (plan-expr-with-foo "CHAR_LENGTH(foo.a)")) "CHAR_LENGTH alias works")
+  (t/is (= '(character-length a) (plan-expr-with-foo "CHAR_LENGTH(foo.a USING CHARACTERS)")) "CHAR_LENGTH alias works")
+  (t/is (= '(octet-length a) (plan-expr-with-foo "CHAR_LENGTH(foo.a USING OCTETS)")) "CHAR_LENGTH alias works"))
 
 (t/deftest test-octet-length-expr
-  (t/is (= '(octet-length x1) (plan-expr "OCTET_LENGTH(foo.a)"))))
+  (t/is (= '(octet-length a) (plan-expr-with-foo "OCTET_LENGTH(foo.a)"))))
 
 (t/deftest test-position-expr
-  (t/is (= '(position x1 x2) (plan-expr "POSITION(foo.a IN foo.b)")))
-  (t/is (= '(position x1 x2) (plan-expr "POSITION(foo.a IN foo.b USING CHARACTERS)")))
-  (t/is (= '(octet-position x1 x2) (plan-expr "POSITION(foo.a IN foo.b USING OCTETS)"))))
+  (t/is (= '(position a b) (plan-expr-with-foo "POSITION(foo.a IN foo.b)")))
+  (t/is (= '(position a b) (plan-expr-with-foo "POSITION(foo.a IN foo.b USING CHARACTERS)")))
+  (t/is (= '(octet-position a b) (plan-expr-with-foo "POSITION(foo.a IN foo.b USING OCTETS)"))))
 
 (t/deftest test-length-expr
-  (t/is (= '(length x1) (plan-expr "LENGTH(foo.a)")))
-  (t/is (= '(length "abc") (plan-expr "LENGTH('abc')")))
-  (t/is (= '(length [1 2 3]) (plan-expr "LENGTH([1, 2, 3])"))))
+  (t/is (= '(length x1) (plan/plan-expr "LENGTH(foo.a)")))
+  (t/is (= '(length "abc") (plan/plan-expr "LENGTH('abc')")))
+  (t/is (= '(length [1 2 3]) (plan/plan-expr "LENGTH([1, 2, 3])"))))
 
 (t/deftest test-length-query
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 
@@ -667,27 +787,62 @@
   (t/is (= [{:len 3}] (xt/q tu/*node* "SELECT LENGTH(docs.set) as len FROM docs"))) 
   (t/is (= [{:len 2}] (xt/q tu/*node* "SELECT LENGTH(docs.varbinary) as len FROM docs"))))
 
+(t/deftest test-numerical-fn-exprs
+  (t/are [expr expected]
+    (= expected (plan-expr-with-foo expr))
+    "CARDINALITY(foo.a)" '(cardinality a)
+    "ABS(foo.a)" '(abs a)
+    "MOD(foo.a, foo.b)" '(mod a b)
+    "SIN(foo.a)" '(sin a)
+    "COS(foo.a)" '(cos a)
+    "TAN(foo.a)" '(tan a)
+    "LOG(foo.a, 3)" '(log a 3)
+    "LOG10(foo.a)" '(log10 a)
+    "LN(foo.a)" '(ln a)
+    "EXP(foo.a)" '(exp a)
+    "POWER(foo.a, 3)" '(power a 3)
+    "SQRT(foo.a)" '(sqrt a)
+    "FLOOR(foo.a)" '(floor a)
+    "CEIL(foo.a)" '(ceil a)
+    "LEAST(foo.a, foo.b)" '(least a b)
+    "GREATEST(foo.a, foo.b)" '(greatest a b)))
+
+(t/deftest test-boolean-predicate-exprs
+  (t/are [expr expected]
+         (= expected (plan-expr-with-foo expr))
+    "1 > 2" '(> 1 2)
+    "1 >= 2" '(>= 1 2)
+    "1 < 2" '(< 1 2)
+    "1 <= 2" '(<= 1 2)
+    "1 = 2" '(= 1 2)
+    "1 != 2" '(!= 1 2)
+    "1 <> 2" '(<> 1 2)
+    "2 BETWEEN 1 AND 3" '(between 2 1 3)
+    "2 BETWEEN ASYMMETRIC 1 AND 3" '(between 2 1 3)
+    "2 BETWEEN SYMMETRIC 1 AND 3" '(between-symmetric 2 1 3)
+    "2 NOT BETWEEN 1 AND 3" '(not (between 2 1 3))))
+  
 (t/deftest test-overlay-expr
   (t/are [sql expected]
-    (= expected (plan-expr sql))
-    "OVERLAY(foo.a PLACING foo.b FROM 1 for 4)" '(overlay x1 x2 1 4)
-    "OVERLAY(foo.a PLACING foo.b FROM 1)" '(overlay x1 x2 1 (default-overlay-length x2))))
+    (= expected (plan-expr-with-foo sql))
+    "OVERLAY(foo.a PLACING foo.b FROM 1 for 4)" '(overlay a b 1 4)
+    "OVERLAY(foo.a PLACING foo.b FROM 1)" '(overlay a b 1 (default-overlay-length b))))
 
 (t/deftest test-bool-test-expr
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan-expr-with-foo sql))
 
-    "foo.a IS true" '(true? x1)
-    "foo.a IS NOT true" '(not (true? x1))
+    "foo.a IS true" '(true? a)
+    "foo.a IS NOT true" '(not (true? a))
 
-    "foo.a IS false" '(false? x1)
-    "foo.a IS NOT false" '(not (false? x1))
+    "foo.a IS false" '(false? a)
+    "foo.a IS NOT false" '(not (false? a))
 
-    "foo.a IS UNKNOWN" '(nil? x1)
-    "foo.a IS NOT UNKNOWN" '(not (nil? x1))
+    "foo.a IS UNKNOWN" '(nil? a)
+    "foo.a IS NOT UNKNOWN" '(not (nil? a))
 
-    "foo.a IS NULL" '(nil? x1)
-    "foo.a IS NOT NULL" '(not (nil? x1))))
+    "foo.a IS NULL" '(nil? a)
+    "foo.a IS NOT NULL" '(not (nil? a))))
 
 (deftest test-projects-that-matter-are-maintained
   (t/is (=plan-file
@@ -722,114 +877,110 @@
 
 (deftest test-interval-expr
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+         (= expected (plan-expr-with-foo sql))
 
-    "1 YEAR" '(single-field-interval 1 "YEAR" 2 0)
-    "1 YEAR + 3 MONTH + 4 DAY" '(+ (+ (single-field-interval 1 "YEAR" 2 0)
-                                      (single-field-interval 3 "MONTH" 2 0))
-                                   (single-field-interval 4 "DAY" 2 0))
+    "1 YEAR" '(single-field-interval 1 "YEAR" 2 6)
+    "1 YEAR + 3 MONTH + 4 DAY" '(+ (+ (single-field-interval 1 "YEAR" 2 6)
+                                      (single-field-interval 3 "MONTH" 2 6))
+                                   (single-field-interval 4 "DAY" 2 6))
 
-    ;; todo investigate, these expr are entirely ambiguous
-    ;; I think these should not be parsed, but they are! ...
-    #_#_ "1 YEAR + 3" '()
-    #_#_ "1 YEAR - 3" '()
+      ;; todo investigate, these expr are entirely ambiguous
+      ;; I think these should not be parsed, but they are! ...
+    #_#_"1 YEAR + 3" '()
+    #_#_"1 YEAR - 3" '()
 
-    ;; scaling is not ambiguous like add/sub is
-    "1 YEAR * 3" '(* (single-field-interval 1 "YEAR" 2 0) 3)
-    "3 * 1 YEAR" '(* 3 (single-field-interval 1 "YEAR" 2 0))
+      ;; scaling is not ambiguous like add/sub is
+    "INTERVAL '1' YEAR * 3" '(* (single-field-interval "1" "YEAR" 2 6) 3)
+    "3 * INTERVAL '1' YEAR" '(* 3 (single-field-interval "1" "YEAR" 2 6))
 
-    ;; division is allowed in spec, but provides some ambiguity
-    ;; as we do not allow fractional components (other than seconds)
-    ;; we therefore throw at runtime for arrow vectors that cannot be cleanly truncated / rond
-    "1 YEAR / 3" '(/ (single-field-interval 1 "YEAR" 2 0) 3)
+      ;; division is allowed in spec, but provides some ambiguity
+      ;; as we do not allow fractional components (other than seconds)
+      ;; we therefore throw at runtime for arrow vectors that cannot be cleanly truncated / rond
+    "1 YEAR / 3" '(/ (single-field-interval 1 "YEAR" 2 6) 3)
 
-    "foo.a YEAR" '(single-field-interval x1 "YEAR" 2 0)
-    "foo.a MONTH" '(single-field-interval x1 "MONTH" 2 0)
-    "foo.a DAY" '(single-field-interval x1 "DAY" 2 0)
-    "foo.a HOUR" '(single-field-interval x1 "HOUR" 2 0)
-    "foo.a MINUTE" '(single-field-interval x1 "MINUTE" 2 0)
-    "foo.a SECOND" '(single-field-interval x1 "SECOND" 2 6)
+    "foo.a YEAR" '(single-field-interval a "YEAR" 2 6)
+    "foo.a MONTH" '(single-field-interval a "MONTH" 2 6)
+    "foo.a DAY" '(single-field-interval a "DAY" 2 6)
+    "foo.a HOUR" '(single-field-interval a "HOUR" 2 6)
+    "foo.a MINUTE" '(single-field-interval a "MINUTE" 2 6)
+    "foo.a SECOND" '(single-field-interval a "SECOND" 2 6)
 
-    "- foo.a SECOND" '(- (single-field-interval x1 "SECOND" 2 6))
-    "+ foo.a SECOND" '(single-field-interval x1 "SECOND" 2 6)
+    "- foo.a SECOND" '(- (single-field-interval a "SECOND" 2 6))
+    "+ foo.a SECOND" '(single-field-interval a "SECOND" 2 6)
 
-    "foo.a YEAR + foo.b YEAR" '(+ (single-field-interval x1 "YEAR" 2 0)
-                                  (single-field-interval x2 "YEAR" 2 0))
-    "foo.a YEAR + foo.b MONTH" '(+ (single-field-interval x1 "YEAR" 2 0)
-                                   (single-field-interval x2 "MONTH" 2 0))
-    "foo.a YEAR - foo.b MONTH" '(- (single-field-interval x1 "YEAR" 2 0)
-                                   (single-field-interval x2 "MONTH" 2 0))
+    "foo.a YEAR + foo.b YEAR" '(+ (single-field-interval a "YEAR" 2 6)
+                                  (single-field-interval b "YEAR" 2 6))
+    "foo.a YEAR + foo.b MONTH" '(+ (single-field-interval a "YEAR" 2 6)
+                                   (single-field-interval b "MONTH" 2 6))
+    "foo.a YEAR - foo.b MONTH" '(- (single-field-interval a "YEAR" 2 6)
+                                   (single-field-interval b "MONTH" 2 6))
 
-    "foo.a YEAR + 1 MONTH" '(+ (single-field-interval x1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
-    "foo.a YEAR + 1 MONTH + 2 DAY" '(+ (+ (single-field-interval x1 "YEAR" 2 0)
-                                          (single-field-interval 1 "MONTH" 2 0))
-                                       (single-field-interval 2 "DAY" 2 0))
-    "foo.a YEAR + 1 MONTH - 2 DAY" '(- (+ (single-field-interval x1 "YEAR" 2 0)
-                                          (single-field-interval 1 "MONTH" 2 0))
-                                       (single-field-interval 2 "DAY" 2 0))
+    "foo.a YEAR + 1 MONTH" '(+ (single-field-interval a "YEAR" 2 6) (single-field-interval 1 "MONTH" 2 6))
+    "foo.a YEAR + 1 MONTH + 2 DAY" '(+ (+ (single-field-interval a "YEAR" 2 6)
+                                          (single-field-interval 1 "MONTH" 2 6))
+                                       (single-field-interval 2 "DAY" 2 6))
+    "foo.a YEAR + 1 MONTH - 2 DAY" '(- (+ (single-field-interval a "YEAR" 2 6)
+                                          (single-field-interval 1 "MONTH" 2 6))
+                                       (single-field-interval 2 "DAY" 2 6))
 
-    "foo.a + 2 MONTH" '(+ x1 (single-field-interval 2 "MONTH" 2 0))
-    "foo.a + +1 MONTH" '(+ x1 (single-field-interval 1 "MONTH" 2 0))
-    "foo.a + -1 MONTH" '(+ x1 (- (single-field-interval 1 "MONTH" 2 0)))
+    "foo.a + 2 MONTH" '(+ a (single-field-interval 2 "MONTH" 2 6))
+    "foo.a + + 1 MONTH" '(+ a (single-field-interval 1 "MONTH" 2 6))
+    "foo.a + - 1 MONTH" '(+ a (- (single-field-interval 1 "MONTH" 2 6)))
 
-    "foo.a YEAR TO MONTH" '(multi-field-interval x1 "YEAR" 2 "MONTH" 2)
-    "foo.a DAY TO SECOND" '(multi-field-interval x1 "DAY" 2 "SECOND" 6)
+    "foo.a YEAR TO MONTH" '(multi-field-interval a "YEAR" 2 "MONTH" 6)
+    "foo.a DAY TO SECOND" '(multi-field-interval a "DAY" 2 "SECOND" 6)
 
-    "INTERVAL '3' YEAR" '(single-field-interval "3" "YEAR" 2 0)
-    "INTERVAL '-3' YEAR" '(single-field-interval "-3" "YEAR" 2 0)
-    "INTERVAL '+3' YEAR" '(single-field-interval "+3" "YEAR" 2 0)
-    "INTERVAL '333' YEAR(3)" '(single-field-interval "333" "YEAR" 3 0)
+    "INTERVAL '3' YEAR" '(single-field-interval "3" "YEAR" 2 6)
+    "INTERVAL '-3' YEAR" '(single-field-interval "-3" "YEAR" 2 6)
+    "INTERVAL '+3' YEAR" '(single-field-interval "+3" "YEAR" 2 6)
 
-    "INTERVAL '3' MONTH" '(single-field-interval "3" "MONTH" 2 0)
-    "INTERVAL '-3' MONTH" '(single-field-interval "-3" "MONTH" 2 0)
-    "INTERVAL '+3' MONTH" '(single-field-interval "+3" "MONTH" 2 0)
-    "INTERVAL '333' MONTH(3)" '(single-field-interval "333" "MONTH" 3 0)
+    "INTERVAL '3' MONTH" '(single-field-interval "3" "MONTH" 2 6)
+    "INTERVAL '-3' MONTH" '(single-field-interval "-3" "MONTH" 2 6)
+    "INTERVAL '+3' MONTH" '(single-field-interval "+3" "MONTH" 2 6)
 
-    "INTERVAL '3' DAY" '(single-field-interval "3" "DAY" 2 0)
-    "INTERVAL '-3' DAY" '(single-field-interval "-3" "DAY" 2 0)
-    "INTERVAL '+3' DAY" '(single-field-interval "+3" "DAY" 2 0)
-    "INTERVAL '333' DAY(3)" '(single-field-interval "333" "DAY" 3 0)
+    "INTERVAL '3' DAY" '(single-field-interval "3" "DAY" 2 6)
+    "INTERVAL '-3' DAY" '(single-field-interval "-3" "DAY" 2 6)
+    "INTERVAL '+3' DAY" '(single-field-interval "+3" "DAY" 2 6)
+    "INTERVAL '333' DAY(3)" '(single-field-interval "333" "DAY" 2 6)
 
-    "INTERVAL '3' HOUR" '(single-field-interval "3" "HOUR" 2 0)
-    "INTERVAL '-3' HOUR" '(single-field-interval "-3" "HOUR" 2 0)
-    "INTERVAL '+3' HOUR" '(single-field-interval "+3" "HOUR" 2 0)
-    "INTERVAL '333' HOUR(3)" '(single-field-interval "333" "HOUR" 3 0)
+    "INTERVAL '3' HOUR" '(single-field-interval "3" "HOUR" 2 6)
+    "INTERVAL '-3' HOUR" '(single-field-interval "-3" "HOUR" 2 6)
+    "INTERVAL '+3' HOUR" '(single-field-interval "+3" "HOUR" 2 6)
 
-    "INTERVAL '3' MINUTE" '(single-field-interval "3" "MINUTE" 2 0)
-    "INTERVAL '-3' MINUTE" '(single-field-interval "-3" "MINUTE" 2 0)
-    "INTERVAL '+3' MINUTE" '(single-field-interval "+3" "MINUTE" 2 0)
-    "INTERVAL '333' MINUTE(3)" '(single-field-interval "333" "MINUTE" 3 0)
+    "INTERVAL '3' MINUTE" '(single-field-interval "3" "MINUTE" 2 6)
+    "INTERVAL '-3' MINUTE" '(single-field-interval "-3" "MINUTE" 2 6)
+    "INTERVAL '+3' MINUTE" '(single-field-interval "+3" "MINUTE" 2 6)
 
     "INTERVAL '3' SECOND" '(single-field-interval "3" "SECOND" 2 6)
     "INTERVAL '-3' SECOND" '(single-field-interval "-3" "SECOND" 2 6)
     "INTERVAL '+3' SECOND" '(single-field-interval "+3" "SECOND" 2 6)
-    "INTERVAL '333' SECOND(3)" '(single-field-interval "333" "SECOND" 3 6)
-    "INTERVAL '333.22' SECOND(3, 2)" '(single-field-interval "333.22" "SECOND" 3 2)
+    "INTERVAL '333' SECOND(3)" '(single-field-interval "333" "SECOND" 2 3)
 
-    "INTERVAL '3-4' YEAR TO MONTH" '(multi-field-interval "3-4" "YEAR" 2 "MONTH" 2)
-    "INTERVAL '3-4' YEAR(3) TO MONTH" '(multi-field-interval "3-4" "YEAR" 3 "MONTH" 2)
+    "INTERVAL '3-4' YEAR TO MONTH" '(multi-field-interval "3-4" "YEAR" 2 "MONTH" 6)
+    "INTERVAL '-3-4' YEAR TO MONTH" '(multi-field-interval "-3-4" "YEAR" 2 "MONTH" 6)
+    "INTERVAL '+3-4' YEAR TO MONTH" '(multi-field-interval "+3-4" "YEAR" 2 "MONTH" 6)
 
-    "INTERVAL '-3-4' YEAR TO MONTH" '(multi-field-interval "-3-4" "YEAR" 2 "MONTH" 2)
-    "INTERVAL '+3-4' YEAR TO MONTH" '(multi-field-interval "+3-4" "YEAR" 2 "MONTH" 2)
-
-    "INTERVAL '3 4' DAY TO HOUR" '(multi-field-interval "3 4" "DAY" 2 "HOUR" 2)
-    "INTERVAL '3 04' DAY TO HOUR" '(multi-field-interval "3 04" "DAY" 2 "HOUR" 2)
-    "INTERVAL '3 04:20' DAY TO MINUTE" '(multi-field-interval "3 04:20" "DAY" 2 "MINUTE" 2)
+    "INTERVAL '3 4' DAY TO HOUR" '(multi-field-interval "3 4" "DAY" 2 "HOUR" 6)
+    "INTERVAL '3 04' DAY TO HOUR" '(multi-field-interval "3 04" "DAY" 2 "HOUR" 6)
+    "INTERVAL '3 04:20' DAY TO MINUTE" '(multi-field-interval "3 04:20" "DAY" 2 "MINUTE" 6)
     "INTERVAL '3 04:20:34' DAY TO SECOND" '(multi-field-interval "3 04:20:34" "DAY" 2 "SECOND" 6)
-    "INTERVAL '3 04:20:34' DAY(3) TO SECOND(4)" '(multi-field-interval "3 04:20:34" "DAY" 3 "SECOND" 4)
     "INTERVAL '3 04:20:34' DAY TO SECOND(4)" '(multi-field-interval "3 04:20:34" "DAY" 2 "SECOND" 4)
 
-    "INTERVAL '04:20' HOUR TO MINUTE" '(multi-field-interval "04:20" "HOUR" 2 "MINUTE" 2)
+    "INTERVAL '04:20' HOUR TO MINUTE" '(multi-field-interval "04:20" "HOUR" 2 "MINUTE" 6)
     "INTERVAL '04:20:34' HOUR TO SECOND" '(multi-field-interval "04:20:34" "HOUR" 2 "SECOND" 6)
 
-    "INTERVAL '20:34' MINUTE TO SECOND" '(multi-field-interval "20:34" "MINUTE" 2 "SECOND" 6)))
+    "INTERVAL '20:34' MINUTE TO SECOND" '(multi-field-interval "20:34" "MINUTE" 2 "SECOND" 6)
+    
+    "INTERVAL -'3' YEAR" '(- (single-field-interval "3" "YEAR" 2 6))
+    "INTERVAL -'3-10' YEAR TO MONTH" '(- (multi-field-interval "3-10" "YEAR" 2 "MONTH" 6))
+    "INTERVAL -'3 10' DAY TO HOUR" '(- (multi-field-interval "3 10" "DAY" 2 "HOUR" 6))))
 
 (deftest test-interval-abs
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan-expr-with-foo sql))
 
-    "ABS(foo.a)" '(abs x1)
-    "ABS(1 YEAR)" '(abs (single-field-interval 1 "YEAR" 2 0))))
+    "ABS(foo.a)" '(abs a)
+    "ABS(1 YEAR)" '(abs (single-field-interval 1 "YEAR" 2 6))))
 
 (t/deftest test-interval-comparison
   (t/is (= [{:gt true}]
@@ -852,7 +1003,7 @@
 
 (deftest test-array-construction
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan/plan-expr sql))
 
     "ARRAY []" []
 
@@ -880,7 +1031,7 @@
 
 (deftest test-object-construction
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan/plan-expr sql))
 
     "OBJECT ()" {}
     "OBJECT ('foo': 2)" {:foo 2}
@@ -896,7 +1047,7 @@
 
 (deftest test-object-field-access
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan/plan-expr sql))
 
     "OBJECT('foo': 2).foo" '(. {:foo 2} :foo)
     "{'foo': 2}.foo" '(. {:foo 2} :foo)
@@ -912,18 +1063,26 @@
     "test-array-subquery1" "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42"
     "test-array-subquery2" "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))
 
+(t/deftest test-array-expressions
+  (t/are [sql expected]
+         (= expected (plan-expr-with-foo sql))
+  
+    "[1,2]" [1 2]
+    "[1,2] || foo.a" '(concat [1 2] a)
+    "[1,2] || [2,3]" '(concat [1 2] [2 3])))
+
 (t/deftest test-array-trim
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan-expr-with-foo sql))
 
     "TRIM_ARRAY(NULL, 2)" '(trim-array nil 2)
-    "TRIM_ARRAY(foo.a, 2)" '(trim-array x1 2)
+    "TRIM_ARRAY(foo.a, 2)" '(trim-array a 2)
     "TRIM_ARRAY(ARRAY [42, 43], 1)" '(trim-array [42, 43] 1)
-    "TRIM_ARRAY(foo.a, foo.b)" '(trim-array x1 x2)))
+    "TRIM_ARRAY(foo.a, foo.b)" '(trim-array a b)))
 
 (t/deftest test-cast
   (t/are [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan-expr-with-foo sql))
 
     "CAST(NULL AS INT)" (list 'cast nil :i32)
     "CAST(NULL AS INTEGER)" (list 'cast nil :i32)
@@ -933,7 +1092,7 @@
     "CAST(NULL AS REAL)" (list 'cast nil :f32)
     "CAST(NULL AS DOUBLE PRECISION)" (list 'cast nil :f64)
 
-    "CAST(foo.a AS INT)" (list 'cast 'x1 :i32)
+    "CAST(foo.a AS INT)" (list 'cast 'a :i32)
     "CAST(42.0 AS INT)" (list 'cast 42.0 :i32)))
 
 (t/deftest test-cast-string-to-temporal
@@ -941,28 +1100,28 @@
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz")))
 
   (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP) as timestamp")))
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP) as \"timestamp\"")))
 
-  (t/is (= [{:timestamp-tz #time/date-time "2021-10-21T12:34:00"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as timestamp_tz")))
+  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as \"timestamp\"")))
 
-  (t/is (= [{:date #time/date "2021-10-21"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as date")))
+  (t/is (= [{:duration #time/date "2021-10-21"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as \"duration\"")))
 
   (t/is (= [{:time #time/time "12:00:01"}]
-           (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as time")))
+           (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as \"time\"")))
   
   (t/is (= [{:duration #time/duration "PT13M56.123456S"}]
-           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION) as duration")))
+           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION) as \"duration\"")))
   
   (t/is (= [{:duration #time/duration "PT13M56.123456789S"}]
-           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION(9)) as duration")))
+           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION(9)) as \"duration\"")))
 
   (t/is (= [{:time #time/time "12:00:01.1234"}]
-           (xt/q tu/*node* "SELECT CAST('12:00:01.123456' AS TIME(4)) as time")))
+           (xt/q tu/*node* "SELECT CAST('12:00:01.123456' AS TIME(4)) as \"time\"")))
   
   (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00.1234567"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123456789' AS TIMESTAMP(7)) as timestamp")))
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123456789' AS TIMESTAMP(7)) as \"timestamp\"")))
   
   (t/is (= [{:timestamp-tz #time/zoned-date-time "2021-10-21T12:34:00.12Z"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123Z' AS TIMESTAMP(2) WITH TIME ZONE) as timestamp_tz")))
@@ -984,25 +1143,21 @@
 
   (t/is (= [{:string "12:00:01"}]
            (xt/q tu/*node* "SELECT CAST(TIME '12:00:01' AS VARCHAR) as string")))
-  
-  ;; We do not have a literal for Duration, so insert one into the table and query & cast it out
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :duration #time/duration "PT13M56.123S"}]])
+
   (t/is (= [{:string "PT13M56.123S"}]
-           (xt/q tu/*node* "SELECT CAST(docs.duration AS VARCHAR) as string FROM docs"))))
+           (xt/q tu/*node* "SELECT CAST(DURATION 'PT13M56.123S' AS VARCHAR) as string"))))
 
 (t/deftest test-cast-interval-to-duration
   (t/is (= [{:duration #time/duration "PT13M56S"}]
-           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as duration")))
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as \"duration\"")))
 
   (t/is (= [{:duration #time/duration "PT13M56.123456789S"}]
-           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as duration"))))
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as \"duration\""))))
 
 (t/deftest test-cast-duration-to-interval
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :duration #time/duration "PT26H13M56.111111S"}]])
-
   (t/testing "without interval qualifier"
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT26H13M56.111111S"]}]
-             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL) as itvl FROM docs")))
+             (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL) as itvl")))
 
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT122H"]}]
              (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2021-10-21T12:00:00') AS INTERVAL) as itvl")))
@@ -1012,19 +1167,19 @@
   
   (t/testing "with interval qualifier"
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
-             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY) as itvl FROM docs")))
+             (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY) as itvl")))
 
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H"]}]
-             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO HOUR) as itvl FROM docs")))
+             (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO HOUR) as itvl")))
 
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M"]}]
-             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO MINUTE) as itvl FROM docs")))
+             (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO MINUTE) as itvl")))
 
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56.111111S"]}]
-             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO SECOND) as itvl FROM docs")))
+             (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO SECOND) as itvl")))
 
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56.111S"]}]
-             (xt/q tu/*node* "SELECT CAST(docs.duration AS INTERVAL DAY TO SECOND(3)) as itvl FROM docs")))))
+             (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO SECOND(3)) as itvl")))))
 
 (t/deftest test-cast-interval-to-interval
   (t/is (= [{:itvl #xt/interval-ym "P22M"}]
@@ -1147,7 +1302,7 @@
 (deftest test-timestamp-literal
   (t/are
     [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan/plan-expr sql))
     "TIMESTAMP '3000-03-15 20:40:31'" #time/date-time "3000-03-15T20:40:31"
     "TIMESTAMP '3000-03-15 20:40:31.11'" #time/date-time "3000-03-15T20:40:31.11"
     "TIMESTAMP '3000-03-15 20:40:31.2222'" #time/date-time "3000-03-15T20:40:31.2222"
@@ -1169,7 +1324,7 @@
 (deftest test-time-literal
   (t/are
     [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan/plan-expr sql))
     "TIME '20:40:31'" #time/time "20:40:31"
     "TIME '20:40:31.467'" #time/time "20:40:31.467"
     "TIME '20:40:31.932254'" #time/time "20:40:31.932254"
@@ -1180,11 +1335,11 @@
 (deftest date-literal
   (t/are
     [sql expected]
-    (= expected (plan-expr sql))
+    (= expected (plan/plan-expr sql))
     "DATE '3000-03-15'" #time/date "3000-03-15"))
 
 (t/deftest interval-literal
-  (t/are [sql expected] (= expected (plan-expr sql))
+  (t/are [sql expected] (= expected (plan/plan-expr sql))
     "INTERVAL 'P1Y'" #xt/interval-mdn ["P1Y" "PT0S"]
     "INTERVAL 'P1Y-2M3D'" #xt/interval-mdn ["P1Y-2M3D" "PT0S"]
     "INTERVAL 'PT5H6M12.912S'" #xt/interval-mdn ["P0D" "PT5H6M12.912S"]
@@ -1194,19 +1349,19 @@
 
 (t/deftest interval-literal-query
   (t/is (= [{:interval #xt/interval-mdn ["P12M" "PT0S"]}]
-           (xt/q tu/*node* "SELECT INTERVAL 'P1Y' as interval")))
+           (xt/q tu/*node* "SELECT INTERVAL 'P1Y' as itvl")))
 
   (t/is (= [{:interval #xt/interval-mdn ["P10M3D" "PT0S"]}]
-           (xt/q tu/*node* "SELECT INTERVAL 'P1Y-2M3D' as interval")))
+           (xt/q tu/*node* "SELECT INTERVAL 'P1Y-2M3D' as itvl")))
 
   (t/is (= [{:interval #xt/interval-mdn ["P0D" "PT5H6M12.912S"]}]
-           (xt/q tu/*node* "SELECT INTERVAL 'PT5H6M12.912S' as interval")))
+           (xt/q tu/*node* "SELECT INTERVAL 'PT5H6M12.912S' as itvl")))
 
   (t/is (= [{:interval #xt/interval-mdn ["P22M3D" "PT4H53M47.088S"]}]
-           (xt/q tu/*node* "SELECT INTERVAL 'P1Y10M3DT5H-6M-12.912S' as interval"))))
+           (xt/q tu/*node* "SELECT INTERVAL 'P1Y10M3DT5H-6M-12.912S' as itvl"))))
 
 (t/deftest duration-literal
-  (t/are [sql expected] (= expected (plan-expr sql))
+  (t/are [sql expected] (= expected (plan/plan-expr sql))
     "DURATION 'P1D'" #time/duration "PT24H"
     "DURATION 'PT1H'" #time/duration "PT1H"
     "DURATION 'PT1M'" #time/duration "PT1M"
@@ -1234,7 +1389,7 @@
   (t/testing "TIMESTAMP behaviour"
     (t/are
      [sql expected]
-     (= expected (plan-expr sql))
+     (= expected (plan/plan-expr sql))
       "DATE_TRUNC('MICROSECOND', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MICROSECOND" #time/date-time "2021-10-21T12:34:56")
       "DATE_TRUNC('MILLISECOND', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLISECOND" #time/date-time "2021-10-21T12:34:56")
       "date_trunc('second', timestamp '2021-10-21T12:34:56')" '(date_trunc "SECOND" #time/date-time "2021-10-21T12:34:56")
@@ -1252,9 +1407,30 @@
   (t/testing "INTERVAL behaviour"
     (t/are
      [sql expected]
-     (= expected (plan-expr sql))
-      "DATE_TRUNC('DAY', INTERVAL '5' DAY)" '(date_trunc "DAY" (single-field-interval "5" "DAY" 2 0))
+     (= expected (plan/plan-expr sql))
+      "DATE_TRUNC('DAY', INTERVAL '5' DAY)" '(date_trunc "DAY" (single-field-interval "5" "DAY" 2 6))
       "date_trunc('hour', interval '3 02:47:33' day to second)" '(date_trunc "HOUR" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6)))))
+
+(deftest test-datetime-functions-plan
+  (t/are
+   [sql expected]
+   (= expected (plan/plan-expr sql))
+    "CURRENT_DATE" '(current-date)
+    "CURRENT_DATE()" '(current-date)
+    "CURRENT_TIME" '(current-time)
+    "CURRENT_TIME()" '(current-time)
+    "CURRENT_TIME(6)" '(current-time 6)
+    "CURRENT_TIMESTAMP" '(current-timestamp)
+    "CURRENT_TIMESTAMP()" '(current-timestamp)
+    "CURRENT_TIMESTAMP(6)" '(current-timestamp 6)
+    "LOCALTIME" '(local-time)
+    "LOCALTIME()" '(local-time)
+    "LOCALTIME(6)" '(local-time 6)
+    "LOCALTIMESTAMP" '(local-timestamp)
+    "LOCALTIMESTAMP()" '(local-timestamp)
+    "LOCALTIMESTAMP(6)" '(local-timestamp 6)
+    "END_OF_TIME" 'xtdb/end-of-time
+    "END_OF_TIME()" 'xtdb/end-of-time))
 
 (deftest test-date-trunc-query
   (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:34:00Z"}]
@@ -1280,22 +1456,22 @@
 
 (deftest test-date-trunc-with-interval-query 
   (t/is (= [{:interval #xt/interval-ym "P36M"}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC('YEAR', 3 YEAR + 3 MONTH) as interval")))
+           (xt/q tu/*node* "SELECT DATE_TRUNC('YEAR', 3 YEAR + 3 MONTH) as itvl")))
 
   (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT2S"]}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC('SECOND', 3 MONTH + 4 DAY + 2 SECOND) as interval")))
+           (xt/q tu/*node* "SELECT DATE_TRUNC('SECOND', 3 MONTH + 4 DAY + 2 SECOND) as itvl")))
 
   (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT0S"]}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC('DAY', 3 MONTH + 4 DAY + 2 SECOND) as interval")))
+           (xt/q tu/*node* "SELECT DATE_TRUNC('DAY', 3 MONTH + 4 DAY + 2 SECOND) as itvl")))
 
   (t/is (= [{:interval #xt/interval-mdn ["P3M" "PT0S"]}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC('MONTH', 3 MONTH + 4 DAY + 2 SECOND) as interval"))))
+           (xt/q tu/*node* "SELECT DATE_TRUNC('MONTH', 3 MONTH + 4 DAY + 2 SECOND) as itvl"))))
 
 (deftest test-extract-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are
      [sql expected]
-     (= expected (plan-expr sql))
+     (= expected (plan/plan-expr sql))
       "extract(second from timestamp '2021-10-21T12:34:56')" '(extract "SECOND" #time/date-time "2021-10-21T12:34:56")
       "EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MINUTE" #time/date-time "2021-10-21T12:34:56")
       "EXTRACT(HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "HOUR" #time/date-time "2021-10-21T12:34:56")
@@ -1308,100 +1484,100 @@
   (t/testing "INTERVAL behaviour"
     (t/are
      [sql expected]
-     (= expected (plan-expr sql))
+     (= expected (plan/plan-expr sql))
       "EXTRACT(second from interval '3 02:47:33' day to second)" '(extract "SECOND" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6))
-      "EXTRACT(MINUTE FROM INTERVAL '5' DAY)" '(extract "MINUTE" (single-field-interval "5" "DAY" 2 0))))
+      "EXTRACT(MINUTE FROM INTERVAL '5' DAY)" '(extract "MINUTE" (single-field-interval "5" "DAY" 2 6))))
   
   (t/testing "TIME behaviour"
     (t/are
      [sql expected]
-     (= expected (plan-expr sql))
+     (= expected (plan/plan-expr sql))
       "EXTRACT(second from time '11:11:11')" '(extract "SECOND" #time/time "11:11:11")
       "EXTRACT(MINUTE FROM TIME '11:11:11')" '(extract "MINUTE" #time/time "11:11:11"))))
 
 (deftest test-extract-query
   (t/testing "timestamp behavior"
     (t/is (= [{:x 34}]
-             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56') as x")))
 
     (t/is (= [{:x 2021}]
-             (xt/q tu/*node* "SELECT EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56') as x")))
 
     (t/is (thrown-with-msg?
            UnsupportedOperationException
            #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z"))))
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
 
   (t/testing "timestamp with timezone behavior"
     (t/is (= [{:x 34}]
-             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56+05:00') as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56+05:00') as x")))
 
     (t/is (= [{:x 5}]
-             (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56+05:00') as x FROM (VALUES 1) AS z"))))
+             (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56+05:00') as x"))))
 
   (t/testing "date behavior"
     (t/is (= [{:x 3}]
-             (xt/q tu/*node* "SELECT EXTRACT(MONTH FROM DATE '2001-03-11') as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(MONTH FROM DATE '2001-03-11') as x")))
 
     (t/is (thrown-with-msg?
            UnsupportedOperationException
            #"Extract \"TIMEZONE_HOUR\" not supported for type date"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x FROM (VALUES 1) AS z"))))
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x"))))
 
   (t/testing "time behavior"
     (t/is (= [{:x 34}]
-             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIME '12:34:56') as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM TIME '12:34:56') as x")))
 
     (t/is (= [{:x 12}]
-             (xt/q tu/*node* "SELECT EXTRACT(HOUR FROM TIME '12:34:56') as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(HOUR FROM TIME '12:34:56') as x")))
 
     (t/is (thrown-with-msg?
            UnsupportedOperationException
            #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x FROM (VALUES 1) AS z"))))
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
 
   (t/testing "interval behavior"
     (t/is (= [{:x 3}]
-             (xt/q tu/*node* "SELECT EXTRACT(DAY FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(DAY FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))
 
     (t/is (= [{:x 47}]
-             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))
 
     (t/is (thrown-with-msg?
            UnsupportedOperationException
            #"Extract \"TIMEZONE_HOUR\" not supported for type interval"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x FROM (VALUES 1) AS z")))))
+           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))))
 
 (deftest test-age-function
   (t/testing "testing AGE with timestamps"
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-02T01:00:00', TIMESTAMP '2022-05-01T23:00:00') as itvl FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-02T01:00:00', TIMESTAMP '2022-05-01T23:00:00') as itvl")))
     (t/is (= [{:itvl #xt/interval-mdn ["P6M" "PT0S"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-11-01T00:00:00', TIMESTAMP '2022-05-01T00:00:00') as itvl FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-11-01T00:00:00', TIMESTAMP '2022-05-01T00:00:00') as itvl")))
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT1H"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-01-01T01:00:00', TIMESTAMP '2023-01-01T00:00:00') as itvl FROM (VALUES 1) AS z"))))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-01-01T01:00:00', TIMESTAMP '2023-01-01T00:00:00') as itvl"))))
 
   (t/testing "testing AGE with timestamp with timezone"
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT1H"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T11:00:00+01:00[Europe/London]', TIMESTAMP '2023-06-01T11:00:00+02:00[Europe/Berlin]') as itvl FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T11:00:00+01:00[Europe/London]', TIMESTAMP '2023-06-01T11:00:00+02:00[Europe/Berlin]') as itvl")))
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T09:00:00-05:00[America/Chicago]', TIMESTAMP '2023-06-01T12:00:00') as itvl FROM (VALUES 1) AS z"))))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T09:00:00-05:00[America/Chicago]', TIMESTAMP '2023-06-01T12:00:00') as itvl"))))
 
   (t/testing "testing AGE with date"
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
-             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', DATE '2023-01-01') as itvl FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', DATE '2023-01-01') as itvl")))
     (t/is (= [{:itvl #xt/interval-mdn ["P-12M" "PT0S"]}]
-             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-01', DATE '2024-01-01') as itvl FROM (VALUES 1) AS z"))))
+             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-01', DATE '2024-01-01') as itvl"))))
 
   (t/testing "test with mixed types"
     (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
-             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', TIMESTAMP '2023-01-01T00:00:00') as itvl FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', TIMESTAMP '2023-01-01T00:00:00') as itvl")))
     (t/is (= [{:itvl #xt/interval-mdn ["P-6M" "PT0S"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-01T00:00:00', TIMESTAMP '2022-11-01T00:00:00+00:00[Europe/London]') as itvl FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-01T00:00:00', TIMESTAMP '2022-11-01T00:00:00+00:00[Europe/London]') as itvl")))
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H0.001S"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.501', TIMESTAMP '2023-07-01T12:00:30.500+02:00[Europe/Berlin]') as itvl FROM (VALUES 1) AS z")))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.501', TIMESTAMP '2023-07-01T12:00:30.500+02:00[Europe/Berlin]') as itvl")))
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT-2H-0.001S"]}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.499+02:00[Europe/Berlin]', TIMESTAMP '2023-07-01T12:00:30.500') as itvl FROM (VALUES 1) AS z")))))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.499+02:00[Europe/Berlin]', TIMESTAMP '2023-07-01T12:00:30.500') as itvl")))))
 
 (deftest test-system-time-queries
   (t/testing "AS OF"
@@ -1462,7 +1638,7 @@
 ;; x1 = app-time-start x2 = app-time-end
 
 (deftest test-period-predicates
-  (t/are [expected sql] (= expected (plan-expr sql))
+  (t/are [expected sql] (= expected (plan/plan-expr sql))
     '(and (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
           (>= x2 #time/zoned-date-time "2001-01-01T00:00Z"))
     "foo.VALID_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
@@ -1501,7 +1677,7 @@
     "foo.VALID_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
 
 (deftest test-period-predicates-point-in-time
-  (t/are [expected sql] (= expected (plan-expr sql))
+  (t/are [expected sql] (= expected (plan/plan-expr sql))
 
     '(and (<= x1 x3) (>= x2 x3))
     "foo.valid_time CONTAINS foo.other_column"
@@ -1531,7 +1707,7 @@
           "SELECT f.foo FROM foo f WHERE f.valid_time OVERLAPS TIMESTAMP '2010-01-01T11:10:11Z'"))))
 
 (deftest test-min-long-value-275
-  (t/is (= Long/MIN_VALUE (plan-expr "-9223372036854775808"))))
+  (t/is (= Long/MIN_VALUE (plan/plan-expr "-9223372036854775808"))))
 
 (deftest test-multiple-references-to-temporal-cols
   (t/is
@@ -1595,17 +1771,6 @@
            (plan-sql "DELETE FROM t1 u WHERE u.col1 = 30")
            (plan-sql "DELETE FROM t1 WHERE t1.col1 = 30"))
         "DELETE"))
-
-(deftest test-remove-names-359
-  (t/is
-   (=plan-file
-    "test-remove-names-359-single-ref"
-    (plan-sql "SELECT (SELECT x.bar FROM z) FROM x")))
-
-  (t/is
-   (=plan-file
-    "test-remove-names-359-multiple-ref"
-    (plan-sql "SELECT (SELECT x.bar FROM (SELECT x.bar FROM z) AS y) FROM x"))))
 
 (deftest test-system-time-period-predicate
   (t/is
@@ -1742,7 +1907,6 @@
                     SELECT foo.id, baz.id
                     FROM foo, foo AS baz"))))
 
-
 (deftest test-delimited-identifiers-in-insert-column-list-2549
   (t/is (=plan-file
           "test-delimited-identifiers-in-insert-column-list-2549"
@@ -1750,16 +1914,19 @@
             "INSERT INTO posts (\"xt$id\", \"user_id\") VALUES (1234, 5678)"))))
 
 (deftest test-table-period-specification-ordering-2260
-  (let [v-s (plan-sql
+  (let [opts {:table-info {"foo" #{"bar"}}}
+        v-s (plan-sql
               "SELECT foo.bar
-              FROM foo
-              FOR ALL VALID_TIME
-              FOR ALL SYSTEM_TIME")
+               FROM foo
+                 FOR ALL VALID_TIME
+                 FOR ALL SYSTEM_TIME"
+              opts)
         s-v (plan-sql
               "SELECT foo.bar
-              FROM foo
-              FOR ALL SYSTEM_TIME
-              FOR ALL VALID_TIME")]
+               FROM foo
+                 FOR ALL SYSTEM_TIME
+                 FOR ALL VALID_TIME"
+              opts)]
 
     (t/is (=plan-file "test-table-period-specification-ordering-2260-v-s" v-s))
 
@@ -1819,14 +1986,14 @@
   (t/is (= [{:y "b"} {:y "a"} {:y "c"}]
            (xt/q tu/*node* "SELECT docs.y FROM docs")))
 
-  (t/is (= #{{:x 2, :bar "b", :xt/id 2}
-             {:x 3, :bar "a", :xt/id 1}
-             {:x 1, :bar "c", :xt/id 3}}
+  (t/is (= #{{:x 2, :y "b", :bar "b", :xt/id 2}
+             {:x 3, :y "a", :bar "a", :xt/id 1}
+             {:x 1, :y "c", :bar "c", :xt/id 3}}
            (set (xt/q tu/*node* "SELECT docs.*, docs.y AS bar FROM docs"))))
 
-  (t/is (= #{{:x 2, :y:1 "b", :xt/id 2}
-             {:x 3, :y:1 "a", :xt/id 1}
-             {:x 1, :y:1 "c", :xt/id 3}}
+  (t/is (= #{{:x 2, :y "b", :xt/id 2}
+             {:x 3, :y "a", :xt/id 1}
+             {:x 1, :y "c", :xt/id 3}}
            (set (xt/q tu/*node* "SELECT docs.*, docs.y FROM docs"))))
 
   (t/is (= #{{:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
@@ -1899,40 +2066,39 @@
   (t/is
    (=plan-file
     "test-sql-over-scanning-col-ref"
-    (plan-sql
-     "SELECT foo.name FROM foo" {:table-info {"foo" #{"name" "lastname"}}})))
-  "Tests only those columns required by the query are scanned for,
-   rather than all those present on the base table"
+    (plan-sql "SELECT foo.name FROM foo"
+              {:table-info {"foo" #{"name" "lastname"}}}))
+
+   "Tests only those columns required by the query are scanned for, rather than all those present on the base table")
 
   (t/is
    (=plan-file
     "test-sql-over-scanning-qualified-asterisk"
-    (plan-sql
-     "SELECT foo.*, bar.jame FROM foo, bar" {:table-info {"foo" #{"name" "lastname"}
-                                                          "bar" #{"jame" "lastjame"}}})))
+    (plan-sql "SELECT foo.*, bar.jame FROM foo, bar"
+              {:table-info {"foo" #{"name" "lastname"}
+                            "bar" #{"jame" "lastjame"}}})))
 
   (t/is
    (=plan-file
     "test-sql-over-scanning-asterisk"
-    (plan-sql
-     "SELECT * FROM foo, bar" {:table-info {"foo" #{"name" "lastname"}
-                                            "bar" #{"jame" "lastjame"}}})))
+    (plan-sql "SELECT * FROM foo, bar"
+              {:table-info {"foo" #{"name" "lastname"}
+                            "bar" #{"jame" "lastjame"}}})))
 
   (t/is
    (=plan-file
     "test-sql-over-scanning-asterisk-subquery"
-    (plan-sql
-     "SELECT foo.*, (SELECT * FROM baz) FROM foo, bar" {:table-info {"foo" #{"name" "lastname"}
-                                                                          "bar" #{"jame" "lastjame"}
-                                                                          "baz" #{"frame"}}})))
+    (plan-sql "SELECT foo.*, (SELECT * FROM baz) FROM foo, bar"
+              {:table-info {"foo" #{"name" "lastname"}
+                            "bar" #{"jame" "lastjame"}
+                            "baz" #{"frame"}}})))
   (t/is
    (=plan-file
     "test-sql-over-scanning-asterisk-from-subquery"
-    (plan-sql
-     "SELECT bar.* FROM (SELECT foo.a, foo.b FROM foo) AS bar"))))
+    (plan-sql "SELECT bar.* FROM (SELECT foo.a, foo.b FROM foo) AS bar"
+              {:table-info {"foo" #{"a" "b"}}}))))
 
 (deftest test-schema-qualified-names
-
   (t/is
    (=plan-file
     "test-schema-qualified-names-fully-qualified"
@@ -2011,7 +2177,7 @@
 
 (t/deftest test-postgres-access-control-functions
   ;; These current functions should always should return true
-  (t/are [sql expected] (= expected (plan-expr sql))
+  (t/are [sql expected] (= expected (plan/plan-expr sql))
     "has_table_privilege('xtdb','docs', 'select')" true
     "has_table_privilege('docs', 'select')" true
     "pg_catalog.has_table_privilege('docs', 'select')" true
@@ -2157,3 +2323,67 @@
                             "DELETE FROM \"T1\" WHERE \"T1\".\"col2\" IN (2000, 3000)"]])
 
   (t/is (= [] (xt/q tu/*node* "SELECT \"T1\".xt$id FROM \"T1\""))))
+
+(t/deftest test-ordering-of-intersect-and-union
+  (xt/submit-tx tu/*node* [[:put-docs :t1 {:xt/id 1 :x 1}]
+                           [:put-docs :t2 {:xt/id 1 :x 1}]
+                           [:put-docs :t3 {:xt/id 1 :x 3}]])
+
+  (t/is (= [{:x 1} {:x 3}]
+           (xt/q tu/*node* "SELECT x FROM t1 INTERSECT SELECT x FROM t2 UNION SELECT x FROM t3"))))
+
+(deftest test-set-operations-with-different-column-names
+  (t/testing "Union"
+    (xt/execute-tx tu/*node* [[:put-docs :foo1 {:xt/id 1 :x 1}]
+                              [:put-docs :bar1 {:xt/id 1 :y 2}]])
+    
+    (t/is (= [{:x 1} {:x 2}]
+             (xt/q tu/*node* "SELECT x FROM foo1 UNION SELECT y FROM bar1"))))
+  
+  (t/testing "Except"
+    (xt/execute-tx tu/*node* [[:put-docs :foo2 {:xt/id 1 :x 1}]
+                              [:put-docs :foo2 {:xt/id 2 :x 2}]
+                              [:put-docs :bar2 {:xt/id 1 :y 1}]])
+    
+    (t/is (= [{:x 2}]
+             (xt/q tu/*node* "SELECT x FROM foo2 EXCEPT SELECT y FROM bar2"))))
+  
+  (t/testing "Intersect"
+    (xt/execute-tx tu/*node* [[:put-docs :foo3 {:xt/id 1 :x 1}]
+                              [:put-docs :foo3 {:xt/id 2 :x 2}]
+                              [:put-docs :bar3 {:xt/id 1 :y 1}]])
+  
+    (t/is (= [{:x 1}]
+             (xt/q tu/*node* "SELECT x FROM foo3 INTERSECT SELECT y FROM bar3")))))
+
+(deftest test-union-all
+  (xt/execute-tx tu/*node* [[:put-docs :foo1 {:xt/id 1 :x 1}]
+                            [:put-docs :foo1 {:xt/id 2 :x 2}]
+                            [:put-docs :foo2 {:xt/id 1 :x 1}]])
+
+  (t/is (= [{:x 2} {:x 1}]
+           (xt/q tu/*node* "SELECT x FROM foo1 UNION SELECT x FROM foo2")))
+
+  (t/is (= [{:x 2} {:x 1} {:x 1}]
+           (xt/q tu/*node* "SELECT x FROM foo1 UNION ALL SELECT x FROM foo2"))))
+
+(deftest test-union-except
+  (xt/execute-tx tu/*node* [[:put-docs :foo1 {:xt/id 1 :x 1}]
+                            [:put-docs :foo1 {:xt/id 2 :x 2}]
+                            [:put-docs :foo2 {:xt/id 1 :x 1}]
+                            [:put-docs :foo3 {:xt/id 1 :x 3}]])
+
+  (t/is (= [{:x 2} {:x 1} {:x 3}]
+           (xt/q tu/*node* "SELECT x FROM foo1 UNION SELECT x FROM foo3")))
+
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node* "SELECT x FROM foo1 EXCEPT SELECT x FROM foo2")))
+
+  (t/is (= [{:x 2} {:x 3}]
+           (xt/q tu/*node* "SELECT x FROM foo1 UNION SELECT x FROM foo3 EXCEPT SELECT x FROM foo2")))
+
+  (t/is (= [{:x 2} {:x 3}]
+           (xt/q tu/*node* "(SELECT x FROM foo1 EXCEPT SELECT x FROM foo2) UNION SELECT x FROM foo3")))
+
+  (t/is (= [{:x 2} {:x 3}]
+           (xt/q tu/*node* "SELECT x FROM foo1 EXCEPT SELECT x FROM foo2 UNION SELECT x FROM foo3"))))

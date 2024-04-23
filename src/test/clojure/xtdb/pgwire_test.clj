@@ -13,7 +13,7 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as result-set])
   (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.fasterxml.jackson.databind.node JsonNodeType)
-           (java.io InputStream OutputStream)
+           (java.io InputStream)
            (java.lang Thread$State)
            (java.net SocketException)
            (java.sql Connection)
@@ -249,10 +249,10 @@
       :json-type JsonNodeType/STRING
       :clj "2021-12-24T11:23:44.003"}
 
-     {:sql "1 YEAR"
+     {:sql "INTERVAL '1' YEAR"
       :json-type JsonNodeType/STRING
       :clj "P12M"}
-     {:sql "1 MONTH"
+     {:sql "INTERVAL '1' MONTH"
       :json-type JsonNodeType/STRING
       :clj "P1M"}
 
@@ -367,7 +367,7 @@
        (mapv (fn [row] (mapv (comp json/read-str str) row)))))
 
 (defn ping [conn]
-  (-> (q conn ["select a.ping from (values ('pong')) a (ping)"])
+  (-> (q conn ["select 'ping' ping"])
       first
       :ping))
 
@@ -399,7 +399,7 @@
   (with-open [conn1 (jdbc-conn)]
     (inject-accept-exc)
     (connect-and-throwaway)
-    (is (= "pong" (ping conn1)))))
+    (is (= "ping" (ping conn1)))))
 
 (deftest accept-thread-socket-closed-exc-does-not-stop-later-accepts-test
   (inject-accept-exc (SocketException. "Socket closed"))
@@ -546,7 +546,7 @@
     ;; redefine parse to block when we ping
     (with-redefs [pgwire/cmd-parse
                   (fn [conn {:keys [query] :as cmd}]
-                    (if-not (str/starts-with? query "select a.ping")
+                    (if-not (str/starts-with? query "select 'ping'")
                       (cmd-parse conn cmd)
                       (do
                         (.countDown latch)
@@ -561,9 +561,9 @@
 
         (is (.await latch 1 TimeUnit/SECONDS))
 
-        (.close *server*)
+        (util/close *server*)
 
-        (is (every? #(= "pong" (deref % 1000 :timeout)) futs))
+        (is (every? #(= "ping" (deref % 1000 :timeout)) futs))
 
         (check-server-resources-freed)))))
 
@@ -645,18 +645,18 @@
 (when (psql-available?)
   (deftest psql-connect-test
     (require-server)
-    (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select ping")]
+    (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select 'ping' ping")]
       (is (= 0 exit))
-      (is (str/includes? out " pong\n(1 row)")))))
+      (is (str/includes? out " \"ping\"\n(1 row)")))))
 
 (when (psql-available?)
   (deftest psql-interactive-test
     (psql-session
      (fn [send read]
        (testing "ping"
-         (send "select ping;\n")
+         (send "select 'ping';\n")
          (let [s (read)]
-           (is (str/includes? s "pong"))
+           (is (str/includes? s "ping"))
            (is (str/includes? s "(1 row)"))))
 
        (testing "numeric printing"
@@ -677,12 +677,12 @@
 
        (testing "error during plan"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
-           (send "select baz.a from (values (42)) a (a);\n")
-           (is (str/includes? (read :err) "Table not in scope: baz")))
+           (send "slect baz.a from baz;\n")
+           (is (str/includes? (read :err) "mismatched input 'slect' expecting")))
 
          (testing "query error allows session to continue"
-           (send "select ping;\n")
-           (is (str/includes? (read) "pong"))))
+           (send "select 'ping';\n")
+           (is (str/includes? (read) "ping"))))
 
        (testing "error during query execution"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
@@ -690,8 +690,8 @@
            (is (str/includes? (read :err) "data exception — division by zero")))
 
          (testing "query error allows session to continue"
-           (send "select ping;\n")
-           (is (str/includes? (read) "pong"))))))))
+           (send "select 'ping';\n")
+           (is (str/includes? (read) "ping"))))))))
 
 (def pg-param-representation-examples
   "A library of examples to test pg parameter oid handling.
@@ -790,12 +790,12 @@
       (with-open [_node (xtn/start-node {:pgwire-server {:port port
                                                          :num-threads 3}})
                   conn (jdbc-conn)]
-        (is (= "pong" (ping conn)))))))
+        (is (= "ping" (ping conn)))))))
 
 (deftest open-close-transaction-does-not-crash-test
   (with-open [conn (jdbc-conn)]
     (jdbc/with-transaction [db conn]
-      (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"]))))))
+      (is (= "ping" (ping db))))))
 
 ;; for now, behaviour will change later I am sure
 (deftest different-transaction-isolation-levels-accepted-and-ignored-test
@@ -806,13 +806,13 @@
                    :serializable]]
       (testing (format "can open and close transaction (%s)" level)
         (jdbc/with-transaction [db conn {:isolation level}]
-          (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"])))))
+          (is (= "ping" (ping db)))))
       (testing (format "readonly accepted (%s)" level)
         (jdbc/with-transaction [db conn {:isolation level, :read-only true}]
-          (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"])))))
+          (is (= "ping" (ping db)))))
       (testing (format "rollback only accepted (%s)" level)
         (jdbc/with-transaction [db conn {:isolation level, :rollback-only true}]
-          (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"]))))))))
+          (is (= "ping" (ping db))))))))
 
 ;; right now all isolation levels have the same defined behaviour
 (deftest transaction-by-default-pins-the-basis-to-last-tx-test
@@ -852,17 +852,17 @@
   (with-open [conn (jdbc-conn)]
     (try
       (jdbc/with-transaction [db conn]
-        (is (= [] (q db ["select a.a from a a"])))
+        (is (= [] (q db ["SELECT * WHERE FALSE"])))
         (throw (Exception. "Oh no!")))
       (catch Throwable _))
-    (is (= [] (q conn ["select a.a from a a"])))))
+    (is (= [] (q conn ["SELECT * WHERE FALSE"])))))
 
 (deftest transactions-are-read-only-by-default-test
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
           PSQLException #"ERROR\: DML is not allowed in a READ ONLY transaction"
           (jdbc/with-transaction [db conn] (q db ["insert into foo(xt$id) values (42)"]))))
-    (is (= [] (q conn ["select foo.a from foo foo"])))))
+    (is (= [] (q conn ["SELECT * WHERE FALSE"])))))
 
 (defn- session-variables [server-conn ks]
   (-> server-conn :conn-state deref :session (select-keys ks)))
@@ -909,8 +909,7 @@
       (is (thrown-with-msg? PSQLException #"queries are unsupported in a READ WRITE transaction"
                             (jdbc/with-transaction [tx conn]
                               (q tx ["INSERT INTO foo(xt$id, a) values(42, 42)"])
-                              (q conn ["SELECT foo.a FROM foo"]))))
-      (is (= [] (q conn ["SELECT foo.a FROM foo"]))))
+                              (q conn ["SELECT foo.a FROM foo"])))))
 
     (testing "insert it"
       (q conn ["SET TRANSACTION READ WRITE"])
@@ -996,7 +995,7 @@
           (q conn ["BEGIN"])))))
 
 (defn- current-ts [conn]
-  (:a (first (q conn ["select current_timestamp a from (values (0)) a (b)"]))))
+  (:a (first (q conn ["select current_timestamp a"]))))
 
 (deftest half-baked-clock-test
   ;; goal is to test time basis params are sent with queries
@@ -1083,8 +1082,8 @@
 
 (deftest pg-begin-unsupported-syntax-error-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
-    (is (thrown-with-msg? PSQLException #"ERROR: Invalid SQL query: Parse error at line 1, column 7:" (q conn ["BEGIN not valid sql!"])))
-    (is (thrown-with-msg? PSQLException #"ERROR: Invalid SQL query: Parse error at line 1, column 7:" (q conn ["BEGIN SERIALIZABLE"])))))
+    (is (thrown-with-msg? PSQLException #"line 1:6 mismatched input 'not'" (q conn ["BEGIN not valid sql!"])))
+    (is (thrown-with-msg? PSQLException #"line 1:6 extraneous input 'SERIALIZABLE'" (q conn ["BEGIN SERIALIZABLE"])))))
 
 (deftest begin-with-access-mode-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
@@ -1160,12 +1159,12 @@
       (sql "COMMIT")
 
       (is (= [{:version 1, :xt$valid_from "2020-01-02T00:00Z", :xt$valid_to nil}]
-             (q conn ["SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"])))
+             (q conn ["SELECT version, xt$valid_from, xt$valid_to FROM foo"])))
 
       (sql "SET valid_time_defaults iso_standard")
       (is (= (set [{:version 0, :xt$valid_from "2020-01-01T00:00Z", :xt$valid_to "2020-01-02T00:00Z"}
                    {:version 1, :xt$valid_from "2020-01-02T00:00Z", :xt$valid_to nil}])
-             (set (q conn ["SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"])))))))
+             (set (q conn ["SELECT version, xt$valid_from, xt$valid_to FROM foo"])))))))
 
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
@@ -1178,7 +1177,7 @@
         (sql "BEGIN")
         (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (xt$id) values (43)")))
         (sql "ROLLBACK")
-        (is (= [] (sql "select foo.xt$id from foo"))))
+        (is (= [] (sql "select * from foo"))))
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
 
@@ -1206,7 +1205,7 @@
 (deftest analyzer-error-returned-test
   (testing "Query"
     (with-open [conn (jdbc-conn)]
-      (is (thrown-with-msg? PSQLException #"Table variable duplicated: baz" (q conn ["SELECT 1 FROM foo AS baz, baz"])))))
+      (is (thrown-with-msg? PSQLException #"mismatched input 'SLECT' expecting" (q conn ["SLECT 1 FROM foo"])))))
   (testing "DML"
     (with-open [conn (jdbc-conn)]
       (q conn ["BEGIN READ WRITE"])
@@ -1217,10 +1216,10 @@
   (deftest psql-analyzer-error-test
     (psql-session
      (fn [send read]
-       (send "SELECT 1 FROM foo AS baz, baz;\n")
+       (send "SLECT 1 FROM foo;\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (re-find #"Table variable duplicated: baz" s)))
+         (is (re-find #"mismatched input 'SLECT' expecting" s)))
 
        (send "BEGIN READ WRITE;\n")
        (read)

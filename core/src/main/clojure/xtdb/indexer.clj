@@ -296,6 +296,7 @@
               ^RelationReader content-rel (vr/rel-reader (->> in-rel
                                                               (remove (comp types/temporal-column? #(.getName ^IVectorReader %))))
                                                          (.rowCount in-rel))
+              table (str table)
               id-col (.readerForName in-rel "xt$id")
               valid-from-rdr (.readerForName in-rel "xt$valid_from")
               valid-to-rdr (.readerForName in-rel "xt$valid_to")

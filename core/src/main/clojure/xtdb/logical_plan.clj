@@ -139,9 +139,6 @@
 ;; them back at the top. Scan still needs explicit names to access the
 ;; columns, so these are directly renamed.
 
-(def ^:const ^String relation-id-delimiter "__")
-(def ^:const ^String relation-prefix-delimiter "_")
-
 (defn extend-projection? [column-or-expr]
   (map? column-or-expr))
 
@@ -153,10 +150,6 @@
 (defn and-predicate? [predicate]
   (and (sequential? predicate)
        (= 'and (first predicate))))
-
-(defn or-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 'or (first predicate))))
 
 (defn flatten-expr [pred expr]
   (if (pred expr)
@@ -214,7 +207,7 @@
     [:rename prefix-or-columns relation]
     (if (symbol? prefix-or-columns)
       (vec (for [c (relation-columns relation)]
-             (symbol (str prefix-or-columns relation-prefix-delimiter  c))))
+             (symbol (str prefix-or-columns) (name c))))
       (replace prefix-or-columns (relation-columns relation)))
 
     [:project projection _]
@@ -276,267 +269,6 @@
     (throw (err/illegal-arg ::cannot-calculate-relation-cols
                             {::err/message (str "cannot calculate columns for: " (pr-str relation-in))
                              :relation relation-in}))))
-
-(def ^:private ^:dynamic *name-counter* (atom 0))
-
-(defn- next-name []
-  (with-meta (symbol (str 'x (swap! *name-counter* inc))) {:column? true}))
-
-(defn rename-walk
-  "Some rename steps require a walk of a relation to replace names. This is usually fine, but it is possible
-  user column names can collide with our 'x1', 'x2' symbols that are generated as part of the remove names step.
-
-  This function is a version of postwalk-replace that does not rename the elements of a `:scan` operator if encountered
-  during the walk."
-  [smap form]
-  ;; consider in the future just ensuring that generated names cannot collide with columns and we
-  ;; can go back to clojure.walk
-  (letfn [(conditional-walk [pred inner outer form]
-            (cond
-              (not (pred form)) form
-              (list? form) (outer (apply list (map inner form)))
-              (instance? clojure.lang.IMapEntry form)
-              (outer (clojure.lang.MapEntry/create (inner (key form)) (inner (val form))))
-              (seq? form) (outer (doall (map inner form)))
-              (instance? clojure.lang.IRecord form)
-              (outer (reduce (fn [r x] (conj r (inner x))) form form))
-              (coll? form) (outer (into (empty form) (map inner form)))
-              :else (outer form)))
-          (conditional-postwalk [pred f form] (conditional-walk pred (partial conditional-postwalk pred f) f form))
-          (not-scan? [form] (if (vector? form)
-                              (not= :scan (nth form 0 nil))
-                              true))
-          (replace [form] (if (contains? smap form) (smap form) form))]
-    (conditional-postwalk not-scan? replace form)))
-
-(defn- remove-names-step [relation-in]
-  (letfn [(with-smap [relation smap]
-            (vary-meta relation assoc :smap smap))
-
-          (->smap [relation]
-            (:smap (meta relation)))
-
-          (remove-projection-names [op projection relation]
-            (let [smap (->smap relation)
-                  new-smap (reduce
-                             (fn [acc p]
-                               (if (extend-projection? p)
-                                 (let [[k v] (first p)]
-                                   (if-let [existing-name (smap v)]
-                                     (assoc acc k existing-name)
-                                     (assoc acc k (next-name))))
-                                 (assoc acc p (smap p))))
-                             (if (= op :map)
-                               smap
-                               (->> smap
-                                    (filter #(str/starts-with? (name (key %)) "?"))
-                                    (into {})))
-                             projection)
-
-                  projection (vec (for [p projection]
-                                    (if (extend-projection? p)
-                                      (let [[k v] (first p)]
-                                        {k (w/postwalk-replace smap v)})
-                                      (w/postwalk-replace smap p))))
-
-                  projection (vec (for [p (w/postwalk-replace new-smap projection)]
-                                    (if (extend-projection? p)
-                                      (let [[k v] (first p)]
-                                        (if (= k v)
-                                          k
-                                          p))
-                                      p)))
-                  projection (if (= :map op)
-                               (filterv map? projection)
-                               projection)
-                  relation (if (and (every? symbol? projection)
-                                    (or (= :map op)
-                                        (= (set projection)
-                                           (set (relation-columns relation)))))
-                             relation
-                             [op
-                              projection
-                              relation])]
-              (with-smap relation new-smap)))]
-    (r/zmatch relation-in
-      [:table explicit-column-names table]
-      (let [smap (zipmap explicit-column-names
-                         (repeatedly next-name))]
-        (with-smap (w/postwalk-replace smap [:table explicit-column-names table]) smap))
-
-      [:table table]
-      (let [smap (zipmap (map symbol (keys (first table)))
-                         (repeatedly next-name))]
-        (with-smap [:table (w/postwalk-replace smap table)]
-          smap))
-
-      [:scan scan-opts columns]
-      (let [smap (zipmap (map ->projected-column columns)
-                         (repeatedly next-name))]
-        (with-smap [:rename smap [:scan scan-opts columns]] smap))
-
-      [:join join-map lhs rhs]
-      (let [smap (merge (->smap lhs) (->smap rhs))]
-        (with-smap [:join (w/postwalk-replace smap join-map) lhs rhs] smap))
-
-      [:cross-join lhs rhs]
-      (let [smap (merge (->smap lhs) (->smap rhs))]
-        (with-smap [:cross-join lhs rhs] smap))
-
-      [:left-outer-join join-map lhs rhs]
-      (let [smap (merge (->smap lhs) (->smap rhs))]
-        (with-smap [:left-outer-join (w/postwalk-replace smap join-map) lhs rhs] smap))
-
-      [:semi-join join-map lhs rhs]
-      (let [smap (merge (->smap lhs) (->smap rhs))]
-        (with-smap [:semi-join (w/postwalk-replace smap join-map) lhs rhs]
-          (->smap lhs)))
-
-      [:anti-join join-map lhs rhs]
-      (let [smap (merge (->smap lhs) (->smap rhs))]
-        (with-smap [:anti-join (w/postwalk-replace smap join-map) lhs rhs]
-          (->smap lhs)))
-
-      [:mark-join projection lhs rhs]
-      (let [mark-join-projection-smap (let [[column _expr] projection]
-                                        {column (next-name)})
-            smap (merge (->smap lhs) (->smap rhs))]
-        (with-smap [:mark-join (w/postwalk-replace smap projection) lhs rhs]
-          (merge (->smap lhs) mark-join-projection-smap)))
-
-      [:rename prefix-or-columns relation]
-      (let [smap (->smap relation)]
-        (with-smap relation
-          (if (symbol? prefix-or-columns)
-            (update-keys smap #(if (str/starts-with? (name %) "?")
-                                 %
-                                 (symbol (str prefix-or-columns relation-prefix-delimiter %))))
-            (set/rename-keys smap prefix-or-columns))))
-
-      [:project columns [:arrow path]]
-      (let [smap (zipmap (map ->projected-column columns)
-                         (repeatedly next-name))]
-        (with-smap [:rename smap [:arrow path]] smap))
-
-      [:project projection relation]
-      (remove-projection-names :project projection relation)
-
-      [:map projection relation]
-      (remove-projection-names :map projection relation)
-
-      [:group-by columns relation]
-      (let [smap (->smap relation)
-            columns (w/postwalk-replace smap columns)
-            smap (merge smap (zipmap (map ->projected-column (filter map? columns))
-                                     (repeatedly next-name)))]
-        (with-smap [:group-by (w/postwalk-replace smap columns) relation] smap))
-
-      [:select predicate relation]
-      (let [smap (->smap relation)]
-        (with-smap [:select (w/postwalk-replace smap predicate) relation] smap))
-
-      [:order-by opts relation]
-      (let [smap (->smap relation)]
-        (with-smap [:order-by (w/postwalk-replace smap opts) relation] smap))
-
-      [:top opts relation]
-      (with-smap [:top opts relation] (->smap relation))
-
-      [:distinct relation]
-      (with-smap [:distinct relation] (->smap relation))
-
-      [:intersect lhs rhs]
-      (with-smap [:intersect lhs (rename-walk (zipmap (relation-columns rhs)
-                                                      (relation-columns lhs))
-                                              rhs)]
-        (->smap lhs))
-
-      [:difference lhs rhs]
-      (with-smap [:difference lhs (rename-walk (zipmap (relation-columns rhs)
-                                                       (relation-columns lhs))
-                                               rhs)]
-        (->smap lhs))
-
-      [:union-all lhs rhs]
-      (with-smap [:union-all lhs (rename-walk (zipmap (relation-columns rhs)
-                                                      (relation-columns lhs))
-                                              rhs)]
-        (->smap lhs))
-
-      [:apply mode columns independent-relation dependent-relation]
-      (let [smap (merge (->smap independent-relation) (->smap dependent-relation))
-            params (->> columns
-                        (vals)
-                        (filter #(str/starts-with? (name %) "?"))
-                        (map (fn [param]
-                               {param (get
-                                        smap
-                                        param
-                                        (with-meta
-                                          (symbol (str "?" (next-name)))
-                                          {:correlated-column? true}))}))
-                        (into {}))
-            mark-join-mode-projection-smap (when-let [[column _expr] (first (:mark-join mode))]
-                                             {column (next-name)})
-            new-smap (merge smap params mark-join-mode-projection-smap)]
-        (-> [:apply
-             (w/postwalk-replace new-smap mode)
-             (w/postwalk-replace new-smap columns)
-             independent-relation
-             (rename-walk new-smap dependent-relation)]
-            (with-smap (if mark-join-mode-projection-smap
-                         (merge (->smap independent-relation) mark-join-mode-projection-smap params)
-                         (case mode
-                           (:cross-join :left-outer-join :single-join) new-smap
-                           (:semi-join :anti-join) (merge (->smap independent-relation) params))))))
-
-      [:unnest columns opts relation]
-      (let [smap (->smap relation)
-            [to from] (first columns)
-            from (get smap from)
-            smap (assoc smap to (next-name))
-            columns {(get smap to) from}
-            [smap opts] (if-let [ordinality-column (:ordinality-column opts)]
-                          (let [smap (assoc smap ordinality-column (next-name))]
-                            [smap {:ordinality-column (get smap ordinality-column)}])
-                          [smap {}])]
-        (with-smap [:unnest columns opts relation] smap))
-
-      [:arrow path]
-      (with-smap [:arrow path] {})
-
-      (when (and (vector? (r/node relation-in))
-                 (keyword? (r/ctor relation-in)))
-        (throw (err/illegal-arg ::cannot-remove-names
-                                {::err/message (str "cannot remove names for: " (pr-str (r/node relation-in)))
-                                 :node (r/node relation-in)}))))))
-
-(defn remove-names [relation {:keys [project-anonymous-columns?]}]
-  (let [named-projection (relation-columns relation)
-        relation (binding [*name-counter* (atom 0)]
-                   (r/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/vector-zip relation))))
-        smap (:smap (meta relation))
-        rename-map (select-keys smap named-projection)
-        projection (replace smap named-projection)
-        add-projection-fn (fn [relation]
-                            (let [relation (if (= projection (relation-columns relation))
-                                             relation
-                                             [:project projection
-                                              relation])
-                                  smap-inv (set/map-invert rename-map)
-                                  relation (if project-anonymous-columns?
-                                             relation
-                                             (or (r/zmatch relation
-                                                   [:rename rename-map-2 relation-2]
-                                                   ;;=>
-                                                   (when (= smap-inv (set/map-invert rename-map-2))
-                                                     relation-2))
-                                                 [:rename smap-inv relation]))]
-                              (with-meta relation {:column->name smap
-                                                   :named-projection named-projection})))]
-    (with-meta relation {:column->name smap
-                         :named-projection named-projection
-                         :add-projection-fn add-projection-fn})))
 
 (defn expr-symbols [expr]
   (set (for [x (flatten (if (coll? expr)
@@ -1500,7 +1232,7 @@
 (defn rewrite-plan
   ([plan] (rewrite-plan plan {}))
 
-  ([plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}, :as opts}]
+  ([plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}}]
    (let [!fired-rules (atom [])]
      (binding [*gensym* (util/seeded-gensym "_" 0)]
        (letfn [(instrument-rule [f]

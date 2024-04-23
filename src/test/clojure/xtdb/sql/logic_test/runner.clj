@@ -299,7 +299,7 @@
                                 [(ex-message t) :lines]
                                 #(conj % (:line record))))))
 
-                      (if (and (str/includes? (or (ex-message t) "") "Column reference is not a grouping column")
+                      (if (and (str/includes? (or (ex-message t) "") "Missing grouping columns")
                                (contains? (set (:skipif record)) "postgresql"))
                         ;; Reporting here commented out as its still quite noisy.
                         (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
@@ -471,7 +471,6 @@
        (map #(vector (first %) ((comp (partial take 5) reverse :lines second) %) (:count (second %)))))
 
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
-
 
   (time (-main  "--verify" "--db" "xtdb" "src/test/resources/xtdb/sql/logic_test/sqlite_test/random/groupby/slt_good_1.test"))
 
