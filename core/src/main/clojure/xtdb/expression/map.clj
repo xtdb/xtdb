@@ -112,8 +112,8 @@
                             {:var->col-type {left-vec (types/field->col-type (.getField left-col))
                                              right-vec (types/field->col-type (.getField right-col))}
                              :param-types param-types})]
-    (f (vr/rel-reader [(.withName left-col (name left-vec))])
-       (vr/rel-reader [(.withName right-col (name right-vec))])
+    (f (vr/rel-reader [(.withName left-col (str left-vec))])
+       (vr/rel-reader [(.withName right-col (str right-vec))])
        params)))
 
 (defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
@@ -156,7 +156,7 @@
   "Returns a single row relation where all columns are nil. (Useful for outer joins)."
   [col-names]
   (vr/rel-reader (for [col-name col-names]
-                   (vr/vec->reader (doto (NullVector. (name col-name))
+                   (vr/vec->reader (doto (NullVector. (str col-name))
                                      (.setValueCount 1))))))
 
 (def nil-row-idx 0)
