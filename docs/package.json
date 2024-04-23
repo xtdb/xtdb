@@ -21,6 +21,7 @@
     "@codemirror/lang-sql": "^6.6.1",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.25.1",
+    "@swup/astro": "^1.4.1",
     "astro": "^4.0.1",
     "astro-heroicons": "^2.1.1",
     "date-fns": "^3.6.0",

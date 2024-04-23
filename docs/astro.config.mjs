@@ -2,7 +2,8 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import tailwind from '@astrojs/tailwind';
 import yaml from '@rollup/plugin-yaml';
-import adoc from '/shared/src/adoc'
+import swup from '@swup/astro';
+import adoc from '/shared/src/adoc';
 
 // https://astro.build/config
 export default defineConfig({
@@ -255,6 +256,13 @@ export default defineConfig({
         tailwind({ applyBaseStyles: false }),
 
         adoc(),
+
+        swup({ theme: false,
+               animationClass: false,
+               containers: ['.main-frame', '.sidebar'],
+               smoothScrolling: false,
+               progress: true,
+        }),
     ],
 
     trailingSlashes: "never",
