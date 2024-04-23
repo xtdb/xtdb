@@ -250,6 +250,7 @@ export default defineConfig({
             components: {
                 TableOfContents: './src/components/table-of-contents.astro',
                 MobileTableOfContents: './src/components/mobile-table-of-contents.astro',
+		MobileMenuToggle: './src/components/mobile-menu-toggle.astro',
             },
         }),
 
@@ -262,6 +263,7 @@ export default defineConfig({
                containers: ['.main-frame', '.sidebar'],
                smoothScrolling: false,
                progress: true,
+               globalInstance: true,
         }),
     ],
 
