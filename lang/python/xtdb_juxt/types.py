@@ -25,7 +25,7 @@ class Sql(Query):
         return {"sql": self.query}
 
 ToQuery = Union[Query, tuple]
-ToBindings = Union[str, Dict[str, 'expr.Expr']]
+ToBindings = Union[str, Dict[str, 'Expr']]
 
 
 class Pipeline(Query):

@@ -12,7 +12,7 @@ class Date(Expr):
 
 
 class UUID(Expr):
-    def __init__(self, uuid_: uuid):
+    def __init__(self, uuid_):
         self.uuid = uuid_
 
     def to_json(self):
