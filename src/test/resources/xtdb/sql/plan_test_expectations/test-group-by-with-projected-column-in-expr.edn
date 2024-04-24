@@ -1,5 +1,3 @@
-[:rename
- {x4 bar}
- [:project
-  [{x4 (- x1 4)}]
-  [:group-by [x1] [:rename {a x1} [:scan {:table foo} [a]]]]]]
+[:project
+ [{bar (- foo.1/a 4)}]
+ [:group-by [foo.1/a] [:rename foo.1 [:scan {:table foo} [a]]]]]
