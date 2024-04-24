@@ -71,7 +71,7 @@ export default defineConfig({
                             items: [
                                 { label: 'Front-office Reporting: Understanding PnL and Risk', link: '/tutorials/financial-usecase/commodities-pnl' },
                                 { label: 'Back-office Compliance: Late trade adjustments', link: '/tutorials/financial-usecase/late-trade' },
-                                { label: 'Strategist: Tracking corporate actions', link: '/tutorials/financial-usecase/corporation-actions' },
+                                { label: 'Strategist: Tracking corporate actions', link: '/tutorials/financial-usecase/corporate-actions' },
                                 { label: 'Quantitative Analyst: Model backtesting', link: '/tutorials/financial-usecase/backtesting' },
                             ],
                         },
