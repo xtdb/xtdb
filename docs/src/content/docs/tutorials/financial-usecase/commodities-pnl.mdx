@@ -1,0 +1,176 @@
+---
+title: Understanding PnL and Risk
+---
+
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import Query from '@components/fiddle/query.astro';
+
+Let's imagine you're a commodities trader.
+
+Every day you arrive at your desk and look at your Risk and PnL reports, telling you the value and risk of your trading positions.
+
+Whenever something in those reports doesn't look quite like what you were expecting you have to do some counterfactual exploration of all the various inputs to understand what's happened.
+
+For example, let's assume that over the course of the day your colleagues have made the following trades:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-04-01"
+       txs={`
+INSERT INTO commodity_trades
+(xt$id, symbol, quantity, price, xt$valid_from, trader_name)
+VALUES
+(1, 'XAU:CUR', 100, 1800.50, TIMESTAMP '2024-03-08 10:00:00', 'John Doe'),   -- Gold
+(2, 'XAG:CUR', 500, 25.30, TIMESTAMP '2024-03-08 11:00:00', 'Jane Smith'),   -- Silver
+(3, 'CL1:COM', 300, 60.00, TIMESTAMP '2024-03-08 11:30:00', 'Mike Johnson'), -- Crude Oil
+(4, 'NG1:COM', 400, 3.10, TIMESTAMP '2024-03-08 12:45:00', 'Emily White'),   -- Natural Gas
+(5, 'W1:COM', 250, 5.20, TIMESTAMP '2024-03-08 13:05:00', 'Alex Green')      -- Wheat
+`} />
+  <Query q={`
+SELECT t.*, t.xt$valid_from
+FROM commodity_trades as t
+ORDER BY t.xt$id
+`} />
+</Fiddle>
+
+At the end of the day, the market closes with the following prices:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-04-01"
+       txs={`
+INSERT INTO commodity_spot_prices
+(xt$id, spot_price, xt$valid_from)
+VALUES
+('XAU:CUR', 1805.50, TIMESTAMP '2024-03-08 17:00:00'),
+('XAG:CUR', 25.35, TIMESTAMP '2024-03-08 17:00:00'),
+('CL1:COM', 61.00, TIMESTAMP '2024-03-08 17:00:00'),
+('NG1:COM', 3.15, TIMESTAMP '2024-03-08 17:00:00'),
+('W1:COM', 5.25, TIMESTAMP '2024-03-08 17:00:00')
+`} />
+  <Query q={`
+SELECT p.xt$id, p.spot_price, p.xt$valid_from
+FROM commodity_spot_prices as p
+`} />
+</Fiddle>
+
+Now we want to price our risk and PnL for the end of this week.
+Let's extract the information we need to calculate our PnL:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT
+    ct.xt$id as trade_id,
+    ct.symbol,
+    ct.quantity,
+    ct.price as trade_price,
+    csp.spot_price,
+    ct.xt$valid_from as trade_timestamp,
+    ct.trader_name,
+    csp.xt$valid_from as spot_price_timestamp
+FROM
+    commodity_trades ct
+INNER JOIN
+    commodity_spot_prices csp
+ON
+    ct.symbol = csp.xt$id
+`} />
+</Fiddle>
+
+For the purposes of this simple example, we'll just use SQL to calculate the PnL.
+However, in the 'real world', we'd usually have much more complex objects (yield curves, etc.) and would use a quant pricing library.
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT
+    SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
+FROM
+    commodity_trades ct
+INNER JOIN
+    commodity_spot_prices csp
+ON
+    ct.symbol = csp.xt$id
+`} />
+</Fiddle>
+
+So far so good.
+
+On the Monday morning, after a pleasant weekend's break, you come back into the trading floor.
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-04-01"
+       txs={`
+INSERT INTO commodity_trades (xt$id, symbol, quantity, price, xt$valid_from, trader_name)
+VALUES
+(6, 'XAU:CUR', 1000, 2590.40, TIMESTAMP '2024-03-11 10:00:00', 'John Doe'),
+(7, 'XAG:CUR', 30, 27.30, TIMESTAMP '2024-03-11 11:00:00', 'Jane Smith')
+`} />
+  <Query q={`
+SELECT t.*, t.xt$valid_from
+FROM commodity_trades as t
+ORDER BY t.xt$id
+`} />
+</Fiddle>
+
+At the end of this Monday trading day, the market closes with the following prices:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-04-01"
+       txs={`
+INSERT INTO commodity_spot_prices (xt$id, spot_price, xt$valid_from)
+VALUES
+('XAU:CUR', 2010.50, TIMESTAMP '2024-03-11 17:00:00'),
+('XAG:CUR', 25.25, TIMESTAMP '2024-03-11 17:00:00'),
+('CL1:COM', 62.00, TIMESTAMP '2024-03-11 17:00:00'),
+('NG1:COM', 3.17, TIMESTAMP '2024-03-11 17:00:00'),
+('W1:COM', 5.27, TIMESTAMP '2024-03-11 17:00:00')
+`} />
+  <Query q={`
+SELECT p.xt$id, p.spot_price, p.xt$valid_from
+FROM commodity_spot_prices as p
+`} />
+</Fiddle>
+
+We now recalculate our new PnL:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT
+    SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
+FROM
+    commodity_trades ct
+INNER JOIN
+    commodity_spot_prices csp
+ON
+    ct.symbol = csp.xt$id
+`} />
+</Fiddle>
+
+Oh no!
+
+What if we could ignore the today's trades, and just see what our closing position on Friday would have looked like in the market at the end of today.
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT
+    SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
+FROM
+    commodity_trades FOR VALID_TIME AS OF TIMESTAMP '2024-03-08 17:00:00' ct
+INNER JOIN
+    commodity_spot_prices csp
+ON
+    ct.symbol = csp.xt$id
+`} />
+</Fiddle>
+
+We have now established that today's trades must be causing the dramatic PnL change.
+
+## Reasoning about cross-effects in high dimensions
+
+In the abstract, traders need to be able to reason about situations quickly and hedge against unexpected situations.
+
+Navigating the relationships between portfolio positions and price volatilities ([the Greeks](https://en.wikipedia.org/wiki/Greeks_(finance))) is generally only possible with the aid of sophisticated pricing and risk models.
+For institutions with large portfolios, distributed teams and complex positions, equipping individual traders with the tools to understand the dynamics surrounding their own trades is essential.
+
+With ubiquitous as-of querying, XTDB provides an essential mechanism to validate the impacts of different dimensions of change as applied to subsets of a portfolio, and without the need for snapshots or other expensive operations.
+
+This general approach to the problem of financial risk was pioneered by SecDB in the 1990s and has been repeated across many subsequent systems.
