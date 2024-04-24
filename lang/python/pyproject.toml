@@ -10,6 +10,7 @@ readme = "README.md"
 python = "^3.10"
 urllib3 = "^2.2.1"
 python-dateutil = "^2.9.0.post0"
+mypy = "^1.9.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.1.1"
