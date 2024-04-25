@@ -18,8 +18,8 @@
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.api IndexerConfig TransactionKey)
            xtdb.IBufferPool
+           (xtdb.api IndexerConfig TransactionKey)
            xtdb.metadata.IMetadataManager
            (xtdb.trie LiveHashTrie)
            (xtdb.util RefCounter RowCounter)
@@ -92,6 +92,22 @@
         (when retain? (util/close out-cols))
         (throw t)))))
 
+(defn live-table-wm [^IRelationWriter live-rel, trie, retain?]
+  (let [fields (live-rel->fields live-rel)
+        wm-live-rel (open-wm-live-rel live-rel retain?)
+        wm-live-trie (cond-> ^LiveHashTrie trie
+                       retain? (.withIidReader (.readerForName wm-live-rel "xt$iid")))]
+    (reify ILiveTableWatermark
+      (columnField [_ col-name]
+        (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
+
+      (columnFields [_] fields)
+      (liveRelation [_] wm-live-rel)
+      (liveTrie [_] wm-live-trie)
+
+      AutoCloseable
+      (close [_] (when retain? (util/close wm-live-rel))))))
+
 (deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr, ^IVectorWriter valid-from-wtr, ^IVectorWriter valid-to-wtr
@@ -147,21 +163,7 @@
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
           (.addRows row-counter 1))
 
-        (openWatermark [_]
-          (let [fields (live-rel->fields live-rel)
-                wm-live-rel (open-wm-live-rel live-rel false)
-                wm-live-trie @!transient-trie]
-
-            (reify ILiveTableWatermark
-              (columnField [_ col-name]
-                (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
-
-              (columnFields [_] fields)
-              (liveRelation [_] wm-live-rel)
-              (liveTrie [_] wm-live-trie)
-
-              AutoCloseable
-              (close [_]))))
+        (openWatermark [_] (live-table-wm live-rel @!transient-trie false))
 
         (commit [_]
           (set! (.-live-trie this-table) @!transient-trie)
@@ -190,21 +192,7 @@
           (-> !fut
               (util/then-apply (fn [_] table-metadata)))))))
 
-  (openWatermark [this retain?]
-    (let [fields (live-rel->fields live-rel)
-          wm-live-rel (open-wm-live-rel live-rel retain?)
-          wm-live-trie (.withIidReader ^LiveHashTrie (.live-trie this) (.readerForName wm-live-rel "xt$iid"))]
-      (reify ILiveTableWatermark
-        (columnField [_ col-name]
-          (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
-
-        (columnFields [_] fields)
-        (liveRelation [_] wm-live-rel)
-        (liveTrie [_] wm-live-trie)
-
-        AutoCloseable
-        (close [_]
-          (when retain? (util/close wm-live-rel))))))
+  (openWatermark [this retain?] (live-table-wm live-rel (.live-trie this) retain?))
 
   TestLiveTable
   (live-trie [_] live-trie)
