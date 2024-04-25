@@ -38,5 +38,5 @@ class Watermark(
 }
 
 interface IWatermarkSource {
-    fun openWatermark(afterTx: TransactionKey?): Watermark
+    fun openWatermark(): Watermark
 }

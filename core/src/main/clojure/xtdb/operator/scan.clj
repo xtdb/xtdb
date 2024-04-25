@@ -114,11 +114,9 @@
         (apply-constraint for-system-time (.getSystemFrom bounds) (.getSystemTo bounds))))
     bounds))
 
-(defn tables-with-cols [{:keys [basis after-tx]} ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
-  (let [{:keys [at-tx]} basis
-        wm-tx (or at-tx after-tx)]
-    (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
-      (.allTableColNames scan-emitter wm))))
+(defn tables-with-cols [^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
+  (with-open [^Watermark wm (.openWatermark wm-src)]
+    (.allTableColNames scan-emitter wm)))
 
 (defn temporal-column? [col-name]
   (contains? #{"xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to"}
