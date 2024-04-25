@@ -3,7 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.await :as await]
             [xtdb.time :as time])
-  (:import java.util.concurrent.PriorityBlockingQueue
+  (:import (java.util.concurrent PriorityBlockingQueue TimeUnit)
            xtdb.api.TransactionKey))
 
 (defn- ->tx [tx-id]
@@ -30,7 +30,8 @@
 
     (await/notify-tx (->tx 4) awaiters)
 
-    (t/is (= (->tx 4) (.getNow fut4 ::waiting))
+    ;;avoids race condition, await-tx-async doesn't instantly react to being notified
+    (t/is (= (->tx 4) (.get fut4 100 TimeUnit/MILLISECONDS))
           "now yields")
 
     (t/is (= ::waiting (.getNow fut5 ::waiting))
