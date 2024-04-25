@@ -1,0 +1,6 @@
+[:project
+ [{title si.2/title} {length m.1/length} {films si.2/films}]
+ [:left-outer-join
+  [{si.2/title m.1/title}]
+  [:rename si.2 [:scan {:table stars_in} [title films]]]
+  [:rename m.1 [:scan {:table movie} [length title]]]]]

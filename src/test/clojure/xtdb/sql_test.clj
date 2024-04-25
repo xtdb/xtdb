@@ -90,18 +90,6 @@
                                   "stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
-          "basic-query-7"
-          (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)"
-                    {:table-info {"movie" #{"title"}
-                                  "stars_in" #{"title"}}})))
-
-  (t/is (=plan-file
-          "basic-query-8"
-          (plan-sql "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)"
-                    {:table-info {"movie" #{"title"}
-                                  "stars_in" #{"title"}}})))
-
-  (t/is (=plan-file
           "basic-query-9"
           (plan-sql "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930"
                     {:table-info {"movie_exec" #{"name" "cert"}
@@ -296,6 +284,33 @@
                    {:table-info {"a" #{"a1" "a2"}
                                  "b" #{"b1"}
                                  "c" #{"c1"}}}))))
+
+(deftest test-named-columns-join
+  (t/is (=plan-file
+         "basic-query-7"
+         (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)"
+                   {:table-info {"movie" #{"title"}
+                                 "stars_in" #{"title"}}})))
+
+  (t/is (=plan-file
+         "basic-query-8"
+         (plan-sql "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)"
+                   {:table-info {"movie" #{"title"}
+                                 "stars_in" #{"title"}}}))))
+
+(deftest test-natural-join
+  (t/is (=plan-file
+         "natural-join-1"
+         (plan-sql "SELECT si.title, m.`length`, si.films FROM Movie AS m NATURAL JOIN StarsIn AS si"
+                   {:table-info {"movie" #{"title" "length"}
+                                 "stars_in" #{"title" "films"}}})))
+
+  (t/is (=plan-file
+         "natural-join-2"
+         (plan-sql "SELECT si.title, m.`length`, si.films FROM Movie AS m NATURAL RIGHT OUTER JOIN StarsIn AS si"
+                   {:table-info {"movie" #{"title" "length"}
+                                 "stars_in" #{"title" "films"}}}))))
+
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?

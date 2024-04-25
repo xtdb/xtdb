@@ -1,0 +1,6 @@
+[:project
+ [{title si.2/title} {length m.1/length} {films si.2/films}]
+ [:mega-join
+  [{m.1/title si.2/title}]
+  [[:rename m.1 [:scan {:table movie} [length title]]]
+   [:rename si.2 [:scan {:table stars_in} [title films]]]]]]
