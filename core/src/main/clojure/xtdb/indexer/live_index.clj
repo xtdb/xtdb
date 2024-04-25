@@ -225,6 +225,20 @@
         (.setPageLimit page-limit))
       (.build)))
 
+(defn open-live-idx-wm [^Map tables]
+  (util/with-close-on-catch [wms (HashMap.)]
+
+    (doseq [[table-name ^ILiveTable live-table] tables]
+      (.put wms table-name (.openWatermark live-table true)))
+
+    (reify ILiveIndexWatermark
+      (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
+
+      (liveTable [_ table-name] (.get wms table-name))
+
+      AutoCloseable
+      (close [_] (util/close wms)))))
+
 (deftype LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
@@ -265,6 +279,12 @@
                 (.put tables table-name (.commit live-table-tx)))
 
               (set! (.-latest-completed-tx this-idx) tx-key)
+
+              (let [^Watermark old-wm (.shared-wm this-idx)
+                    ^Watermark shared-wm (Watermark. (.latestCompletedTx this-idx) (open-live-idx-wm tables))]
+                (set! (.shared-wm this-idx) shared-wm)
+                (some-> old-wm .close))
+
               (finally
                 (.unlock wm-lock wm-lock-stamp))))
 
@@ -286,68 +306,24 @@
               (.put wms table-name (.openWatermark live-table-tx)))
 
             (doseq [[table-name ^ILiveTable live-table] tables]
-              (.computeIfAbsent wms table-name
-                                (util/->jfn (fn [_] (.openWatermark live-table false)))))
+              (.computeIfAbsent wms table-name (util/->jfn (fn [_] (.openWatermark live-table false)))))
 
             (reify ILiveIndexWatermark
               (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
               (liveTable [_ table-name] (.get wms table-name))
 
               AutoCloseable
-              (close [_]
-                (util/close wms)))))
+              (close [_] (util/close wms)))))
 
         AutoCloseable
         (close [_]))))
 
   (openWatermark [this tx-key]
-    (letfn [(maybe-existing-wm []
-              (when-let [^Watermark wm (.shared-wm this)]
-                (let [wm-tx-key (.txBasis wm)]
-                  (when (or (nil? tx-key)
-                            (and wm-tx-key
-                                 (<= (.getTxId tx-key) (.getTxId wm-tx-key))))
-                    (doto wm .retain)))))
-            (open-live-idx-wm []
-              (.acquire wm-cnt)
-              (try
-                (util/with-close-on-catch [wms (HashMap.)]
-
-                  (doseq [[table-name ^ILiveTable live-table] tables]
-                    (.put wms table-name (.openWatermark live-table true)))
-
-                  (reify ILiveIndexWatermark
-                    (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
-
-                    (liveTable [_ table-name] (.get wms table-name))
-
-                    AutoCloseable
-                    (close [_]
-                      (util/close wms)
-                      (.release wm-cnt))))
-                (catch Throwable t
-                  (.release wm-cnt)
-                  (throw t))))]
-
-      (or (let [wm-lock-stamp (.readLock wm-lock)]
-            (try
-              (maybe-existing-wm)
-              (finally
-                (.unlock wm-lock wm-lock-stamp))))
-
-          (let [wm-lock-stamp (.writeLock wm-lock)]
-            (try
-              (or (maybe-existing-wm)
-                  (let [^Watermark old-wm (.shared-wm this)]
-                    (try
-                      (let [^Watermark shared-wm (Watermark. (.latestCompletedTx this) (open-live-idx-wm))]
-                        (set! (.shared-wm this) shared-wm)
-                        (doto shared-wm .retain))
-                      (finally
-                        (some-> old-wm .close)))))
-
-              (finally
-                (.unlock wm-lock wm-lock-stamp)))))))
+    (let [wm-read-stamp (.readLock wm-lock)]
+      (try
+        (doto ^Watermark (.-shared-wm this) .retain)
+        (finally
+          (.unlock wm-lock wm-read-stamp)))))
 
   FinishChunk
   (finish-chunk! [this]
@@ -379,12 +355,12 @@
 
       (let [wm-lock-stamp (.writeLock wm-lock)]
         (try
-          (when-let [^Watermark shared-wm (.shared-wm this)]
-            (set! (.shared-wm this) nil)
+          (let [^Watermark shared-wm (.shared-wm this)]
             (.close shared-wm))
 
           (util/close tables)
           (.clear tables)
+          (set! (.shared-wm this) (Watermark. latest-completed-tx (open-live-idx-wm tables)))
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
@@ -414,17 +390,18 @@
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr ^IndexerConfig config]}]
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
-      (->LiveIndex allocator buffer-pool metadata-mgr
-                   latest-completed-tx latest-completed-tx
-                   (HashMap.)
+      (let [tables (HashMap.)]
+        (->LiveIndex allocator buffer-pool metadata-mgr
+                     latest-completed-tx latest-completed-tx
+                     tables
 
-                   nil ;; watermark
-                   (StampedLock.)
-                   (RefCounter.)
+                     (Watermark. nil (open-live-idx-wm tables))
+                     (StampedLock.)
+                     (RefCounter.)
 
-                   (RowCounter. next-chunk-idx) (.getRowsPerChunk config)
+                     (RowCounter. next-chunk-idx) (.getRowsPerChunk config)
 
-                   (.getLogLimit config) (.getPageLimit config)))))
+                     (.getLogLimit config) (.getPageLimit config))))))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))
