@@ -124,20 +124,19 @@
            ordered-outer-projection (:named-projection (meta query))]
 
        (reify PreparedQuery
-         (bind [_ {:keys [args params basis after-tx default-tz default-all-valid-time?]}]
+         (bind [_ {:keys [args params basis default-tz default-all-valid-time?]}]
 
            (util/with-close-on-catch [args (open-args allocator args)]
              ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
              (let [params (or params args)
-                   {:keys [at-tx current-time]} basis
+                   {:keys [current-time]} basis
                    current-time (or current-time (.instant expr/*clock*))
                    default-tz (or default-tz (.getZone expr/*clock*))
-                   wm-tx (or at-tx after-tx)
                    clock (Clock/fixed current-time default-tz)
 
                    {:keys [fields ->cursor]} (.computeIfAbsent cache
                                                                {:scan-fields (when (and (seq scan-cols) scan-emitter)
-                                                                               (with-open [wm (.openWatermark wm-src wm-tx)]
+                                                                               (with-open [wm (.openWatermark wm-src)]
                                                                                  (.scanFields scan-emitter wm scan-cols)))
                                                                 :param-fields (expr/->param-fields params)
                                                                 :default-tz default-tz
@@ -160,7 +159,7 @@
                          (if allocator
                            (util/->child-allocator allocator "BoundQuery/openCursor")
                            (RootAllocator.))
-                         wm (some-> wm-src (.openWatermark wm-tx))]
+                         wm (some-> wm-src (.openWatermark))]
                      (try
                        (binding [expr/*clock* clock]
                          (-> (->cursor {:allocator allocator, :watermark wm
@@ -196,7 +195,7 @@
         (prepare-ra query (assoc deps :wm-src wm-src)))
 
       (planQuery [_ query wm-src query-opts]
-        (let [table-info (scan/tables-with-cols query-opts wm-src (:scan-emitter deps))
+        (let [table-info (scan/tables-with-cols wm-src (:scan-emitter deps))
               plan-query-opts
               (-> query-opts
                   (select-keys

@@ -189,7 +189,7 @@
 
             (.commit live-index-tx)
 
-            (with-open [wm (.openWatermark live-index tx-key)]
+            (with-open [wm (.openWatermark live-index)]
               (let [live-index-wm (.liveIndex wm)
                     live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
 

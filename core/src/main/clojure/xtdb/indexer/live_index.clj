@@ -59,7 +59,7 @@
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
   (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.TransactionKey txKey])
 
-  (^xtdb.watermark.Watermark openWatermark [^xtdb.api.TransactionKey txKey])
+  (^xtdb.watermark.Watermark openWatermark [])
 
   (^void close []))
 
@@ -318,7 +318,7 @@
         AutoCloseable
         (close [_]))))
 
-  (openWatermark [this tx-key]
+  (openWatermark [this]
     (let [wm-read-stamp (.readLock wm-lock)]
       (try
         (doto ^Watermark (.-shared-wm this) .retain)
