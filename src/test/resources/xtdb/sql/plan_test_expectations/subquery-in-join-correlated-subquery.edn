@@ -1,16 +1,16 @@
-[:rename
- {x1 a}
- [:project
-  [x1]
-  [:mega-join
-   []
-   [[:rename {a x1} [:scan {:table foo} [a]]]
+[:project
+ [{a foo.1/a}]
+ [:mega-join
+  []
+  [[:rename foo.1 [:scan {:table foo} [a]]]
+   [:select
+    xt$sq_3
     [:apply
-     :semi-join
-     {x4 ?x9, x3 ?x10}
-     [:rename {c x3, b x4} [:scan {:table bar} [c b]]]
+     {:mark-join {xt$sq_3 (= ?xt$needle b)}}
+     {bar.2/b ?xt$sq_b_4, bar.2/c ?xt$needle}
+     [:rename bar.2 [:scan {:table bar} [b c]]]
      [:project
-      [x6]
+      [{b foo.4/b}]
       [:rename
-       {b x6, a x7}
-       [:scan {:table foo} [{b (= ?x10 b)} {a (= a ?x9)}]]]]]]]]]
+       foo.4
+       [:scan {:table foo} [b {a (= a ?xt$sq_b_4)}]]]]]]]]]

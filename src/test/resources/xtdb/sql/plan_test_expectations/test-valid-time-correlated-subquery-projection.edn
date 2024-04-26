@@ -1,15 +1,13 @@
-[:rename
- {x7 xt$column_1}
- [:project
-  [x7]
-  [:apply
-   :single-join
-   {x1 ?x8, x2 ?x9}
-   [:rename
-    {xt$valid_from x1, xt$valid_to x2}
-    [:scan {:table bar} [xt$valid_from xt$valid_to]]]
-   [:project
-    [{x7 (and (< x4 ?x9) (> x5 ?x8))}]
-    [:rename
-     {xt$valid_from x4, xt$valid_to x5}
-     [:scan {:table foo} [xt$valid_from xt$valid_to]]]]]]]
+[:project
+ [{xt$column_1 xt$sq_2}]
+ [:apply
+  :single-join
+  {bar.1/xt$valid_from ?xt$sq_xt$valid_from_3,
+   bar.1/xt$valid_to ?xt$sq_xt$valid_to_4}
+  [:rename bar.1 [:scan {:table bar} [xt$valid_to xt$valid_from]]]
+  [:project
+   [{xt$sq_2
+     (and
+      (< foo.3/xt$valid_from ?xt$sq_xt$valid_to_4)
+      (> foo.3/xt$valid_to ?xt$sq_xt$valid_from_3))}]
+   [:rename foo.3 [:scan {:table foo} [xt$valid_to xt$valid_from]]]]]]

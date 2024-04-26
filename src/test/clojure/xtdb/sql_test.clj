@@ -96,12 +96,12 @@
   (t/is (=plan-file
           "basic-query-11"
           (plan-sql "SELECT * FROM StarsIn AS si(name)"
-                    {:table-info {"stars_in" #{"name"}}})))
+                    {:table-info {"stars_in" #{"name" "title"}}})))
 
   (t/is (=plan-file
           "basic-query-11"
           (plan-sql "FROM StarsIn AS si(name)"
-                    {:table-info {"stars_in" #{"name"}}}))
+                    {:table-info {"stars_in" #{"name" "title"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
@@ -312,7 +312,13 @@
 (deftest test-subqueries
   (t/testing "Scalar subquery in SELECT"
     (t/is (=plan-file
-            "scalar-subquery-in-select"
+            "scalar-subquery-in-select-1"
+            (plan-sql "SELECT (1 = (SELECT bar FROM foo)) AS some_column FROM x WHERE y = 1"
+                      {:table-info {"x" #{"y"}
+                                    "foo" #{"bar"}}})))
+
+    (t/is (=plan-file
+            "scalar-subquery-in-select-2"
             (plan-sql "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
                       {:table-info {"x" #{"y"}
                                     "foo" #{"bar"}}}))))
@@ -441,7 +447,7 @@
                       e.grade = (SELECT MIN(e2.grade)
                       FROM exams e2
                       WHERE s.id = e2.sid)"
-                      {:table-info {"students" #{"id"}
+                      {:table-info {"students" #{"id" "name"}
                                     "exams" #{"sid" "grade" "course"}}})))
 
     (t/is (=plan-file
@@ -465,19 +471,32 @@
       (->> "uncorrelated subquery"
            (t/is (=plan-file
                    "subquery-in-join-uncorrelated-subquery"
-                   (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo)"))))
+                   (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo)"
+                             {:table-info {"foo" #{"a" "b"}
+                                           "bar" #{"c"}}}))))
 
       (->> "correlated subquery"
            (t/is (=plan-file
                    "subquery-in-join-correlated-subquery"
-                   (plan-sql "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"))))
+                   (plan-sql "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"
+                             {:table-info {"foo" #{"a" "b"}
+                                           "bar" #{"c"}}}))))
 
       ;; TODO unable to decorr, need to be able to pull the select over the max-1-row
       ;; although should be able to do this now, no such thing as max-1-row any more
       (->> "correlated equalty subquery"
            (t/is (=plan-file
                    "subquery-in-join-correlated-equality-subquery"
-                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)")))))))
+                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)"
+                              {:table-info {"foo" #{"a" "b"}
+                                            "bar" #{"c"}}})))))))
+
+(t/deftest test-in-subquery
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 1 :foo "Hello"}]
+                           [:put-docs :docs {:xt/id 2 :x 2 :y 1}]])
+
+  (t/is (= [{:xt/id 1, :foo "Hello", :x 1}]
+           (xt/q tu/*node* "SELECT * FROM docs AS d1 WHERE d1.x IN (SELECT d2.y FROM docs AS d2 WHERE d2.y = d1.x)"))))
 
 (t/deftest parameters-referenced-in-relation-test
   (t/are [expected plan apply-columns]
@@ -488,11 +507,13 @@
 (deftest non-semi-join-subquery-optimizations-test
   (t/is (=plan-file
           "non-semi-join-subquery-optimizations-test-1"
-          (plan-sql "select f.a from foo f where f.a in (1,2) or f.b = 42"))
+          (plan-sql "select f.a from foo f where f.a in (1,2) or f.b = 42"
+                    {:table-info {"foo" #{"a" "b"}}}))
         "should not be decorrelated")
   (t/is (=plan-file
           "non-semi-join-subquery-optimizations-test-2"
-          (plan-sql "select f.a from foo f where true = (EXISTS (SELECT foo.c from foo))"))
+          (plan-sql "select f.a from foo f where true = (EXISTS (SELECT foo.c from foo))"
+                    {:table-info {"foo" #{"a" "c"}}}))
         "should be decorrelated as a cross join, not a semi/anti join"))
 
 (deftest multiple-ins-in-where-clause
@@ -670,10 +691,24 @@
 
 (deftest test-array-subqueries
   (t/are [file q]
-    (=plan-file file (plan-sql q))
+    (=plan-file file (plan-sql q {:table-info {"a" #{"a" "b"}, "b" #{"b1" "b2"}}}))
 
     "test-array-subquery1" "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42"
-    "test-array-subquery2" "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))
+    "test-array-subquery2" "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42")
+
+  (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id :a1, :a 42, :b 42}]
+                           [:put-docs :b
+                            {:xt/id :b1, :b1 42, :b2 42}
+                            {:xt/id :b2, :b1 43, :b2 43}]])
+
+  (t/is (= [{:xt/column-1 [42 43]}]
+           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b) FROM a where a.a = 42")))
+
+  (t/is (= [{:xt/column-1 [42]}]
+           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42")))
+
+  (t/is (= [{:xt/column-1 [42]}]
+           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))))
 
 (t/deftest test-expr-in-equi-join
   (t/is
@@ -686,10 +721,11 @@
       (plan-sql "SELECT a.a FROM a JOIN bar b ON a.a = b.b+1"))))
 
 (deftest push-semi-and-anti-joins-down-test
-;;semi-join was previously been pushed down below the cross join
-;;where the cols it required weren't in scope
 (t/is
   (=plan-file
+  ;;semi-join was previously been pushed down below the cross join
+  ;;where the cols it required weren't in scope
+  ;; TODO I think this should be decorr'able?
     "push-semi-and-anti-joins-down"
     (plan-sql "SELECT
               x.foo
@@ -835,20 +871,17 @@
         WHERE foo.SYSTEM_TIME OVERLAPS bar.SYSTEM_TIME"))))
 
 (deftest test-valid-time-correlated-subquery
-  (t/is
-   (=plan-file
-    "test-valid-time-correlated-subquery-where"
-    (plan-sql
-     "SELECT (SELECT foo.name
-        FROM foo
-        WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM bar")))
+  (t/is (=plan-file
+         "test-valid-time-correlated-subquery-where"
+         (plan-sql "SELECT (SELECT foo.name
+                    FROM foo
+                    WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM bar"
+                   {:table-info {"foo" #{"name"}}})))
 
-  (t/is
-   (=plan-file
-    "test-valid-time-correlated-subquery-projection"
-    (plan-sql
-     "SELECT (SELECT (foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM foo)
-        FROM bar"))))
+  (t/is (=plan-file
+         "test-valid-time-correlated-subquery-projection"
+         (plan-sql "SELECT (SELECT (foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM foo)
+                    FROM bar"))))
 
 (deftest test-derived-columns-with-periods
   (t/is
@@ -950,8 +983,10 @@
               {:default-all-valid-time? false}))))
 
 (deftest parenthesized-joined-tables-are-unboxed-502
-  (t/is (= (plan-sql "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )")
-           (plan-sql "SELECT 1 FROM tab0 JOIN tab2 ON TRUE"))))
+  (t/is (= (plan-sql "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )"
+                     {:table-info {"tab0" #{}, "tab2" #{}}})
+           (plan-sql "SELECT 1 FROM tab0 JOIN tab2 ON TRUE"
+                     {:table-info {"tab0" #{}, "tab2" #{}}}))))
 
 (deftest test-with-clause
   (t/is (=plan-file
@@ -1229,9 +1264,11 @@
 
 (t/deftest test-nest
   (t/is (=plan-file "test-nest-one"
-          (plan-sql "SELECT o.xt$id AS order_id, o.value,
+          (plan-sql "SELECT xt$id AS order_id, value,
                             NEST_ONE(SELECT c.name FROM customers c WHERE c.xt$id = o.customer_id) AS customer
-                     FROM orders o")))
+                     FROM orders o"
+                    {:table-info {"orders" #{"xt$id" "value" "customer_id"}
+                                  "customers" #{"xt$id" "name"}}})))
 
   (t/is (=plan-file "test-nest-many"
           (plan-sql "SELECT c.xt$id AS customer_id, c.name,
@@ -1239,14 +1276,15 @@
                                       FROM orders o
                                       WHERE o.customer_id = c.xt$id)
                               AS orders
-                     FROM customers c")))
+                     FROM customers c"
+                    {:table-info {"orders" #{"xt$id" "value" "customer_id"}
+                                  "customers" #{"xt$id" "name"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :customers {:xt/id 0, :name "bob"}]
                            [:put-docs :customers {:xt/id 1, :name "alice"}]
                            [:put-docs :orders {:xt/id 0, :customer-id 0, :value 26.20}]
                            [:put-docs :orders {:xt/id 1, :customer-id 0, :value 8.99}]
                            [:put-docs :orders {:xt/id 2, :customer-id 1, :value 12.34}]])
-
 
   (t/is (= #{{:customer {:name "bob"}, :order-id 0, :value 26.20}
              {:customer {:name "bob"}, :order-id 1, :value 8.99}
@@ -1304,16 +1342,16 @@
            (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
 
 (t/deftest test-case-sensitivity-in-delimited-cols
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO T1(xt$id, col1, col2) VALUES(1,'fish',1000)"]])
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, COL1, COL2) VALUES(2,'dog',2000)"]])
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "INSERT INTO T1(xt$id, col1, col2) VALUES(1,'fish',1000)"]])))
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, COL1, COL2) VALUES(2,'dog',2000)"]])))
 
   (t/is (= [{:xt/id 2, :col1 "dog", :col2 2000}
             {:xt/id 1, :col1 "fish", :col2 1000}]
            (xt/q tu/*node* "SELECT t1.XT$ID, T1.col1, t1.COL2 FROM T1")
            (xt/q tu/*node* "SELECT \"t1\".xt$id, T1.\"col1\", t1.COL2 FROM t1")))
 
-  (xt/submit-tx tu/*node* [[:sql
-                            "INSERT INTO \"T1\"(xt$id, \"CoL1\", \"col2\") VALUES(3,'cat',3000)"]])
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql
+                                                "INSERT INTO \"T1\"(xt$id, \"CoL1\", \"col2\") VALUES(3,'cat',3000)"]])))
 
   (t/is (= [{:xt/id 3, :CoL1 "cat", :col2 3000}]
            (xt/q tu/*node*
@@ -1324,7 +1362,7 @@
                  "SELECT \"T1\".xt$id, \"T1\".col1, \"T1\".COL2 FROM \"T1\""))
         "can't refer to it as `col1`, have to quote")
 
-  (xt/submit-tx tu/*node* [[:sql "UPDATE T1 SET Col1 = 'cat' WHERE t1.COL2 IN (313, 2000)"]])
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "UPDATE T1 SET Col1 = 'cat' WHERE t1.COL2 IN (313, 2000)"]])))
 
   (t/is (= [{:xt/id 2, :col1 "cat", :col2 2000}
             {:xt/id 1, :col1 "fish", :col2 1000}]
@@ -1332,18 +1370,18 @@
 
   (t/is (= [{:col1 "cat", :avg 2000.0} {:col1 "fish", :avg 1000.0}]
            (xt/q tu/*node* "SELECT T1.col1, AVG(t1.col2) avg FROM t1 GROUP BY T1.col1")))
-
+  
   (t/is (= [{:col2 3000}]
            (xt/q tu/*node*
                  "SELECT \"TEEONE\".col2 FROM \"T1\" AS \"TEEONE\" WHERE \"TEEONE\".\"CoL1\" IN ( SELECT t1.\"col1\" FROM T1 WHERE T1.col1 = \"TEEONE\".\"CoL1\" ) ORDER BY \"TEEONE\".col2")))
 
-  (xt/submit-tx tu/*node* [[:sql "DELETE FROM T1 WHERE t1.Col1 = 'fish'"]])
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "DELETE FROM T1 WHERE t1.Col1 = 'fish'"]])))
 
   (t/is (= [{:xt/id 2}]
            (xt/q tu/*node* "SELECT t1.XT$ID FROM T1")))
 
-  (xt/submit-tx tu/*node* [[:sql
-                            "DELETE FROM \"T1\" WHERE \"T1\".\"col2\" IN (2000, 3000)"]])
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql
+                                                "DELETE FROM \"T1\" WHERE \"T1\".\"col2\" IN (2000, 3000)"]])))
 
   (t/is (= [] (xt/q tu/*node* "SELECT \"T1\".xt$id FROM \"T1\""))))
 
@@ -1410,3 +1448,13 @@
 
   (t/is (= [{:x 2} {:x 3}]
            (xt/q tu/*node* "SELECT x FROM foo1 EXCEPT SELECT x FROM foo2 UNION SELECT x FROM foo3"))))
+
+(deftest test-join-cond-subqueries
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, x) VALUES (1, 1), (2, 2)"]
+                            [:sql "INSERT INTO bar (xt$id, x) VALUES (1, 1), (2, 3)"]
+                            [:sql "INSERT INTO baz (xt$id, x) VALUES (1, 2)"]])
+  (t/is (= [{:x 2, :bar-x 3} {:x 2, :bar-x 1} {:x 1}] 
+           (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON foo.x = (SELECT baz.x FROM baz)")))
+  
+  (t/is (= [{:x 2}, {:x 1}]
+           (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON bar.x = (SELECT baz.x FROM baz WHERE baz.x = foo.x)"))))

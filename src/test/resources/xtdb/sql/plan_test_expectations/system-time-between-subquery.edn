@@ -1,12 +1,12 @@
-[:rename
- {x3 xt$column_1}
+[:project
+ [{xt$column_1 xt$sq_2}]
  [:single-join
   []
-  [:rename {} [:scan {:table t2} []]]
+  [:rename t2.1 [:scan {:table t2} []]]
   [:project
-   [{x3 4}]
+   [{xt$sq_2 4}]
    [:rename
-    {}
+    t1.3
     [:scan
      {:table t1,
       :for-system-time

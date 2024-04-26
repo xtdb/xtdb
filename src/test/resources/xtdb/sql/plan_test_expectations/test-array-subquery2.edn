@@ -1,12 +1,13 @@
-[:rename
- {x7 xt$column_1}
- [:project
-  [x7]
-  [:group-by
-   [x1 x2 xt$row_number_0 {x7 (array-agg x4)}]
-   [:mega-join
-    [{x1 x5}]
-    [[:map
-      [{xt$row_number_0 (row-number)}]
-      [:rename {b x1, a x2} [:scan {:table a} [b {a (= a 42)}]]]]
-     [:rename {b1 x4, b2 x5} [:scan {:table b} [b1 b2]]]]]]]]
+[:project
+ [{xt$column_1 xt$sq_2}]
+ [:group-by
+  [a.1/b a.1/a xt$row_number_0 {xt$sq_2 (array_agg b1)}]
+  [:apply
+   :left-outer-join
+   {a.1/b ?xt$sq_b_3}
+   [:map
+    [{xt$row_number_0 (row-number)}]
+    [:rename a.1 [:scan {:table a} [b {a (= a 42)}]]]]
+   [:project
+    [{b1 b.3/b1}]
+    [:rename b.3 [:scan {:table b} [{b2 (= b2 ?xt$sq_b_3)} b1]]]]]]]

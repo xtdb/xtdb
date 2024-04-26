@@ -1,18 +1,16 @@
-[:rename
- {x1 a}
- [:project
-  [x1]
-  [:mega-join
-   []
-   [[:rename {a x1} [:scan {:table foo} [a]]]
-    [:select
-     (= x3 x6)
-     [:apply
-      :single-join
-      {x4 ?x9}
-      [:rename {c x3, b x4} [:scan {:table bar} [c b]]]
-      [:project
-       [x6]
-       [:rename
-        {b x6, a x7}
-        [:scan {:table foo} [b {a (= a ?x9)}]]]]]]]]]]
+[:project
+ [{a foo.1/a}]
+ [:mega-join
+  []
+  [[:rename foo.1 [:scan {:table foo} [a]]]
+   [:select
+    (= bar.2/c xt$sq_3)
+    [:apply
+     :single-join
+     {bar.2/b ?xt$sq_b_4}
+     [:rename bar.2 [:scan {:table bar} [b c]]]
+     [:project
+      [{xt$sq_3 foo.4/b}]
+      [:rename
+       foo.4
+       [:scan {:table foo} [b {a (= a ?xt$sq_b_4)}]]]]]]]]]
