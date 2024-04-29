@@ -9,6 +9,7 @@ import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
+import xtdb.Types;
 import xtdb.api.query.IKeyFn;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
@@ -185,12 +186,12 @@ public class ValueVectorReader implements IVectorReader {
 
     @Override
     public Keyword getLeg(int idx) {
-        throw unsupported();
+        return Types.toLeg(vector.getField().getFieldType().getType());
     }
 
     @Override
     public List<Keyword> legs() {
-        throw unsupported();
+        return List.of(Types.toLeg(vector.getField().getFieldType().getType()));
     }
 
     @Override
