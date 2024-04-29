@@ -68,6 +68,15 @@ def test_sql_tx_and_query(client):
 
     assert client.query(query) == [{"xt$id": "Alice"}]
 
+def test_null_coverage(client):
+    query = Sql("SELECT * FROM people")
+    assert client.query(query) == []
+
+    client.submit_tx([SqlTx("INSERT INTO people (xt$id, name) VALUES ('Alice', null)")])
+
+    assert client.query(query) == [{"xt$id": "Alice"}]
+
+
 def test_independent_processing(make_client):
     client1 = make_client()
     client2 = make_client()
