@@ -7,7 +7,7 @@
             [xtdb.vector.writer :as vw])
   (:import [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.vector IVectorPosition RelationWriter)))
+           (xtdb.vector IVectorPosition IValueReader RelationWriter IndirectMultiVectorReader IVectorIndirection$Selection)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -254,3 +254,51 @@
 
       (t/is (= [{:myColumn {:shortName "forty-two", :longName 42}}]
                (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :camel-case-keyword))))))
+
+(deftest multivec-underlying-monomorphic-vectors-get-leg-test ; see #3343
+  (with-open [struct-int-vec (.createVector  (types/->field "foo" #xt.arrow/type :struct false
+                                                            (types/col-type->field "bar" :i64))
+                                             tu/*allocator*)
+              struct-str-vec (.createVector (types/->field "foo" #xt.arrow/type :struct false
+                                                           (types/col-type->field "bar" :utf8))
+                                            tu/*allocator*)]
+    (letfn [(read-children [v]
+              (if (instance? java.util.Map v)
+                (update-vals v #(if (instance? IValueReader %) (read-children (.readObject ^IValueReader %)) %))
+                v))
+            (get-children-legs [v]
+              (if (instance? java.util.Map v)
+                (update-vals v #(if (instance? IValueReader %) (.getLeg ^IValueReader %) %))
+                v))]
+      (let [struct-int-wrt (vw/->writer struct-int-vec)
+            struct-str-wrt (vw/->writer struct-str-vec)]
+
+        (dotimes [_ 2]
+          (.writeObject struct-int-wrt {:bar 42})
+          (.writeObject struct-str-wrt {:bar "forty-two"})))
+
+      (let [int-rdr (vr/vec->reader struct-int-vec)
+            str-rdr (vr/vec->reader struct-str-vec)
+            rdr-ind (IVectorIndirection$Selection. (int-array (concat (repeat 2 0) (repeat 2 1))))
+            vec-ind (IVectorIndirection$Selection. (int-array (concat (range 2) (range 2))))
+            indirect-rdr (IndirectMultiVectorReader. [int-rdr str-rdr] rdr-ind vec-ind)
+            vpos (xtdb.vector.IVectorPosition/build)
+            value-rdr (.valueReader indirect-rdr vpos)]
+
+        (t/is (= (types/->field "struct" #xt.arrow/type :struct false
+                                (types/->field "bar" #xt.arrow/type :union false
+                                               (types/col-type->field :i64)
+                                               (types/col-type->field :utf8)))
+                 (.getField indirect-rdr)))
+
+        (t/is (= [{"bar" 42} {"bar" 42} {"bar" "forty-two"} {"bar" "forty-two"}]
+                 (for [i (range 4)]
+                   (do
+                     (.setPosition vpos i)
+                     (read-children (.readObject value-rdr))))))
+
+        (t/is (= [{"bar" :i64} {"bar" :i64} {"bar" :utf8} {"bar" :utf8}]
+                 (for [i (range 4)]
+                   (do
+                     (.setPosition vpos i)
+                     (get-children-legs (.readObject value-rdr))))))))))
