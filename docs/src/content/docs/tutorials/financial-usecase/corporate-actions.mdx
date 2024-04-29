@@ -1,0 +1,131 @@
+---
+title: Tracking corporate actions
+---
+
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import Query from '@components/fiddle/query.astro';
+
+Let's imagine that we operate a simple portfolio risk system which only tracks very limited information about the products we've bought from various sources:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2001-01-01"
+       txs="INSERT INTO assets (xt$id, product, amount)
+            VALUES
+            (1, 'my-product-1', 340),
+            (2, 'my-product-2', 10)" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+The system has only ever been required to hold a basic set of data for risk reporting because the trade execution platform kept its own rules for when to buy and sell stocks, and the extra integration work always seemed unnecessary.
+
+Unfortunately however, a lack of easily accessible information combined with a severe market event can easily present a serious risk.
+
+Imagine we just found out that a (fictional) major bank has collapsed: XY Bank.
+
+Oh gosh, does our portfolio include any products managed by XY Bank?
+
+<Fiddle magicContext="my-context">
+  <Txs hidden={true}
+       txs="INSERT INTO assets (xt$id, product, amount)
+            VALUES
+            (1, 'my-product-1', 625),
+            (2, 'my-product-2', 31),
+            (3, 'my-product-3', 1920),
+            (4, 'my-product-4', 206)" />
+  <Query q="SELECT * FROM assets AS a ORDER BY a.xt$id" />
+</Fiddle>
+
+Right, we probably should have done that integration work to keep track of what we bought from who owned what...
+
+Not to worry, with a bit of manual effort and research we can add a table of which products are owned by various entities:
+
+<Fiddle magicContext="my-context">
+  <Txs txs="INSERT INTO products (xt$id, name, owner)
+            VALUES
+            (1, 'my-product-1', 'XY Bank'),
+            (2, 'my-product-2', 'Standard Dollar'),
+            (3, 'my-product-3', 'XY Bank'),
+            (4, 'my-product-4', 'Royal Red')" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+Now, what do we have to sell?
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT *
+  FROM assets AS a
+  INNER JOIN products AS p ON a.product = p.name
+  WHERE p.owner = 'XY Bank'
+  ORDER BY a.xt$id`} />
+</Fiddle>
+
+Ok, that's a lot. But we can manage.
+
+The question our own investors are now demanding an answer to though, is: how much did we just lose because of those products compared to if we had sold them _before_ they ended up on XY Bank's balance sheet?
+We didn't keep track of when that happened!
+
+Let's add that in:
+
+<Fiddle magicContext="my-context">
+  <Txs txs="INSERT INTO products (xt$id, name, owner, xt$valid_from, xt$valid_to)
+            VALUES
+            -- Product 1's history
+            (1, 'my-product-1', 'Standard Dollar', DATE '2018-01-01', DATE '2020-01-01'),
+            (1, 'my-product-1', 'Other Company', DATE '2020-01-01', DATE '2022-01-01'),
+            (1, 'my-product-1', 'XY Bank', DATE '2024-01-01', null),
+            -- Product 2's history
+            (2, 'my-product-2', 'Some Other Company', DATE '2016-01-01', DATE '2021-01-01'),
+            (2, 'my-product-2', 'Standard Dollar', DATE '2021-01-01', null),
+            -- Product 3's history
+            (3, 'my-product-3', 'Some Other Company', DATE '2016-01-01', DATE '2021-01-01'),
+            (3, 'my-product-3', 'Other Company', DATE '2021-01-01', DATE '2024-01-01'),
+            (3, 'my-product-3', 'XY Bank', DATE '2024-01-01', null),
+            -- Product 4's history
+            (4, 'my-product-4', 'Royal Red', DATE '2020-01-01', null)" />
+  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$txs.xt$tx_time DESC LIMIT 1" />
+</Fiddle>
+
+Just to double-check that's not changed our current view of the exposure:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT *
+  FROM assets AS a
+  INNER JOIN products AS p ON a.product = p.name
+  WHERE p.owner = 'XY Bank'
+  ORDER BY a.xt$id`} />
+</Fiddle>
+
+Nope!
+
+Let's start with figuring out when was each product last not owned by XY Bank:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT p.name, max(p.xt$valid_from)
+  FROM products FOR ALL VALID_TIME AS p
+  WHERE p.owner <> 'XY Bank'
+  GROUP BY p.name
+`} />
+</Fiddle>
+
+Ok, now we know when we should have ideally sold and we can combine that with our prices to calculate how much we lost because of XY Bank's collapse.
+
+With our new and improved approach to historical record-keeping we'll also now be in a better position to keep track of when products change ownership, and understand other impacts of corporate actions, so that we can more easily answer key investor questions in the future.
+
+---
+
+Should a prospective new investor a year from now ask why did we not sell these XY Bank products earlier - and having long since forgotten the details of the situation - we can quickly produce the answer:
+
+<Fiddle magicContext="my-context">
+  <Query q={`
+SELECT p.xt$id, p.name, p.owner, p.xt$system_from
+  FROM products FOR ALL SYSTEM_TIME AS p
+`} />
+</Fiddle>
+
+Ah, see there.
+The audit information shows that we only started recording product owner changes recently.
+No wonder we didn't sell earlier!

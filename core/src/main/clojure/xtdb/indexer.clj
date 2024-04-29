@@ -38,7 +38,7 @@
            (xtdb.api.tx TxOp TxOp$XtqlOp)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.query IRaQuerySource PreparedQuery)
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
            (xtdb.vector IRowCopier IVectorReader RelationReader)
            (xtdb.watermark IWatermarkSource Watermark)))
@@ -168,10 +168,10 @@
 
         nil))))
 
-(defn- find-fn [allocator ^IRaQuerySource ra-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-iid]
+(defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-iid]
   (let [lp '[:scan {:table xt$tx_fns} [{xt$iid (= xt$iid ?iid)} xt$id xt$fn]]
-        ^xtdb.query.PreparedQuery pq (.prepareRaQuery ra-src lp)]
-    (with-open [bq (.bind pq wm-src
+        ^xtdb.query.PreparedQuery pq (.prepareRaQuery q-src lp wm-src)]
+    (with-open [bq (.bind pq
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
                                                        (vr/vec->reader))]
                                                   1)
@@ -202,18 +202,17 @@
               (catch Throwable t
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
-(defn- tx-fn-q [allocator ra-src wm-src tx-opts]
-  ;; TODO tx-fns don't appear collect table-info and so won't work correctly with from *
-  ;; this appears to be true already of the sql-tx fns, leaving this work out for now,
-  ;; can circle back on both.
+(defn- tx-fn-q [^IQuerySource q-src wm-src tx-opts]
   (fn tx-fn-q*
     ([query] (tx-fn-q* query {}))
 
     ([query opts]
      (let [query-opts (-> (reduce into [{:key-fn :kebab-case-keyword} tx-opts opts])
                           (update :key-fn serde/read-key-fn))
-           plan (q/compile-query query query-opts nil)]
-       (with-open [res (q/open-query allocator ra-src wm-src plan query-opts)]
+           prepared-query (.prepareRaQuery q-src (.planQuery q-src query wm-src query-opts) wm-src)]
+
+       (with-open [res (-> (.bind prepared-query query-opts)
+                           (q/open-cursor-as-stream query-opts))]
          (vec (.toList res)))))))
 
 (def ^:private !last-tx-fn-error (atom nil))
@@ -226,7 +225,7 @@
       (select-keys ['put 'put-fn
                     'during 'starting-at 'until])))
 
-(defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src
+(defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, q-src, wm-src
                                                ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
   (let [call-leg (.legReader tx-ops-rdr :call)
         fn-id-rdr (.structKeyReader call-leg "fn-id")
@@ -234,7 +233,7 @@
         args-rdr (.structKeyReader call-leg "args")
 
         ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src tx-opts)
+        sci-ctx (sci/init {:bindings {'q (tx-fn-q q-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
                                       '*current-tx* (serde/tx-key-write-fn tx-key)}
                            :namespaces {'xt xt-sci-ns}})]
@@ -245,7 +244,7 @@
           (let [fn-iid (if fn-iid-rdr
                          (.getBytes fn-iid-rdr tx-op-idx)
                          (trie/->iid (.getObject fn-id-rdr tx-op-idx)))
-                {:keys [fn-id tx-fn]} (find-fn allocator ra-src wm-src (sci/fork sci-ctx) tx-opts fn-iid)
+                {:keys [fn-id tx-fn]} (find-fn allocator q-src wm-src (sci/fork sci-ctx) tx-opts fn-iid)
                 args (.form ^ClojureForm (.getObject args-rdr tx-op-idx))
 
                 res (try
@@ -361,11 +360,11 @@
             (-> (.liveTable live-idx-tx table)
                 (.logErase iid))))))))
 
-(defn- query-indexer [^IRaQuerySource ra-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?]} query-opts]
-  (let [^PreparedQuery pq (.prepareRaQuery ra-src query)]
+(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?]} query-opts]
+  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src)]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq wm-src {:params args, :basis basis, :default-tz default-tz
-                                            :default-all-valid-time? default-all-valid-time?})
+      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz
+                                     :default-all-valid-time? default-all-valid-time?})
                           (.openCursor))]
 
         (.forEachRemaining res
@@ -395,7 +394,7 @@
                                             (.withName col (str "?_" idx))))))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
-                                              ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
+                                              ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src, ^IScanEmitter scan-emitter
                                               tx-opts]
   (let [sql-leg (.legReader tx-ops-rdr :sql)
         query-rdr (.structKeyReader sql-leg "query")
@@ -411,39 +410,39 @@
           (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
             [:insert query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
                                  (wrap-sql-args)))
 
             [:update query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
                                  (wrap-sql-args)))
 
             [:delete query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
+                             (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
                                  (wrap-sql-args)))
 
             [:erase query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
+                             (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
                                  (wrap-sql-args)))
 
             (throw (UnsupportedOperationException. "sql query"))))
 
         nil))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode ^IRaQuerySource ra-src, wm-src
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode ^IQuerySource q-src, wm-src
                                                      query, {:keys [basis default-tz default-all-valid-time?]}]
-  (let [^PreparedQuery pq (.prepareRaQuery ra-src query)
+  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src)
         ^IntPredicate valid-query-pred (case mode
                                          :assert-exists (reify IntPredicate
                                                           (test [_ i] (pos? i)))
                                          :assert-not-exists (reify IntPredicate
                                                               (test [_ i] (zero? i))))]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq wm-src {:params args, :basis basis, :default-tz default-tz
-                                            :default-all-valid-time? default-all-valid-time?})
+      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz
+                                     :default-all-valid-time? default-all-valid-time?})
                           (.openCursor))]
 
         (doto (.tryAdvance res
@@ -470,7 +469,7 @@
                           (.withName col (str "?" (.getName col)))))))))
 
 (defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
-                                               ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
+                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src, ^IScanEmitter scan-emitter
                                                tx-opts]
   (let [xtql-leg (.legReader tx-ops-rdr :xtql)
         op-rdr (.structKeyReader xtql-leg "op")
@@ -488,32 +487,32 @@
           (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info tables-with-cols))
             [:insert query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
                                  (wrap-xtql-args)))
 
             [:update query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
                                  (wrap-xtql-args)))
 
             [:delete query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
+                             (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
                                  (wrap-xtql-args)))
 
             [:erase query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts query-opts)
+                             (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
                                  (wrap-xtql-args)))
 
             [:assert-not-exists _query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (->assert-idxer :assert-not-exists ra-src wm-src inner-query tx-opts)
+                             (-> (->assert-idxer :assert-not-exists q-src wm-src inner-query tx-opts)
                                  (wrap-xtql-args)))
 
             [:assert-exists _query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (->assert-idxer :assert-exists ra-src wm-src inner-query tx-opts)
+                             (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
                                  (wrap-xtql-args)))
 
             (throw (UnsupportedOperationException. "xtql query"))))
@@ -550,7 +549,7 @@
 
 (deftype Indexer [^BufferAllocator allocator
                   ^IScanEmitter scan-emitter
-                  ^IRaQuerySource ra-src
+                  ^IQuerySource q-src
                   ^ILiveIndex live-idx
 
                   ^:volatile-mutable indexer-error
@@ -597,9 +596,9 @@
                               !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time))
                               !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time))
                               !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr))
-                              !call-idxer (delay (->call-indexer allocator ra-src wm-src tx-ops-rdr tx-opts))
-                              !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
-                              !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
+                              !call-idxer (delay (->call-indexer allocator q-src wm-src tx-ops-rdr tx-opts))
+                              !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src scan-emitter tx-opts))
+                              !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src scan-emitter tx-opts))]
                           (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
                             (when-let [more-tx-ops
                                        (.recordCallable ^Timer (:tx-timer metrics)
@@ -676,13 +675,13 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :live-index (ig/ref :xtdb.indexer/live-index)
-          :ra-src (ig/ref ::q/ra-query-source)
+          :q-src (ig/ref ::q/query-source)
           :registry (ig/ref :xtdb/meter-registry)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator scan-emitter, ra-src, live-index registry]}]
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator scan-emitter, q-src, live-index registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
-    (->Indexer allocator scan-emitter ra-src live-index
+    (->Indexer allocator scan-emitter q-src live-index
 
                nil ;; indexer-error
 

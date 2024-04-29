@@ -66,6 +66,7 @@ object AnySerde : KSerializer<Any> {
                     "xt:period" -> Period.parse(value.asStringOrThrow())
                     "xt:keyword" -> Keyword.intern(value.asStringOrThrow())
                     "xt:symbol" -> Symbol.intern(value.asStringOrThrow())
+                    "xt:uuid" -> UUID.fromString(value.asStringOrThrow())
                     "xt:set" -> (value as? JsonArray ?: throw jsonIAEwithMessage(
                         "@value must be array!",
                         this
@@ -123,6 +124,7 @@ object AnySerde : KSerializer<Any> {
         is Collection<*> -> JsonArray(map { it.toJsonElement() })
         is Keyword -> sym.toJsonLdElement("xt:keyword")
         is Symbol -> toJsonLdElement("xt:symbol")
+        is UUID -> toJsonLdElement("xt:uuid")
         is ZonedDateTime -> toJsonLdElement("xt:timestamptz")
         is Instant -> toJsonLdElement("xt:instant")
         is LocalDate -> toJsonLdElement("xt:date")

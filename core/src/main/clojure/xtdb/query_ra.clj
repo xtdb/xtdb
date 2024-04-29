@@ -10,7 +10,7 @@
   (:import (java.time Duration)
            (xtdb.api TransactionKey)
            xtdb.indexer.IIndexer
-           (xtdb.query IRaQuerySource PreparedQuery)
+           (xtdb.query IQuerySource PreparedQuery)
            (xtdb.vector RelationReader)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
@@ -53,15 +53,14 @@
                               (vw/open-params allocator params)
                               vw/empty-params)]
        (let [^PreparedQuery pq (if node
-                                 (let [^IRaQuerySource ra-src (util/component node ::q/ra-query-source)]
-                                   (.prepareRaQuery ra-src query))
+                                 (let [^IQuerySource q-src (util/component node ::q/query-source)]
+                                   (.prepareRaQuery q-src query indexer))
                                  (q/prepare-ra query))
-             bq (.bind pq indexer
-                       (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz :default-all-valid-time?])
-                           (assoc :params params-rel)))]
+             bq (.bind pq (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz :default-all-valid-time?])
+                              (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
-               {:res rows, :col-types (update-vals (.columnFields bq) types/field->col-type)}
+               {:res rows, :col-types (update-vals (into {} (.columnFields bq)) types/field->col-type)}
                rows))))))))

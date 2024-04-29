@@ -29,7 +29,7 @@ class Sql(Query):
         return {"sql": self.sql}
 
 ToQuery = Union[Query, tuple]
-ToBindings = Union[str, Dict[str, 'expr.Expr']]
+ToBindings = Union[str, Dict[str, 'Expr']]
 
 
 class Pipeline(XtqlQuery):

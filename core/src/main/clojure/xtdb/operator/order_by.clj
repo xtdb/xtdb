@@ -63,7 +63,7 @@
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                                       :or {direction :asc, null-ordering :nulls-last}}]]
-                         (let [read-col (.readerForName read-rel (name column))
+                         (let [read-col (.readerForName read-rel (str column))
                                col-comparator (expr.comp/->comparator read-col read-col null-ordering)
 
                                ^Comparator
@@ -103,8 +103,8 @@
 (defn mk-irel-comparator [^RelationReader irel1 ^RelationReader irel2 order-specs]
   (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                          :or {direction :asc, null-ordering :nulls-last}}]]
-            (let [read-col1 (.readerForName irel1 (name column))
-                  read-col2 (.readerForName irel2 (name column))
+            (let [read-col1 (.readerForName irel1 (str column))
+                  read-col2 (.readerForName irel2 (str column))
                   col-comparator (expr.comp/->comparator read-col1 read-col2 null-ordering)
 
                   ^Comparator

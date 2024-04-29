@@ -2075,3 +2075,12 @@
                                         WHERE o.customer_id = c.xt$id)
                                 AS orders
                        FROM customers c")))))
+
+(deftest test-invalid-xt-id-in-query-3324
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0 :name "bob"}]])
+  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo.xt$id = NULL")))
+  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo.xt$id = ?" {:args [nil]}))))
+
+(deftest test-random-fn
+  (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))
+  (t/is (= true (-> (xt/q tu/*node* "SELECT random() < 1.0 AS smaller ") first :smaller))))

@@ -133,12 +133,7 @@ internal class XtdbTest {
             "default-tz"
         )
 
-        val plan = Clojure.read(
-            """
-               [:scan {:table docs, :for-valid-time nil, :for-system-time nil}
-                 [foo]] 
-            """.trimIndent()
-        )
+        val plan = "[:scan {:table docs, :for-valid-time nil, :for-system-time nil} [foo]]\n"
 
         assertEquals(
             listOf(mapOf("plan" to plan)),

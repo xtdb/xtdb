@@ -42,6 +42,8 @@
            (.digest eid-bytes)
            (Arrays/copyOfRange 0 16))))))
 
+(def valid-iid? (some-fn uuid? string? keyword? integer?))
+
 (defn ->log-l0-l1-trie-key [^long level, ^long next-row, ^long row-count]
   (assert (<= 0 level 1))
 

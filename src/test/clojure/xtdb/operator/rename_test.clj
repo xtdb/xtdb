@@ -17,9 +17,9 @@
                            :with-col-types? true})))
 
     (t/testing "prefix"
-      (t/is (= {:col-types '{r_b :i64, r_c :i64}
-                :res [[{:r_c 12, :r_b 10}, {:r_c 0, :r_b 15}]
-                      [{:r_c 100, :r_b 83}]]}
+      (t/is (= {:col-types '{r/b :i64, r/c :i64}
+                :res [[{:r/c 12, :r/b 10}, {:r/c 0, :r/b 15}]
+                      [{:r/c 100, :r/b 83}]]}
                (tu/query-ra [:rename 'r '{a c}
                              blocks-expr]
                             {:preserve-blocks? true
@@ -27,9 +27,9 @@
                              :key-fn :snake-case-keyword}))))
 
     (t/testing "prefix only"
-      (t/is (= {:col-types '{r_a :i64, r_b :i64}
-                :res [[{:r_a 12, :r_b 10}, {:r_a 0, :r_b 15}]
-                      [{:r_a 100, :r_b 83}]]}
+      (t/is (= {:col-types '{r/a :i64, r/b :i64}
+                :res [[{:r/a 12, :r/b 10}, {:r/a 0, :r/b 15}]
+                      [{:r/a 100, :r/b 83}]]}
                (tu/query-ra [:rename 'r
                              blocks-expr]
                             {:preserve-blocks? true

@@ -151,7 +151,7 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (let [in-col (.readerForName in-rel (name from-name))]
+            (let [in-col (.readerForName in-rel (str from-name))]
               (dotimes [idx (.rowCount in-rel)]
                 (let [group-idx (.get group-mapping idx)]
                   (when (<= (.getValueCount out-vec) group-idx)
@@ -277,7 +277,7 @@
       (build [_ al]
         (let [sum-agg (.build sum-agg al)
               count-agg (.build count-agg al)
-              res-vec (Float8Vector. (name to-name) al)]
+              res-vec (Float8Vector. (str to-name) al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
@@ -330,11 +330,11 @@
         (let [sumx-agg (.build sumx-agg al)
               sumx2-agg (.build sumx2-agg al)
               countx-agg (.build countx-agg al)
-              res-vec (Float8Vector. (name to-name) al)]
+              res-vec (Float8Vector. (str to-name) al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
-              (let [in-vec (.readerForName in-rel (name from-name))]
+              (let [in-vec (.readerForName in-rel (str from-name))]
                 (with-open [x2 (.project x2-projecter al (vr/rel-reader [in-vec]) vw/empty-params)]
                   (.aggregate sumx-agg in-rel group-mapping)
                   (.aggregate sumx2-agg (vr/rel-reader [x2]) group-mapping)
@@ -367,7 +367,7 @@
 
       (build [_ al]
         (let [variance-agg (.build variance-agg al)
-              res-vec (Float8Vector. (name to-name) al)]
+              res-vec (Float8Vector. (str to-name) al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
@@ -440,7 +440,7 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (let [in-vec (.readerForName in-rel (name from-name))
+            (let [in-vec (.readerForName in-rel (str from-name))
                   builders (ArrayList. (.size rel-maps))
                   distinct-idxs (IntStream/builder)]
               (dotimes [idx (.valueCount in-vec)]
@@ -505,7 +505,7 @@
                                 ^List group-idxmaps]
   IAggregateSpec
   (aggregate [this in-rel group-mapping]
-    (let [in-vec (.readerForName in-rel (name from-name))
+    (let [in-vec (.readerForName in-rel (str from-name))
           row-count (.valueCount in-vec)]
       (vw/append-vec acc-col in-vec)
 
@@ -550,7 +550,7 @@
 
       (build [_ al]
         (ArrayAggAggregateSpec. al from-name to-name to-type
-                                (vw/->vec-writer al (name to-name) (FieldType/notNullable #xt.arrow/type :union))
+                                (vw/->vec-writer al (str to-name) (FieldType/notNullable #xt.arrow/type :union))
                                 nil 0 (ArrayList.))))))
 
 (defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-type] :as agg-opts}]

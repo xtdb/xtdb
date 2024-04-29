@@ -5,7 +5,7 @@
             [xtdb.serde]
             [xtdb.tx-ops :as tx-ops])
   (:import (java.time Instant)
-           (java.util List)
+           (java.util List UUID)
            (xtdb JsonSerde)
            (xtdb.api TransactionKey)
            (xtdb.api.query Basis Binding Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Exprs
@@ -28,7 +28,8 @@
            "zoned-date-time" #time/zoned-date-time "2020-01-01T12:34:56.789Z"
            "time-zone" #time/zone "America/Los_Angeles"
            "duration" #time/duration "PT3H1M35.23S"
-           "period" #time/period "P18Y"}]
+           "period" #time/period "P18Y"
+           "uuid" (UUID/randomUUID)}]
     (t/is (= v
              (roundtrip-json-ld v))
           "testing json ld values"))

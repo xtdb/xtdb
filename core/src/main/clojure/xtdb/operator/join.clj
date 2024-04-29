@@ -175,7 +175,7 @@
                            (when pushdown-blooms
                              (dotimes [col-idx (count build-key-col-names)]
                                (let [build-col-name (nth build-key-col-names col-idx)
-                                     build-col (.readerForName build-rel (name build-col-name))
+                                     build-col (.readerForName build-rel (str build-col-name))
                                      ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                  (dotimes [build-idx (.rowCount build-rel)]
                                    (.add pushdown-bloom ^ints (bloom/bloom-hashes build-col build-idx)))))))))))

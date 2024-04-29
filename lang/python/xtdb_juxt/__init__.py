@@ -6,7 +6,7 @@ from typing import Optional
 import urllib3
 
 from .types import ToQuery
-from .xt_json import XtdbJsonEncoder
+from .xt_json import XtdbJsonEncoder, XtdbJsonDecoder
 from . import query as q
 
 
@@ -104,7 +104,7 @@ class Xtdb:
                 headers={"accept": "application/json", "content-type": "application/json"}
             )
 
-            resp_data = json.loads(resp.data.decode('utf-8'))
+            resp_data = json.loads(resp.data.decode('utf-8'), cls=XtdbJsonDecoder)
 
             if resp.status != 200:
                 raise Exception(f"Error submitting query: {resp.status} ({resp.reason}): {resp_data}")

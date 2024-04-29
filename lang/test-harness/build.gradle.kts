@@ -21,6 +21,10 @@ dependencies {
     testImplementation("cheshire", "cheshire", "5.12.0")
 }
 
+val defaultJvmArgs = listOf(
+    "--add-opens=java.base/java.nio=ALL-UNNAMED"
+)
+
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 tasks.javadoc.get().enabled = false
@@ -35,4 +39,5 @@ tasks.register<JavaExec>("httpProxy") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("clojure.main")
     this.args = listOf("-m", "test-harness.core")
+    jvmArgs = defaultJvmArgs
 }

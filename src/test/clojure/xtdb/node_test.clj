@@ -7,7 +7,8 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
-           [xtdb.api.tx TxOps]))
+           [xtdb.api.tx TxOps]
+           [xtdb.query IQuerySource]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -493,12 +494,15 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     #_(t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL SYSTEM_TIME")))))
 
 (t/deftest test-explain-plan-sql
-  (t/is (= '[{:plan [:rename {x1 xt$id, x2 foo}
-                     [:project [x1 x2]
-                      [:rename {xt$id x1, foo x2, a x3, b x4}
-                       [:select (= (+ a b) 12)
-                        [:scan {:table users} [xt$id foo a b]]]]]]}]
-
+  (t/is (= [{:plan
+             "[:rename
+ {x1 xt$id, x2 foo}
+ [:project
+  [x1 x2]
+  [:rename
+   {xt$id x1, foo x2, a x3, b x4}
+   [:select (= (+ a b) 12) [:scan {:table users} [xt$id foo a b]]]]]]
+"}]
            (xt/q tu/*node*
                  "SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"
                  {:explain? true}))))
@@ -654,3 +658,27 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                         (map #(vector :put-docs :docs %))
                         (partition-all 16))]
           (xt/submit-tx node tx))))))
+
+(deftest test-plan-query-cache
+  (let [query-src ^IQuerySource (tu/component :xtdb.query/query-source)
+        wm-src (tu/component :xtdb/indexer)
+        pq1 (.planQuery query-src "SELECT 1" wm-src {})
+        pq2 (.planQuery query-src "SELECT 1" wm-src {:default-all-valid-time? true})
+        pq3 (.planQuery query-src "SELECT 1" wm-src {})]
+
+    ;;could add explicit test for all query options that are relevant to planning
+
+    (t/is (identical? pq1 pq3)
+          "duplicate query with matching options is returned from cache")
+
+    (t/is (not (identical? pq1 pq2))
+          "different relevant query options returns new query")
+
+     (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo 2}]])]
+
+       (tu/then-await-tx tx tu/*node*)
+
+       (let [pq4 (.planQuery query-src "SELECT 1" wm-src {:after-tx tx})]
+
+         (t/is (not (identical? pq1 pq4))
+               "changing table-info causes previous cache-hits to miss")))))

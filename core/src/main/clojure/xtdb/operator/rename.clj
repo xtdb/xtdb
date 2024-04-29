@@ -18,8 +18,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:const ^String relation-prefix-delimiter "_")
-
 (deftype RenameCursor [^ICursor in-cursor
                        ^Map #_#_<Symbol, Symbol> col-name-mapping
                        ^Map #_#_<Symbol, Symbol> col-name-reverse-mapping]
@@ -44,18 +42,17 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (let [emmited-child-relation (lp/emit-expr relation args)]
-    (lp/unary-expr
-     emmited-child-relation
-     (fn [fields]
-       (let [col-name-mapping (->> (for [old-name (set (keys fields))]
-                                     [old-name
-                                      (cond-> (get columns old-name old-name)
-                                        prefix (->> name (str prefix relation-prefix-delimiter) symbol))])
-                                   (into {}))]
-         {:fields (->> fields
-                       (into {}
-                             (map (juxt (comp col-name-mapping key) val))))
-          :stats (:stats emmited-child-relation)
-          :->cursor (fn [_opts in-cursor]
-                      (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))})))))
+  (let [emitted-child-relation (lp/emit-expr relation args)]
+    (lp/unary-expr emitted-child-relation
+      (fn [fields]
+        (let [col-name-mapping (->> (for [old-name (set (keys fields))]
+                                      [old-name
+                                       (cond-> (get columns old-name old-name)
+                                         prefix (->> name (symbol (name prefix))))])
+                                    (into {}))]
+          {:fields (->> fields
+                        (into {}
+                              (map (juxt (comp col-name-mapping key) val))))
+           :stats (:stats emitted-child-relation)
+           :->cursor (fn [_opts in-cursor]
+                       (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))})))))

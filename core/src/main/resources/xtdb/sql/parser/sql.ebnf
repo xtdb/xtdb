@@ -412,6 +412,7 @@ factor
     | ceiling_function
     | least_function
     | greatest_function
+    | random_function
     ;
 
 <position_expression>
@@ -1372,3 +1373,7 @@ arrow_table : 'ARROW_TABLE' [ <left_paren> character_string_literal <right_paren
 (* multiple <direct sql statement> to used for example with files *)
 
 direct_sql_statements : direct_sql_statement+ ;
+
+(* random_function *)
+
+random_function : 'RANDOM' <left_paren> <right_paren>

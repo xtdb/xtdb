@@ -2,7 +2,8 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import tailwind from '@astrojs/tailwind';
 import yaml from '@rollup/plugin-yaml';
-import adoc from '/shared/src/adoc'
+import swup from '@swup/astro';
+import adoc from '/shared/src/adoc';
 
 // https://astro.build/config
 export default defineConfig({
@@ -55,6 +56,23 @@ export default defineConfig({
                                 { label: '2) Understanding change', link: '/tutorials/immutability-walkthrough/part-2' },
                                 { label: '3) Updating the past', link: '/tutorials/immutability-walkthrough/part-3' },
                                 { label: '4) Changing an immutable database', link: '/tutorials/immutability-walkthrough/part-4' },
+                            ],
+                        },
+                    ],
+                },
+
+                {
+                    label: 'Industry Use-cases',
+                    collapsed: true,
+                    items: [
+                        {
+                            label: 'Financial Services',
+                            collapsed: false,
+                            items: [
+                                { label: 'Front-office Reporting: Understanding PnL and Risk', link: '/tutorials/financial-usecase/commodities-pnl' },
+                                { label: 'Back-office Compliance: Late trade adjustments', link: '/tutorials/financial-usecase/late-trade' },
+                                { label: 'Strategist: Tracking corporate actions', link: '/tutorials/financial-usecase/corporate-actions' },
+                                { label: 'Quantitative Analyst: Model backtesting', link: '/tutorials/financial-usecase/backtesting' },
                             ],
                         },
                     ],
@@ -249,12 +267,21 @@ export default defineConfig({
             components: {
                 TableOfContents: './src/components/table-of-contents.astro',
                 MobileTableOfContents: './src/components/mobile-table-of-contents.astro',
+		MobileMenuToggle: './src/components/mobile-menu-toggle.astro',
             },
         }),
 
         tailwind({ applyBaseStyles: false }),
 
         adoc(),
+
+        swup({ theme: false,
+               animationClass: false,
+               containers: ['.main-frame', '.sidebar'],
+               smoothScrolling: false,
+               progress: true,
+               globalInstance: true,
+        }),
     ],
 
     trailingSlashes: "never",

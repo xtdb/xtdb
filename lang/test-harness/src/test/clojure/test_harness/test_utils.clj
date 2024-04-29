@@ -15,17 +15,9 @@
 (defn- get-root-path
   "Returns a path to the root of the project (with a .git directory)"
   []
-  (loop [path (.getCanonicalFile (io/file "."))]
-    (cond
-      (= "/" (str path))
-      path
-
-      (some #(and (.isDirectory %)
-                  (str/ends-with? (str %) ".git"))
-            (.listFiles path))
-      path
-
-      :else (recur (.getParentFile path)))))
+  (let [path (.getCanonicalFile (io/file "."))]
+    (if (str/ends-with? (str path) "/lang/test-harness")
+      (.getParentFile (.getParentFile path))
+      path)))
 
 (def root-path (delay (get-root-path)))
-

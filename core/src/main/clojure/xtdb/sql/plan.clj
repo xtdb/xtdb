@@ -342,6 +342,9 @@
     :greatest_function
     (list* 'greatest (map expr (r/right-zips (r/$ z 2))))
 
+    :random_function
+    (list 'random)
+
     (throw (err/illegal-arg :xtdb.sql/parse-error
                             {::err/message (str "Cannot build expression for: "  (pr-str (r/node z)))
                              :node (r/node z)}))))

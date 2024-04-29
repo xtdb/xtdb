@@ -320,7 +320,7 @@
 (def ^Field null-field (->field "null" ArrowType$Null/INSTANCE true))
 
 ;; beware that anywhere this is used, naming of the fields (apart from struct subfields) should not matter
-(defn merge-fields [& fields]
+(defn merge-fields* [& fields]
   (letfn [(merge-field* [acc ^Field field]
             (let [arrow-type (.getType field)
                   nullable? (.isNullable field)
@@ -338,15 +338,15 @@
                                            (let [default-field-mapping (if acc {#xt.arrow/type :null nil} nil)
                                                  children (.getChildren field)]
                                              (as-> acc acc
-                                               (reduce (fn [acc ^Field field]
-                                                         (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
-                                                       acc
-                                                       children)
-                                               (reduce (fn [acc null-k]
-                                                         (update acc null-k merge-field* null-field))
-                                                       acc
-                                                       (set/difference (set (keys acc))
-                                                                       (set (map #(.getName ^Field %) children))))))))
+                                                   (reduce (fn [acc ^Field field]
+                                                             (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
+                                                           acc
+                                                           children)
+                                                   (reduce (fn [acc null-k]
+                                                             (update acc null-k merge-field* null-field))
+                                                           acc
+                                                           (set/difference (set (keys acc))
+                                                                           (set (map #(.getName ^Field %) children))))))))
                 (assoc acc (.getType field) nil))))
 
           (kv->field [[arrow-type opts] {:keys [nullable?] :or {nullable? false}}]
@@ -379,6 +379,8 @@
 
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-field*) {} fields)
         (map->field))))
+
+(def merge-fields (util/lru-memoize merge-fields*))
 
 ;;; time units
 

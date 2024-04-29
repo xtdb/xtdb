@@ -915,7 +915,7 @@
      :provided-vars provided-vars}))
 
 (def compile-query
-  (-> (fn [query table-info]
+  (-> (fn [query {:keys [table-info]}]
         (let [{:keys [ra-plan]} (binding [*gensym* (util/seeded-gensym "_" 0)
                                           *table-info* table-info]
                                   (plan-query query))]

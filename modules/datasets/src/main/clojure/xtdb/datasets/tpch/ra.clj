@@ -120,14 +120,14 @@
          [:project [supp_nation cust_nation
                     {l_year (extract "YEAR" l_shipdate)}
                     {volume (* l_extendedprice (- 1 l_discount))}]
-          [:rename {n1_n_name supp_nation, n2_n_name cust_nation}
-           [:join [{c_nationkey n2_n_nationkey}
-                   (or (and (= n1_n_name ?nation1)
-                            (= n2_n_name ?nation2))
-                       (and (= n1_n_name ?nation2)
-                            (= n2_n_name ?nation1)))]
+          [:rename {n1/n_name supp_nation, n2/n_name cust_nation}
+           [:join [{c_nationkey n2/n_nationkey}
+                   (or (and (= n1/n_name ?nation1)
+                            (= n2/n_name ?nation2))
+                       (and (= n1/n_name ?nation2)
+                            (= n2/n_name ?nation1)))]
             [:join [{o_custkey c_custkey}]
-             [:join [{s_nationkey n1_n_nationkey}]
+             [:join [{s_nationkey n1/n_nationkey}]
               [:join [{l_orderkey o_orderkey}]
                [:join [{s_suppkey l_suppkey}]
                 [:scan {:for-valid-time [:at :now] :table supplier} [s_suppkey s_nationkey]]
@@ -156,9 +156,9 @@
                                       0.0)}
                      {volume (* l_extendedprice (- 1 l_discount))}
                      nation]
-           [:rename {n2_n_name nation}
-            [:join [{s_nationkey n2_n_nationkey}]
-             [:join [{c_nationkey n1_n_nationkey}]
+           [:rename {n2/n_name nation}
+            [:join [{s_nationkey n2/n_nationkey}]
+             [:join [{c_nationkey n1/n_nationkey}]
               [:join [{o_custkey c_custkey}]
                [:join [{l_orderkey o_orderkey}]
                 [:join [{l_suppkey s_suppkey}]
@@ -171,7 +171,7 @@
                   {o_orderdate (and (>= o_orderdate ?start-date)
                                     (<= o_orderdate ?end-date))}]]]
                [:scan {:for-valid-time [:at :now] :table customer} [c_custkey c_nationkey]]]
-              [:join [{r_regionkey n1_n_regionkey}]
+              [:join [{r_regionkey n1/n_regionkey}]
                [:scan {:for-valid-time [:at :now] :table region} [r_regionkey {r_name (= r_name ?region)}]]
                [:rename n1
                 [:scan {:for-valid-time [:at :now] :table nation} [n_name n_nationkey n_regionkey]]]]]
@@ -436,9 +436,9 @@
                     '?nation "CANADA"})))
 
 (def q21-suppliers-who-kept-orders-waiting
-  (-> '[:assign [L1 [:join [{l1_l_orderkey l2_l_orderkey} (<> l1_l_suppkey l2_l_suppkey)]
-                     [:join [{l1_l_suppkey s_suppkey}]
-                      [:join [{l1_l_orderkey o_orderkey}]
+  (-> '[:assign [L1 [:join [{l1/l_orderkey l2/l_orderkey} (<> l1/l_suppkey l2/l_suppkey)]
+                     [:join [{l1/l_suppkey s_suppkey}]
+                      [:join [{l1/l_orderkey o_orderkey}]
                        [:rename l1
                         [:select (> l_receiptdate l_commitdate)
                          [:scan {:for-valid-time [:at :now] :table lineitem} [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]
@@ -452,12 +452,12 @@
          [:order-by [[numwait {:direction :desc}] [s_name]]
           [:group-by [s_name {numwait (row-count)}]
            [:distinct
-            [:project [s_name l1_l_orderkey]
-             [:anti-join [{l1_l_orderkey l3_l_orderkey}]
+            [:project [s_name l1/l_orderkey]
+             [:anti-join [{l1/l_orderkey l3/l_orderkey}]
               L1
-              [:join [{l1_l_orderkey l3_l_orderkey} (<> l3_l_suppkey l1_l_suppkey)]
+              [:join [{l1/l_orderkey l3/l_orderkey} (<> l3/l_suppkey l1/l_suppkey)]
                L1
-               [:select (> l3_l_receiptdate l3_l_commitdate)
+               [:select (> l3/l_receiptdate l3/l_commitdate)
                 [:rename l3
                  [:scan {:for-valid-time [:at :now] :table lineitem} [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]]]
       (with-params {'?nation "SAUDI ARABIA"})))

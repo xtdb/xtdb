@@ -16,7 +16,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.api.query Expr$Bool Expr$Call Expr$Cast Expr$CastTimestamp Expr$Double Expr$Get Expr$If Expr$Let Expr$LetBinding Expr$ListExpr Expr$Local Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$SetExpr)
+           (xtdb.api.query Expr$Bool Expr$Call Expr$Cast Expr$Double Expr$Get Expr$If Expr$Let Expr$LetBinding Expr$ListExpr Expr$Local Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$SetExpr)
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.util StringUtil)
@@ -977,6 +977,10 @@
   {:return-type :utf8
    :->call-code (fn [[code]]
                   `(ByteBuffer/wrap (.getBytes (.toLowerCase (resolve-string ~code)) StandardCharsets/UTF_8)))})
+
+(defmethod codegen-call [:random] [_]
+  {:return-type :f64
+   :->call-code (fn [_] '(Math/random))})
 
 ;; SQL Session Variable functions.
 ;; We currently return hard-coded values for these functions, as we do not currently have any of these concepts.
