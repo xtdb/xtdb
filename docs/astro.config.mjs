@@ -73,7 +73,7 @@ export default defineConfig({
                                 { label: 'Late trade adjustments', link: '/tutorials/financial-usecase/late-trade' },
 				{ label: 'Auditing changes to the past', link: '/tutorials/financial-usecase/auditing-change' },
                                 { label: 'Analysing counterparty risk', link: '/tutorials/financial-usecase/counterparty-risk' },
-                                { label: 'Quantitative Analyst: Model backtesting', link: '/tutorials/financial-usecase/backtesting' },
+                                { label: 'Model backtesting', link: '/tutorials/financial-usecase/backtesting' },
                             ],
                         },
                     ],
