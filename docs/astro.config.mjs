@@ -71,7 +71,7 @@ export default defineConfig({
                             items: [
                                 { label: 'Understanding P&L and Risk', link: '/tutorials/financial-usecase/commodities-pnl' },
                                 { label: 'Late trade adjustments', link: '/tutorials/financial-usecase/late-trade' },
-				{ label: 'Auditing changes to the past', link: '/tutorials/financial-usecase/auditing-change' },
+				{ label: 'Auditing past trade adjustments', link: '/tutorials/financial-usecase/auditing-change' },
                                 { label: 'Analysing counterparty risk', link: '/tutorials/financial-usecase/counterparty-risk' },
                                 { label: 'Model backtesting', link: '/tutorials/financial-usecase/backtesting' },
                             ],
