@@ -1,5 +1,5 @@
 ---
-title: Understanding PnL and Risk
+title: Understanding P&L and Risk
 ---
 
 import Fiddle from '@components/fiddle.astro';
@@ -8,7 +8,7 @@ import Query from '@components/fiddle/query.astro';
 
 Let's imagine you're a commodities trader.
 
-Every day you arrive at your desk and look at your Risk and PnL reports, telling you the value and risk of your trading positions.
+Every day you arrive at your desk and look at your Risk and [P&L reports](https://en.wikipedia.org/wiki/PnL_explained), telling you the value and risk of your trading positions.
 
 Whenever something in those reports doesn't look quite like what you were expecting you have to do some counterfactual exploration of all the various inputs to understand what's happened.
 
@@ -53,8 +53,8 @@ FROM commodity_spot_prices as p
 `} />
 </Fiddle>
 
-Now we want to price our risk and PnL for the end of this week.
-Let's extract the information we need to calculate our PnL:
+Now we want to price our risk and P&L for the end of this week.
+Let's extract the information we need to calculate our P&L:
 
 <Fiddle magicContext="my-context">
   <Query q={`
@@ -76,7 +76,7 @@ ON
 `} />
 </Fiddle>
 
-For the purposes of this simple example, we'll just use SQL to calculate the PnL.
+For the purposes of this simple example, we'll just use SQL to calculate the P&L.
 However, in the 'real world', we'd usually have much more complex objects (yield curves, etc.) and would use a quant pricing library.
 
 <Fiddle magicContext="my-context">
@@ -130,7 +130,7 @@ FROM commodity_spot_prices as p
 `} />
 </Fiddle>
 
-We now recalculate our new PnL:
+We now recalculate our new P&L:
 
 <Fiddle magicContext="my-context">
   <Query q={`
@@ -162,7 +162,7 @@ ON
 `} />
 </Fiddle>
 
-We have now established that today's trades must be causing the dramatic PnL change.
+We have now established that today's trades must be causing the dramatic P&L change.
 
 ## Reasoning about cross-effects in high dimensions
 
