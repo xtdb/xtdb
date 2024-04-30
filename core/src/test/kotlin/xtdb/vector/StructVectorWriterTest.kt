@@ -2,6 +2,7 @@ package xtdb.vector
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
@@ -52,6 +53,7 @@ class StructVectorWriterTest {
             }
 
             writerFor(StructVector.empty("dest", al)).use { dest ->
+                dest.maybePromote(srcVec.field)
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
@@ -75,6 +77,7 @@ class StructVectorWriterTest {
             assertEquals(objs, w.toReader().toList())
 
             writerFor(StructVector.empty("dest", al)).use { dest ->
+                dest.maybePromote(srcVec.field)
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
@@ -125,5 +128,59 @@ class StructVectorWriterTest {
             assertEquals(structField, structWriter.field)
             assertEquals(aField, nnWriter.field)
         }
+    }
+
+    // TODO - test this with non-nullable children - see #3355
+    private val intField = Field("int", FieldType.nullable(MinorType.BIGINT.type), emptyList())
+
+    @Test
+    fun `test maybePromote on non nullable struct`() {
+        val nonNullableStructField = Field("my-struct", FieldType.notNullable(STRUCT_TYPE), listOf(intField))
+        val nullableStructField = Field("my-struct", FieldType.nullable(STRUCT_TYPE), listOf(intField))
+
+        nonNullableStructField.createVector(al).use { structVec ->
+           val structWriter = writerFor(structVec)
+           structWriter.writeObject(mapOf("int" to 42L))
+
+           val newWriter = structWriter.maybePromote(nullableStructField)
+           assertEquals(nullableStructField, newWriter.field)
+
+           newWriter.writeNull()
+           assertEquals(listOf(mapOf("int" to 42L), null), newWriter.toReader().toList())
+
+           newWriter.close()
+        }
+    }
+
+    @Test
+    fun `test struct-vector child promotion`() {
+        val barIntField = Field("bar", FieldType.nullable(MinorType.BIGINT.type), emptyList())
+        val struct1Field = Field("struct-int-field", FieldType.nullable(STRUCT_TYPE), listOf(barIntField))
+        val barCharField = Field("bar", FieldType.nullable(MinorType.VARCHAR.type), emptyList())
+        val struct2Field = Field("struct-char-field", FieldType.nullable(STRUCT_TYPE), listOf(barCharField))
+
+        val struct1Vec = struct1Field.createVector(al)
+        val struct2Vec = struct2Field.createVector(al)
+        val struct1Writer = writerFor(struct1Vec)
+        val struct2Writer = writerFor(struct2Vec)
+
+        struct1Writer.writeObject(mapOf("bar" to 42L))
+        struct2Writer.writeObject(mapOf("bar" to "forty-two"))
+
+        StructVector.empty("src", al).use { srcVec ->
+            val newStructWriter = writerFor(srcVec).maybePromote(struct1Field).maybePromote(struct2Field)
+            val rowCopier1 = newStructWriter.rowCopier(struct1Vec)
+            val rowCopier2 = newStructWriter.rowCopier(struct2Vec)
+
+            rowCopier1.copyRow(0)
+            rowCopier2.copyRow(0)
+
+            assertEquals(listOf(mapOf("bar" to 42L), mapOf("bar" to "forty-two")), newStructWriter.toReader().toList())
+
+            newStructWriter.close()
+        }
+
+        struct1Writer.close()
+        struct2Writer.close()
     }
 }

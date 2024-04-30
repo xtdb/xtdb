@@ -83,6 +83,7 @@
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
           (doseq [[col-name ^Field field] dependent-fields]
+            (.maybePromote dep-out-writer (name col-name) field)
             (.colWriter dep-out-writer (name col-name) (.getFieldType field)))
 
           (let [match? (boolean-array [false])]

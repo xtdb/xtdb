@@ -7,6 +7,7 @@ import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.isSubType
 import xtdb.toArrowType
 import xtdb.toLeg
 import java.nio.ByteBuffer
@@ -15,7 +16,7 @@ import java.util.LinkedHashMap
 
 class DenseUnionVectorWriter(
     override val vector: DenseUnionVector,
-    private val notify: FieldChangeListener?,
+    override val notify: FieldChangeListener?,
 ) : IVectorWriter {
     private val wp = IVectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
@@ -26,6 +27,7 @@ class DenseUnionVectorWriter(
     private inner class ChildWriter(private val inner: IVectorWriter, val typeId: Byte) : IVectorWriter {
         override val vector get() = inner.vector
         override val field: Field get() = inner.field
+        override val notify: FieldChangeListener? get() = inner.notify
         private val parentDuv get() = this@DenseUnionVectorWriter.vector
         private val parentWP get() = this@DenseUnionVectorWriter.wp
 
@@ -101,7 +103,16 @@ class DenseUnionVectorWriter(
             writeValue(); inner.writeValue0(v)
         }
 
+        override fun maybePromote(field: Field): IVectorWriter {
+            val newWriter = ChildWriter(inner.maybePromote(field), typeId)
+            val newField = newWriter.field
+            this@DenseUnionVectorWriter.writersByLeg[newField.type.toLeg()] = newWriter
+            upsertChildField(newField)
+            return newWriter
+        }
+
         override fun rowCopier(src: ValueVector): IRowCopier {
+            assert(isSubType(src.field, field))
             val innerCopier = inner.rowCopier(src)
 
             return IRowCopier { srcIdx ->
@@ -111,6 +122,7 @@ class DenseUnionVectorWriter(
         }
 
         override fun rowCopier(src: RelationReader): IRowCopier {
+            assert(isSubType(src.field, field))
             val innerCopier = inner.rowCopier(src)
 
             return IRowCopier { srcIdx ->
@@ -202,7 +214,7 @@ class DenseUnionVectorWriter(
     private fun duvRowCopier(src: DenseUnionVector): IRowCopier {
         val copierMapping = src.map { childVec ->
             val childField = childVec.field
-            legWriter(Keyword.intern(childField.name), childField.fieldType).rowCopier(childVec)
+            legWriter(Keyword.intern(childField.name), childField.fieldType).maybePromote(childField).rowCopier(childVec)
         }
 
         return IRowCopier { srcIdx ->
@@ -216,6 +228,42 @@ class DenseUnionVectorWriter(
         return legWriter(srcField.type.toLeg(), srcField.fieldType).rowCopier(src)
     }
 
-    override fun rowCopier(src: ValueVector) =
-        if (src is DenseUnionVector) duvRowCopier(src) else rowCopier0(src)
+    override fun maybePromote(field: Field): IVectorWriter {
+        when (field.type) {
+            is ArrowType.Union -> {
+                for (potentialNewChild in field.children) {
+                    val potentialNewLeg = potentialNewChild.type.toLeg()
+                    when (val legWriter = writersByLeg[potentialNewLeg]) {
+                        null ->  legWriter(potentialNewLeg, potentialNewChild.fieldType).maybePromote(potentialNewChild)
+                        else ->
+                            if (potentialNewChild.fieldType != legWriter.field.fieldType) {
+                                promoteLeg(legWriter, potentialNewChild.fieldType).maybePromote(potentialNewChild)
+                            } else {
+                                legWriter.maybePromote(potentialNewChild)
+                            }
+                    }
+                }
+            }
+            else -> {
+                val potentialNewLeg = field.type.toLeg()
+                when (val legWriter = writersByLeg[potentialNewLeg]) {
+                    null ->  legWriter(potentialNewLeg , field.fieldType).maybePromote(field)
+                    else ->
+                        if (field.type != legWriter.field.type && (field.isNullable || !legWriter.field.isNullable)) {
+                            promoteLeg(legWriter, field.fieldType).maybePromote(field)
+                        } else {
+                            legWriter.maybePromote(field)
+                        }
+                }
+            }
+        }
+        notify(field)
+        return this
+    }
+
+    override fun rowCopier(src: ValueVector): IRowCopier {
+        assert(isSubType(src.field, field)) { "${src.field} is not a subtype of $field" }
+        return if (src is DenseUnionVector) duvRowCopier(src)
+        else rowCopier0(src)
+    }
 }

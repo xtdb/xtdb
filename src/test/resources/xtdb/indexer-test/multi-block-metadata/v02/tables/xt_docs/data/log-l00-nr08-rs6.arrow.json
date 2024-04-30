@@ -169,7 +169,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [ ]
+              "typeIds" : [0,1,2,3]
             },
             "children" : [{
               "name" : "f64",

@@ -204,7 +204,10 @@
       (.copyRow row-copier src-idx))))
 
 (defn append-rel [^IRelationWriter dest-rel, ^RelationReader src-rel]
-  (doseq [^IVectorReader src-col src-rel]
+  (doseq [^IVectorReader src-col src-rel
+          :let [name (.getName src-col)
+                field (.getField src-col)]]
+    (.maybePromote dest-rel name field)
     (append-vec (.colWriter dest-rel (.getName src-col)) src-col))
 
   (let [wp (.writerPosition dest-rel)]

@@ -40,7 +40,10 @@
             sf-copier (-> (.readerForName data-rdr "xt$system_from") (.rowCopier sf-wtr))
             vf-copier (-> (.readerForName data-rdr "xt$valid_from") (.rowCopier vf-wtr))
             vt-copier (-> (.readerForName data-rdr "xt$valid_to") (.rowCopier vt-wtr))
-            op-copier (-> (.readerForName data-rdr "op") (.rowCopier op-wtr))]
+            op-rdr (.readerForName data-rdr "op")
+            ;; makes the assumption that the op writer only gets mangled in place
+            _ (.maybePromote op-wtr (.getField op-rdr))
+            op-copier (.rowCopier op-rdr op-wtr)]
         (reify IRowCopier
           (copyRow [_ ev-idx]
             (.startRow data-wtr)
@@ -298,7 +301,7 @@
 
                       (catch InterruptedException _)
                       (catch Throwable t
-                        (log/warn t "uncaught compactor-loop error"))))]
+                        (log/error t "uncaught compactor-loop error"))))]
 
             (dotimes [_ threads]
               (.execute thread-pool compactor-loop))

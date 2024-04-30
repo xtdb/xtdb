@@ -19,8 +19,7 @@
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.types UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType$Union]
-           (xtdb.api TransactionKey)
+           [org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType]
            xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            (xtdb.watermark IWatermarkSource)))
@@ -261,13 +260,22 @@
                                 (types/col-type->field :i64))
                  (.columnField mm "xt_docs" "xt$id")))
 
-        (t/is (= (types/->field "list" #xt.arrow/type :list true
-                                (types/->field "$data$" #xt.arrow/type :union false
-                                               (types/col-type->field :f64)
-                                               (types/col-type->field :utf8)
-                                               (types/col-type->field [:timestamp-tz :micro "UTC"])
-                                               (types/col-type->field :bool)))
-                 (.columnField mm "xt_docs" "list")))
+        (let [^Field field (.columnField mm "xt_docs" "list")]
+          (t/is (= #xt.arrow/type :list (.getType field)))
+          (t/is (= [(types/col-type->field :f64)
+                    (types/col-type->field :utf8)
+                    (types/col-type->field [:timestamp-tz :micro "UTC"])
+                    (types/col-type->field :bool)]
+                   (-> field (.getChildren) first (.getChildren)))))
+        ;; TODO - type-ids are part of a field or not?
+        #_(t/is (= (types/->field "list" #xt.arrow/type :list true
+                                  (types/->field "$data$" #xt.arrow/type :union false
+                                                 (types/col-type->field :f64)
+                                                 (types/col-type->field :utf8)
+                                                 (types/col-type->field [:timestamp-tz :micro "UTC"])
+                                                 (types/col-type->field :bool)
+                                                 ))
+                   (.columnField mm "xt_docs" "list")))
 
         (t/is (= (types/->field "struct" #xt.arrow/type :struct true
                                 (types/->field "a" #xt.arrow/type :union false

@@ -506,6 +506,8 @@
   (aggregate [this in-rel group-mapping]
     (let [in-vec (.readerForName in-rel (str from-name))
           row-count (.valueCount in-vec)]
+      ;; this promotion should only mangle children of the acc-col writer
+      (.maybePromote acc-col (.getField in-vec))
       (vw/append-vec acc-col in-vec)
 
       (dotimes [idx row-count]
@@ -542,10 +544,11 @@
     (util/try-close out-vec)))
 
 (defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name]}]
-  (let [to-type [:list from-type]]
+  (let [to-type [:list from-type]
+        to-field (types/col-type->field to-type)]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
-      (getToColumnField [_] (types/col-type->field to-type))
+      (getToColumnField [_] to-field)
 
       (build [_ al]
         (ArrayAggAggregateSpec. al from-name to-name to-type

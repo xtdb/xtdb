@@ -6,11 +6,15 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.replaceDataVector
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.isSubType
 import xtdb.toFieldType
+import xtdb.toLeg
+import org.apache.arrow.vector.types.pojo.ArrowType.Union as UNION_TYPE
 
-class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
+class ListVectorWriter(override val vector: ListVector, override val notify: FieldChangeListener?) : IVectorWriter {
     private val wp = IVectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
@@ -41,8 +45,8 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         vector.lastSet = wp.position - 1
     }
 
-    override fun listElementWriter(): IVectorWriter =
-        if (vector.dataVector is NullVector) listElementWriter(UNION_FIELD_TYPE) else elWriter
+    override fun listElementWriter(): IVectorWriter = elWriter
+        //if (vector.dataVector is NullVector) listElementWriter(UNION_FIELD_TYPE) else elWriter
 
     override fun listElementWriter(fieldType: FieldType): IVectorWriter {
         val res = vector.addOrGetVector<FieldVector>(fieldType)
@@ -95,12 +99,31 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
 
     override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
 
+    override fun maybePromote(field: Field): IVectorWriter {
+        return when {
+            field.type is ArrowType.List && (!field.isNullable || this.field.isNullable) -> {
+                if (field.children[0].fieldType != vector.dataVector.field.fieldType && vector.dataVector.field.type !is UNION_TYPE)
+                    promoteElWriter(field.children[0].fieldType)
+                elWriter = elWriter.maybePromote(field.children[0])
+                upsertElField(elWriter.field)
+                this
+            }
+            else -> {
+                val newWriter = writerFor(promote(field.fieldType, vector.allocator)).also {
+                    if (it is DenseUnionVectorWriter) it.legWriter(field.type.toLeg()).maybePromote(field)
+                }
+                notify(newWriter.field)
+                newWriter.writerPosition().position = writerPosition().position
+                newWriter
+            }
+        }
+    }
+
     override fun rowCopier(src: ValueVector) = when (src) {
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)
         is ListVector -> {
-            if (src.field.isNullable && !field.isNullable)
-                throw InvalidCopySourceException(src.field, field)
+            assert(isSubType(src.field, field))
 
             val innerCopier = listElementWriter().rowCopier(src.dataVector)
 

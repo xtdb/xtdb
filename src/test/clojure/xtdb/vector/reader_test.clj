@@ -17,15 +17,18 @@
                      rel-wtr2 (vw/->rel-writer tu/*allocator*)
                      rel-wtr3 (vw/->rel-writer tu/*allocator*)]
       (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :i64))
-            my-colun-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :utf8))]
+            my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :utf8))]
         (.writeLong my-column-wtr1 42)
-        (.writeObject my-colun-wtr2 "forty-two"))
-      (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-            copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
-        (.copyRow copier1 0)
-        (.copyRow copier2 0))
-      (t/is (= [{:my-column 42} {:my-column "forty-two"}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))))
+        (.writeObject my-column-wtr2 "forty-two")
+
+        (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr1))
+        (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr2))
+        (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
+              copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+          (.copyRow copier1 0)
+          (.copyRow copier2 0))
+        (t/is (= [{:my-column 42} {:my-column "forty-two"}]
+                 (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3)))))))
 
   (t/testing "copying rows from different (composite) col-types from different relations"
     (t/testing "structs"
@@ -43,18 +46,21 @@
           (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))
                 my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
             (.writeObject my-column-wtr1 {"foo" 42 "bar" "forty-two"})
-            (.writeObject my-column-wtr2 {"foo" 42.0 "toto" :my-keyword}))
+            (.writeObject my-column-wtr2 {"foo" 42.0 "toto" :my-keyword})
 
-          (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-                copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
-            (.copyRow copier1 0)
-            (.copyRow copier2 0))
+            (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr1))
+            (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr2))
+            (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
+                  copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+              (.copyRow copier1 0)
+              (.copyRow copier2 0))
 
-          (t/is (= [{:my-column {:foo 42, :bar "forty-two"}}
-                    {:my-column {:foo 42.0, :toto :my-keyword}}]
-                   (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
-          (t/is (= combined-field
-                   (.getField (.colWriter rel-wtr3 "my-column")))))))
+            (t/is (= [{:my-column {:foo 42, :bar "forty-two"}}
+                      {:my-column {:foo 42.0, :toto :my-keyword}}]
+                     (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
+            (t/is (= combined-field
+                     (.getField (.colWriter rel-wtr3 "my-column"))))))))
+
 
     (t/testing "unions"
       (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
@@ -65,24 +71,27 @@
           (.writeObject my-column-wtr1 42)
           (.writeObject my-column-wtr1 "forty-two")
           (.writeObject my-column-wtr2 42)
-          (.writeObject my-column-wtr2 :my-keyword))
+          (.writeObject my-column-wtr2 :my-keyword)
 
-        (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-              copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
-          (.copyRow copier1 0)
-          (.copyRow copier1 1)
-          (.copyRow copier2 0)
-          (.copyRow copier2 1))
-        (t/is (= [{:my-column 42}
-                  {:my-column "forty-two"}
-                  {:my-column 42}
-                  {:my-column :my-keyword}]
-                 (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
-        (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                                (types/col-type->field "i64" :i64)
-                                (types/col-type->field "utf8" :utf8)
-                                (types/col-type->field "keyword" :keyword))
-                 (.getField (.colWriter rel-wtr3 "my-column"))))))
+          (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr1))
+          (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr2))
+
+          (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
+                copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+            (.copyRow copier1 0)
+            (.copyRow copier1 1)
+            (.copyRow copier2 0)
+            (.copyRow copier2 1))
+          (t/is (= [{:my-column 42}
+                    {:my-column "forty-two"}
+                    {:my-column 42}
+                    {:my-column :my-keyword}]
+                   (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
+          (t/is (= (types/->field "my-column" #xt.arrow/type :union false
+                                  (types/col-type->field "i64" :i64)
+                                  (types/col-type->field "utf8" :utf8)
+                                  (types/col-type->field "keyword" :keyword))
+                   (.getField (.colWriter rel-wtr3 "my-column")))))))
 
     (t/testing "list"
       (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
@@ -96,21 +105,22 @@
           (t/is (= (types/->field "my-column" #xt.arrow/type :list false (types/col-type->field "$data$" :i64))
                    (.getField my-column-wtr1)))
           (t/is (= (types/->field "my-column" #xt.arrow/type :list false (types/col-type->field "$data$" :utf8))
-                   (.getField my-column-wtr2))))
+                   (.getField my-column-wtr2)))
 
-        (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-              copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
-          (.copyRow copier1 0)
-          (.copyRow copier2 0))
+          (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr1))
+          (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr2))
+          (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
+                copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+            (.copyRow copier1 0)
+            (.copyRow copier2 0))
 
-        (t/is (= [{:my-column [42 43]} {:my-column ["forty-two" "forty-three"]}]
-                 (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
-        (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                                (types/->field "list" #xt.arrow/type :list false
-                                               (types/->field "$data$" #xt.arrow/type :union false
-                                                              (types/col-type->field :i64)
-                                                              (types/col-type->field :utf8))))
-                 (.getField (.colWriter rel-wtr3 "my-column"))))))
+          (t/is (= [{:my-column [42 43]} {:my-column ["forty-two" "forty-three"]}]
+                   (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
+          (t/is (= (types/->field "my-column" #xt.arrow/type :list false
+                                  (types/->field "$data$" #xt.arrow/type :union false
+                                                 (types/col-type->field :i64)
+                                                 (types/col-type->field :utf8)))
+                   (.getField (.colWriter rel-wtr3 "my-column")))))))
 
     (t/testing "set"
       (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
@@ -126,6 +136,10 @@
           (t/is (= (types/->field "my-column" #xt.arrow/type :set false (types/col-type->field "$data$" :utf8))
                    (.getField my-column-wtr2)))
 
+          (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr1))
+          (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr2))
+
+
           (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
                 copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
             (.copyRow copier1 0)
@@ -133,31 +147,11 @@
 
           (t/is (= [{:my-column #{42 43}} {:my-column #{"forty-two" "forty-three"}}]
                    (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
-          (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                                  (types/->field "set" #xt.arrow/type :set false
-                                                 (types/->field "$data$" #xt.arrow/type :union false
-                                                                (types/col-type->field :i64)
-                                                                (types/col-type->field :utf8))))
+          (t/is (= (types/->field "my-column" #xt.arrow/type :set false
+                                  (types/->field "$data$" #xt.arrow/type :union false
+                                                 (types/col-type->field :i64)
+                                                 (types/col-type->field :utf8)))
                    (.getField (.colWriter rel-wtr3 "my-column")))))))))
-
-(deftest copying-union-legs-with-different-types-throws
-  (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
-              rel-wtr2 (vw/->rel-writer tu/*allocator*)
-              rel-wtr3 (vw/->rel-writer tu/*allocator*)]
-    (-> rel-wtr1
-        (.colWriter "my-column" (FieldType/notNullable #xt.arrow/type :union))
-        (.legWriter :foo (FieldType/notNullable #xt.arrow/type :i64))
-        (.writeLong 42))
-    (-> rel-wtr2
-        (.colWriter "my-column" (FieldType/notNullable #xt.arrow/type :union))
-        (.legWriter :foo (FieldType/notNullable #xt.arrow/type :f64))
-        (.writeDouble 42.0))
-    (t/is (thrown-with-msg?
-           RuntimeException #"Field type mismatch"
-           (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-                 copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
-             (.copyRow copier1 0)
-             (.copyRow copier2 0))))))
 
 (deftest testing-duv->vec-copying
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)
@@ -198,6 +192,7 @@
         (.writeLong 43))
 
       (.endList duv-list-wrt)
+      (.maybePromote list-wrt (.getField duv-list-wrt))
       (let [copier (.rowCopier list-wrt duv)]
         (.copyRow copier 0))
       (t/is (= [[42 43]]
@@ -225,6 +220,7 @@
       (-> (.structKeyWriter duv-struct-wrt "bar" (FieldType/notNullable #xt.arrow/type :utf8))
           (.writeObject "forty-two"))
       (.endStruct duv-struct-wrt)
+      (.maybePromote struct-wrt (.getField duv-struct-wrt))
       (let [copier (.rowCopier struct-wrt duv)]
         (.copyRow copier 0))
       (t/is (= [{:foo 42, :bar "forty-two"}]
@@ -315,3 +311,51 @@
                    (do
                      (.setPosition vpos i)
                      (get-children-legs (.readObject value-rdr))))))))))
+
+(deftest struct-promote-children-in-row-copier
+  (let [struct-int-field (types/->field "foo" #xt.arrow/type :struct false (types/col-type->field "bar" :i64))
+        struct-str-field (types/->field "foo" #xt.arrow/type :struct false (types/col-type->field "bar" :utf8))]
+    (with-open [struct-int-vec (.createVector struct-int-field tu/*allocator*)
+                struct-str-vec (.createVector struct-str-field tu/*allocator*)]
+
+      (let [struct-int-wrt (vw/->writer struct-int-vec)
+            struct-str-wrt (vw/->writer struct-str-vec)]
+
+        (dotimes [_ 1]
+          (.writeObject struct-int-wrt {:bar 42})
+          (.writeObject struct-str-wrt {:bar "forty-two"}))
+
+        (.syncValueCount struct-int-wrt)
+        (.syncValueCount struct-str-wrt))
+
+      (with-open [wtr (-> (vw/->vec-writer tu/*allocator* "my-new-struct" (FieldType/notNullable #xt.arrow/type :struct))
+                          (.maybePromote struct-int-field)
+                          (.maybePromote struct-str-field))]
+        (let [int-copier (.rowCopier wtr struct-int-vec)
+              str-copier (.rowCopier wtr struct-str-vec)]
+          (.copyRow int-copier 0)
+          (t/is (= [{:bar 42}]
+                   (tu/vec->vals (vw/vec-wtr->rdr wtr))))
+          (.copyRow str-copier 0)
+          (t/is (= [{:bar 42} {:bar "forty-two"}]
+                   (tu/vec->vals (vw/vec-wtr->rdr wtr)))))))))
+
+(deftest nested-empty-list-field-propagation-test
+  (t/testing "empty list field propagation"
+    (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
+                rel-wtr2 (vw/->rel-writer tu/*allocator*)]
+      (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
+        (.writeObject my-column-wtr1
+                      {:a-list []})
+
+        (t/is (= (types/->field "my-column" #xt.arrow/type :struct false
+                                (types/->field "a_list" #xt.arrow/type :list false
+                                               (types/col-type->field "$data$" :null)))
+                 (.getField my-column-wtr1)))
+
+        (.maybePromote rel-wtr2 "my-column" (.getField my-column-wtr1))
+        (let [copier1 (.rowCopier rel-wtr2 (vw/rel-wtr->rdr rel-wtr1))]
+          (.copyRow copier1 0))
+
+        (t/is (= [{:my-column {:a-list []}}]
+                 (vr/rel->rows (vw/rel-wtr->rdr rel-wtr2))))))))

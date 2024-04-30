@@ -66,18 +66,9 @@
             "name" : "$data$",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "utf8"
             },
-            "children" : [{
-              "name" : "utf8",
-              "nullable" : false,
-              "type" : {
-                "name" : "utf8"
-              },
-              "children" : [ ]
-            }]
+            "children" : [ ]
           }],
           "metadata" : [{
             "value" : "set",
@@ -149,15 +140,9 @@
           "children" : [{
             "name" : "$data$",
             "count" : 3,
-            "TYPE_ID" : [0,0,0],
-            "OFFSET" : [0,1,2],
-            "children" : [{
-              "name" : "utf8",
-              "count" : 3,
-              "VALIDITY" : [1,1,1],
-              "OFFSET" : [0,4,9,12],
-              "DATA" : ["blue","green","red"]
-            }]
+            "VALIDITY" : [1,1,1],
+            "OFFSET" : [0,4,9,12],
+            "DATA" : ["blue","green","red"]
           }]
         }]
       },{

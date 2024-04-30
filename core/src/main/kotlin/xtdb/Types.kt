@@ -16,6 +16,7 @@ import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.types.ClojureForm
 import xtdb.types.IntervalDayTime
@@ -142,3 +143,47 @@ fun valueToArrowType(obj: Any?) = when (obj) {
 
 internal fun Any?.toArrowType() = valueToArrowType(this)
 internal fun Any?.toFieldType() = FieldType(this == null, toArrowType(), null)
+
+val NULL_FIELD = Field("\$data\$", FieldType.nullable(MinorType.NULL.type), null)
+
+fun toNotNullable(field: Field) = Field(field.name, FieldType.notNullable(field.type), field.children)
+
+fun isSubType(subField: Field, field: Field): Boolean {
+    // order is important here
+    when {
+        subField.type !is ArrowType.Union && field.type is ArrowType.Union ->{
+            val childFields = field.children.associateByTo(LinkedHashMap()) { it.type }
+            return when (val childField = childFields[subField.type]) {
+                null -> false
+                else -> isSubType(subField, childField) || (isSubType(toNotNullable(subField), childField) && childFields[MinorType.NULL.type] != null)
+            }
+        }
+        subField.isNullable && !field.isNullable -> return false
+        // Unions might have different typeIds
+        subField.type != field.type && subField.type !is ArrowType.Union && field.type !is ArrowType.Union -> return false
+        subField.type is ArrowType.List -> isSubType(subField.children[0], field.children[0])
+        subField.type is ArrowType.Struct -> {
+            val childFields = field.children.associateByTo(LinkedHashMap()) { it.name }
+            for (subFieldChild in subField.children) {
+                when (val childField = childFields[subFieldChild.name]) {
+                    null -> return false
+                    else -> if (!isSubType(subFieldChild, childField)) return false
+                }
+            }
+            return true
+        }
+        subField.type is ArrowType.Union -> {
+            val childFields = field.children.associateByTo(LinkedHashMap()) { it.type }
+            for (subFieldChild in subField.children) {
+                when (val fieldChild = childFields[subFieldChild.type]) {
+                    null -> return false
+                    else -> if (!isSubType(subFieldChild, fieldChild)) return false
+                }
+            }
+            return true
+        }
+    }
+    return true
+}
+
+fun Field.withName(name: String) = Field(name, fieldType, children)

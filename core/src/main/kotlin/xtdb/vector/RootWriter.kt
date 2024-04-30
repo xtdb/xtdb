@@ -1,6 +1,7 @@
 package xtdb.vector
 
 import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 
 class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
@@ -27,6 +28,12 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
 
     // dynamic column creation unsupported in RootWriters
     override fun colWriter(colName: String, fieldType: FieldType) = colWriter(colName)
+
+    override fun maybePromote(colName: String, field: Field) =
+        throw UnsupportedOperationException("RootWriter doesn't support dynamic column widening")
+
+    override fun maybePromote(inRel: RelationReader) =
+        throw UnsupportedOperationException("RootWriter doesn't support dynamic column widening")
 
     override fun syncRowCount() {
         root.syncSchema()

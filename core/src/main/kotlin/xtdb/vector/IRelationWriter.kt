@@ -1,5 +1,6 @@
 package xtdb.vector
 
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 
 interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {
@@ -23,6 +24,10 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
     fun colWriter(colName: String): IVectorWriter
 
     fun colWriter(colName: String, fieldType: FieldType): IVectorWriter
+
+    fun maybePromote(colName: String, field: Field): IVectorWriter
+
+    fun maybePromote(inRel: RelationReader):  IRelationWriter
 
     fun rowCopier(inRel: RelationReader): IRowCopier {
         val copiers = inRel.map { inVec -> inVec.rowCopier(colWriter(inVec.name)) }

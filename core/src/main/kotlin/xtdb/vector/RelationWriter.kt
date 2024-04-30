@@ -1,6 +1,7 @@
 package xtdb.vector
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 
 @Suppress("unused")
@@ -34,6 +35,20 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
                     it.populateWithAbsents(wp.position)
                     writers[colName] = it
                 }
+
+    override fun maybePromote(colName: String, field: Field) : IVectorWriter {
+        val writer = when (val existing = writers[colName]) {
+            null -> colWriter(colName, field.fieldType).maybePromote(field)
+            else -> existing.maybePromote(field)
+        }
+        writers[colName] = writer
+        return  writer
+    }
+
+    override fun maybePromote(inRel: RelationReader) : IRelationWriter {
+        inRel.forEach { vec -> maybePromote(vec.name, vec.field) }
+        return this
+    }
 
     override fun close() {
         writers.values.forEach(IVectorWriter::close)

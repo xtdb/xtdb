@@ -236,8 +236,13 @@
 
   ;; Readers are mostly used to copy from a relation into new relation writer.
   ;; The following copies the first row of `rel-wtr1` into `rel-wtr2`.
-  '(let [copier (.rowCopier rel-wtr2 (vw/rel-wtr->rdr rel-wtr1))]
-     (.copyRow copier 0))
+  ;; Importantly you need to always call `maybePromote` on the rel-wtr with the field types of the
+  ;; relations you are copying from. This is important so that any promotion can happen before all the
+  ;; copiers have been set up.
+  '(do
+     (.maybePromote rel-wtr2 "my-int" (.getField my-int-wrt))
+     (let [copier (.rowCopier rel-wtr2 (vw/rel-wtr->rdr rel-wtr1))]
+       (.copyRow copier 0)))
 
   ;; Let us set up a whole example.
 
@@ -252,24 +257,27 @@
 
     ;; populating rel-wtr1 and rel-wtr2
     (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :i64))
-          my-colun-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :utf8))]
+          my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :utf8))]
       (.writeLong my-column-wtr1 42)
-      (.writeObject my-colun-wtr2 "forty-two"))
+      (.writeObject my-column-wtr2 "forty-two")
 
-    ;; copying to rel-wtr3
-    (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-          copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
-      (.copyRow copier1 0)
-      (.copyRow copier2 0))
 
-    ;; checkout of the field type of that column
-    (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                            (types/->field "i64" #xt.arrow/type :i64 false)
-                            (types/->field "utf8" #xt.arrow/type :utf8 false))
-             (.getField (.colWriter rel-wtr3 "my-column"))))
+      ;; copying to rel-wtr3
+      (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr1))
+      (.maybePromote rel-wtr3 "my-column" (.getField my-column-wtr2))
+      (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
+            copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+        (.copyRow copier1 0)
+        (.copyRow copier2 0))
 
-    (t/is (= [{:my-column 42} {:my-column "forty-two"}]
-             (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3)))))
+      ;; checkout of the field type of that column
+      (t/is (= (types/->field "my-column" #xt.arrow/type :union false
+                              (types/->field "i64" #xt.arrow/type :i64 false)
+                              (types/->field "utf8" #xt.arrow/type :utf8 false))
+               (.getField (.colWriter rel-wtr3 "my-column"))))
+
+      (t/is (= [{:my-column 42} {:my-column "forty-two"}]
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))))
 
   ;; What is nice about the above example is that even though the types of "my-column" of rel-wtr1 and rel-wtr2
   ;; are base types the row copiers take care to create "union" types.

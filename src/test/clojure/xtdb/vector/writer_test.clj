@@ -38,24 +38,20 @@
 
             "legWriter creates lists/sets with uninitialized data vectors")
 
-      (doto (.listElementWriter my-list-wtr)
-        (.legWriter (.getType (types/col-type->field :i64))))
+      (.listElementWriter my-list-wtr (.getFieldType (types/col-type->field :i64)))
 
-      (doto (.listElementWriter my-set-wtr)
-        (.legWriter (.getType (types/col-type->field :f64))))
+      (.listElementWriter my-set-wtr (.getFieldType (types/col-type->field :f64)))
 
       (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                               (types/->field "list" #xt.arrow/type :list false
-                                             (types/->field "$data$" #xt.arrow/type :union false
-                                                            (types/col-type->field :i64)))
+                                             (types/->field "$data$" #xt.arrow/type :i64 false))
 
                               (types/->field "set" #xt.arrow/type :set false
-                                             (types/->field "$data$" #xt.arrow/type :union false
-                                                            (types/col-type->field :f64))))
+                                             (types/->field "$data$" #xt.arrow/type :f64 false)))
                (.getField duv-wtr)))
 
-      (doto (.listElementWriter my-list-wtr)
-        (.legWriter (.getType (types/col-type->field :f64))))
+      (.maybePromote my-list-wtr (types/->field "new-list" #xt.arrow/type :list false
+                                                (types/->field "$data$" #xt.arrow/type :f64 false)))
 
       (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                               (types/->field "list" #xt.arrow/type :list false
@@ -64,8 +60,7 @@
                                                             (types/col-type->field :f64)))
 
                               (types/->field "set" #xt.arrow/type :set false
-                                             (types/->field "$data$" #xt.arrow/type :union false
-                                                            (types/col-type->field :f64))))
+                                             (types/->field "$data$" #xt.arrow/type :f64 false)))
                (.getField duv-wtr)))))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)]
@@ -117,16 +112,22 @@
                  (.getField list-wrt)))
 
         (t/is (= (types/->field "my-list" #xt.arrow/type :list true
-                                (types/->field "$data$" #xt.arrow/type :union false))
+                                (types/->field "$data$" #xt.arrow/type :null true))
                  (-> list-wrt
                      (doto (.listElementWriter))
-                     (.getField)))
-              "call listElementWriter initializes it with a dense union")
+                     (.getField))))
+
+        (t/is (= (types/->field "my-list" #xt.arrow/type :list true
+                                (types/->field "$data$" #xt.arrow/type :i64 true))
+                 (-> list-wrt
+                     (doto (.listElementWriter (FieldType/nullable #xt.arrow/type :i64)))
+                     (.getField))))
+
         (t/is (thrown-with-msg? RuntimeException #"Inner vector type mismatch"
                                 (-> list-wrt
-                                    (doto (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64)))
+                                    (doto (.listElementWriter (FieldType/notNullable #xt.arrow/type :f64)))
                                     (.getField)))
-              "can't now ask for a :i64"))))
+              "can't now ask for a :f64 after :i64"))))
 
 
   (with-open [list-vec (ListVector/empty "my-list" tu/*allocator*)]

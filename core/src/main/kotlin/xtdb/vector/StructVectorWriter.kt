@@ -7,15 +7,21 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.complex.replaceChild
+import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.ArrowType.Struct
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import org.checkerframework.checker.units.qual.t
 import xtdb.asKeyword
+import xtdb.isSubType
 import xtdb.toFieldType
+import xtdb.toLeg
 import xtdb.util.normalForm
+import java.util.LinkedHashMap
 import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Union as UNION_TYPE
 
-class StructVectorWriter(override val vector: StructVector, private val notify: FieldChangeListener?) : IVectorWriter,
+class StructVectorWriter(override val vector: StructVector, override val notify: FieldChangeListener?) : IVectorWriter,
     Iterable<Map.Entry<String, IVectorWriter>> {
     private val wp = IVectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
@@ -135,6 +141,32 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         startStruct(); f(); endStruct()
     }
 
+    override fun maybePromote(field: Field): IVectorWriter {
+        return if (field.type == Struct.INSTANCE && (!field.isNullable || this.field.isNullable)) {
+            for (potentialNewChild in field.children) {
+                val newWriter : IVectorWriter = when (val childWriter = writers[potentialNewChild.name]) {
+                    null -> newChildWriter(potentialNewChild.name, potentialNewChild.fieldType).maybePromote(potentialNewChild)
+                    else ->
+                        if (childWriter.field.type !is UNION_TYPE &&
+                            ((potentialNewChild.type != childWriter.field.type) || ( potentialNewChild.isNullable && !childWriter.field.isNullable))) {
+                            promoteChild(childWriter, potentialNewChild.fieldType).maybePromote(potentialNewChild)
+                        } else {
+                            childWriter.maybePromote(potentialNewChild)
+                        }
+                }
+                upsertChildField(newWriter.field)
+            }
+            this
+        } else {
+            val newWriter = writerFor(promote(field.fieldType, vector.allocator), notify).also {
+                if (it is DenseUnionVectorWriter) it.legWriter(field.type.toLeg()).maybePromote(field)
+            }
+            notify(newWriter.field)
+            newWriter.writerPosition().position = writerPosition().position
+            newWriter
+        }
+    }
+
     private inline fun childRowCopier(
         srcName: String,
         fieldType: FieldType,
@@ -153,11 +185,10 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)
         is StructVector -> {
-            if (src.field.isNullable && !field.isNullable)
-                throw InvalidCopySourceException(src.field, field)
+            assert(isSubType(src.field, field))
 
             val innerCopiers =
-                src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> w.rowCopier(child) } }
+                src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> w.rowCopier(child) } }.toMutableList()
 
             IRowCopier { srcIdx ->
                 wp.position.also {

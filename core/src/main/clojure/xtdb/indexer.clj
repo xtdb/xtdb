@@ -91,6 +91,7 @@
                                                         :docs-rdr table-docs-rdr
 
                                                         :doc-copier (-> (.docWriter live-table)
+                                                                        (.maybePromote (.getField table-rel-rdr))
                                                                         (.rowCopier table-rel-rdr))}))))))]
 
     (reify OpIndexer
@@ -302,6 +303,7 @@
 
               live-idx-table (.liveTable live-idx-tx table)
               live-idx-table-copier (-> (.docWriter live-idx-table)
+                                        (.maybePromote (.getField content-rel))
                                         (.rowCopier content-rel))]
 
           (when-not id-col
@@ -389,8 +391,8 @@
         (f nil)
         (throw (err/runtime-err :xtdb.indexer/missing-sql-args
                                 {::err/message "Arguments list was expected but not provided"
-                                 :param-count param-count}))) 
-      
+                                 :param-count param-count})))
+
       (let [arg-count (count (seq args))]
         (if (not= arg-count param-count)
           (throw (err/runtime-err :xtdb.indexer/incorrect-sql-arg-count

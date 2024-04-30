@@ -158,7 +158,7 @@ class IndirectMultiVectorReaderTest {
 
         val duvField = Field("my-duv", FieldType(false, DENSEUNION_TYPE.type, null, null), null)
         val resVec = duvField.createVector(alloc) as DenseUnionVector
-        val vectorWriter = writerFor(resVec)
+        val vectorWriter = writerFor(resVec).maybePromote(indirectRdr.field)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
         vectorWriter.syncValueCount()
@@ -208,7 +208,7 @@ class IndirectMultiVectorReaderTest {
         assertEquals(expected, r.map { valueRdr.readObject().also { pos.getPositionAndIncrement() } })
 
         val resVec = duvField.createVector(alloc) as DenseUnionVector
-        val vectorWriter = writerFor(resVec)
+        val vectorWriter = writerFor(resVec).maybePromote(indirectRdr.field)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
         vectorWriter.syncValueCount()
@@ -261,7 +261,7 @@ class IndirectMultiVectorReaderTest {
         })
 
         val resVec = duvField.createVector(alloc) as DenseUnionVector
-        val vectorWriter = writerFor(resVec)
+        val vectorWriter = writerFor(resVec).maybePromote(indirectRdr.field)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
         vectorWriter.syncValueCount()

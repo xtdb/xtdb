@@ -72,6 +72,22 @@
                      [:scan {:table xt_docs} [foo]]]
                    {:node node}))))))
 
+
+(t/deftest test-row-copying-different-struct-types-bewteen-chunk-boundaries-3388
+  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 20}})]
+    (xt/submit-tx node (for [i (range 20)]
+                         [:put-docs :xt_docs {:xt/id i :foo {:bar 42}}]))
+
+    (xt/submit-tx node (for [i (range 20 40)]
+                         [:put-docs :xt_docs {:xt/id i :foo {:bar "forty-two"}}]))
+
+    (t/is (= #{{:foo {:bar 42}} {:foo {:bar "forty-two"}}}
+             (set (tu/query-ra
+                   '[:apply :cross-join {}
+                     [:table [{}]]
+                     [:scan {:table xt_docs} [foo]]]
+                   {:node node}))))))
+
 (t/deftest test-smaller-page-limit
   (with-open [node (xtn/start-node {:indexer {:page-limit 16}})]
     (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
