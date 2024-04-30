@@ -45,6 +45,7 @@
           (.accept (reify SqlVisitor
                      (visitSchemaName [_ ctx] (symbol (.getText ctx)))
                      (visitAsClause [this ctx] (-> (.columnName ctx) (.accept this)))
+                     (visitQueryName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitTableName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitTableAlias [this ctx] (-> (.correlationName ctx) (.accept this)))
                      (visitColumnName [this ctx] (-> (.identifier ctx) (.accept this)))
@@ -181,6 +182,25 @@
                                              (:plan query-plan)]))))
              plan
              subqs))
+
+(defrecord CTE [plan col-syms])
+
+(defrecord WithVisitor [env scope]
+  SqlVisitor
+  (visitWithClause [{{:keys [ctes]} :env, :as this} ctx]
+    (assert (not (.RECURSIVE ctx)) "Recursive CTEs are not supported yet")
+    (->> (.withListElement ctx)
+         (reduce (fn [ctes ^ParserRuleContext wle]
+                   (conj ctes (.accept wle (assoc-in this [:env :ctes] ctes))))
+                 (or ctes {}))))
+
+  (visitWithListElement [_ ctx]
+    (let [query-name (identifier-sym (.queryName ctx))]
+      (assert (nil? (.columnNameList ctx)) "Column aliases are not supported yet")
+
+      (let [{:keys [plan col-syms]} (-> (.subquery ctx)
+                                        (.accept (->QueryPlanVisitor env scope)))]
+        (MapEntry/create query-name (->CTE plan col-syms))))))
 
 (defrecord TableTimePeriodSpecificationVisitor [expr-visitor]
   SqlVisitor
@@ -343,8 +363,8 @@
 
   (find-decls [_ [col-name table-name]]
     (when (or (nil? table-name) (= table-name table-alias))
-      (when-let [col (get available-cols col-name)]
-        [(->col-sym (str unique-table-alias) (str col))])))
+      (when (.contains available-cols col-name)
+        [(->col-sym (str unique-table-alias) (str col-name))])))
 
   TableRef
   (plan-table-ref [_]
@@ -422,16 +442,21 @@
 
 (defrecord TableRefVisitor [env scope]
   SqlVisitor
-  (visitBaseTable [{{:keys [!id-count table-info]} :env} ctx]
+  (visitBaseTable [{{:keys [!id-count table-info ctes] :as env} :env} ctx]
     (let [tn (some-> (.tableOrQueryName ctx) (.tableName))
           sn (identifier-sym (.schemaName tn))
           tn (identifier-sym (.identifier tn))
           table-alias (or (identifier-sym (.tableAlias ctx)) tn)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           cols (some-> (.tableProjection ctx) (->table-projection))]
-      (->BaseTable env ctx sn tn table-alias unique-table-alias
-                   (->insertion-ordered-set (or cols (get table-info tn)))
-                   (HashMap.))))
+      (or (when-not sn
+            (when-let [{:keys [plan], cte-cols :col-syms} (get ctes tn)]
+              (->DerivedTable plan table-alias unique-table-alias
+                              (->insertion-ordered-set (or cols cte-cols)))))
+
+          (->BaseTable env ctx sn tn table-alias unique-table-alias
+                       (->insertion-ordered-set (or cols (get table-info tn)))
+                       (HashMap.)))))
 
   (visitJoinTable [this ctx]
     (let [l (-> (.tableReference ctx 0) (.accept this))
@@ -1455,7 +1480,12 @@
   (visitWrappedQuery [this ctx] (-> (.queryExpressionBody ctx) (.accept this)))
 
   (visitQueryExpression [this ctx]
-    (let [order-by-ctx (.orderByClause ctx)
+    (let [{:keys [env] :as this} (-> this
+                                     (assoc-in [:env :ctes] (or (some-> (.withClause ctx)
+                                                                        (.accept (->WithVisitor env scope)))
+                                                                (:ctes env))))
+
+          order-by-ctx (.orderByClause ctx)
 
           qeb-ctx (.queryExpressionBody ctx)
 
@@ -2084,5 +2114,7 @@
              (vary-meta assoc :param-count @!param-count)))))))
 
 (comment
-  (plan-statement "SELECT m.producer, SUM(m.`length`) FROM Movie AS m HAVING MIN(m.`year`) < 1930"
-                  {:table-info {"movie" #{"producer" "year" "length"}}}))
+  (plan-statement "WITH foo AS (SELECT id FROM bar WHERE id = 5)
+                   SELECT foo.id, baz.id
+                   FROM foo, foo AS baz"
+                  {:table-info {"bar" #{"id"}}}))

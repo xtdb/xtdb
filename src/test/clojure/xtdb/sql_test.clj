@@ -1041,9 +1041,10 @@
 (deftest test-with-clause
   (t/is (=plan-file
           "test-with-clause"
-          (plan-sql "WITH foo AS (SELECT bar.id FROM bar WHERE bar.id = 5)
-                    SELECT foo.id, baz.id
-                    FROM foo, foo AS baz"))))
+          (plan-sql "WITH foo AS (SELECT id FROM bar WHERE id = 5)
+                    SELECT foo.id foo_id, baz.id baz_id
+                    FROM foo, foo AS baz"
+                    {:table-info {"bar" #{"id"}}}))))
 
 (deftest test-delimited-identifiers-in-insert-column-list-2549
   (t/is (=plan-file
