@@ -49,13 +49,6 @@
 (defn- pack-result ^org.apache.arrow.flight.Result [res]
   (Result. (.toByteArray (Any/pack res))))
 
-(defn then-await-fn ^java.util.concurrent.CompletableFuture [cf {:keys [^IIndexer idxer]}]
-  (-> cf
-      (util/then-compose
-       (fn [tx]
-         ;; HACK til we have the ability to await on the connection
-         (.awaitTxAsync idxer tx nil)))))
-
 (doto (def ^:private do-put-update-msg
         (let [^org.apache.arrow.flight.sql.impl.FlightSql$DoPutUpdateResult$Builder
               b (doto (FlightSql$DoPutUpdateResult/newBuilder)
@@ -115,9 +108,11 @@
                 (CompletableFuture/completedFuture nil)
                 (CompletableFuture/failedFuture (UnsupportedOperationException. "unknown tx")))
 
-              (-> (xt/submit-tx& node [dml])
-                  (then-await-fn svr)
-                  (doto deref))))
+              (-> (CompletableFuture/completedFuture
+                   (xt/submit-tx node [dml]))
+                  (util/then-compose (fn [tx]
+                                       ;; HACK til we have the ability to await on the connection
+                                       (.awaitTxAsync idxer tx nil))))))
 
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
             (with-open [res (.openCursor bq)
@@ -269,8 +264,10 @@
           (if (= FlightSql$ActionEndTransactionRequest$EndTransaction/END_TRANSACTION_COMMIT
                  (.getAction req))
 
-            @(-> (xt/submit-tx& node dml)
-                 (then-await-fn svr)
+            @(-> (let [tx-key (xt/submit-tx node dml)]
+                   ;; HACK til we have the ability to await on the connection
+                   (.awaitTxAsync idxer tx-key nil))
+
                  (.whenComplete (reify BiConsumer
                                   (accept [_ _v e]
                                     (if e

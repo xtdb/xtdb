@@ -191,48 +191,6 @@
           (.openQueryAsync this query query-opts))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn submit-tx&
-  "Writes transactions to the log for processing. Non-blocking.
-
-  tx-ops: XTQL/SQL transaction operations.
-    [[:put-docs :table {:xt/id \"my-id\", ...}]
-     [:delete-docs :table \"my-id\"]
-
-     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
-      [0 1]]
-
-     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
-      [2 3] [4 5] [6 7]]
-
-     [:sql \"UPDATE foo SET b = 1\"]]
-
-  Returns a CompletableFuture containing a map with details about
-  the submitted transaction, including system-time and tx-id.
-
-  opts (map):
-   - :system-time
-     overrides system-time for the transaction,
-     mustn't be earlier than any previous system-time
-
-   - :default-tz
-     overrides the default time zone for the transaction,
-     should be an instance of java.time.ZoneId"
-  (^java.util.concurrent.CompletableFuture [node tx-ops] (submit-tx& node tx-ops {}))
-  (^java.util.concurrent.CompletableFuture [^IXtdb node tx-ops tx-opts]
-   (.submitTxAsync node
-                   (cond
-                     (instance? TxOptions tx-opts) tx-opts
-                     (nil? tx-opts) (TxOptions.)
-                     (map? tx-opts) (let [{:keys [system-time default-tz default-all-valid-time?]} tx-opts]
-                                      (TxOptions. (some-> system-time expect-instant)
-                                                  default-tz
-                                                  (boolean default-all-valid-time?))))
-                   (->> (for [tx-op tx-ops]
-                          (cond-> tx-op
-                            (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
-                        (into-array TxOp)))))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
   "Writes transactions to the log for processing
 
@@ -259,10 +217,20 @@
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
 
-  (^TransactionKey [node tx-ops] (submit-tx node tx-ops {}))
-  (^TransactionKey [node tx-ops tx-opts]
-   (-> @(submit-tx& node tx-ops tx-opts)
-       (rethrowing-cause))))
+  (^TransactionKey [^IXtdb node, tx-ops] (submit-tx node tx-ops {}))
+  (^TransactionKey [^IXtdb node, tx-ops tx-opts]
+   (.submitTx node
+              (cond
+                (instance? TxOptions tx-opts) tx-opts
+                (nil? tx-opts) (TxOptions.)
+                (map? tx-opts) (let [{:keys [system-time default-tz default-all-valid-time?]} tx-opts]
+                                 (TxOptions. (some-> system-time expect-instant)
+                                             default-tz
+                                             (boolean default-all-valid-time?))))
+              (->> (for [tx-op tx-ops]
+                     (cond-> tx-op
+                       (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
+                   (into-array TxOp)))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status

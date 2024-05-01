@@ -8,12 +8,12 @@
             [xtdb.time :as time])
   (:import [java.io EOFException InputStream]
            java.lang.AutoCloseable
-           java.util.concurrent.CompletableFuture
+           [java.util.concurrent CompletableFuture ExecutionException]
            java.util.function.Function
            java.util.Spliterator
            [java.util.stream StreamSupport]
            xtdb.api.IXtdb
-           (xtdb.api.query Basis XtqlQuery QueryOptions)))
+           (xtdb.api.query Basis QueryOptions XtqlQuery)))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}
@@ -96,18 +96,14 @@
   (^CompletableFuture openQueryAsync [client ^XtqlQuery query ^QueryOptions query-opts]
    (open-query& client query (into {:key-fn #xt/key-fn :camel-case-string} query-opts)))
 
-  (submitTxAsync [client opts tx-ops]
-    (-> ^CompletableFuture
-        (request client :post :tx
-                 {:content-type :transit+json
-                  :form-params {:tx-ops (vec tx-ops)
-                                :opts opts}})
+  (submitTx [client opts tx-ops]
+    (let [{tx :body} @(request client :post :tx
+                               {:content-type :transit+json
+                                :form-params {:tx-ops (vec tx-ops)
+                                              :opts opts}})]
 
-        (.thenApply (reify Function
-                      (apply [_ resp]
-                        (let [tx (:body resp)]
-                          (swap! !latest-submitted-tx time/max-tx tx)
-                          tx))))))
+      (swap! !latest-submitted-tx time/max-tx tx)
+      tx))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)

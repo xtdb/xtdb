@@ -124,9 +124,8 @@
 
    :post {:handler (fn [{:keys [^IXtdb node] :as req}]
                      (let [{:keys [tx-ops opts]} (get-in req [:parameters :body])]
-                       (-> (.submitTxAsync node opts (into-array TxOp tx-ops))
-                           (util/then-apply (fn [tx]
-                                              {:status 200, :body tx})))))
+                       {:status 200
+                        :body (.submitTx node opts (into-array TxOp tx-ops))}))
 
           ;; TODO spec-tools doesn't handle multi-spec with a vector,
           ;; so we just check for vector and then conform later.

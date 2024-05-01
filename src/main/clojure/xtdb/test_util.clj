@@ -251,11 +251,11 @@
                 (ig/prep)
                 (ig/init))]
     (reify IXtdb
-      (submitTxAsync [_ tx-opts tx-ops]
-        (xtdb.log/submit-tx& {:allocator (:xtdb/allocator sys)
-                              :log (:xtdb/log sys)
-                              :default-tz (:xtdb/default-tz sys)}
-                             (vec tx-ops) tx-opts))
+      (submitTx [_ tx-opts tx-ops]
+        @(xtdb.log/submit-tx& {:allocator (:xtdb/allocator sys)
+                               :log (:xtdb/log sys)
+                               :default-tz (:xtdb/default-tz sys)}
+                              (vec tx-ops) tx-opts))
       (close [_]
         (ig/halt! sys)))))
 

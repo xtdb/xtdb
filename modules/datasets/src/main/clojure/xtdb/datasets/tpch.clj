@@ -65,16 +65,16 @@
   (log/debug "Transacting TPC-H tables...")
   (->> (TpchTable/getTables)
        (reduce (fn [_last-tx ^TpchTable t]
-                 (let [[!last-tx doc-count] (->> (tpch-table->docs t scale-factor)
-                                                 (partition-all 1000)
-                                                 (reduce (fn [[_!last-tx last-doc-count] batch]
-                                                           [(xt/submit-tx& node
-                                                                           (vec (for [doc batch]
-                                                                                  [:put-docs (:table (meta doc)) doc])))
-                                                            (+ last-doc-count (count batch))])
-                                                         [nil 0]))]
+                 (let [[last-tx doc-count] (->> (tpch-table->docs t scale-factor)
+                                                (partition-all 1000)
+                                                (reduce (fn [[_last-tx last-doc-count] batch]
+                                                          [(xt/submit-tx node
+                                                                         (vec (for [doc batch]
+                                                                                [:put-docs (:table (meta doc)) doc])))
+                                                           (+ last-doc-count (count batch))])
+                                                        [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName t))
-                   @!last-tx))
+                   last-tx))
                nil)))
 
 (defn- tpch-table->dml [^TpchTable table]
@@ -101,15 +101,15 @@
   (->> (TpchTable/getTables)
        (reduce (fn [_last-tx ^TpchTable table]
                  (let [dml (tpch-table->dml table)
-                       [!last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
-                                                 (partition-all 1000)
-                                                 (reduce (fn [[_!last-tx last-doc-count] param-batch]
-                                                           [(xt/submit-tx& node
-                                                                           [(into [:sql dml] param-batch)])
-                                                            (+ last-doc-count (count param-batch))])
-                                                         [nil 0]))]
+                       [last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
+                                                (partition-all 1000)
+                                                (reduce (fn [[_!last-tx last-doc-count] param-batch]
+                                                          [(xt/submit-tx node
+                                                                         [(into [:sql dml] param-batch)])
+                                                           (+ last-doc-count (count param-batch))])
+                                                        [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName table))
-                   @!last-tx))
+                   last-tx))
                nil)))
 
 (defn dump-tpch-log-files [^File root-dir {:keys [scale-factor tx-size seg-row-limit]

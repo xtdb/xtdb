@@ -5,23 +5,18 @@
             xtdb.indexer
             [xtdb.log :as log]
             [xtdb.metrics :as metrics]
-            [xtdb.operator.scan :as scan]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
-            [xtdb.sql :as sql]
             [xtdb.time :as time]
-            [xtdb.util :as util]
-            [xtdb.xtql :as xtql])
-  (:import (io.micrometer.core.instrument Timer)
-           (java.io Closeable Writer)
+            [xtdb.util :as util])
+  (:import (java.io Closeable Writer)
+           (java.util.concurrent CompletableFuture ExecutionException)
            java.util.HashMap
-           (java.util.concurrent CompletableFuture)
-           [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb TransactionKey Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
-           (xtdb.api.query Basis IKeyFn QueryOptions XtqlQuery)
+           (xtdb.api.query Basis QueryOptions XtqlQuery)
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -69,16 +64,17 @@
                  system, close-fn, registry
                  metrics]
   IXtdb
-  (submitTxAsync [this opts tx-ops]
-    (let [system-time (some-> opts .getSystemTime)]
-      (-> (log/submit-tx& this (vec tx-ops) opts)
-          (util/then-apply
-            (fn [^TransactionKey tx-key]
-              (let [tx-key (cond-> tx-key
-                             system-time (.withSystemTime system-time))]
+  (submitTx [this opts tx-ops]
+    (let [system-time (some-> opts .getSystemTime)
+          ^TransactionKey tx-key (try
+                                   @(log/submit-tx& this (vec tx-ops) opts)
+                                   (catch ExecutionException e
+                                     (throw (ex-cause e))))
+          tx-key (cond-> tx-key
+                   system-time (.withSystemTime system-time))]
 
-                (swap! !latest-submitted-tx time/max-tx tx-key)
-                tx-key))))))
+      (swap! !latest-submitted-tx time/max-tx tx-key)
+      tx-key))
 
   (^CompletableFuture openQueryAsync [this ^String query, ^QueryOptions query-opts]
    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
