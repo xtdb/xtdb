@@ -52,65 +52,6 @@
   (print-dup clj-form w))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn q&
-  "asynchronously query an XTDB node.
-
-  - query: either an XTQL or SQL query.
-  - opts:
-    - `:basis`: see 'Transaction Basis'
-    - `:args`: arguments to pass to the query.
-
-  For example:
-
-  (q& node '(from ...))
-
-  (q& node '(from :foo [{:a $a, :b $b}])
-      {:a a-value, :b b-value})
-
-  (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
-  (q& node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" {:args [foo-id]})
-
-  Please see XTQL/SQL query language docs for more details.
-
-  This function returns a CompletableFuture containing the results of its query as a vector of maps
-
-  Transaction Basis:
-
-  In XTDB there are a number of ways to control at what point in time a query is run -
-  this is done via a basis map optionally supplied as part of the query map.
-
-  In the case a basis is not provided the query is guaranteed to run sometime after
-  the latest transaction submitted by this connection/node.
-
-  Alternatively a basis map containing reference to a specific transaction can be supplied,
-  in this case the query will be run exactly at that transaction, ensuring the repeatability of queries.
-
-  This tx key is the same map returned by `submit-tx`.
-
-  (q& node '(from ...)
-      {:basis {:at-tx tx}})
-
-  Additionally a tx timeout can be supplied to the query map, which if after the specified duration
-  the query's requested basis is not complete the query will be cancelled.
-
-  (q& node '(from ...)
-      {:basis-timeout (Duration/ofSeconds 1)})"
-
-  (^java.util.concurrent.CompletableFuture [node q+args] (q& node q+args {}))
-
-  (^java.util.concurrent.CompletableFuture
-   [node query opts]
-   (let [opts (-> (into {:default-all-valid-time? false} opts)
-                  (time/after-latest-submitted-tx node))]
-
-     (-> (xtp/open-query& node query opts)
-         (.thenApply
-          (reify Function
-            (apply [_ res]
-              (with-open [^Stream res res]
-                (vec (.toList res))))))))))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn q
   "query an XTDB node.
 
@@ -154,13 +95,14 @@
 
   (q node '(from ...)
      {:tx-timeout (Duration/ofSeconds 1)})"
-  ([node q+args]
-   (-> @(q& node q+args)
-       (rethrowing-cause)))
+  ([node query] (q node query {}))
 
-  ([node q+args opts]
-   (-> @(q& node q+args opts)
-       (rethrowing-cause))))
+  ([node query opts]
+   (let [opts (-> (into {:default-all-valid-time? false} opts)
+                  (time/after-latest-submitted-tx node))]
+
+     (with-open [res (xtp/open-query node query opts)]
+       (vec (.toList res))))))
 
 (defn ->QueryOptions [{:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
   (-> (QueryOptions/queryOpts)
@@ -179,16 +121,16 @@
 
 (extend-protocol xtp/PNode
   IXtdb
-  (open-query& [this query clj-query-opts]
+  (open-query [this query clj-query-opts]
     (let [^QueryOptions query-opts (->QueryOptions clj-query-opts)]
       (if (string? query)
-        (.openQueryAsync this ^String query query-opts)
+        (.openQuery this ^String query query-opts)
 
         (let [^XtqlQuery query (cond
                                  (instance? XtqlQuery query) query
                                  (seq? query) (xtql.edn/parse-query query)
                                  :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-          (.openQueryAsync this query query-opts))))))
+          (.openQuery this query query-opts))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx

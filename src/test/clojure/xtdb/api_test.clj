@@ -399,8 +399,7 @@
   (t/is (thrown-with-msg?
          xtdb.IllegalArgumentException
          #"Invalid SQL query: Parse error at line 1"
-         (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])
-             (util/rethrowing-cause)))
+         (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]]))
         "parse error - date with double quotes")
 
   (t/testing "still an active node"

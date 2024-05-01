@@ -119,6 +119,7 @@
 (defn latest-submitted-tx ^TransactionKey [node]
   (:latest-submitted-tx (xtp/status node)))
 
+;; TODO inline this now that we have `idx/await-tx`
 (defn then-await-tx
   (^TransactionKey [node]
    (then-await-tx (latest-submitted-tx node) node nil))
@@ -126,8 +127,8 @@
   (^TransactionKey [tx node]
    (then-await-tx tx node nil))
 
-  (^TransactionKey [tx node ^Duration timeout]
-   @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer) tx timeout)))
+  (^TransactionKey [tx node timeout]
+   (idx/await-tx tx node timeout)))
 
 (defn ->mock-clock
   (^java.time.InstantSource []

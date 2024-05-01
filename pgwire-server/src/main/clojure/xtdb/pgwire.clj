@@ -1620,7 +1620,7 @@
 
                     {:keys [prepared-query prep-outcome]}
                     (try
-                      {:prepared-query @(.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt-with-bind-msg) query-opts)
+                      {:prepared-query (.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt-with-bind-msg) query-opts)
                        :prep-outcome :success}
                       (catch InterruptedException e
                         (log/trace e "Interrupt thrown compiling query")
@@ -1629,7 +1629,7 @@
                         (log/warn e)
                         (cmd-send-error
                          conn
-                         (err-pg-exception (.getCause e) "unexpected server error compiling query"))))]
+                         (err-pg-exception e "unexpected server error compiling query"))))]
 
 
                 (when (= :success prep-outcome)

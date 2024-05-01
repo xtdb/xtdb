@@ -20,7 +20,8 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql])
+            [xtdb.xtql :as xtql]
+            [xtdb.protocols :as xtp])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Timer)
            (java.io ByteArrayInputStream Closeable)
@@ -53,7 +54,7 @@
   (^xtdb.api.TransactionKey latestCompletedTx [])
   (^xtdb.api.TransactionKey latestCompletedChunkTx [])
 
-  (^java.util.concurrent.CompletableFuture #_<TransactionKey> awaitTxAsync [^xtdb.api.TransactionKey tx, ^java.time.Duration timeout])
+  (^xtdb.api.TransactionKey awaitTx [^xtdb.api.TransactionKey tx, ^java.time.Duration timeout])
   (^void forceFlush [^xtdb.api.TransactionKey txKey ^long expected-last-chunk-tx-id])
   (^Throwable indexerError []))
 
@@ -658,14 +659,14 @@
   (latestCompletedTx [_] (.latestCompletedTx live-idx))
   (latestCompletedChunkTx [_] (.latestCompletedChunkTx live-idx))
 
-  (awaitTxAsync [this tx timeout]
-    (-> (if tx
-          (await/await-tx-async tx
-                                #(or (some-> (.indexer-error this) throw)
-                                     (.latestCompletedTx this))
-                                awaiters)
-          (CompletableFuture/completedFuture (.latestCompletedTx this)))
-        (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
+  (awaitTx [this tx timeout]
+    @(-> (if tx
+           (await/await-tx-async tx
+                                 #(or (some-> (.indexer-error this) throw)
+                                      (.latestCompletedTx this))
+                                 awaiters)
+           (CompletableFuture/completedFuture (.latestCompletedTx this)))
+         (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
   Closeable
   (close [_]
@@ -691,3 +692,8 @@
 
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
+
+(defn await-tx
+  ([node] (await-tx (xtp/latest-submitted-tx node) node))
+  ([tx node] (await-tx tx node nil))
+  ([tx node timeout] (.awaitTx ^IIndexer (util/component node :xtdb/indexer) tx timeout)))

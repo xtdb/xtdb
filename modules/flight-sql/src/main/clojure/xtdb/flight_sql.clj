@@ -1,7 +1,8 @@
 (ns xtdb.flight-sql
-  (:require [clojure.tools.logging :as log] 
+  (:require [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.indexer]
+            [xtdb.indexer :as idx]
             [xtdb.node :as xtn]
             [xtdb.query]
             [xtdb.sql :as sql]
@@ -9,7 +10,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [com.google.protobuf Any ByteString] 
+  (:import [com.google.protobuf Any ByteString]
            [java.nio ByteBuffer]
            [java.util ArrayList HashMap Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
@@ -20,9 +21,9 @@
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector FieldVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Schema]
-           [xtdb.api.tx TxOps]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
+           [xtdb.api.tx TxOps]
            [xtdb.indexer IIndexer]
            [xtdb.query BoundQuery IQuerySource PreparedQuery]
            [xtdb.vector IVectorReader]))
@@ -58,23 +59,13 @@
   ;; for some reason, it doesn't work with ^bytes on the symbol :/
   (alter-meta! assoc :tag 'bytes))
 
-(defn then-send-do-put-update-res
-  ^java.util.concurrent.CompletableFuture
-  [^CompletableFuture cf, ^FlightProducer$StreamListener ack-stream, ^BufferAllocator allocator]
+(defn send-do-put-update-res [^FlightProducer$StreamListener ack-stream, ^BufferAllocator allocator]
+  (with-open [res (PutResult/metadata
+                   (doto (.buffer allocator (alength do-put-update-msg))
+                     (.writeBytes do-put-update-msg)))]
+    (.onNext ack-stream res))
 
-  (.whenComplete cf
-                 (reify BiConsumer
-                   (accept [_ _ e]
-                     (if e
-                       (.onError ack-stream e)
-
-                       (do
-                         (with-open [res (PutResult/metadata
-                                          (doto (.buffer allocator (alength do-put-update-msg))
-                                            (.writeBytes do-put-update-msg)))]
-                           (.onNext ack-stream res))
-
-                         (.onCompleted ack-stream)))))))
+  (.onCompleted ack-stream))
 
 (def ^:private dml?
   (comp #{:insert :delete :erase :merge} first))
@@ -101,18 +92,15 @@
 
           (exec-dml [dml fsql-tx-id]
             (if fsql-tx-id
-              (if (.computeIfPresent fsql-txs fsql-tx-id
+              (when-not (.computeIfPresent fsql-txs fsql-tx-id
                                      (reify BiFunction
                                        (apply [_ _fsql-tx-id fsql-tx]
                                          (update fsql-tx :dml conj dml))))
-                (CompletableFuture/completedFuture nil)
-                (CompletableFuture/failedFuture (UnsupportedOperationException. "unknown tx")))
+                (throw (UnsupportedOperationException. "unknown tx")))
 
-              (-> (CompletableFuture/completedFuture
-                   (xt/submit-tx node [dml]))
-                  (util/then-compose (fn [tx]
-                                       ;; HACK til we have the ability to await on the connection
-                                       (.awaitTxAsync idxer tx nil))))))
+              (let [tx (xt/submit-tx node [dml])]
+                ;; HACK til we have the ability to await on the connection
+                (.awaitTx idxer tx nil))))
 
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
             (with-open [res (.openCursor bq)
@@ -134,10 +122,14 @@
     (reify FlightSqlProducer
       (acceptPutStatement [_ cmd _ctx _flight-stream ack-stream]
         (fn []
-          @(-> (exec-dml [:sql (.getQuery cmd)]
-                         (when (.hasTransactionId cmd)
-                           (.getTransactionId cmd)))
-               (then-send-do-put-update-res ack-stream allocator))))
+          (try
+            (exec-dml [:sql (.getQuery cmd)]
+                      (when (.hasTransactionId cmd)
+                        (.getTransactionId cmd)))
+
+            (send-do-put-update-res ack-stream allocator)
+            (catch Throwable t
+              (.onError ack-stream t)))))
 
       (acceptPutPreparedStatementQuery [_ cmd _ctx flight-stream ack-stream]
         (fn []
@@ -164,12 +156,15 @@
         ;; NOTE atm the PSs are either created within a tx and then assumed to be within that tx
         ;; my mental model would be that you could create a PS outside a tx and then use it inside, but this doesn't seem possible in FSQL.
         (fn []
-          @(-> (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
-                                                  (throw (UnsupportedOperationException. "invalid ps-id")))
-                     dml (TxOps/sql sql (flight-stream->bytes flight-stream))]
-                 (exec-dml dml fsql-tx-id))
+          (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
+                                             (throw (UnsupportedOperationException. "invalid ps-id")))
+                dml (TxOps/sql sql (flight-stream->bytes flight-stream))]
+            (try
+              (exec-dml dml fsql-tx-id)
+              (send-do-put-update-res ack-stream allocator)
 
-               (then-send-do-put-update-res ack-stream allocator))))
+              (catch Throwable t
+                (.onError ack-stream t))))))
 
       (getFlightInfoStatement [_ cmd _ctx descriptor]
         (let [sql (.toStringUtf8 (.getQueryBytes cmd))
@@ -264,15 +259,14 @@
           (if (= FlightSql$ActionEndTransactionRequest$EndTransaction/END_TRANSACTION_COMMIT
                  (.getAction req))
 
-            @(-> (let [tx-key (xt/submit-tx node dml)]
-                   ;; HACK til we have the ability to await on the connection
-                   (.awaitTxAsync idxer tx-key nil))
+            (try
+              (let [tx-key (xt/submit-tx node dml)]
+                ;; HACK til we have the ability to await on the connection
+                (.awaitTx idxer tx-key nil)
+                (.onCompleted listener))
 
-                 (.whenComplete (reify BiConsumer
-                                  (accept [_ _v e]
-                                    (if e
-                                      (.onError listener e)
-                                      (.onCompleted listener))))))
+              (catch Throwable t
+                (.onError listener t)))
 
             (.onCompleted listener)))))))
 

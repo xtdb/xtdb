@@ -204,10 +204,8 @@
                                     [[:put-docs :xt_docs {:xt/id id :foo (str id)}]])]])
             (xt/submit-tx node [[:call :hello-world 1]])
 
-            (Thread/sleep 100)
-
-            (xt/q& node '(from :xt_docs [xt/id]))))))
-
+            (future
+              (xt/q node '(from :xt_docs [xt/id])))))))
 
 (t/deftest test-call-tx-fn-with-ns-attr
   (t/testing "simple call"

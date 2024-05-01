@@ -2,7 +2,7 @@
     xtdb.protocols)
 
 (defprotocol PNode
-  (^java.util.concurrent.CompletableFuture open-query& [node query opts]))
+  (^java.util.stream.Stream open-query [node query opts]))
 
 (defprotocol PStatus
   (latest-submitted-tx [node])
