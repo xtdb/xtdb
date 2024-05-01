@@ -7,7 +7,8 @@
             xtdb.node.impl
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.serde :as serde])
   (:import [java.nio ByteBuffer]
            java.time.Duration
            [java.util Random UUID]
@@ -41,7 +42,7 @@
                        (mapv (comp vec util/uuid->bytes)))]
 
     (t/testing "commit"
-      (let [live-idx-tx (.startTx live-index (TransactionKey. 0 (.toInstant #inst "2000")))
+      (let [live-idx-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))
             live-table-tx (.liveTable live-idx-tx "my-table")
             put-doc-wrt (.docWriter live-table-tx)]
         (let [wp (IVectorPosition/build)]

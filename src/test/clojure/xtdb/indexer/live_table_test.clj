@@ -8,7 +8,8 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.serde :as serde])
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
@@ -42,7 +43,7 @@
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
 
-          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)
+          (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.docWriter live-table-tx)]
             (let [wp (IVectorPosition/build)]
               (dotimes [_n n]
@@ -79,7 +80,7 @@
                          ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
-          (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)
+          (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.docWriter live-table-tx)]
 
             (let [wp (IVectorPosition/build)]
@@ -132,7 +133,7 @@
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp rc "foo")]
-      (let [live-table-tx (.startTx live-table (TransactionKey. 0 (.toInstant #inst "2000")) false)
+      (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.docWriter live-table-tx)]
 
         (let [wp (IVectorPosition/build)]
@@ -173,7 +174,7 @@
                                                                         (RefCounter.)
                                                                         (RowCounter. 0) 102400
                                                                         64 1024)]
-          (let [tx-key (TransactionKey. 0 (.toInstant #inst "2000"))
+          (let [tx-key (serde/->TxKey 0 (.toInstant #inst "2000"))
                 live-index-tx (.startTx live-index tx-key)
                 live-table-tx (.liveTable live-index-tx table-name)
                 doc-wtr (.docWriter live-table-tx)]

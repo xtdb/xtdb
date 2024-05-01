@@ -9,11 +9,9 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.toArrowType
 import xtdb.toLeg
-import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.util.HashMap
 import java.util.LinkedHashMap
-import kotlin.LazyThreadSafetyMode.PUBLICATION
 
 class DenseUnionVectorWriter(
     override val vector: DenseUnionVector,

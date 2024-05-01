@@ -2,7 +2,6 @@
 package xtdb.util
 
 import clojure.java.api.Clojure
-import clojure.lang.IFn
 import clojure.lang.Symbol
 import clojure.lang.Var
 

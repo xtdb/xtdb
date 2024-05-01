@@ -1,13 +1,12 @@
 (ns xtdb.await-test
   (:require [clojure.test :as t]
-            [xtdb.api :as xt]
             [xtdb.await :as await]
+            [xtdb.serde :as serde]
             [xtdb.time :as time])
-  (:import (java.util.concurrent PriorityBlockingQueue TimeUnit)
-           xtdb.api.TransactionKey))
+  (:import (java.util.concurrent PriorityBlockingQueue TimeUnit)))
 
 (defn- ->tx [tx-id]
-  (TransactionKey. tx-id (time/->instant #inst "2020")))
+  (serde/->TxKey tx-id (time/->instant #inst "2020")))
 
 (t/deftest test-await
   (t/is (= (->tx 2)

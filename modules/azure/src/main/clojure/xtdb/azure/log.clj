@@ -1,7 +1,8 @@
 (ns xtdb.azure.log
   (:require [xtdb.api :as xt]
             [xtdb.log :as log]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.serde :as serde])
   (:import [com.azure.messaging.eventhubs EventData EventHubConsumerClient EventHubProducerAsyncClient]
            [com.azure.messaging.eventhubs.models EventPosition PartitionEvent SendOptions]
            java.io.Closeable
@@ -19,7 +20,7 @@
      (f val))))
 
 (defn event-data->tx-instant [^EventData data]
-  (TransactionKey. (.getOffset data) (.getEnqueuedTime data)))
+  (serde/->TxKey (.getOffset data) (.getEnqueuedTime data)))
 
 (def producer-send-options
   (.setPartitionId (SendOptions.) "0"))
@@ -48,7 +49,7 @@
                       (->consumer (fn [e]
                                     (.completeExceptionally fut e)))
                       (fn [] (let [{:keys [offset timestamp]} (get-partition-properties consumer)]
-                               (.complete fut (Log$Record. (TransactionKey. offset timestamp) record))))))
+                               (.complete fut (Log$Record. (serde/->TxKey offset timestamp) record))))))
       fut))
 
   (readRecords [_ after-tx-id limit]

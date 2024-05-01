@@ -3,7 +3,8 @@
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.serde]
-            [xtdb.tx-ops :as tx-ops])
+            [xtdb.tx-ops :as tx-ops]
+            [xtdb.serde :as serde])
   (:import (java.time Instant)
            (java.util List UUID)
            (xtdb JsonSerde)
@@ -485,7 +486,7 @@
   (JsonSerde/decode v QueryRequest))
 
 (deftest deserialize-query-map-test
-  (let [tx-key (TransactionKey. 1 #time/instant "2023-12-06T09:31:27.570827956Z")
+  (let [tx-key (serde/->TxKey 1 #time/instant "2023-12-06T09:31:27.570827956Z")
         v (QueryRequest. (XtqlQuery$From. "docs" [(Binding. "xt/id" (Exprs/lVar "xt/id"))])
                          (-> (QueryOptions/queryOpts)
                              (.args {"id" :foo})

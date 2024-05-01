@@ -4,7 +4,8 @@
             [xtdb.log :as xt.log]
             [xtdb.node :as xtn]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.serde :as serde])
   (:import clojure.lang.MapEntry
            (java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException)
            java.nio.ByteBuffer
@@ -53,7 +54,7 @@
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (Log$Record. (TransactionKey. offset system-time) (ByteBuffer/wrap record))))
+                                  (Log$Record. (serde/->TxKey offset system-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -114,7 +115,7 @@
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (Log$Record. (TransactionKey. offset system-time) record)))
+                      (.set elements n (MapEntry/create f (Log$Record. (serde/->TxKey offset system-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)

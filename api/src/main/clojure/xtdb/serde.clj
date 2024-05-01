@@ -20,6 +20,11 @@
               (some-> (System/getProperty "xtdb.no-java-time-literals") Boolean/valueOf))
   (time-literals/print-time-literals-clj!))
 
+(defrecord TxKey [tx-id system-time]
+  TransactionKey
+  (getTxId [_] tx-id)
+  (getSystemTime [_] system-time))
+
 (defn period-duration-reader [[p d]]
   (PeriodDuration. (Period/parse p) (Duration/parse d)))
 
@@ -170,15 +175,15 @@
 (defmethod print-method IKeyFn$KeyFn [e, ^Writer w]
   (print-dup e w))
 
-(defmethod print-dup TransactionKey [^TransactionKey tx-key ^Writer w]
+(defmethod print-dup TxKey [tx-key ^Writer w]
   (.write w "#xt/tx-key ")
-  (print-method {:tx-id (.getTxId tx-key) :system-time (.getSystemTime tx-key)} w))
+  (print-method (into {} tx-key) w))
 
-(defmethod print-method TransactionKey [tx-key w]
+(defmethod print-method TxKey [tx-key w]
   (print-dup tx-key w))
 
 (defn tx-key-read-fn [{:keys [tx-id system-time]}]
-  (TransactionKey. tx-id system-time))
+  (->TxKey tx-id system-time))
 
 (defn tx-key-write-fn [^TransactionKey tx-key]
   {:tx-id (.getTxId tx-key) :system-time (.getSystemTime tx-key)})
@@ -266,7 +271,7 @@
               YearMonth "time/year-month"
               MonthDay "time/month-day"}
              (update-vals #(transit/write-handler % str)))
-         {TransactionKey (transit/write-handler "xtdb/tx-key" tx-key-write-fn)
+         {TxKey (transit/write-handler "xtdb/tx-key" tx-key-write-fn)
           TxOptions (transit/write-handler "xtdb/tx-opts" tx-opts-write-fn)
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" render-runex)

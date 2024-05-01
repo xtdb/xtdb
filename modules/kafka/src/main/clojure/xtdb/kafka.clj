@@ -4,7 +4,8 @@
             [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.serde :as serde])
   (:import java.io.Closeable
            java.lang.AutoCloseable
            java.nio.file.Path
@@ -57,7 +58,7 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (Log$Record. (TransactionKey. (.offset record) (Instant/ofEpochMilli (.timestamp record)))
+  (Log$Record. (serde/->TxKey (.offset record) (Instant/ofEpochMilli (.timestamp record)))
                (.value record)))
 
 (defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^Log$Subscriber subscriber]
@@ -98,8 +99,8 @@
                (onCompletion [_ record-metadata e]
                  (if e
                    (.completeExceptionally fut e)
-                   (.complete fut (TransactionKey. (.offset record-metadata)
-                                                   (Instant/ofEpochMilli (.timestamp record-metadata))))))))
+                   (.complete fut (serde/->TxKey (.offset record-metadata)
+                                                 (Instant/ofEpochMilli (.timestamp record-metadata))))))))
       fut))
 
   (readRecords [_ after-tx-id limit]

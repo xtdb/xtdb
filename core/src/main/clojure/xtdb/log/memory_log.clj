@@ -1,11 +1,12 @@
 (ns xtdb.log.memory-log
   (:require [xtdb.api :as xt]
             [xtdb.log :as log]
-            [xtdb.node :as xtn])
+            [xtdb.node :as xtn]
+            [xtdb.serde :as serde])
   (:import java.time.InstantSource
            java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture
-           (xtdb.api Xtdb$Config TransactionKey)
+           (xtdb.api Xtdb$Config)
            (xtdb.api.log Log Log$Record Logs Logs$InMemoryLogFactory)
            xtdb.log.INotifyingSubscriberHandler))
 
@@ -14,9 +15,9 @@
   (appendRecord [_ record]
     (CompletableFuture/completedFuture
      (let [^Log$Record record (-> (swap! !records (fn [records]
-                                                   (let [system-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))]
-                                                     (conj records (Log$Record. (TransactionKey. (count records) system-time) record)))))
-                                 peek)
+                                                    (let [system-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))]
+                                                      (conj records (Log$Record. (serde/->TxKey (count records) system-time) record)))))
+                                  peek)
            tx-key (.getTxKey record)]
        (.notifyTx subscriber-handler tx-key)
        tx-key)))

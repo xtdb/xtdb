@@ -64,12 +64,12 @@
   IXtdb
   (submitTx [this opts tx-ops]
     (let [system-time (some-> opts .getSystemTime)
-          ^TransactionKey tx-key (try
-                                   @(log/submit-tx& this (vec tx-ops) opts)
-                                   (catch ExecutionException e
-                                     (throw (ex-cause e))))
+          tx-key (try
+                   @(log/submit-tx& this (vec tx-ops) opts)
+                   (catch ExecutionException e
+                     (throw (ex-cause e))))
           tx-key (cond-> tx-key
-                   system-time (.withSystemTime system-time))]
+                   system-time (assoc :system-time system-time))]
 
       (swap! !latest-submitted-tx time/max-tx tx-key)
       tx-key))

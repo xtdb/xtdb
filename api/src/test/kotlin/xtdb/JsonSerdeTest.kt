@@ -5,7 +5,6 @@ import clojure.lang.Symbol
 import kotlinx.serialization.encodeToString
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.api.TransactionKey
 import xtdb.api.query.*
 import xtdb.api.query.Expr.Bool.FALSE
 import xtdb.api.query.Expr.Bool.TRUE
@@ -37,6 +36,7 @@ import xtdb.api.tx.TxOp
 import xtdb.api.tx.TxOps.insert
 import xtdb.api.tx.TxOps.putDocs
 import xtdb.api.tx.TxOps.update
+import xtdb.api.txKey
 import java.time.*
 import java.util.*
 
@@ -446,7 +446,7 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeQueryRequest() {
-        val txKey = TransactionKey(1, Instant.EPOCH)
+        val txKey = txKey(1, Instant.EPOCH)
         QueryRequest(
             from("docs").bind("xt/id").build(),
             queryOpts()
