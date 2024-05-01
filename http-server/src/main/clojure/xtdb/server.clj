@@ -99,7 +99,6 @@
    :get (fn [{:keys [node] :as _req}]
           {:status 200, :body (xtp/status node)})})
 
-
 (defn- json-tx-encoder []
   (reify
     mf/EncodeToBytes
@@ -123,15 +122,17 @@
                            (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
 
    :post {:handler (fn [{:keys [^IXtdb node] :as req}]
-                     (let [{:keys [tx-ops opts]} (get-in req [:parameters :body])]
+                     (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])
+                           tx-op-array (into-array TxOp tx-ops)]
                        {:status 200
-                        :body (.submitTx node opts (into-array TxOp tx-ops))}))
+                        :body (if await-tx?
+                                (.executeTx node opts tx-op-array)
+                                (.submitTx node opts tx-op-array))}))
 
           ;; TODO spec-tools doesn't handle multi-spec with a vector,
           ;; so we just check for vector and then conform later.
           :parameters {:body (s/keys :req-un [::tx-ops]
-                                     :opt-un [::opts])}}})
-
+                                     :opt-un [::opts ::await-tx?])}}})
 
 (defn- throwable->ex-info [^Throwable t]
   (ex-info (.getMessage t) {::err/error-type :unknown-runtime-error

@@ -92,6 +92,21 @@
                decode-transit))
         "testing tx")
 
+  (t/is (= #xt/tx-result {:tx-id 2,
+                          :system-time #time/instant "2020-01-03T00:00:00Z",
+                          :committed? true}
+           (-> (http/request {:accept :transit+json
+                              :as :string
+                              :request-method :post
+                              :content-type :transit+json
+                              :form-params {:tx-ops possible-tx-ops
+                                            :await-tx? true}
+                              :transit-opts xtc/transit-opts
+                              :url (http-url "tx")})
+               :body
+               decode-transit))
+        "testing await-tx")
+
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
                  {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))

@@ -236,7 +236,7 @@
         ;; TODO confirm/expand API that we expose to tx-fns
         sci-ctx (sci/init {:bindings {'q (tx-fn-q q-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
-                                      '*current-tx* (serde/tx-key-write-fn tx-key)}
+                                      '*current-tx* tx-key}
                            :namespaces {'xt xt-sci-ns}})]
 
     (reify OpIndexer

@@ -40,6 +40,12 @@ import xtdb.api.txKey
 import java.time.*
 import java.util.*
 
+internal fun String.trimJson() =
+    trimIndent()
+        .replace(": ", ":")
+        .replace(", ", ",")
+        .replace(Regex("\n\\s*"), "")
+
 class JsonSerdeTest {
 
     private fun Any?.assertRoundTrip(expectedJson: String) {
@@ -123,13 +129,6 @@ class JsonSerdeTest {
     fun `round-trips sets`() {
         emptySet<Any>().assertRoundTrip("""{"@type":"xt:set","@value":[]}""")
         setOf(4L, 5L, 6.0).assertRoundTrip("""{"@type":"xt:set","@value":[4,5,6.0]}""")
-    }
-
-    private fun String.trimJson(): String {
-        return this.trimIndent()
-            .replace(": ", ":")
-            .replace(", ", ",")
-            .replace(Regex("\n\\s+"), "")
     }
 
     @Test

@@ -11,7 +11,7 @@
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
-           (xtdb.api TransactionKey)
+           (xtdb.api TransactionKey TransactionResult TransactionAborted TransactionCommitted)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$XtqlAndArgs TxOp$XtqlOp TxOps TxOptions)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
@@ -24,6 +24,26 @@
   TransactionKey
   (getTxId [_] tx-id)
   (getSystemTime [_] system-time))
+
+(defrecord TxCommitted [tx-id system-time committed?]
+  TransactionCommitted
+  (getTxId [_] tx-id)
+  (getSystemTime [_] system-time))
+
+(defn ->tx-committed
+  ([^TransactionKey tx-key] (->tx-committed (.getTxId tx-key) (.getSystemTime tx-key)))
+  ([tx-id system-time] (->TxCommitted tx-id system-time true)))
+
+
+(defrecord TxAborted [tx-id system-time committed? error]
+  TransactionAborted
+  (getTxId [_] tx-id)
+  (getSystemTime [_] system-time)
+  (getError [_] error))
+
+(defn ->tx-aborted
+  ([^TransactionKey tx-key error] (->tx-aborted (.getTxId tx-key) (.getSystemTime tx-key) error))
+  ([tx-id system-time error] (->TxAborted tx-id system-time false error)))
 
 (defn period-duration-reader [[p d]]
   (PeriodDuration. (Period/parse p) (Duration/parse d)))
@@ -182,11 +202,24 @@
 (defmethod print-method TxKey [tx-key w]
   (print-dup tx-key w))
 
-(defn tx-key-read-fn [{:keys [tx-id system-time]}]
-  (->TxKey tx-id system-time))
+(defn tx-result-read-fn [{:keys [committed?] :as tx-res}]
+  (if committed?
+    (map->TxCommitted tx-res)
+    (map->TxAborted tx-res)))
 
-(defn tx-key-write-fn [^TransactionKey tx-key]
-  {:tx-id (.getTxId tx-key) :system-time (.getSystemTime tx-key)})
+(defmethod print-dup TxCommitted [tx-result ^Writer w]
+  (.write w "#xt/tx-result ")
+  (print-method (into {} tx-result) w))
+
+(defmethod print-method TxCommitted [tx-result ^Writer w]
+  (print-dup tx-result w))
+
+(defmethod print-dup TxAborted [tx-result ^Writer w]
+  (.write w "#xt/tx-result ")
+  (print-method (into {} tx-result) w))
+
+(defmethod print-method TxAborted [tx-result ^Writer w]
+  (print-dup tx-result w))
 
 (defn tx-opts-read-fn [{:keys [system-time default-tz default-all-valid-time?]}]
   (TxOptions. system-time default-tz default-all-valid-time?))
@@ -231,7 +264,8 @@
              (update-keys str)
              (update-vals transit/read-handler))
          {"xtdb/clj-form" (transit/read-handler #(ClojureForm. %))
-          "xtdb/tx-key" (transit/read-handler tx-key-read-fn)
+          "xtdb/tx-key" (transit/read-handler map->TxKey)
+          "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
           "xtdb/key-fn" (transit/read-handler read-key-fn)
           "xtdb/illegal-arg" (transit/read-handler iae-reader)
           "xtdb/runtime-err" (transit/read-handler runex-reader)
@@ -271,7 +305,9 @@
               YearMonth "time/year-month"
               MonthDay "time/month-day"}
              (update-vals #(transit/write-handler % str)))
-         {TxKey (transit/write-handler "xtdb/tx-key" tx-key-write-fn)
+         {TxKey (transit/write-handler "xtdb/tx-key" #(into {} %))
+          TxCommitted (transit/write-handler "xtdb/tx-result" #(into {} %))
+          TxAborted (transit/write-handler "xtdb/tx-result" #(into {} %))
           TxOptions (transit/write-handler "xtdb/tx-opts" tx-opts-write-fn)
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" render-runex)

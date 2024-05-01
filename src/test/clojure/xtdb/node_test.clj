@@ -5,7 +5,8 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.serde :as serde])
   (:import [xtdb.api Xtdb$Config]
            [xtdb.api.tx TxOps]
            [xtdb.query IQuerySource]))
@@ -348,13 +349,23 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (t/deftest test-txs-table-485
   (tu/with-log-level 'xtdb.indexer :error
-    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])
-    (xt/submit-tx tu/*node* [TxOps/abort])
-    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])
-    (xt/submit-tx tu/*node* [[:put-fn :tx-fn-fail
-                              '(fn []
-                                 (throw (Exception. "boom")))]
-                             [:call :tx-fn-fail]])
+    (t/is (= (serde/->tx-committed 0 #time/instant "2020-01-01T00:00:00Z")
+             (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
+
+    (t/is (= (serde/->tx-aborted 1 #time/instant "2020-01-02T00:00:00Z" nil)
+             (xt/execute-tx tu/*node* [TxOps/abort])))
+
+    (t/is (= (serde/->tx-committed 2 #time/instant "2020-01-03T00:00:00Z")
+             (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))
+
+    (t/is (= (serde/->tx-aborted 3 #time/instant "2020-01-04T00:00:00Z"
+                                 #xt/runtime-err [:xtdb.call/error-evaluating-tx-fn
+                                                  "Runtime error: 'xtdb.call/error-evaluating-tx-fn'"
+                                                  {:fn-id :tx-fn-fail, :args []}])
+             (xt/execute-tx tu/*node* [[:put-fn :tx-fn-fail
+                                        '(fn []
+                                           (throw (Exception. "boom")))]
+                                       [:call :tx-fn-fail]])))
 
     (t/is (= #{{:tx-id 0, :tx-time (time/->zdt #inst "2020-01-01"), :committed? true}
                {:tx-id 1, :tx-time (time/->zdt #inst "2020-01-02"), :committed? false}
@@ -380,10 +391,15 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
-    (xt/submit-tx tu/*node*
-                  [[:sql "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to)
+    (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z"
+                                 #xt/runtime-err [:xtdb.indexer/invalid-valid-times
+                                                  "Runtime error: 'xtdb.indexer/invalid-valid-times'"
+                                                  {:valid-from #time/instant "2030-01-01T00:00:00Z"
+                                                   :valid-to #time/instant "2020-01-01T00:00:00Z"}])
+             (xt/execute-tx tu/*node*
+                            [[:sql "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to)
                                VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
-                                      (1, DATE '2030-01-01', DATE '2020-01-01')"]])
+                                      (1, DATE '2030-01-01', DATE '2020-01-01')"]])))
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
@@ -617,7 +633,11 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                  (xt/q node '(from :docs [{:xt/id e} inst]))))))))
 
 (deftest assert-exists-on-empty-tables-3061
-  (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:xt/id :john}])]])
+  (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z"
+                                 #xt/runtime-err [:xtdb/assert-failed
+                                                  "Precondition failed: assert-exists"
+                                                  {:row-count 0}])
+           (xt/execute-tx tu/*node* [[:assert-exists '(from :users [{:xt/id :john}])]])))
 
   (t/is (= [{:xt/id 0,
              :xt/committed? false,
@@ -629,8 +649,13 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
         "assert fails on empty table")
 
-  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :not-john}]
-                           [:assert-exists '(from :users [{:xt/id :john}])]])
+  (t/is (= (serde/->tx-aborted 1 #time/instant "2020-01-02T00:00:00Z"
+                               #xt/runtime-err [:xtdb/assert-failed
+                                                "Precondition failed: assert-exists"
+                                                {:row-count 0}])
+
+           (xt/execute-tx tu/*node* [[:put-docs :users {:xt/id :not-john}]
+                                     [:assert-exists '(from :users [{:xt/id :john}])]])))
 
   (t/is (= [{:xt/id 1,
              :xt/committed? false,

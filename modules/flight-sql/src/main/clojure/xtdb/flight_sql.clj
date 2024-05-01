@@ -98,9 +98,7 @@
                                          (update fsql-tx :dml conj dml))))
                 (throw (UnsupportedOperationException. "unknown tx")))
 
-              (let [tx (xt/submit-tx node [dml])]
-                ;; HACK til we have the ability to await on the connection
-                (.awaitTx idxer tx nil))))
+              (xt/execute-tx node [dml])))
 
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
             (with-open [res (.openCursor bq)
@@ -260,10 +258,8 @@
                  (.getAction req))
 
             (try
-              (let [tx-key (xt/submit-tx node dml)]
-                ;; HACK til we have the ability to await on the connection
-                (.awaitTx idxer tx-key nil)
-                (.onCompleted listener))
+              (xt/execute-tx node dml)
+              (.onCompleted listener)
 
               (catch Throwable t
                 (.onError listener t)))

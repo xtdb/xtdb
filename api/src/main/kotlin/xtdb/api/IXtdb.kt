@@ -58,6 +58,23 @@ interface IXtdb : AutoCloseable {
     fun submitTx(vararg ops: TxOp) = submitTx(TxOptions(), *ops)
 
     /**
+     * Executes the transaction - this method will block until the receiving node has indexed the transaction.
+     *
+     * @param txOpts options for the transaction
+     * @param ops XTQL/SQL transaction operations.
+     * @return the result of the executed transaction.
+     */
+    fun executeTx(txOpts: TxOptions, vararg ops: TxOp): TransactionResult
+
+    /**
+     * Executes the transaction - this method will block until the receiving node has indexed the transaction.
+     *
+     * @param ops XTQL/SQL transaction operations.
+     * @return the result of the executed transaction.
+     */
+    fun executeTx(vararg ops: TxOp) = executeTx(TxOptions(), *ops)
+
+    /**
      * @suppress
      */
     override fun close()

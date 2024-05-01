@@ -37,7 +37,7 @@ internal class XtdbTest {
 
     @Test
     fun startsInMemoryNode() {
-        node.submitTx(putDocs("foo", mapOf("xt\$id" to "jms")))
+        node.executeTx(putDocs("foo", mapOf("xt\$id" to "jms")))
 
         assertEquals(
             listOf(mapOf("id" to "jms")),
@@ -60,7 +60,7 @@ internal class XtdbTest {
 
     @Test
     fun `test query opts`() {
-        node.submitTx(putDocs("docs2", mapOf("xt\$id" to 1, "foo" to "bar")))
+        node.executeTx(putDocs("docs2", mapOf("xt\$id" to 1, "foo" to "bar")))
 
         assertEquals(
             listOf(mapOf("myFoo" to "bar")),

@@ -1318,17 +1318,15 @@
 (def supported-param-oids
   (set (map (comp oids :pg) type-mappings)))
 
-(defn- submit-tx [{:keys [node conn-state]} dml-buf {:keys [default-all-valid-time?]}]
+(defn- execute-tx [{:keys [node]} dml-buf {:keys [default-all-valid-time?]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql transformed-query params])
                      dml-buf)]
-    ;; TODO review err log policy
     (try
-      (let [tx (xt/submit-tx node tx-ops {:default-all-valid-time? default-all-valid-time?})]
-        (swap! conn-state update-in [:session :latest-submitted-tx] time/max-tx tx)
-        nil)
+      (some-> (ex-message (:error (xt/execute-tx node tx-ops {:default-all-valid-time? default-all-valid-time?})))
+              err-protocol-violation)
       (catch Throwable e
-        (log/trace e "Error on submit-tx")
+        (log/debug e "Error on execute-tx")
         (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
 
 (defn- ->xtify-param [{:keys [arg-types param-format]}]
@@ -1360,7 +1358,7 @@
       ;; we buffer the statement in the transaction (to be flushed with COMMIT)
       (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
 
-      (submit-tx conn [stmt] {:default-all-valid-time? default-all-valid-time?
+      (execute-tx conn [stmt] {:default-all-valid-time? default-all-valid-time?
                               :default-tz (.getZone clock)}))
 
     (cmd-write-msg conn msg-command-complete
@@ -1450,10 +1448,9 @@
 (defn cmd-commit [{:keys [conn-state] :as conn}]
   (let [{{:keys [failed err dml-buf]} :transaction, :keys [session]} @conn-state]
     (if failed
-      ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (submit-tx conn dml-buf {:default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))})]
+      (if-let [err (execute-tx conn dml-buf {:default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))
@@ -1593,7 +1590,7 @@
   (let [{:keys [statement-type] :as stmt} (get-in @conn-state [:prepared-statements stmt-name])]
     (if stmt
       (let [stmt-with-bind-msg
-            ;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during submit-tx.
+            ;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during execute-tx.
             (merge stmt bind-msg)
             {:keys [portal bind-outcome]}
             ;;if statement is a query, compile and bind it, else use the statment as a portal

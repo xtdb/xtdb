@@ -7,17 +7,19 @@
             [xtdb.metrics :as metrics]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.io Closeable Writer)
            (java.util.concurrent ExecutionException)
            java.util.HashMap
+           java.util.List
            [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb TransactionKey Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
-           (xtdb.api.query Basis QueryOptions XtqlQuery)
+           (xtdb.api.query Basis IKeyFn$KeyFn QueryOptions XtqlQuery)
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -73,6 +75,19 @@
 
       (swap! !latest-submitted-tx time/max-tx tx-key)
       tx-key))
+
+  (executeTx [this opts tx-ops]
+    (let [tx-key (.submitTx this opts tx-ops)]
+      (with-open [res (.openQuery this "SELECT txs.\"xt$committed?\" AS committed, txs.xt$error AS error FROM xt$txs txs WHERE txs.xt$id = ?"
+                                  (let [^List args [(:tx-id tx-key)]]
+                                    (-> (QueryOptions/queryOpts)
+                                        (.args args)
+                                        (.keyFn IKeyFn$KeyFn/KEBAB_CASE_KEYWORD)
+                                        (.build))))]
+        (let [{:keys [committed error]} (-> (.findFirst res) (.orElse nil))]
+          (if committed
+            (serde/->tx-committed tx-key)
+            (serde/->tx-aborted tx-key error))))))
 
   (^Stream openQuery [this ^String query, ^QueryOptions query-opts]
    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]

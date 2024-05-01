@@ -1238,14 +1238,14 @@
 (deftest runtime-error-query-test
   (tu/with-log-level 'xtdb.pgwire :off
     (with-open [conn (jdbc-conn)]
-      (is (thrown? PSQLException #"Data error - trim error" (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"]))))))
+      (is (thrown-with-msg? PSQLException #"Data Exception - trim error."
+                            (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"]))))))
 
 (deftest runtime-error-commit-test
   (with-open [conn (jdbc-conn)]
     (q conn ["START TRANSACTION READ WRITE"])
     (q conn ["INSERT INTO foo (xt$id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
-    #_ ; FIXME #401 - need to show this as an aborted transaction?
-    (is (thrown? PSQLException #"Data error - trim error" (q conn ["COMMIT"])))))
+    (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error." (q conn ["COMMIT"])))))
 
 (deftest test-column-order
   (with-open [conn (jdbc-conn)]

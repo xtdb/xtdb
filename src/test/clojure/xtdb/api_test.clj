@@ -21,8 +21,8 @@
   (t/is (map? (xt/status *node*))))
 
 (t/deftest test-simple-query
-  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])]
+    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
              (xt/q *node* '(from :docs [{:xt/id e} inst]))))))
@@ -37,10 +37,10 @@
                      (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
-  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
+  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
                                  [:sql "INSERT INTO docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                   [4]]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
@@ -54,8 +54,8 @@
                    {:tx-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
-  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
+    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
              (xt/q *node* '(from :docs [{:xt/id id} v]))))
@@ -64,9 +64,9 @@
              (xt/q *node* "SELECT b.xt$id, b.v FROM docs b")))))
 
 (t/deftest round-trips-structs
-  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
+  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
                                  [:put-docs :docs {:xt/id :bar, :struct {:a true, :d 42.0}}]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
@@ -80,8 +80,8 @@
             ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
             }]
 
-    (xt/submit-tx *node* [[:sql "INSERT INTO foo (xt$id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
-                           (mapv vs [:dt :ts :tstz :tm])]])
+    (xt/execute-tx *node* [[:sql "INSERT INTO foo (xt$id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
+                            (mapv vs [:dt :ts :tstz :tm])]])
 
     (t/is (= [(assoc vs :xt/id "foo")]
              (xt/q *node* "SELECT f.xt$id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
@@ -95,9 +95,9 @@
                 #_ ; FIXME #323
                 [:tmtz "TIME '11:21:14.932254-08:00'"]]]
 
-      (xt/submit-tx *node* (vec (for [[t lit] lits]
-                                  [:sql (format "INSERT INTO bar (xt$id, v) VALUES (?, %s)" lit)
-                                   [(name t)]])))
+      (xt/execute-tx *node* (vec (for [[t lit] lits]
+                                   [:sql (format "INSERT INTO bar (xt$id, v) VALUES (?, %s)" lit)
+                                    [(name t)]])))
       (t/is (= (set (for [[t _lit] lits]
                       {:xt/id (name t), :v (get vs t)}))
                (set (xt/q *node* "SELECT b.xt$id, b.v FROM bar b"
@@ -567,9 +567,15 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                               {:name "Dave"}]
                              [:put-docs :users {:xt/id :dave, :first-name "Dave"}] ])
 
-    (xt/submit-tx tu/*node* [[:assert-not-exists '(from :users [{:first-name $name}])
-                              {:name "James"}]
-                             [:put-docs :users {:xt/id :james2, :first-name "James"}] ])
+    (t/is (= (serde/map->TxAborted
+              {:tx-id 2,
+               :system-time #time/instant "2020-01-03T00:00:00Z",
+               :committed? false,
+               :error #xt/runtime-err [:xtdb/assert-failed "Precondition failed: assert-not-exists" {:row-count 1}]})
+
+             (xt/execute-tx tu/*node* [[:assert-not-exists '(from :users [{:first-name $name}])
+                                        {:name "James"}]
+                                       [:put-docs :users {:xt/id :james2, :first-name "James"}] ])))
 
     (t/is (= #{{:xt/id :james, :first-name "James"}
                {:xt/id :dave, :first-name "Dave"}}
@@ -585,9 +591,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                          (update row :xt/error (juxt ex-message ex-data))))))))
 
   (t/testing "assert-exists"
-    (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])
-                              {:name "Mike"}]
-                             [:put-docs :users {:xt/id :mike, :first-name "Mike"}] ])
+    (t/is (= (serde/map->TxAborted
+              {:tx-id 3,
+               :system-time #time/instant "2020-01-04T00:00:00Z",
+               :committed? false,
+               :error #xt/runtime-err [:xtdb/assert-failed "Precondition failed: assert-exists" {:row-count 0}]})
+             (xt/execute-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])
+                                        {:name "Mike"}]
+                                       [:put-docs :users {:xt/id :mike, :first-name "Mike"}] ])))
 
     (xt/submit-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])
                               {:name "James"}]

@@ -1,17 +1,13 @@
 (ns xtdb.json-serde-test
   (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.api :as xt]
             [xtdb.error :as err]
-            [xtdb.serde]
-            [xtdb.tx-ops :as tx-ops]
-            [xtdb.serde :as serde])
+            [xtdb.serde :as serde]
+            [xtdb.tx-ops :as tx-ops])
   (:import (java.time Instant)
            (java.util List UUID)
            (xtdb JsonSerde)
-           (xtdb.api TransactionKey)
-           (xtdb.api.query Basis Binding Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Exprs
-                           Queries Query QueryOptions QueryRequest SqlQuery TemporalFilter TemporalFilter$AllTime TemporalFilters
-                           XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)
+           xtdb.api.TransactionResult
+           (xtdb.api.query Basis Binding Expr Expr$Bool Expr$Call Expr$Null Expr$SetExpr Exprs Queries Query QueryOptions QueryRequest SqlQuery TemporalFilter TemporalFilter$AllTime TemporalFilters XtqlQuery$Aggregate XtqlQuery$Call XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$QueryTail XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)
            (xtdb.api.tx TxOp TxOptions TxRequest)))
 
 (defn- encode [v]
@@ -350,7 +346,6 @@
     (t/testing "sql-query"
       (let [v (SqlQuery. "SELECT * FROM docs")]
         (t/is (= v (roundtrip-query v)))))))
-
 
 (defn- roundtrip-query-tail [v]
   (-> v (JsonSerde/encode XtqlQuery$QueryTail) (JsonSerde/decode XtqlQuery$QueryTail)))

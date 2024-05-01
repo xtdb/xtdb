@@ -1,4 +1,5 @@
-{xt/tx-key xtdb.serde/tx-key-read-fn
+{xt/tx-key xtdb.serde/map->TxKey
+ xt/tx-result xtdb.serde/tx-result-read-fn
  xt/tx-opts xtdb.serde/tx-opts-read-fn
  xt/clj-form xtdb.api/->ClojureForm
  xt/illegal-arg xtdb.serde/iae-reader
