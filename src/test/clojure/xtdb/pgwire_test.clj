@@ -5,7 +5,6 @@
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.protocols :as xtp]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]
@@ -14,15 +13,15 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as result-set])
   (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.fasterxml.jackson.databind.node JsonNodeType)
+           (java.io InputStream OutputStream)
            (java.lang Thread$State)
            (java.net SocketException)
-           (java.sql Connection PreparedStatement)
+           (java.sql Connection)
            (java.time Clock Instant ZoneId ZoneOffset)
-           (java.util.concurrent CompletableFuture CountDownLatch TimeUnit)
-           java.util.stream.StreamSupport
+           java.util.List
+           (java.util.concurrent CountDownLatch TimeUnit)
            #_org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
-           (org.postgresql.util PGobject PSQLException)
-           xtdb.ICursor))
+           (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -599,31 +598,35 @@
   [f]
   (require-server)
   ;; there are other ways to do this, but its a straightforward factoring that removes some boilerplate for now.
-  (let [pb (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
+  (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*)]
+        pb (ProcessBuilder. argv)
         p (.start pb)
-        in (delay (.getInputStream p))
-        err (delay (.getErrorStream p))
-        out (delay (.getOutputStream p))
+        in (.getInputStream p)
+        err (.getErrorStream p)
+        out (.getOutputStream p)
 
         send
-        (fn [s]
-          (.write @out (.getBytes s "utf-8"))
-          (.flush @out))
+        (fn [^String s]
+          (.write out (.getBytes s "utf-8"))
+          (.flush out))
 
         read
         (fn read
-          ([] (read @in))
+          ([] (read in))
           ([stream]
-           (let [stream (case stream :err @err stream)]
+           (let [^InputStream stream (case stream :err err stream)]
              (loop [wait-until (+ (System/currentTimeMillis) 1000)]
-               (cond
-                 (pos? (.available stream))
-                 (let [barr (byte-array (.available stream))]
-                   (.read stream barr)
-                   (String. barr))
+               (or (when (pos? (.available stream))
+                     (let [barr (byte-array (.available stream))]
+                       (.read stream barr)
+                       (let [read-str (String. barr)]
+                         (when-not (str/starts-with? read-str "Null display is")
+                           read-str))))
 
-                 (< wait-until (System/currentTimeMillis)) :timeout
-                 :else (recur wait-until))))))]
+                   (when (< wait-until (System/currentTimeMillis))
+                     :timeout)
+
+                   (recur wait-until))))))]
     (try
       (f send read)
       (finally
@@ -633,9 +636,9 @@
         (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
         (is (#{143, 0} (.exitValue p)))
 
-        (when (realized? in) (util/try-close @in))
-        (when (realized? out) (util/try-close @out))
-        (when (realized? err) (util/try-close @err))))))
+        (util/try-close in)
+        (util/try-close out)
+        (util/try-close err)))))
 
 ;; define psql tests if psql is available on path
 ;; (will probably move to a selector)
