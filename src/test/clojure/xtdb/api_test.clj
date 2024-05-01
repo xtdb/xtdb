@@ -395,12 +395,15 @@
                     :xt/valid-from (time/->zdt #inst "2020-01-01")}}
                  (q tx1)))))))
 
-(t/deftest throws-static-tx-op-errors-on-submit-346
-  (t/is (thrown-with-msg?
-         xtdb.IllegalArgumentException
-         #"Invalid SQL query: Parse error at line 1"
-         (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]]))
-        "parse error - date with double quotes")
+(t/deftest returns-dml-errors-through-execute-tx
+  (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z",
+                               {:message-matches? true, :data {::err/error-key :xtdb.sql/parse-error}})
+           (-> (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])
+               (update :error (fn [err]
+                                ;; massive error message
+                                {:message-matches? (boolean (re-find #"Invalid SQL query: Parse error at line 1, column 48:"
+                                                                     (ex-message err)))
+                                 :data (-> (ex-data err) (dissoc :errs))})))))
 
   (t/testing "still an active node"
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('dave', 'Dave')"]])
