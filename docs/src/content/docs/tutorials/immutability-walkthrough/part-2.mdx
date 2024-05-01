@@ -72,7 +72,7 @@ Now let's say our CFO wants to know how the prices have increased over Q1?
 <Fiddle magicContext="my-context">
   <Query q="SELECT product.*, product.xt$valid_from, product.xt$valid_to
             FROM product
-            FOR ALL VALID_TIME
+	    FOR VALID_TIME FROM DATE '2024-01-01' TO DATE '2024-03-31'
             ORDER BY product.xt$valid_from" />
 </Fiddle>
 
@@ -81,7 +81,7 @@ When did the bicycle price first exceed $350 ?
 <Fiddle magicContext="my-context">
   <Query q="SELECT product.*, product.xt$valid_from, product.xt$valid_to
             FROM product
-            FOR ALL VALID_TIME
+	    FOR VALID_TIME FROM DATE '2024-01-01' TO DATE '2024-03-31'
             WHERE product.price > 350
             ORDER BY product.xt$valid_from
             LIMIT 1" />
