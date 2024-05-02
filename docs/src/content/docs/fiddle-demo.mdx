@@ -3,11 +3,15 @@ title: Fiddle Demo
 pagefind: false
 ---
 
+## The Fiddle
+
 import Fiddle from '@components/fiddle.astro';
 import Txs from '@components/fiddle/txs.astro';
 import Query from '@components/fiddle/query.astro';
 
-## Basic Usage
+Allows you to embed a miniature instance of [xt-fiddle](https://fiddle.xtdb.com) in the docs, with a couple added features as a bonus!
+
+### Basic Usage
 
 You can add a `Fiddle` to the page with pre-set transactions & query like so:
 
@@ -28,7 +32,7 @@ If you want to preserve whitespace you can do this:
 </Fiddle>
 
 
-## Hide editors
+### Hide editors
 
 Sometimes you just want to show of the query, you can hide the transactions like so:
 
@@ -46,6 +50,8 @@ You can do the same with the query of course:
   <Query hidden={true} q="SELECT * FROM docs"/>
 </Fiddle>
 
+### Errors
+
 If you have an error in the transactions/query it looks like this:
 
 <Fiddle>
@@ -53,7 +59,7 @@ If you have an error in the transactions/query it looks like this:
   <Query q="SELECT * FOM docs" />
 </Fiddle>
 
-## System Time
+### System Time
 
 You can set system time on a transaction like so:
 
@@ -63,7 +69,7 @@ You can set system time on a transaction like so:
   <Query q="SELECT * FROM xt$txs" />
 </Fiddle>
 
-## Multiple Transactions
+### Multiple Transactions
 
 It can be useful to include multiple "batches" of transactions.
 Particularly for showing of valid time & system time:
@@ -79,7 +85,7 @@ Particularly for showing of valid time & system time:
   ORDER BY d.xt$id, d.xt$system_from`} />
 </Fiddle>
 
-## Magic Context
+### Magic Context
 
 While of course you can use hidden `Txs` to include transactions previously executed on the page but that can get tedious.
 
@@ -123,7 +129,7 @@ This fiddle uses a different context id, so it will not use the context of previ
 </Fiddle>
 
 
-## Caveats
+### Caveats
 
 Please note that the fiddle expects **exactly one** `Query` and it will always run it **after all transactions are run**
 For example:
@@ -132,7 +138,7 @@ For example:
   <Txs txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one')" />
   <Query q="SELECT * FROM docs" />
   <Txs txs="INSERT INTO docs (xt$id, name) VALUES (2, 'two')" />
-  <Query q="SELECT * FROM docs" />
+  <Query q="this won't be run" />
 </Fiddle>
 
 And with no query you'll get an error at load time in the browser console.
@@ -146,3 +152,259 @@ Having just a query is fine though (and useful with Magic Context):
 <Fiddle>
   <Query q="SELECT * FROM docs" />
 </Fiddle>
+
+
+## Live Queries
+
+import LiveQuery from '@components/live-query.astro';
+import Range from '@components/live-query/range.astro';
+import QueryTemplate from '@components/live-query/template.astro';
+
+An extensible system for running interactive queries with visualisations.
+
+
+### Basic Usage
+
+You specify some number of [inputs](#available-inputs), and a query template (which uses [mustache](https://mustache.github.io/) templates).
+
+Inputs set a variable in the template using their `name` property.
+
+<LiveQuery>
+  <QueryTemplate q={`
+SELECT *
+FROM (
+  VALUES
+  (1, 'Bike',        4),
+  (2, 'Ice Cream',   3),
+  (3, 'Tennis Ball', 5),
+  (4, 'Toy Gun',     2),
+  (5, 'Blocks',      1)
+) AS orders(xt$id, name, count)
+LIMIT {{limit}}
+`} />
+  <Range name="limit" min={0} max={5} step={1} value={3} />
+</LiveQuery>
+
+
+### Magic Context
+
+Live queries work with Magic Context as you would expect:
+
+First setup some transactions:
+
+<Fiddle magicContext="orders">
+  <Txs txs="INSERT INTO orders
+            (xt$id, name, count)
+            VALUES
+            (1, 'Bike',        4),
+            (2, 'Ice Cream',   3),
+            (3, 'Tennis Ball', 5),
+            (4, 'Toy Gun',     2),
+            (5, 'Blocks',      1)" />
+  <Query hidden
+         q="SELECT *
+            FROM xt$txs" />
+</Fiddle>
+
+Then use them:
+
+<LiveQuery magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders
+                    LIMIT {{limit}}" />
+  <Range name="limit" min={0} max={5} step={1} value={3} />
+</LiveQuery>
+
+
+### Txs
+
+You can add Txs to a LiveQuery as you would expect:
+
+<LiveQuery>
+  <Txs txs="INSERT INTO orders
+            (xt$id, name, count)
+            VALUES
+            (1, 'Bike',        4),
+            (2, 'Ice Cream',   3),
+            (3, 'Tennis Ball', 5),
+            (4, 'Toy Gun',     2),
+            (5, 'Blocks',      1)" />
+  <QueryTemplate q="SELECT *
+                    FROM orders
+                    LIMIT {{limit}}" />
+  <Range name="limit" min={0} max={5} step={1} value={3} />
+</LiveQuery>
+
+
+### AutoLoad
+
+You can set a live query to load it's results on page load by using the `autoLoad` property:
+
+<LiveQuery autoLoad magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders
+                    LIMIT {{limit}}" />
+  <Range name="limit" min={0} max={5} step={1} value={3} />
+</LiveQuery>
+
+
+### Errors
+
+Errors look like this:
+
+<LiveQuery autoLoad magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    {{^break}}
+                    FROM orders AS o
+                    {{/break}}
+                    ORDER BY o.xt$id" />
+  <div class="flex flex-row gap-2 items-center">
+    Uncheck to un-break the query:
+    <Checkbox name="break" checked />
+  </div>
+</LiveQuery>
+
+
+### Styling Tips
+
+As you'll have seen in the examples above, you can use tailwind to style the inputs.
+
+This is handy for:
+
+<LiveQuery magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    WHERE {{#true}}true{{/true}}{{^true}}false{{/true}} {{#enableSearch}}AND o.name LIKE '%{{search}}%'{{/enableSearch}}
+                    LIMIT {{limit}}" />
+
+  Putting a label beside an input:
+  <div class="flex flex-row gap-2 items-center">
+    My checkbox:
+    <Checkbox name="true" checked />
+  </div>
+
+  <hr class="border-b border-gray-300 dark:border-gray-600" />
+
+  Styling the input itself:
+  <Range class="w-full" name="limit" min="0" max="5" value="3" />
+
+  <hr class="border-b border-gray-300 dark:border-gray-600" />
+  Organising inputs:
+  <div class="flex flex-row gap-2 items-center">
+    Search:
+    <Checkbox name="enableSearch" checked />
+    <Text name="search" />
+  </div>
+</LiveQuery>
+
+
+### Available Inputs
+
+#### Checkbox
+
+import Checkbox from '@components/live-query/checkbox.astro';
+
+A wrapper around the [checkbox input](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/checkbox).
+
+<LiveQuery magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    {{#useWhere}}
+                    WHERE o.count < 3
+                    {{/useWhere}}
+                    ORDER BY o.xt$id" />
+  <Checkbox name="useWhere" checked />
+</LiveQuery>
+
+#### Range
+
+You can provide a `min`, `max`, `step` and `value` to specify a range.
+Can be a float or integer.
+
+<LiveQuery magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    WHERE o.count > {{count}}
+                    ORDER BY o.xt$id" />
+  <Range name="count" min={0} max={6} step={2} />
+</LiveQuery>
+
+#### DateRange
+
+import DateRange from '@components/live-query/date-range.astro';
+
+A customised range input specifically for outputting dates with two varieties:
+
+You can provide a `start`, `stop` and `step` amount to have a full range of dates:
+
+<LiveQuery magicContext="orders">
+  <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
+                    FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
+                    ORDER BY o.xt$id" />
+  <DateRange name="validTime" start="2024-01-01" stop="2024-01-05" step="1 day" value="2024-01-04" />
+</LiveQuery>
+
+Or you can provide an array of dates:
+
+<LiveQuery magicContext="orders">
+  <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
+                    FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
+                    ORDER BY o.xt$id" />
+  <DateRange name="validTime" dates={["2024-01-01","2024-02-01","2024-03-05"]} value="2024-03-05" />
+</LiveQuery>
+
+#### Text
+
+import Text from '@components/live-query/text.astro';
+
+A textbox element that allows the user to type in whatever they like:
+
+<LiveQuery magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    WHERE o.name LIKE '%{{name}}%'
+                    ORDER BY o.xt$id" />
+  <Text name="name" value="Toy" />
+</LiveQuery>
+
+### Available Outputs
+
+#### Table
+
+import OutputTable from '@components/live-query/output-table.astro';
+
+The same table used in the Fiddle. Added by default if no output is provided.
+
+<LiveQuery autoLoad magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    WHERE o.count > {{count}}
+                    ORDER BY o.xt$id" />
+  <Range name="count" min={0} max={6} step={2} />
+  <OutputTable />
+</LiveQuery>
+
+#### Vega
+
+import OutputVega from '@components/live-query/output-vega.astro';
+
+Displays a vega chart. You can specify a chart spec using the `spec` arg.
+
+Data is provided through a dataset named `table`.
+
+<LiveQuery autoLoad magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    WHERE o.count > {{count}}
+                    ORDER BY o.xt$id" />
+  <Range name="count" min={0} max={6} step={2} value={0} />
+  <OutputVega spec={{
+    $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+    data: { name: "table" },
+    mark: "bar",
+    encoding: {
+      x: { field: 'xt$id', type: 'ordinal' },
+      y: { field: 'count', type: 'quantitative' }
+    }
+  }} />
+</LiveQuery>
