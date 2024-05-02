@@ -116,7 +116,10 @@ if (autoLoad) {
                 } else {
                     this.query.render(this.state);
                 }
-            }, 0);
+            },
+            // This is a hack that I *think* works because all the children use
+            // setTimeout(0) to initialize
+            1);
         }
 
         // Called by an input to update the state

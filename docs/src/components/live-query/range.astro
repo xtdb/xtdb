@@ -16,7 +16,9 @@ import RawRange from './raw-range.astro'
                 this.set(slider.value);
             });
             this.name = slider.name;
-            this.parent.update(this.name, slider.value);
+            setTimeout(() => {
+                this.parent.update(this.name, slider.value);
+            }, 0);
         }
 
         set(value) {

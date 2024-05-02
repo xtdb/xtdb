@@ -16,7 +16,9 @@
                 this.set(text.value);
             });
             this.name = text.name;
-            this.parent.update(this.name, text.value);
+            setTimeout(() => {
+                this.parent.update(this.name, text.value);
+            }, 0);
         }
 
         set(value) {

@@ -79,7 +79,9 @@ if (dates) {
             // Tell parent about initial value
             let initialValue = this.valueToDate(slider.value);
             initialValue = formatTimestamp(initialValue);
-            this.parent.update(this.name, initialValue);
+            setTimeout(() => {
+                this.parent.update(this.name, initialValue);
+            }, 0);
         }
 
         valueToDate(value) {

@@ -16,7 +16,10 @@
                 this.set(checkbox.checked);
             });
             this.name = checkbox.name;
-            this.parent.update(this.name, checkbox.checked);
+
+            setTimeout(() => {
+                this.parent.update(this.name, checkbox.checked);
+            }, 0);
         }
 
         set(value) {
