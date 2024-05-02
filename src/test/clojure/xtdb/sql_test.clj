@@ -3,6 +3,7 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
+            [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.test-util :as tu])
 
@@ -2084,3 +2085,30 @@
 (deftest test-random-fn
   (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))
   (t/is (= true (-> (xt/q tu/*node* "SELECT random() < 1.0 AS smaller ") first :smaller))))
+
+(t/deftest test-tx-ops-sql-params
+  (t/testing "correct number of args"
+    (t/is (= (serde/->tx-committed 0 #time/instant "2020-01-01T00:00:00Z")
+             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [1 "dan"] [2 "james"]]])))
+
+    (t/is (= [{:u-name "dan", :xt/id 1}
+              {:u-name "james", :xt/id 2}]
+             (xt/q tu/*node* "SELECT users.xt$id, users.u_name FROM users ORDER BY xt$id"))))
+
+  (t/testing "no arg rows provided when args expected"
+    (t/is (= (serde/->tx-aborted 1
+                                 #time/instant "2020-01-02T00:00:00Z"
+                                 #xt/runtime-err [:xtdb.indexer/missing-sql-args "Arguments list was expected but not provided" {:param-count 2}])
+             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)"]]))))
+
+  (t/testing "incorrect number of args on all arg-row"
+    (t/is (= (serde/->tx-aborted 2
+                                 #time/instant "2020-01-03T00:00:00Z"
+                                 #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "1 arguments were provided and 2 arguments were provided" {:param-count 2, :arg-count 1}])
+             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [3] [4]]]))))
+
+  (t/testing "incorrect number of args on one row"
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"All SQL arg-rows must have the same number of columns"
+           (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
