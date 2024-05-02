@@ -79,9 +79,7 @@ if (magicContext) {
 
             // Query
             this.query = this.querySelector('fiddle-query');
-            if (this.query == null) {
-                throw "No query element found!";
-            }
+            console.assert(this.query != null, "No query element found!");
 
             const myThis = this;
 
