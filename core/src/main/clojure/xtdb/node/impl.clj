@@ -78,14 +78,14 @@
 
   (executeTx [this opts tx-ops]
     (let [tx-key (.submitTx this opts tx-ops)]
-      (with-open [res (.openQuery this "SELECT txs.\"xt$committed?\" AS committed, txs.xt$error AS error FROM xt$txs txs WHERE txs.xt$id = ?"
+      (with-open [res (.openQuery this "SELECT txs.\"xt$committed?\" AS is_committed, txs.xt$error AS error FROM xt$txs txs WHERE txs.xt$id = ?"
                                   (let [^List args [(:tx-id tx-key)]]
                                     (-> (QueryOptions/queryOpts)
                                         (.args args)
                                         (.keyFn IKeyFn$KeyFn/KEBAB_CASE_KEYWORD)
                                         (.build))))]
-        (let [{:keys [committed error]} (-> (.findFirst res) (.orElse nil))]
-          (if committed
+        (let [{:keys [is-committed error]} (-> (.findFirst res) (.orElse nil))]
+          (if is-committed
             (serde/->tx-committed tx-key)
             (serde/->tx-aborted tx-key error))))))
 
