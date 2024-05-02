@@ -1,10 +1,9 @@
-[:rename
- {x1 lastname, x2 name, x4 jame, x5 lastjame}
+[:project
+ [{jame bar.2/jame}
+  {lastjame bar.2/lastjame}
+  {lastname foo.1/lastname}
+  {name foo.1/name}]
  [:mega-join
   []
-  [[:rename
-    {lastname x1, name x2}
-    [:scan {:table foo} [lastname name]]]
-   [:rename
-    {jame x4, lastjame x5}
-    [:scan {:table bar} [jame lastjame]]]]]]
+  [[:rename foo.1 [:scan {:table foo} [name lastname]]]
+   [:rename bar.2 [:scan {:table bar} [lastjame jame]]]]]]

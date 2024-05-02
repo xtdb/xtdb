@@ -1,5 +1,3 @@
-[:rename
- {x4 xt$column_1}
- [:project
-  [{x4 (nullif x1 x2)}]
-  [:rename {a x1, b x2} [:scan {:table t1} [a b]]]]]
+[:project
+ [{xt$column_1 (nullif t1.1/a t1.1/b)}]
+ [:rename t1.1 [:scan {:table t1} [b a]]]]

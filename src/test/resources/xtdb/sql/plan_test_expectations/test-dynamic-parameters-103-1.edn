@@ -1,7 +1,3 @@
-[:rename
- {x1 a}
- [:project
-  [x1]
-  [:rename
-   {a x1, b x2, c x3}
-   [:scan {:table foo} [a {b (= b ?_0)} {c (= c ?_1)}]]]]]
+[:project
+ [{a foo.1/a}]
+ [:rename foo.1 [:scan {:table foo} [{b (= b ?_0)} {c (= c ?_1)} a]]]]

@@ -1,12 +1,10 @@
-[:rename
- {x6 xt$column_1}
- [:project
-  [{x6 (and (< x3 x2) (> x4 x1))}]
-  [:rename
-   {xt$system_from x1,
-    xt$system_to x2,
-    xt$valid_from x3,
-    xt$valid_to x4}
-   [:scan
-    {:table foo}
-    [xt$system_from xt$system_to xt$valid_from xt$valid_to]]]]]
+[:project
+ [{xt$column_1
+   (and
+    (< f.1/xt$valid_from f.1/xt$system_to)
+    (> f.1/xt$valid_to f.1/xt$system_from))}]
+ [:rename
+  f.1
+  [:scan
+   {:table foo}
+   [xt$valid_to xt$system_from xt$valid_from xt$system_to]]]]

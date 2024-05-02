@@ -1,27 +1,14 @@
-[:rename
- {x1 a,
-  x8 xt$column_7,
-  x13 xt$column_12,
-  x5 xt$column_4,
-  x9 xt$column_8,
-  x12 xt$column_11,
-  x10 xt$column_9,
-  x4 xt$column_3,
-  x6 xt$column_5,
-  x11 xt$column_10,
-  x7 xt$column_6,
-  x3 xt$column_2}
- [:project
-  [x1
-   {x3 (current-time)}
-   {x4 (current-time 2)}
-   {x5 (current-date)}
-   {x6 (current-timestamp)}
-   {x7 (current-timestamp 4)}
-   {x8 (local-time)}
-   {x9 (local-time 6)}
-   {x10 (local-timestamp)}
-   {x11 (local-timestamp 9)}
-   {x12 xtdb/end-of-time}
-   {x13 xtdb/end-of-time}]
-  [:rename {a x1} [:scan {:table u} [a]]]]]
+[:project
+ [{a u.1/a}
+  {xt$column_2 (current-time)}
+  {xt$column_3 (current-time 2)}
+  {xt$column_4 (current-date)}
+  {xt$column_5 (current-timestamp)}
+  {xt$column_6 (current-timestamp 4)}
+  {xt$column_7 (local-time)}
+  {xt$column_8 (local-time 6)}
+  {xt$column_9 (local-timestamp)}
+  {xt$column_10 (local-timestamp 9)}
+  {xt$column_11 xtdb/end-of-time}
+  {xt$column_12 xtdb/end-of-time}]
+ [:rename u.1 [:scan {:table u} [a]]]]

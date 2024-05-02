@@ -1,1 +1,5 @@
-[:rename {x1 xt$column_1} [:table [x1] [{x1 1} {x1 2}]]]
+[:project
+ [{xt$column_1 xt.values.1/xt$column_1}]
+ [:rename
+  xt.values.1
+  [:table [xt$column_1] [{:xt$column_1 1} {:xt$column_1 2}]]]]

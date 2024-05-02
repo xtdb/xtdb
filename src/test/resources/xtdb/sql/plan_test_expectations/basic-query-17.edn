@@ -1,6 +1,8 @@
-[:rename
- {x1 name}
- [:distinct
-  [:intersect
-   [:rename {name x1} [:scan {:table stars_in} [name]]]
-   [:rename {name x1} [:scan {:table stars_in} [name]]]]]]
+[:distinct
+ [:intersect
+  [:project
+   [{name si.1/name}]
+   [:rename si.1 [:scan {:table stars_in} [name]]]]
+  [:project
+   [{name si.2/name}]
+   [:rename si.2 [:scan {:table stars_in} [name]]]]]]

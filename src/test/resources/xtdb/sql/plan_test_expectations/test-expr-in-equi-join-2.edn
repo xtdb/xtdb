@@ -1,8 +1,6 @@
-[:rename
- {x1 a}
- [:project
-  [x1]
-  [:mega-join
-   [{x1 (+ x3 1)}]
-   [[:rename {a x1} [:scan {:table a} [a]]]
-    [:rename {b x3} [:scan {:table bar} [b]]]]]]]
+[:project
+ [{a a.1/a}]
+ [:mega-join
+  [{a.1/a (+ b.2/b 1)}]
+  [[:rename a.1 [:scan {:table a} [a]]]
+   [:rename b.2 [:scan {:table bar} [b]]]]]]

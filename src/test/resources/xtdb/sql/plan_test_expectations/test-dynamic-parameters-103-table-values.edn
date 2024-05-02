@@ -1,1 +1,7 @@
-[:rename {x1 foo} [:table [x1] [{x1 ?_0}]]]
+[:project
+ [{foo bar.2/foo}]
+ [:rename
+  bar.2
+  [:project
+   [{foo xt.values.1/foo}]
+   [:rename xt.values.1 [:table [foo] [{:foo ?_0}]]]]]]

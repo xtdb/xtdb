@@ -1,13 +1,11 @@
-[:rename
- {x2 xt$column_1}
- [:project
-  [{x2 4}]
-  [:rename
-   {}
-   [:scan
-    {:table t1,
-     :for-valid-time
-     [:between
-      #time/zoned-date-time "3000-01-01T00:00Z"
-      #time/date "3001-01-01"]}
-    []]]]]
+[:project
+ [{xt$column_1 4}]
+ [:rename
+  t1.1
+  [:scan
+   {:table t1,
+    :for-valid-time
+    [:between
+     #time/zoned-date-time "3000-01-01T00:00Z"
+     #time/date "3001-01-01"]}
+   []]]]

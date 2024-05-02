@@ -1,3 +1,9 @@
-[:rename
- {x1 xt$column_1, x2 xt$column_2}
- [:table [x1 x2] [{x1 1, x2 2} {x1 3, x2 4}]]]
+[:project
+ [{xt$column_1 xt.values.1/xt$column_1}
+  {xt$column_2 xt.values.1/xt$column_2}]
+ [:rename
+  xt.values.1
+  [:table
+   [xt$column_1 xt$column_2]
+   [{:xt$column_1 1, :xt$column_2 2}
+    {:xt$column_1 3, :xt$column_2 4}]]]]

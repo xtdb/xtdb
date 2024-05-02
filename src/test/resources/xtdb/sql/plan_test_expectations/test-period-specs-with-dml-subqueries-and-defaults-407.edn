@@ -1,19 +1,31 @@
 [:insert
- {:table "prop_owner"}
- [:rename
-  {x6 xt$id,
-   x7 customer_number,
-   x8 property_number,
-   x10 xt$valid_from,
-   x11 xt$valid_to}
-  [:project
-   [x6 x7 x8 {x10 (cast-tstz x9)} {x11 (cast-tstz x4)}]
+ {:table prop_owner}
+ [:project
+  [{xt$id xt$id}
+   {customer_number customer_number}
+   {property_number property_number}
+   {xt$valid_from (cast xt$valid_from [:timestamp-tz :micro "UTC"])}
+   {xt$valid_to (cast xt$valid_to [:timestamp-tz :micro "UTC"])}]
+  [:rename
+   {xt$column_1 xt$id,
+    xt$column_2 customer_number,
+    xt$column_3 property_number,
+    xt$column_4 xt$valid_from,
+    tmp.3/app_start xt$valid_to}
    [:project
-    [{x6 1} {x7 145} {x8 7797} {x9 #time/date "1998-01-03"} x4]
-    [:group-by
-     [{x4 (min x1)}]
-     [:rename
-      {xt$system_from x1, id x2}
-      [:scan
-       {:table prop_owner, :for-system-time :all-time}
-       [xt$system_from {id (= id 1)}]]]]]]]]
+    [{xt$column_1 1}
+     {xt$column_2 145}
+     {xt$column_3 7797}
+     {xt$column_4 #time/date "1998-01-03"}
+     tmp.3/app_start]
+    [:rename
+     tmp.3
+     [:project
+      [{app_start xt$min_out_2}]
+      [:group-by
+       [{xt$min_out_2 (min prop_owner.1/xt$system_from)}]
+       [:rename
+        prop_owner.1
+        [:scan
+         {:table prop_owner, :for-system-time :all-time}
+         [xt$system_from {id (= id 1)}]]]]]]]]]]

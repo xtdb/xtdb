@@ -1,5 +1,3 @@
-[:rename
- {x3 first_el}
- [:project
-  [{x3 (nth x1 (- 1 1))}]
-  [:rename {a x1} [:scan {:table u} [a]]]]]
+[:project
+ [{first_el (nth u.1/a 0)}]
+ [:rename u.1 [:scan {:table u} [a]]]]

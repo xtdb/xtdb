@@ -1,12 +1,12 @@
-[:rename
- {x1 a}
- [:project
-  [x1]
-  [:mega-join
-   []
-   [[:rename
-     {a x1, b x2, c x3}
-     [:scan {:table foo} [a {b (= b ?_1)} {c (= c ?_2)}]]]
-    [:project
-     [x5]
-     [:rename {b x5, c x6} [:scan {:table bar} [b {c (= c ?_0)}]]]]]]]]
+[:project
+ [{a foo.1/a}]
+ [:mega-join
+  []
+  [[:rename foo.1 [:scan {:table foo} [{b (= b ?_1)} {c (= c ?_2)} a]]]
+   [:rename
+    bar.3
+    [:rename
+     {bar.2/b b}
+     [:project
+      [bar.2/b]
+      [:rename bar.2 [:scan {:table bar} [b {c (= c ?_0)}]]]]]]]]]
