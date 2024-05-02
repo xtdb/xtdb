@@ -100,7 +100,7 @@ if (autoLoad) {
             // Magic Context
             this.magic_txs = [];
             for (const el of magicElementsAbove(this.dataset.magicContext, this.dataset.id)) {
-                for (const tx_el of el.txs) {
+                for (const tx_el of el.querySelectorAll('fiddle-txs')) {
                     this.magic_txs.push(tx_el);
                 }
             }
