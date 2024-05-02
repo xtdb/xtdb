@@ -387,12 +387,24 @@
               (aset selection 0 idx)
               (eval-query (-> param-rel (.select selection))))))))))
 
-(defn- wrap-sql-args [f]
+(defn- wrap-sql-args [f ^long param-count]
   (fn [^RelationReader args]
-    (f (when args
-         (vr/rel-reader (->> args
-                             (map-indexed (fn [idx ^IVectorReader col]
-                                            (.withName col (str "?_" idx))))))))))
+    (if (not args)
+      (if (zero? param-count)
+        (f nil)
+        (throw (err/runtime-err :xtdb.indexer/missing-sql-args
+                                {::err/message "Arguments list was expected but not provided"
+                                 :param-count param-count}))) 
+      
+      (let [arg-count (count (seq args))]
+        (if (not= arg-count param-count)
+          (throw (err/runtime-err :xtdb.indexer/incorrect-sql-arg-count
+                                  {::err/message (format "%s arguments were provided and %s arguments were provided" arg-count param-count)
+                                   :param-count param-count
+                                   :arg-count arg-count}))
+          (f (vr/rel-reader (->> args
+                                 (map-indexed (fn [idx ^IVectorReader col]
+                                                (.withName col (str "?_" idx))))))))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src, ^IScanEmitter scan-emitter
@@ -406,28 +418,30 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)
-              tables-with-cols (scan/tables-with-cols wm-src scan-emitter)]
+              tables-with-cols (scan/tables-with-cols wm-src scan-emitter)
+              compiled-query (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
+              param-count (:param-count (meta compiled-query))]
           ;; TODO handle error
-          (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
+          (zmatch compiled-query
             [:insert query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
                              (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                 (wrap-sql-args)))
+                                 (wrap-sql-args param-count)))
 
             [:update query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
                              (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                 (wrap-sql-args)))
+                                 (wrap-sql-args param-count)))
 
             [:delete query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
                              (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                 (wrap-sql-args)))
+                                 (wrap-sql-args param-count)))
 
             [:erase query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
                              (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
-                                 (wrap-sql-args)))
+                                 (wrap-sql-args param-count)))
 
             (throw (UnsupportedOperationException. "sql query"))))
 

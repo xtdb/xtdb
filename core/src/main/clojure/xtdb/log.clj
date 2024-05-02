@@ -196,25 +196,26 @@
       (.writeObject xtql-op-writer (ClojureForm. op))
       (.endStruct xtql-writer))))
 
-(defn encode-sql-args [^BufferAllocator allocator, query, arg-rows]
-  (let [plan (sql/compile-query query)
-        {:keys [^long param-count]} (meta plan)
+(defn encode-sql-args [^BufferAllocator allocator, arg-rows]
+  (if (apply not= (map count arg-rows))
+    (throw (err/illegal-arg :sql/arg-rows-different-lengths
+                            {::err/message "All SQL arg-rows must have the same number of columns"
+                             :arg-rows arg-rows}))
+    (let [param-count (count (first arg-rows))
+          vecs (ArrayList. param-count)]
+      (try
+        (dotimes [col-idx param-count]
+          (.add vecs
+                (vw/open-vec allocator (symbol (str "?_" col-idx))
+                             (mapv #(nth % col-idx nil) arg-rows))))
 
-        vecs (ArrayList. param-count)]
-    (try
-      ;; TODO check arg count in each row, handle error
-      (dotimes [col-idx param-count]
-        (.add vecs
-              (vw/open-vec allocator (symbol (str "?_" col-idx))
-                           (mapv #(nth % col-idx) arg-rows))))
+        (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count arg-rows)))]
+          (util/build-arrow-ipc-byte-buffer root :stream
+                                            (fn [write-batch!]
+                                              (write-batch!))))
 
-      (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count arg-rows)))]
-        (util/build-arrow-ipc-byte-buffer root :stream
-          (fn [write-batch!]
-            (write-batch!))))
-
-      (finally
-        (run! util/try-close vecs)))))
+        (finally
+          (run! util/try-close vecs))))))
 
 (defn- ->sql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
   (let [sql-writer (.legWriter op-writer :sql (FieldType/notNullable #xt.arrow/type :struct))
@@ -225,8 +226,8 @@
         (.startStruct sql-writer)
         (.writeObject query-writer sql)
 
-        (when-let [arg-rows (.argRows op)]
-          (.writeObject args-writer (encode-sql-args allocator sql arg-rows))))
+        (when-let [arg-rows (not-empty (.argRows op))]
+          (.writeObject args-writer (encode-sql-args allocator arg-rows))))
 
       (.endStruct sql-writer))))
 
