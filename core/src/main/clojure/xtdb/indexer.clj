@@ -406,7 +406,7 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)
-              tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
+              tables-with-cols (scan/tables-with-cols tx-opts wm-src scan-emitter)]
           ;; TODO handle error
           (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
             [:insert query-opts inner-query]
@@ -481,7 +481,7 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [xtql-op (.form ^ClojureForm (.getObject op-rdr tx-op-idx))
-              tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
+              tables-with-cols (scan/tables-with-cols tx-opts wm-src scan-emitter)]
           (when-not (instance? TxOp$XtqlOp xtql-op)
             (throw (UnsupportedOperationException. "unknown XTQL DML op")))
 
