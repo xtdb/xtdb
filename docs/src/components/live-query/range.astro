@@ -1,0 +1,29 @@
+---
+import RawRange from './raw-range.astro'
+---
+<live-query-input-range>
+    <RawRange {...Astro.props} />
+</live-query-input-range>
+
+<script>
+    import { LiveQueryInput } from "./live-query.js";
+
+    class Range extends LiveQueryInput {
+        constructor() {
+            super();
+            let slider = this.querySelector('input[type="range"]');
+            slider.addEventListener("input", () => {
+                this.set(slider.value);
+            });
+            this.name = slider.name;
+            this.parent.update(this.name, slider.value);
+        }
+
+        set(value) {
+            this.parent.update(this.name, value);
+            return value;
+        }
+    }
+
+    customElements.define('live-query-input-range', Range);
+</script>

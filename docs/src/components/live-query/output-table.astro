@@ -1,0 +1,26 @@
+---
+---
+<live-query-output-table />
+
+<script>
+    import { makeTable } from "../fiddle/table.js"
+    import { makeError } from "../fiddle/utils.js"
+
+    class LiveQueryOutputTable extends HTMLElement {
+        render(results) {
+            try {
+                this.innerHTML = ''
+                    + '<div class="bg-gray-100 dark:bg-gray-800 rounded-md overflow-x-auto">'
+                    + makeTable(results)
+                    + '</div>';
+            } catch (e) {
+                this.innerHTML = makeError(
+                    "Result Error",
+                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
+                );
+            }
+        }
+    }
+
+    customElements.define('live-query-output-table', LiveQueryOutputTable);
+</script>

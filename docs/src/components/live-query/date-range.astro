@@ -1,0 +1,101 @@
+---
+import RawRange from './raw-range.astro'
+import { gensym } from '../fiddle/utils';
+import { parseDuration } from "./date-utils.js";
+
+// This component supports two different ways of specifying the range of dates:
+// - A list of dates provided through the `dates` prop
+// - A range specified by `start`, `stop`, and `step` props
+
+const { name, value,      // Required
+        dates,            // When providing a list of dates
+        start, stop, step // When providing a range
+} = Astro.props;
+
+var props = {};
+var inputProps = {};
+
+if (dates) {
+    props["data-dates"] = JSON.stringify(dates);
+
+    // Uses the input value to index into the list of dates
+    inputProps["min"] = 0;
+    inputProps["max"] = dates.length - 1;
+
+    if (value) {
+        inputProps["value"] = dates.indexOf(value);
+    }
+} else {
+    props["data-start"] = start;
+    props["data-stop"] = stop;
+    props["data-step"] = step || "1 day";
+
+    let start2 = new Date(props["data-start"])
+    let stop2 = new Date(props["data-stop"])
+    console.assert(start2 < stop2, "Invalid date range");
+    let step2 = parseDuration(props["data-step"]);
+    let steps = Math.floor((stop2 - start2) / step2);
+
+    // Uses the input value to index into the range of dates
+    inputProps["min"] = 0;
+    inputProps["max"] = steps;
+
+    if (value) {
+        let value2 = new Date(value);
+        inputProps["value"] = (value2 - start2) / step2;
+    }
+}
+---
+<live-query-input-date-range data-name={name} {...props}>
+    <RawRange {...inputProps}>
+</live-query-input-date-range>
+
+<script>
+    import { LiveQueryInput } from "./live-query.js";
+    import { parseDuration, addMilliseconds, formatTimestamp } from "./date-utils.js";
+
+    class DateRange extends LiveQueryInput {
+        constructor() {
+            super();
+            this.name = this.dataset.name;
+
+            if (this.dataset.dates) {
+                this.dates = JSON.parse(this.dataset.dates)
+                  .map((date) => new Date(date));
+            } else {
+                this.start = new Date(this.dataset.start);
+                this.stop = new Date(this.dataset.stop);
+                console.assert(this.start < this.stop, "Invalid date range");
+                // Milliseconds per step
+                this.step = parseDuration(this.dataset.step);
+            }
+
+            // Listen to changes
+            let slider = this.querySelector("input[type='range']");
+            slider.addEventListener("input", () => {
+                this.set(slider.value);
+            });
+
+            // Tell parent about initial value
+            let initialValue = this.valueToDate(slider.value);
+            initialValue = formatTimestamp(initialValue);
+            this.parent.update(this.name, initialValue);
+        }
+
+        valueToDate(value) {
+            if (this.dates) {
+                return this.dates[value];
+            } else {
+                return addMilliseconds(this.start, value * this.step);
+            }
+        }
+
+        set(value) {
+            let output = formatTimestamp(this.valueToDate(value));
+            this.parent.update(this.name, output);
+            return output;
+        }
+    }
+
+    customElements.define('live-query-input-date-range', DateRange);
+</script>

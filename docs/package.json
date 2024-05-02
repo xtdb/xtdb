@@ -26,9 +26,13 @@
     "astro-heroicons": "^2.1.1",
     "date-fns": "^3.6.0",
     "highlight.js": "^11.9.0",
+    "mustache": "^4.2.0",
     "rehype-highlight": "^6.0.0",
     "sharp": "^0.32.5",
-    "tailwindcss": "^3.3.3"
+    "tailwindcss": "^3.3.3",
+    "vega": "^5.28.0",
+    "vega-embed": "^6.25.0",
+    "vega-lite": "^5.18.0"
   },
   "devDependencies": {
     "@rollup/plugin-yaml": "^4.0.1",

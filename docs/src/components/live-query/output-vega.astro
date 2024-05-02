@@ -1,0 +1,72 @@
+---
+import { gensym } from '../fiddle/utils';
+
+const { spec } = Astro.props;
+
+const visId = gensym();
+---
+<live-query-output-vega data-vis-id={visId} data-spec={JSON.stringify(spec)}>
+  <div data-id={visId} />
+  <div data-id="error" />
+</live-query-output-vega>
+
+
+<script>
+    import * as vega from 'vega';
+    import embed from 'vega-embed';
+    import { makeError } from "../fiddle/utils.js"
+
+    class LiveQueryOutputVega extends HTMLElement {
+        constructor() {
+            super();
+            this.visId = this.dataset.visId;
+            this.spec = JSON.parse(this.dataset.spec);
+            this.chart;
+            this.chartEl = document.querySelector(`[data-id="${this.visId}"]`);
+            this.errorEl = document.querySelector(`[data-id="error"]`);
+        }
+
+        showChart() {
+            this.chartEl.style.display = "block";
+            this.errorEl.style.display = "none";
+        }
+
+        showError() {
+            this.chartEl.style.display = "none"
+            this.errorEl.style.display = "block";
+        }
+
+        render(results) {
+            this.showChart();
+
+            try {
+                if (!this.chart) {
+                    // Add the chart
+                    this.chart = embed(`[data-id="${this.visId}"]`, this.spec)
+                    this.chart.then((res) => {
+                        res.view.insert("table", results).run();
+                    });
+                } else {
+                    // Update the chart's data
+                    this.chart.then((res) => {
+                        res.view
+                            .change("table",
+                                vega.changeset()
+                                    .remove(() => true)
+                                    .insert(results))
+                            .run();
+                    });
+                }
+            } catch (e) {
+                this.showError();
+
+                this.errorEl.innerHTML = makeError(
+                    "Result Error",
+                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
+                );
+            }
+        }
+    }
+
+    customElements.define('live-query-output-vega', LiveQueryOutputVega);
+</script>

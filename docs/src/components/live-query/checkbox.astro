@@ -1,0 +1,29 @@
+---
+---
+<live-query-input-checkbox>
+    {/* autocomplete="off" resets the value on page refresh */}
+    <input type="checkbox" autocomplete="off" {...Astro.props} />
+</live-query-input-checkbox>
+
+<script>
+    import { LiveQueryInput } from "./live-query.js";
+
+    class Checkbox extends LiveQueryInput {
+        constructor() {
+            super();
+            let checkbox = this.querySelector('input[type="checkbox"]');
+            checkbox.addEventListener("change", () => {
+                this.set(checkbox.checked);
+            });
+            this.name = checkbox.name;
+            this.parent.update(this.name, checkbox.checked);
+        }
+
+        set(value) {
+            this.parent.update(this.name, value);
+            return value;
+        }
+    }
+
+    customElements.define('live-query-input-checkbox', Checkbox);
+</script>

@@ -1,0 +1,229 @@
+---
+// # Concept
+// There are four components in the LiveQuery system:
+// - The outer LiveQuery component
+// - Query Inputs
+// - A QueryTemplate
+// - Outputs
+//
+// The LiveQuery component is responsible for:
+// - Managing the state of the inputs
+// - Asking outputs & the query template to render
+// - Rendering query errors
+// - Making the network request to run the query
+// - Being aware of magicContext
+//
+// Query Inputs are responsible for:
+// - Rendering themselves
+// - Updating the state of the LiveQuery component
+//   - This includes the initial state
+//
+// The QueryTemplate is responsible for:
+// - Rendering the query, given the state
+//   - Also returns the rendered query
+//
+// Finally Outputs are responsible for:
+// - Rendering themselves in whatever way they see fit
+// - Handling their own errors (usually they just use makeError)
+//
+// # Things to note
+// - The LiveQuery component caches the results of the query
+// - There is a LiveQueryInput class you can inherit to automatically find the parent
+// - When working on this code, watch out for race conditions between different components starting
+//   - The only thing that seems guaranteed is that parent's are constructed before children
+
+// The OutputTable component is added by default by the LiveQuery
+// We import it here, then use it in a template to ensure it's loaded
+import OutputTable from '@components/live-query/output-table.astro';
+
+import { gensym } from './fiddle/utils';
+
+const { magicContext, autoLoad } = Astro.props;
+
+var props = {};
+
+if (magicContext) {
+    props['data-magic-context'] = magicContext;
+}
+if (autoLoad) {
+    props['data-auto-load'] = autoLoad ? 'true' : 'false';
+}
+---
+{/* NOTE: This doesn't render the OutputTable, but it ensures the component is loaded */}
+<template>
+    <OutputTable />
+</template>
+
+<live-query class="not-content" data-id={gensym()} {...props}>
+    <div data-id="content" class="flex flex-col gap-2 p-2 rounded-sm border border-gray-300 dark:border-gray-600">
+        <slot />
+        <div style="display: none;" data-id="live-query-error" />
+    </div>
+</live-query>
+
+<script>
+    import { parseSQLTxs, runFiddle, magicElementsAbove, makeError } from "./fiddle/utils.js"
+
+    class LiveQuery extends HTMLElement {
+        constructor() {
+            super();
+
+            this.__isInit = true;
+            this.autoLoad = this.dataset.autoLoad === 'true';
+            this.state = {}; // Stores the state of the inputs
+            this.runCache = {}; // Memo cache for the run method
+
+            // Get the QueryTemplate
+            this.query = this.querySelector('live-query-template');
+            console.assert(this.query, "Must provide QueryTemplate");
+
+            // Get the outputs
+            this.outputs = [];
+            for (const output of this.querySelectorAll('*')) {
+                if (output.tagName.startsWith('LIVE-QUERY-OUTPUT')) {
+                    this.outputs.push(output);
+                }
+            }
+            // If no outputs are provided, add a default OutputTable
+            if (this.outputs.length == 0) {
+                let table_output = document.createElement('live-query-output-table');
+                this.querySelector('[data-id="content"]').appendChild(table_output);
+                this.outputs = [table_output];
+            }
+
+            // Txs
+            this.txs = [];
+            for (const el of this.querySelectorAll('fiddle-txs')) {
+                this.txs.push(el);
+            }
+
+            // Magic Context
+            this.magic_txs = [];
+            for (const el of magicElementsAbove(this.dataset.magicContext, this.dataset.id)) {
+                for (const tx_el of el.txs) {
+                    this.magic_txs.push(tx_el);
+                }
+            }
+
+            // The error element
+            this.errorEl = this.querySelector('[data-id="live-query-error"]');
+
+            // Stuff to run after all children are initialized
+            setTimeout(() => {
+                this.__isInit = false;
+                if (this.autoLoad) {
+                    this.render();
+                } else {
+                    this.query.render(this.state);
+                }
+            }, 0);
+        }
+
+        // Called by an input to update the state
+        // Renders the query template & outputs if called outside of init
+        // Inputs can call this during init to set the initial state
+        update(name, value) {
+            this.state[name] = value;
+            if (!this.__isInit) {
+                this.render();
+            }
+        }
+
+        // Helper function to display an error
+        displayError(title, message, data) {
+            // Hide all outputs
+            for (const output of this.outputs) {
+                output.style.display = 'none';
+            }
+            // Show error
+            this.errorEl.style.display = 'block';
+            this.errorEl.innerHTML = makeError(title, message, data);
+        }
+
+        // Render the query template & outputs
+        // Calls run to get the result
+        render() {
+            let query = this.query.render(this.state);
+
+            let txs = [];
+
+            for (const tx of this.magic_txs) {
+                txs.push({
+                    txs: parseSQLTxs(tx.originalTxs),
+                    'system-time': tx.dataset.systemTime || null,
+                });
+            }
+            for (const tx of this.txs) {
+                txs.push({
+                    txs: parseSQLTxs(tx.txs),
+                    'system-time': tx.dataset.systemTime || null,
+                });
+            }
+
+            this.run(txs, query)
+                .then((result) => {
+                    if (result.ok) {
+                        this.errorEl.style.display = 'none';
+                        for (const output of this.outputs) {
+                            output.style.display = 'block';
+                            output.render(result.body);
+                        }
+                    } else {
+                        this.displayError(
+                            result.body.exception,
+                            result.body.message,
+                            result.body.data
+                        );
+                    }
+                })
+                .catch((error) => {
+                    var title = "Error";
+                    var message = error.message;
+
+                    switch (error.message) {
+                        case "Network Error":
+                            title = "Network Error";
+                            message = "Uh oh! A network error. Please try again.";
+                            break;
+                        case "JSON Parse Error":
+                            title = "JSON Parse Error";
+                            message = "Uh oh! Failed to read the result. Please try again or contact us to sort it out.";
+                            break;
+                    }
+                    this.displayError(title, message);
+                })
+        }
+
+        // Run the given txs and query
+        async run(txs, query) {
+            let cacheKey = txs + query;
+            if (cacheKey in this.runCache) {
+                return this.runCache[cacheKey];
+            }
+            
+            // Run the given txs and query
+            try {
+                var response = await runFiddle(txs, query);
+            } catch (e) {
+                throw new Error("Network Error", {error: e});
+            }
+
+            try {
+                var json = await response.json();
+            } catch (e) {
+                throw new Error("JSON Parse Error", {response: response, error: e});
+            }
+
+            let ret = {
+                ok: response.ok,
+                body: json
+            };
+
+            // Don't cache network or parse errors
+            this.runCache[cacheKey] = ret;
+
+            return ret;
+        }
+    }
+    customElements.define('live-query', LiveQuery);
+</script>
