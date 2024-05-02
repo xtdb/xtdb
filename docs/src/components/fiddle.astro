@@ -1,6 +1,7 @@
 ---
 import Play from 'astro-heroicons/solid/Play.astro';
 import ArrowTopRightOnSquare from 'astro-heroicons/solid/ArrowTopRightOnSquare.astro';
+import { gensym } from './fiddle/utils';
 
 const { magicContext } = Astro.props;
 
@@ -8,10 +9,6 @@ var props = {};
 
 if (magicContext) {
     props['data-magic-context'] = magicContext;
-}
-
-function gensym() {
-     return Math.random().toString(36).substr(2);
 }
 ---
 <fiddle-embed class="not-content" data-id={gensym()} {...props}>
@@ -40,6 +37,8 @@ function gensym() {
 </fiddle-embed>
 
 <script>
+    import { makeTable } from "./fiddle/table.js"
+    import { parseSQLTxs, fiddle_url, runFiddle, magicElementsAbove, makeError } from "./fiddle/utils.js"
     import hljs from "highlight.js/lib/core"
     import hljsJson from "highlight.js/lib/languages/json"
     import { getTheme, onThemeChange } from "../utils.ts"
@@ -59,87 +58,6 @@ function gensym() {
     set_hljs_theme(getTheme());
     onThemeChange(set_hljs_theme);
 
-    function parseSQLTxs(s) {
-        var txs = s
-            .split(';')
-            .map((x) => x.trim())
-            .filter((x) => x.length > 0)
-            .map((x) => JSON.stringify(x))
-            .map((x) => "[:sql " + x + "]")
-            .join('');
-        return "[" + txs + "]";
-    }
-
-    function makeError(title, message, data) {
-        return `
-        <div class="bg-[#fad1df] dark:bg-[#4e2232] border-l-4 border-[#f53d7d] dark:border-[#ee5389] text-[#8a0f3a] dark:text-[#f9c3d6] p-4">
-          <p class="font-bold">${title}</p>
-          <p class="whitespace-pre-wrap font-mono text-black dark:text-white">${message.replace(/(?:\r\n|\r|\n)/g, '<br>')}</p>
-          ${
-              data
-              ? `<p class="pt-2 font-semibold">Data:</p>
-                 <p class="text-black dark:text-white">${JSON.stringify(data)}</p>`
-              : ""
-           }
-        </div>`
-    }
-
-    function tableOrder(a, b) {
-        if (a === b) {
-            return 0;
-        }
-        if (a === 'xt$id') {
-            return -1;
-        }
-        if (b === 'xt$id') {
-            return 1;
-        }
-        return a < b ? -1 : 1;
-            
-    }
-
-    function makeTable(rows) {
-        if (rows.length === 0) {
-            return "<p>No results</p>"
-        }
-        var allKeys = new Set();
-        for (const row of rows) {
-            for (const key of Object.keys(row)) {
-                allKeys.add(key);
-            }
-        }
-        allKeys = Array.from(allKeys);
-        allKeys.sort(tableOrder);
-
-        // Header
-        var headerCols = "";
-        for (const key of allKeys) {
-            headerCols += `<th class="text-left p-1">${key}</th>`;
-        }
-
-        var header = `
-        <thead>
-            <tr>${headerCols}</tr>
-        </thead>`;
-
-        // Body
-        var bodyRows = "";
-        for (const row of rows) {
-            var rowCols = "";
-            for (const key of allKeys) {
-                let value = row[key] || null;
-                let highlight = hljs.highlight(JSON.stringify(value), {language: 'json'});
-                rowCols += `<td class="text-left p-1">${highlight.value}</Code></td>`;
-            }
-            bodyRows += `<tr class="border-gray-300 border-t">${rowCols}</tr>`;
-        }
-
-        var body = `<tbody>${bodyRows}</tbody>`;
-
-        return `<table class="table-auto border-collapse w-full">${header}${body}</table>`
-    }
-
-    const fiddle_url = "https://fiddle.xtdb.com"
     class FiddleEmbed extends HTMLElement {
         constructor() {
             super();
@@ -147,8 +65,8 @@ function gensym() {
 
             // Magic Context
             this.magic_txs = [];
-            for (const fiddle_el of this.magicElements()) {
                 for (const tx_el of fiddle_el.txs) {
+            for (const fiddle_el of magicElementsAbove(this.dataset.magicContext, this.dataset.id)) {
                     this.magic_txs.push(tx_el)
                 }
             }
@@ -176,23 +94,6 @@ function gensym() {
             edit_button.addEventListener('click', () => myThis.openInFiddle());
         }
 
-        // Generator function that gets elements with the same magic context higher in the page
-        *magicElements() {
-            if (this.dataset.magicContext) {
-                let ctx = this.dataset.magicContext;
-                let my_id = this.dataset.id;
-                // Only consider elements with the same "magic-context"
-                const context_els = document.querySelectorAll(`fiddle-embed[data-magic-context="${ctx}"]`);
-                for (const fiddle_el of context_els) {
-                    // Only consider elements above me
-                    if (fiddle_el.dataset.id == my_id) {
-                        break;
-                    }
-                    yield fiddle_el;
-                }
-            }
-        }
-
         async run() {
             var txs = [];
             // We use the original txs from the magic context
@@ -210,19 +111,9 @@ function gensym() {
             }
 
             var query = this.query.query;
-            query = query.replace(/;\s*$/, ""); // remove last semi-colon
-            query = JSON.stringify(query);
-
             // Run the given txs and query
             try {
-                var response = await fetch(`${fiddle_url}/db-run`,{
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        'tx-batches': txs,
-                        query: query
-                    })
-                });
+                var response = await runFiddle(txs, query);
             } catch (e) {
                 console.error(e);
                 this.results_el.innerHTML = makeError(
