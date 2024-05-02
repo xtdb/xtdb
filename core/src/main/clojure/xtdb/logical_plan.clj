@@ -684,14 +684,19 @@
 (defn- push-selection-down-past-rename [push-correlated? z]
   (r/zmatch z
     [:select predicate
-     [:rename columns
+     [:rename prefix-or-columns
       relation]]
     ;;=>
-    (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (map? columns))
-      [:rename columns
-       [:select (w/postwalk-replace (set/map-invert columns) predicate)
-        relation]])))
+    (when (or push-correlated? (no-correlated-columns? predicate))
+      (when-let [columns (cond
+                           (map? prefix-or-columns) (set/map-invert prefix-or-columns)
+                           (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
+                                                         (->> (for [c (relation-columns relation)]
+                                                                [(symbol prefix (name c)) c])
+                                                              (into {}))))]
+        [:rename prefix-or-columns
+         [:select (w/postwalk-replace columns predicate)
+          relation]]))))
 
 (defn rename-map-for-projection-spec [projection-spec]
   (into
