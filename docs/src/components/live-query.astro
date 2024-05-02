@@ -199,7 +199,7 @@ if (autoLoad) {
 
         // Run the given txs and query
         async run(txs, query) {
-            let cacheKey = txs + query;
+            let cacheKey = JSON.stringify({txs, query});
             if (cacheKey in this.runCache) {
                 return this.runCache[cacheKey];
             }
