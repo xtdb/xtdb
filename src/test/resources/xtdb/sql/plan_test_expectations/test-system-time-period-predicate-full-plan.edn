@@ -1,12 +1,11 @@
-[:rename
- {x1 name, x5 name:1}
- [:project
-  [x1 x5]
-  [:mega-join
-   [(< x2 x7) (> x3 x6)]
-   [[:rename
-     {name x1, xt$system_from x2, xt$system_to x3}
-     [:scan {:table foo} [name xt$system_from xt$system_to]]]
-    [:rename
-     {name x5, xt$system_from x6, xt$system_to x7}
-     [:scan {:table bar} [name xt$system_from xt$system_to]]]]]]]
+[:project
+ [{foo_name foo.1/name} {bar_name bar.2/name}]
+ [:mega-join
+  [(< foo.1/xt$system_from bar.2/xt$system_to)
+   (> foo.1/xt$system_to bar.2/xt$system_from)]
+  [[:rename
+    foo.1
+    [:scan {:table foo} [name xt$system_from xt$system_to]]]
+   [:rename
+    bar.2
+    [:scan {:table bar} [name xt$system_from xt$system_to]]]]]]

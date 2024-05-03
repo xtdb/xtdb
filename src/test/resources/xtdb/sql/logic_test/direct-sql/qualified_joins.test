@@ -443,7 +443,7 @@ NULL
 # multiple qualified-joins
 
 query III rowsort
-SELECT foo.x, bar.x, baz.x FROM foo LEFT JOIN bar ON foo.x = bar.x LEFT JOIN baz ON foo.x = baz.x
+SELECT foo.x foo_x, bar.x bar_x, baz.x baz_x FROM foo LEFT JOIN bar ON foo.x = bar.x LEFT JOIN baz ON foo.x = baz.x
 ----
 1
 1
@@ -453,7 +453,7 @@ NULL
 2
 
 query III rowsort
-SELECT foo.x, bar.x, baz.x FROM foo LEFT JOIN bar ON foo.x = bar.x LEFT JOIN baz ON foo.x = bar.x
+SELECT foo.x foo_x, bar.x bar_x, baz.x baz_x FROM foo LEFT JOIN bar ON foo.x = bar.x LEFT JOIN baz ON foo.x = bar.x
 ----
 1
 1
@@ -466,7 +466,7 @@ statement ok
 INSERT INTO bibble (xt$id, x) VALUES (1, 1), (2, 2)
 
 query IIII rowsort
-SELECT foo.x, bar.x, baz.x, bibble.x FROM foo JOIN bar ON foo.x = bar.x RIGHT JOIN baz ON bar.x = (SELECT baz.x FROM baz WHERE foo.x = bar.x) LEFT JOIN bibble ON bar.x = bibble.x
+SELECT foo.x foo_x, bar.x bar_x, baz.x baz_x, bibble.x bibble_x FROM foo JOIN bar ON foo.x = bar.x RIGHT JOIN baz ON bar.x = (SELECT baz.x FROM baz WHERE foo.x = bar.x) LEFT JOIN bibble ON bar.x = bibble.x
 ----
 NULL
 NULL

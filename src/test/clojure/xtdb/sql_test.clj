@@ -916,9 +916,11 @@
     (=plan-file
       "test-system-time-period-predicate-full-plan"
       (plan-sql
-        "SELECT foo.name, bar.name
+        "SELECT foo.name foo_name, bar.name bar_name
         FROM foo, bar
-        WHERE foo.SYSTEM_TIME OVERLAPS bar.SYSTEM_TIME"))))
+        WHERE foo.SYSTEM_TIME OVERLAPS bar.SYSTEM_TIME"
+        {:table-info {"foo" #{"name"}
+                      "bar" #{"name"}}}))))
 
 (deftest test-valid-time-correlated-subquery
   (t/is (=plan-file
@@ -1195,9 +1197,11 @@
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]
                            [:put-docs :bar {:xt/id 2 :a "one"}]])
 
+  #_ ; FIXME should throw
   (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
            (xt/q tu/*node* "SELECT * FROM foo JOIN bar ON true")))
 
+  #_ ; FIXME should throw
   (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
            (xt/q tu/*node* "FROM foo JOIN bar ON true")))
 

@@ -1561,7 +1561,16 @@
         [:project (mapv :col-sym projected-cols) plan]
         plan))))
 
-(defn- remove-ns-qualifiers [{:keys [plan col-syms]}]
+(defrecord DuplicateColumnProjection [col-sym]
+  PlanError
+  (error-string [_] (str "Duplicate column projection: " col-sym)))
+
+(defn dups [seq]
+  (for [[id freq] (frequencies seq)
+        :when (> freq 1)]
+    id))
+
+(defn- remove-ns-qualifiers [{:keys [plan col-syms]} env]
   (let [out-projections (->> col-syms
                              (into [] (map (fn [col-sym]
                                              (if (namespace col-sym)
@@ -1569,10 +1578,13 @@
                                                                  (with-meta (meta col-sym)))]
                                                  (->ProjectedCol {out-sym col-sym}
                                                                  out-sym))
-                                               (->ProjectedCol col-sym col-sym))))))]
-    (->QueryExpr [:project (mapv :projection out-projections)
-                  plan]
-                 (mapv :col-sym out-projections))))
+                                               (->ProjectedCol col-sym col-sym))))))
+        out-col-syms (mapv :col-sym out-projections)
+        duplicate-col-syms (not-empty (dups out-col-syms))]
+    (if duplicate-col-syms
+      (doseq [sym duplicate-col-syms]
+        (add-err! env (->DuplicateColumnProjection sym)))
+      (->QueryExpr [:project (mapv :projection out-projections) plan] out-col-syms))))
 
 (defrecord SetOperationColumnCountMismatch [operation-type lhs-count rhs-count]
   PlanError
@@ -1612,7 +1624,7 @@
 
           query-expr)
 
-        (remove-ns-qualifiers query-expr)
+        (remove-ns-qualifiers query-expr env)
 
         (let [offset-clause (.resultOffsetClause ctx)
               limit-clause (.fetchFirstClause ctx)]
@@ -1634,10 +1646,10 @@
 
   (visitUnionQuery [this ctx]
     (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryExpressionBody ctx) (.accept this)
-                                                   (remove-ns-qualifiers))
+                                                   (remove-ns-qualifiers env))
 
           {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx) (.accept this)
-                                                   (remove-ns-qualifiers))
+                                                   (remove-ns-qualifiers env))
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "UNION" (count l-col-syms) (count r-col-syms))))
@@ -1652,10 +1664,10 @@
 
   (visitExceptQuery [this ctx]
     (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryExpressionBody ctx) (.accept this)
-                                                   (remove-ns-qualifiers))
+                                                   (remove-ns-qualifiers env))
 
           {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx) (.accept this)
-                                                   (remove-ns-qualifiers))
+                                                   (remove-ns-qualifiers env))
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "EXCEPT" (count l-col-syms) (count r-col-syms))))
@@ -1677,10 +1689,10 @@
 
   (visitIntersectQuery [this ctx]
     (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryTerm ctx 0) (.accept this)
-                                                   (remove-ns-qualifiers))
+                                                   (remove-ns-qualifiers env))
 
           {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx 1) (.accept this)
-                                                   (remove-ns-qualifiers))
+                                                   (remove-ns-qualifiers env))
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "INTERSECT" (count l-col-syms) (count r-col-syms))))
@@ -1834,7 +1846,7 @@
                 (.accept (assoc this :out-col-syms out-col-syms)))
           {:keys [plan col-syms] :as query-expr}
 
-        (remove-ns-qualifiers query-expr)
+        (remove-ns-qualifiers query-expr env)
 
         (if (some (comp types/temporal-column? str) col-syms)
           (->QueryExpr [:project (mapv (fn [col-sym]

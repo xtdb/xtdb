@@ -311,11 +311,11 @@ WHERE foo.xt$id = 1"]])]
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t3(xt$id, data) VALUES (1, [2, 3])"]
                            [:sql "INSERT INTO t3(xt$id, data) VALUES (2, [6, 7])"]])
 
-  (t/is (= {{:data [2 3], :data:1 [2 3]} 1
-            {:data [2 3], :data:1 [6 7]} 1
-            {:data [6 7], :data:1 [2 3]} 1
-            {:data [6 7], :data:1 [6 7]} 1}
-           (frequencies (xt/q tu/*node* "SELECT t3.data, t2.data FROM t3, t3 AS t2")))))
+  (t/is (= {{:t3-data [2 3], :t2-data [2 3]} 1
+            {:t3-data [2 3], :t2-data [6 7]} 1
+            {:t3-data [6 7], :t2-data [2 3]} 1
+            {:t3-data [6 7], :t2-data [6 7]} 1}
+           (frequencies (xt/q tu/*node* "SELECT t3.data AS t3_data, t2.data AS t2_data FROM t3, t3 AS t2")))))
 
 (t/deftest test-mutable-data-buffer-bug
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id) VALUES(1)"]])
@@ -432,6 +432,17 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
            (set (xt/q tu/*node* "SELECT * EXCLUDE (xt$id) FROM foo, bar"))))
+
+  ;; Thrown due to duplicate column projection in the query on `xt$id`
+  (t/is (thrown-with-msg? 
+         IllegalArgumentException
+         #"Duplicate column projection: xt\$id" 
+         (xt/q tu/*node* "FROM foo, bar")))
+  
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Duplicate column projection: xt\$id"
+         (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar")))
 
   (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
            (set (xt/q tu/*node* "SELECT bar.* EXCLUDE (xt$id), foo.* EXCLUDE (xt$id) FROM foo, bar"))))
