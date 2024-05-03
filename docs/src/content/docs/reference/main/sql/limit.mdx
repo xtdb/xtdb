@@ -1,0 +1,41 @@
+---
+title: LIMIT
+---
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import QueryTemplate from "@components/fiddle/template.astro"
+import Range from '@components/fiddle/range.astro';
+
+## Syntax
+
+```
+LIMIT count
+```
+
+## Example
+
+<Fiddle autoLoad>
+  <Txs hidden txs="INSERT INTO orders
+                   (xt$id, name)
+                   VALUES
+                   (1, 'Bike'),
+                   (2, 'Ice Cream'),
+                   (3, 'Tennis Ball'),
+                   (4, 'Toy Gun'),
+                   (5, 'Blocks')" />
+  <QueryTemplate q="SELECT *
+                    FROM orders
+                    LIMIT {{count}}" />
+  <div class="flex flex-row gap-2">
+    Limit count:
+    <Range name="count" min="0" max="5" value="5" />
+  </div>
+</Fiddle>
+
+## Description
+
+{/* Good ol' ChatGPT, not checked at all :) */}
+
+The `LIMIT` command in SQL is used to specify the maximum number of records that the database should return in the result set of a query.
+This command is very useful in scenarios where you need to retrieve only a portion of records for purposes such as pagination or when testing queries to avoid overwhelming the client application with too much data.
+It is generally used at the end of a query after specifying the selection and sorting criteria.

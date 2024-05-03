@@ -1,0 +1,70 @@
+---
+title: JOIN
+---
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import Query from "@components/fiddle/query.astro"
+import Range from '@components/fiddle/range.astro';
+
+## Syntax
+
+```
+SELECT column_name(s)
+FROM table1
+[LEFT | RIGHT] JOIN table2
+ON table1.column_name = table2.column_name;
+```
+
+## Example
+
+<Fiddle autoLoad context="my-context">
+  <Txs hidden txs="INSERT INTO customers
+                   (xt$id, name)
+                   VALUES
+                   (1, 'Jim'),
+                   (2, 'Blake'),
+                   (3, 'Sally'),
+                   (4, 'Richy');
+                   INSERT INTO orders
+                   (xt$id, name, customer)
+                   VALUES
+                   (1,  'Bike',        4),
+                   (2,  'Bike',        3),
+                   (3,  'Ice Cream',   4),
+                   (4,  'Ice Cream',   1),
+                   (5,  'Ice Cream',   2),
+                   (6,  'Tennis Ball', 4),
+                   (7,  'Tennis Ball', 1),
+                   (8,  'Toy Gun',     1),
+                   (9,  'Toy Gun',     2),
+                   (10, 'Toy Gun',     3),
+                   (11,  'Toy Gun',    4),
+                   (12,  'Blocks',     4),
+                   (13,  'Blocks',     3)" />
+  <Query q={`
+SELECT c.name as customer_name, o.name as order_name
+FROM orders AS o
+INNER JOIN customers AS c
+  ON o.customer = c.xt$id
+ORDER BY c.name
+LIMIT 5
+`} />
+</Fiddle>
+
+## Description
+
+{/* Good ol' ChatGPT, not checked at all :) */}
+
+The JOIN command in SQL is used to combine rows from two or more tables based on a related column between them.
+This is key in SQL for retrieving comprehensive data that spans multiple tables.
+JOIN operations can vary in type, such as INNER JOIN, LEFT JOIN, RIGHT JOIN, and FULL OUTER JOIN, to cater to different relational needs and desired outputs.
+For example, an INNER JOIN retrieves rows with matching values in both tables, whereas a LEFT JOIN will include all rows from the left table, and matching rows from the right table, filling with NULL where no matches are found.
+This command is particularly useful in queries involving normalized databases where related information is kept in separate tables but linked via foreign keys, thus ensuring data integrity and supporting efficient data retrieval.
+
+Here is an example of an edge case you may find:
+
+<Fiddle context="my-context">
+  <Query q="Some example" />
+</Fiddle>
+
+This is just to show that I think that having runnable examples in the text is cool!
