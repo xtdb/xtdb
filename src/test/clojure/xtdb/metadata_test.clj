@@ -126,7 +126,7 @@
                               (map (comp bucket->page-idx first)))
 
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
+          literal-selector (expr.meta/->metadata-selector '(and (< xt$id 11) (> xt$id 9)) '{xt$id :i64} {})
           meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 21 20))]
       (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
         (let [page-idx-pred (.build literal-selector table-metadata)]

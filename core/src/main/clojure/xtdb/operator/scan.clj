@@ -118,7 +118,7 @@
 
 (defn temporal-column? [col-name]
   (contains? #{"xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to"}
-             (util/str->normal-form-str col-name)))
+             col-name))
 
 (defn rels->multi-vector-rel-factory ^xtdb.vector.IMultiVectorRelationFactory [leaf-rels, ^BufferAllocator allocator, col-names]
   (let [put-rdrs (mapv (fn [^RelationReader rel]
@@ -127,14 +127,13 @@
         reader-indirection (IntArrayList.)
         vector-indirection (IntArrayList.)]
     (letfn [(->indirect-multi-vec [col-name reader-selection vector-selection]
-              (let [normalized-name (util/str->normal-form-str col-name)
-                    readers (ArrayList.)]
-                (if (= normalized-name "xt$iid")
+              (let [readers (ArrayList.)]
+                (if (= col-name "xt$iid")
                   (doseq [^RelationReader leaf-rel leaf-rels]
-                    (.add readers (-> (.readerForName leaf-rel "xt$iid") (.withName col-name))))
+                    (.add readers (.readerForName leaf-rel "xt$iid")))
 
                   (doseq [[row-count ^IVectorReader put-rdr] put-rdrs]
-                    (if-let [rdr (some-> (.structKeyReader put-rdr normalized-name)
+                    (if-let [rdr (some-> (.structKeyReader put-rdr col-name)
                                          (.withName col-name))]
                       (.add readers rdr)
                       (.add readers (vr/->absent-col col-name allocator row-count)))))
@@ -152,16 +151,9 @@
   (rels->multi-vector-rel-factory leaf-rdrs allocator content-col-names))
 
 (defn- ->bitemporal-consumer ^xtdb.bitemporal.IRowConsumer [^IRelationWriter out-rel, col-names]
-  (letfn [(writer-for [normalised-col-name]
-            (when-let [wtrs (not-empty
-                             (->> col-names
-                                  (into [] (keep (fn [^String col-name]
-                                                   (when (= normalised-col-name (util/str->normal-form-str col-name))
-                                                     (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))))))))]
-              (reify IVectorWriter
-                (writeLong [_ l]
-                  (doseq [^IVectorWriter wtr wtrs]
-                    (.writeLong wtr l))))))]
+  (letfn [(writer-for [col-name]
+            (when (contains? col-names col-name)
+              (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))))]
 
     (let [^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
           ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to")
@@ -429,21 +421,20 @@
 
     (scanFields [_ wm scan-cols]
       (letfn [(->field [[table col-name]]
-                (let [normal-table (util/str->normal-form-str (str table))
-                      col-name (str col-name)
-                      normal-col-name (util/str->normal-form-str col-name)]
+                (let [table (str table)
+                      col-name (str col-name)]
 
                   ;; TODO move to fields here
                   (-> (cond
-                        (= "xt$iid" normal-col-name) (types/col-type->field col-name [:fixed-size-binary 16])
-                        (types/temporal-column? normal-col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
+                        (= "xt$iid" col-name) (types/col-type->field col-name [:fixed-size-binary 16])
+                        (types/temporal-column? col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
 
-                        :else (if-let [info-field (get-in info-schema/derived-tables [normal-table normal-col-name])]
+                        :else (if-let [info-field (get-in info-schema/derived-tables [table col-name])]
                                 info-field
-                                (types/merge-fields (.columnField metadata-mgr normal-table normal-col-name)
+                                (types/merge-fields (.columnField metadata-mgr table col-name)
                                                     (some-> (.liveIndex wm)
-                                                            (.liveTable normal-table)
-                                                            (.columnField normal-col-name)))))
+                                                            (.liveTable table)
+                                                            (.columnField col-name)))))
                       (types/field-with-name col-name))))]
         (->> scan-cols
              (into {} (map (juxt identity ->field))))))

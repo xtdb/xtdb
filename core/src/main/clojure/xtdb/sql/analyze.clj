@@ -145,7 +145,7 @@
 
     :delimited_identifier
     (let [lexeme (r/lexeme ag 1)]
-      (util/str->normal-form-str (subs lexeme 1 (dec (count lexeme)))))
+      (subs lexeme 1 (dec (count lexeme))))
 
     :correlation_name
     (identifier (r/$ ag 1))

@@ -2112,3 +2112,47 @@
            IllegalArgumentException
            #"All SQL arg-rows must have the same number of columns"
            (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
+
+(t/deftest test-case-sensitivity-in-delimited-cols
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO T1(xt$id, col1, col2) VALUES(1,'fish',1000)"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, COL1, COL2) VALUES(2,'dog',2000)"]])
+
+  (t/is (= [{:xt/id 2, :col1 "dog", :col2 2000}
+            {:xt/id 1, :col1 "fish", :col2 1000}]
+           (xt/q tu/*node* "SELECT t1.XT$ID, T1.col1, t1.COL2 FROM T1")
+           (xt/q tu/*node* "SELECT \"t1\".xt$id, T1.\"col1\", t1.COL2 FROM t1")))
+
+  (xt/submit-tx tu/*node* [[:sql
+                            "INSERT INTO \"T1\"(xt$id, \"CoL1\", \"col2\") VALUES(3,'cat',3000)"]])
+
+  (t/is (= [{:xt/id 3, :CoL1 "cat", :col2 3000}]
+           (xt/q tu/*node*
+                 "SELECT \"T1\".xt$id, \"T1\".\"CoL1\", \"T1\".COL2 FROM \"T1\"")))
+
+  (t/is (= [{:xt/id 3, :col2 3000}]
+           (xt/q tu/*node*
+                 "SELECT \"T1\".xt$id, \"T1\".col1, \"T1\".COL2 FROM \"T1\""))
+        "can't refer to it as `col1`, have to quote")
+
+  (xt/submit-tx tu/*node* [[:sql "UPDATE T1 SET Col1 = 'cat' WHERE t1.COL2 IN (313, 2000)"]])
+
+  (t/is (= [{:xt/id 2, :col1 "cat", :col2 2000}
+            {:xt/id 1, :col1 "fish", :col2 1000}]
+           (xt/q tu/*node* "SELECT t1.xt$id, T1.col1, \"t1\".col2 FROM t1")))
+
+  (t/is (= [{:col1 "cat", :avg 2000.0} {:col1 "fish", :avg 1000.0}]
+           (xt/q tu/*node* "SELECT T1.col1, AVG(t1.col2) avg FROM t1 GROUP BY T1.col1")))
+
+  (t/is (= [{:col2 3000}]
+           (xt/q tu/*node*
+                 "SELECT \"TEEONE\".col2 FROM \"T1\" AS \"TEEONE\" WHERE \"TEEONE\".\"CoL1\" IN ( SELECT t1.\"col1\" FROM T1 WHERE T1.col1 = \"TEEONE\".\"CoL1\" ) ORDER BY \"TEEONE\".col2")))
+
+  (xt/submit-tx tu/*node* [[:sql "DELETE FROM T1 WHERE t1.Col1 = 'fish'"]])
+
+  (t/is (= [{:xt/id 2}]
+           (xt/q tu/*node* "SELECT t1.XT$ID FROM T1")))
+
+  (xt/submit-tx tu/*node* [[:sql
+                            "DELETE FROM \"T1\" WHERE \"T1\".\"col2\" IN (2000, 3000)"]])
+
+  (t/is (= [] (xt/q tu/*node* "SELECT \"T1\".xt$id FROM \"T1\""))))

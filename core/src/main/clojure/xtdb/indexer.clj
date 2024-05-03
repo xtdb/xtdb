@@ -294,11 +294,8 @@
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
               ^RelationReader content-rel (vr/rel-reader (->> in-rel
-                                                              (remove (comp types/temporal-column? #(.getName ^IVectorReader %)))
-                                                              (map (fn [^IVectorReader vec]
-                                                                     (.withName vec (util/str->normal-form-str (.getName vec))))))
+                                                              (remove (comp types/temporal-column? #(.getName ^IVectorReader %))))
                                                          (.rowCount in-rel))
-              table (util/str->normal-form-str table)
               id-col (.readerForName in-rel "xt$id")
               valid-from-rdr (.readerForName in-rel "xt$valid_from")
               valid-to-rdr (.readerForName in-rel "xt$valid_to")
@@ -331,8 +328,7 @@
 (defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
-      (let [table (util/str->normal-form-str table)
-            row-count (.rowCount in-rel)
+      (let [row-count (.rowCount in-rel)
             iid-rdr (.readerForName in-rel "xt$iid")
             valid-from-rdr (.readerForName in-rel "xt$valid_from")
             valid-to-rdr (.readerForName in-rel "xt$valid_to")]
@@ -353,8 +349,7 @@
 (defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
-      (let [table (util/str->normal-form-str table)
-            row-count (.rowCount in-rel)
+      (let [row-count (.rowCount in-rel)
             iid-rdr (.readerForName in-rel "xt$iid")]
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)]

@@ -129,7 +129,7 @@
 
 
 (defmethod expr/codegen-expr :test-metadata [{:keys [f meta-value field value-expr col-type bloom-hash-sym]} opts]
-  (let [field-name (util/str->normal-form-str (str field))
+  (let [field-name (str field)
 
         idx-code `(.rowIndex ~table-metadata-sym ~field-name ~page-idx-sym)]
 

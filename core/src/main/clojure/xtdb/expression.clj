@@ -385,15 +385,14 @@
   (let [vpos-sym (gensym 'vpos)
         col-type (or (get var->col-type variable)
                      (throw (AssertionError. (str "unknown variable: " variable))))
-        sanitized-var (util/symbol->normal-form-symbol variable)
-        var-rdr-sym (gensym sanitized-var)]
+        var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
     {:return-type col-type
      :batch-bindings [[vpos-sym `(IVectorPosition/build)]
                       (if (and extract-vecs-from-rel? extract-vec-from-rel?)
                         [var-rdr-sym `(.valueReader (.readerForName ~rel ~(str variable)) ~vpos-sym)]
-                        [var-rdr-sym `(some-> ~sanitized-var (.valueReader ~vpos-sym))])]
+                        [var-rdr-sym `(some-> ~variable (.valueReader ~vpos-sym))])]
      :continue (fn [f]
                  `(do
                     (.setPosition ~vpos-sym ~idx)

@@ -21,5 +21,4 @@
 (slt/def-slt-test direct-sql--qualified_joins {:direct-sql true})
 (slt/def-slt-test direct-sql--qualified_joins-correlated {:direct-sql true, :decorrelate? false} "direct-sql/qualified_joins.test")
 
-(slt/def-slt-test direct-sql--identifier-case-insensitivity {:direct-sql true})
 (slt/def-slt-test direct-sql--dollar_identifiers {:direct-sql true})
