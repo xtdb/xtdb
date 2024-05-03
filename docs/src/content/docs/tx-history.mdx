@@ -1,0 +1,131 @@
+---
+title: Transaction histories visualisation
+pagefind: false
+---
+
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import QueryTemplate from "@components/fiddle/template.astro"
+import DateRange from '@components/fiddle/date-range.astro';
+import OutputVega from '@components/fiddle/output-vega.astro';
+
+This is based off of a notebook by yry that can be found [here](https://github.com/xtdb/sakila-playground/blob/db79cfc3e4b36a2fac0cedeffd4704801821ef02/dev/nb/tx_history.clj). It's much more stripped down, see the [here](https://juxt.slack.com/archives/C06C4L7HRFC/p1709049998640449) for a video of what it originally looked like.
+
+Given these seed values:
+
+<Fiddle magicContext="my-context">
+  <Txs txs={`
+INSERT INTO customer (xt$id, address, preference, xt$valid_from, xt$valid_to)
+VALUES
+-- Customer 1
+(1, 'address 1', 'preference 1', DATE '2024-01-01', DATE '2024-01-05'),
+(1, 'address 2', 'preference 1', DATE '2024-01-05', DATE '2024-03-10'),
+(1, 'address 2', 'preference 2', DATE '2024-03-10', DATE '2024-06-15'),
+(1, 'address 2', 'preference 3', DATE '2024-06-15', NULL),
+
+-- Customer 2
+(2, 'address 1', 'preference 1', DATE '2024-02-02', DATE '2024-05-12'),
+(2, 'address 1', 'preference 2', DATE '2024-05-12', NULL),
+
+-- Customer 3
+(3, 'address 1', 'preference 1', DATE '2024-01-02', DATE '2024-04-12'),
+(3, 'address 2', 'preference 1', DATE '2024-04-12', DATE '2024-08-12'),
+
+-- Customer 4
+(4, 'address 1', 'preference 1', DATE '2024-06-05', DATE '2024-08-05'),
+(4, 'address 2', 'preference 2', DATE '2024-08-05', DATE '2024-10-07'),
+(4, 'address 1', 'preference 2', DATE '2024-10-07', NULL)`} />
+</Fiddle>
+
+Let's plot the transactions like so:
+
+<Fiddle autoLoad magicContext="my-context">
+  <div class="flex flex-row gap-2 items-center">
+    <div class="flex flex-row gap-2 items-center">
+      from:
+      <DateRange name="from" start="2024-01-01" stop="2025-01-01" step="1 month" value="2024-01-01" />
+    </div>
+    <div class="flex flex-row gap-2 items-center">
+      to:
+      <DateRange name="to" start="2024-01-01" stop="2025-01-01" step="1 month" value="2025-01-01" />
+    </div>
+  </div>
+  <QueryTemplate q={`
+SELECT CAST(customer.xt$id AS INTEGER) AS id,
+   customer.address,
+   customer.preference,
+   customer.xt$valid_from AS valid_from,
+   customer.xt$valid_to AS valid_to
+FROM customer FOR VALID_TIME FROM {{from}} TO {{to}}
+ORDER BY CAST (customer.xt$id AS INTEGER), customer.xt$valid_from`} />
+
+  <OutputVega spec={{
+    data: { name: "table" },
+    transform: [
+    ],
+    vconcat: [
+      {
+        width: 600,
+        title: "Customers transaction history",
+        encoding: {
+          x: {
+            field: "valid_from",
+            type: "temporal",
+            title: "valid time",
+            scale: { domain: { param: "brush" } }
+          },
+          y: {
+            field: "id",
+            type: "ordinal"
+          }
+        },
+        layer: [
+          {
+            description: "tx-timeline",
+            mark: {
+              type: "line",
+              point: false
+            },
+            encoding: { detail: { field: "id" } }
+          },
+          {
+            description: "Timeline outline",
+            mark: {
+              type: "point",
+              filled: false,
+              size: 125
+            }
+          },
+          {
+            description: "Timeline points",
+            mark: {
+              type: "point",
+              filled: true,
+              opacity: 1.0,
+              size: 75
+            },
+            encoding: {
+              tooltip: [
+                { field: "id" },
+                { field: "address" },
+                { field: "preference" }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        width: 600,
+        title: "Valid time",
+        mark: "tick",
+        params: [
+          {
+            name: "brush",
+            select: { type: "interval", encodings: ["x"] }
+          }
+        ],
+        encoding: { x: { field: "valid_from", type: "temporal" } }
+      }
+    ]
+  }} />
+</Fiddle>
