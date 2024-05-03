@@ -1,0 +1,29 @@
+---
+---
+<fiddle-input-text>
+    {/* autocomplete="off" resets the value on page refresh */}
+    <input type="text" autocomplete="off" class="border rounded-sm border-gray-300 dark:border-gray-600" {...Astro.props} />
+</fiddle-input-text>
+
+<script>
+    import { FiddleInput } from "./fiddle.js";
+
+    class FiddleInputText extends FiddleInput {
+        connectedCallback() {
+            super.connectedCallback();
+            let text = this.querySelector('input[type="text"]');
+            text.addEventListener("input", () => {
+                this.set(text.value);
+            });
+            this.name = text.name;
+            this._registry.setValue(this.name, text.value);
+        }
+
+        set(value) {
+            this._registry.setValue(this.name, value);
+            return value;
+        }
+    }
+
+    customElements.define('fiddle-input-text', FiddleInputText);
+</script>

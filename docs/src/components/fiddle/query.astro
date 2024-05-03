@@ -1,11 +1,77 @@
 ---
+import Play from 'astro-heroicons/solid/Play.astro';
+import ArrowTopRightOnSquare from 'astro-heroicons/solid/ArrowTopRightOnSquare.astro';
+import { gensym } from './utils';
+
 const { hidden, q } = Astro.props;
 
+const id = gensym();
+
 var props = {
+    'data-id': id,
     'data-hidden': hidden ? 'true' : undefined,
     'data-query': q.trim(),
 }
 ---
-<div class:list={[{hidden: hidden}, "p-1", "bg-gray-100", "dark:bg-gray-800", "rounded-md"]}>
+<div class:list={[{hidden: hidden}, "p-1 bg-gray-100 dark:bg-gray-800 rounded-md"]}>
     <fiddle-query {...props} />
 </div>
+
+{/* Buttons: */}
+<div class="flex flex-row gap-1">
+    <div data-parent-id={id}
+         data-id="run"
+         class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
+        <div class="flex flex-row items-center gap-1">
+            Run
+            <Play class="size-4" />
+        </div>
+    </div>
+    <div class="flex-grow" />
+    <span data-parent-id={id}
+          data-id="open-in-fiddle"
+          class="cursor-pointer underline">
+        Open in xt-fiddle
+        <ArrowTopRightOnSquare class="size-3" />
+    </span>
+</div>
+
+<script>
+    import { FiddleComponent } from "./fiddle.js"
+    import { makeEditor } from "./editor.ts"
+
+    class FiddleQuery extends FiddleComponent {
+        connectedCallback() {
+            super.connectedCallback();
+            this._registry.registerQuery(this);
+
+            this.editor;
+            if (!this.dataset.hidden) {
+                this.editor = makeEditor({
+                    initialText: this.dataset.query,
+                    parent: this,
+                });
+            }
+
+            const run_button = document.querySelector(`[data-parent-id="${this.dataset.id}"][data-id="run"]`);
+            run_button.addEventListener('click', () => {
+                this._registry.render();
+            });
+
+            const edit_button = document.querySelector(`[data-parent-id="${this.dataset.id}"][data-id="open-in-fiddle"]`);
+            edit_button.addEventListener('click', () => {
+                this._registry.openInFiddle();
+            });
+        }
+
+        get query() {
+            if (this.editor) {
+                return this.editor.state.doc.toString();
+            } else {
+                return this.dataset.query;
+            }
+        }
+    }
+
+    customElements.define('fiddle-query', FiddleQuery);
+</script>

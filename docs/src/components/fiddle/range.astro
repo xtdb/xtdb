@@ -1,0 +1,30 @@
+---
+import RawRange from './raw-range.astro'
+---
+<fiddle-input-range>
+    <RawRange {...Astro.props} />
+</fiddle-input-range>
+
+<script>
+    import { FiddleInput } from "./fiddle.js";
+
+    class FiddleInputRange extends FiddleInput {
+        connectedCallback() {
+            super.connectedCallback();
+
+            let slider = this.querySelector('input[type="range"]');
+            slider.addEventListener("input", () => {
+                this.set(slider.value);
+            });
+            this.name = slider.name;
+            this._registry.setValue(this.name, slider.value);
+        }
+
+        set(value) {
+            this._registry.setValue(this.name, value);
+            return value;
+        }
+    }
+
+    customElements.define('fiddle-input-range', FiddleInputRange);
+</script>

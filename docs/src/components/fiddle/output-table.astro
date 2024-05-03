@@ -1,0 +1,28 @@
+---
+---
+{/* Tag name should start with fiddle-output */}
+<fiddle-output-table style="display: none;" />
+
+<script>
+    import { FiddleOutput } from "./fiddle.js"
+    import { makeTable } from "../fiddle/table.js"
+    import { makeError } from "../fiddle/utils.js"
+
+    class FiddleOutputTable extends FiddleOutput {
+        render(results) {
+            try {
+                this.innerHTML = ''
+                    + '<div class="bg-gray-100 dark:bg-gray-800 rounded-md overflow-x-auto">'
+                    + makeTable(results)
+                    + '</div>';
+            } catch (e) {
+                this.innerHTML = makeError(
+                    "Result Error",
+                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
+                );
+            }
+        }
+    }
+
+    customElements.define('fiddle-output-table', FiddleOutputTable);
+</script>

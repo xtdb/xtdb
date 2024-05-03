@@ -1,0 +1,18 @@
+---
+import { gensym } from './utils';
+
+const { min = 0, max = 100, step = 1 } = Astro.props;
+var ticks = Math.floor((max - min) / step) + 1;
+
+const datalistId = gensym();
+---
+{/* autocomplete="off" resets the value on page refresh */}
+<input type="range" autocomplete="off" list={datalistId} {...Astro.props} />
+<datalist id={datalistId}>
+    {
+        Array.from({ length: ticks }, (_, i) => {
+            let value = min + i * step;
+            return <option value={value} />;
+        })
+    }
+</datalist>

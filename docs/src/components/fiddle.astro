@@ -1,52 +1,37 @@
 ---
-import Play from 'astro-heroicons/solid/Play.astro';
-import ArrowTopRightOnSquare from 'astro-heroicons/solid/ArrowTopRightOnSquare.astro';
+// The OutputTable component is added by default by the Fiddle
+// We import it here, then use it in a template to ensure it's loaded
+import OutputTable from '@components/fiddle/output-table.astro';
+import { gensym } from './fiddle/utils';
 
-const { magicContext } = Astro.props;
+const { magicContext, autoLoad } = Astro.props;
 
 var props = {};
 
 if (magicContext) {
     props['data-magic-context'] = magicContext;
 }
-
-function gensym() {
-     return Math.random().toString(36).substr(2);
+if (autoLoad) {
+    props['data-auto-load'] = 'true';
 }
 ---
+{/* NOTE: This doesn't render the OutputTable, but it ensures the component is loaded */}
+<template>
+    <OutputTable />
+</template>
+
 <fiddle-embed class="not-content" data-id={gensym()} {...props}>
-    <div class="flex flex-col gap-2 p-2 rounded-sm border border-gray-300 dark:border-gray-600">
-        <div class="flex flex-col gap-1">
-            <slot />
-        </div>
-        <div class="flex flex-row gap-1">
-            <div data-id="run"
-                 class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
-                <div class="flex flex-row items-center gap-1">
-                    Run
-                    <Play class="size-4" />
-                </div>
-            </div>
-            <div class="flex-grow" />
-            <span data-id="open-in-fiddle"
-                 class="cursor-pointer underline">
-                 Open in xt-fiddle
-                 <ArrowTopRightOnSquare class="size-3" />
-            </span>
-        </div>
-        <div class="bg-gray-100 dark:bg-gray-800 rounded-md overflow-x-auto"
-             data-id="results" />
+    <div class="flex flex-col gap-1 p-2 rounded-sm border border-gray-300 dark:border-gray-600"
+         data-id="content">
+        <slot />
+        <div class="hidden pt-1" data-id="fiddle-error" />
     </div>
 </fiddle-embed>
 
 <script>
-    import { makeEditor } from "./fiddle/editor.ts"
-    import hljs from "highlight.js/lib/core"
-    import hljsJson from "highlight.js/lib/languages/json"
     import { getTheme, onThemeChange } from "../utils.ts"
 
-    hljs.registerLanguage('json', hljsJson);
-
+    // TODO: Put this somewhere else
     function set_hljs_theme(theme) {
         console.log('Setting theme to', theme);
         if (theme == "dark") {
@@ -59,272 +44,4 @@ function gensym() {
     }
     set_hljs_theme(getTheme());
     onThemeChange(set_hljs_theme);
-
-    function parseSQLTxs(s) {
-        var txs = s
-            .split(';')
-            .map((x) => x.trim())
-            .filter((x) => x.length > 0)
-            .map((x) => JSON.stringify(x))
-            .map((x) => "[:sql " + x + "]")
-            .join('');
-        return "[" + txs + "]";
-    }
-
-    function makeError(title, message, data) {
-        return `
-        <div class="bg-[#fad1df] dark:bg-[#4e2232] border-l-4 border-[#f53d7d] dark:border-[#ee5389] text-[#8a0f3a] dark:text-[#f9c3d6] p-4">
-          <p class="font-bold">${title}</p>
-          <p class="whitespace-pre-wrap font-mono text-black dark:text-white">${message.replace(/(?:\r\n|\r|\n)/g, '<br>')}</p>
-          ${
-              data
-              ? `<p class="pt-2 font-semibold">Data:</p>
-                 <p class="text-black dark:text-white">${JSON.stringify(data)}</p>`
-              : ""
-           }
-        </div>`
-    }
-
-    function tableOrder(a, b) {
-        if (a === b) {
-            return 0;
-        }
-        if (a === 'xt$id') {
-            return -1;
-        }
-        if (b === 'xt$id') {
-            return 1;
-        }
-        return a < b ? -1 : 1;
-            
-    }
-
-    function makeTable(rows) {
-        if (rows.length === 0) {
-            return "<p>No results</p>"
-        }
-        var allKeys = new Set();
-        for (const row of rows) {
-            for (const key of Object.keys(row)) {
-                allKeys.add(key);
-            }
-        }
-        allKeys = Array.from(allKeys);
-        allKeys.sort(tableOrder);
-
-        // Header
-        var headerCols = "";
-        for (const key of allKeys) {
-            headerCols += `<th class="text-left p-1">${key}</th>`;
-        }
-
-        var header = `
-        <thead>
-            <tr>${headerCols}</tr>
-        </thead>`;
-
-        // Body
-        var bodyRows = "";
-        for (const row of rows) {
-            var rowCols = "";
-            for (const key of allKeys) {
-                let value = row[key] || null;
-                let highlight = hljs.highlight(JSON.stringify(value), {language: 'json'});
-                rowCols += `<td class="text-left p-1">${highlight.value}</Code></td>`;
-            }
-            bodyRows += `<tr class="border-gray-300 border-t">${rowCols}</tr>`;
-        }
-
-        var body = `<tbody>${bodyRows}</tbody>`;
-
-        return `<table class="table-auto border-collapse w-full">${header}${body}</table>`
-    }
-
-    const fiddle_url = "https://fiddle.xtdb.com"
-    class FiddleEmbed extends HTMLElement {
-        constructor() {
-            super();
-            this.results_el = this.querySelector('[data-id="results"]');
-
-            // A list of objects with the following keys:
-            // - system-time ( the system time or null)
-            // - txs (the transaction text)
-            // - editor (the transaction text)
-            // Either txs or editor will be set
-            this.txs = [];
-
-            // Magic Context
-            if (this.dataset.magicContext) {
-                let ctx = this.dataset.magicContext;
-                let my_id = this.dataset.id;
-                // Only consider elements with the same "magic-context"
-                const context_els = document.querySelectorAll(`fiddle-embed[data-magic-context="${ctx}"]`);
-                for (const fiddle_el of context_els) {
-                    // Only consider elements above me
-                    if (fiddle_el.dataset.id == my_id) {
-                        break;
-                    }
-                    for (const tx_el of fiddle_el.querySelectorAll('fiddle-txs')) {
-                        this.txs.push({
-                            txs: tx_el.dataset.txs,
-                            'system-time': tx_el.dataset.systemTime,
-                        })
-                    }
-                }
-            }
-
-            // Transactions present the current element
-            for (const tx_el of this.querySelectorAll('fiddle-txs')) {
-                if (tx_el.dataset.hidden) {
-                    this.txs.push({
-                        txs: tx_el.dataset.txs,
-                        'system-time': tx_el.dataset.systemTime,
-                    });
-                } else {
-                    var editor = makeEditor({
-                        initialText: tx_el.dataset.txs,
-                        parent: tx_el,
-                    });
-                    this.txs.push({
-                        editor: editor,
-                        'system-time': tx_el.dataset.systemTime,
-                    });
-                }
-            }
-
-            // This is either:
-            // - A CodeMirror editor instance
-            // - A string containing the query
-            this.query = undefined;
-            var q_els = this.querySelectorAll('fiddle-query');
-            if (q_els.length === 0) {
-                throw "No query element found!";
-            }
-            // We only care about the last query element
-            var q_el = q_els[q_els.length - 1];
-            if (q_el.dataset.hidden) {
-                this.query = q_el.dataset.query;
-            } else {
-                this.query = makeEditor({
-                    initialText: q_el.dataset.query,
-                    parent: q_el,
-                });
-            }
-
-            const myThis = this;
-
-            // Setup run button
-            const run_button = this.querySelector('[data-id="run"]');
-            run_button.addEventListener('click', () => myThis.run());
-
-            // Setup "open in fiddle" button
-            const edit_button = this.querySelector('[data-id="open-in-fiddle"]');
-            edit_button.addEventListener('click', () => myThis.openInFiddle());
-        }
-
-        async run() {
-            var txs = [];
-            for (const tx of this.txs) {
-                if ('txs' in tx) {
-                    txs.push({
-                        txs: parseSQLTxs(tx.txs),
-                        'system-time': tx['system-time'] || null,
-                    });
-                } else {
-                    txs.push({
-                        txs: parseSQLTxs(tx.editor.state.doc.toString()),
-                        'system-time': tx['system-time'] || null,
-                    });
-                }
-            }
-
-            var query = undefined;
-            if (typeof this.query === 'string') {
-                query = this.query;
-            } else {
-                query = this.query.state.doc.toString();
-            }
-
-            query = query.replace(/;\s*$/, ""); // remove last semi-colon
-
-            query = JSON.stringify(query);
-
-            try {
-                var response = await fetch(`${fiddle_url}/db-run`,{
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        'tx-batches': txs,
-                        query: query
-                    })
-                });
-            } catch (e) {
-                console.error(e);
-                this.results_el.innerHTML = makeError(
-                    "Network Error",
-                    "Uh oh! A network error. Please try again.",
-                );
-            }
-
-            try {
-                var json = await response.json();
-            } catch (e) {
-                console.error(e);
-                this.results_el.innerHTML = makeError(
-                    "Result Error",
-                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
-                );
-            }
-
-            try {
-                if (response.ok) {
-                    this.results_el.innerHTML = makeTable(json);
-                } else {
-                    this.results_el.innerHTML = makeError(
-                        json.exception,
-                        json.message,
-                        json.data
-                    );
-                }
-            } catch (e) {
-                console.error(e);
-                this.results_el.innerHTML = makeError(
-                    "Result Error",
-                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
-                );
-            }
-        }
-
-        openInFiddle() {
-            var txs = [];
-            for (const tx of this.txs) {
-                if ('txs' in tx) {
-                    txs.push({
-                        txs: tx.txs,
-                        'system-time': tx['system-time'] || null,
-                    });
-                } else {
-                    txs.push({
-                        txs: tx.editor.state.doc.toString(),
-                        'system-time': tx['system-time'] || null,
-                    });
-                }
-            }
-
-            var query = undefined;
-            if (typeof this.query === 'string') {
-                query = this.query;
-            } else {
-                query = this.query.state.doc.toString();
-            }
-
-            var url = new URL(fiddle_url);
-            url.searchParams.append('type', 'sql');
-            url.searchParams.append('txs', btoa(JSON.stringify(txs)));
-            url.searchParams.append('query', btoa(query));
-            window.open(url);
-        }
-    }
-
-    customElements.define('fiddle-embed', FiddleEmbed);
 </script>
