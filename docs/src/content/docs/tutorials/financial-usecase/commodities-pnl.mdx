@@ -151,6 +151,7 @@ What if we could ignore the today's trades, and just see what our closing positi
 
 import DateRange from '@components/fiddle/date-range.astro';
 import QueryTemplate from '@components/fiddle/template.astro';
+import OutputTraffic from '@components/fiddle/output-traffic.astro';
 
 <Fiddle autoLoad magicContext="my-context">
   <QueryTemplate q={`
@@ -186,6 +187,7 @@ ON
                value="2024-03-11T17:00" />
     </div>
   </div>
+  <OutputTraffic />
 </Fiddle>
 
 We have now established that today's trades must be causing the dramatic PnL change.
