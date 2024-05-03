@@ -1,9 +1,22 @@
 ---
+import ArrowTopRightOnSquare from 'astro-heroicons/solid/ArrowTopRightOnSquare.astro';
+import { gensym } from './utils';
+
 const { q } = Astro.props;
+
+const id = gensym();
 ---
 <div class="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
-    <fiddle-query-template data-template={q.trim()} />
+    <fiddle-query-template data-id={id} data-template={q.trim()} />
 </div>
+
+{/* Buttons: */}
+<span data-parent-id={id}
+      data-id="open-in-fiddle"
+      class="cursor-pointer underline">
+    Open in xt-fiddle
+    <ArrowTopRightOnSquare class="size-3" />
+</span>
 
 <script>
     import { FiddleComponent } from "./fiddle.js"
@@ -20,6 +33,11 @@ const { q } = Astro.props;
         connectedCallback() {
             super.connectedCallback();
             this._registry.registerTemplate(this);
+
+            const edit_button = document.querySelector(`[data-parent-id="${this.dataset.id}"][data-id="open-in-fiddle"]`);
+            edit_button.addEventListener('click', () => {
+                this._registry.openInFiddle();
+            });
         }
 
         render(view) {
