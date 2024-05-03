@@ -273,7 +273,7 @@ This is handy for:
 
 import Text from '@components/fiddle/text.astro';
 
-<Fiddle magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE {{#true}}true{{/true}}{{^true}}false{{/true}} {{#enableSearch}}AND o.name LIKE '%{{search}}%'{{/enableSearch}}
@@ -307,7 +307,7 @@ A wrapper around the [checkbox input](https://developer.mozilla.org/en-US/docs/W
 
 import Checkbox from "@components/fiddle/checkbox.astro"
 
-<Fiddle magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     -- Watch as the below changes:
@@ -323,7 +323,7 @@ import Checkbox from "@components/fiddle/checkbox.astro"
 You can provide a `min`, `max`, `step` and `value` to specify a range.
 Can be a float or integer.
 
-<Fiddle magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE o.count > {{count}}
@@ -339,7 +339,7 @@ A customised range input specifically for outputting dates with two varieties:
 
 You can provide a `start`, `stop` and `step` amount to have a full range of dates:
 
-<Fiddle magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
                     ORDER BY o.xt$id" />
@@ -348,7 +348,7 @@ You can provide a `start`, `stop` and `step` amount to have a full range of date
 
 Or you can provide an array of dates:
 
-<Fiddle magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
                     ORDER BY o.xt$id" />
@@ -359,7 +359,7 @@ Or you can provide an array of dates:
 
 A textbox element that allows the user to type in whatever they like:
 
-<Fiddle magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE o.name LIKE '%{{name}}%'
