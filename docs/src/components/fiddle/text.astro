@@ -1,31 +1,29 @@
 ---
 ---
-<live-query-input-text>
+<fiddle-input-text>
     {/* autocomplete="off" resets the value on page refresh */}
     <input type="text" autocomplete="off" class="border rounded-sm border-gray-300 dark:border-gray-600" {...Astro.props} />
-</live-query-input-text>
+</fiddle-input-text>
 
 <script>
-    import { LiveQueryInput } from "./live-query.js";
+    import { FiddleInput } from "./fiddle.js";
 
-    class Text extends LiveQueryInput {
-        constructor() {
-            super();
+    class FiddleInputText extends FiddleInput {
+        connectedCallback() {
+            super.connectedCallback();
             let text = this.querySelector('input[type="text"]');
             text.addEventListener("input", () => {
                 this.set(text.value);
             });
             this.name = text.name;
-            setTimeout(() => {
-                this.parent.update(this.name, text.value);
-            }, 0);
+            this._registry.setValue(this.name, text.value);
         }
 
         set(value) {
-            this.parent.update(this.name, value);
+            this._registry.setValue(this.name, value);
             return value;
         }
     }
 
-    customElements.define('live-query-input-text', Text);
+    customElements.define('fiddle-input-text', FiddleInputText);
 </script>

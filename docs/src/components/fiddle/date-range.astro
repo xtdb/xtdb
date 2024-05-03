@@ -32,7 +32,9 @@ if (dates) {
 
     let start2 = new Date(props["data-start"])
     let stop2 = new Date(props["data-stop"])
-    console.assert(start2 < stop2, "Invalid date range");
+    if (!(start2 < stop2)) {
+        throw Error("Invalid date range");
+    }
     let step2 = parseDuration(props["data-step"]);
     let steps = Math.floor((stop2 - start2) / step2);
 
@@ -46,17 +48,17 @@ if (dates) {
     }
 }
 ---
-<live-query-input-date-range data-name={name} {...props}>
+<fiddle-input-date-range data-name={name} {...props}>
     <RawRange {...inputProps}>
-</live-query-input-date-range>
+</fiddle-input-date-range>
 
 <script>
-    import { LiveQueryInput } from "./live-query.js";
+    import { FiddleInput } from "./fiddle.js";
     import { parseDuration, addMilliseconds, formatTimestamp } from "./date-utils.js";
 
-    class DateRange extends LiveQueryInput {
-        constructor() {
-            super();
+    class FiddleInputDateRange extends FiddleInput {
+        connectedCallback() {
+            super.connectedCallback();
             this.name = this.dataset.name;
 
             if (this.dataset.dates) {
@@ -65,7 +67,9 @@ if (dates) {
             } else {
                 this.start = new Date(this.dataset.start);
                 this.stop = new Date(this.dataset.stop);
-                console.assert(this.start < this.stop, "Invalid date range");
+                if (!(this.start < this.stop)) {
+                    throw Error("Invalid date range");
+                }
                 // Milliseconds per step
                 this.step = parseDuration(this.dataset.step);
             }
@@ -79,9 +83,7 @@ if (dates) {
             // Tell parent about initial value
             let initialValue = this.valueToDate(slider.value);
             initialValue = formatTimestamp(initialValue);
-            setTimeout(() => {
-                this.parent.update(this.name, initialValue);
-            }, 0);
+            this._registry.setValue(this.name, initialValue);
         }
 
         valueToDate(value) {
@@ -94,10 +96,10 @@ if (dates) {
 
         set(value) {
             let output = formatTimestamp(this.valueToDate(value));
-            this.parent.update(this.name, output);
+            this._registry.setValue(this.name, output);
             return output;
         }
     }
 
-    customElements.define('live-query-input-date-range', DateRange);
+    customElements.define('fiddle-input-date-range', FiddleInputDateRange);
 </script>

@@ -1,50 +1,37 @@
 ---
-import Play from 'astro-heroicons/solid/Play.astro';
-import ArrowTopRightOnSquare from 'astro-heroicons/solid/ArrowTopRightOnSquare.astro';
+// The OutputTable component is added by default by the Fiddle
+// We import it here, then use it in a template to ensure it's loaded
+import OutputTable from '@components/fiddle/output-table.astro';
 import { gensym } from './fiddle/utils';
 
-const { magicContext } = Astro.props;
+const { magicContext, autoLoad } = Astro.props;
 
 var props = {};
 
 if (magicContext) {
     props['data-magic-context'] = magicContext;
 }
+if (autoLoad) {
+    props['data-auto-load'] = 'true';
+}
 ---
+{/* NOTE: This doesn't render the OutputTable, but it ensures the component is loaded */}
+<template>
+    <OutputTable />
+</template>
+
 <fiddle-embed class="not-content" data-id={gensym()} {...props}>
-    <div class="flex flex-col gap-2 p-2 rounded-sm border border-gray-300 dark:border-gray-600">
-        <div class="flex flex-col gap-1">
-            <slot />
-        </div>
-        <div class="flex flex-row gap-1">
-            <div data-id="run"
-                 class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
-                <div class="flex flex-row items-center gap-1">
-                    Run
-                    <Play class="size-4" />
-                </div>
-            </div>
-            <div class="flex-grow" />
-            <span data-id="open-in-fiddle"
-                 class="cursor-pointer underline">
-                 Open in xt-fiddle
-                 <ArrowTopRightOnSquare class="size-3" />
-            </span>
-        </div>
-        <div class="bg-gray-100 dark:bg-gray-800 rounded-md overflow-x-auto"
-             data-id="results" />
+    <div class="flex flex-col gap-1 p-2 rounded-sm border border-gray-300 dark:border-gray-600"
+         data-id="content">
+        <slot />
+        <div class="hidden pt-1" data-id="fiddle-error" />
     </div>
 </fiddle-embed>
 
 <script>
-    import { makeTable } from "./fiddle/table.js"
-    import { parseSQLTxs, fiddle_url, runFiddle, magicElementsAbove, makeError } from "./fiddle/utils.js"
-    import hljs from "highlight.js/lib/core"
-    import hljsJson from "highlight.js/lib/languages/json"
     import { getTheme, onThemeChange } from "../utils.ts"
 
-    hljs.registerLanguage('json', hljsJson);
-
+    // TODO: Put this somewhere else
     function set_hljs_theme(theme) {
         console.log('Setting theme to', theme);
         if (theme == "dark") {
@@ -57,127 +44,4 @@ if (magicContext) {
     }
     set_hljs_theme(getTheme());
     onThemeChange(set_hljs_theme);
-
-    class FiddleEmbed extends HTMLElement {
-        constructor() {
-            super();
-            this.results_el = this.querySelector('[data-id="results"]');
-
-            // Magic Context
-            this.magic_txs = [];
-            for (const fiddle_el of magicElementsAbove(this.dataset.magicContext, this.dataset.id)) {
-                for (const tx_el of fiddle_el.querySelectorAll('fiddle-txs')) {
-                    this.magic_txs.push(tx_el)
-                }
-            }
-
-            // Transactions present the current element
-            this.txs = [];
-            for (const tx_el of this.querySelectorAll('fiddle-txs')) {
-                this.txs.push(tx_el);
-            }
-
-            // Query
-            this.query = this.querySelector('fiddle-query');
-            console.assert(this.query != null, "No query element found!");
-
-            const myThis = this;
-
-            // Setup run button
-            const run_button = this.querySelector('[data-id="run"]');
-            run_button.addEventListener('click', () => myThis.run());
-
-            // Setup "open in fiddle" button
-            const edit_button = this.querySelector('[data-id="open-in-fiddle"]');
-            edit_button.addEventListener('click', () => myThis.openInFiddle());
-        }
-
-        async run() {
-            var txs = [];
-            // We use the original txs from the magic context
-            for (const tx of this.magic_txs) {
-                txs.push({
-                    txs: parseSQLTxs(tx.originalTxs),
-                    'system-time': tx.dataset.systemTime || null,
-                });
-            }
-            for (const tx of this.txs) {
-                txs.push({
-                    txs: parseSQLTxs(tx.txs),
-                    'system-time': tx.dataset.systemTime || null,
-                });
-            }
-
-            var query = this.query.query;
-            // Run the given txs and query
-            try {
-                var response = await runFiddle(txs, query);
-            } catch (e) {
-                console.error(e);
-                this.results_el.innerHTML = makeError(
-                    "Network Error",
-                    "Uh oh! A network error. Please try again.",
-                );
-            }
-
-            // Parse the response
-            try {
-                var json = await response.json();
-            } catch (e) {
-                console.error(e);
-                this.results_el.innerHTML = makeError(
-                    "Result Error",
-                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
-                );
-            }
-
-            // Present the response
-            try {
-                if (response.ok) {
-                    this.results_el.innerHTML = makeTable(json);
-                } else {
-                    this.results_el.innerHTML = makeError(
-                        json.exception,
-                        json.message,
-                        json.data
-                    );
-                }
-            } catch (e) {
-                console.error(e);
-                this.results_el.innerHTML = makeError(
-                    "Result Error",
-                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
-                );
-            }
-        }
-
-        openInFiddle() {
-            var txs = [];
-            // We use the original txs from the magic context
-            for (const tx of this.magic_txs) {
-                txs.push({
-                    txs: tx.originalTxs,
-                    'system-time': tx.dataset.systemTime || null,
-                });
-            }
-            for (const tx of this.txs) {
-                txs.push({
-                    txs: tx.txs,
-                    'system-time': tx.dataset.systemTime || null,
-                });
-            }
-
-            var query = this.query.query;
-
-            // Create the fiddle URL
-            var url = new URL(fiddle_url);
-            url.searchParams.append('type', 'sql');
-            url.searchParams.append('txs', btoa(JSON.stringify(txs)));
-            url.searchParams.append('query', btoa(query));
-
-            window.open(url);
-        }
-    }
-
-    customElements.define('fiddle-embed', FiddleEmbed);
 </script>

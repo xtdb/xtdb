@@ -1,11 +1,12 @@
 ---
 const { q } = Astro.props;
 ---
-<div class="p-2 bg-gray-100 dark:bg-gray-800 rounded-md text-sm">
-    <live-query-template data-template={q.trim()} />
+<div class="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+    <fiddle-query-template data-template={q.trim()} />
 </div>
 
 <script>
+    import { FiddleComponent } from "./fiddle.js"
     import hljs from "highlight.js/lib/core"
     import hljsSql from "highlight.js/lib/languages/sql"
     import Mustache from 'mustache';
@@ -15,24 +16,24 @@ const { q } = Astro.props;
     // Disable HTML escaping
     Mustache.escape = function(text) {return text;};
 
-    class LiveQueryTemplate extends HTMLElement {
-        constructor() {
-            super();
-            this.template = this.dataset.template;
+    class FiddleQueryTemplate extends FiddleComponent {
+        connectedCallback() {
+            super.connectedCallback();
+            this._registry.registerTemplate(this);
         }
 
         render(view) {
             // Render the template
-            let query = Mustache.render(this.template, view);
+            let query = Mustache.render(this.dataset.template, view);
 
             // Render this component
             let highlight = hljs.highlight(query, {language: 'sql'});
-            this.innerHTML = '<pre class="overflow-x-auto">' + highlight.value + '</pre>';
+            this.innerHTML = '<pre class="overflow-x-auto text-sm">' + highlight.value + '</pre>';
 
             // Return the rendered query
             return query;
         }
     }
 
-    customElements.define('live-query-template', LiveQueryTemplate);
+    customElements.define('fiddle-query-template', FiddleQueryTemplate);
 </script>

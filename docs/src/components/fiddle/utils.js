@@ -1,3 +1,8 @@
+import hljs from "highlight.js/lib/core"
+import hljsSql from "highlight.js/lib/languages/sql"
+
+hljs.registerLanguage('sql', hljsSql);
+
 function gensym() {
      return Math.random().toString(36).substr(2);
 }
@@ -57,4 +62,8 @@ function makeError(title, message, data) {
     </div>`
 }
 
-export { gensym, parseSQLTxs, fiddle_url, runFiddle, magicElementsAbove, makeError };
+function highlightSql(sql) {
+    return hljs.highlight(sql, {language: 'sql'});
+}
+
+export { gensym, parseSQLTxs, fiddle_url, runFiddle, magicElementsAbove, makeError, highlightSql };

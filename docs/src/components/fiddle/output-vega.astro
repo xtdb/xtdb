@@ -5,20 +5,21 @@ const { spec } = Astro.props;
 
 const visId = gensym();
 ---
-<live-query-output-vega data-vis-id={visId} data-spec={JSON.stringify(spec)}>
+<fiddle-output-vega data-vis-id={visId} data-spec={JSON.stringify(spec)}>
   <div data-id={visId} />
   <div data-id="error" />
-</live-query-output-vega>
+</fiddle-output-vega>
 
 
 <script>
+    import { FiddleOutput } from "./fiddle.js"
     import * as vega from 'vega';
     import embed from 'vega-embed';
     import { makeError } from "../fiddle/utils.js"
 
-    class LiveQueryOutputVega extends HTMLElement {
-        constructor() {
-            super();
+    class FiddleOutputVega extends FiddleOutput {
+        connectedCallback() {
+            super.connectedCallback();
             this.visId = this.dataset.visId;
             this.spec = JSON.parse(this.dataset.spec);
             this.chart;
@@ -68,5 +69,5 @@ const visId = gensym();
         }
     }
 
-    customElements.define('live-query-output-vega', LiveQueryOutputVega);
+    customElements.define('fiddle-output-vega', FiddleOutputVega);
 </script>

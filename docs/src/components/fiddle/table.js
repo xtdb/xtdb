@@ -1,4 +1,7 @@
 import hljs from "highlight.js/lib/core"
+import hljsJson from "highlight.js/lib/languages/json"
+
+hljs.registerLanguage('json', hljsJson);
 
 function tableOrder(a, b) {
     if (a === b) {

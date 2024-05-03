@@ -1,12 +1,14 @@
 ---
 ---
-<live-query-output-table />
+{/* Tag name should start with fiddle-output */}
+<fiddle-output-table style="display: none;" />
 
 <script>
+    import { FiddleOutput } from "./fiddle.js"
     import { makeTable } from "../fiddle/table.js"
     import { makeError } from "../fiddle/utils.js"
 
-    class LiveQueryOutputTable extends HTMLElement {
+    class FiddleOutputTable extends FiddleOutput {
         render(results) {
             try {
                 this.innerHTML = ''
@@ -22,5 +24,5 @@
         }
     }
 
-    customElements.define('live-query-output-table', LiveQueryOutputTable);
+    customElements.define('fiddle-output-table', FiddleOutputTable);
 </script>

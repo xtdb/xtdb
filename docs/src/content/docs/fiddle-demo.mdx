@@ -3,15 +3,13 @@ title: Fiddle Demo
 pagefind: false
 ---
 
-## The Fiddle
-
 import Fiddle from '@components/fiddle.astro';
 import Txs from '@components/fiddle/txs.astro';
 import Query from '@components/fiddle/query.astro';
 
 Allows you to embed a miniature instance of [xt-fiddle](https://fiddle.xtdb.com) in the docs, with a couple added features as a bonus!
 
-### Basic Usage
+## Basic Usage
 
 You can add a `Fiddle` to the page with pre-set transactions & query like so:
 
@@ -31,8 +29,7 @@ If you want to preserve whitespace you can do this:
 />
 </Fiddle>
 
-
-### Hide editors
+## Hide editors
 
 Sometimes you just want to show of the query, you can hide the transactions like so:
 
@@ -50,16 +47,27 @@ You can do the same with the query of course:
   <Query hidden={true} q="SELECT * FROM docs"/>
 </Fiddle>
 
-### Errors
+## AutoLoad
+
+You can tell Fiddle to load it's results on page load by using the `autoLoad` property:
+
+<Fiddle autoLoad>
+  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Query q="SELECT * FROM docs"/>
+</Fiddle>
+
+This is particularly useful for [Templated Queries](#templated-queries) as we'll see below.
+
+## Errors
 
 If you have an error in the transactions/query it looks like this:
 
-<Fiddle>
+<Fiddle autoLoad>
   <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FOM docs" />
 </Fiddle>
 
-### System Time
+## System Time
 
 You can set system time on a transaction like so:
 
@@ -69,7 +77,7 @@ You can set system time on a transaction like so:
   <Query q="SELECT * FROM xt$txs" />
 </Fiddle>
 
-### Multiple Transactions
+## Multiple Transactions
 
 It can be useful to include multiple "batches" of transactions.
 Particularly for showing of valid time & system time:
@@ -85,7 +93,22 @@ Particularly for showing of valid time & system time:
   ORDER BY d.xt$id, d.xt$system_from`} />
 </Fiddle>
 
-### Magic Context
+## Lone Transaction
+
+If you have a transaction on it's own then it won't be rendered with an editor:
+
+<Fiddle>
+  <Txs txs="INSERT INTO docs
+            (xt$id, name)
+            VALUES
+            (1, 'one');" />
+</Fiddle>
+
+(It will still contribute to magicContext if you set one).
+
+It will also render without an editor if you use a [Templated Query](#templated-queries).
+
+## Magic Context
 
 While of course you can use hidden `Txs` to include transactions previously executed on the page but that can get tedious.
 
@@ -129,10 +152,104 @@ This fiddle uses a different context id, so it will not use the context of previ
 </Fiddle>
 
 
-### Caveats
+## Templated Queries
 
-Please note that the fiddle expects **exactly one** `Query` and it will always run it **after all transactions are run**
-For example:
+Having a full editor and asking a user to change it can be a lot. Instead you can use a query template:
+
+import QueryTemplate from "@components/fiddle/template.astro"
+import Range from "@components/fiddle/range.astro"
+
+<Fiddle autoLoad magicContext="orders">
+  <Txs txs="INSERT INTO orders
+            (xt$id, name, count, xt$valid_from)
+            VALUES
+            (1, 'Bike',        4, DATE '2024-01-01'),
+            (2, 'Ice Cream',   3, DATE '2024-01-02'),
+            (3, 'Tennis Ball', 5, DATE '2024-01-03'),
+            (4, 'Toy Gun',     2, DATE '2024-01-04'),
+            (5, 'Blocks',      1, DATE '2024-01-05')" />
+  <QueryTemplate q="SELECT *
+                    FROM orders
+                    LIMIT {{limit}}" />
+  <Range name="limit" min={0} max={5} step={1} value={3} />
+</Fiddle>
+
+Query templates use [mustache](https://mustache.github.io/) templates.
+
+Use [Inputs](#inputs) to set the state used to render the template.
+
+It usually makes sense to set the `autoLoad` property when you have a query template.
+
+## Inputs
+
+Inputs set variables in the template using their `name` property.
+
+<Fiddle autoLoad magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders
+                    {{#enabled}}
+                    LIMIT {{limit}}
+                    {{/enabled}}" />
+  <div class="flex flex-row gap-2">
+    Limit:
+    <Checkbox name="enabled" checked />
+    <Range name="limit" min={0} max={5} step={1} value={3} />
+  </div>
+</Fiddle>
+
+See [Available Inputs](#available-inputs) for a showcase.
+
+
+## Outputs
+
+By default, if no outputs are added a [table output](#table-output) is automatically appended to the fiddle.
+
+You can override this by adding your own:
+
+<Fiddle autoLoad magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    WHERE o.count > {{count}}
+                    ORDER BY o.xt$id" />
+  <Range name="count" min={0} max={6} step={2} value={0} />
+  <OutputVega spec={{
+    $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+    data: { name: "table" },
+    mark: "bar",
+    encoding: {
+      x: { field: 'xt$id', type: 'ordinal' },
+      y: { field: 'count', type: 'quantitative' }
+    }
+  }} />
+</Fiddle>
+
+You can also have multiple if you want:
+
+<Fiddle autoLoad magicContext="orders">
+  <QueryTemplate q="SELECT *
+                    FROM orders AS o
+                    WHERE o.count > {{count}}
+                    ORDER BY o.xt$id" />
+  <Range name="count" min={0} max={6} step={2} value={0} />
+  <div class="grid grid-cols-2 gap-1">
+    <OutputVega spec={{
+      $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+      data: { name: "table" },
+      mark: "bar",
+      encoding: {
+        x: { field: 'xt$id', type: 'ordinal' },
+        y: { field: 'count', type: 'quantitative' }
+      }
+    }} />
+    <OutputTable />
+  </div>
+</Fiddle>
+
+See [Available Outputs](#available-outputs) for a showcase.
+
+## Caveats
+
+Please note that the fiddle expects **exactly one** query:
 
 <Fiddle>
   <Txs txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one')" />
@@ -141,137 +258,22 @@ For example:
   <Query q="this won't be run" />
 </Fiddle>
 
-And with no query you'll get an error at load time in the browser console.
-
-<Fiddle>
-  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (2, 'two')" />
-</Fiddle>
-
-Having just a query is fine though (and useful with Magic Context):
+The query is always run last:
 
 <Fiddle>
   <Query q="SELECT * FROM docs" />
+  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one')" />
 </Fiddle>
 
-
-## Live Queries
-
-import LiveQuery from '@components/live-query.astro';
-import Range from '@components/live-query/range.astro';
-import QueryTemplate from '@components/live-query/template.astro';
-
-An extensible system for running interactive queries with visualisations.
-
-
-### Basic Usage
-
-You specify some number of [inputs](#available-inputs), and a query template (which uses [mustache](https://mustache.github.io/) templates).
-
-Inputs set a variable in the template using their `name` property.
-
-<LiveQuery>
-  <QueryTemplate q={`
-SELECT *
-FROM (
-  VALUES
-  (1, 'Bike',        4),
-  (2, 'Ice Cream',   3),
-  (3, 'Tennis Ball', 5),
-  (4, 'Toy Gun',     2),
-  (5, 'Blocks',      1)
-) AS orders(xt$id, name, count)
-LIMIT {{limit}}
-`} />
-  <Range name="limit" min={0} max={5} step={1} value={3} />
-</LiveQuery>
-
-
-### Magic Context
-
-Live queries work with Magic Context as you would expect:
-
-First setup some transactions:
-
-<Fiddle magicContext="orders">
-  <Txs txs="INSERT INTO orders
-            (xt$id, name, count)
-            VALUES
-            (1, 'Bike',        4),
-            (2, 'Ice Cream',   3),
-            (3, 'Tennis Ball', 5),
-            (4, 'Toy Gun',     2),
-            (5, 'Blocks',      1)" />
-  <Query hidden
-         q="SELECT *
-            FROM xt$txs" />
-</Fiddle>
-
-Then use them:
-
-<LiveQuery magicContext="orders">
-  <QueryTemplate q="SELECT *
-                    FROM orders
-                    LIMIT {{limit}}" />
-  <Range name="limit" min={0} max={5} step={1} value={3} />
-</LiveQuery>
-
-
-### Txs
-
-You can add Txs to a LiveQuery as you would expect:
-
-<LiveQuery>
-  <Txs txs="INSERT INTO orders
-            (xt$id, name, count)
-            VALUES
-            (1, 'Bike',        4),
-            (2, 'Ice Cream',   3),
-            (3, 'Tennis Ball', 5),
-            (4, 'Toy Gun',     2),
-            (5, 'Blocks',      1)" />
-  <QueryTemplate q="SELECT *
-                    FROM orders
-                    LIMIT {{limit}}" />
-  <Range name="limit" min={0} max={5} step={1} value={3} />
-</LiveQuery>
-
-
-### AutoLoad
-
-You can set a live query to load it's results on page load by using the `autoLoad` property:
-
-<LiveQuery autoLoad magicContext="orders">
-  <QueryTemplate q="SELECT *
-                    FROM orders
-                    LIMIT {{limit}}" />
-  <Range name="limit" min={0} max={5} step={1} value={3} />
-</LiveQuery>
-
-
-### Errors
-
-Errors look like this:
-
-<LiveQuery autoLoad magicContext="orders">
-  <QueryTemplate q="SELECT *
-                    {{^break}}
-                    FROM orders AS o
-                    {{/break}}
-                    ORDER BY o.xt$id" />
-  <div class="flex flex-row gap-2 items-center">
-    Uncheck to un-break the query:
-    <Checkbox name="break" checked />
-  </div>
-</LiveQuery>
-
-
-### Styling Tips
+## Styling Tips
 
 As you'll have seen in the examples above, you can use tailwind to style the inputs.
 
 This is handy for:
 
-<LiveQuery magicContext="orders">
+import Text from '@components/fiddle/text.astro';
+
+<Fiddle magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE {{#true}}true{{/true}}{{^true}}false{{/true}} {{#enableSearch}}AND o.name LIKE '%{{search}}%'{{/enableSearch}}
@@ -295,104 +297,103 @@ This is handy for:
     <Checkbox name="enableSearch" checked />
     <Text name="search" />
   </div>
-</LiveQuery>
+</Fiddle>
 
+## Available Inputs
 
-### Available Inputs
-
-#### Checkbox
-
-import Checkbox from '@components/live-query/checkbox.astro';
+### Checkbox
 
 A wrapper around the [checkbox input](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/checkbox).
 
-<LiveQuery magicContext="orders">
+import Checkbox from "@components/fiddle/checkbox.astro"
+
+<Fiddle magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
+                    -- Watch as the below changes:
                     {{#useWhere}}
                     WHERE o.count < 3
                     {{/useWhere}}
                     ORDER BY o.xt$id" />
   <Checkbox name="useWhere" checked />
-</LiveQuery>
+</Fiddle>
 
-#### Range
+### Range
 
 You can provide a `min`, `max`, `step` and `value` to specify a range.
 Can be a float or integer.
 
-<LiveQuery magicContext="orders">
+<Fiddle magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE o.count > {{count}}
                     ORDER BY o.xt$id" />
   <Range name="count" min={0} max={6} step={2} />
-</LiveQuery>
+</Fiddle>
 
-#### DateRange
+### DateRange
 
-import DateRange from '@components/live-query/date-range.astro';
+import DateRange from '@components/fiddle/date-range.astro';
 
 A customised range input specifically for outputting dates with two varieties:
 
 You can provide a `start`, `stop` and `step` amount to have a full range of dates:
 
-<LiveQuery magicContext="orders">
+<Fiddle magicContext="orders">
   <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
                     ORDER BY o.xt$id" />
   <DateRange name="validTime" start="2024-01-01" stop="2024-01-05" step="1 day" value="2024-01-04" />
-</LiveQuery>
+</Fiddle>
 
 Or you can provide an array of dates:
 
-<LiveQuery magicContext="orders">
+<Fiddle magicContext="orders">
   <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
                     ORDER BY o.xt$id" />
-  <DateRange name="validTime" dates={["2024-01-01","2024-02-01","2024-03-05"]} value="2024-03-05" />
-</LiveQuery>
+  <DateRange name="validTime" dates={["2024-01-01","2024-01-02","2024-01-05"]} value="2024-01-05" />
+</Fiddle>
 
-#### Text
-
-import Text from '@components/live-query/text.astro';
+### Text
 
 A textbox element that allows the user to type in whatever they like:
 
-<LiveQuery magicContext="orders">
+<Fiddle magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE o.name LIKE '%{{name}}%'
                     ORDER BY o.xt$id" />
   <Text name="name" value="Toy" />
-</LiveQuery>
+</Fiddle>
 
-### Available Outputs
 
-#### Table
+## Available Outputs
 
-import OutputTable from '@components/live-query/output-table.astro';
+### Table
+
+import OutputTable from '@components/fiddle/output-table.astro';
 
 The same table used in the Fiddle. Added by default if no output is provided.
 
-<LiveQuery autoLoad magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE o.count > {{count}}
                     ORDER BY o.xt$id" />
   <Range name="count" min={0} max={6} step={2} />
   <OutputTable />
-</LiveQuery>
+</Fiddle>
 
-#### Vega
+### Vega
 
-import OutputVega from '@components/live-query/output-vega.astro';
+import OutputVega from '@components/fiddle/output-vega.astro';
 
 Displays a vega chart. You can specify a chart spec using the `spec` arg.
 
 Data is provided through a dataset named `table`.
 
-<LiveQuery autoLoad magicContext="orders">
+<Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders AS o
                     WHERE o.count > {{count}}
@@ -407,4 +408,122 @@ Data is provided through a dataset named `table`.
       y: { field: 'count', type: 'quantitative' }
     }
   }} />
-</LiveQuery>
+</Fiddle>
+
+{/*
+
+TODO: Put this somewhere?
+
+<Fiddle autoLoad>
+  <Txs hidden txs={`
+INSERT INTO customer (xt$id, address, preference, xt$valid_from, xt$valid_to)
+VALUES
+-- Customer 1
+(1, 'address 1', 'preference 1', DATE '2024-01-01', DATE '2024-01-05'),
+(1, 'address 2', 'preference 1', DATE '2024-01-05', DATE '2024-03-10'),
+(1, 'address 2', 'preference 2', DATE '2024-03-10', DATE '2024-06-15'),
+(1, 'address 2', 'preference 3', DATE '2024-06-15', NULL),
+
+-- Customer 2
+(2, 'address 1', 'preference 1', DATE '2024-02-02', DATE '2024-05-12'),
+(2, 'address 1', 'preference 2', DATE '2024-05-12', NULL),
+
+-- Customer 3
+(3, 'address 1', 'preference 1', DATE '2024-01-02', DATE '2024-04-12'),
+(3, 'address 2', 'preference 1', DATE '2024-04-12', DATE '2024-08-12'),
+
+-- Customer 4
+(4, 'address 1', 'preference 1', DATE '2024-06-05', DATE '2024-08-05'),
+(4, 'address 2', 'preference 2', DATE '2024-08-05', DATE '2024-10-07'),
+(4, 'address 1', 'preference 2', DATE '2024-10-07', NULL)`} />
+  <div class="flex flex-row gap-2 items-center">
+    <div class="flex flex-row gap-2 items-center">
+      from:
+      <DateRange name="from" start="2024-01-01" stop="2025-01-01" step="1 month" value="2024-01-01" />
+    </div>
+    <div class="flex flex-row gap-2 items-center">
+      to:
+      <DateRange name="to" start="2024-01-01" stop="2025-01-01" step="1 month" value="2025-01-01" />
+    </div>
+  </div>
+  <QueryTemplate q={`
+SELECT CAST(customer.xt$id AS INTEGER) AS id,
+   customer.address,
+   customer.preference,
+   customer.xt$valid_from AS valid_from,
+   customer.xt$valid_to AS valid_to
+FROM customer FOR VALID_TIME FROM {{from}} TO {{to}}
+ORDER BY CAST (customer.xt$id AS INTEGER), customer.xt$valid_from`} />
+
+  <OutputVega spec={{
+    data: { name: "table" },
+    transform: [
+    ],
+    vconcat: [
+      {
+        width: 600,
+        title: "Customers transaction history",
+        encoding: {
+          x: {
+            field: "valid_from",
+            type: "temporal",
+            title: "valid time",
+            scale: { domain: { param: "brush" } }
+          },
+          y: {
+            field: "id",
+            type: "ordinal"
+          }
+        },
+        layer: [
+          {
+            description: "tx-timeline",
+            mark: {
+              type: "line",
+              point: false
+            },
+            encoding: { detail: { field: "id" } }
+          },
+          {
+            description: "Timeline outline",
+            mark: {
+              type: "point",
+              filled: false,
+              size: 125
+            }
+          },
+          {
+            description: "Timeline points",
+            mark: {
+              type: "point",
+              filled: true,
+              opacity: 1.0,
+              size: 75
+            },
+            encoding: {
+              tooltip: [
+                { field: "id" },
+                { field: "address" },
+                { field: "preference" }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        width: 600,
+        title: "Valid time",
+        mark: "tick",
+        params: [
+          {
+            name: "brush",
+            select: { type: "interval", encodings: ["x"] }
+          }
+        ],
+        encoding: { x: { field: "valid_from", type: "temporal" } }
+      }
+    ]
+  }} />
+</Fiddle>
+
+*/}

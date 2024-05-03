@@ -2,9 +2,15 @@
 const { hidden, systemTime, txs } = Astro.props;
 
 var props = {
-    'data-hidden': hidden ? 'true' : undefined,
-    'data-system-time': systemTime ? systemTime : undefined,
-    'data-txs': txs.trim(),
+    'data-txs': txs.trim()
+}
+
+if (hidden) {
+    props['data-hidden'] = 'true';
+}
+
+if (systemTime) {
+    props['data-system-time'] = systemTime;
 }
 ---
 <div class:list={[{hidden: hidden}, "relative flex flex-col"]}>
@@ -15,21 +21,42 @@ var props = {
 </div>
 
 <script>
+    import { FiddleComponent } from "./fiddle.js"
     import { makeEditor } from "./editor.ts"
+    import { highlightSql } from "./utils.js"
 
-    class FiddleTxs extends HTMLElement {
-        constructor() {
-            super();
+    class FiddleTxs extends FiddleComponent {
+        connectedCallback() {
+            super.connectedCallback();
+            this._registry.registerTxs(this);
+
+            // Use an editor if a query is added
+            this.editor;
             if (!this.dataset.hidden) {
+                // If there's a query editor, this should also be an editor
+                if (this._registry.query && !this._registry.isTemplate) {
+                    this._setupEditor();
+                } else {
+                    // In case the query is added later
+                    this._registry.on("registerQuery", _ => {
+                        this._setupEditor();
+                    });
+
+                    // Otherwise, let's render this as a code block
+                    let highlight = highlightSql(this.dataset.txs);
+                    this.innerHTML = '<pre class="overflow-x-auto text-sm">' + highlight.value + '</pre>';
+                }
+            }
+        }
+
+        _setupEditor() {
+            if (!this.editor) {
+                this.innerHTML = "";
                 this.editor = makeEditor({
                     initialText: this.dataset.txs,
                     parent: this,
                 });
             }
-        }
-
-        get originalTxs() {
-            return this.dataset.txs;
         }
 
         get txs() {
