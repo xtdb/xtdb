@@ -65,7 +65,7 @@ In contrast, XTDB allows applications to refer to previous database states witho
 `} />
 </Fiddle>
 
-No locking, copying, or snapshotting required. Queries against old, stable versions of the data are always consistent and will never contain partial changes or 'tearing' in the results.
+No locking, copying, or snapshotting is taking place against within XTDB. Queries against old, stable versions of the data are always consistent and will never contain partial changes or 'tearing' in the results.
 
 ## 3) Interleaving Upstream Sources: who's timestamp?
 
@@ -122,7 +122,7 @@ WHERE trades.xt$id = 1;`} />
 `UPDATE trades
 SET info = {'price': 101,
             'qty': 4,
-	    'model_params':[3.14, DATE '2020-06-01']}
+            'model_params':[DATE '2020-06-01', {'gbp_usd': 1.2617}]}
 WHERE trades.xt$id = 1;`} />
 
   <Query q={
@@ -130,6 +130,10 @@ WHERE trades.xt$id = 1;`} />
   FROM trades FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
 `} />
 </Fiddle>
+
+Unlike typical document databases, XTDB provides complete SQL expressiveness and join capabilities:
+
+
 
 ## 5) Intelligent Archival: live data and storage tiering with transparent queries
 
@@ -165,12 +169,75 @@ WHERE trades.xt$id = 1;`} />
 `} />
 </Fiddle>
 
+Extracting unbounded "change data" from XTDB is therefore trivial, without any additional Change Data Capture complexity or integration work beyond raw SQL.
+
 Only systems with a comprehensive, fine-grained understanding of the data lifecycle can effectively implement storage tiering to reduce long-term costs.
 
 ## 6) Corrections: curated history
 
-Many finance applications rely on carefully designed 'forward correction' mechanisms.
+Many finance applications rely on carefully designed 'forward correction' mechanisms that preserve an audit history whilst compensating for mistakes in human-scale business processes and software logic.
+
+For example if someone mistypes a trade price, it may be sufficient to just record the revised price "as of now" in order to resolve the situation.
+
+However, if any part of the application or downstream trade processing relies on a consistent understanding of the precise periods of time to when that revision is made, particularly if there is reporting happening against historic timestamps, then the mistake must also be resolved such that queries against historic timestamps will observe the _corrected_ values.
+
+Otherwise, the forward-correcting logic itself must be replicated (without bugs!) in every downstream system in order to ensure that any re-processing or revised calculations happening in those systems incorporate the changes appropriately across the given reporting period.
+
+Valid-time in XTDB may be fully controlled by the application, and can therefore be carefully adjusted to reflect the most accurate, linear understanding of historical changes to data. Any previous versions of data can be 'corrected' using SQL:2011 temporal operators:
+
+<Fiddle autoLoad>
+  <Txs systemTime="2020-01-01"
+       txs={
+`INSERT INTO trades (xt$id, price) VALUES (1, 100);`} />
+  <Txs systemTime="2020-01-02"
+       txs={
+`UPDATE trades SET price = 2000
+WHERE trades.xt$id = 1;`} />
+  <Txs systemTime="2020-01-04"
+       txs={
+`UPDATE trades SET price = 400
+WHERE trades.xt$id = 1;`} />
+  <Txs systemTime="2020-01-05"
+       txs={
+`UPDATE trades
+FOR PORTION OF VALID_TIME FROM DATE '2020-01-02' TO DATE '2020-01-04'
+SET price = 200
+WHERE trades.xt$id = 1;`} />
+
+  <QueryTemplate q={
+`SELECT trades.xt$id, trades.price, trades.xt$valid_from, trades.xt$valid_to
+  FROM trades
+  FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
+  FOR SYSTEM_TIME AS OF {{systemTime}}
+  ORDER BY trades.xt$valid_from
+`} />
+  <DateRange name="systemTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04","2020-01-05"]} value="2020-01-01" />
+</Fiddle>
+
+Combined with the use of system-time, XTDB gives applications the ability to retrieve data consistently, both with and without corrections.
 
 ## 7) Scheduled Effectivity: synchronize and preview future states
+
+### Automatic record expiration
+
+`valid_to` doesn't just have to be set to past or current timestamps, it can also be set to _future_ timestamps.
+
+This is useful for reducing or eliminating various batch-update activities that might normally take place. For example if a trade has a known expiration date in the future, an application might periodically remove expired trades from the database.
+
+Using `valid_to`, the process of removing expired trades can happen implicitly as the database clock moves forward, avoiding the need to have a long-running batch job that must execute transactionally.
+
+### Coordinated future versions
+
+More generally, almost all software developers will have struggled with deploying changes to applications in their careers. Even in modern environments where automation is common, things can easily go wrong and people must be on standby to assist with fixing or reverting changes.
+
+Since the risks are non-zero, any scheduled maintainance windows for deploying application changes will therefore typically take place during unsociable working hours.
+
+Instead of relying on a scheduled batch process to update an underlying database at a given time with some new set of records or schema changes, XTDB's universal implementation of valid-time can be used as a mechanism to coordinate future changes _within_ the database.
+
+In other words, `valid_from` can also be set to future timestamps:
+
+Whilst this ability to "load data into the future" may not address all aspects of application deployment, it can help to remove some of the more challenging integration and reliability failure points in systems.
+
+Additionally, SQL queries are able to preview the effects of any future valid-time changes:
 
 ## 8) What If: time-travelling source of truth
