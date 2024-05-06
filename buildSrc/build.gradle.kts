@@ -15,3 +15,7 @@ dependencies {
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+
+tasks.shadowJar {
+    isZip64 = true
+}
