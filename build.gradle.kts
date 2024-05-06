@@ -123,6 +123,10 @@ allprojects {
                         jvmArgs += "-Darrow.enable_unsafe_memory_access=true"
                     }
 
+                    if (project.hasProperty("enableAssertions")) {
+                        jvmArgs += "-enableassertions"
+                    }
+
                     this.jvmArgs = jvmArgs
                 }
 
