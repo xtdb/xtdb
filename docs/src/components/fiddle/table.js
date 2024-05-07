@@ -46,7 +46,7 @@ function makeTable(rows) {
     for (const row of rows) {
         var rowCols = "";
         for (const key of allKeys) {
-            let value = row[key] || null;
+            let value = key in row ? row[key] : null;
             let highlight = hljs.highlight(JSON.stringify(value), {language: 'json'});
             rowCols += `<td class="text-left p-1">${highlight.value}</Code></td>`;
         }
