@@ -1135,10 +1135,10 @@
              {:x 1, :y "c", :bar "c", :xt/id 3}}
            (set (xt/q tu/*node* "SELECT docs.*, docs.y AS bar FROM docs"))))
 
-  (t/is (= #{{:x 2, :y "b", :xt/id 2}
-             {:x 3, :y "a", :xt/id 1}
-             {:x 1, :y "c", :xt/id 3}}
-           (set (xt/q tu/*node* "SELECT docs.*, docs.y FROM docs"))))
+  (t/is (= #{{:x 2, :new-y "b", :xt/id 2}
+             {:x 3, :new-y "a", :xt/id 1}
+             {:x 1, :new-y "c", :xt/id 3}}
+           (set (xt/q tu/*node* "SELECT docs.* RENAME docs.y AS new_y FROM docs"))))
 
   (t/is (= #{{:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 2,
@@ -1168,6 +1168,29 @@
               :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
              (set (xt/q tu/*node* "SELECT docs.*, docs.xt$valid_from FROM docs WHERE docs.xt$system_to = docs.xt$valid_to")))))
 
+(t/deftest test-select-star-asterisk-clause
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3 :y "a"}]
+                           [:put-docs :docs {:xt/id 2 :x 2 :y "b"}]
+                           [:put-docs :docs {:xt/id 3 :x 1 :y "c"}]])
+
+  (t/is (= [{:xt/id 1, :x 3, :y "a"}]
+           (xt/q tu/*node* "SELECT * FROM docs WHERE xt$id = 1")))
+
+  (t/is (= [{:xt/id 1, :y "a"}]
+           (xt/q tu/*node* "SELECT * EXCLUDE x FROM docs WHERE xt$id = 1")))
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* "SELECT * EXCLUDE (x, y) FROM docs WHERE xt$id = 1")))
+
+  (t/is (= [{:xt/id 1, :x 3, :z "a"}]
+           (xt/q tu/*node* "SELECT * RENAME y AS z FROM docs WHERE xt$id = 1")))
+
+  (t/is (= [{:xt/id 1, :y 3, :z "a"}]
+           (xt/q tu/*node* "SELECT * RENAME (x AS y, y AS z) FROM docs WHERE xt$id = 1")))
+
+  (t/is (= [{:xt/id 1, :y 3}]
+           (xt/q tu/*node* "SELECT * EXCLUDE y RENAME (x AS y, y AS z) FROM docs WHERE xt$id = 1"))))
+
 (deftest test-select-star-qualified-join
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]
                            [:put-docs :bar {:xt/id 2 :a "one"}]])
@@ -1176,7 +1199,10 @@
            (xt/q tu/*node* "SELECT * FROM foo JOIN bar ON true")))
 
   (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
-           (xt/q tu/*node* "FROM foo JOIN bar ON true"))))
+           (xt/q tu/*node* "FROM foo JOIN bar ON true")))
+
+  (t/is (= [{:bar-id 2, :a "one", :foo-id 1}]
+           (xt/q tu/*node* "SELECT * RENAME (foo.xt$id AS foo_id, bar.xt$id AS bar_id) FROM foo JOIN bar ON true"))))
 
 (deftest test-expand-asterisk-parenthesized-joined-table
   ;;Parens in the place of a table primary creates a parenthesized_joined_table
@@ -1187,10 +1213,10 @@
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]
                            [:put-docs :bar {:xt/id 2 :a "one"}]])
 
-  (t/is (= [{:xt/id 1, :a "one", :xt/id:1 2}]
+  (t/is (= [{:foo-id 1 :bar-id 2 :a "one"}]
 
            (xt/q tu/*node*
-                 "SELECT * FROM ( foo LEFT JOIN bar ON true )"))))
+                 "SELECT * RENAME (foo.xt$id AS foo_id, bar.xt$id AS bar_id) FROM ( foo LEFT JOIN bar ON true )"))))
 
 (deftest test-select-star-lateral-join
   (xt/submit-tx tu/*node* [[:put-docs :y {:xt/id 1 :b "one"}]])

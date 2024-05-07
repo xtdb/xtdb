@@ -547,9 +547,25 @@ windowFrameExclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUDE'
 /// §7.12 <query specification>
 
 selectClause : 'SELECT' setQuantifier? selectList ;
-selectList : ASTERISK | selectSublist (',' selectSublist)* ;
+selectList
+    : ASTERISK excludeClause? renameClause? # SelectListAsterisk
+    | selectSublist (',' selectSublist)* # SelectListCols ;
+
 selectSublist : derivedColumn | qualifiedAsterisk ;
-qualifiedAsterisk : identifierChain '.' ASTERISK ;
+qualifiedAsterisk : identifierChain '.' ASTERISK excludeClause? renameClause?;
+
+renameClause
+    : 'RENAME' renameColumn
+    | 'RENAME' '(' renameColumn (',' renameColumn )* ')'
+    ;
+
+renameColumn : columnReference asClause ;
+
+excludeClause
+    : 'EXCLUDE' identifier
+    | 'EXCLUDE' '(' identifier (',' identifier )* ')'
+    ;
+
 derivedColumn : expr asClause? ;
 asClause : 'AS'? columnName ;
 

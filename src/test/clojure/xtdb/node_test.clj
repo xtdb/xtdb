@@ -421,8 +421,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (xt/submit-tx tu/*node*
                 [[:sql "INSERT INTO foo (xt$id, a) VALUES (1, 1)"]
                  [:sql "INSERT INTO foo (xt$id, b) VALUES (2, 2)"]
-                 [:sql "INSERT INTO bar (xt$id, a) VALUES (1, 3)"]
-                 [:sql "INSERT INTO bar (xt$id, b) VALUES (2, 4)"]])
+                 [:sql "INSERT INTO bar (xt$id, c) VALUES (1, 3)"]
+                 [:sql "INSERT INTO bar (xt$id, d) VALUES (2, 4)"]])
 
   (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
            (set (xt/q tu/*node* "SELECT * FROM foo"))))
@@ -430,35 +430,32 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
            (set (xt/q tu/*node* "FROM foo"))))
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "SELECT * FROM foo, bar"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT * EXCLUDE (xt$id) FROM foo, bar"))))
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "FROM foo, bar"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT bar.* EXCLUDE (xt$id), foo.* EXCLUDE (xt$id) FROM foo, bar"))))
 
-  (t/is (= #{{:xt/id 1, :a 3, :xt/id:1 1, :a:1 1}
-             {:xt/id 2, :b 4, :xt/id:1 1, :a:1 1}
-             {:xt/id 1, :a 3, :xt/id:1 2, :b:1 2}
-             {:xt/id 2, :b 4, :xt/id:1 2, :b:1 2}}
-           (set (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT * FROM (SELECT * EXCLUDE (xt$id) FROM foo, bar) AS baz"))))
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "SELECT * FROM (SELECT * FROM foo, bar) AS baz"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "FROM (SELECT * EXCLUDE (xt$id) FROM foo, bar) AS baz"))))
+  
+  (t/is (= #{{:xt/id 1 :a 1 :c 3} {:xt/id 1 :b 2 :c 3} {:xt/id 2 :a 1 :d 4} {:xt/id 2 :b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT bar.*, foo.a, foo.b FROM foo, bar"))))
+  
+  (t/is (= #{{} {:b 2}}
+           (set (xt/q tu/*node* "SELECT * EXCLUDE (xt$id, a) FROM foo"))))
+  
+  (t/is (= #{{:xt/id 1 :new 1} {:xt/id 2 :b 2}}
+           (set (xt/q tu/*node* "SELECT * RENAME a AS new FROM foo")))) 
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "FROM (SELECT * FROM foo, bar) AS baz"))))
+  (t/is (= #{{:xt/id 1 :new 1} {:xt/id 2 :new2 2}}
+           (set (xt/q tu/*node* "SELECT * RENAME (a AS new, b AS new2)  FROM foo"))))
+
+  (t/is (= #{{} {:new 1}}
+           (set (xt/q tu/*node* "SELECT * EXCLUDE (xt$id, b) RENAME a AS new FROM foo")))) 
 
   (xt/submit-tx tu/*node*
                 [[:sql "INSERT INTO bing (SELECT * FROM foo)"]])
