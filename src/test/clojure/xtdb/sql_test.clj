@@ -652,7 +652,7 @@
 (t/deftest test-arrow-table
   (t/is (=plan-file
           "test-arrow-table-1"
-          (plan-sql "SELECT foo.a FROM ARROW_TABLE('test.arrow') AS foo")))
+          (plan-sql "SELECT foo.a FROM ARROW_TABLE('test.arrow') AS foo (a)")))
 
   (t/is (=plan-file
           "test-arrow-table-2"
