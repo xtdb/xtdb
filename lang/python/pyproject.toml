@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xtdb"
-version = "0.0.1-dev0"
+version = "0.0.0-dev0"
 description = ""
 authors = ["XTDB Team <hello@xtdb.com>"]
 license = "MPL-2.0"
