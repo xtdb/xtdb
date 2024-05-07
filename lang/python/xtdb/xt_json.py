@@ -3,6 +3,9 @@ import uuid
 from .types import Query, QueryTail
 from .tx import TxOp
 
+class XTRuntimeError(RuntimeError):
+    def __init__(self, message):
+        super().__init__(message)
 
 class XtdbJsonEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -21,7 +24,7 @@ class XtdbJsonDecoder(json.JSONDecoder):
             if obj['@type'] == 'xt:uuid':
                 return uuid.UUID(obj['@value'])
             elif obj['@type'] == 'xt:error':
-                return obj
+                raise XTRuntimeError(obj['@value'])
             else:
                 raise ValueError(f"Unknown type: {obj['@type']}")
         return obj

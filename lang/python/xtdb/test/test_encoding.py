@@ -1,8 +1,8 @@
-from xtdb_juxt.xt_json import XtdbJsonEncoder
-from xtdb_juxt.query import From
-from xtdb_juxt.tx import PutDocs, Sql as SqlTx
-from xtdb_juxt import Xtdb
-from xtdb_juxt.types import Sql
+from xtdb.xt_json import XtdbJsonEncoder
+from xtdb.query import From
+from xtdb.tx import PutDocs, Sql as SqlTx
+from xtdb import Xtdb, DBAPI
+from xtdb.types import Sql
 
 import os
 import pytest
@@ -96,3 +96,8 @@ def test_uuid_encoding_3327(client):
     query = From("uuid_test", None, None, True)
     assert client.query(query) == [{"xt$id": sample_uuid}]
 
+def test_db_api_class(client):
+    conn = DBAPI().connect(client._url)
+    conn.execute("INSERT INTO docs (xt$id, foo) VALUES (1, 'bar')")
+    result = conn.execute("SELECT * FROM docs")
+    assert result.fetchall() == [['bar', 1]]
