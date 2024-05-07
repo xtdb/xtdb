@@ -20,6 +20,8 @@ class XtdbJsonDecoder(json.JSONDecoder):
         if '@type' in obj:
             if obj['@type'] == 'xt:uuid':
                 return uuid.UUID(obj['@value'])
+            elif obj['@type'] == 'xt:error':
+                return obj
             else:
                 raise ValueError(f"Unknown type: {obj['@type']}")
         return obj
