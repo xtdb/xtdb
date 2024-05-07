@@ -1,0 +1,28 @@
+---
+import Default from '@astrojs/starlight/components/Head.astro';
+---
+<Default {...Astro.props} />
+
+<script>
+    {/** NOTE: Included here not in https://starlight.astro.build/reference/configuration/#head
+       *       because the tailwind integration doesn't pick up on classes added in the head.
+       */}
+    if (window.location.search.includes('demo=true')) {
+        // Delete the header
+        document.querySelector('header').remove();
+        // Delete sidebar
+        document.querySelector('.sidebar').remove();
+        // Delete "on this page"
+        document.querySelector('aside').remove();
+        // Delete the footer
+        document.querySelector('footer').remove();
+
+        // Make all non-fiddle elements more transparent
+        document.querySelectorAll('.sl-markdown-content > *').forEach((el) => {
+            if (el.tagName != 'FIDDLE-EMBED') {
+                el.classList.add('opacity-30');
+            }
+        });
+            
+    }
+</script>
