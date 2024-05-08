@@ -363,7 +363,10 @@ function makeRegistry() {
     return registry
 }
 
-const registry = makeRegistry();
+var registry = makeRegistry();
+function clearRegistry() {
+    registry = makeRegistry();
+}
 
 class FiddleComponent extends HTMLElement {
     connectedCallback() {
@@ -387,4 +390,4 @@ class FiddleOutput extends FiddleComponent {
 
 }
 
-export { registry, FiddleComponent, FiddleInput, FiddleOutput }
+export { registry, clearRegistry, FiddleComponent, FiddleInput, FiddleOutput }

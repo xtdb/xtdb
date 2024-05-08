@@ -27,9 +27,11 @@ import Default from '@astrojs/starlight/components/Head.astro';
 </script>
 
 <script>
+    import { clearRegistry }  from '@components/fiddle/fiddle'
     const setup = () => {
         window.swup.hooks.on('page:view', () => {
             document.querySelector("starlight-menu-button").setExpanded(false);
+            clearRegistry();
         })
     }
     if (window.swup) {
