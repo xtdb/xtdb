@@ -493,7 +493,7 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
     }
 
     override fun visit(vec: UnionVector, notify: FieldChangeListener?): IVectorWriter =
-        throw UnsupportedOperationException()
+        SparseUnionVectorWriter(vec, notify)
 
     override fun visit(vec: DenseUnionVector, notify: FieldChangeListener?): IVectorWriter =
         DenseUnionVectorWriter(vec, notify)

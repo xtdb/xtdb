@@ -29,6 +29,11 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     }
 
     override fun writerPosition() = wp
+    override fun setWriterPosition(pos: Int) {
+        // TODO can this be skipped?
+        for (i in wp.position until pos) writeNull()
+        writerPosition().position = pos
+    }
 
     override fun clear() {
         super.clear()
