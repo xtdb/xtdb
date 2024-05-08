@@ -23,6 +23,13 @@ import Default from '@astrojs/starlight/components/Head.astro';
                 el.classList.add('opacity-30');
             }
         });
+
+        // Escape key
+        document.addEventListener ("keydown", function (zEvent) {
+            if (zEvent.ctrlKey  &&  zEvent.key === "e") {
+                window.location = window.location.href.split('?')[0];
+            }
+        });
     }
 </script>
 
