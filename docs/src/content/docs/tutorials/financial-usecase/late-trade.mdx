@@ -9,19 +9,19 @@ import Query from '@components/fiddle/query.astro';
 A typical trade flow will include the following steps:
 
 1. A trade is booked on a certain day at a certain time
-2. Later that same day, the trade is entered into a risk system
+2. At some time later, the trade is entered into a risk system. This might even be after the market has closed.
 
 Whenever a trade arrives in our risk system we can set the valid-time (the business curated timeline) to the exact time of the trade. This backfilling of histoical data allows us to understand and report on the risk position of our trade portfolio as-of any point in the past.
 
 For example, a set of trades entering our risk system may look something like this:
 
 <Fiddle magicContext="my-context">
-  <Txs systemTime="2024-01-15"
+  <Txs systemTime="2024-01-15T16:59:00"
        txs="INSERT INTO trades (xt$id, symbol, volume, xt$valid_from)
             VALUES
-            (1, 'ABC', 150, TIMESTAMP '2024-01-15 10:00:00'),
-            (2, 'XYZ', 430, TIMESTAMP '2024-01-15 11:15:00'),
-            (3, 'ABC', 200, TIMESTAMP '2024-01-15 12:05:00')" />
+            (1, 'XAU:CUR', 150, TIMESTAMP '2024-01-15 10:00:00'),
+            (2, 'NG1:COM', 430, TIMESTAMP '2024-01-15 11:15:00'),
+            (3, 'XAU:CUR', 200, TIMESTAMP '2024-01-15 12:05:00')" />
   <Query q="SELECT t.*, t.xt$valid_from AS trade_date
             FROM trades AS t
             ORDER BY t.xt$id" />
@@ -29,71 +29,43 @@ For example, a set of trades entering our risk system may look something like th
 
 However sometimes a trade is booked right at the end of the day, after the standard End-of-Day reporting window has closed, and therefore isn't available and processed by the system until sometime later.
 
-Let's say this trade was entered the next day:
+Let's say this trade was entered after the market close:
 
 <Fiddle magicContext="my-context">
-  <Txs systemTime="2024-01-16"
+  <Txs systemTime="2024-01-15T19:10:00"
        txs="INSERT INTO trades (xt$id, symbol, volume, xt$valid_from)
             VALUES
-            (4, 'DEF', 320, TIMESTAMP '2024-01-15 19:10:00')" />
+            (4, 'W1:COM', 320, TIMESTAMP '2024-01-15 16:50:00')" />
   <Query q="SELECT t.*, t.xt$valid_from AS trade_date
             FROM trades AS t
             ORDER BY t.xt$id" />
 </Fiddle>
 
-We can re-run our final risk reports for yesterday to include the late-arriving trade:
+The following day sees more trades entered into the system:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-16T16:59:00"
+       txs="INSERT INTO trades (xt$id, symbol, volume, xt$valid_from)
+            VALUES
+            (5, 'W1:COM', 100, TIMESTAMP '2024-01-16 12:10:00'),
+	    (6, 'W1:COM', 120, TIMESTAMP '2024-01-16 14:55:00')" />
+  <Query q="SELECT t.*, t.xt$valid_from AS trade_date
+            FROM trades AS t
+            ORDER BY t.xt$id" />
+</Fiddle>
+
+We can re-run our final risk reports for yesterday, which includes the late-arriving trade, but not the new trades for today:
 
 <Fiddle magicContext="my-context">
   <Query q="SELECT *
             FROM trades FOR ALL VALID_TIME AS t
-            WHERE t.VALID_TIME CONTAINS TIMESTAMP '2024-01-15 23:59:59'
+            WHERE t.VALID_TIME CONTAINS TIMESTAMP '2024-01-15 17:00:00'
             ORDER BY t.xt$id" />
 </Fiddle>
 
 Now our reports can be made consistent and reproducible whilst accounting for late-arriving data, great!
 
-Can anyone see any potential problems with updating the past like this?
+How would you achieve this capability without a database that allows you to query across time?
 
-Let's say instead of backfilling a trade to yesterday, someone adds a trade a *month* ago!
-
-<Fiddle magicContext="my-context">
-  <Txs txs="INSERT INTO trades (xt$id, symbol, volume, xt$valid_from)
-            VALUES
-            (5, 'GHI', 1000000, DATE '2023-12-01')" />
-  <Query q="SELECT t.*, t.xt$valid_from AS trade_date
-            FROM trades AS t
-            ORDER BY t.xt$id" />
-</Fiddle>
-
-Now when the auditors come in, they check for changes since they last were here:
-
-<Fiddle magicContext="my-context">
-  <Query q="SELECT *
-            FROM trades AS t
-            WHERE t.xt$valid_from > DATE '2024-01-01'
-            ORDER BY t.xt$id" />
-</Fiddle>
-
-They can't find the trade we sneaked into last month! Has someone just gotten away with fraud?
-
-If we want to allow editing the timeline, how can we avoid this?
-
-In XTDB we use system-time (a.k.a. wall-clock time), an **immutable** timeline that gets appended to with every change. This means our fraudulent/malicious/accidental edit from earlier gets caught easily:
-
-<Fiddle magicContext="my-context">
-  <Query q="SELECT *
-            FROM trades AS t
-            WHERE t.xt$system_from > DATE '2024-01-01'
-            ORDER BY t.xt$id" />
-</Fiddle>
-
-In fact we can even scan the system for suspicious or unusual changes. For example, any retroactive changes to valid-time that go back further than 24 hours:
-
-<Fiddle magicContext="my-context">
-  <Query q="SELECT t.*, t.xt$system_from, t.xt$valid_from
-            FROM trades AS t
-            WHERE (t.xt$system_from - t.xt$valid_from) > DURATION 'PT24H'
-            ORDER BY t.xt$id" />
-</Fiddle>
-
-Conclusion: As an immutable database, XTDB keeps you safe from your own changes by making sure to record when they happened. Even when reaching into the past!
+Many financial institutions build complex systems involving tagged data snapshots, exports and file processing simply to query the past.
+With XTDB, this extra complexity is avoided.

@@ -1,0 +1,29 @@
+---
+---
+<fiddle-output-traffic style="display: none;" />
+
+<script>
+    import { FiddleOutput } from "./fiddle.js"
+    import { makeError } from "../fiddle/utils.js"
+
+    class FiddleOutputTraffic extends FiddleOutput {
+        render(results) {
+            try {
+                let firstCol = results[0];
+                let value = firstCol[Object.keys(firstCol)[0]]
+                value = parseFloat(value).toFixed(2);
+
+                let color = value < 0 ? 'text-red-500' : 'text-black';
+
+                this.innerHTML = `<div class="text-3xl ${color}">${value}</div>`
+            } catch (e) {
+                this.innerHTML = makeError(
+                    "Result Error",
+                    "Uh oh! Failed to read the result. Please try again or contact us to sort it out.",
+                );
+            }
+        }
+    }
+
+    customElements.define('fiddle-output-traffic', FiddleOutputTraffic);
+</script>

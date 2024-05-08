@@ -10,9 +10,6 @@ class FiddleRegistry {
         // Input state
         this.state = {};
 
-        // Cache for the run function
-        this.runCache = {};
-
         // Txs inside the parent element
         // NOTE: These may not be initialised yet
         // NOTE: We search for these manually rather than register them because the order is important
@@ -216,16 +213,13 @@ class FiddleRegistry {
     }
 
     async run(query, txs) {
-        let cacheKey = JSON.stringify({txs, query});
-        if (cacheKey in this.runCache) {
-            return this.runCache[cacheKey];
-        }
-        
         // Run the given txs and query
         try {
             var response = await runFiddle(txs, query);
         } catch (e) {
             throw new Error("Network Error", {error: e});
+        } finally {
+            this._call("fetchComplete");
         }
 
         try {
@@ -238,9 +232,6 @@ class FiddleRegistry {
             ok: response.ok,
             body: json
         };
-
-        // Don't cache network or parse errors
-        this.runCache[cacheKey] = ret;
 
         return ret;
     }
@@ -363,7 +354,10 @@ function makeRegistry() {
     return registry
 }
 
-const registry = makeRegistry();
+var registry = makeRegistry();
+function clearRegistry() {
+    registry = makeRegistry();
+}
 
 class FiddleComponent extends HTMLElement {
     connectedCallback() {
@@ -387,4 +381,4 @@ class FiddleOutput extends FiddleComponent {
 
 }
 
-export { registry, FiddleComponent, FiddleInput, FiddleOutput }
+export { registry, clearRegistry, FiddleComponent, FiddleInput, FiddleOutput }

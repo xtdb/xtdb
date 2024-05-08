@@ -23,6 +23,29 @@ import Default from '@astrojs/starlight/components/Head.astro';
                 el.classList.add('opacity-30');
             }
         });
-            
+
+        // Escape key
+        document.addEventListener ("keydown", function (zEvent) {
+            if (zEvent.ctrlKey  &&  zEvent.key === "e") {
+                window.location = window.location.href.split('?')[0];
+            }
+        });
+    }
+</script>
+
+<script>
+    import { clearRegistry }  from '@components/fiddle/fiddle'
+    const setup = () => {
+        window.swup.hooks.on('page:view', () => {
+            document.querySelector("starlight-menu-button").setExpanded(false);
+        });
+        window.swup.hooks.on('content:replace', () => {
+            clearRegistry();
+        }, { before: true });
+    }
+    if (window.swup) {
+        setup()
+    } else {
+        document.addEventListener('swup:enable', setup)
     }
 </script>

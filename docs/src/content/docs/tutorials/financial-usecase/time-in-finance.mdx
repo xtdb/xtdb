@@ -1,0 +1,409 @@
+---
+title: Time in Finance
+---
+
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import Query from '@components/fiddle/query.astro';
+import QueryTemplate from "@components/fiddle/template.astro"
+import DateRange from '@components/fiddle/date-range.astro';
+import Range from "@components/fiddle/range.astro"
+
+IT systems of all kinds are plagued by many time-related complexities, from misconfigured Network Time Protocol and unexpected certificate expirations, to changing timezones and software concurrency bugs. However, systems in financial domains are additionally accutely affected by the following common requirements and challenges...
+
+<div class="not-content grid grid-cols-4 gap-2">
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#1-audit-and-replay-what-happened">Audit & Replay</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#2-snapshot-free-reporting-reproducibility-without-copying-and-result-tearing">Snapshot-free</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#3-interleaving-upstream-sources-whose-timestamp">Upstream Sources</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#4-complex-version-histories">Complex Histories</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#5-intelligent-archival-live-data-and-storage-tiering-with-transparent-queries">Intelligent Archival</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#6-corrections-curated-history">Corrections</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#7-scheduled-effectivity-synchronize-and-preview-future-states">Schedule Change</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#8-what-if-time-travelling-sources-of-truth">What If</a>
+</div>
+
+## 1) Audit and Replay: what happened?
+
+SQL databases systems typically lose information whenever UPDATE or DELETE are used. They also don't record or track the any changes to data by default.
+
+<Fiddle>
+  <Txs txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
+  <Txs txs="UPDATE trades SET price = 150 WHERE trades.xt$id = 1;" />
+  <Query q={
+`SELECT trades.xt$id, trades.price
+  FROM trades
+`}
+/>
+</Fiddle>
+
+In common SQL databases, the original price '100' is lost forever, and no information about when it was last changed is recorded. Perhaps if you're sufficiently desparate and very lucky there _might_ be an old backup of the data available somewhere with a previous value.
+
+As a consequence, software engineers working in financial domains are forced to routinely confront this fundamental 'mutability' across their database systems to ensure that sufficient records are kept for satisfying auditors and regulators about exactly how have changed over time.
+
+In XTDB however, there is no need for custom audit tables or timestamp columns to litter the application schema, because a full audit history is maintained automatically, and the history of the entire database can be 'replayed' with microsecond granularity.
+
+<Fiddle magicContext="audit">
+  <Txs txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
+  <Txs txs="UPDATE trades SET price = 150 WHERE trades.xt$id = 1;" />
+  <Query q={
+`SELECT trades.xt$id, trades.price, trades.xt$system_from, trades.xt$system_to
+  FROM trades FOR ALL SYSTEM_TIME
+`}
+/>
+</Fiddle>
+
+XTDB implements the SQL:2011 standard for "system time versioning" ubiquitously, across all tables. Queries can run against any previous database state and have full access to history through the regular SQL interface.
+
+A fully-ordered log of transaction history is maintained:
+
+<Fiddle magicContext="audit">
+  <Query q={
+`SELECT transaction_log.*
+FROM xt$txs AS transaction_log
+`}
+/>
+</Fiddle>
+
+## 2) Snapshot-free Reporting: reproducibility without copying and result tearing
+
+Most applications rely on an ability to issue multiple queries against a database, and can't simply execute a single SQL statement to retrieve all necessary information in a single round trip.
+
+To maintain consistency across multiple queries, databases offer ACID transaction sessions which fully isolate the reading application process from any concurrent writes that may be affecting the records being read.
+
+This session-oriented transaction isolation capability is typically stateful and extremely resource-intensive over long durations due to 'locking' of record versions internally within the database, and in turn this degrades the performance of all workloads using the system.
+
+To workaround these limitations of regular transactions, applications that need to run many queries in a consistent manner will often resort to first exporting all the necessary data or using database facilities to create explicit 'snapshots' (i.e. redundant copies).
+
+In contrast, XTDB allows applications to refer to previous database states without any declarations ahead of time - queries can simply specify the version of the database (using a 'basis' timestamp) and specific tables as needed:
+
+<Fiddle>
+  <Txs systemTime="2020-01-01"
+       txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
+  <Txs systemTime="2020-01-02"
+       txs="INSERT INTO trades (xt$id, price) VALUES (1, 150);" />
+  <Query q={
+`SELECT trades.xt$id, trades.price
+  FROM trades FOR SYSTEM_TIME AS OF DATE '2020-01-01'
+`} />
+</Fiddle>
+
+No locking, copying, or snapshotting is taking place against within XTDB. Queries against old, stable versions of the data are always consistent and will never contain partial changes or 'tearing' in the results.
+
+## 3) Interleaving Upstream Sources: whose timestamp?
+
+In many circumstances the system time of the database itself is uninteresting (i.e outside of auditing / debugging), and what is more relevant is the time recorded in an upstrem system. For instance a High-Frequency Trading platform could generate a trade with a timestamp that is anywhere from 0.01-100ms earlier than the time at which the trade database records the trade. In other situations information may even arrive hours or days 'late'.
+
+In cases where the upstream timestamps need to be respected for the AS OF application reporting requirement even moreso than the database timestamps, "valid time versioning" is required (implementing SQL:2011's notion of "application time versioning").
+
+Crucially, valid-time is suitable for handling out-of-order timestamp information coming from many upstream systems, whereas system-time is always a monotonically increasing local clock. All rows of data in XTDB keep track of system-time and valid-time timestamps, which allows for precise querying.
+
+Similarly to using system-time for snapshot-free reporting, valid-time can be used to run multiple queries consistently against fixed timestamps in conjunction with system-time, creating a "bitemporal timeslice" view of data.
+
+<Fiddle autoLoad>
+  <Txs systemTime="2020-01-02"
+       txs={
+`INSERT INTO trades (xt$id, price, xt$valid_from)
+VALUES (2, 200, DATE '2020-01-02');`} />
+  <Txs systemTime="2020-01-03"
+       txs={
+`INSERT INTO trades (xt$id, price, xt$valid_from)
+VALUES (1, 100, DATE '2020-01-01');`} />
+  <Txs systemTime="2020-01-04"
+       txs={
+`INSERT INTO trades (xt$id, price, xt$valid_from)
+VALUES (4, 400, DATE '2020-01-04');`} />
+
+  <QueryTemplate q={
+`SELECT trades.xt$id, trades.price
+  FROM trades FOR VALID_TIME AS OF {{validTime}}
+              FOR SYSTEM_TIME AS OF DATE '2020-01-31'
+`} />
+  <DateRange name="validTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04"]} value="2020-01-01" />
+</Fiddle>
+
+## 4) Complex Version Histories
+
+In addition to storing and reporting against upstream timestamps, financial applications often need to record and display multiple versions of entities.
+
+Within many SQL systems, schema migrations complicate the ability to retain access to prior versions, and many applications resort to storing data as denormalized JSON.
+
+XTDB allows applications to handle diverse shapes of evolving, document-like data natively within regular SQL. No schema is required up-front and regular SQL typing is respected:
+
+<Fiddle>
+  <Txs systemTime="2020-01-02"
+       txs={
+`INSERT INTO trades (xt$id, info, xt$valid_from)
+VALUES (1, {'price': 100}, DATE '2020-01-01');`} />
+  <Txs systemTime="2020-01-03"
+       txs={
+`UPDATE trades
+SET info = {'price': 100, 'qty': 5}
+WHERE trades.xt$id = 1;`} />
+  <Txs systemTime="2020-01-04"
+       txs={
+`UPDATE trades
+SET info = {'price': 101,
+            'qty': 4,
+            'model_params':[DATE '2020-06-01', {'gbp_usd': 1.2617}]}
+WHERE trades.xt$id = 1;`} />
+
+  <Query q={
+`SELECT trades.xt$id, trades.info, trades.xt$valid_from, trades.xt$valid_to
+  FROM trades FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
+`} />
+</Fiddle>
+
+Unlike 'document databases', XTDB also provides complete SQL expressiveness and join capabilities.
+
+## 5) Intelligent Archival: live data and storage tiering with transparent queries
+
+All data has a lifecycle, and in a typical application the window of 'live' data is carefully managed to ensure that the existence of old and now-irrelevant data does not impact the ongoing performance of the application more than necessary.
+
+For instance, once a trade has been settled, it no longer needs to be incorporated into new risk calculations.
+
+However, any such 'old' data invariably still needs to be retained beyond any single application's window of interest, so it likely gets migrated of 'archived' as part of a batch processing job into a longer term storage system which has a significantly lower basic operational cost for data retention.
+
+With XTDB's ubiquitous tracking of `system_to` and `valid_to` columns however, manual migration processes become unnecessary. Applications can allow data to be transparently archived into cheaper storage by the database without affecting the performance of working with live data.
+
+Whenever old data is needed to be queried, it can achieved purely via SQL without any out-of-band engineering or processing work.
+
+Applications can set the `valid_to` column explicitly to correspond with data lifecycle archival events like 'settled_at'. Or alternatively they can simple `DELETE` the relevant records (setting `valid_to` to the implicit `CURRENT_TIMESTAMP` at the time of the transaction):
+
+<Fiddle>
+  <Txs systemTime="2020-01-02"
+       txs={
+`INSERT INTO trades (xt$id, price, xt$valid_from)
+VALUES (1, 100, DATE '2020-01-01');`} />
+  <Txs systemTime="2020-01-03"
+       txs={
+`UPDATE trades SET price = 105
+WHERE trades.xt$id = 1;`} />
+  <Txs systemTime="2020-01-10"
+       txs={
+`DELETE FROM trades
+WHERE trades.xt$id = 1;`} />
+
+  <Query q={
+`SELECT trades.xt$id, trades.price, trades.xt$valid_from, trades.xt$valid_to
+  FROM trades FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
+`} />
+</Fiddle>
+
+Extracting unbounded "change data" from XTDB is therefore trivial, without any additional Change Data Capture complexity or integration work beyond raw SQL.
+
+Only systems with a comprehensive, fine-grained understanding of the data lifecycle can effectively implement storage tiering to reduce long-term costs.
+
+## 6) Corrections: curated history
+
+Many finance applications rely on carefully designed 'forward correction' mechanisms that preserve an audit history whilst compensating for mistakes in human-scale business processes and software logic.
+
+For example if someone mistypes a trade price, it may be sufficient to just record the revised price "as of now" in order to resolve the situation.
+
+However, if any part of the application or downstream trade processing relies on a consistent understanding of the precise periods of time to when that revision is made, particularly if there is reporting happening against historic timestamps, then the mistake must also be resolved such that queries against historic timestamps will observe the _corrected_ values.
+
+Otherwise, the forward-correcting logic itself must be replicated (without bugs!) in every downstream system in order to ensure that any re-processing or revised calculations happening in those systems incorporate the changes appropriately across the given reporting period.
+
+Valid-time in XTDB may be fully controlled by the application, and can therefore be carefully adjusted to reflect the most accurate, linear understanding of historical changes to data. Any previous versions of data can be 'corrected' using SQL:2011 temporal operators:
+
+<Fiddle autoLoad>
+  <Txs systemTime="2020-01-01"
+       txs={
+`INSERT INTO trades (xt$id, price) VALUES (1, 100);`} />
+  <Txs systemTime="2020-01-02"
+       txs={
+`UPDATE trades SET price = 2000
+WHERE trades.xt$id = 1;`} />
+  <Txs systemTime="2020-01-04"
+       txs={
+`UPDATE trades SET price = 400
+WHERE trades.xt$id = 1;`} />
+  <Txs systemTime="2020-01-05"
+       txs={
+`UPDATE trades
+FOR PORTION OF VALID_TIME FROM DATE '2020-01-02' TO DATE '2020-01-04'
+SET price = 200
+WHERE trades.xt$id = 1;`} />
+
+  <QueryTemplate q={
+`SELECT trades.xt$id, trades.price, trades.xt$valid_from, trades.xt$valid_to
+FROM trades
+  FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
+  FOR SYSTEM_TIME AS OF {{systemTime}}
+ORDER BY trades.xt$valid_from
+`} />
+  <DateRange name="systemTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04","2020-01-05"]} value="2020-01-01" />
+</Fiddle>
+
+Combined with the use of system-time, XTDB gives applications the ability to retrieve data consistently, both with and without corrections.
+
+## 7) Scheduled Effectivity: synchronize and preview future states
+
+### Automatic record expiration
+
+`valid_to` isn't restricted to past or current timestamps, it can also be used to represent _future_ timestamps.
+
+This is useful for reducing or eliminating various batch-update activities that might normally take place. For example if a trade has a known expiration date in the future, an application might periodically remove expired trades from the database.
+
+By using `valid_to`, the process of removing expired trades can happen implicitly as the database clock moves forward, avoiding the need to have a long-running batch job that must execute transactionally.
+
+<Fiddle autoLoad>
+  <Txs systemTime="2020-01-01"
+       txs={
+`INSERT INTO trades (xt$id, price, xt$valid_from)
+VALUES (1, 100, DATE '2020-01-01');`} />
+  <Txs systemTime="2020-01-02"
+       txs={
+`INSERT INTO trades (xt$id, price, xt$valid_from)
+VALUES (1, 200, DATE '2020-01-02');`} />
+  <Txs systemTime="2020-01-03"
+       txs={
+`DELETE FROM trades
+FOR PORTION OF VALID_TIME FROM DATE '2020-01-04' TO NULL;`} />
+
+  <QueryTemplate q={
+`SELECT trades.xt$id, trades.price, trades.xt$valid_from, trades.xt$valid_to
+FROM trades
+  FOR VALID_TIME AS OF {{validTime}}
+ORDER BY trades.xt$valid_from
+`} />
+  <DateRange name="validTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04"]} value="2020-01-01" />
+</Fiddle>
+
+### Coordinated future versions
+
+More generally, almost all software developers will have struggled with deploying changes to applications in their careers. Even in modern environments where automation is common, things can easily go wrong and people must be on standby to assist with fixing or reverting changes.
+
+Since the risks are non-zero, any scheduled maintainance windows for deploying application changes will therefore typically take place during unsociable working hours.
+
+Instead of relying on a scheduled batch process to update an underlying database at a given time with some new set of records or schema changes, XTDB's universal implementation of valid-time can be used as a mechanism to coordinate future changes _within_ the database.
+
+In other words, `valid_from` can also be set to future timestamps.
+
+Whilst an ability to "load data into the future" may not address all aspects of application deployment, it can help to remove some of the more challenging integration and reliability failure points in systems.
+
+Additionally, SQL queries are able to preview the effects of any future valid-time changes.
+
+For example, imagine you want to reliably update some key data ahead of a seaonal 'code freeze':
+
+<Fiddle autoLoad>
+  <Txs systemTime="2020-03-01"
+       txs={
+`INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
+VALUES (1, {'risk': 5}, DATE '2020-03-01'),
+       (2, {'risk': 10}, DATE '2020-03-02');`} />
+  <Txs systemTime="2020-12-01"
+       txs={
+`INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
+VALUES (1, {'risk': 6}, DATE '2021-01-01');`} />
+  <Txs systemTime="2020-12-03"
+       txs={
+`INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
+VALUES (2, {'risk': 11}, DATE '2021-01-05');`} />
+
+  <QueryTemplate q={
+`SELECT ps.xt$id, ps.config
+FROM pricing_strategies
+  FOR VALID_TIME AS OF {{validTime}}
+  AS ps
+ORDER BY ps.xt$id
+`} />
+  <DateRange name="validTime" dates={["2020-01-01","2020-03-01","2020-03-02","2020-12-01","2020-12-03","2021-01-01","2021-01-05"]} value="2020-01-01" />
+</Fiddle>
+
+## 8) What If: time-travelling sources of truth
+
+All of the previous capabilities discussed represent simplifications of common operational problems, based on XTDB's ubiquitous bitemporal data model implementation.
+
+However, something that truly differentiates XTDB from less sophisticated databases is the ease with which SQL can be applied to perform 'What If' scenario analysis.
+
+Underpinning all effective What If systems is fast access to accurate historical data.
+
+Ordinarily, creating such singular sources of truth for key business records requires complex work, but XTDB's time-travel versioning and semi-structured approach to data storage makes creating such sources an automatic outcome of building applications.
+
+For example, you can construct queries for questions like: "What are the estimates for the best and worst case values of my portfolio as of last week, using market data up to yesterday? Also including some hypothetical hedging factors as speculative market data."
+
+<Fiddle autoLoad>
+  <Txs systemTime="2020-01-01"
+       txs={
+`INSERT INTO portfolio (xt$id, name)
+VALUES
+(1, 'Tech Fund');
+
+INSERT INTO portfolio_security (xt$id, portfolio_id, security_id, xt$valid_from)
+VALUES
+(1, 1, 101, DATE '2020-01-01'),
+(2, 1, 102, DATE '2020-01-2');
+
+INSERT INTO market_data (xt$id, security_id, return, xt$valid_from)
+VALUES
+(1, 101, 0.05, DATE '2020-01-03'),
+(2, 101, 0.07, DATE '2020-01-04'),
+(3, 102, -0.02, DATE '2020-01-05'),
+(4, 102, 0.04, DATE '2020-01-06');
+
+INSERT INTO portfolio_security (xt$id, portfolio_id, security_id, xt$valid_from)
+VALUES
+(3, 1, 101, DATE '2020-01-15');
+
+INSERT INTO market_data (xt$id, security_id, return, xt$valid_from)
+VALUES
+(5, 101, 0.01, DATE '2020-01-07'),
+(6, 101, -0.03, DATE '2020-01-08'),
+(7, 102, 0.04, DATE '2020-01-09'),
+(8, 102, 0.02, DATE '2020-01-10');
+
+`} />
+
+  <QueryTemplate q={
+`WITH Security_Stats AS (
+    SELECT
+        ps.portfolio_id,
+        ps.security_id,
+        AVG(md.return) AS avg_return,
+        AVG(md.return) AS return_stddev -- STDDEV
+    FROM
+        portfolio_security FOR VALID_TIME AS OF {{validTimePortfolio}} AS ps
+    JOIN
+        market_data FOR VALID_TIME AS OF {{validTime}} AS md
+            ON md.security_id = ps.security_id
+    GROUP BY
+        ps.portfolio_id, ps.security_id
+    UNION ALL
+    SELECT
+        1 AS portfolio_id,
+        101 AS security_id,
+        {{hedgeReturn}} AS avg_return,  -- Hypothetical average return
+        {{hedgeStddev}} AS return_stddev -- Hypothetical standard deviation
+    FROM
+        (VALUES (1)) DUAL
+)
+
+SELECT
+    CAST(SUM(ss.avg_return - 3 * ss.return_stddev) * 100 AS INT) AS worst_case_value,
+    CAST(SUM(ss.avg_return + 3 * ss.return_stddev) * 100 AS INT) AS best_case_value
+FROM
+    Security_Stats ss
+JOIN
+    portfolio FOR VALID_TIME AS OF {{validTimePortfolio}} p ON p.xt$id = ss.portfolio_id
+GROUP BY
+    p.xt$id
+`} />
+  <div class="flex flex-row gap-2 items-center">
+    Portfolio as-of:
+    <DateRange name="validTimePortfolio" start="2020-01-01" stop="2020-01-14" step="1 day" value="2020-01-14" />
+  </div>
+  <div class="flex flex-row gap-2 items-center">
+    Market Data as-of:
+    <DateRange name="validTime" start="2020-01-01" stop="2020-01-14" step="1 day" value="2020-01-14" />
+  </div>
+  <div class="flex flex-row gap-2 items-center">
+    Hypothetical return:
+    <Range name="hedgeReturn" min={-1} max={1} step={0.1} value={0.3} />
+  </div>
+  <div class="flex flex-row gap-2 items-center">
+    Hypothetical standard deviation:
+    <Range name="hedgeStddev" min={-1} max={1} step={0.1} value={0.2} />
+  </div>
+</Fiddle>
+
+This approach is able to blend historical and predictive analysis within the same framework.

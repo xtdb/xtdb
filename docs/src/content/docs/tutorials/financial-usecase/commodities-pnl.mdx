@@ -1,5 +1,5 @@
 ---
-title: Understanding PnL and Risk
+title: Understanding P&L and Risk
 ---
 
 import Fiddle from '@components/fiddle.astro';
@@ -8,7 +8,7 @@ import Query from '@components/fiddle/query.astro';
 
 Let's imagine you're a commodities trader.
 
-Every day you arrive at your desk and look at your Risk and PnL reports, telling you the value and risk of your trading positions.
+Every day you arrive at your desk and look at your Risk and [P&L reports](https://en.wikipedia.org/wiki/PnL_explained), telling you the value and risk of your trading positions.
 
 Whenever something in those reports doesn't look quite like what you were expecting you have to do some counterfactual exploration of all the various inputs to understand what's happened.
 
@@ -53,8 +53,8 @@ FROM commodity_spot_prices as p
 `} />
 </Fiddle>
 
-Now we want to price our risk and PnL for the end of this week.
-Let's extract the information we need to calculate our PnL:
+Now we want to price our risk and P&L for the end of this week.
+Let's extract the information we need to calculate our P&L:
 
 <Fiddle magicContext="my-context">
   <Query q={`
@@ -76,7 +76,7 @@ ON
 `} />
 </Fiddle>
 
-For the purposes of this simple example, we'll just use SQL to calculate the PnL.
+For the purposes of this simple example, we'll just use SQL to calculate the P&L.
 However, in the 'real world', we'd usually have much more complex objects (yield curves, etc.) and would use a quant pricing library.
 
 <Fiddle magicContext="my-context">
@@ -90,6 +90,7 @@ INNER JOIN
 ON
     ct.symbol = csp.xt$id
 `} />
+  <OutputTraffic />
 </Fiddle>
 
 So far so good.
@@ -130,7 +131,7 @@ FROM commodity_spot_prices as p
 `} />
 </Fiddle>
 
-We now recalculate our new PnL:
+We now recalculate our new P&L:
 
 <Fiddle magicContext="my-context">
   <Query q={`
@@ -143,34 +144,52 @@ INNER JOIN
 ON
     ct.symbol = csp.xt$id
 `} />
+  <OutputTraffic />
 </Fiddle>
 
 Oh no!
 
 What if we could ignore the today's trades, and just see what our closing position on Friday would have looked like in the market at the end of today.
 
-<Fiddle magicContext="my-context">
-  <Query q={`
+import DateRange from '@components/fiddle/date-range.astro';
+import QueryTemplate from '@components/fiddle/template.astro';
+import OutputTraffic from '@components/fiddle/output-traffic.astro';
+
+<Fiddle autoLoad magicContext="my-context">
+  <QueryTemplate q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
 FROM
-    commodity_trades FOR VALID_TIME AS OF TIMESTAMP '2024-03-08 17:00:00' ct
+    commodity_trades FOR VALID_TIME AS OF {{tradesFrom}} ct
 INNER JOIN
-    commodity_spot_prices csp
+    commodity_spot_prices FOR VALID_TIME AS OF {{pricesFrom}} csp
 ON
     ct.symbol = csp.xt$id
 `} />
+  <div class="flex flex-col">
+    <div class="flex flex-row gap-2">
+    <label>Trades:</label>
+    <DateRange class="w-full flex-1"
+               name="tradesFrom"
+               dates={["2024-03-08T10:00",
+                       "2024-03-08T11:00",
+                       "2024-03-08T11:30",
+                       "2024-03-08T12:45",
+                       "2024-03-08T13:05",
+                       "2024-03-11T10:00",
+                       "2024-03-11T11:00"]}
+               value="2024-03-11T11:00" />
+    </div>
+    <div class="flex flex-row gap-2">
+    <label>Spot Prices:</label>
+    <DateRange class="w-full flex-1"
+               name="pricesFrom"
+               dates={["2024-03-08T17:00",
+                       "2024-03-11T17:00"]}
+               value="2024-03-11T17:00" />
+    </div>
+  </div>
+  <OutputTraffic />
 </Fiddle>
 
-We have now established that today's trades must be causing the dramatic PnL change.
-
-## Reasoning about cross-effects in high dimensions
-
-In the abstract, traders need to be able to reason about situations quickly and hedge against unexpected situations.
-
-Navigating the relationships between portfolio positions and price volatilities ([the Greeks](https://en.wikipedia.org/wiki/Greeks_(finance))) is generally only possible with the aid of sophisticated pricing and risk models.
-For institutions with large portfolios, distributed teams and complex positions, equipping individual traders with the tools to understand the dynamics surrounding their own trades is essential.
-
-With ubiquitous as-of querying, XTDB provides an essential mechanism to validate the impacts of different dimensions of change as applied to subsets of a portfolio, and without the need for snapshots or other expensive operations.
-
-This general approach to the problem of financial risk was pioneered by SecDB in the 1990s and has been repeated across many subsequent systems.
+We have now established that today's trades must be causing the dramatic P&L change.
