@@ -149,17 +149,45 @@ Oh no!
 
 What if we could ignore the today's trades, and just see what our closing position on Friday would have looked like in the market at the end of today.
 
-<Fiddle magicContext="my-context">
-  <Query q={`
+import DateRange from '@components/fiddle/date-range.astro';
+import QueryTemplate from '@components/fiddle/template.astro';
+import OutputTraffic from '@components/fiddle/output-traffic.astro';
+
+<Fiddle autoLoad magicContext="my-context">
+  <QueryTemplate q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
 FROM
-    commodity_trades FOR VALID_TIME AS OF TIMESTAMP '2024-03-08 17:00:00' ct
+    commodity_trades FOR VALID_TIME AS OF {{tradesFrom}} ct
 INNER JOIN
-    commodity_spot_prices csp
+    commodity_spot_prices FOR VALID_TIME AS OF {{pricesFrom}} csp
 ON
     ct.symbol = csp.xt$id
 `} />
+  <div class="flex flex-col">
+    <div class="flex flex-row gap-2">
+    <label>Trades:</label>
+    <DateRange class="w-full flex-1"
+               name="tradesFrom"
+               dates={["2024-03-08T10:00",
+                       "2024-03-08T11:00",
+                       "2024-03-08T11:30",
+                       "2024-03-08T12:45",
+                       "2024-03-08T13:05",
+                       "2024-03-11T10:00",
+                       "2024-03-11T11:00"]}
+               value="2024-03-11T11:00" />
+    </div>
+    <div class="flex flex-row gap-2">
+    <label>Spot Prices:</label>
+    <DateRange class="w-full flex-1"
+               name="pricesFrom"
+               dates={["2024-03-08T17:00",
+                       "2024-03-11T17:00"]}
+               value="2024-03-11T17:00" />
+    </div>
+  </div>
+  <OutputTraffic />
 </Fiddle>
 
 We have now established that today's trades must be causing the dramatic P&L change.
