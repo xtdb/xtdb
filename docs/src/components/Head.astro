@@ -23,6 +23,18 @@ import Default from '@astrojs/starlight/components/Head.astro';
                 el.classList.add('opacity-30');
             }
         });
-            
+    }
+</script>
+
+<script>
+    const setup = () => {
+        window.swup.hooks.on('page:view', () => {
+            document.querySelector("starlight-menu-button").setExpanded(false);
+        })
+    }
+    if (window.swup) {
+        setup()
+    } else {
+        document.addEventListener('swup:enable', setup)
     }
 </script>
