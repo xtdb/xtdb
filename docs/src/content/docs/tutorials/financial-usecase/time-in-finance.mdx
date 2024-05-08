@@ -14,7 +14,7 @@ IT systems of all kinds are plagued by many time-related complexities, from misc
 <div class="not-content grid grid-cols-4 gap-2">
   <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#1-audit-and-replay-what-happened">Audit & Replay</a>
   <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#2-snapshot-free-reporting-reproducibility-without-copying-and-result-tearing">Snapshot-free</a>
-  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#3-interleaving-upstream-sources-whos-timestamp">Upstream Sources</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#3-interleaving-upstream-sources-whose-timestamp">Upstream Sources</a>
   <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#4-complex-version-histories">Complex Histories</a>
   <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#5-intelligent-archival-live-data-and-storage-tiering-with-transparent-queries">Intelligent Archival</a>
   <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#6-corrections-curated-history">Corrections</a>
@@ -89,7 +89,7 @@ In contrast, XTDB allows applications to refer to previous database states witho
 
 No locking, copying, or snapshotting is taking place against within XTDB. Queries against old, stable versions of the data are always consistent and will never contain partial changes or 'tearing' in the results.
 
-## 3) Interleaving Upstream Sources: who's timestamp?
+## 3) Interleaving Upstream Sources: whose timestamp?
 
 In many circumstances the system time of the database itself is uninteresting (i.e outside of auditing / debugging), and what is more relevant is the time recorded in an upstrem system. For instance a High-Frequency Trading platform could generate a trade with a timestamp that is anywhere from 0.01-100ms earlier than the time at which the trade database records the trade. In other situations information may even arrive hours or days 'late'.
 
