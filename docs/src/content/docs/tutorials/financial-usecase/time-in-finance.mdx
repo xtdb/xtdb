@@ -11,6 +11,17 @@ import Range from "@components/fiddle/range.astro"
 
 IT systems of all kinds are plagued by many time-related complexities, from misconfigured Network Time Protocol and unexpected certificate expirations, to changing timezones and software concurrency bugs. However, systems in financial domains are additionally accutely affected by the following common requirements and challenges...
 
+<div class="not-content grid grid-cols-4 gap-2">
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#1-audit-and-replay-what-happened">Audit & Replay</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#2-snapshot-free-reporting-reproducibility-without-copying-and-result-tearing">Snapshot-free</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#3-interleaving-upstream-sources-whos-timestamp">Upstream Sources</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#4-complex-version-histories">Complex Histories</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#5-intelligent-archival-live-data-and-storage-tiering-with-transparent-queries">Intelligent Archival</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#6-corrections-curated-history">Corrections</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#7-scheduled-effectivity-synchronize-and-preview-future-states">Schedule Change</a>
+  <a class="border rounded h-10 hover:bg-gray-100 content-center text-center" href="#8-what-if-time-travelling-sources-of-truth">What If</a>
+</div>
+
 ## 1) Audit and Replay: what happened?
 
 SQL databases systems typically lose information whenever UPDATE or DELETE are used. They also don't record or track the any changes to data by default.
