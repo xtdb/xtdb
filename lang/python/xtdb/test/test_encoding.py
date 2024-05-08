@@ -4,6 +4,7 @@ from xtdb.tx import PutDocs, Sql as SqlTx
 from xtdb import Xtdb, DBAPI
 from xtdb.types import Sql
 
+from datetime import datetime
 import os
 import pytest
 import requests
@@ -101,3 +102,8 @@ def test_db_api_class(client):
     conn.execute("INSERT INTO docs (xt$id, foo) VALUES (1, 'bar')")
     result = conn.execute("SELECT * FROM docs")
     assert result.fetchall() == [['bar', 1]]
+
+def test_timestamps(client):
+    client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
+    query_result = client.query(Sql("SELECT trades.xt$id, trades.price, trades.xt$system_from, trades.xt$system_to FROM trades FOR ALL SYSTEM_TIME"))
+    assert isinstance(query_result[0]["xt$system_from"], datetime)

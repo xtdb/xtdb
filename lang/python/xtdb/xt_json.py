@@ -1,7 +1,10 @@
+from datetime import datetime
 import json
 import uuid
+
 from .types import Query, QueryTail
 from .tx import TxOp
+
 
 class XTRuntimeError(RuntimeError):
     def __init__(self, message):
@@ -25,6 +28,9 @@ class XtdbJsonDecoder(json.JSONDecoder):
                 return uuid.UUID(obj['@value'])
             elif obj['@type'] == 'xt:error':
                 raise XTRuntimeError(obj['@value'])
+            elif obj['@type'] == 'xt:timestamptz':
+                timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%I:%M:%S.%fZ[%Z]")
+                return timestamp
             else:
                 raise ValueError(f"Unknown type: {obj['@type']}")
         return obj
