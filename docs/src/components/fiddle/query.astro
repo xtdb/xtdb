@@ -18,7 +18,7 @@ var props = {
 </div>
 
 {/* Buttons: */}
-<div class="flex flex-row gap-1">
+<div class="flex flex-row gap-2 items-center">
     <div data-parent-id={id}
          data-id="run"
          class="px-2 bg-gray-300 hover:bg-gray-400/70 dark:bg-gray-600 dark:hover:bg-gray-700 cursor-pointer rounded-md">
@@ -27,6 +27,15 @@ var props = {
             <Play class="size-4" />
         </div>
     </div>
+    <svg data-parent-id={id}
+         data-id="spinner"
+         class="hidden animate-spin h-5 w-5 text-gray"
+         xmlns="http://www.w3.org/2000/svg"
+         fill="none"
+         viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
     <div class="flex-grow" />
     <span data-parent-id={id}
           data-id="open-in-fiddle"
@@ -53,8 +62,11 @@ var props = {
                 });
             }
 
+            this.spinner = document.querySelector(`[data-parent-id="${this.dataset.id}"][data-id="spinner"]`);
+
             const run_button = document.querySelector(`[data-parent-id="${this.dataset.id}"][data-id="run"]`);
             run_button.addEventListener('click', () => {
+                this._showSpinner();
                 this._registry.render();
             });
 
@@ -62,6 +74,18 @@ var props = {
             edit_button.addEventListener('click', () => {
                 this._registry.openInFiddle();
             });
+
+            this._registry.on("fetchComplete", () => {
+                this._hideSpinner();
+            });
+        }
+
+        _showSpinner() {
+            this.spinner.classList.remove('hidden');
+        }
+
+        _hideSpinner() {
+            this.spinner.classList.add('hidden');
         }
 
         get query() {

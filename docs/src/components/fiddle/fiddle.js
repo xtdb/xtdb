@@ -218,6 +218,8 @@ class FiddleRegistry {
             var response = await runFiddle(txs, query);
         } catch (e) {
             throw new Error("Network Error", {error: e});
+        } finally {
+            this._call("fetchComplete");
         }
 
         try {
