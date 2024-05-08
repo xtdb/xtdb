@@ -69,6 +69,7 @@ export default defineConfig({
                             label: 'Financial Services',
                             collapsed: false,
                             items: [
+                                { label: 'Time in Finance', link: '/tutorials/financial-usecase/time-in-finance' },
                                 { label: 'Understanding P&L and Risk', link: '/tutorials/financial-usecase/commodities-pnl' },
                                 { label: 'Late trade adjustments', link: '/tutorials/financial-usecase/late-trade' },
 				{ label: 'Auditing past trade adjustments', link: '/tutorials/financial-usecase/auditing-change' },
