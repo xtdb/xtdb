@@ -38,8 +38,10 @@ import Default from '@astrojs/starlight/components/Head.astro';
     const setup = () => {
         window.swup.hooks.on('page:view', () => {
             document.querySelector("starlight-menu-button").setExpanded(false);
+        });
+        window.swup.hooks.on('content:replace', () => {
             clearRegistry();
-        })
+        }, { before: true });
     }
     if (window.swup) {
         setup()
