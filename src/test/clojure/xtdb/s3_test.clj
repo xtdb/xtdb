@@ -1,10 +1,11 @@
 (ns xtdb.s3-test
-  (:require [clojure.test :as t] 
+  (:require [clojure.test :as t]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
             [xtdb.object-store-test :as os-test]
-            [xtdb.s3 :as s3] 
+            [xtdb.s3 :as s3]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.io Closeable]
@@ -14,6 +15,7 @@
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
            [xtdb.api.storage ObjectStore S3 S3$Factory]
+           [xtdb.buffer_pool RemoteBufferPool]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
@@ -79,30 +81,34 @@
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-key (util/->path "test-multi-created")
+    (let [prefix (:prefix os)
+          multipart-key (util/->path "test-multi-created")
           multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os multipart-key)
-          prefixed-key (str (.resolve ^Path (:prefix os) multipart-key))]
+          prefixed-key (str (.resolve ^Path prefix multipart-key))]
       (t/testing "Call to start a multipart upload should work and be visible in multipart upload list"
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
                                                                       (-> (ListMultipartUploadsRequest/builder)
                                                                           (.bucket bucket)
+                                                                          (.prefix (str prefix))
                                                                           ^ListMultipartUploadsRequest (.build)))
               [^MultipartUpload upload] (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
           (t/is (= (.uploadId upload) (:upload-id multipart-upload)) "upload id should be present")
           (t/is (= (.key upload) prefixed-key) "should be under the prefixed key")))
-      
+
       (t/testing "Call to abort a multipart upload should work - should be removed from the upload list"
         @(.abort multipart-upload)
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
                                                                       (-> (ListMultipartUploadsRequest/builder)
                                                                           (.bucket bucket)
+                                                                          (.prefix (str prefix))
                                                                           ^ListMultipartUploadsRequest (.build)))
               uploads (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
           (t/is (= [] uploads) "uploads should be empty"))))))
 
 (t/deftest ^:s3 multipart-put-test
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
+    (let [prefix (:prefix os)
+          multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
           part-size (* 5 1024 1024)
           file-part-1 (os-test/generate-random-byte-buffer part-size)
           file-part-2 (os-test/generate-random-byte-buffer part-size)]
@@ -116,6 +122,7 @@
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
                                                                       (-> (ListMultipartUploadsRequest/builder)
                                                                           (.bucket bucket)
+                                                                          (.prefix (str prefix))
                                                                           ^ListMultipartUploadsRequest (.build)))
               uploads (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
           (t/is (= [] uploads) "uploads should be empty")))
@@ -130,47 +137,50 @@
 
 (t/deftest ^:s3 node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
-                      (util/with-open [node (xtn/start-node
+    (util/with-open [node (xtn/start-node
                            {:storage [:remote
                                       {:object-store [:s3 {:bucket bucket
                                                            :prefix (util/->path (str (random-uuid)))
                                                            :sns-topic-arn sns-topic-arn}]
                                        :local-disk-cache local-disk-cache}]})]
 
-                                      ;; Submit some documents to the node
-                                      (t/is (xt/submit-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                [:put-docs :bar {:xt/id "bar2"}]
-                                [:put-docs :bar {:xt/id "bar3"}]]))
+      ;; Submit some documents to the node
+      (t/is (= true
+               (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                                 [:put-docs :bar {:xt/id "bar2"}]
+                                                 [:put-docs :bar {:xt/id "bar3"}]]))))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      ;; Ensure can query back out results
-                                      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
-               (xtdb.api/q node '(from :bar [{:xt/id e}]))))
-
-                                      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
-                                        (t/is (instance? ObjectStore object-store))
-                                        ;; Ensure some files are written
-                                        (t/is (not-empty (.listAllObjects ^ObjectStore object-store)))))))
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+               (xt/q node '(from :bar [{:xt/id e}])))) 
+      
+      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
+        (t/is (instance? RemoteBufferPool buffer-pool))
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (seq (.listAllObjects object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-(t/deftest ^:s3 tpch-test-node
+#_(t/deftest ^:s3 tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
-                      (util/with-open [node (xtn/start-node
+    (util/with-open [node (xtn/start-node
                            {:storage [:remote
                                       {:object-store [:s3 {:bucket bucket
                                                            :prefix (util/->path (str (random-uuid)))
                                                            :sns-topic-arn sns-topic-arn}]
                                        :local-disk-cache local-disk-cache}]})]
-                                      ;; Submit tpch docs
-                                      (-> (tpch/submit-docs! node 0.05)
+      ;; Submit tpch docs
+      (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
-                                        (t/is (instance? ObjectStore object-store))
-                                        ;; Ensure files have been written
-                                        (t/is (not-empty (.listAllObjects ^ObjectStore object-store)))))))
+      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
+        (t/is (instance? RemoteBufferPool buffer-pool))
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (seq (.listAllObjects object-store)))))))

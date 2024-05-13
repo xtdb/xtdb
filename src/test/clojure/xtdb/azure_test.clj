@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.azure :as azure]
             [xtdb.datasets.tpch :as tpch]
@@ -17,6 +18,7 @@
            (java.nio.file Path)
            (java.time Duration)
            (xtdb.api.storage AzureBlobStorage ObjectStore)
+           (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (def resource-group-name "azure-modules-test")
@@ -200,7 +202,7 @@
 
 (t/deftest ^:azure node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
-                      (util/with-open [node (xtn/start-node
+    (util/with-open [node (xtn/start-node
                            {:storage [:remote
                                       {:object-store [:azure {:storage-account storage-account
                                                               :container container
@@ -208,27 +210,29 @@
                                                               :servicebus-topic-name servicebus-topic-name
                                                               :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}]
                                        :local-disk-cache local-disk-cache}]})]
-                                      ;; Submit some documents to the node
-                                      (t/is (xt/submit-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                [:put-docs :bar {:xt/id "bar2"}]
-                                [:put-docs :bar {:xt/id "bar3"}]]))
+      ;; Submit some documents to the node
+      (t/is (= true
+               (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                                 [:put-docs :bar {:xt/id "bar2"}]
+                                                 [:put-docs :bar {:xt/id "bar3"}]]))))
 
-                                      ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-chunk! works
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      ;; Ensure can query back out results
-                                      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
-               (xtdb.api/q node '(from :bar [{:xt/id e}]))))
+      ;; Ensure can query back out results
+      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+               (xt/q node '(from :bar [{:xt/id e}]))))
 
-                                      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
-                                        (t/is (instance? ObjectStore object-store))
-                                        ;; Ensure some files are written
-                                        (t/is (not-empty (.listAllObjects ^ObjectStore object-store)))))))
+      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
+        (t/is (instance? RemoteBufferPool buffer-pool))
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (seq (.listAllObjects object-store)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (t/deftest ^:azure tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
-                      (util/with-open [node (xtn/start-node
+    (util/with-open [node (xtn/start-node
                            {:storage [:remote {:object-store [:azure {:storage-account storage-account
                                                                       :container container
                                                                       :servicebus-namespace servicebus-namespace
@@ -236,13 +240,14 @@
                                                                       :prefix (util/->path (str "xtdb.azure-test." (random-uuid)))}]
                                                :local-disk-cache local-disk-cache}]})]
                                       ;; Submit tpch docs
-                                      (-> (tpch/submit-docs! node 0.05)
+      (-> (tpch/submit-docs! node 0.05)
           (tu/then-await-tx node (Duration/ofHours 1)))
 
                                       ;; Ensure finish-chunk! works
-                                      (t/is (nil? (tu/finish-chunk! node)))
+      (t/is (nil? (tu/finish-chunk! node)))
 
-                                      (let [object-store (get-in node [:system :xtdb/buffer-pool :remote-store])]
-                                        (t/is (instance? ObjectStore object-store))
-                                        ;; Ensure files have been written
-                                        (t/is (not-empty (.listAllObjects ^ObjectStore object-store)))))))
+      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
+        (t/is (instance? RemoteBufferPool buffer-pool))
+        (t/is (instance? ObjectStore object-store))
+        ;; Ensure some files are written
+        (t/is (seq (.listAllObjects object-store)))))))
