@@ -16,6 +16,7 @@
         bucket (.getBucket factory)
         pubsub-topic (.getPubSubTopic factory)
         prefix (.getPrefix factory)
+        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)
         storage-service (-> (StorageOptions/newBuilder)
                             ^StorageOptions$Builder (.setProjectId project-id)
                             ^StorageOptions (.build)
@@ -25,7 +26,7 @@
         file-list-watcher (google-file-watch/open-file-list-watcher {:project-id project-id
                                                                      :bucket bucket
                                                                      :pubsub-topic pubsub-topic
-                                                                     :prefix prefix
+                                                                     :prefix prefix-with-version
                                                                      :storage-service storage-service}
                                                                     file-name-cache)]
-    (os/->GoogleCloudStorageObjectStore storage-service bucket prefix file-name-cache file-list-watcher)))
+    (os/->GoogleCloudStorageObjectStore storage-service bucket prefix-with-version file-name-cache file-list-watcher)))
