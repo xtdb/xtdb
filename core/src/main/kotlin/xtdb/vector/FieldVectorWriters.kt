@@ -347,6 +347,7 @@ abstract class ExtensionVectorWriter(
     notify: FieldChangeListener? = null,
 ) :
     ScalarVectorWriter(vector) {
+    override val field: Field get() = Field(vector.field.name, vector.field.fieldType , vector.underlyingVector.field.children)
 
     private val inner = writerFor(vector.underlyingVector, notify)
 
