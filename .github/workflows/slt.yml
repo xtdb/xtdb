@@ -1,10 +1,13 @@
-name: XTDB SLT on demand
-run-name: XTDB SLT on demand
+name: XTDB SLT
+run-name: XTDB SLT
 
-on: workflow_dispatch
+on:
+  schedule:
+    - cron:  '0 19 * * 1-5'
 
 jobs:
   slt-test-dir:
+    if: github.repository == 'xtdb/xtdb'
     name: SLT Test Dir
     runs-on: ubuntu-latest
     strategy:
@@ -31,3 +34,14 @@ jobs:
         uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: slt-test-dir -PtestDir=${{ matrix.slt-dir.dir }} -PtestMaxErrors=${{ matrix.slt-dir.error }} -PtestMaxFailures=${{ matrix.slt-dir.failure }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Post Slack Notification
+        if: failure()
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notification_title: "*SLT Test*"
+          message_format: "{emoji} Scheduled *SLT Test* has {status_message}!"
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
