@@ -42,18 +42,8 @@
                                                    [(vw/->writer (.createVector combined-field tu/*allocator*))])]
           (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))
                 my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
-            (.startStruct my-column-wtr1)
-            (-> (.structKeyWriter my-column-wtr1 "foo" (FieldType/notNullable #xt.arrow/type :i64))
-                (.writeLong 42))
-            (-> (.structKeyWriter my-column-wtr1 "bar" (FieldType/notNullable #xt.arrow/type :utf8))
-                (.writeObject "forty-two"))
-            (.endStruct my-column-wtr1)
-            (.startStruct my-column-wtr2)
-            (-> (.structKeyWriter my-column-wtr2 "foo" (FieldType/notNullable #xt.arrow/type :f64))
-                (.writeDouble 42.0))
-            (-> (.structKeyWriter my-column-wtr2 "toto" (FieldType/notNullable #xt.arrow/type :keyword))
-                (.writeObject :my-keyword))
-            (.endStruct my-column-wtr2))
+            (.writeObject my-column-wtr1 {"foo" 42 "bar" "forty-two"})
+            (.writeObject my-column-wtr2 {"foo" 42.0 "toto" :my-keyword}))
 
           (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
                 copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
@@ -100,18 +90,8 @@
                   rel-wtr3 (vw/->rel-writer tu/*allocator*)]
         (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :list))
               my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :list))]
-          (.startList my-column-wtr1)
-          (-> (.listElementWriter my-column-wtr1 (FieldType/notNullable #xt.arrow/type :i64))
-              (.writeLong 42))
-          (-> (.listElementWriter my-column-wtr1)
-              (.writeLong 43))
-          (.endList my-column-wtr1)
-          (.startList my-column-wtr2)
-          (-> (.listElementWriter my-column-wtr2 (FieldType/notNullable #xt.arrow/type :utf8))
-              (.writeObject "forty-two"))
-          (-> (.listElementWriter my-column-wtr2)
-              (.writeObject "forty-three"))
-          (.endList my-column-wtr2))
+          (.writeObject my-column-wtr1 [42 43])
+          (.writeObject my-column-wtr2 ["forty-two" "forty-three"]))
 
         (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
               copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
