@@ -35,6 +35,7 @@
         servicebus-namespace (.getServiceBusNamespace factory)
         servicebus-topic-name (.getServiceBusTopicName factory)
         prefix (.getPrefix factory)
+        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)
         blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
                                         (.endpoint (str "https://" storage-account ".blob.core.windows.net"))
                                         (.credential credential)
@@ -46,12 +47,12 @@
                                                                     :container container
                                                                     :servicebus-namespace servicebus-namespace
                                                                     :servicebus-topic-name servicebus-topic-name
-                                                                    :prefix prefix
+                                                                    :prefix prefix-with-version
                                                                     :blob-container-client blob-client
                                                                     :azure-credential credential}
                                                                    file-name-cache)]
     (os/->AzureBlobObjectStore blob-client
-                               prefix
+                               prefix-with-version
                                minimum-part-size
                                file-name-cache
                                file-list-watcher)))

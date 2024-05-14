@@ -208,18 +208,19 @@
         configurator (.getS3Configurator factory)
         s3-client (.makeClient configurator)
         prefix (.getPrefix factory)
+        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)
         file-name-cache (ConcurrentSkipListSet.)
         ;; Watch s3 bucket for changes
         file-list-watcher (s3-file-watch/open-file-list-watcher {:bucket bucket
                                                                  :sns-topic-arn sns-topic-arn
-                                                                 :prefix prefix
+                                                                 :prefix prefix-with-version
                                                                  :s3-client s3-client}
                                                                 file-name-cache)]
   
     (->S3ObjectStore configurator
                      s3-client
                      bucket
-                     prefix
+                     prefix-with-version
                      minimum-part-size
                      file-name-cache
                      file-list-watcher)))

@@ -31,7 +31,7 @@
 (def ^:private min-multipart-part-size (* 5 1024 1024))
 (def ^:private max-multipart-per-upload-concurrency 4)
 
-(def ^:private ^java.nio.file.Path storage-root
+(def ^java.nio.file.Path storage-root
   ;; bump this if the storage format changes in a backwards-incompatible way
   (let [version 2]
     (util/->path (str "v" (util/->lex-hex-string version)))))
@@ -327,15 +327,13 @@
       (with-open [arrow-buf (util/->arrow-buf-view allocator mmap-buffer)]
         (upload-multipart-buffers object-store k (arrow-buf->parts arrow-buf))
         nil))))
-
 (defrecord RemoteBufferPool [allocator
                              ^ArrowBufLRU memory-store
                              ^Path local-disk-cache
                              ^ObjectStore object-store]
   IBufferPool
   (getBuffer [_ k]
-    (let [k (.resolve storage-root k)
-          cached-buffer (cache-get memory-store k)]
+    (let [cached-buffer (cache-get memory-store k)]
       (cond
         (nil? k)
         (CompletableFuture/completedFuture nil)
@@ -363,11 +361,10 @@
 
   (listAllObjects [_] (.listAllObjects object-store))
 
-  (listObjects [_ dir] (.listObjects object-store (.resolve storage-root dir)))
+  (listObjects [_ dir] (.listObjects object-store dir))
 
   (openArrowWriter [_ k vsr]
-    (let [k (.resolve storage-root k)
-          tmp-path (create-tmp-path local-disk-cache)]
+    (let [tmp-path (create-tmp-path local-disk-cache)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  aw (ArrowFileWriter. vsr nil file-ch)]
 
@@ -396,29 +393,28 @@
               (.close file-ch)))))))
 
   (putObject [_ k buffer]
-    (let [k (.resolve storage-root k)]
-      (if (or (not (instance? SupportsMultipart object-store))
-              (<= (.remaining buffer) (int min-multipart-part-size)))
-        (.putObject object-store k buffer)
-
-        (let [buffers (->> (range (.position buffer) (.limit buffer) min-multipart-part-size)
-                           (map (fn [n] (.slice buffer
-                                                (int n)
-                                                (min (int min-multipart-part-size)
-                                                     (- (.limit buffer) (int n)))))))]
-          (-> (CompletableFuture/runAsync
-               (fn []
-                 (upload-multipart-buffers object-store k buffers)))
-
-              (.thenRun (fn []
-                          (let [tmp-path (create-tmp-path local-disk-cache)]
-                            (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
-                              (.write file-ch buffer))
-
-                            (let [file-path (.resolve local-disk-cache k)]
-                              (util/create-parents file-path)
-                              ;; see #2847
-                              (util/atomic-move tmp-path file-path))))))))))
+    (if (or (not (instance? SupportsMultipart object-store))
+            (<= (.remaining buffer) (int min-multipart-part-size)))
+      (.putObject object-store k buffer)
+    
+      (let [buffers (->> (range (.position buffer) (.limit buffer) min-multipart-part-size)
+                         (map (fn [n] (.slice buffer
+                                              (int n)
+                                              (min (int min-multipart-part-size)
+                                                   (- (.limit buffer) (int n)))))))]
+        (-> (CompletableFuture/runAsync
+             (fn []
+               (upload-multipart-buffers object-store k buffers)))
+    
+            (.thenRun (fn []
+                        (let [tmp-path (create-tmp-path local-disk-cache)]
+                          (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
+                            (.write file-ch buffer))
+    
+                          (let [file-path (.resolve local-disk-cache k)]
+                            (util/create-parents file-path)
+                                  ;; see #2847
+                            (util/atomic-move tmp-path file-path)))))))))
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]

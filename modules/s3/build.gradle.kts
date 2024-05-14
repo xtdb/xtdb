@@ -25,8 +25,8 @@ dependencies {
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
 
-    api("software.amazon.awssdk", "s3", "2.16.76")
-    api("software.amazon.awssdk", "sqs", "2.16.76")
-    api("software.amazon.awssdk", "sns", "2.16.76")
+    api("software.amazon.awssdk", "s3", "2.25.50")
+    api("software.amazon.awssdk", "sqs", "2.25.50")
+    api("software.amazon.awssdk", "sns", "2.25.50")
     api(kotlin("stdlib-jdk8"))
 }

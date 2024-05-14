@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log] 
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
+           [java.net URLDecoder]
            [java.nio.file Path]
            [java.util UUID NavigableSet]
            [software.amazon.awssdk.core.exception AbortedException]
@@ -121,7 +122,10 @@
                                                 event-type (cond
                                                              (string/starts-with? event-name "ObjectCreated") :create
                                                              (string/starts-with? event-name "ObjectRemoved") :delete)
-                                                filename (util/->path (get-in s3-event [:s3 :object :key]))
+                                                filename (-> s3-event
+                                                             (get-in [:s3 :object :key])
+                                                             (URLDecoder/decode "utf8")
+                                                             (util/->path))
                                                 ;; If prefix present - need to filter for objects that start with prefix
                                                 ;; And then relativize the path - otherwise, can leave it unaltered and unfiltered
                                                 file (if prefix
