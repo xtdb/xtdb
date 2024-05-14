@@ -43,12 +43,25 @@ class Xtdb:
     def __init__(self, url):
         self._latest_submitted_tx = None
         self._url = url
+        self._basis = None
+        self._at_tx = None
 
     def __str__(self):
         return f"<Xtdb '{self._url}'>"
 
     def __repr__(self):
         return self.__str__()
+
+    def set_basis(self, timestamp):
+        assert datetime.strptime(timestamp, "%Y-%m-%dT%I:%M:%SZ")
+        self._basis = timestamp
+        self._at_tx = None
+
+    def set_tx_time(self, tx_key: TxKey):
+        assert isinstance(tx_key, TxKey)
+        basis_time = datetime.strftime(tx_key.system_time, "%Y-%m-%dT%I:%M:%SZ")
+        self._at_tx = {"txId": tx_key.tx_id, "systemTime": basis_time}
+        self._basis = None
 
     def status(self):
         try:
@@ -70,8 +83,11 @@ class Xtdb:
         if opts is None:
             opts = {}
 
+        if self._basis:
+            opts["systemTime"] = self._basis
+
         try:
-            req_data = json.dumps({"txOps": ops, **opts}, cls=XtdbJsonEncoder)
+            req_data = json.dumps({"txOps": ops, "opts": opts}, cls=XtdbJsonEncoder)
             resp = self._http.request(
                 'POST',
                 f"{self._url}/tx",
@@ -91,8 +107,18 @@ class Xtdb:
             raise Exception(f"Error in submitTx request: {e}")
 
     def query(self, query: ToQuery, opts=None):
-        if opts is None:
+        if not opts:
             opts = {}
+
+        if self._basis:
+            if "basis" not in opts:
+                opts["basis"] = {}
+            opts["basis"]["currentTime"] = self._basis
+
+        if self._at_tx:
+            if "basis" not in opts:
+                opts["basis"] = {}
+            opts["basis"]["atTx"] = self._at_tx
 
         try:
             req_data = json.dumps({"query": query, "queryOpts": opts}, cls=XtdbJsonEncoder)
@@ -188,7 +214,7 @@ class Connection(object):
 
         self.closed = False
         self.cursors = []
-
+        
     @check_closed
     def close(self):
         """Close the connection now."""

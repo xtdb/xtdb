@@ -107,3 +107,29 @@ def test_timestamps(client):
     client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
     query_result = client.query(Sql("SELECT trades.xt$id, trades.price, trades.xt$system_from, trades.xt$system_to FROM trades FOR ALL SYSTEM_TIME"))
     assert isinstance(query_result[0]["xt$system_from"], datetime)
+
+def test_basis_change(client):
+    client.set_basis("2020-01-01T12:34:56Z")
+    client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
+    client.set_basis("2020-01-02T12:34:56Z")
+    client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 105)")])
+    query_result = client.query(Sql("SELECT trades.xt$id, trades.price, trades.xt$system_from, trades.xt$system_to FROM trades FOR ALL SYSTEM_TIME"))
+    assert query_result[0]['xt$system_from'].day - query_result[1]['xt$system_from'].day == 1
+
+    client.set_basis("2020-01-02T11:34:55Z")
+    query_result = client.query(Sql("SELECT trades.xt$id, trades.price FROM trades"))
+    assert query_result[0]['price'] == 100
+
+def test_tx_time(client):
+    tx = client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
+    tx2 = client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 105)")])
+    client.set_tx_time(tx)
+    assert client._at_tx["txId"] == tx.tx_id
+    assert client._at_tx["systemTime"] == datetime.strftime(tx.system_time, "%Y-%m-%dT%I:%M:%SZ")
+
+    query_result = client.query(Sql("SELECT trades.xt$id, trades.price FROM trades FOR ALL SYSTEM_TIME"))
+
+    assert len(query_result) == 0
+
+
+    

@@ -16,6 +16,7 @@ class XtdbJsonEncoder(json.JSONEncoder):
             return obj.to_json()
         elif isinstance(obj, uuid.UUID):
             return {'@type': 'xt:uuid', '@value': str(obj)}
+
         return super().default(obj)
 
 class XtdbJsonDecoder(json.JSONDecoder):
@@ -29,8 +30,14 @@ class XtdbJsonDecoder(json.JSONDecoder):
             elif obj['@type'] == 'xt:error':
                 raise XTRuntimeError(obj['@value'])
             elif obj['@type'] == 'xt:timestamptz':
-                timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%I:%M:%S.%fZ[%Z]")
+                try:
+                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%I:%M:%S.%fZ[%Z]")
+
+                except:
+                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%I:%M:%SZ[%Z]")
+
                 return timestamp
+            
             else:
                 raise ValueError(f"Unknown type: {obj['@type']}")
         return obj
