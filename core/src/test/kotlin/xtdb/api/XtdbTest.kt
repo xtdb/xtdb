@@ -1,6 +1,5 @@
 package xtdb.api
 
-import clojure.java.api.Clojure
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach

@@ -2,17 +2,14 @@ package xtdb.vector.extensions
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.Types
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.vector.toList
-import xtdb.vector.toReader
 import xtdb.vector.writerFor
 
 class SetVectorTest {

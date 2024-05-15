@@ -11,8 +11,6 @@ import xtdb.isSubType
 import xtdb.toArrowType
 import xtdb.toLeg
 import java.nio.ByteBuffer
-import java.util.HashMap
-import java.util.LinkedHashMap
 
 class DenseUnionVectorWriter(
     override val vector: DenseUnionVector,

@@ -7,17 +7,14 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.complex.replaceChild
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import org.checkerframework.checker.units.qual.t
 import xtdb.asKeyword
 import xtdb.isSubType
 import xtdb.toFieldType
 import xtdb.toLeg
 import xtdb.util.normalForm
-import java.util.LinkedHashMap
 import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Union as UNION_TYPE
 

@@ -11,7 +11,6 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import xtdb.AnySerde
 import xtdb.api.query.Expr.Null
-import xtdb.api.query.Exprs.expr
 import xtdb.jsonIAE
 import kotlin.Double as KDouble
 import kotlin.Long as KLong

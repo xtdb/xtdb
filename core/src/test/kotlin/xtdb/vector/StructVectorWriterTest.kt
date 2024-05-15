@@ -2,7 +2,6 @@ package xtdb.vector
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
