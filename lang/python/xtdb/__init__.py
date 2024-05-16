@@ -1,11 +1,11 @@
 import json
 from dateutil import parser
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 import urllib3
 
-from .types import ToQuery, Sql
+from .types import Sql, Query
 from .xt_json import XtdbJsonEncoder, XtdbJsonDecoder
 from . import query as q
 
@@ -44,6 +44,7 @@ class Xtdb:
         self._latest_submitted_tx = None
         self._url = url
         self._basis = None
+        self._tx_time = None
         self._at_tx = None
 
     def __str__(self):
@@ -53,15 +54,19 @@ class Xtdb:
         return self.__str__()
 
     def set_basis(self, timestamp):
-        assert datetime.strptime(timestamp, "%Y-%m-%dT%I:%M:%SZ")
+        assert datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
         self._basis = timestamp
         self._at_tx = None
 
-    def set_tx_time(self, tx_key: TxKey):
+    def set_at_tx(self, tx_key: TxKey):
         assert isinstance(tx_key, TxKey)
-        basis_time = datetime.strftime(tx_key.system_time, "%Y-%m-%dT%I:%M:%SZ")
+        basis_time = datetime.strftime(tx_key.system_time, "%Y-%m-%dT%H:%M:%SZ")
         self._at_tx = {"txId": tx_key.tx_id, "systemTime": basis_time}
         self._basis = None
+
+    def set_tx_time(self, timestamp):
+        assert datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+        self._tx_time = timestamp
 
     def status(self):
         try:
@@ -79,12 +84,12 @@ class Xtdb:
         except Exception as e:
             raise Exception(f"Error in status request: {e}")
 
-    def submit_tx(self, ops, opts=None):
+    def submit_tx(self, ops: List[Query], opts=None):
         if opts is None:
             opts = {}
 
-        if self._basis:
-            opts["systemTime"] = self._basis
+        if self._tx_time:
+            opts["systemTime"] = self._tx_time
 
         try:
             req_data = json.dumps({"txOps": ops, "opts": opts}, cls=XtdbJsonEncoder)
@@ -106,7 +111,7 @@ class Xtdb:
         except Exception as e:
             raise Exception(f"Error in submitTx request: {e}")
 
-    def query(self, query: ToQuery, opts=None):
+    def query(self, query: Query, opts=None):
         if not opts:
             opts = {}
 

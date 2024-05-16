@@ -2,8 +2,7 @@ from datetime import datetime
 import json
 import uuid
 
-from .types import Query, QueryTail
-from .tx import TxOp
+from .types import Query
 
 
 class XTRuntimeError(RuntimeError):
@@ -12,7 +11,7 @@ class XTRuntimeError(RuntimeError):
 
 class XtdbJsonEncoder(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, (Query, QueryTail, TxOp)):
+        if isinstance(obj, Query):
             return obj.to_json()
         elif isinstance(obj, uuid.UUID):
             return {'@type': 'xt:uuid', '@value': str(obj)}
@@ -31,10 +30,10 @@ class XtdbJsonDecoder(json.JSONDecoder):
                 raise XTRuntimeError(obj['@value'])
             elif obj['@type'] == 'xt:timestamptz':
                 try:
-                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%I:%M:%S.%fZ[%Z]")
+                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%H:%M:%S.%fZ[%Z]")
 
                 except:
-                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%I:%M:%SZ[%Z]")
+                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%H:%M:%SZ[%Z]")
 
                 return timestamp
             

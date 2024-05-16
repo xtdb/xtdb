@@ -1,6 +1,4 @@
 from xtdb.xt_json import XtdbJsonEncoder
-from xtdb.query import From
-from xtdb.tx import PutDocs, Sql as SqlTx
 from xtdb import Xtdb, DBAPI
 from xtdb.types import Sql
 
@@ -38,34 +36,15 @@ def client(make_client):
     return make_client()
 
 
-def test_encoding():
-    query = From("people", None, None, True)
-    assert query.to_json()['from'] == 'people'
-
-
 def test_node_status(client):
     assert client.status()['latestCompletedTx'] is None
-
-
-def test_xtql_query_from(client):
-    query = From("people", None, None, True)
-    assert client.query(query) == []
-
-
-def test_xtql_tx_and_query(client):
-    query = From("people", None, None, True)
-    assert client.query(query) == []
-
-    client.submit_tx([PutDocs("people", {"xt$id": "Alice"})])
-
-    assert client.query(query) == [{"xt$id": "Alice"}]
 
 
 def test_sql_tx_and_query(client):
     query = Sql("SELECT * FROM people")
     assert client.query(query) == []
 
-    client.submit_tx([SqlTx("INSERT INTO people (xt$id) VALUES ('Alice')")])
+    client.submit_tx([Sql("INSERT INTO people (xt$id) VALUES ('Alice')")])
 
     assert client.query(query) == [{"xt$id": "Alice"}]
 
@@ -73,7 +52,7 @@ def test_null_coverage(client):
     query = Sql("SELECT * FROM people")
     assert client.query(query) == []
 
-    client.submit_tx([SqlTx("INSERT INTO people (xt$id, name) VALUES ('Alice', null)")])
+    client.submit_tx([Sql("INSERT INTO people (xt$id, name) VALUES ('Alice', null)")])
 
     assert client.query(query) == [{"xt$id": "Alice"}]
 
@@ -86,16 +65,10 @@ def test_independent_processing(make_client):
     assert client1.query(query) == []
     assert client2.query(query) == []
 
-    client1.submit_tx([SqlTx("INSERT INTO people (xt$id) VALUES ('Alice')")])
+    client1.submit_tx([Sql("INSERT INTO people (xt$id) VALUES ('Alice')")])
 
     assert client1.query(query) == [{"xt$id": "Alice"}]
     assert client2.query(query) == []
-
-def test_uuid_encoding_3327(client):
-    sample_uuid = uuid.uuid4()
-    client.submit_tx([PutDocs("uuid_test", {"xt$id": sample_uuid})])
-    query = From("uuid_test", None, None, True)
-    assert client.query(query) == [{"xt$id": sample_uuid}]
 
 def test_db_api_class(client):
     conn = DBAPI().connect(client._url)
@@ -104,28 +77,27 @@ def test_db_api_class(client):
     assert result.fetchall() == [['bar', 1]]
 
 def test_timestamps(client):
-    client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
+    client.submit_tx([Sql("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
     query_result = client.query(Sql("SELECT trades.xt$id, trades.price, trades.xt$system_from, trades.xt$system_to FROM trades FOR ALL SYSTEM_TIME"))
     assert isinstance(query_result[0]["xt$system_from"], datetime)
 
 def test_basis_change(client):
-    client.set_basis("2020-01-01T12:34:56Z")
-    client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
-    client.set_basis("2020-01-02T12:34:56Z")
-    client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 105)")])
+    client.set_tx_time("2020-01-01T12:34:56Z")
+    client.submit_tx([Sql("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
+    client.set_tx_time("2020-01-02T12:34:56Z")
+    client.submit_tx([Sql("INSERT INTO trades (xt$id, price) VALUES (1, 105)")])
     query_result = client.query(Sql("SELECT trades.xt$id, trades.price, trades.xt$system_from, trades.xt$system_to FROM trades FOR ALL SYSTEM_TIME"))
     assert query_result[0]['xt$system_from'].day - query_result[1]['xt$system_from'].day == 1
-
-    client.set_basis("2020-01-02T11:34:55Z")
+    client.set_basis("2020-01-02T12:34:55Z")
     query_result = client.query(Sql("SELECT trades.xt$id, trades.price FROM trades"))
     assert query_result[0]['price'] == 100
 
 def test_tx_time(client):
-    tx = client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
-    tx2 = client.submit_tx([SqlTx("INSERT INTO trades (xt$id, price) VALUES (1, 105)")])
-    client.set_tx_time(tx)
+    tx = client.submit_tx([Sql("INSERT INTO trades (xt$id, price) VALUES (1, 100)")])
+    tx2 = client.submit_tx([Sql("INSERT INTO trades (xt$id, price) VALUES (1, 105)")])
+    client.set_at_tx(tx)
     assert client._at_tx["txId"] == tx.tx_id
-    assert client._at_tx["systemTime"] == datetime.strftime(tx.system_time, "%Y-%m-%dT%I:%M:%SZ")
+    assert client._at_tx["systemTime"] == datetime.strftime(tx.system_time, "%Y-%m-%dT%H:%M:%SZ")
 
     query_result = client.query(Sql("SELECT trades.xt$id, trades.price FROM trades FOR ALL SYSTEM_TIME"))
 
