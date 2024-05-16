@@ -72,8 +72,8 @@ def test_independent_processing(make_client):
 
 def test_db_api_class(client):
     conn = DBAPI().connect(client._url)
-    conn.execute("INSERT INTO docs (xt$id, foo) VALUES (1, 'bar')")
-    result = conn.execute("SELECT * FROM docs")
+    conn.execute("INSERT INTO docs (xt$id, foo) VALUES (1, 'bar');")
+    result = conn.execute("SELECT * FROM docs;")
     assert result.fetchall() == [['bar', 1]]
 
 def test_timestamps(client):
@@ -103,5 +103,9 @@ def test_tx_time(client):
 
     assert len(query_result) == 0
 
-
-    
+def test_multiple_statements_db_api(client):
+    conn = DBAPI().connect(client._url)
+    conn.execute("""INSERT INTO docs (xt$id, foo) VALUES (1, 'bar');
+                    INSERT INTO docs (xt$id, foo) VALUES (1, 'baz');""")
+    result = conn.execute("SELECT * FROM docs;")
+    assert result.fetchall() == [['baz', 1]]

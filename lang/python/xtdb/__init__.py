@@ -4,11 +4,10 @@ from datetime import datetime
 from typing import Optional, List
 
 import urllib3
+import sqlparse
 
 from .types import Sql, Query
 from .xt_json import XtdbJsonEncoder, XtdbJsonDecoder
-from . import query as q
-
 
 class TxKey:
     def __init__(self, tx_id: int, system_time: datetime):
@@ -174,6 +173,9 @@ class DataError(DatabaseError):
 class NotSupportedError(DatabaseError):
     pass
 
+def remove_trailing_semicolon(s: str):
+    if s[-1] == ';':
+        return s[:-1]
 
 class DBAPI(object):
     paramstyle = "qmark"
@@ -296,11 +298,22 @@ class Cursor(object):
         # Ignoring parameters for now (don't think jupysql uses them)
 
         # ✨ Quick and dirty ✨
-        if is_tx(operation):
-            self.client.submit_tx([Sql(operation)])
+
+        operations = [remove_trailing_semicolon(s) for s in sqlparse.split(operation)]
+
+        if operations == [None]:
+            raise Exception(f"Parsing Error on {operation}, no SQL statements found by driver API internals")
+        
+        if all([is_tx(op) for op in operations]):
+            self.client.submit_tx([Sql(op) for op in operations])
             self._results = []
+        elif all([not is_tx(op) for op in operations]):
+            if len(operations) == 1:
+                self._results = self.client.query(Sql(operations[0]))
+            else:
+                raise Exception(f"Cannot do multiple queries at once: {operations}")
         else:
-            self._results = self.client.query(Sql(operation))
+            raise Exception(f"Cannot mix queries and transactions: {operations}")
 
         cols = {}
         for row in self._results:
