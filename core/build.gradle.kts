@@ -56,6 +56,7 @@ dependencies {
     api("com.charleskorn.kaml","kaml","0.56.0")
 
     testImplementation("io.mockk","mockk", "1.13.9")
+    testImplementation("org.clojure","test.check", "1.1.1")
     testImplementation(project(":xtdb-http-server"))
     testImplementation(project(":xtdb-pgwire-server"))
     testImplementation(project(":modules:xtdb-kafka"))

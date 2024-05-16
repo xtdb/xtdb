@@ -653,3 +653,18 @@
      (fn gensym-seed
        ([] (symbol (str "gensym" suffix (swap! ctr inc))))
        ([prefix] (symbol (str prefix suffix (swap! ctr inc))))))))
+
+;; Copied from
+;; https://github.com/clojure/clojurescript/blob/e74d48d5b0fd8d08c154672349cfa4d8a4166d2d/src/main/clojure/cljs/util.cljc
+(defn distinct-by
+  ([f coll]
+   (let [step (fn step [xs seen]
+                (lazy-seq
+                 ((fn [[x :as xs] seen]
+                    (when-let [s (seq xs)]
+                      (let [v (f x)]
+                        (if (contains? seen v)
+                          (recur (rest s) seen)
+                          (cons x (step (rest s) (conj seen v)))))))
+                  xs seen)))]
+     (step coll #{}))))
