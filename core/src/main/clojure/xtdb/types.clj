@@ -171,6 +171,14 @@
       :fixed-size-binary (let [[_ byte-width] col-type]
                            (ArrowType$FixedSizeBinary. byte-width)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/field-type reader macro
+(defn ->field-type ^org.apache.arrow.vector.types.pojo.FieldType [[arrow-type nullable? dictionary metadata]]
+  (FieldType. nullable? arrow-type dictionary metadata))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/field reader macro
+(defn ->field* ^org.apache.arrow.vector.types.pojo.Field [[field-name field-type & children]]
+  (Field. field-name field-type children))
+
 (defmethod print-dup ArrowType [arrow-type, ^Writer w]
   (.write w "#xt.arrow/type ")
   (.write w (pr-str (<-arrow-type arrow-type))))
@@ -178,30 +186,36 @@
 (defmethod print-method ArrowType [arrow-type w]
   (print-dup arrow-type w))
 
-(defmethod print-method FieldType [^FieldType field-type, ^Writer w]
-  (.write w (format "<FieldType "))
+(defmethod print-dup FieldType [^FieldType field-type, ^Writer w]
+  (.write w "#xt.arrow/field-type [")
   (print-method (.getType field-type) w)
   (.write w (if (.isNullable field-type)
-              " null" " not-null"))
+              " true" " false"))
   (when-let [dictionary (.getDictionary field-type)]
+    (.write w " ")
     (.write w (pr-str dictionary)))
   (when-let [metadata (.getDictionary field-type)]
+    (.write w " ")
     (print-method metadata w))
-  (.write w ">"))
+  (.write w "]"))
 
-(defmethod print-method Field [^Field field, ^Writer w]
-  (.write w (format "<Field %s %s %s"
-                    (pr-str (.getName field))
-                    (pr-str (.getType field))
-                    (if (.isNullable (.getFieldType field))
-                      "null" "not-null")))
+(defmethod print-method FieldType [field-type w]
+  (print-dup field-type w))
 
+(defmethod print-dup Field [^Field field, ^Writer w]
+  (.write w "#xt.arrow/field [")
+  (.write w (pr-str (.getName field)))
+  (.write w " ")
+  (print-method (.getFieldType field) w)
   (when-let [children (seq (.getChildren field))]
     (doseq [^Field child-field children]
       (.write w " ")
       (print-method child-field w)))
+  (.write w "]"))
 
-  (.write w ">"))
+(defmethod print-method Field [field w]
+  (print-dup field w))
+
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
 (def nullable-temporal-type [:union #{:null temporal-col-type}])
