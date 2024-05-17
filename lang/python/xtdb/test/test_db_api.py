@@ -21,6 +21,7 @@ def test_multiple_statements_db_api(client):
 def test_import_system_time_session_var_api(client):
     conn = DBAPI().connect(client._url)    
     conn.execute("INSERT INTO docs (xt$id, foo) VALUES (1, 'bang');")
+    
     conn.execute("""SET import_system_time = '3001-01-02T12:34:56Z';
                     INSERT INTO docs (xt$id, foo) VALUES (1, 'bar');
                     INSERT INTO docs (xt$id, foo) VALUES (1, 'baz');
@@ -68,3 +69,12 @@ def test_set_statements_at_top_only(client):
         assert False
     except SQLParsingError:
         assert True
+
+def test_as_of_query(client):
+    conn = DBAPI().connect(client._url)
+    conn.execute("SET import_system_time = '2020-01-01T00:00:00Z'; INSERT INTO trades (xt$id, price) VALUES (1, 100);")
+    conn.execute("SET import_system_time = '2020-01-02T00:00:00Z'; INSERT INTO trades (xt$id, price) VALUES (1, 150);")
+
+    result = conn.execute("SELECT trades.xt$id, trades.price FROM trades FOR SYSTEM_TIME AS OF DATE '2020-01-01';")
+
+    assert result.fetchall() == [[100, 1]]

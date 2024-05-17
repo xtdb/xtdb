@@ -375,6 +375,8 @@ class Cursor(object):
 
         stripped_operations = self._execute_set_statements(operations)
 
+        print(operations)
+        print(stripped_operations)
         self._execute_operations(stripped_operations)
         
         cols = {}
