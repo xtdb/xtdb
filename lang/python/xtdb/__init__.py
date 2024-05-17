@@ -43,7 +43,7 @@ class Xtdb:
         self._latest_submitted_tx = None
         self._url = url
         self._basis = None
-        self._tx_time = None
+        self._import_system_time = None
         self._at_tx = None
 
     def __str__(self):
@@ -63,9 +63,9 @@ class Xtdb:
         self._at_tx = {"txId": tx_key.tx_id, "systemTime": basis_time}
         self._basis = None
 
-    def set_tx_time(self, timestamp):
+    def set_import_system_time(self, timestamp):
         assert datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
-        self._tx_time = timestamp
+        self._import_system_time = timestamp
 
     def status(self):
         try:
@@ -87,8 +87,8 @@ class Xtdb:
         if opts is None:
             opts = {}
 
-        if self._tx_time:
-            opts["systemTime"] = self._tx_time
+        if self._import_system_time:
+            opts["systemTime"] = self._import_system_time
 
         try:
             req_data = json.dumps({"txOps": ops, "opts": opts}, cls=XtdbJsonEncoder)
@@ -126,6 +126,7 @@ class Xtdb:
 
         try:
             req_data = json.dumps({"query": query, "queryOpts": opts}, cls=XtdbJsonEncoder)
+            print(req_data)
 
             resp = self._http.request(
                 'POST',
@@ -173,9 +174,9 @@ class DataError(DatabaseError):
 class NotSupportedError(DatabaseError):
     pass
 
-def remove_trailing_semicolon(s: str):
-    if s[-1] == ';':
-        return s[:-1]
+class SQLParsingError(DatabaseError):
+    def __init__(self, message):
+        super().__init__(message)
 
 class DBAPI(object):
     paramstyle = "qmark"
@@ -208,20 +209,37 @@ def check_result(f):
     return g
 
 _tx_ops = ["INSERT INTO", "UPDATE", "DELETE FROM", "ERASE FROM"]
-def is_tx(operation):
-  for op in _tx_ops:
-    if op in operation:
-      return True
-  return False
+_session_vars = ["import_system_time", "basis"]
+
+def remove_trailing_semicolon(s: str):
+    if s[-1] == ';':
+        return s[:-1]
+
+def _is_set(operation):
+    if operation.startswith("SET"):
+        for var in _session_vars:
+            if var in operation:
+                timestamp = operation.split(" = ")[-1].replace("'", "")
+                if timestamp == "None":
+                    timestamp = None
+                return [var, timestamp]
+        return (False, None)
+    return (False, None)
+
+def _is_tx(operation):
+    for op in _tx_ops:
+        if op in operation:
+            return True
+    return False
 
 class Connection(object):
-
+    
     def __init__(self, url):
         self.client = Xtdb(url)
 
         self.closed = False
         self.cursors = []
-        
+
     @check_closed
     def close(self):
         """Close the connection now."""
@@ -253,7 +271,7 @@ class Connection(object):
     def execute(self, operation, parameters=None):
         cursor = self.cursor()
         return cursor.execute(operation, parameters)
-
+    
     def __enter__(self):
         return self
 
@@ -292,29 +310,73 @@ class Cursor(object):
         """Close the cursor."""
         self.closed = True
 
+
+    def _execute_operations(self, operations):
+        if operations == []:
+            self._results = []
+        
+        # If only transactions found, execute as transactions
+        elif all([_is_tx(op) for op in operations]):
+            self.client.submit_tx([Sql(op) for op in operations])
+            self._results = []
+
+        # If only queries found, execute as queries
+        elif all([not _is_tx(op) for op in operations]):
+            for op in operations:
+                self._results = self.client.query(Sql(op))
+
+        # Cannot mix them
+        else:
+            raise SQLParsingError(f"Cannot mix queries and transactions: {operations}")
+
+
+    def _execute_set_statements(self, operations):
+        if operations == []:
+            return []
+        
+        first_op, *rest_ops = operations
+        set_variable, variable_value = _is_set(first_op)
+
+        match set_variable:
+            case "import_system_time":
+                # Set import time
+                if variable_value:
+                    self.client.set_import_system_time(variable_value)
+                else:
+                    self.client._import_system_time = None
+                
+                return self._execute_set_statements(rest_ops)
+
+            case "basis":
+                if variable_value:
+                    self.client.set_basis(variable_value)
+                else:
+                    self.client._basis = None
+                    
+                return self._execute_set_statements(rest_ops)
+            
+            case False:
+                if not all([not _is_set(op)[0] for op in rest_ops]):
+                    raise SQLParsingError(f"Can only add SET statements to beginning of session: {rest_ops}")
+                return operations
+
+            case _:
+                raise SQLParsingError(f"Unhandled SET variable: {set_variable}") 
+        
     @check_closed
     def execute(self, operation, parameters=None):
         self.description = None
         # Ignoring parameters for now (don't think jupysql uses them)
 
-        # ✨ Quick and dirty ✨
-
         operations = [remove_trailing_semicolon(s) for s in sqlparse.split(operation)]
 
         if operations == [None]:
-            raise Exception(f"Parsing Error on {operation}, no SQL statements found by driver API internals")
-        
-        if all([is_tx(op) for op in operations]):
-            self.client.submit_tx([Sql(op) for op in operations])
-            self._results = []
-        elif all([not is_tx(op) for op in operations]):
-            if len(operations) == 1:
-                self._results = self.client.query(Sql(operations[0]))
-            else:
-                raise Exception(f"Cannot do multiple queries at once: {operations}")
-        else:
-            raise Exception(f"Cannot mix queries and transactions: {operations}")
+            raise SQLParsingError(f"Parsing Error on {operation}, no SQL statements found by driver API internals")
 
+        stripped_operations = self._execute_set_statements(operations)
+
+        self._execute_operations(stripped_operations)
+        
         cols = {}
         for row in self._results:
             for name, value in row.items():
