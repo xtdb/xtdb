@@ -18,7 +18,7 @@ function parseSQLTxs(s) {
     return "[" + txs + "]";
 }
 
-const fiddle_url = "https://fiddle.xtdb.com"
+const fiddle_url = "https://play.xtdb.com"
 async function runFiddle(txs, query) {
     query.replace(/;\s$/, ""); // remove last semi-colon
     query = JSON.stringify(query);
