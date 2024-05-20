@@ -1,4 +1,4 @@
-from xtdb import Xtdb
+from xtdb import Xtdb, DBAPI
 
 import pytest
 import os
@@ -30,3 +30,7 @@ def make_client():
 @pytest.fixture
 def client(make_client):
     return make_client()
+
+@pytest.fixture
+def connection(make_client):
+    return DBAPI().connect(make_client()._url)

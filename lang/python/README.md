@@ -28,6 +28,10 @@ You can then run the tests via:
 poetry run pytest
 ```
 
+There is also the option of running a static typechecker
+```shell
+poetry run mypy
+```
 
 ## Deployment
 
