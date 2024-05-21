@@ -6,7 +6,8 @@
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (org.apache.arrow.vector VectorSchemaRoot)
+  (:import (org.apache.arrow.memory RootAllocator)
+           (org.apache.arrow.vector VectorSchemaRoot)
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            (org.apache.arrow.vector.types Types$MinorType)
            (org.apache.arrow.vector.types.pojo FieldType Schema)))
@@ -405,3 +406,13 @@
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"key-already-set"
                             (xt/submit-tx node [[:put-docs :foo {:xt/id :foo, :xt$id :bar}]])))))
+
+(deftest test-extension-types-in-struct-transfer-pairs-3305
+  (let [field #xt.arrow/field ["toplevel" #xt.arrow/field-type [#xt.arrow/type :struct false]
+                               #xt.arrow/field ["data" #xt.arrow/field-type [#xt.arrow/type :struct false]
+                                                #xt.arrow/field ["type" #xt.arrow/field-type [#xt.arrow/type :keyword false]]]]
+        vs [{:data {:type :foo}}
+            {:type :bar}]]
+    (with-open [al (RootAllocator.)
+                vec (vw/open-vec al field vs)]
+      (t/is (= vs (tu/vec->vals (vr/vec->reader vec)))))))
