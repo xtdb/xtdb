@@ -94,6 +94,8 @@ public class NullableStructWriter extends AbstractFieldWriter {
         map(child.getName(), arrowType.getKeysSorted());
         break;
       }
+      case EXTENSIONTYPE:
+        break;
       case DENSEUNION: {
         FieldType fieldType = new FieldType(addVectorAsNullable, MinorType.DENSEUNION.getType(), null, null);
         DenseUnionWriter writer = new DenseUnionWriter(container.addOrGet(child.getName(), fieldType, DenseUnionVector.class), getNullableStructWriterFactory());

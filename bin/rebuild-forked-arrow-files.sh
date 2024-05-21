@@ -20,5 +20,9 @@ mkdir -p "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"{complex/impl,i
     cp vector/target/generated-sources/org/apache/arrow/vector/complex/UnionVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"
     cp vector/src/main/java/org/apache/arrow/vector/complex/AbstractContainerVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"
     cp vector/target/generated-sources/org/apache/arrow/vector/complex/impl/NullableStructWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/impl/"
+    cp vector/target/generated-sources/org/apache/arrow/vector/complex/impl/UnionWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/impl/"
     cp vector/src/main/java/org/apache/arrow/vector/ipc/JsonFileWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/ipc/"
+
+    cp vector/src/main/java/org/apache/arrow/vector/complex/impl/PromotableWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/impl/"
+
 )
