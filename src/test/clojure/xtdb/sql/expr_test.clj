@@ -362,8 +362,6 @@
     "{foo: 2, bar: {baz: [true, 1]}}" {:foo 2 :bar {:baz [true 1]}}))
 
 (t/deftest test-object-field-access
-  ;; FIXME chains
-  ;;
   (t/are [sql expected]
          (= expected (plan-expr-with-foo sql))
 
@@ -371,9 +369,10 @@
     "{foo: 2}.foo" '(. {:foo 2} :foo)
     "{foo: 2}.foo.bar" '(. (. {:foo 2} :foo) :bar)
 
-    "foo.a.b" '(. f/a :b)
-    "foo.a.b.c" '(. (. f/a :b) :c)))
-
+    ;; currently required to wrap field accesses in parens - Postgres does this too, so it's not a cardinal sin,
+    ;; but I guess it'd be nice to resolve this in the future
+    "(foo.a).b" '(. f/a :b)
+    "(foo.a).b.c" '(. (. f/a :b) :c)))
 
 (t/deftest test-array-expressions
   (t/are [sql expected]

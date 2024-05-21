@@ -536,7 +536,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest test-normalising-nested-cols-2483
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo {:a/b "foo"}}]])
   (t/is (= [{:foo {:a/b "foo"}}] (xt/q tu/*node* "SELECT docs.foo FROM docs")))
-  (t/is (= [{:a/b "foo"}] (xt/q tu/*node* "SELECT docs.foo.a$b FROM docs"))))
+  (t/is (= [{:a/b "foo"}] (xt/q tu/*node* "SELECT (docs.foo).a$b FROM docs"))))
 
 (t/deftest non-namespaced-keys-for-structs-2418
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, OBJECT(c$d: 'bar'))"]])
@@ -574,8 +574,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         "testing insert worked")
 
   (t/is (= [{:field-name2 true}]
-           (xt/q tu/*node* "SELECT t2.field_name1.field_name2, t2.field$name4.baz
-                            FROM (SELECT t1.data.field_name1, t1.data.field$name4 FROM t1) AS t2"))
+           (xt/q tu/*node* "SELECT (t2.field_name1).field_name2, t2.field$name4.baz
+                            FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"))
         "testing insert worked"))
 
 (t/deftest test-get-field-on-duv-with-struct-2425
@@ -583,7 +583,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                            [:sql "INSERT INTO t2(xt$id, data) VALUES(2, OBJECT(foo: 2))"]])
 
   (t/is (= [{:foo 2} {}]
-           (xt/q tu/*node* "SELECT t2.data.foo FROM t2"))))
+           (xt/q tu/*node* "SELECT (t2.data).foo FROM t2"))))
 
 (t/deftest distinct-null-2535
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, foo) VALUES(1, NULL)"]
