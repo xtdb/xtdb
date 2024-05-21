@@ -51,9 +51,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 
-import java.sql.Date;
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
@@ -122,6 +119,10 @@ public class NullableStructWriter extends AbstractFieldWriter {
       }
       case SMALLINT: {
         smallInt(child.getName());
+        break;
+      }
+      case FLOAT2: {
+        float2(child.getName());
         break;
       }
       case INT: {
@@ -544,6 +545,37 @@ public class NullableStructWriter extends AbstractFieldWriter {
       if (writer instanceof PromotableWriter) {
         // ensure writers are initialized
         ((PromotableWriter)writer).getWriter(MinorType.SMALLINT);
+      }
+    }
+    return writer;
+  }
+
+
+  @Override
+  public Float2Writer float2(String name) {
+    FieldWriter writer = fields.get(handleCase(name));
+    if(writer == null) {
+      ValueVector vector;
+      ValueVector currentVector = container.getChild(name);
+      Float2Vector v = container.addOrGet(name,
+          new FieldType(addVectorAsNullable,
+            MinorType.FLOAT2.getType()
+          ,null, null),
+          Float2Vector.class);
+      writer = new PromotableWriter(v, container, getNullableStructWriterFactory());
+      vector = v;
+      if (currentVector == null || currentVector != vector) {
+        if(this.initialCapacity > 0) {
+          vector.setInitialCapacity(this.initialCapacity);
+        }
+        vector.allocateNewSafe();
+      } 
+      writer.setPosition(idx());
+      fields.put(handleCase(name), writer);
+    } else {
+      if (writer instanceof PromotableWriter) {
+        // ensure writers are initialized
+        ((PromotableWriter)writer).getWriter(MinorType.FLOAT2);
       }
     }
     return writer;

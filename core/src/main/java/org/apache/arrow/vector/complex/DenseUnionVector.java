@@ -52,9 +52,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 
-import java.sql.Date;
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
@@ -142,7 +139,7 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
           ArrowType.Struct.INSTANCE, /*dictionary*/ null, /*metadata*/ null);
 
   public static DenseUnionVector empty(String name, BufferAllocator allocator) {
-    FieldType fieldType = FieldType.nullable(new ArrowType.Union(
+    FieldType fieldType = FieldType.notNullable(new ArrowType.Union(
             UnionMode.Dense, null));
     return new DenseUnionVector(name, allocator, fieldType, null);
   }
@@ -389,6 +386,22 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       }
     }
     return (SmallIntVector) vector;
+  }
+
+  public Float2Vector getFloat2Vector(byte typeId) {
+    ValueVector vector = typeId < 0 ? null : childVectors[typeId];
+    if (vector == null) {
+      int vectorCount = internalStruct.size();
+      vector = addOrGet(typeId, MinorType.FLOAT2, Float2Vector.class);
+      childVectors[typeId] = vector;
+      if (internalStruct.size() > vectorCount) {
+        vector.allocateNew();
+        if (callBack != null) {
+          callBack.doWork();
+        }
+      }
+    }
+    return (Float2Vector) vector;
   }
 
   public IntVector getIntVector(byte typeId) {
@@ -1366,6 +1379,11 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       reader.read(smallIntHolder);
       setSafe(index, smallIntHolder);
       break;
+      case FLOAT2:
+      NullableFloat2Holder float2Holder = new NullableFloat2Holder();
+      reader.read(float2Holder);
+      setSafe(index, float2Holder);
+      break;
       case INT:
       NullableIntHolder intHolder = new NullableIntHolder();
       reader.read(intHolder);
@@ -1545,6 +1563,17 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     }
     byte typeId = getTypeId(index);
     SmallIntVector vector = getSmallIntVector(typeId);
+    int offset = vector.getValueCount();
+    vector.setValueCount(offset + 1);
+    vector.setSafe(offset, holder);
+    offsetBuffer.setInt((long) index * OFFSET_WIDTH, offset);
+  }
+  public void setSafe(int index, NullableFloat2Holder holder) {
+    while (index >= getOffsetBufferValueCapacity()) {
+      reallocOffsetBuffer();
+    }
+    byte typeId = getTypeId(index);
+    Float2Vector vector = getFloat2Vector(typeId);
     int offset = vector.getValueCount();
     vector.setValueCount(offset + 1);
     vector.setSafe(offset, holder);

@@ -52,9 +52,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 
-import java.sql.Date;
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
@@ -357,6 +354,26 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
       }
     }
     return smallIntVector;
+  }
+
+  private Float2Vector float2Vector;
+
+  public Float2Vector getFloat2Vector() {
+    return getFloat2Vector(null);
+  }
+
+  public Float2Vector getFloat2Vector(String name) {
+    if (float2Vector == null) {
+      int vectorCount = internalStruct.size();
+      float2Vector = addOrGet(name, MinorType.FLOAT2, Float2Vector.class);
+      if (internalStruct.size() > vectorCount) {
+        float2Vector.allocateNew();
+        if (callBack != null) {
+          callBack.doWork();
+        }
+      }
+    }
+    return float2Vector;
   }
 
   private IntVector intVector;
@@ -1413,6 +1430,8 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
         return getUInt2Vector(name);
         case SMALLINT:
         return getSmallIntVector(name);
+        case FLOAT2:
+        return getFloat2Vector(name);
         case INT:
         return getIntVector(name);
         case UINT4:
@@ -1572,6 +1591,11 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
         NullableSmallIntHolder smallIntHolder = new NullableSmallIntHolder();
         reader.read(smallIntHolder);
         setSafe(index, smallIntHolder);
+        break;
+      case FLOAT2:
+        NullableFloat2Holder float2Holder = new NullableFloat2Holder();
+        reader.read(float2Holder);
+        setSafe(index, float2Holder);
         break;
       case INT:
         NullableIntHolder intHolder = new NullableIntHolder();
@@ -1761,6 +1785,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     public void setSafe(int index, NullableSmallIntHolder holder) {
       setType(index, MinorType.SMALLINT);
       getSmallIntVector(null).setSafe(index, holder);
+    }
+    public void setSafe(int index, NullableFloat2Holder holder) {
+      setType(index, MinorType.FLOAT2);
+      getFloat2Vector(null).setSafe(index, holder);
     }
     public void setSafe(int index, NullableIntHolder holder) {
       setType(index, MinorType.INT);

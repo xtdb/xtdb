@@ -56,7 +56,7 @@ interface HashTrie<N : Node<N>> {
             val byteIdx = bitIdx / java.lang.Byte.SIZE
             val bitOffset = bitIdx % java.lang.Byte.SIZE
 
-            val b = pointer.buf.getByte(pointer.offset + byteIdx)
+            val b = pointer.buf!!.getByte(pointer.offset + byteIdx)
             return ((b.toInt() ushr ((java.lang.Byte.SIZE - LEVEL_BITS) - bitOffset)) and LEVEL_MASK).toByte()
         }
 
