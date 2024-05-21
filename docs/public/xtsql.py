@@ -460,13 +460,13 @@ class XtdbConsole(cmd.Cmd):
     def do_accept(self, arg):
         'Sets or shows the accepted mime type.'
         if arg:
-            self.accept = re.sub('=\s*', '', arg)
+            self.accept = re.sub('=\\s*', '', arg)
         print2(self.accept)
 
     def do_url(self, arg):
         'Sets or shows the database URL.'
         if arg:
-            self.url = re.sub('=\s*', '', arg)
+            self.url = re.sub('=\\s*', '', arg)
         print2(self.url)
 
     def do_quit(self, arg):
