@@ -72,7 +72,7 @@ dependencies {
     implementation("com.xtdb:xtdb-http-client-jvm:2.0.0-SNAPSHOT")
 
     // xtdb-core for running an in-process (test) node
-    implementation("com.xtdb:xtdb-http-core:2.0.0-SNAPSHOT")
+    implementation("com.xtdb:xtdb-core:2.0.0-SNAPSHOT")
 }
 ----
 ====
