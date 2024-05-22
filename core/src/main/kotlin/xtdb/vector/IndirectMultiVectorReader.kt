@@ -182,6 +182,7 @@ class IndirectMultiVectorReader(
     }
 
     override fun rowCopier(writer: IVectorWriter): IRowCopier {
+        readers.map { it?.also { writer.promoteChildren(it.field) }}
         val rowCopiers = readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector()).rowCopier(writer) }
         return IRowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
     }

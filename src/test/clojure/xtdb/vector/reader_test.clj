@@ -315,3 +315,31 @@
                    (do
                      (.setPosition vpos i)
                      (get-children-legs (.readObject value-rdr))))))))))
+
+(deftest struct-promote-children-in-row-copier
+  (let [struct-int-field (types/->field "foo" #xt.arrow/type :struct false (types/col-type->field "bar" :i64))
+        struct-str-field (types/->field "foo" #xt.arrow/type :struct false (types/col-type->field "bar" :utf8))]
+    (with-open [struct-int-vec (.createVector struct-int-field tu/*allocator*)
+                struct-str-vec (.createVector struct-str-field tu/*allocator*)]
+
+      (let [struct-int-wrt (vw/->writer struct-int-vec)
+            struct-str-wrt (vw/->writer struct-str-vec)]
+
+        (dotimes [_ 1]
+          (.writeObject struct-int-wrt {:bar 42})
+          (.writeObject struct-str-wrt {:bar "forty-two"}))
+
+        (.syncValueCount struct-int-wrt)
+        (.syncValueCount struct-str-wrt))
+
+      (with-open [wtr (vw/->vec-writer tu/*allocator* "my-new-struct" (FieldType/notNullable #xt.arrow/type :struct))]
+        (.promoteChildren wtr struct-int-field)
+        (.promoteChildren wtr struct-str-field)
+        (let [int-copier (.rowCopier wtr struct-int-vec)
+              str-copier (.rowCopier wtr struct-str-vec)]
+          (.copyRow int-copier 0)
+          (t/is (= [{:bar 42}]
+                   (tu/vec->vals (vw/vec-wtr->rdr wtr))))
+          (.copyRow str-copier 0)
+          (t/is (= [{:bar 42} {:bar "forty-two"}]
+                   (tu/vec->vals (vw/vec-wtr->rdr wtr)))))))))

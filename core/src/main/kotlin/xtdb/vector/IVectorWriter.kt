@@ -36,6 +36,10 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
         vector.valueCount = writerPosition().position
     }
 
+    fun promoteChildren(field: Field) {
+        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
+    };
+
     fun rowCopier(src: ValueVector): IRowCopier
 
     fun rowCopier(src: RelationReader): IRowCopier {

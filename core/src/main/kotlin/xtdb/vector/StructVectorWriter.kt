@@ -113,7 +113,8 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
     override fun structKeyWriter(key: String, fieldType: FieldType) =
         writers[key]?.let {
-            if (it.field.type == fieldType.type && (it.field.isNullable || !fieldType.isNullable)) it
+            if ((it.field.type == fieldType.type && (it.field.isNullable || !fieldType.isNullable)) ||
+                it.field.fieldType == UNION_FIELD_TYPE) it
             else promoteChild(it, fieldType)
         }
             ?: newChildWriter(key, fieldType)
@@ -146,6 +147,16 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
             toRowCopier(childWriter)
         } catch (e: InvalidCopySourceException) {
             return toRowCopier(promoteChild(childWriter, e.src.fieldType))
+        }
+    }
+
+    override fun promoteChildren(field: Field) {
+        if (field.type != this.field.type || (field.isNullable && !field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
+        for (child in field.children) {
+            var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)
+            if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.fieldType != UNION_FIELD_TYPE)
+                childWriter = promoteChild(childWriter, child.fieldType)
+            if (child.children.isNotEmpty()) childWriter.promoteChildren(child)
         }
     }
 
