@@ -44,7 +44,7 @@ class FiddleRegistry {
             return tagName.startsWith("fiddle-output");
         }
         let foundOutput = false;
-        // We don't use this to find outputs, just to see if we thinkg any
+        // We don't use this to find outputs, just to see if we think any
         // will be registered
         for (const el of parent.querySelectorAll('*')) {
             if (looksLikeOutput(el)) {
@@ -59,7 +59,7 @@ class FiddleRegistry {
                 let table_output = document.createElement('fiddle-output-table');
                 table_output.style.display = 'none';
                 parent.querySelector('[data-id="content"]').appendChild(table_output);
-                // Will regester itself
+                // Will register itself
             }, 0);
         }
 
