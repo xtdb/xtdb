@@ -78,7 +78,8 @@ class FiddleRegistry {
 
         // Reduce re-renders during init by rendering late & registering re-renders late
         setTimeout(() => {
-            if (parent.dataset.autoLoad == 'true') {
+            let autoLoad = parent.dataset.autoLoad == 'true';
+            if (autoLoad) {
                 this.render();
             } else if (this.query && this.isTemplate) {
                 // Always at least render the template
@@ -91,12 +92,12 @@ class FiddleRegistry {
 
             // NOTE: Here we decide what to do when something registers late
             this.on("registerQuery", _ => {
-                if (this.renderedOutputs) {
+                if (autoLoad) {
                     this.render();
                 }
             });
             this.on("registerTemplate", _ => {
-                if (this.renderedOutputs) {
+                if (autoLoad) {
                     this.render();
                 } else {
                     // Always at least render self when registered
