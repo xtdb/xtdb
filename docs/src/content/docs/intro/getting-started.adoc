@@ -8,7 +8,7 @@ title: Quickstart
 
 == Try Online
 
-If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying XTDB right now using the link:https://fiddle.xtdb.com/[XT fiddle] website.
+If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying XTDB right now using the link:https://play.xtdb.com/[XT Play] website.
 
 == Docker Install
 

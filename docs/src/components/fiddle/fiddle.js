@@ -44,7 +44,7 @@ class FiddleRegistry {
             return tagName.startsWith("fiddle-output");
         }
         let foundOutput = false;
-        // We don't use this to find outputs, just to see if we thinkg any
+        // We don't use this to find outputs, just to see if we think any
         // will be registered
         for (const el of parent.querySelectorAll('*')) {
             if (looksLikeOutput(el)) {
@@ -59,7 +59,7 @@ class FiddleRegistry {
                 let table_output = document.createElement('fiddle-output-table');
                 table_output.style.display = 'none';
                 parent.querySelector('[data-id="content"]').appendChild(table_output);
-                // Will regester itself
+                // Will register itself
             }, 0);
         }
 
@@ -78,7 +78,8 @@ class FiddleRegistry {
 
         // Reduce re-renders during init by rendering late & registering re-renders late
         setTimeout(() => {
-            if (parent.dataset.autoLoad == 'true') {
+            let autoLoad = parent.dataset.autoLoad == 'true';
+            if (autoLoad) {
                 this.render();
             } else if (this.query && this.isTemplate) {
                 // Always at least render the template
@@ -91,12 +92,12 @@ class FiddleRegistry {
 
             // NOTE: Here we decide what to do when something registers late
             this.on("registerQuery", _ => {
-                if (this.renderedOutputs) {
+                if (autoLoad) {
                     this.render();
                 }
             });
             this.on("registerTemplate", _ => {
-                if (this.renderedOutputs) {
+                if (autoLoad) {
                     this.render();
                 } else {
                     // Always at least render self when registered
