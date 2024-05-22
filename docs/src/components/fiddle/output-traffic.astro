@@ -13,7 +13,7 @@
                 let value = firstCol[Object.keys(firstCol)[0]]
                 value = parseFloat(value).toFixed(2);
 
-                let color = value < 0 ? 'text-red-500' : 'text-black';
+                let color = value < 0 ? 'text-red-500' : 'text-black dark:text-white';
 
                 this.innerHTML = `<div class="text-3xl ${color}">${value}</div>`
             } catch (e) {
