@@ -255,7 +255,7 @@
                                                                             (fn [params]
                                                                               (vr/rel-reader (concat params
                                                                                                      (for [[ik dk] columns]
-                                                                                                       (-> (.readerForName in-rel (name ik))
+                                                                                                       (-> (.readerForName in-rel (str ik))
                                                                                                            (.select (int-array [idx]))
                                                                                                            (.withName (name dk)))))
                                                                                              1))))))))))}))))
