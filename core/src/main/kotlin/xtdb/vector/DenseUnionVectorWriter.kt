@@ -4,6 +4,7 @@ import clojure.lang.Keyword
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.replaceChild
+import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -208,6 +209,18 @@ class DenseUnionVectorWriter(
         return IRowCopier { srcIdx ->
             copierMapping[src.getTypeId(srcIdx).also { check(it >= 0) }.toInt()]
                 .copyRow(src.getOffset(srcIdx))
+        }
+    }
+
+    override fun promoteChildren(field: Field) {
+        if (field.type == UNION_FIELD_TYPE.type) {
+            for (child in field.children) {
+                val legWriter = legWriter(child.type.toLeg(), child.fieldType)
+                if (child.children.isNotEmpty()) legWriter.promoteChildren(child)
+            }
+        } else {
+            val legWriter = legWriter(field.type.toLeg(), field.fieldType)
+            if (field.children.isNotEmpty()) legWriter.promoteChildren(field)
         }
     }
 

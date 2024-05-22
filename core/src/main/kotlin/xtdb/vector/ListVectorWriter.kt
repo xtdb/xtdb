@@ -95,6 +95,15 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
 
     override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
 
+    override fun promoteChildren(field: Field) {
+        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
+            throw FieldMismatch(this.field.fieldType, field.fieldType)
+        val child = field.children.single()
+        if ((child.type != elWriter.field.type || (child.isNullable && !elWriter.field.isNullable)) && elWriter.field.fieldType != UNION_FIELD_TYPE)
+            promoteElWriter(child.fieldType)
+        if (child.children.isNotEmpty()) elWriter.promoteChildren(child)
+    }
+
     override fun rowCopier(src: ValueVector) = when (src) {
         is NullVector -> nullToVecCopier(this)
         is DenseUnionVector -> duvToVecCopier(this, src)

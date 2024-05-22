@@ -349,7 +349,7 @@ abstract class ExtensionVectorWriter(
     ScalarVectorWriter(vector) {
     override var field: Field = vector.field
 
-    private val inner = writerFor(vector.underlyingVector, {
+    internal val inner = writerFor(vector.underlyingVector, {
         field = Field(field.name, field.fieldType, it.children)
         notify(field)
     })
@@ -439,6 +439,11 @@ internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) 
         }
 
     override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
+
+    override fun promoteChildren(field: Field) {
+        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
+        inner.promoteChildren(Field(field.name, inner.field.fieldType, field.children))
+    }
 }
 
 private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChangeListener?> {
