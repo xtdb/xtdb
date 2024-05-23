@@ -5,11 +5,14 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
+import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.toLeg
+import xtdb.vector.extensions.SetType
+import xtdb.vector.extensions.SetVector
 import java.nio.ByteBuffer
 
 interface IVectorWriter : IValueWriter, AutoCloseable {
@@ -132,8 +135,13 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
                 .to as FieldVector
 
         field.type == ArrowType.Null.INSTANCE -> {
-            Field(field.name, FieldType(writerPosition().position > 0, fieldType.type, null), emptyList())
-                .createVector(al).also { it.valueCount = vector.valueCount }
+            // workaround for #3376
+            when  {
+                fieldType.type == ArrowType.List.INSTANCE -> ListVector(field.name, al, FieldType.nullable(ArrowType.List.INSTANCE), null).also { it.valueCount = vector.valueCount }
+                fieldType.type == SetType -> SetVector(field.name, al, FieldType.nullable(SetType), null).also { it.valueCount = vector.valueCount }
+                else -> Field(field.name, FieldType(writerPosition().position > 0 || fieldType.isNullable, fieldType.type, null), emptyList())
+                    .createVector(al).also { it.valueCount = vector.valueCount }
+            }
         }
 
         else -> {

@@ -15,3 +15,16 @@
   (t/is (= [{:data {:type :foo} :xt/id "doc-1"}
             {:type :bar, :xt/id "doc-2"}]
            (xt/q tu/*node* '(from :table [*])))))
+
+(deftest test-promotion-of-null-to-list-3376
+  (t/testing "lists"
+    (xt/submit-tx tu/*node* [[:put-docs :table {:xt/id "doc-1" :data nil}]])
+    (xt/submit-tx tu/*node* [[:put-docs :table {:xt/id "doc-1" :data [1]}]])
+    (t/is (= [{:xt/id "doc-1" :data [1]}]
+             (xt/q tu/*node* '(from :table [*])))))
+
+  (t/testing "sets"
+    (xt/submit-tx tu/*node* [[:put-docs :table1 {:xt/id "doc-1" :data nil}]])
+    (xt/submit-tx tu/*node* [[:put-docs :table1 {:xt/id "doc-1" :data #{1}}]])
+    (t/is (= [{:xt/id "doc-1" :data #{1}}]
+             (xt/q tu/*node* '(from :table1 [*]))))))
