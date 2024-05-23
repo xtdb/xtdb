@@ -2,7 +2,6 @@ package xtdb.vector.extensions
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.FixedSizeBinaryVector
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import java.nio.ByteBuffer
 import java.util.*

@@ -2,8 +2,8 @@ package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import xtdb.util.requiringResolve
 import xtdb.api.module.XtdbModule
+import xtdb.util.requiringResolve
 
 /**
  * Used to set configuration options for an optional HTTP Server module.

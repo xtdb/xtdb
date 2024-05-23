@@ -1,13 +1,13 @@
 package xtdb
 
-import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
-import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
-import shadow.org.apache.tools.zip.ZipOutputStream
 import clojure.java.api.Clojure
 import clojure.lang.PersistentHashMap
-import shadow.org.apache.tools.zip.ZipEntry
-import java.io.InputStream
+import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
 import org.gradle.api.file.FileTreeElement
+import shadow.org.apache.tools.zip.ZipEntry
+import shadow.org.apache.tools.zip.ZipOutputStream
+import java.io.InputStream
 
 class DataReaderTransformer : Transformer {
     private val readers: MutableMap<Any, Any> = mutableMapOf()

@@ -7,8 +7,8 @@ import xtdb.ZoneIdSerde
 import xtdb.api.log.Log
 import xtdb.api.log.Logs.inMemoryLog
 import xtdb.api.module.XtdbModule
-import xtdb.api.storage.Storage.inMemoryStorage
 import xtdb.api.storage.Storage
+import xtdb.api.storage.Storage.inMemoryStorage
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path

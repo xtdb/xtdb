@@ -6,7 +6,6 @@ import xtdb.api.Xtdb.openNode
 import xtdb.api.query.Queries.from
 import xtdb.api.tx.TxOps.putDocs
 import java.net.URI
-import java.net.URL
 
 internal class XtdbClientTest {
     @Test

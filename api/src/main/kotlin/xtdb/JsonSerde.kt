@@ -10,11 +10,7 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.contextual
-import kotlinx.serialization.modules.polymorphic
-import xtdb.api.TransactionAborted
-import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
-import xtdb.api.TransactionResult
 import xtdb.util.kebabToCamelCase
 import java.io.InputStream
 import java.io.OutputStream

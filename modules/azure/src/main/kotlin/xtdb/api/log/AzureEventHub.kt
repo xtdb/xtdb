@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.Xtdb
-import xtdb.api.module.*
+import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
 import java.time.Duration
 
