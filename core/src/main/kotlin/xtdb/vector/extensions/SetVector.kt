@@ -18,7 +18,7 @@ fun toListFieldType (fieldType: FieldType): FieldType {
 class SetVector(name: String, allocator: BufferAllocator, fieldType: FieldType, callBack: CallBack? = null) :
     XtExtensionVector<ListVector>(name, allocator, fieldType, ListVector(name, allocator, toListFieldType(fieldType), callBack)) {
 
-    override fun getObject(index: Int): Set<*> = HashSet(underlyingVector.getObject(index))
+    override fun getObject0(index: Int): Set<*> = HashSet(underlyingVector.getObject(index))
 
     override fun getField(): Field {
         val field = super.getField()

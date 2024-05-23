@@ -8,6 +8,5 @@ import org.apache.arrow.vector.types.pojo.FieldType
 class KeywordVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
     XtExtensionVector<VarCharVector>(name, allocator, fieldType, VarCharVector(name, allocator)) {
 
-    override fun getObject(index: Int): Keyword? =
-        if (isNull(index)) null else Keyword.intern(underlyingVector.getObject(index).toString())
+    override fun getObject0(index: Int): Keyword = Keyword.intern(underlyingVector.getObject(index).toString())
 }

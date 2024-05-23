@@ -9,5 +9,5 @@ import java.nio.charset.StandardCharsets
 class UriVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
     XtExtensionVector<VarCharVector>(name, allocator, fieldType, VarCharVector(name, allocator)) {
 
-    override fun getObject(index: Int): URI = URI.create(String(underlyingVector[index], StandardCharsets.UTF_8))
+    override fun getObject0(index: Int): URI = URI.create(String(underlyingVector[index], StandardCharsets.UTF_8))
 }

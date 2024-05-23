@@ -15,5 +15,5 @@ class TransitVector(name: String, allocator: BufferAllocator, fieldType: FieldTy
 
     private fun transitReader(v: ByteArray): Reader = TRANSIT_MSGPACK_READER.invoke(ByteArrayInputStream(v)) as Reader
 
-    override fun getObject(index: Int): Any = transitReader(underlyingVector[index]).read()
+    override fun getObject0(index: Int): Any = transitReader(underlyingVector[index]).read()
 }
