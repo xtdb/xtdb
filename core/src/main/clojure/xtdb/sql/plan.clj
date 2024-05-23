@@ -5,7 +5,8 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.information-schema :as info-schema])
   (:import clojure.lang.MapEntry
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set)
@@ -243,13 +244,14 @@
     (when-not (and chain (not= chain [table-alias]))
       cols))
 
-  (find-decls [_ [col-name table-name]]
-    (when (or (nil? table-name) (= table-name table-alias))
-      (when (or (contains? cols col-name) (types/temporal-column? col-name))
-        [(.computeIfAbsent !reqd-cols col-name
-                           (reify Function
-                             (apply [_ col]
-                               (->col-sym (str unique-table-alias) (str col)))))])))
+  (find-decls [this [col-name table-name]]
+    (when (and (or (nil? table-name) (= table-name table-alias))
+               (or (nil? schema-name) (= schema-name (:schema-name this)))
+               (or (contains? cols col-name) (types/temporal-column? col-name)))
+      [(.computeIfAbsent !reqd-cols col-name
+                         (reify Function
+                           (apply [_ col]
+                             (->col-sym (str unique-table-alias) (str col)))))]))
 
   TableRef
   (plan-table-ref [{{:keys [default-all-valid-time?]} :env, :as this}]
@@ -264,7 +266,9 @@
               for-st (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))]
 
           [:rename unique-table-alias
-           [:scan (cond-> {:table table-name}
+           [:scan (cond-> {:table (if schema-name
+                                    (symbol (str schema-name) (str table-name))
+                                    table-name)}
                     for-vt (assoc :for-valid-time for-vt)
                     for-st (assoc :for-system-time for-st))
             (vec (.keySet !reqd-cols))]])))))
@@ -454,9 +458,19 @@
               (->DerivedTable plan table-alias unique-table-alias
                               (->insertion-ordered-set (or cols cte-cols)))))
 
-          (->BaseTable env ctx sn tn table-alias unique-table-alias
-                       (->insertion-ordered-set (or cols (get table-info tn)))
-                       (HashMap.)))))
+          (let [[sn table-cols] (or (when-let [table-cols (get table-info (if sn
+                                                                            (symbol (str sn) (str tn))
+                                                                            tn))]
+                                      [sn table-cols])
+
+                                    (when-not sn
+                                      (when-let [table-cols (get info-schema/unq-pg-catalog tn)]
+                                        ['pg_catalog table-cols]))
+
+                                    (add-warning! env (->BaseTableNotFound sn tn)))]
+            (->BaseTable env ctx sn tn table-alias unique-table-alias
+                         (->insertion-ordered-set (or cols table-cols))
+                         (HashMap.))))))
 
   (visitJoinTable [this ctx]
     (let [l (-> (.tableReference ctx 0) (.accept this))
@@ -2009,17 +2023,17 @@
       (add-throwing-error-listener)))
 
 (defn- xform-table-info [table-info]
-  (->> (for [[tn cns] table-info]
-         [(symbol tn) (->> cns
-                           (map ->col-sym)
-                           ^Collection
-                           (sort-by identity (fn [s1 s2]
-                                               (cond
-                                                 (= 'xt$id s1) -1
-                                                 (= 'xt$id s2) 1
-                                                 :else (compare s1 s2))))
-                           ->insertion-ordered-set)])
-       (into {})))
+  (into {}
+        (for [[tn cns] (into info-schema/table-info table-info)]
+          [(symbol tn) (->> cns
+                            (map ->col-sym)
+                            ^Collection
+                            (sort-by identity (fn [s1 s2]
+                                                (cond
+                                                  (= 'xt$id s1) -1
+                                                  (= 'xt$id s2) 1
+                                                  :else (compare s1 s2))))
+                            ->insertion-ordered-set)])))
 
 (defn log-warnings [!warnings]
   (doseq [warning @!warnings]

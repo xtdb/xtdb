@@ -27,57 +27,59 @@
      :name name
      :type (types/field->col-type col-field)}))
 
-(def info-tables-raw {"tables" {"table_catalog" (types/col-type->field "table_catalog" :utf8)
+(def info-tables
+  {'information_schema/tables {"table_catalog" (types/col-type->field "table_catalog" :utf8)
+                               "table_schema" (types/col-type->field "table_schema" :utf8)
+                               "table_name" (types/col-type->field "table_name" :utf8)
+                               "table_type" (types/col-type->field "table_type" :utf8)}
+   'information_schema/columns {"table_catalog" (types/col-type->field "table_catalog" :utf8)
                                 "table_schema" (types/col-type->field "table_schema" :utf8)
                                 "table_name" (types/col-type->field "table_name" :utf8)
-                                "table_type" (types/col-type->field "table_type" :utf8)}
-                      "columns" {"table_catalog" (types/col-type->field "table_catalog" :utf8)
-                                 "table_schema" (types/col-type->field "table_schema" :utf8)
-                                 "table_name" (types/col-type->field "table_name" :utf8)
-                                 "column_name" (types/col-type->field "column_name" :utf8)
-                                 "data_type" (types/col-type->field "data_type" :utf8)}
-                      "schemata" {"catalog_name" (types/col-type->field "catalog_name" :utf8)
-                                  "schema_name" (types/col-type->field "schema_name" :utf8)
-                                  "schema_owner" (types/col-type->field "schema_owner" :utf8)}})
+                                "column_name" (types/col-type->field "column_name" :utf8)
+                                "data_type" (types/col-type->field "data_type" :utf8)}
+   'information_schema/schemata {"catalog_name" (types/col-type->field "catalog_name" :utf8)
+                                 "schema_name" (types/col-type->field "schema_name" :utf8)
+                                 "schema_owner" (types/col-type->field "schema_owner" :utf8)}})
 
-(def info-tables (update-keys info-tables-raw #(str "information_schema$" %)))
-(def info-table-cols (update-vals info-tables-raw (comp set keys)))
-
-(def pg-catalog-tables-raw
-  {"pg_tables" {"schemaname" (types/col-type->field "schemaname" :utf8)
-                "tablename" (types/col-type->field "tablename" :utf8)
-                "tableowner" (types/col-type->field "tableowner" :utf8)
-                "tablespace" (types/col-type->field "tablespace" :null)}
-   "pg_views" {"schemaname" (types/col-type->field "schemaname" :utf8)
-               "viewname" (types/col-type->field "viewname" :utf8)
-               "viewowner" (types/col-type->field "viewowner" :utf8)}
-   "pg_matviews" {"schemaname" (types/col-type->field "schemaname" :utf8)
-                  "matviewname" (types/col-type->field "matviewname" :utf8)
-                  "matviewowner" (types/col-type->field "matviewowner" :utf8)}
-   "pg_attribute" {"attrelid" (types/col-type->field "attrelid" :i32)
-                   "attname" (types/col-type->field "attname" :utf8)
-                   "atttypid" (types/col-type->field "atttypid" :i32)
-                   "attlen" (types/col-type->field "attlen" :i16)
-                   "attnum" (types/col-type->field "attnum" :i16)}
-   "pg_namespace" {"oid" (types/col-type->field "oid" :i32)
-                   "nspname" (types/col-type->field "nspname" :utf8)
-                   "nspowner" (types/col-type->field "nspowner" :i32)
-                   "nspacl" (types/col-type->field "nspacl" :null)}})
-
-(def pg-catalog-tables (update-keys pg-catalog-tables-raw #(str "pg_catalog$" %)))
-(def pg-catalog-table-cols (update-vals pg-catalog-tables-raw (comp set keys)))
+(def pg-catalog-tables
+  {'pg_catalog/pg_tables {"schemaname" (types/col-type->field "schemaname" :utf8)
+                          "tablename" (types/col-type->field "tablename" :utf8)
+                          "tableowner" (types/col-type->field "tableowner" :utf8)
+                          "tablespace" (types/col-type->field "tablespace" :null)}
+   'pg_catalog/pg_views {"schemaname" (types/col-type->field "schemaname" :utf8)
+                         "viewname" (types/col-type->field "viewname" :utf8)
+                         "viewowner" (types/col-type->field "viewowner" :utf8)}
+   'pg_catalog/pg_matviews {"schemaname" (types/col-type->field "schemaname" :utf8)
+                            "matviewname" (types/col-type->field "matviewname" :utf8)
+                            "matviewowner" (types/col-type->field "matviewowner" :utf8)}
+   'pg_catalog/pg_attribute {"attrelid" (types/col-type->field "attrelid" :i32)
+                             "attname" (types/col-type->field "attname" :utf8)
+                             "atttypid" (types/col-type->field "atttypid" :i32)
+                             "attlen" (types/col-type->field "attlen" :i16)
+                             "attnum" (types/col-type->field "attnum" :i16)}
+   'pg_catalog/pg_namespace {"oid" (types/col-type->field "oid" :i32)
+                             "nspname" (types/col-type->field "nspname" :utf8)
+                             "nspowner" (types/col-type->field "nspowner" :i32)
+                             "nspacl" (types/col-type->field "nspacl" :null)}})
 
 (def derived-tables (merge info-tables pg-catalog-tables))
+(def table-info (-> derived-tables (update-vals (comp set keys))))
 
-(def schemas [{"catalog_name" "xtdb"
-               "schema_name" "pg_catalog"
-               "schema_owner" "xtdb"}
-              {"catalog_name" "xtdb"
-               "schema_name" "public"
-               "schema_owner" "xtdb"}
-              {"catalog_name" "xtdb"
-               "schema_name" "information_schema"
-               "schema_owner" "xtdb"}])
+(def unq-pg-catalog
+  (-> pg-catalog-tables
+      (update-vals (comp #(into #{} (map symbol) %) keys))
+      (update-keys (comp symbol name))))
+
+(def schemas
+  [{"catalog_name" "xtdb"
+    "schema_name" "pg_catalog"
+    "schema_owner" "xtdb"}
+   {"catalog_name" "xtdb"
+    "schema_name" "public"
+    "schema_owner" "xtdb"}
+   {"catalog_name" "xtdb"
+    "schema_name" "information_schema"
+    "schema_owner" "xtdb"}])
 
 (def pg-namespaces (map (fn [{:strs [schema_owner schema_name] :as schema}]
                           (-> schema
@@ -189,14 +191,14 @@
                                           (.allColumnFields)))
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (case table
-                                     "information_schema$tables" (tables out-rel-wtr schema-info)
-                                     "information_schema$columns" (columns out-rel-wtr (schema-info->col-rows schema-info))
-                                     "information_schema$schemata" (schemata out-rel-wtr)
-                                     "pg_catalog$pg_tables" (pg-tables out-rel-wtr schema-info)
-                                     "pg_catalog$pg_views" out-rel-wtr
-                                     "pg_catalog$pg_matviews" out-rel-wtr
-                                     "pg_catalog$pg_attribute" (pg-attribute out-rel-wtr (schema-info->col-rows schema-info))
-                                     "pg_catalog$pg_namespace" (pg-namespace out-rel-wtr)
+                                     information_schema/tables (tables out-rel-wtr schema-info)
+                                     information_schema/columns (columns out-rel-wtr (schema-info->col-rows schema-info))
+                                     information_schema/schemata (schemata out-rel-wtr)
+                                     pg_catalog/pg_tables (pg-tables out-rel-wtr schema-info)
+                                     pg_catalog/pg_views out-rel-wtr
+                                     pg_catalog/pg_matviews out-rel-wtr
+                                     pg_catalog/pg_attribute (pg-attribute out-rel-wtr (schema-info->col-rows schema-info))
+                                     pg_catalog/pg_namespace (pg-namespace out-rel-wtr)
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor
