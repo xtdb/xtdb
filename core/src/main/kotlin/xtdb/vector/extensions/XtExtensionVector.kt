@@ -28,6 +28,9 @@ abstract class XtExtensionVector<V : FieldVector>(private val field: Field, allo
 
     override fun getObject(index: Int): Any? = if (isNull(index)) null else getObject0(index)
 
+    override fun getTransferPair(allocator: BufferAllocator) =
+        makeTransferPair(field.createVector(allocator))
+
     override fun getTransferPair(field: Field, allocator: BufferAllocator) =
         makeTransferPair(field.createVector(allocator))
 

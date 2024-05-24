@@ -344,10 +344,10 @@
 ;;; Arrow
 
 (defn slice-vec
-  ([^ValueVector v] (slice-vec v 0))
-  ([^ValueVector v, ^long start-idx] (slice-vec v start-idx (.getValueCount v)))
+  (^org.apache.arrow.vector.ValueVector [^ValueVector v] (slice-vec v 0))
+  (^org.apache.arrow.vector.ValueVector [^ValueVector v, ^long start-idx] (slice-vec v start-idx (.getValueCount v)))
 
-  ([^ValueVector v, ^long start-idx, ^long len]
+  (^org.apache.arrow.vector.ValueVector [^ValueVector v, ^long start-idx, ^long len]
    (cond
      ;; see #3088
      (and (instance? ListVector v) (= 0 start-idx len))
