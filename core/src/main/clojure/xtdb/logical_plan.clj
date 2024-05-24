@@ -1073,6 +1073,21 @@
        independent-relation
        dependent-relation])))
 
+(defn- pull-apply-mark-join-select->mark-join-cond [z]
+  (r/zmatch z
+    [:apply mode columns
+     independent-relation
+     [:select predicate
+      dependent-relation]]
+    ;; =>
+    (when-let [[mj-col mj-projection] (first (:mark-join mode))]
+      [:apply {:mark-join {mj-col (if (true? mj-projection)
+                                    predicate
+                                    (list 'and predicate mj-projection))}}
+       columns
+       independent-relation
+       dependent-relation])))
+
 (defn- select-mark-join->semi-join [z]
   (r/zmatch z
     [:select predicate
@@ -1412,6 +1427,7 @@
    #'squash-correlated-selects
    #'decorrelate-apply-rule-1
    #'apply-mark-join->mark-join
+   #'pull-apply-mark-join-select->mark-join-cond
    #'select-mark-join->semi-join
    #'decorrelate-apply-rule-2
    #'decorrelate-apply-rule-3
