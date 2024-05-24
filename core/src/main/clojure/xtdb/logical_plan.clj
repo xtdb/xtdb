@@ -936,13 +936,16 @@
      [:select predicate
       relation]]
     ;;=>
-    (when (and (not-empty (expr-correlated-symbols predicate))
-               (set/subset?
-                (expr-symbols predicate)
-                (set (relation-columns [:project projection nil]))))
-      [:select predicate
-       [:project projection
-        relation]])
+    (when (not-empty (expr-correlated-symbols predicate))
+      (let [p-map (->> (for [p projection]
+                         (cond
+                           (map? p) [(val (first p)) (key (first p))]
+                           (symbol? p) [p p]))
+                       (into {}))]
+        (when (every? p-map (expr-symbols predicate))
+          [:select (w/postwalk-replace p-map predicate)
+           [:project projection
+            relation]])))
 
     [:map projection
      [:select predicate
