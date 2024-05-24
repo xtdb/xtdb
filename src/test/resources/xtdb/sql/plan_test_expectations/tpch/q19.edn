@@ -6,27 +6,34 @@
    [{x37 (* x1 (- 1 x2))}]
    [:select
     (or
+     (or
+      (and
+       (and
+        (and
+         (and
+          (and (and (= x9 "Brand#12") x16) (>= x4 1))
+          (<= x4 (+ 1 10)))
+         (between x11 1 5))
+        x20)
+       (= x6 "DELIVER IN PERSON"))
+      (and
+       (and
+        (and
+         (and
+          (and (and (= x9 "Brand#23") x24) (>= x4 10))
+          (<= x4 (+ 10 10)))
+         (between x11 1 10))
+        x28)
+       (= x6 "DELIVER IN PERSON")))
      (and
-      (= x9 "Brand#12")
-      x16
-      (>= x4 1)
-      (<= x4 (+ 1 10))
-      (between x11 1 5)
-      x20)
-     (and
-      (= x9 "Brand#23")
-      x24
-      (>= x4 10)
-      (<= x4 (+ 10 10))
-      (between x11 1 10)
-      x28)
-     (and
-      (= x9 "Brand#34")
-      x32
-      (>= x4 20)
-      (<= x4 (+ 20 10))
-      (between x11 1 15)
-      x36))
+      (and
+       (and
+        (and
+         (and (and (= x9 "Brand#34") x32) (>= x4 20))
+         (<= x4 (+ 20 10)))
+        (between x11 1 15))
+       x36)
+      (= x6 "DELIVER IN PERSON")))
     [:mark-join
      {x36 [{x5 x33}]}
      [:mark-join
@@ -55,8 +62,7 @@
                l_partkey
                l_quantity
                l_shipmode
-               {l_shipinstruct
-                (= l_shipinstruct "DELIVER IN PERSON")}]]]
+               l_shipinstruct]]]
             [:rename
              {p_partkey x8, p_brand x9, p_container x10, p_size x11}
              [:scan
