@@ -6,7 +6,7 @@
             [xtdb.error :as err]
             [xtdb.rewrite :as r]
             [xtdb.util :as util])
-  (:import (clojure.lang Var)
+  (:import (clojure.lang MapEntry Var)
            java.time.temporal.Temporal
            java.util.Date))
 
@@ -791,16 +791,27 @@
      [:project projections-2
       relation]]
     ;;=>
-    (cond
-      (and (every? symbol? projections-1)
-           (every? symbol? projections-2)
-           (<= (count projections-1) (count projections-2)))
-      [:project projections-1 relation]
+    (let [p1-map (for [p projections-1]
+                   (cond
+                     (column? p) (MapEntry/create p p)
+                     (map? p) (first p)))]
+      (cond
+        (and (every? some? p1-map)
+             (every? column? (vals p1-map))
+             (distinct? (vals p1-map)))
+        (let [p2-map (->> (for [p projections-2]
+                            (cond
+                              (column? p) (MapEntry/create p p)
+                              (map? p) p))
+                          (into {}))]
+          [:project (vec (for [[col expr] p1-map]
+                           {col (get p2-map expr)}))
+           relation])
 
-      (and (every? symbol? projections-1)
-           (not (every? symbol? projections-2))
-           (= projections-1 (mapv ->projected-column projections-2)))
-      [:project projections-2 relation])
+        (and (every? symbol? projections-1)
+             (not (every? symbol? projections-2))
+             (= projections-1 (mapv ->projected-column projections-2)))
+        [:project projections-2 relation]))
 
     [:project projections
      relation]
@@ -1373,7 +1384,8 @@
    #'add-selection-to-scan-predicate])
 
 (def ^:private decorrelate-plan-rules
-  [#'pull-correlated-selection-up-towards-apply
+  [#'remove-superseded-projects
+   #'pull-correlated-selection-up-towards-apply
    #'remove-redundant-projects
    #'push-selection-down-past-apply
    #'push-decorrelated-selection-down-past-join
