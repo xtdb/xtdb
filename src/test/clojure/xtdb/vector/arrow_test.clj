@@ -38,3 +38,30 @@
     (t/is (= #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :keyword false]]
              (.getField copied-vec)))
     (t/is (= :A (.getObject (vr/vec->reader copied-vec) 0)))))
+
+(deftest empty-list-with-nested-lists-slicing-3377
+  (t/testing "empty list of lists"
+    (with-open [vec (vw/open-vec tu/*allocator*
+                                 #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
+                                 [[]])
+                copied-vec (util/slice-vec vec)]
+      (t/is (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec))))))
+
+  (t/testing "empty set of lists"
+    (with-open [vec (vw/open-vec tu/*allocator*
+                                 #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :set false]
+                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
+                                 [#{}])
+                copied-vec (util/slice-vec vec)]
+      (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec)))))
+  (t/testing "empty list of sets"
+    (with-open [vec (vw/open-vec tu/*allocator*
+                                 #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :set false]
+                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
+                                 [[] [#{}]])
+                copied-vec (util/slice-vec vec)]
+      (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec))))))

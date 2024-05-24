@@ -15,8 +15,21 @@ fun toListFieldType (fieldType: FieldType): FieldType {
     }
 }
 
-class SetVector(name: String, allocator: BufferAllocator, fieldType: FieldType, callBack: CallBack? = null) :
-    XtExtensionVector<ListVector>(name, allocator, fieldType, ListVector(name, allocator, toListFieldType(fieldType), callBack)) {
+class SetVector : XtExtensionVector<ListVector> {
+
+    constructor( name: String, allocator: BufferAllocator, fieldType: FieldType, callBack: CallBack? = null) :
+            super(name, allocator, fieldType, ListVector(name, allocator, toListFieldType(fieldType), callBack))
+
+    constructor(field: Field, allocator: BufferAllocator, callBack: CallBack? = null) :
+            super(field, allocator, ListVector(field.name, allocator, toListFieldType(field.fieldType), callBack))
+
+    // the overriding of the XtExtensionVector.getTransferPair are only needed because createVector
+    // on ListField throws when no child is provided, see #3377
+    override fun getTransferPair(allocator: BufferAllocator) =
+        makeTransferPair(SetVector(field.name, allocator, FieldType.nullable(SetType), null))
+
+    override fun getTransferPair(field: Field, allocator: BufferAllocator) =
+        makeTransferPair(SetVector(field, allocator, null))
 
     override fun getObject0(index: Int): Set<*> = HashSet(underlyingVector.getObject(index))
 
