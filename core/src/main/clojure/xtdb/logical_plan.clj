@@ -1073,6 +1073,22 @@
        independent-relation
        dependent-relation])))
 
+(defn- select-mark-join->semi-join [z]
+  (r/zmatch z
+    [:select predicate
+     [:mark-join projection lhs rhs]]
+    ;; =>
+    (let [mj-col (key (first projection))]
+      (cond
+        (= predicate mj-col)
+        [:map [{mj-col true}]
+         [:semi-join (val (first projection))
+          lhs rhs]]
+
+        (= predicate (list 'not mj-col))
+        [:map [{mj-col true}]
+         [:anti-join (val (first projection))
+          lhs rhs]]))))
 
 (defn- decorrelate-apply-rule-2
   "R A⊗(σp E) = R ⊗p E
@@ -1396,6 +1412,7 @@
    #'squash-correlated-selects
    #'decorrelate-apply-rule-1
    #'apply-mark-join->mark-join
+   #'select-mark-join->semi-join
    #'decorrelate-apply-rule-2
    #'decorrelate-apply-rule-3
    #'decorrelate-apply-rule-4
