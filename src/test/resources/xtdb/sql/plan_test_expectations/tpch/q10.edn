@@ -1,66 +1,71 @@
-[:rename
- {x1 c_custkey,
-  x2 c_name,
-  x22 revenue,
-  x3 c_acctbal,
-  x18 n_name,
-  x4 c_address,
-  x5 c_phone,
-  x6 c_comment}
+[:top
+ {:offset nil, :limit 20}
  [:project
-  [x1 x2 x22 x3 x18 x4 x5 x6]
-  [:top
-   {:limit 20}
-   [:order-by
-    [[x22 {:direction :desc, :null-ordering :nulls-last}]]
+  [{c_custkey c.1/c_custkey}
+   {c_name c.1/c_name}
+   revenue
+   {c_acctbal c.1/c_acctbal}
+   {n_name n.4/n_name}
+   {c_address c.1/c_address}
+   {c_phone c.1/c_phone}
+   {c_comment c.1/c_comment}]
+  [:order-by
+   [[revenue {:direction :desc, :null-ordering :nulls-first}]]
+   [:project
+    [c.1/c_custkey
+     c.1/c_name
+     {revenue xt$sum_out_5}
+     c.1/c_acctbal
+     n.4/n_name
+     c.1/c_address
+     c.1/c_phone
+     c.1/c_comment]
     [:group-by
-     [x1 x2 x3 x5 x18 x4 x6 {x22 (sum x21)}]
+     [c.1/c_custkey
+      c.1/c_name
+      c.1/c_acctbal
+      c.1/c_phone
+      n.4/n_name
+      c.1/c_address
+      c.1/c_comment
+      {xt$sum_out_5 (sum xt$sum_in_6)}]
      [:map
-      [{x21 (* x13 (- 1 x14))}]
+      [{xt$sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
       [:mega-join
-       [{x7 x19} {x10 x15} {x1 x9}]
-       [[:rename
-         {n_name x18, n_nationkey x19}
-         [:scan {:table nation} [n_name n_nationkey]]]
+       [{c.1/c_nationkey n.4/n_nationkey}
+        {o.2/o_orderkey l.3/l_orderkey}
+        {c.1/c_custkey o.2/o_custkey}]
+       [[:rename n.4 [:scan {:table nation} [n_nationkey n_name]]]
         [:rename
-         {l_extendedprice x13,
-          l_discount x14,
-          l_orderkey x15,
-          l_returnflag x16}
+         l.3
          [:scan
           {:table lineitem}
-          [l_extendedprice
-           l_discount
+          [l_discount
            l_orderkey
-           {l_returnflag (= l_returnflag "R")}]]]
+           {l_returnflag (= l_returnflag "R")}
+           l_extendedprice]]]
         [:rename
-         {c_custkey x1,
-          c_name x2,
-          c_acctbal x3,
-          c_address x4,
-          c_phone x5,
-          c_comment x6,
-          c_nationkey x7}
+         c.1
          [:scan
           {:table customer}
-          [c_custkey
-           c_name
-           c_acctbal
-           c_address
-           c_phone
+          [c_address
            c_comment
-           c_nationkey]]]
+           c_phone
+           c_name
+           c_nationkey
+           c_custkey
+           c_acctbal]]]
         [:rename
-         {o_custkey x9, o_orderkey x10, o_orderdate x11}
+         o.2
          [:scan
           {:table orders}
           [o_custkey
-           o_orderkey
            {o_orderdate
             (and
              (<
               o_orderdate
               (+
                #time/date "1993-10-01"
-               (single-field-interval "3" "MONTH" 2 0)))
-             (>= o_orderdate #time/date "1993-10-01"))}]]]]]]]]]]]
+               (single-field-interval "3" "MONTH" 2 6)))
+             (>= o_orderdate #time/date "1993-10-01"))}
+           o_orderkey]]]]]]]]]]]

@@ -1,51 +1,95 @@
-[:rename
- {x19 cntrycode, x21 numcust, x22 totacctbal}
+[:project
+ [{cntrycode custsale.12/cntrycode} numcust totacctbal]
  [:order-by
-  [[x19 {:direction :asc, :null-ordering :nulls-last}]]
-  [:group-by
-   [x19 {x21 (count x20)} {x22 (sum x2)}]
-   [:map
-    [{x20 1}]
-    [:project
-     [{x19 (substring x1 1 2)} x2]
-     [:anti-join
-      [{x3 x16}]
-      [:select
-       (> x2 x14)
-       [:single-join
-        []
-        [:semi-join
-         [{(substring x1 1 2) x5}]
+  [[custsale.12/cntrycode
+    {:direction :asc, :null-ordering :nulls-last}]]
+  [:project
+   [custsale.12/cntrycode
+    {numcust xt$row_count_13}
+    {totacctbal xt$sum_out_14}]
+   [:group-by
+    [custsale.12/cntrycode
+     {xt$row_count_13 (row-count)}
+     {xt$sum_out_14 (sum custsale.12/c_acctbal)}]
+    [:rename
+     custsale.12
+     [:project
+      [{cntrycode (substring c.1/c_phone 1 2)}
+       {c_acctbal c.1/c_acctbal}]
+      [:map
+       [{xt$sq_9 true}]
+       [:anti-join
+        [{c.1/c_custkey o_custkey}]
+        [:select
+         (> c.1/c_acctbal xt$sq_4)
+         [:single-join
+          []
+          [:map
+           [{xt$sq_2 true}]
+           [:semi-join
+            [{xt$needle xt.values.3/xt$column_1}]
+            [:map
+             [{xt$needle (substring c.1/c_phone 1 2)}]
+             [:rename
+              c.1
+              [:scan {:table customer} [c_phone c_custkey c_acctbal]]]]
+            [:rename
+             xt.values.3
+             [:table
+              [xt$column_1]
+              [{:xt$column_1 "13"}
+               {:xt$column_1 "31"}
+               {:xt$column_1 "23"}
+               {:xt$column_1 "29"}
+               {:xt$column_1 "30"}
+               {:xt$column_1 "18"}
+               {:xt$column_1 "17"}]]]]]
+          [:project
+           [{xt$sq_4 xt$avg_out_8}]
+           [:group-by
+            [{xt$avg_out_8 (avg c.5/c_acctbal)}]
+            [:map
+             [{xt$sq_6 true}]
+             [:semi-join
+              [{xt$needle xt.values.7/xt$column_1}]
+              [:map
+               [{xt$needle (substring c.5/c_phone 1 2)}]
+               [:rename
+                c.5
+                [:scan
+                 {:table customer}
+                 [c_phone {c_acctbal (> c_acctbal 0.0)}]]]]
+              [:rename
+               xt.values.7
+               [:table
+                [xt$column_1]
+                [{:xt$column_1 "13"}
+                 {:xt$column_1 "31"}
+                 {:xt$column_1 "23"}
+                 {:xt$column_1 "29"}
+                 {:xt$column_1 "30"}
+                 {:xt$column_1 "18"}
+                 {:xt$column_1 "17"}]]]]]]]]]
+        [:project
+         [{o_clerk o.10/o_clerk}
+          {o_comment o.10/o_comment}
+          {o_custkey o.10/o_custkey}
+          {o_orderdate o.10/o_orderdate}
+          {o_orderkey o.10/o_orderkey}
+          {o_orderpriority o.10/o_orderpriority}
+          {o_orderstatus o.10/o_orderstatus}
+          {o_shippriority o.10/o_shippriority}
+          {o_totalprice o.10/o_totalprice}]
          [:rename
-          {c_phone x1, c_acctbal x2, c_custkey x3}
-          [:scan {:table customer} [c_phone c_acctbal c_custkey]]]
-         [:table
-          [x5]
-          [{x5 "13"}
-           {x5 "31"}
-           {x5 "23"}
-           {x5 "29"}
-           {x5 "30"}
-           {x5 "18"}
-           {x5 "17"}]]]
-        [:group-by
-         [{x14 (avg x8)}]
-         [:semi-join
-          [{(substring x9 1 2) x11}]
-          [:rename
-           {c_acctbal x8, c_phone x9}
-           [:scan
-            {:table customer}
-            [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
-          [:table
-           [x11]
-           [{x11 "13"}
-            {x11 "31"}
-            {x11 "23"}
-            {x11 "29"}
-            {x11 "30"}
-            {x11 "18"}
-            {x11 "17"}]]]]]]
-      [:rename
-       {o_custkey x16}
-       [:scan {:table orders} [o_custkey]]]]]]]]]
+          o.10
+          [:scan
+           {:table orders}
+           [o_custkey
+            o_shippriority
+            o_orderdate
+            o_orderstatus
+            o_orderkey
+            o_clerk
+            o_orderpriority
+            o_totalprice
+            o_comment]]]]]]]]]]]]

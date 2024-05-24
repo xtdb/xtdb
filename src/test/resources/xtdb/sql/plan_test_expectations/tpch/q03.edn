@@ -1,42 +1,45 @@
-[:rename
- {x9 l_orderkey, x15 revenue, x4 o_orderdate, x5 o_shippriority}
+[:top
+ {:offset nil, :limit 10}
  [:project
-  [x9 x15 x4 x5]
-  [:top
-   {:limit 10}
-   [:order-by
-    [[x15 {:direction :desc, :null-ordering :nulls-last}]
-     [x4 {:direction :asc, :null-ordering :nulls-last}]]
+  [{l_orderkey l.3/l_orderkey}
+   revenue
+   {o_orderdate o.2/o_orderdate}
+   {o_shippriority o.2/o_shippriority}]
+  [:order-by
+   [[revenue {:direction :desc, :null-ordering :nulls-first}]
+    [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]
+   [:project
+    [l.3/l_orderkey
+     {revenue xt$sum_out_4}
+     o.2/o_orderdate
+     o.2/o_shippriority]
     [:group-by
-     [x9 x4 x5 {x15 (sum x14)}]
+     [l.3/l_orderkey
+      o.2/o_orderdate
+      o.2/o_shippriority
+      {xt$sum_out_4 (sum xt$sum_in_5)}]
      [:map
-      [{x14 (* x10 (- 1 x11))}]
+      [{xt$sum_in_5 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
       [:mega-join
-       [{x7 x9} {x2 x6}]
+       [{o.2/o_orderkey l.3/l_orderkey} {c.1/c_custkey o.2/o_custkey}]
        [[:rename
-         {l_orderkey x9,
-          l_extendedprice x10,
-          l_discount x11,
-          l_shipdate x12}
+         l.3
          [:scan
           {:table lineitem}
-          [l_orderkey
-           l_extendedprice
+          [{l_shipdate (> l_shipdate #time/date "1995-03-15")}
            l_discount
-           {l_shipdate (> l_shipdate #time/date "1995-03-15")}]]]
+           l_orderkey
+           l_extendedprice]]]
         [:rename
-         {c_mktsegment x1, c_custkey x2}
+         c.1
          [:scan
           {:table customer}
           [{c_mktsegment (= c_mktsegment "BUILDING")} c_custkey]]]
         [:rename
-         {o_orderdate x4,
-          o_shippriority x5,
-          o_custkey x6,
-          o_orderkey x7}
+         o.2
          [:scan
           {:table orders}
-          [{o_orderdate (< o_orderdate #time/date "1995-03-15")}
+          [o_custkey
            o_shippriority
-           o_custkey
+           {o_orderdate (< o_orderdate #time/date "1995-03-15")}
            o_orderkey]]]]]]]]]]]

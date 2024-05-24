@@ -1,42 +1,61 @@
-[:rename
- {x4 p_brand, x5 p_type, x6 p_size, x16 supplier_cnt}
+[:project
+ [{p_brand p.2/p_brand}
+  {p_type p.2/p_type}
+  {p_size p.2/p_size}
+  supplier_cnt]
  [:order-by
-  [[x16 {:direction :desc, :null-ordering :nulls-last}]
-   [x4 {:direction :asc, :null-ordering :nulls-last}]
-   [x5 {:direction :asc, :null-ordering :nulls-last}]
-   [x6 {:direction :asc, :null-ordering :nulls-last}]]
-  [:group-by
-   [x4 x5 x6 {x16 (count-distinct x1)}]
-   [:mega-join
-    [{x2 x7}]
-    [[:anti-join
-      [(or (= x1 x12) (nil? x1) (nil? x12))]
-      [:rename
-       {ps_suppkey x1, ps_partkey x2}
-       [:scan {:table partsupp} [ps_suppkey ps_partkey]]]
-      [:rename
-       {s_suppkey x12, s_comment x13}
-       [:scan
-        {:table supplier}
-        [s_suppkey
-         {s_comment (like s_comment "%Customer%Complaints%")}]]]]
-     [:semi-join
-      [{x6 x9}]
-      [:rename
-       {p_brand x4, p_type x5, p_size x6, p_partkey x7}
-       [:scan
-        {:table part}
-        [{p_brand (<> p_brand "Brand#45")}
-         {p_type (not (like p_type "MEDIUM POLISHED%"))}
-         p_size
-         p_partkey]]]
-      [:table
-       [x9]
-       [{x9 49}
-        {x9 14}
-        {x9 23}
-        {x9 45}
-        {x9 19}
-        {x9 3}
-        {x9 36}
-        {x9 9}]]]]]]]]
+  [[supplier_cnt {:direction :desc, :null-ordering :nulls-first}]
+   [p.2/p_brand {:direction :asc, :null-ordering :nulls-last}]
+   [p.2/p_type {:direction :asc, :null-ordering :nulls-last}]
+   [p.2/p_size {:direction :asc, :null-ordering :nulls-last}]]
+  [:project
+   [p.2/p_brand
+    p.2/p_type
+    p.2/p_size
+    {supplier_cnt xt$count_distinct_out_7}]
+   [:group-by
+    [p.2/p_brand
+     p.2/p_type
+     p.2/p_size
+     {xt$count_distinct_out_7 (count_distinct ps.1/ps_suppkey)}]
+    [:map
+     [{xt$sq_3 true}]
+     [:map
+      [{xt$sq_5 true}]
+      [:mega-join
+       [{ps.1/ps_partkey p.2/p_partkey}]
+       [[:anti-join
+         [{ps.1/ps_suppkey s_suppkey}]
+         [:rename
+          ps.1
+          [:scan {:table partsupp} [ps_partkey ps_suppkey]]]
+         [:project
+          [{s_suppkey s.6/s_suppkey}]
+          [:rename
+           s.6
+           [:scan
+            {:table supplier}
+            [{s_comment (like s_comment "%Customer%Complaints%")}
+             s_suppkey]]]]]
+        [:semi-join
+         [{p.2/p_size xt.values.4/xt$column_1}]
+         [:rename
+          p.2
+          [:scan
+           {:table part}
+           [p_partkey
+            {p_type (not (like p_type "MEDIUM POLISHED%"))}
+            {p_brand (<> p_brand "Brand#45")}
+            p_size]]]
+         [:rename
+          xt.values.4
+          [:table
+           [xt$column_1]
+           [{:xt$column_1 49}
+            {:xt$column_1 14}
+            {:xt$column_1 23}
+            {:xt$column_1 45}
+            {:xt$column_1 19}
+            {:xt$column_1 3}
+            {:xt$column_1 36}
+            {:xt$column_1 9}]]]]]]]]]]]]

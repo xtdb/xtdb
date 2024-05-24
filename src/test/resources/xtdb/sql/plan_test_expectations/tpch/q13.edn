@@ -1,22 +1,27 @@
-[:rename
- {x8 c_count, x11 custdist}
+[:project
+ [{c_count c_orders.5/c_count} custdist]
  [:order-by
-  [[x11 {:direction :desc, :null-ordering :nulls-last}]
-   [x8 {:direction :desc, :null-ordering :nulls-last}]]
-  [:group-by
-   [x8 {x11 (count x10)}]
-   [:map
-    [{x10 1}]
-    [:group-by
-     [x1 {x8 (count x3)}]
-     [:left-outer-join
-      [{x1 x4}]
-      [:rename {c_custkey x1} [:scan {:table customer} [c_custkey]]]
-      [:rename
-       {o_orderkey x3, o_custkey x4, o_comment x5}
-       [:scan
-        {:table orders}
-        [o_orderkey
-         o_custkey
-         {o_comment
-          (not (like o_comment "%special%requests%"))}]]]]]]]]]
+  [[custdist {:direction :desc, :null-ordering :nulls-first}]
+   [c_orders.5/c_count
+    {:direction :desc, :null-ordering :nulls-first}]]
+  [:project
+   [c_orders.5/c_count {custdist xt$row_count_6}]
+   [:group-by
+    [c_orders.5/c_count {xt$row_count_6 (row-count)}]
+    [:rename
+     c_orders.5
+     [:rename
+      {c.1/c_custkey c_custkey, xt$column_2 c_count}
+      [:project
+       [c.1/c_custkey {xt$column_2 xt$count_out_3}]
+       [:group-by
+        [c.1/c_custkey {xt$count_out_3 (count o.2/o_orderkey)}]
+        [:left-outer-join
+         [{c.1/c_custkey o.2/o_custkey}
+          (not (like o.2/o_comment "%special%requests%"))]
+         [:rename c.1 [:scan {:table customer} [c_custkey]]]
+         [:rename
+          o.2
+          [:scan
+           {:table orders}
+           [o_custkey o_orderkey o_comment]]]]]]]]]]]]

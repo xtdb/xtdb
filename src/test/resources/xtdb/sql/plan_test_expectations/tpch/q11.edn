@@ -1,53 +1,55 @@
-[:rename
- {x1 ps_partkey, x14 value}
+[:project
+ [{ps_partkey ps.1/ps_partkey} value]
  [:order-by
-  [[x14 {:direction :desc, :null-ordering :nulls-last}]]
+  [[value {:direction :desc, :null-ordering :nulls-first}]]
   [:project
-   [x1 x14]
+   [ps.1/ps_partkey {value xt$sum_out_12}]
    [:select
-    (> x15 x30)
+    (> xt$sum_out_4 xt$sq_6)
     [:single-join
      []
      [:group-by
-      [x1 {x14 (sum x12)} {x15 (sum x13)}]
+      [ps.1/ps_partkey
+       {xt$sum_out_12 (sum xt$sum_in_13)}
+       {xt$sum_out_4 (sum xt$sum_in_5)}]
       [:map
-       [{x12 (* x2 x3)} {x13 (* x2 x3)}]
+       [{xt$sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
+        {xt$sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]
        [:mega-join
-        [{x7 x9} {x4 x6}]
+        [{s.2/s_nationkey n.3/n_nationkey}
+         {ps.1/ps_suppkey s.2/s_suppkey}]
         [[:rename
-          {n_nationkey x9, n_name x10}
+          n.3
           [:scan
            {:table nation}
            [n_nationkey {n_name (= n_name "GERMANY")}]]]
          [:rename
-          {ps_partkey x1,
-           ps_supplycost x2,
-           ps_availqty x3,
-           ps_suppkey x4}
+          ps.1
           [:scan
            {:table partsupp}
-           [ps_partkey ps_supplycost ps_availqty ps_suppkey]]]
+           [ps_partkey ps_availqty ps_suppkey ps_supplycost]]]
          [:rename
-          {s_suppkey x6, s_nationkey x7}
-          [:scan {:table supplier} [s_suppkey s_nationkey]]]]]]]
+          s.2
+          [:scan {:table supplier} [s_nationkey s_suppkey]]]]]]]
      [:project
-      [{x30 (* x28 1.0E-4)}]
+      [{xt$sq_6 (* xt$sum_out_10 1.0E-4)}]
       [:group-by
-       [{x28 (sum x27)}]
+       [{xt$sum_out_10 (sum xt$sum_in_11)}]
        [:map
-        [{x27 (* x17 x18)}]
+        [{xt$sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]
         [:mega-join
-         [{x22 x24} {x19 x21}]
+         [{s.8/s_nationkey n.9/n_nationkey}
+          {ps.7/ps_suppkey s.8/s_suppkey}]
          [[:rename
-           {n_nationkey x24, n_name x25}
+           n.9
            [:scan
             {:table nation}
             [n_nationkey {n_name (= n_name "GERMANY")}]]]
           [:rename
-           {ps_supplycost x17, ps_availqty x18, ps_suppkey x19}
+           ps.7
            [:scan
             {:table partsupp}
-            [ps_supplycost ps_availqty ps_suppkey]]]
+            [ps_availqty ps_suppkey ps_supplycost]]]
           [:rename
-           {s_suppkey x21, s_nationkey x22}
-           [:scan {:table supplier} [s_suppkey s_nationkey]]]]]]]]]]]]]
+           s.8
+           [:scan {:table supplier} [s_nationkey s_suppkey]]]]]]]]]]]]]
