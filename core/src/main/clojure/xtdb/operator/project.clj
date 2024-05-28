@@ -96,8 +96,12 @@
   (getColumnName [_] to-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
-    (-> (.readerForName in-rel (str from-name))
-        (.withName (str to-name)))))
+    (or (some-> (.readerForName in-rel (str from-name))
+                (.withName (str to-name)))
+        (throw (ex-info (str "Column " from-name " not found in relation")
+                        {:from-name from-name
+                         :to-name to-name
+                         :relation (into #{} (map #(.getName ^IVectorReader %)) in-rel)})))))
 
 (defn ->rename-projection-spec ^xtdb.operator.IProjectionSpec [to-name from-name field]
   (->RenameProjectionSpec to-name from-name (types/field->col-type field)))
