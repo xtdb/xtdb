@@ -36,6 +36,18 @@ class XtdbJsonDecoder(json.JSONDecoder):
                     timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%H:%M:%SZ[%Z]")
 
                 return timestamp
+            elif obj['@type'] == 'xt:timestamp':
+                try:
+                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%H:%M:%S.%fZ")
+
+                except:
+                    timestamp = datetime.strptime(obj['@value'], "%Y-%m-%dT%H:%M:%SZ")
+
+                return timestamp
+
+            elif obj['@type'] == 'xt:date':
+                timestamp = datetime.strptime(obj['@value'], "%Y-%m-%d")
+                
             
             else:
                 raise ValueError(f"Unknown type: {obj['@type']}")
