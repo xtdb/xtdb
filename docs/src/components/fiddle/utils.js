@@ -66,4 +66,28 @@ function highlightSql(sql) {
     return hljs.highlight(sql, {language: 'sql'});
 }
 
-export { gensym, parseSQLTxs, fiddle_url, runFiddle, magicElementsAbove, makeError, highlightSql };
+// Source: https://www.30secondsofcode.org/js/s/debounce-promise/
+function debouncePromise(fn, ms = 0) {
+    let timeoutId;
+    const pending = [];
+    return async (...args) => {
+        return new Promise((res, rej) => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                const currentPending = [...pending];
+                pending.length = 0;
+                Promise.resolve(fn.apply(this, args)).then(
+                    data => {
+                        currentPending.forEach(({ resolve }) => resolve(data));
+                    },
+                    error => {
+                        currentPending.forEach(({ reject }) => reject(error));
+                    }
+                );
+            }, ms);
+            pending.push({ resolve: res, reject: rej });
+        });
+    }
+};
+
+export { gensym, parseSQLTxs, fiddle_url, runFiddle, magicElementsAbove, makeError, highlightSql, debouncePromise };
