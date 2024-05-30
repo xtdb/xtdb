@@ -699,11 +699,7 @@
           relation]]))))
 
 (defn rename-map-for-projection-spec [projection-spec]
-  (into
-    {}
-    (filter
-      #(and (map? %) (column? (val (first %))))
-      projection-spec)))
+  (into {} (filter map?) projection-spec))
 
 (defn- predicate-depends-on-calculated-column? [predicate projection-spec]
   (not-empty (set/intersection (set (expr-symbols predicate))
@@ -1335,7 +1331,27 @@
           (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
           [:join inner-join-condition
            inner-lhs
-           [:anti-join join-condition inner-rhs rhs]])))
+           [:anti-join join-condition inner-rhs rhs]])
+
+    [:semi-join join-condition
+     [:map projection
+      inner-lhs]
+     inner-rhs]
+    ;; =>
+    (when-not (predicate-depends-on-calculated-column? join-condition projection)
+      [:map projection
+       [:semi-join (w/postwalk-replace (rename-map-for-projection-spec projection) join-condition)
+        inner-lhs inner-rhs]])
+
+    [:anti-join join-condition
+     [:map projection
+      inner-lhs]
+     inner-rhs]
+    ;; =>
+    (when-not (predicate-depends-on-calculated-column? join-condition projection)
+      [:map projection
+       [:anti-join (w/postwalk-replace (rename-map-for-projection-spec projection) join-condition)
+        inner-lhs inner-rhs]])))
 
 (defn- promote-selection-to-mega-join [z]
   (r/zmatch
