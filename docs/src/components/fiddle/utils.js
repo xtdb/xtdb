@@ -66,26 +66,24 @@ function highlightSql(sql) {
     return hljs.highlight(sql, {language: 'sql'});
 }
 
-// Source: https://www.30secondsofcode.org/js/s/debounce-promise/
+// Based on: https://www.30secondsofcode.org/js/s/debounce-promise/
+// The difference is we throw away previous calls and only resolve the last one
+// I'm honestly not sure of the memory implications
 function debouncePromise(fn, ms = 0) {
     let timeoutId;
-    const pending = [];
+    let pending;
     return async (...args) => {
         return new Promise((res, rej) => {
             clearTimeout(timeoutId);
             timeoutId = setTimeout(() => {
-                const currentPending = [...pending];
-                pending.length = 0;
+                const currentPending = pending;
+                pending = undefined;
                 Promise.resolve(fn.apply(this, args)).then(
-                    data => {
-                        currentPending.forEach(({ resolve }) => resolve(data));
-                    },
-                    error => {
-                        currentPending.forEach(({ reject }) => reject(error));
-                    }
+                    currentPending.resolve,
+                    currentPending.reject
                 );
             }, ms);
-            pending.push({ resolve: res, reject: rej });
+            pending = { resolve: res, reject: rej };
         });
     }
 };
