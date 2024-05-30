@@ -182,22 +182,23 @@
 
   (open-tx-log [_ after-tx-id _]
     ;; see https://github.com/xtdb/xtdb/pull/1815 for detail on fetch policy
-    (let [conn (jdbc/get-connection pool)
-          require-rollback (when (= :postgresql (db-type dialect)) (.setAutoCommit conn false) true)
-          sql "SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
-          stmt (doto (.prepareStatement conn sql ResultSet/TYPE_FORWARD_ONLY ResultSet/CONCUR_READ_ONLY)
-                 (.setFetchSize (if (= :mysql (db-type dialect))
-                                  Integer/MIN_VALUE
-                                  fetch-size))
-                 (.setObject 1 (or after-tx-id 0)))
-          rs (.executeQuery stmt)]
-      (xio/->cursor (fn []
-                      (try
-                        (when require-rollback (.rollback conn))
-                        (finally
-                          (run! xio/try-close [rs stmt conn]))))
-                    (->> (resultset-seq rs)
-                         (map #(row->log-entry % dialect))))))
+    (let [sql "SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"]
+      (xio/with-close-on-catch [conn (jdbc/get-connection pool)
+                                stmt (doto (.prepareStatement conn sql ResultSet/TYPE_FORWARD_ONLY ResultSet/CONCUR_READ_ONLY)
+                                       (.setFetchSize (if (= :mysql (db-type dialect))
+                                                        Integer/MIN_VALUE
+                                                        fetch-size))
+                                       (.setObject 1 (or after-tx-id 0)))
+                                rs (.executeQuery stmt)]
+        (let [require-rollback (when (= :postgresql (db-type dialect))
+                                 (.setAutoCommit conn false) true)]
+          (xio/->cursor (fn []
+                          (try
+                            (when require-rollback (.rollback conn))
+                            (finally
+                              (run! xio/try-close [rs stmt conn]))))
+                        (->> (resultset-seq rs)
+                             (map #(row->log-entry % dialect))))))))
 
   (subscribe [this after-tx-id f]
     (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))

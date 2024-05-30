@@ -122,6 +122,33 @@
     (catch Throwable t
       (log/error t "Could not close:" c))))
 
+(defn close [c]
+  (cond
+    (nil? c) nil
+    (instance? AutoCloseable c) (.close ^AutoCloseable c)
+    (instance? Map c) (run! close (.values ^Map c))
+    (seqable? c) (run! close c)
+    :else (throw (ClassCastException. (format "could not close '%s'" (.getName (class c)))))))
+
+(defmacro with-close-on-catch
+  "Like `with-open` but doesn't close the resources if the body completes successfully.
+  Used where you're opening multiple resources and want to ensure earlier ones are closed if initialising later ones fails."
+  [bindings & body]
+  (assert (zero? ^long (mod (count bindings) 2)))
+
+  (if-let [[binding expr & more-bindings] bindings]
+    `(let [~binding ~expr]
+       (try
+         (with-close-on-catch ~more-bindings ~@body)
+         (catch Throwable t#
+           (try
+             (close ~binding)
+             (catch Throwable s#
+               (.addSuppressed t# s#)))
+           (throw t#))))
+
+    `(do ~@body)))
+
 (defn load-properties [^Reader in]
   (->> (doto (Properties.)
          (.load in))
