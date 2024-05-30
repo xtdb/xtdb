@@ -216,6 +216,7 @@ class FiddleRegistry {
     async run(query, txs) {
         // Run the given txs and query
         try {
+            this._call("fetchStart");
             var response = await runFiddle(txs, query);
         } catch (e) {
             throw new Error("Network Error", {error: e});
