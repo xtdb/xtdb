@@ -110,12 +110,7 @@
                    (fn [fields]
                      (let [unnest-field (->> (get fields from-col)
                                              types/flatten-union-field
-                                             (keep (fn [^Field field]
-                                                     (condp = (class (.getType field))
-                                                       ArrowType$List (first (.getChildren field))
-                                                       SetType (first (.getChildren field))
-                                                       ArrowType$FixedSizeList (first (.getChildren field))
-                                                       (types/col-type->field :null))))
+                                             (keep types/unnest-field)
                                              (apply types/merge-fields))]
                        {:fields (-> fields
                                     (assoc to-col unnest-field)

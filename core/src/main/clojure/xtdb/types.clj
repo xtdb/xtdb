@@ -521,6 +521,13 @@
 (defmethod arrow-type->col-type SetType [_ data-field]
   [:set (field->col-type data-field)])
 
+(defn unnest-field [^Field field]
+  (condp = (class (.getType field))
+    ArrowType$List (first (.getChildren field))
+    SetType (first (.getChildren field))
+    ArrowType$FixedSizeList (first (.getChildren field))
+    (col-type->field :null)))
+
 ;;; struct
 
 (defmethod col-type->field* :struct [col-name nullable? [_ inner-col-types]]

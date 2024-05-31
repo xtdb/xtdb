@@ -150,3 +150,21 @@
                         {:params {'?table [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]}
                          :with-col-types? true}))
         "actual nils"))
+
+(t/deftest test-single-col
+  (t/is (= '{:res [{:x5 1} {:x5 2} {:x5 3}],
+             :col-types {x5 :i64}}
+           (tu/query-ra '[:table {x5 [1 2 3]}]
+                        {:with-col-types? true})))
+
+  (t/is (= '{:res [{:x5 1} {:x5 2.0} {:x5 3}],
+             :col-types {x5 [:union #{:i64 :f64}]}}
+           (tu/query-ra '[:table {x5 [1 2.0 3]}]
+                        {:with-col-types? true})))
+
+  (t/is (= {:res [{:unnest-param 12.4} {} {:unnest-param 100} {:unnest-param 83.0}],
+            :col-types '{unnest-param [:union #{:f64 :null :i64}]}}
+
+           (tu/query-ra '[:table {unnest-param ?coll}]
+                        {:params {'?coll [12.4, nil, 100, 83.0]}
+                         :with-col-types? true}))))

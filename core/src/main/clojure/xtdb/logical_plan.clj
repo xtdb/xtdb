@@ -178,7 +178,9 @@
     (vec explicit-column-names)
 
     [:table table]
-    (mapv symbol (keys (first table)))
+    (mapv symbol (if (map? table)
+                   (keys table)
+                   (keys (first table))))
 
     [:scan _scan-opts columns]
     (mapv ->projected-column columns)
