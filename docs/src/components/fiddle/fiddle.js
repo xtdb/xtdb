@@ -1,4 +1,4 @@
-import { magicElementsAbove, parseSQLTxs, makeError, fiddle_url, runFiddle } from "./utils"
+import { magicElementsAbove, parseSQLTxs, makeError, fiddle_url, runFiddle, debouncePromise } from "./utils"
 
 // From my experiments it seems like web-components' constructors can be called in any order
 //
@@ -9,6 +9,10 @@ class FiddleRegistry {
     constructor(parent) {
         // Input state
         this.state = {};
+
+        // Debounce the runFiddle function
+        // NOTE: One per registry to avoid conflicts on a page with many `autoLoad`s
+        this.debouncedRunFiddle = debouncePromise(runFiddle, 150);
 
         // Txs inside the parent element
         // NOTE: These may not be initialised yet
@@ -216,7 +220,8 @@ class FiddleRegistry {
     async run(query, txs) {
         // Run the given txs and query
         try {
-            var response = await runFiddle(txs, query);
+            this._call("fetchStart");
+            var response = await this.debouncedRunFiddle(txs, query);
         } catch (e) {
             throw new Error("Network Error", {error: e});
         } finally {
