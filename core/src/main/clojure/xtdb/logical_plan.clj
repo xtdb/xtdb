@@ -1106,6 +1106,34 @@
          [:anti-join (val (first projection))
           lhs rhs]]))))
 
+(defn- apply-table-col->unnest [z]
+  (r/zmatch z
+    [:apply :cross-join cols
+     lhs
+     [:table col-spec]]
+    ;; =>
+    (when (map? col-spec)
+      (let [[unnest-col unnest-expr] (first col-spec)
+            unnest-expr (w/postwalk-replace (set/map-invert cols) unnest-expr)]
+        [:unnest {unnest-col 'unnest}
+         [:map [{'unnest unnest-expr}]
+          lhs]]))
+
+    [:apply :cross-join cols
+     lhs
+     [:map projection
+      [:table col-spec]]]
+    ;; =>
+    (when (and (map? col-spec)
+               (= 1 (count projection))
+               (map? (first projection))
+               (= '(row-number) (val (ffirst projection))))
+      (let [[unnest-col unnest-expr] (first col-spec)
+            unnest-expr (w/postwalk-replace (set/map-invert cols) unnest-expr)]
+        [:unnest {unnest-col 'unnest} {:ordinality-column (key (ffirst projection))}
+         [:map [{'unnest unnest-expr}]
+          lhs]]))))
+
 (defn- decorrelate-apply-rule-2
   "R A⊗(σp E) = R ⊗p E
   if no parameters in E resolved from R"
@@ -1450,6 +1478,7 @@
    #'apply-mark-join->mark-join
    #'pull-apply-mark-join-select->mark-join-cond
    #'select-mark-join->semi-join
+   #'apply-table-col->unnest
    #'decorrelate-apply-rule-2
    #'decorrelate-apply-rule-3
    #'decorrelate-apply-rule-4
