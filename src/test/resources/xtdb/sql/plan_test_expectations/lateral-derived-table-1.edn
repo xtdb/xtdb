@@ -1,6 +1,11 @@
-[:rename
- {x1 y, x3 z}
- [:mega-join
-  [{x1 x3}]
-  [[:rename {y x1} [:scan {:table x} [y]]]
-   [:rename {z x3} [:scan {:table z} [z]]]]]]
+[:project
+ [{y x.1/y} {z y.4/z}]
+ [:apply
+  :cross-join
+  {x.1/y ?xt$sq_y_2}
+  [:rename x.1 [:scan {:table x} [y]]]
+  [:rename
+   y.4
+   [:project
+    [{z z.2/z}]
+    [:rename z.2 [:scan {:table z} [{z (= z ?xt$sq_y_2)}]]]]]]]

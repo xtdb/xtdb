@@ -248,17 +248,17 @@
 (t/deftest test-unnest
   (t/is (=plan-file
           "basic-query-29"
-          (plan-sql "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)"
+          (plan-sql "SELECT film FROM StarsIn AS si, UNNEST(si.films) AS film(film)"
                     {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-30"
-          (plan-sql "SELECT * FROM StarsIn AS si(films), UNNEST(si.films) AS film"
+          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
                     {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-30"
-          (plan-sql "FROM StarsIn, UNNEST(films) AS film"
+          (plan-sql "FROM StarsIn si, UNNEST(films) AS film"
                     {:table-info {"stars_in" #{"films"}}}))
 
         "implicit SELECT *")
@@ -272,7 +272,30 @@
           "basic-query-31"
           (plan-sql "FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
                     {:table-info {"stars_in" #{"films"}}}))
-        "implicit SELECT *"))
+        "implicit SELECT *")
+
+  (t/is (=plan-file
+          "unnest-query-1"
+          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film(film, film_ord)"
+                    {:table-info {"stars_in" #{"films"}}})))
+
+  (xt/submit-tx tu/*node* [[:put-docs :actors
+                            {:xt/id "bob", :name "Bob", :films ["The Great Escape", "Bob the Builder", "Bob the Builder Electric Boogaloo"]}
+                            {:xt/id "steve", :name "Steve", :films ["Hot Fuzz" "Shaun of the Dead"]}]])
+
+  (t/is (= [{:name "Bob", :film "The Great Escape"}
+            {:name "Bob", :film "Bob the Builder"}
+            {:name "Bob", :film "Bob the Builder Electric Boogaloo"}
+            {:name "Steve", :film "Hot Fuzz"}
+            {:name "Steve", :film "Shaun of the Dead"}]
+           (xt/q tu/*node* "SELECT name, film FROM actors, UNNEST(films) AS films(film)")))
+
+  (t/is (= [{:name "Bob", :film "The Great Escape", :ord 1}
+            {:name "Bob", :film "Bob the Builder", :ord 2}
+            {:name "Bob", :film "Bob the Builder Electric Boogaloo", :ord 3}
+            {:name "Steve", :film "Hot Fuzz", :ord 1}
+            {:name "Steve", :film "Shaun of the Dead", :ord 2}]
+           (xt/q tu/*node* "SELECT name, film, ord FROM actors, UNNEST(films) WITH ORDINALITY AS films(film, ord)"))))
 
 (deftest test-cross-join
   (t/is (=plan-file
@@ -1240,9 +1263,9 @@
 (deftest test-select-star-lateral-join
   (xt/submit-tx tu/*node* [[:put-docs :y {:xt/id 1 :b "one"}]])
 
-  (t/is (= [{:b "one", :b:1 "one"}]
+  (t/is (= [{:x-b "one", :outer-b "one", :z-b "one"}]
            (xt/q tu/*node*
-                 "SELECT * FROM (SELECT y.b FROM y) AS x, LATERAL (SELECT y.b FROM y) AS z"))))
+                 "SELECT * FROM (SELECT y.b FROM y) AS x (x_b), LATERAL (SELECT y.b AS z_b, x_b FROM y) AS z (z_b, outer_b)"))))
 
 (deftest test-select-star-subquery
   (xt/submit-tx tu/*node* [[:put-docs :y {:xt/id 1 :b "one" :a 2}]])

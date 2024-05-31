@@ -355,7 +355,7 @@
                          (-> (plan-table-ref r)
                              (apply-sqs !join-cond-subqs))]])))))))))
 
-(defrecord CrossJoinTable [env l r]
+(defrecord CrossJoinTable [env !sq-refs l r]
   Scope
   (available-cols [_ chain]
     (->> [l r]
@@ -374,7 +374,8 @@
   (plan-table-ref [_]
     (let [planned-l (plan-table-ref l)
           planned-r (plan-table-ref r)]
-      [:cross-join planned-l planned-r])))
+      [:apply :cross-join (into {} !sq-refs)
+       planned-l planned-r])))
 
 (defrecord DerivedTable [plan table-alias unique-table-alias, ^SequencedSet available-cols]
   Scope
@@ -393,6 +394,38 @@
   (plan-table-ref [_]
     [:rename unique-table-alias
      plan]))
+
+(defrecord UnnestTable [env table-alias unique-table-alias unnest-col unnest-expr ordinality-col]
+  Scope
+  (available-cols [_ chain]
+    (when-not (and chain (not= chain [table-alias]))
+      (->insertion-ordered-set (cond-> [unnest-col]
+                                 ordinality-col (conj ordinality-col)))))
+
+  (available-tables [_] [table-alias])
+
+  (find-decls [_ [col-name table-name]]
+    (when (or (nil? table-name) (= table-name table-alias))
+      (condp = col-name
+        unnest-col [(-> (->col-sym (str unique-table-alias) (str col-name))
+                        (with-meta (meta unnest-col)))]
+        ordinality-col [(-> (->col-sym (str unique-table-alias) (str ordinality-col))
+                            (with-meta (meta ordinality-col)))]
+        nil)))
+
+  TableRef
+  (plan-table-ref [_]
+    (as-> [:table {(-> (->col-sym (str unique-table-alias) (str unnest-col))
+                       (with-meta (meta unnest-col)))
+                   unnest-expr}]
+        plan
+
+      (if ordinality-col
+        [:map [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
+                    (with-meta (meta ordinality-col)))
+                '(row-number)}]
+         plan]
+        plan))))
 
 (defrecord ArrowTable [env url table-alias unique-table-alias ^SequencedSet !table-cols]
   Scope
@@ -484,7 +517,7 @@
          plan]
         plan))))
 
-(defrecord TableRefVisitor [env scope]
+(defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
   (visitBaseTable [{{:keys [!id-count table-info ctes] :as env} :env} ctx]
     (let [tn (some-> (.tableOrQueryName ctx) (.tableName))
@@ -526,6 +559,7 @@
 
   (visitCrossJoinTable [this ctx]
     (->CrossJoinTable env
+                      {}
                       (-> (.tableReference ctx 0) (.accept this))
                       (-> (.tableReference ctx 1) (.accept this))))
 
@@ -546,7 +580,38 @@
       (->DerivedTable plan table-alias
                       (symbol (str table-alias "." (swap! !id-count inc)))
                       (->insertion-ordered-set col-syms))))
-  
+
+  (visitLateralDerivedTable [{{:keys [!id-count]} :env} ctx]
+    (let [{:keys [plan col-syms]} (-> (.subquery ctx) (.queryExpression)
+                                      (.accept (-> (->QueryPlanVisitor env (or left-scope scope))
+                                                   (assoc :out-col-syms (->table-projection (.tableProjection ctx))))))
+
+          table-alias (identifier-sym (.tableAlias ctx))]
+
+      (->DerivedTable plan table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+                      (->insertion-ordered-set col-syms))))
+
+  (visitCollectionDerivedTable [{{:keys [!id-count]} :env} ctx]
+    (let [expr (-> (.expr ctx)
+                   (.accept (->ExprPlanVisitor env (or left-scope scope))))
+          table-projection (->table-projection (.tableProjection ctx))
+          table-alias (identifier-sym (.tableAlias ctx))
+          with-ordinality? (boolean (.withOrdinality ctx))]
+
+      (assert (or (nil? table-projection)
+                  (= (+ 1 (if with-ordinality? 1 0)) (count table-projection))))
+
+      (->UnnestTable env table-alias
+                     (symbol (str table-alias "." (swap! !id-count inc)))
+                     (or (->col-sym (first table-projection))
+                         (-> (->col-sym (str "xt$unnest." (swap! !id-count inc)))
+                             (vary-meta assoc :unnamed-unnest-col? true)))
+                     expr
+                     (when with-ordinality?
+                       (or (->col-sym (second table-projection))
+                           (-> (->col-sym (str "xt$ordinal." (swap! !id-count inc)))
+                               (vary-meta assoc :unnamed-unnest-col? true)))))))
+
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
 
   (visitArrowTable [{{:keys [!id-count]} :env} ctx]
@@ -1712,9 +1777,11 @@
     (let [qs-scope (->QuerySpecificationScope scope
                                               (when-let [from (.fromClause ctx)]
                                                 (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
-                                                          (let [right-table-ref (.accept table-ref (->TableRefVisitor env scope))]
+                                                          (let [!sq-refs (HashMap.)
+                                                                left-sq-scope (->SubqueryScope env left-table-ref !sq-refs)
+                                                                right-table-ref (.accept table-ref (->TableRefVisitor env scope left-sq-scope))]
                                                             (if left-table-ref
-                                                              (->CrossJoinTable env left-table-ref right-table-ref)
+                                                              (->CrossJoinTable env !sq-refs left-table-ref right-table-ref)
                                                               right-table-ref)))
                                                         nil
                                                         (.tableReference from))))
