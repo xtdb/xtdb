@@ -1029,14 +1029,26 @@
         smap (set/map-invert columns)
         row-number-sym (gen-row-number)
         columns (remove-unused-correlated-columns columns dependent-relation)
-        post-group-by-projection (remove symbol? post-group-by-projection)]
-    (cond->> [:group-by (vec (concat independent-projection
-                                     [row-number-sym]
-                                     (w/postwalk-replace smap group-by-columns)))
+        post-group-by-projection (remove symbol? post-group-by-projection)
+        count-star? (seq (filter #(= '(row-count) (val (first %))) group-by-columns))
+        dep-countable-sym (symbol (str "xt$" (*gensym* "dep_countable")))]
+    (cond->> [:group-by (vec
+                         (concat
+                          independent-projection
+                          [row-number-sym]
+                          (w/postwalk-replace smap
+                                              (if count-star?
+                                                (map #(if (= '(row-count) (val (first %)))
+                                                        {(key (first %)) (list 'count dep-countable-sym)}
+                                                        %) group-by-columns)
+                                                group-by-columns))))
               [:apply apply-mode columns
                [:map [{row-number-sym '(row-number)}]
                 independent-relation]
-               dependent-relation]]
+               (if count-star?
+                 [:map [{dep-countable-sym 1}]
+                  dependent-relation]
+                 dependent-relation)]]
       (not-empty post-group-by-projection)
       (conj [:map (vec (w/postwalk-replace
                         smap
