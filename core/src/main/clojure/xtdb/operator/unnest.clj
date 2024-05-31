@@ -118,4 +118,4 @@
                         :->cursor (fn [{:keys [allocator]} in-cursor]
                                     (UnnestCursor. allocator in-cursor
                                                    (str from-col) (types/field-with-name unnest-field (str to-col))
-                                                   (some-> ordinality-column name)))})))))
+                                                   (some-> ordinality-column str)))})))))
