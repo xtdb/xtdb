@@ -359,7 +359,6 @@
          (run! (fn [^MergePlanTask merge-plan-task]
                  (let [path (.getPath merge-plan-task)
                        mp-nodes (.getMpNodes merge-plan-task)
-                       ^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)
                        leaves (ArrayList.)]
                    (loop [[^MergePlanNode mp-node & more-mp-nodes] mp-nodes
                           node-taken? false]
@@ -371,18 +370,12 @@
 
                            (condp = (class trie-node)
                              ArrowHashTrie$Leaf
-                             (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata]} segment
+                             (let [{:keys [^IntPredicate page-idx-pred]} segment
                                    page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
                                    take-node? (.test page-idx-pred page-idx)]
 
-                               (when take-node?
-                                 (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
-                                   (.or cumulative-iid-bitmap iid-bitmap)))
 
-                               (when (or take-node?
-                                         (when node-taken?
-                                           (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
-                                             (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
+                               (when (or take-node? node-taken?)
                                  (.add leaves [:arrow segment page-idx]))
 
                                (recur more-mp-nodes (or node-taken? take-node?)))
