@@ -239,11 +239,13 @@
 
 (defmethod probe-phase ::anti-semi-join
   [_join-type, ^RelationReader probe-rel, ^IRelationMap rel-map, _matched-build-idxs]
-  (.select probe-rel
-           (-> (doto (MutableRoaringBitmap.)
-                 (.add (probe-semi-join-select probe-rel rel-map))
-                 (.flip (int 0) (.rowCount ^RelationReader probe-rel)))
-               (.toArray))))
+  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
+        matching-probe-idxs (IntStream/builder)]
+    (dotimes [probe-idx (.rowCount probe-rel)]
+      (when (neg? (.matches rel-map-prober probe-idx))
+        (.add matching-probe-idxs probe-idx)))
+
+    (.select probe-rel (.toArray (.build matching-probe-idxs)))))
 
 (defmethod probe-phase ::mark-join
   [_join-type

@@ -161,6 +161,22 @@
                                 [::tu/blocks '{b :i64}
                                  [[]]]]))))
 
+  (t/testing "nulls"
+    (t/is (= []
+             (tu/query-ra [:semi-join '[{a b}]
+                           [:table [{:a nil}]]
+                           [:table [{:b 12}, {:b 2}]]])))
+
+    (t/is (= [{:a 12}]
+             (tu/query-ra [:semi-join '[{a b}]
+                           [:table [{:a 12}]]
+                           [:table [{:b 12}, {:b nil}]]])))
+
+    (t/is (= []
+             (tu/query-ra [:semi-join '[{a b}]
+                           [:table [{:a 4}]]
+                           [:table [{:b 12}, {:b nil}]]]))))
+
   (t/is (empty? (tu/query-ra [:semi-join '[{a b}]
                               [::tu/blocks
                                [[{:a 12}, {:a 0}]
@@ -590,6 +606,22 @@
                                {:preserve-blocks? true})
                   (mapv set)))))
 
+  (t/testing "nulls"
+    (t/is (= []
+             (tu/query-ra [:anti-join '[{a b}]
+                           [:table [{:a nil}]]
+                           [:table [{:b 12}, {:b 2}]]])))
+
+    (t/is (= []
+             (tu/query-ra [:anti-join '[{a b}]
+                           [:table [{:a 12}]]
+                           [:table [{:b 12}, {:b nil}]]])))
+
+    (t/is (= []
+             (tu/query-ra [:anti-join '[{a b}]
+                           [:table [{:a 4}]]
+                           [:table [{:b 12}, {:b nil}]]]))))
+
   (t/is (empty? (tu/query-ra [:anti-join '[{a b}]
                               [::tu/blocks
                                [[{:a 12}, {:a 2}]
@@ -783,7 +815,7 @@
     (t/is (= [] (run-anti false true true)))
 
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true true false)))
-    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true true nil)))
+    (t/is (= [] (run-anti true true nil)))
 
     (t/is (= [] (run-anti true true true)))))
 
