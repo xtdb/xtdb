@@ -35,6 +35,13 @@ val sixGBJvmArgs = listOf(
     "-XX:MaxMetaspaceSize=1g"
 )
 
+val twelveGBJvmArgs = listOf(
+    "-Xmx5g",
+    "-Xms5g",
+    "-XX:MaxDirectMemorySize=6g",
+    "-XX:MaxMetaspaceSize=1g"
+)
+
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 allprojects {
@@ -63,25 +70,24 @@ allprojects {
             }
 
         tasks.test {
+            jvmArgs(defaultJvmArgs + sixGBJvmArgs)
             useJUnitPlatform {
                 excludeTags("integration", "kafka", "jdbc", "timescale", "s3", "slt", "docker", "azure", "google-cloud")
             }
         }
 
         tasks.create("integration-test", Test::class) {
+            jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
             useJUnitPlatform {
                 includeTags("integration")
             }
         }
 
         tasks.create("nightly-test", Test::class) {
+            jvmArgs(defaultJvmArgs + sixGBJvmArgs)
             useJUnitPlatform {
                 includeTags("s3", "google-cloud", "azure", "kafka")
             }
-        }
-
-        tasks.withType(Test::class) {
-            jvmArgs = defaultJvmArgs + sixGBJvmArgs
         }
 
         dependencies {
