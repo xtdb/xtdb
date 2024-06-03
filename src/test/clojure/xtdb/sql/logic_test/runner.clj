@@ -299,13 +299,13 @@
                                 [(ex-message t) :lines]
                                 #(conj % (:line record))))))
 
-                      (if (and (str/includes? (or (ex-message t) "") "Missing grouping columns")
-                               (contains? (set (:skipif record)) "postgresql"))
-                        ;; Reporting here commented out as its still quite noisy.
-                        (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
-                            (update ctx :queries-run + (if (= :query (:type record))
-                                                         1
-                                                         0)))
+                      (if (or (and (str/includes? (or (ex-message t) "") "Missing grouping columns")
+                                   (contains? (set (:skipif record)) "postgresql"))
+                              (str/includes? (or (ex-message t) "") "Duplicate column projection"))
+                        (update ctx :queries-run + (if (= :query (:type record))
+                                                     1
+                                                     0))
+
                         (do (log/error t "Error Executing Record" record)
                             (t/do-report {:type :error, :expected nil, :actual t, :file file, :line line})
                             (-> ctx
