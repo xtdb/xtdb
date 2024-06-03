@@ -1,5 +1,5 @@
-[:rename
- {x3 xt$column_1}
+[:project
+ [{xt$column_1 xt$sum_out_2}]
  [:group-by
-  [{x3 (sum x1)}]
-  [:rename {length x1} [:scan {:table movie} [length]]]]]
+  [{xt$sum_out_2 (sum m.1/length)}]
+  [:rename m.1 [:scan {:table movie} [length]]]]]

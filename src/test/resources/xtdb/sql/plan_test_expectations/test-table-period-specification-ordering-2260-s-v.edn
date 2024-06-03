@@ -1,3 +1,7 @@
-[:scan
- {:table foo, :for-valid-time :all-time, :for-system-time :all-time}
- [bar]]
+[:project
+ [{bar foo.1/bar}]
+ [:rename
+  foo.1
+  [:scan
+   {:table foo, :for-valid-time :all-time, :for-system-time :all-time}
+   [bar]]]]

@@ -5,7 +5,6 @@
 (slt/def-slt-test direct-sql--gcse-statistics {:direct-sql true})
 (slt/def-slt-test direct-sql--numeric-value-functions-6.28 {:direct-sql true})
 (slt/def-slt-test direct-sql--period_predicates {:direct-sql true})
-(slt/def-slt-test direct-sql--remove-names {:direct-sql true})
 (slt/def-slt-test direct-sql--set-functions {:direct-sql true})
 (slt/def-slt-test direct-sql--system_time {:direct-sql true})
 (slt/def-slt-test direct-sql--period_specifications {:direct-sql true})

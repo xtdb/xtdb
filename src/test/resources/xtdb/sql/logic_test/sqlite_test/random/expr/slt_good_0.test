@@ -29968,6 +29968,7 @@ SELECT CASE WHEN + - 44 <> 44 * - - 17 + 30 AND NOT NULL IS NOT NULL THEN COUNT(
 1
 
 skipif mysql # not compatible
+skipif xtdb # aggregates in `in`
 query I rowsort label-3317
 SELECT CASE WHEN + - 44 <> 44 * - - 17 + 30 AND NOT NULL IS NOT NULL THEN COUNT ( * ) WHEN NULL NOT IN ( COUNT ( DISTINCT + 86 ) * - COUNT ( * ) ) THEN + 53 ELSE ( 66 ) * - CAST ( NULL AS INTEGER ) + 10 END
 ----
@@ -33735,6 +33736,7 @@ SELECT - 39 * - + ( - NULLIF ( + ( + + 26 ), + CASE WHEN NULL IN ( CAST( COUNT( 
 -1014
 
 skipif mysql # not compatible
+skipif xtdb # aggregates in `in`
 query I rowsort label-3719
 SELECT - 39 * - + ( - NULLIF ( + ( + + 26 ), + CASE WHEN NULL IN ( CAST ( COUNT ( * ) AS INTEGER ), - 38 / - ( - ( - - 90 ) ) * 89 + - CAST ( NULL AS INTEGER ) * - 16 ) THEN + + 2 * - COUNT ( * ) ELSE NULL END * 1 ) ) AS col0
 ----
@@ -35128,6 +35130,7 @@ SELECT - CASE - MIN( + 23 ) WHEN + 54 + 36 - + CASE WHEN NOT + ( + COUNT( * ) ) 
 NULL
 
 skipif mysql # not compatible
+skipif xtdb # aggregates in `in`
 query I rowsort label-3879
 SELECT - CASE - MIN ( + 23 ) WHEN + 54 + 36 - + CASE WHEN NOT + ( + COUNT ( * ) ) IN ( + COALESCE ( + 49, CASE + COUNT ( * ) WHEN COUNT ( * ) THEN - - 12 * + COUNT ( * ) * 69 + 49 + - 68 END - 82 * + + 75 * + 78 ) / COALESCE ( + 19, - 94 * 18, + 80 - 21 ) ) THEN 31 / + 81 ELSE + 50 END + 69 * 11 * + 35 THEN + 96 WHEN + 59 * - COUNT ( * ) THEN NULL END AS col1
 ----
@@ -63280,6 +63283,7 @@ SELECT - CASE WHEN NOT + 74 NOT IN ( + 91 / 76 * + COUNT( DISTINCT - 24 ) * + + 
 NULL
 
 skipif mysql # not compatible
+skipif xtdb # aggregates in `in`
 query I rowsort label-7001
 SELECT - CASE WHEN NOT + 74 NOT IN ( + 91 / 76 * + COUNT ( DISTINCT - 24 ) * + + 0 / 66 ) THEN NULL WHEN ( + 61 + CAST ( NULL AS INTEGER ) ) = + MAX ( 96 ) THEN + 77 END AS col2
 ----

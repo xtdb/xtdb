@@ -1,23 +1,19 @@
-[:rename
- {x1 customer_id, x2 name, x9 orders}
- [:project
-  [x1 x2 x9]
-  [:group-by
-   [x1 x2 xt$row_number_0 {x9 (array_agg x8)}]
-   [:apply
-    :left-outer-join
-    {x1 ?x11}
-    [:map
-     [{xt$row_number_0 (row-number)}]
-     [:rename
-      {xt$id x1, name x2}
-      [:scan {:table customers} [xt$id name]]]]
+[:project
+ [{customer_id c.1/xt$id} {name c.1/name} {orders xt$sq_2}]
+ [:group-by
+  [c.1/name c.1/xt$id xt$row_number_0 {xt$sq_2 (array_agg xt$sq_2)}]
+  [:apply
+   :left-outer-join
+   {c.1/xt$id ?xt$sq_xt$id_3}
+   [:map
+    [{xt$row_number_0 (row-number)}]
+    [:rename c.1 [:scan {:table customers} [name xt$id]]]]
+   [:project
+    [{xt$sq_2 {:order_id order_id, :value value}}]
     [:project
-     [{x8 {:order_id x4, :value x5}}]
-     [:project
-      [x4 x5]
-      [:rename
-       {xt$id x4, value x5, customer_id x6}
-       [:scan
-        {:table orders}
-        [xt$id value {customer_id (= customer_id ?x11)}]]]]]]]]]
+     [{order_id o.3/xt$id} {value o.3/value}]
+     [:rename
+      o.3
+      [:scan
+       {:table orders}
+       [{customer_id (= customer_id ?xt$sq_xt$id_3)} xt$id value]]]]]]]]

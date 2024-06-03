@@ -58,7 +58,7 @@
               :column-name "xt$committed?",
               :data-type ":bool"}}
            (set (tu/query-ra '[:scan
-                               {:table information_schema$columns}
+                               {:table information_schema/columns}
                                [table_catalog table_schema table_name column_name data_type]]
                              {:node tu/*node*})))))
 
@@ -77,7 +77,7 @@
               :table-schema "public",
               :table-name "baseball",
               :table-type "BASE TABLE"}}
-           (set (tu/query-ra '[:scan {:table information_schema$tables} [table_catalog table_schema table_name table_type]]
+           (set (tu/query-ra '[:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-attribute
@@ -94,7 +94,7 @@
            {:attrelid 93927094, :atttypid 114, :attname "xt$error", :attlen -1}
            {:attrelid 499408916, :atttypid 114, :attname "col1", :attlen -1}}
            (set (tu/query-ra '[:scan
-                               {:table pg_catalog$pg_attribute}
+                               {:table pg_catalog/pg_attribute}
                                [attrelid attname atttypid attlen]]
                              {:node tu/*node*})))))
 
@@ -111,21 +111,21 @@
               :tableowner "xtdb",
               :tablename "beanie"}}
            (set (tu/query-ra '[:scan
-                               {:table pg_catalog$pg_tables}
+                               {:table pg_catalog/pg_tables}
                                [schemaname tablename tableowner tablespace]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-views
   (t/is (= []
            (tu/query-ra '[:scan
-                          {:table pg_catalog$pg_views}
+                          {:table pg_catalog/pg_views}
                           [schemaname viewname viewowner]]
                         {:node tu/*node*}))))
 
 (deftest test-mat-views
   (t/is (= []
            (tu/query-ra '[:scan
-                          {:table pg_catalog$pg_matviews}
+                          {:table pg_catalog/pg_matviews}
                           [schemaname matviewname matviewowner]]
                         {:node tu/*node*}))))
 
@@ -161,19 +161,19 @@
          #{{:table-name "xt$txs", :table-schema "public"}
            {:table-name "beanie", :table-schema "public"}
            {:table-name "baseball", :table-schema "public"}}
-         (set (tu/query-ra '[:scan {:table information_schema$tables} [table_name table_schema]]
+         (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name table_schema]]
                            {:node tu/*node*})))
         "Only requested cols are projected")
 
   (t/is (=
          #{{:table-name "baseball", :table-schema "public"}}
-         (set (tu/query-ra '[:scan {:table information_schema$tables} [table_schema {table_name (= table_name "baseball")}]]
+         (set (tu/query-ra '[:scan {:table information_schema/tables} [table_schema {table_name (= table_name "baseball")}]]
                            {:node tu/*node*})))
         "col-preds work")
 
   (t/is (=
          #{{:table-name "beanie", :table-schema "public"}}
-         (set (tu/query-ra '[:scan {:table information_schema$tables} [table_schema {table_name (= table_name ?tn)}]]
+         (set (tu/query-ra '[:scan {:table information_schema/tables} [table_schema {table_name (= table_name ?tn)}]]
                            {:node tu/*node* :params {'?tn "beanie"}})))
         "col-preds with params work")
 
@@ -186,7 +186,7 @@
     #{{:table-name "baseball"}
       {:table-name "beanie"}
       {:table-name "xt$txs"}}
-    (set (tu/query-ra '[:scan {:table information_schema$tables} [table_name unknown_col]]
+    (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name unknown_col]]
                       {:node tu/*node*})))
    "cols that don't exist don't error/projected as nulls/absents"))
 
@@ -201,7 +201,7 @@
            {:nspowner 1376455703,
             :oid 1106696632,
             :nspname "public"}}
-         (set (tu/query-ra '[:scan {:table pg_catalog$pg_namespace} [oid nspname nspowner nspacl]]
+         (set (tu/query-ra '[:scan {:table pg_catalog/pg_namespace} [oid nspname nspowner nspacl]]
                            {:node tu/*node*})))))
 (deftest test-schemata
   (t/is (= #{{:catalog-name "xtdb",
@@ -213,7 +213,7 @@
              {:catalog-name "xtdb",
               :schema-name "public",
               :schema-owner "xtdb"}}
-           (set (tu/query-ra '[:scan {:table information_schema$schemata} [catalog_name schema_name schema_owner]]
+           (set (tu/query-ra '[:scan {:table information_schema/schemata} [catalog_name schema_name schema_owner]]
                              {:node tu/*node*})))))
 
 (deftest test-composite-columns

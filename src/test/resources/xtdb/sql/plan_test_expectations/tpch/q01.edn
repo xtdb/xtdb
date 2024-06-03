@@ -1,49 +1,58 @@
-[:rename
- {x1 l_returnflag,
-  x13 sum_base_price,
-  x2 l_linestatus,
-  x12 sum_qty,
-  x14 sum_disc_price,
-  x17 avg_price,
-  x15 sum_charge,
-  x16 avg_qty,
-  x18 avg_disc,
-  x19 count_order}
+[:project
+ [{l_returnflag l.1/l_returnflag}
+  {l_linestatus l.1/l_linestatus}
+  sum_qty
+  sum_base_price
+  sum_disc_price
+  sum_charge
+  avg_qty
+  avg_price
+  avg_disc
+  count_order]
  [:order-by
-  [[x1 {:direction :asc, :null-ordering :nulls-last}]
-   [x2 {:direction :asc, :null-ordering :nulls-last}]]
-  [:group-by
-   [x1
-    x2
-    {x12 (sum x3)}
-    {x13 (sum x4)}
-    {x14 (sum x9)}
-    {x15 (sum x10)}
-    {x16 (avg x3)}
-    {x17 (avg x4)}
-    {x18 (avg x5)}
-    {x19 (count x11)}]
-   [:map
-    [{x9 (* x4 (- 1 x5))} {x10 (* (* x4 (- 1 x5)) (+ 1 x6))} {x11 1}]
-    [:rename
-     {l_returnflag x1,
-      l_linestatus x2,
-      l_quantity x3,
-      l_extendedprice x4,
-      l_discount x5,
-      l_tax x6,
-      l_shipdate x7}
-     [:scan
-      {:table lineitem}
-      [l_returnflag
-       l_linestatus
-       l_quantity
-       l_extendedprice
-       l_discount
-       l_tax
-       {l_shipdate
-        (<=
-         l_shipdate
-         (-
-          #time/date "1998-12-01"
-          (single-field-interval "90" "DAY" 2 0)))}]]]]]]]
+  [[l.1/l_returnflag {:direction :asc, :null-ordering :nulls-last}]
+   [l.1/l_linestatus {:direction :asc, :null-ordering :nulls-last}]]
+  [:project
+   [l.1/l_returnflag
+    l.1/l_linestatus
+    {sum_qty xt$sum_out_2}
+    {sum_base_price xt$sum_out_3}
+    {sum_disc_price xt$sum_out_4}
+    {sum_charge xt$sum_out_6}
+    {avg_qty xt$avg_out_8}
+    {avg_price xt$avg_out_9}
+    {avg_disc xt$avg_out_10}
+    {count_order xt$row_count_11}]
+   [:group-by
+    [l.1/l_returnflag
+     l.1/l_linestatus
+     {xt$sum_out_2 (sum l.1/l_quantity)}
+     {xt$avg_out_10 (avg l.1/l_discount)}
+     {xt$sum_out_4 (sum xt$sum_in_5)}
+     {xt$sum_out_3 (sum l.1/l_extendedprice)}
+     {xt$row_count_11 (row-count)}
+     {xt$avg_out_8 (avg l.1/l_quantity)}
+     {xt$avg_out_9 (avg l.1/l_extendedprice)}
+     {xt$sum_out_6 (sum xt$sum_in_7)}]
+    [:map
+     [{xt$sum_in_5 (* l.1/l_extendedprice (- 1 l.1/l_discount))}
+      {xt$sum_in_7
+       (*
+        (* l.1/l_extendedprice (- 1 l.1/l_discount))
+        (+ 1 l.1/l_tax))}]
+     [:rename
+      l.1
+      [:scan
+       {:table lineitem}
+       [{l_shipdate
+         (<=
+          l_shipdate
+          (-
+           #time/date "1998-12-01"
+           (single-field-interval "90" "DAY" 2 6)))}
+        l_discount
+        l_quantity
+        l_returnflag
+        l_extendedprice
+        l_linestatus
+        l_tax]]]]]]]]

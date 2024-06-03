@@ -6,6 +6,7 @@
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             xtdb.expression.temporal
+            [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.operator.apply
@@ -40,8 +41,8 @@
            (xtdb.api.query IKeyFn Query)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
-           xtdb.watermark.IWatermarkSource
-           xtdb.util.RefCounter))
+           xtdb.util.RefCounter
+           xtdb.watermark.IWatermarkSource))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery

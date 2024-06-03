@@ -5,7 +5,7 @@ import pytest
 def test_db_api_class(connection):
     connection.execute("INSERT INTO docs (xt$id, foo) VALUES (1, 'bar');")
     result = connection.execute("SELECT * FROM docs;")
-    assert result.fetchall() == [['bar', 1]]
+    assert result.fetchall() == [[1, 'bar']]
 
 
 def test_multiple_statements_db_api(connection):
@@ -13,7 +13,7 @@ def test_multiple_statements_db_api(connection):
                     INSERT INTO docs (xt$id, foo) VALUES (1, 'baz');""")
     
     result = connection.execute("SELECT * FROM docs;")
-    assert result.fetchall() == [['baz', 1]]
+    assert result.fetchall() == [[1, 'baz']]
 
 
 def test_import_system_time_session_var_api(connection):
@@ -24,7 +24,7 @@ def test_import_system_time_session_var_api(connection):
                     INSERT INTO docs (xt$id, foo) VALUES (1, 'baz');
                     """)
     result = connection.execute("SELECT * FROM docs;")
-    assert result.fetchall() == [['bang', 1]]
+    assert result.fetchall() == [[1, 'bang']]
 
 def test_basis_session_var_api(connection):
     connection.execute("""SET import_system_time = '2020-01-02T12:34:56Z';
@@ -41,7 +41,7 @@ def test_basis_session_var_api(connection):
                           SELECT * FROM docs;
                           """)
 
-    assert result.fetchall() == [['b;az', 1]]
+    assert result.fetchall() == [[1, 'b;az']]
 
 
 def test_reversion_of_session_vars_api(connection):
@@ -70,4 +70,4 @@ def test_as_of_query(connection):
 
     result = connection.execute("SELECT trades.xt$id, trades.price FROM trades FOR SYSTEM_TIME AS OF DATE '2020-01-01';")
 
-    assert result.fetchall() == [[100, 1]]
+    assert result.fetchall() == [[1, 100]]

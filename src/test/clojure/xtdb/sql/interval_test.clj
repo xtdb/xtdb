@@ -26,5 +26,5 @@
   (t/is (= #xt/interval-mdn ["P0D" "PT20M34S"] (q "INTERVAL '20:34' MINUTE TO SECOND"))))
 
 (t/deftest test-interval-fns
-  (t/is (= #xt/interval-ym "P-12M" (q "-1 YEAR")))
-  (t/is (= #xt/interval-ym "P12M" (q "ABS(-1 YEAR)"))))
+  (t/is (= #xt/interval-ym "P-12M" (q "INTERVAL '-1' YEAR")))
+  (t/is (= #xt/interval-ym "P12M" (q "ABS(INTERVAL '-1' YEAR)"))))

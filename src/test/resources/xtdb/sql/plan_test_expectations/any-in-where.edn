@@ -1,8 +1,10 @@
-[:rename
- {x1 y}
- [:project
-  [x1]
+[:project
+ [{y x.1/y}]
+ [:map
+  [{xt$sq_2 true}]
   [:semi-join
-   [(> (= x2 1) x4)]
-   [:rename {y x1, z x2} [:scan {:table x} [y z]]]
-   [:rename {z x4} [:scan {:table y} [z]]]]]]
+   [(> xt$needle z)]
+   [:map
+    [{xt$needle (= x.1/z 1)}]
+    [:rename x.1 [:scan {:table x} [y z]]]]
+   [:project [{z y.3/z}] [:rename y.3 [:scan {:table y} [z]]]]]]]

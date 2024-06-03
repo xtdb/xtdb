@@ -1,6 +1,14 @@
-[:rename
- {x1 id, x3 id:1}
+[:project
+ [{foo_id foo.2/id} {baz_id baz.3/id}]
  [:mega-join
   []
-  [[:rename {id x1} [:scan {:table bar} [{id (= id 5)}]]]
-   [:rename {id x3} [:scan {:table bar} [{id (= id 5)}]]]]]]
+  [[:rename
+    foo.2
+    [:project
+     [{id bar.1/id}]
+     [:rename bar.1 [:scan {:table bar} [{id (= id 5)}]]]]]
+   [:rename
+    baz.3
+    [:project
+     [{id bar.1/id}]
+     [:rename bar.1 [:scan {:table bar} [{id (= id 5)}]]]]]]]]

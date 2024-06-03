@@ -1,9 +1,19 @@
-[:scan
- {:table foo,
-  :for-system-time [:in #time/date "2001-01-01" #time/date "2002-01-01"]}
- [{xt$valid_from
-   (and (< xt$valid_from #time/date "2004-01-01") (= xt$valid_from 4))}
-  {xt$valid_to
-   (and (> xt$valid_to #time/date "2000-01-01") (> xt$valid_to 10))}
-  {xt$system_from (= xt$system_from 20)}
-  {xt$system_to (<= xt$system_to 23)}]]
+[:project
+ [{xt$valid_from foo.1/xt$valid_from}
+  {xt$valid_to foo.1/xt$valid_to}
+  {xt$system_from foo.1/xt$system_from}
+  {xt$system_to foo.1/xt$system_to}]
+ [:rename
+  foo.1
+  [:scan
+   {:table foo,
+    :for-system-time
+    [:in #time/date "2001-01-01" #time/date "2002-01-01"]}
+   [{xt$valid_to
+     (and (> xt$valid_to #time/date "2000-01-01") (> xt$valid_to 10))}
+    {xt$system_from (= xt$system_from 20)}
+    {xt$valid_from
+     (and
+      (< xt$valid_from #time/date "2004-01-01")
+      (= xt$valid_from 4))}
+    {xt$system_to (<= xt$system_to 23)}]]]]

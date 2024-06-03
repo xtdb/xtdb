@@ -1,16 +1,14 @@
-[:rename
- {x1 custkey}
- [:project
-  [x1]
+[:project
+ [{custkey c.1/custkey}]
+ [:map
+  [{xt$sq_2 xt$sum_out_5}]
   [:select
-   (< 1000000 x6)
+   (< 1000000 xt$sum_out_5)
    [:group-by
-    [x1 xt$row_number_0 {x6 (sum x3)}]
+    [c.1/custkey xt$row_number_0 {xt$sum_out_5 (sum o.3/totalprice)}]
     [:left-outer-join
-     [{x1 x4}]
+     [{c.1/custkey o.3/custkey}]
      [:map
       [{xt$row_number_0 (row-number)}]
-      [:rename {custkey x1} [:scan {:table customer} [custkey]]]]
-     [:rename
-      {totalprice x3, custkey x4}
-      [:scan {:table orders} [totalprice custkey]]]]]]]]
+      [:rename c.1 [:scan {:table customer} [custkey]]]]
+     [:rename o.3 [:scan {:table orders} [custkey totalprice]]]]]]]]

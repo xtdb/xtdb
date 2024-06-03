@@ -419,13 +419,12 @@
       (letfn [(->field [[table col-name]]
                 (let [table (str table)
                       col-name (str col-name)]
-
                   ;; TODO move to fields here
                   (-> (cond
                         (= "xt$iid" col-name) (types/col-type->field col-name [:fixed-size-binary 16])
                         (types/temporal-column? col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
 
-                        :else (if-let [info-field (get-in info-schema/derived-tables [table col-name])]
+                        :else (if-let [info-field (get-in info-schema/derived-tables [(symbol table) col-name])]
                                 info-field
                                 (types/merge-fields (.columnField metadata-mgr table col-name)
                                                     (some-> (.liveIndex wm)
@@ -479,8 +478,8 @@
         {:fields fields
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, params default-all-valid-time?]}]
-                     (if-let [derived-table-schema (info-schema/derived-tables table-name)]
-                       (info-schema/->cursor allocator derived-table-schema table-name col-names col-preds params metadata-mgr watermark)
+                     (if-let [derived-table-schema (info-schema/derived-tables table)]
+                       (info-schema/->cursor allocator derived-table-schema table col-names col-preds params metadata-mgr watermark)
                        (let [iid-bb (selects->iid-byte-buffer selects params)
                              col-preds (cond-> col-preds
                                          iid-bb (assoc "xt$iid" (iid-selector iid-bb)))

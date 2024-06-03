@@ -1,8 +1,10 @@
-[:rename
- {x1 y}
- [:project
-  [x1]
+[:project
+ [{y x.1/y}]
+ [:map
+  [{xt$sq_2 true}]
   [:semi-join
-   [{x2 x4}]
-   [:rename {y x1, z x2} [:scan {:table x} [y z]]]
-   [:table [x4] [{x4 1} {x4 2}]]]]]
+   [{x.1/z xt.values.3/xt$column_1}]
+   [:rename x.1 [:scan {:table x} [y z]]]
+   [:rename
+    xt.values.3
+    [:table [xt$column_1] [{:xt$column_1 1} {:xt$column_1 2}]]]]]]

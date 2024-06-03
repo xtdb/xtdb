@@ -1,31 +1,65 @@
-[:rename
- {x1 o_orderpriority, x11 order_count}
+[:project
+ [{o_orderpriority o.1/o_orderpriority} order_count]
  [:order-by
-  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
-  [:group-by
-   [x1 {x11 (count x10)}]
-   [:map
-    [{x10 1}]
-    [:semi-join
-     [{x3 x5}]
-     [:rename
-      {o_orderpriority x1, o_orderdate x2, o_orderkey x3}
-      [:scan
-       {:table orders}
-       [o_orderpriority
-        {o_orderdate
-         (and
-          (<
-           o_orderdate
-           (+
-            #time/date "1993-07-01"
-            (single-field-interval "3" "MONTH" 2 0)))
-          (>= o_orderdate #time/date "1993-07-01"))}
-        o_orderkey]]]
-     [:rename
-      {l_orderkey x5, l_commitdate x6, l_receiptdate x7}
-      [:select
-       (< l_commitdate l_receiptdate)
+  [[o.1/o_orderpriority {:direction :asc, :null-ordering :nulls-last}]]
+  [:project
+   [o.1/o_orderpriority {order_count xt$row_count_5}]
+   [:group-by
+    [o.1/o_orderpriority {xt$row_count_5 (row-count)}]
+    [:map
+     [{xt$sq_2 true}]
+     [:semi-join
+      [{o.1/o_orderkey l_orderkey}]
+      [:rename
+       o.1
        [:scan
-        {:table lineitem}
-        [l_orderkey l_commitdate l_receiptdate]]]]]]]]]
+        {:table orders}
+        [{o_orderdate
+          (and
+           (<
+            o_orderdate
+            (+
+             #time/date "1993-07-01"
+             (single-field-interval "3" "MONTH" 2 6)))
+           (>= o_orderdate #time/date "1993-07-01"))}
+         o_orderkey
+         o_orderpriority]]]
+      [:project
+       [{l_comment l.3/l_comment}
+        {l_commitdate l.3/l_commitdate}
+        {l_discount l.3/l_discount}
+        {l_extendedprice l.3/l_extendedprice}
+        {l_linenumber l.3/l_linenumber}
+        {l_linestatus l.3/l_linestatus}
+        {l_orderkey l.3/l_orderkey}
+        {l_partkey l.3/l_partkey}
+        {l_quantity l.3/l_quantity}
+        {l_receiptdate l.3/l_receiptdate}
+        {l_returnflag l.3/l_returnflag}
+        {l_shipdate l.3/l_shipdate}
+        {l_shipinstruct l.3/l_shipinstruct}
+        {l_shipmode l.3/l_shipmode}
+        {l_suppkey l.3/l_suppkey}
+        {l_tax l.3/l_tax}]
+       [:rename
+        l.3
+        [:select
+         (< l_commitdate l_receiptdate)
+         [:scan
+          {:table lineitem}
+          [l_partkey
+           l_shipinstruct
+           l_discount
+           l_receiptdate
+           l_orderkey
+           l_returnflag
+           l_commitdate
+           l_extendedprice
+           l_linenumber
+           l_shipdate
+           l_quantity
+           l_comment
+           l_suppkey
+           l_shipmode
+           l_linestatus
+           l_tax]]]]]]]]]]]

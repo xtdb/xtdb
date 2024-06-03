@@ -1,30 +1,36 @@
-[:rename
- {x1 name, x6 course}
- [:project
-  [x1 x6]
-  [:select
-   (>= x8 x17)
-   [:map
-    [{x17 (+ x15 1)}]
-    [:group-by
-     [x1 x2 x3 x4 x6 x7 x8 xt$row_number_0 {x15 (avg x10)}]
-     [:left-outer-join
-      [(or (= x2 x11) (and (= x12 x3) (> x4 x13)))]
-      [:map
-       [{xt$row_number_0 (row-number)}]
-       [:mega-join
-        [{x2 x7}]
-        [[:rename
-          {name x1, id x2, major x3, year x4}
-          [:scan
-           {:table students}
-           [name
-            id
-            {major (or (= major "CS") (= major "Games Eng"))}
-            year]]]
-         [:rename
-          {course x6, sid x7, grade x8}
-          [:scan {:table exams} [course sid grade]]]]]]
-      [:rename
-       {grade x10, sid x11, curriculum x12, date x13}
-       [:scan {:table exams} [grade sid curriculum date]]]]]]]]]
+[:project
+ [{name s.1/name} {course e.2/course}]
+ [:select
+  (>= e.2/grade xt$sq_3)
+  [:map
+   [{xt$sq_3 (+ xt$avg_out_8 1)}]
+   [:group-by
+    [s.1/name
+     s.1/major
+     s.1/year
+     s.1/id
+     e.2/sid
+     e.2/course
+     e.2/grade
+     xt$row_number_0
+     {xt$avg_out_8 (avg e2.4/grade)}]
+    [:left-outer-join
+     [(or
+       (= s.1/id e2.4/sid)
+       (and (= e2.4/curriculum s.1/major) (> s.1/year e2.4/date)))]
+     [:map
+      [{xt$row_number_0 (row-number)}]
+      [:mega-join
+       [{s.1/id e.2/sid}]
+       [[:rename
+         s.1
+         [:scan
+          {:table students}
+          [name
+           {major (or (= major "CS") (= major "Games Eng"))}
+           year
+           id]]]
+        [:rename e.2 [:scan {:table exams} [sid course grade]]]]]]
+     [:rename
+      e2.4
+      [:scan {:table exams} [sid grade date curriculum]]]]]]]]

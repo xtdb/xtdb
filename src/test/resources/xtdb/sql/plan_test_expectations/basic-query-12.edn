@@ -1,1 +1,7 @@
-[:rename {x1 bar} [:rename {name x1} [:scan {:table stars_in} [name]]]]
+[:project
+ [{bar foo.2/bar}]
+ [:rename
+  foo.2
+  [:rename
+   {si.1/name bar}
+   [:rename si.1 [:scan {:table stars_in} [name]]]]]]

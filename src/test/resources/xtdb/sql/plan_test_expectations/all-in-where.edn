@@ -1,8 +1,8 @@
-[:rename
- {x1 y}
- [:project
-  [x1]
-  [:anti-join
-   [(or (<= x2 x4) (nil? x2) (nil? x4))]
-   [:rename {y x1, z x2} [:scan {:table x} [y z]]]
-   [:rename {z x4} [:scan {:table y} [z]]]]]]
+[:project
+ [{y x.1/y}]
+ [:map
+  [{xt$sq_2 true}]
+  [:semi-join
+   [(<= x.1/z z)]
+   [:rename x.1 [:scan {:table x} [y z]]]
+   [:project [{z y.3/z}] [:rename y.3 [:scan {:table y} [z]]]]]]]

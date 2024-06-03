@@ -1,0 +1,7 @@
+[:project
+ [{bar xt$sum_out_2}]
+ [:group-by
+  [{xt$sum_out_2 (sum xt$sum_in_3)}]
+  [:map
+   [{xt$sum_in_3 (- foo.1/a 4)}]
+   [:rename foo.1 [:scan {:table foo} [a]]]]]]

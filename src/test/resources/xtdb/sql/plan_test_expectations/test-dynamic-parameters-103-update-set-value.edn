@@ -1,20 +1,18 @@
 [:update
- {:table "t1"}
- [:rename
-  {x1 xt$iid,
-   x4 xt$system_to,
-   x5 xt$system_from,
-   x7 col1,
-   x8 xt$valid_from,
-   x9 xt$valid_to}
+ {:table t1}
+ [:project
+  [xt$iid
+   {xt$valid_from
+    (greatest
+     xt$valid_from
+     (cast (current-timestamp) [:timestamp-tz :micro "UTC"]))}
+   xt$valid_to
+   col1]
   [:project
-   [x1 x4 x5 {x7 ?_0} {x8 (cast-tstz x3)} {x9 (cast-tstz x2)}]
+   ({xt$iid t1.1/xt$iid}
+    {xt$valid_from t1.1/xt$valid_from}
+    {xt$valid_to t1.1/xt$valid_to}
+    {col1 ?_0})
    [:rename
-    {xt$iid x1,
-     xt$valid_to x2,
-     xt$valid_from x3,
-     xt$system_to x4,
-     xt$system_from x5}
-    [:scan
-     {:table t1}
-     (xt$iid xt$valid_to xt$valid_from xt$system_to xt$system_from)]]]]]
+    t1.1
+    [:scan {:table t1} [xt$valid_from xt$iid xt$valid_to]]]]]]

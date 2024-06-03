@@ -1,1 +1,7 @@
-[:scan {:table foo} [a b]]
+[:project
+ [{a bar.2/a} {b bar.2/b}]
+ [:rename
+  bar.2
+  [:project
+   [{a foo.1/a} {b foo.1/b}]
+   [:rename foo.1 [:scan {:table foo} [b a]]]]]]

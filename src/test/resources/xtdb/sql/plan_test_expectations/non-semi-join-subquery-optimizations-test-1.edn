@@ -1,10 +1,10 @@
-[:rename
- {x1 a}
- [:project
-  [x1]
-  [:select
-   (or x7 (= x2 42))
-   [:mark-join
-    {x7 [{x1 x4}]}
-    [:rename {a x1, b x2} [:scan {:table foo} [a b]]]
-    [:table [x4] [{x4 1} {x4 2}]]]]]]
+[:project
+ [{a f.1/a}]
+ [:select
+  (or xt$sq_2 (= f.1/b 42))
+  [:mark-join
+   {xt$sq_2 [{f.1/a xt.values.3/xt$column_1}]}
+   [:rename f.1 [:scan {:table foo} [b a]]]
+   [:rename
+    xt.values.3
+    [:table [xt$column_1] [{:xt$column_1 1} {:xt$column_1 2}]]]]]]

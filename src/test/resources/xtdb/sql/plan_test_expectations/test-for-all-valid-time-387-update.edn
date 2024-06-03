@@ -1,20 +1,12 @@
 [:update
- {:table "users"}
- [:rename
-  {x1 xt$iid,
-   x4 xt$system_to,
-   x5 xt$system_from,
-   x7 first_name,
-   x8 xt$valid_from,
-   x9 xt$valid_to}
-  [:project
-   [x1 x4 x5 {x7 "Sue"} {x8 (cast-tstz x3)} {x9 (cast-tstz x2)}]
-   [:rename
-    {xt$iid x1,
-     xt$valid_to x2,
-     xt$valid_from x3,
-     xt$system_to x4,
-     xt$system_from x5}
-    [:scan
-     {:table users, :for-valid-time :all-time}
-     (xt$iid xt$valid_to xt$valid_from xt$system_to xt$system_from)]]]]]
+ {:table users}
+ [:project
+  ({xt$iid users.1/xt$iid}
+   {xt$valid_from users.1/xt$valid_from}
+   {xt$valid_to users.1/xt$valid_to}
+   {first_name "Sue"})
+  [:rename
+   users.1
+   [:scan
+    {:table users, :for-valid-time :all-time}
+    [xt$valid_from xt$iid xt$valid_to]]]]]

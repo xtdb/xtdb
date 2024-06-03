@@ -1,1 +1,5 @@
-[:scan {:table information_schema$columns} [column_name]]
+[:project
+ [{column_name f.1/column_name}]
+ [:rename
+  f.1
+  [:scan {:table information_schema/columns} [column_name]]]]

@@ -6,22 +6,22 @@ INSERT INTO t1(xt$id) VALUES(1)
 # testing projection/construction
 
 query T rowsort
-SELECT OBJECT('id': 1) FROM t1
+SELECT OBJECT(id: 1) FROM t1
 ----
 {"id" 1}
 
 query T rowsort
-SELECT OBJECT ('foo': 2, 'bar': OBJECT('baz': 'biff')) FROM t1
+SELECT OBJECT (foo: 2, bar: OBJECT(baz: 'biff')) FROM t1
 ----
 {"bar" {"baz" "biff"}, "foo" 2}
 
 query T rowsort
-SELECT OBJECT ('foo': OBJECT('bibble': true),
-			   'bar': OBJECT('baz': -4113466,
-							 'flib': OBJECT('true': false)))
+SELECT OBJECT (foo: OBJECT(bibble: true),
+			   bar: OBJECT(baz: -4113466,
+                           flib: OBJECT(flob: false)))
 FROM t1
 ----
-{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
+{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
 
 query T rowsort
 SELECT ARRAY ['foo', 'bar'] FROM t1
@@ -39,12 +39,12 @@ SELECT ARRAY [true, FALSE, true, TRUE, false] FROM t1
 [true false true true false]
 
 query T rowsort
-SELECT OBJECT ('foo': 5, 'bar': OBJECT('baz': ARRAY [-45, 1, 24])) FROM t1
+SELECT OBJECT (foo: 5, bar: OBJECT(baz: ARRAY [-45, 1, 24])) FROM t1
 ----
 {"bar" {"baz" [-45 1 24]}, "foo" 5}
 
 query T rowsort
-SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1
+SELECT ARRAY [OBJECT(foo: 5), OBJECT(foo: 5)] FROM t1
 ----
 [{"foo" 5} {"foo" 5}]
 
@@ -54,28 +54,28 @@ INSERT INTO t1(xt$id) VALUES(2)
 # testing more than one row
 
 query T rowsort
-SELECT OBJECT ('foo': OBJECT('bibble': true),
-			   'bar': OBJECT('baz': -4113466,
-							 'flib': OBJECT('true': false)))
+SELECT OBJECT (foo: OBJECT(bibble: true),
+			   bar: OBJECT(baz: -4113466,
+                           flib: OBJECT(flob: false)))
 FROM t1
 ----
-{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
-{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
+{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
+{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
 
 # testing field refs
 
 query T nosort
-SELECT foo.a.b
-FROM (VALUES ({'b': 42}),
-			 ({'d': 100})) AS foo(a)
+SELECT (foo.a).b
+FROM (VALUES ({b: 42}),
+			 ({d: 100})) AS foo(a)
 ----
 42
 NULL
 
 query T nosort
-SELECT foo.a.b.c
-FROM (VALUES ({'b': {'c': 'cat'}}),
- 			 ({'d': 100})) AS foo(a)
+SELECT (foo.a).b.c
+FROM (VALUES ({b: {c: 'cat'}}),
+ 			 ({d: 100})) AS foo(a)
 ----
 cat
 NULL
@@ -84,19 +84,19 @@ NULL
 
 statement ok
 INSERT INTO t2(xt$id, data)
-VALUES(1, OBJECT ('foo': OBJECT('bibble': true),
-				  'bar': OBJECT('baz': -4113466,
-				        		'flib': OBJECT('true': false))))
+VALUES(1, OBJECT (foo: OBJECT(bibble: true),
+				  bar: OBJECT(baz: -4113466,
+				              flib: OBJECT(flob: false))))
 
 statement ok
 INSERT INTO t2(xt$id, data)
-VALUES(2, {'foo': {'bibble': true},
-		   'bar': {'baz': 1001}})
+VALUES(2, {foo: {bibble: true},
+		   bar: {baz: 1001}})
 
 query T rowsort
 SELECT t2.data FROM t2
 ----
-{"bar" {"baz" -4113466, "flib" {"true" false}}, "foo" {"bibble" true}}
+{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
 {"bar" {"baz" 1001}, "foo" {"bibble" true}}
 
 # SEE 440

@@ -1,53 +1,119 @@
-[:rename
- {x1 s_name, x29 numwait}
- [:top
-  {:limit 100}
+[:top
+ {:offset nil, :limit 100}
+ [:project
+  [{s_name s.1/s_name} numwait]
   [:order-by
-   [[x29 {:direction :desc, :null-ordering :nulls-last}]
-    [x1 {:direction :asc, :null-ordering :nulls-last}]]
-   [:group-by
-    [x1 {x29 (count x28)}]
-    [:map
-     [{x28 1}]
-     [:mega-join
-      [{x3 x13} {x6 x10} {x2 x5}]
-      [[:rename
-        {n_nationkey x13, n_name x14}
-        [:scan
-         {:table nation}
-         [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]
-       [:rename
-        {o_orderkey x10, o_orderstatus x11}
-        [:scan
-         {:table orders}
-         [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]
-       [:rename
-        {s_name x1, s_suppkey x2, s_nationkey x3}
-        [:scan {:table supplier} [s_name s_suppkey s_nationkey]]]
-       [:anti-join
-        [(<> x22 x5) {x6 x21}]
-        [:semi-join
-         [(<> x17 x5) {x6 x16}]
-         [:rename
-          {l_suppkey x5,
-           l_orderkey x6,
-           l_receiptdate x7,
-           l_commitdate x8}
-          [:select
-           (> l_receiptdate l_commitdate)
-           [:scan
-            {:table lineitem}
-            [l_suppkey l_orderkey l_receiptdate l_commitdate]]]]
-         [:rename
-          {l_orderkey x16, l_suppkey x17}
-          [:scan {:table lineitem} [l_orderkey l_suppkey]]]]
-        [:rename
-         {l_orderkey x21,
-          l_suppkey x22,
-          l_receiptdate x23,
-          l_commitdate x24}
-         [:select
-          (> l_receiptdate l_commitdate)
+   [[numwait {:direction :desc, :null-ordering :nulls-first}]
+    [s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]
+   [:project
+    [s.1/s_name {numwait xt$row_count_13}]
+    [:group-by
+     [s.1/s_name {xt$row_count_13 (row-count)}]
+     [:map
+      [{xt$sq_9 true}]
+      [:map
+       [{xt$sq_5 true}]
+       [:mega-join
+        [{s.1/s_nationkey n.4/n_nationkey}
+         {l1.2/l_orderkey o.3/o_orderkey}
+         {s.1/s_suppkey l1.2/l_suppkey}]
+        [[:rename
+          n.4
           [:scan
-           {:table lineitem}
-           [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]]]
+           {:table nation}
+           [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]
+         [:rename
+          o.3
+          [:scan
+           {:table orders}
+           [{o_orderstatus (= o_orderstatus "F")} o_orderkey]]]
+         [:rename
+          s.1
+          [:scan {:table supplier} [s_name s_nationkey s_suppkey]]]
+         [:anti-join
+          [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
+          [:semi-join
+           [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
+           [:rename
+            l1.2
+            [:select
+             (> l_receiptdate l_commitdate)
+             [:scan
+              {:table lineitem}
+              [l_receiptdate l_suppkey l_orderkey l_commitdate]]]]
+           [:project
+            [{l_comment l2.6/l_comment}
+             {l_commitdate l2.6/l_commitdate}
+             {l_discount l2.6/l_discount}
+             {l_extendedprice l2.6/l_extendedprice}
+             {l_linenumber l2.6/l_linenumber}
+             {l_linestatus l2.6/l_linestatus}
+             {l_orderkey l2.6/l_orderkey}
+             {l_partkey l2.6/l_partkey}
+             {l_quantity l2.6/l_quantity}
+             {l_receiptdate l2.6/l_receiptdate}
+             {l_returnflag l2.6/l_returnflag}
+             {l_shipdate l2.6/l_shipdate}
+             {l_shipinstruct l2.6/l_shipinstruct}
+             {l_shipmode l2.6/l_shipmode}
+             {l_suppkey l2.6/l_suppkey}
+             {l_tax l2.6/l_tax}]
+            [:rename
+             l2.6
+             [:scan
+              {:table lineitem}
+              [l_partkey
+               l_shipinstruct
+               l_receiptdate
+               l_discount
+               l_orderkey
+               l_returnflag
+               l_commitdate
+               l_extendedprice
+               l_linenumber
+               l_shipdate
+               l_quantity
+               l_comment
+               l_suppkey
+               l_shipmode
+               l_linestatus
+               l_tax]]]]]
+          [:project
+           [{l_comment l3.10/l_comment}
+            {l_commitdate l3.10/l_commitdate}
+            {l_discount l3.10/l_discount}
+            {l_extendedprice l3.10/l_extendedprice}
+            {l_linenumber l3.10/l_linenumber}
+            {l_linestatus l3.10/l_linestatus}
+            {l_orderkey l3.10/l_orderkey}
+            {l_partkey l3.10/l_partkey}
+            {l_quantity l3.10/l_quantity}
+            {l_receiptdate l3.10/l_receiptdate}
+            {l_returnflag l3.10/l_returnflag}
+            {l_shipdate l3.10/l_shipdate}
+            {l_shipinstruct l3.10/l_shipinstruct}
+            {l_shipmode l3.10/l_shipmode}
+            {l_suppkey l3.10/l_suppkey}
+            {l_tax l3.10/l_tax}]
+           [:rename
+            l3.10
+            [:select
+             (> l_receiptdate l_commitdate)
+             [:scan
+              {:table lineitem}
+              [l_partkey
+               l_shipinstruct
+               l_discount
+               l_receiptdate
+               l_orderkey
+               l_returnflag
+               l_commitdate
+               l_extendedprice
+               l_linenumber
+               l_shipdate
+               l_quantity
+               l_comment
+               l_suppkey
+               l_shipmode
+               l_linestatus
+               l_tax]]]]]]]]]]]]]]]

@@ -1,7 +1,7 @@
 hash-threshold 100
 
 query T nosort
-SELECT foo.xt$id FROM ARROW_TABLE('src/test/resources/xtdb/operator/arrow-cursor-test.arrow') AS foo
+SELECT foo.xt$id FROM ARROW_TABLE('src/test/resources/xtdb/operator/arrow-cursor-test.arrow') AS foo(xt$id)
 ----
 foo1
 foo2

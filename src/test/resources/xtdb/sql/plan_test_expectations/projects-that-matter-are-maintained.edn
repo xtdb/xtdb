@@ -1,10 +1,12 @@
-[:rename
- {x1 id}
- [:distinct
-  [:union-all
-   [:rename {id x1} [:scan {:table customers} [id]]]
-   [:project
-    [x1]
-    [:rename
-     {id x1, product x4}
-     [:scan {:table orders} [id product]]]]]]]
+[:distinct
+ [:union-all
+  [:project
+   [{id customers.1/id}]
+   [:rename customers.1 [:scan {:table customers} [id]]]]
+  [:project
+   [{id o.3/id}]
+   [:rename
+    o.3
+    [:project
+     [{id orders.2/id} {product orders.2/product}]
+     [:rename orders.2 [:scan {:table orders} [product id]]]]]]]]

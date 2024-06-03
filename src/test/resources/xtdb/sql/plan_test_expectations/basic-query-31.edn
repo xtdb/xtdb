@@ -1,8 +1,10 @@
-[:rename
- {x1 films, x3 xt$column_2, x4 xt$column_3}
- [:project
-  [x1 x3 x4]
-  [:unnest
-   {x3 x1}
-   {:ordinality-column x4}
-   [:rename {films x1} [:scan {:table stars_in} [films]]]]]]
+[:project
+ [{xt$column_1 film.3/xt$unnest.4}
+  {xt$column_2 film.3/xt$ordinal.5}
+  {films si.1/films}]
+ [:unnest
+  {film.3/xt$unnest.4 unnest}
+  {:ordinality-column film.3/xt$ordinal.5}
+  [:map
+   [{unnest si.1/films}]
+   [:rename si.1 [:scan {:table stars_in} [films]]]]]]

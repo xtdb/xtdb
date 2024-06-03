@@ -1,5 +1,5 @@
-[:rename
- {x1 movie_title}
+[:project
+ [{movie_title si.1/movie_title}]
  [:order-by
-  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
-  [:rename {movie_title x1} [:scan {:table stars_in} [movie_title]]]]]
+  [[si.1/movie_title {:direction :asc, :null-ordering :nulls-last}]]
+  [:rename si.1 [:scan {:table stars_in} [movie_title]]]]]

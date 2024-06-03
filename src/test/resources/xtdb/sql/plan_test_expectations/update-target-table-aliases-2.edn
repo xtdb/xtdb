@@ -1,0 +1,18 @@
+[:update
+ {:table t1}
+ [:project
+  [xt$iid
+   {xt$valid_from
+    (greatest
+     xt$valid_from
+     (cast (current-timestamp) [:timestamp-tz :micro "UTC"]))}
+   xt$valid_to
+   col1]
+  [:project
+   ({xt$iid t1.1/xt$iid}
+    {xt$valid_from t1.1/xt$valid_from}
+    {xt$valid_to t1.1/xt$valid_to}
+    {col1 30})
+   [:rename
+    t1.1
+    [:scan {:table t1} [xt$valid_from xt$iid xt$valid_to]]]]]]

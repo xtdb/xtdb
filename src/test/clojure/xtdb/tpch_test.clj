@@ -2,14 +2,14 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.sql :as core.sql]
+            [xtdb.compactor :as c]
             [xtdb.datasets.tpch :as tpch]
-            [xtdb.datasets.tpch.xtql :as tpch-xtql]
             [xtdb.datasets.tpch.ra :as tpch-ra]
+            [xtdb.datasets.tpch.xtql :as tpch-xtql]
             xtdb.sql-test
+            [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.compactor :as c])
+            [xtdb.util :as util])
   (:import (java.nio.file Path)))
 
 (def ^:dynamic *node* nil)
@@ -145,13 +145,25 @@
 
 ;; TODO unable to decorr Q19, select stuck under this top/union exists thing
 
+(def tpch-table-info
+  {"customer" #{"c_custkey" "c_name" "c_address" "c_nationkey" "c_phone" "c_acctbal" "c_mktsegment" "c_comment"}
+   "lineitem" #{"l_orderkey" "l_partkey" "l_suppkey" "l_linenumber" "l_quantity" "l_extendedprice" "l_discount" "l_tax" "l_returnflag" "l_linestatus" "l_shipdate" "l_commitdate" "l_receiptdate" "l_shipinstruct" "l_shipmode" "l_comment"}
+   "nation" #{"n_nationkey" "n_name" "n_regionkey" "n_comment"}
+   "orders" #{"o_orderkey" "o_custkey" "o_orderstatus" "o_totalprice" "o_orderdate" "o_orderpriority" "o_clerk" "o_shippriority" "o_comment"}
+   "part" #{"p_partkey" "p_name" "p_mfgr" "p_brand" "p_type" "p_size" "p_container" "p_retailprice" "p_comment"}
+   "partsupp" #{"ps_partkey" "ps_suppkey" "ps_availqty" "ps_supplycost" "ps_comment"}
+   "region" #{"r_regionkey" "r_name" "r_comment"}
+   "supplier" #{"s_suppkey" "s_name" "s_address" "s_nationkey" "s_phone" "s_acctbal" "s_comment"}})
+
 (t/deftest test-sql-plans
   (dotimes [n 22]
     (let [n (inc n)]
       (when (contains? *qs* n)
         (t/is (=plan-file
                (format "tpch/q%02d" n)
-               (core.sql/compile-query (slurp-sql-query n)))
+               (-> (plan/plan-statement (slurp-sql-query n)
+                                        {:table-info tpch-table-info})
+                   plan/->logical-plan))
               (format "Q%02d" n))))))
 
 (defn test-sql-query

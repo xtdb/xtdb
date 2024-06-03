@@ -1,8 +1,8 @@
 (ns xtdb.rewrite
   (:require [clojure.walk :as w]
             [xtdb.error :as err])
-  (:import [clojure.lang Box ILookup IObj IPersistentVector Indexed MapEntry]
-           [java.util ArrayList List Map Objects]
+  (:import [clojure.lang ILookup IObj IPersistentVector Indexed]
+           [java.util Objects]
            java.util.regex.Pattern))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -91,25 +91,6 @@
   `(let [^Zip z# ~z]
      (.node z#)))
 
-(defmacro zbranch? [z]
-  `(instance? IPersistentVector (znode ~z)))
-
-(defmacro zleft [z]
-  `(let [^Zip z# ~z]
-     (when-let [^Zip parent# (zup z#)]
-       (let [idx# (unchecked-dec-int (.idx z#))
-             ^IPersistentVector level# (.node parent#)]
-         (when-some [child-node# (.nth level# idx# nil)]
-           (Zip. child-node# idx# parent# 0 (.depth z#)))))))
-
-(defmacro zleft-no-edit [z]
-  `(let [^Zip z# ~z]
-     (when-let [^Zip parent# (.parent z#)]
-       (let [idx# (unchecked-dec-int (.idx z#))
-             ^IPersistentVector level# (.node parent#)]
-         (when-some [child-node# (.nth level# idx# nil)]
-           (Zip. child-node# idx# parent# 0 (.depth z#)))))))
-
 (defmacro zright [z]
   `(let [^Zip z# ~z]
      (when-let [^Zip parent# (zup z#)]
@@ -118,42 +99,12 @@
          (when-some [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
-(defmacro zright-no-edit [z]
-  `(let [^Zip z# ~z]
-     (when-let [^Zip parent# (.parent z#)]
-       (let [idx# (unchecked-inc-int (.idx z#))
-             ^IPersistentVector level# (.node parent#)]
-         (when-some [child-node# (.nth level# idx# nil)]
-           (Zip. child-node# idx# parent# 0 (.depth z#)))))))
-
-(defmacro znth [z idx]
-  `(let [^Zip z# ~z
-         ^IPersistentVector node# (.node z#)]
-     (when (instance? IPersistentVector node#)
-       (let [idx# (if (neg? ~idx)
-                    (unchecked-add-int (.count node#) ~idx)
-                    ~idx)]
-         (when-some [child-node# (.nth node# idx# nil)]
-           (Zip. child-node# idx# z# 0 (unchecked-inc-int (.depth z#))))))))
-
 (defmacro zdown [z]
   `(let [^Zip z# ~z
          ^IPersistentVector node# (.node z#)]
      (when (instance? IPersistentVector node#)
        (when-some [child-node# (.nth node# 0 nil)]
          (Zip. child-node# 0 z# 0 (unchecked-inc-int (.depth z#)))))))
-
-(defmacro zups [z depth]
-  `(loop [^Zip z# ~z]
-     (if (= ~depth (.depth z#))
-       z#
-       (recur (zup z#)))))
-
-(defmacro zroot [z]
-  `(loop [^Zip z# ~z]
-     (if-let [z# (zup z#)]
-       (recur z#)
-       (.node z#))))
 
 (defmacro zright-or-up [z depth]
   `(loop [^Zip z# ~z]
@@ -185,50 +136,6 @@
   `(let [^Zip z# ~z]
      (or (zdown z#)
          (zright-or-up-bu z# ~depth ~out-fn))))
-
-(defmacro zright-or-up-no-edit [z depth]
-  `(loop [z# ~z]
-     (when-not (= ~depth (.depth z#))
-       (or (zright-no-edit z#)
-           (recur (.parent z#))))))
-
-(defmacro znext-no-edit [z depth]
-  `(let [^Zip z# ~z]
-     (or (zdown z#)
-         (zright-or-up-no-edit z# ~depth))))
-
-(defmacro zprev [z]
-  `(let [^Zip z# ~z]
-     (if-let [z# (zleft z#)]
-       (loop [z# z#]
-         (if-let [z# (znth z# -1)]
-           (recur z#)
-           z#))
-       (zup z#))))
-
-(defmacro zprev-no-edit [z]
-  `(let [^Zip z# ~z]
-     (if-let [^Zip z# (zleft-no-edit z#)]
-       (loop [z# z#]
-         (if-let [z# (znth z# -1)]
-           (recur z#)
-           z#))
-       (.parent z#))))
-
-(defmacro zchild-idx [z]
-  `(let [^Zip z# ~z]
-     (.idx z#)))
-
-(defmacro zchildren [z]
-  `(vec (.node ^Zip (.parent ~z))))
-
-(defmacro zrights [z]
-  `(let [^Zip z# ~z]
-     (seq (subvec (zchildren z#) (unchecked-inc-int (.idx z#))))))
-
-(defmacro zlefts [z]
-  `(let [^Zip z# ~z]
-     (seq (subvec (zchildren z#) 0 (.idx z#)))))
 
 (defmacro zreplace [z x]
   `(let [^Zip z# ~z
@@ -434,70 +341,9 @@
   `(->zipper ~x))
 (defmacro node [x]
   `(znode ~x))
-(defmacro root [x]
-  `(zroot ~x))
-(defmacro left [x]
-  `(zleft ~x))
-(defmacro right [x]
-  `(zright ~x))
-(defmacro prev [x]
-  `(zprev ~x))
-(defmacro parent [x]
-  `(zup ~x))
-(defmacro $ [x n]
-  `(znth ~x ~n))
-(defmacro child-idx [x]
-  `(zchild-idx ~x))
-
-(defmacro lexeme [ag n]
-  `(some-> ($ ~ag ~n) (znode)))
-
-(defmacro first-child? [ag]
-  `(= 1 (count (zlefts ~ag))))
-
-(defmacro left-or-parent [ag]
-  `(let [^Zip ag# ~ag]
-     (if (first-child? ag#)
-       (parent ag#)
-       (zleft ag#))))
 
 (defmacro zcase {:style/indent 1} [ag & body]
   `(case (ctor ~ag) ~@body))
-
-(def ^:dynamic *memo*)
-
-(defn zmemoize-with-inherited [f]
-  (fn [x]
-    (let [^Map memo *memo*
-          memo-box (Box. nil)]
-      (loop [^Zip x x
-             inherited? false]
-        (let [k (MapEntry/create f x)
-              ^Box stored-memo-box (.getOrDefault memo k memo-box)]
-          (if (identical? memo-box stored-memo-box)
-            (let [v (f x)]
-              (.put memo k memo-box)
-              (if (= ::inherit v)
-                (some-> x (parent) (recur true))
-                (do (set! (.val memo-box) v)
-                    v)))
-            (let [v (.val stored-memo-box)]
-              (when inherited?
-                (set! (.val memo-box) v))
-              v)))))))
-
-(defn zmemoize [f]
-  (fn [^Zip x]
-    (let [^Map memo *memo*
-          k (MapEntry/create f x)
-          v (.getOrDefault memo k ::not-found)]
-      (if (= ::not-found v)
-        (let [v (f x)]
-          (if (= ::inherit v)
-            (some-> x (parent) (recur))
-            (doto v
-              (->> (.put memo k)))))
-        v))))
 
 (defn find-first [f z]
   (loop [z (zdown z)]
@@ -505,13 +351,6 @@
       (if (f z)
         z
         (recur (zright z))))))
-
-(defn right-zips
-  "returns a seq of zips for this node and all of its right-hand siblings"
-  [z]
-  (->> (iterate #(zright %) z)
-       (take-while some?)))
-
 
 ;; Strategic Zippers based on Ztrategic
 
@@ -541,23 +380,6 @@
             (.z ^StrategyDone z)
             (recur z)))))))
 
-(defn full-bu-tp [f ^Zip z]
-  (let [depth (.depth z)]
-    (loop [^Zip z z]
-      (when-let [z (znext-bu z depth f)]
-        (if (zstate-done? z)
-          (f (.z ^StrategyDone z))
-          (recur z))))))
-
-(defn once-td-tp [f ^Zip z]
-  (let [depth (.depth z)]
-    (loop [z z]
-      (if-let [^Zip z (f z)]
-        (zups z depth)
-        (when-let [z (znext z depth)]
-          (when-not (zstate-done? z)
-            (recur z)))))))
-
 (defn z-try-apply-m [f]
   (fn [^Zip z]
     (some->> (f z)
@@ -579,7 +401,7 @@
                     (StrategyRepeat. z)
                     z))]
     (loop [^Zip z z]
-      (if-let [z (znext-bu z depth inner-f)]
+      (when-let [z (znext-bu z depth inner-f)]
         (if (zstate-done? z)
           (if-let [z (f (.z ^StrategyDone z))]
             (recur z)
@@ -588,59 +410,3 @@
 
 (def topdown full-td-tp)
 
-(def bottomup full-bu-tp)
-
-;; Type Unifying
-
-(defn- into-array-list
-  ([] (ArrayList. 0))
-  ([x] (vec x))
-  ([^List x ^List y]
-   (if y
-     (doto x
-       (.addAll y))
-     x)))
-
-(defn collect
-  ([f z]
-   (collect f into-array-list z))
-  ([f m ^Zip z]
-   (let [depth (.depth z)]
-     (loop [z z
-            acc (m)]
-       (let [acc (if-some [x (f z)]
-                   (m acc x)
-                   acc)]
-         (if-let [z (znext-no-edit z depth)]
-           (recur z acc)
-           (m acc)))))))
-
-(defn collect-stop
-  ([f z]
-   (collect-stop f into-array-list z))
-  ([f m ^Zip z]
-   (let [depth (.depth z)]
-     (loop [z z
-            acc (m)]
-       (let [x (f z)
-             stop? (some? x)
-             acc (if stop?
-                   (m acc x)
-                   acc)]
-         (if-let [z (if stop?
-                      (zright-or-up-no-edit z depth)
-                      (znext-no-edit z depth))]
-           (recur z acc)
-           (m acc)))))))
-
-(defn reduce-children [combinef f z]
-  ;;children includes the first element which in the case of our AST and RA is the name
-  (loop [acc (combinef)
-         z (zdown z)]
-    (if z
-      (recur
-        (if-let [v (f z)]
-          (combinef acc v)
-          acc)
-        (zright z))
-      acc)))

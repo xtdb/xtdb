@@ -1,8 +1,6 @@
-[:rename
- {x3 title}
- [:project
-  [x3]
-  [:mega-join
-   [{x1 x3}]
-   [[:rename {title x1} [:scan {:table movie} [title]]]
-    [:rename {title x3} [:scan {:table stars_in} [title]]]]]]]
+[:project
+ [{title si.2/title}]
+ [:mega-join
+  [{m.1/title si.2/title}]
+  [[:rename m.1 [:scan {:table movie} [title]]]
+   [:rename si.2 [:scan {:table stars_in} [title]]]]]]

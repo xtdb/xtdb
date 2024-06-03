@@ -1,12 +1,13 @@
 (ns xtdb.node-test
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.util :as util]
-            [xtdb.serde :as serde])
+            [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
            [xtdb.api.tx TxOps]
            [xtdb.query IQuerySource]))
@@ -150,7 +151,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
 (t/deftest test-interval-literal-cce-271
   (t/is (= [{:a #xt/interval-ym "P12M"}]
-           (xt/q tu/*node* "select a.a from (values (1 year)) a (a)"))))
+           (xt/q tu/*node* "select a.a from (values (INTERVAL '1' YEAR)) a (a)"))))
 
 (t/deftest test-overrides-range
   (xt/submit-tx tu/*node* [[:sql "
@@ -257,7 +258,9 @@ WHERE foo.xt$id = 1"]])]
                (q2 {:basis {:at-tx tx2}, :default-all-valid-time? true}))))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, xt$valid_from) VALUES (1, '2018-01-01')"]])
+  (t/is (= (serde/->tx-aborted 0 (time/->instant #inst "2020-01-01")
+                               #xt/runtime-err [:xtdb.expression/invalid-temporal-string "String '2018-01-01' has invalid format for type timestamp with timezone" {}])
+           (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, xt$valid_from) VALUES (1, '2018-01-01')"]])))
 
   ;; TODO check the rollback error when it's available, #401
   (t/is (= [] (xt/q tu/*node* "SELECT foo.xt$id FROM foo"))))
@@ -269,7 +272,6 @@ WHERE foo.xt$id = 1"]])]
   (t/is (= [{:a [["hello"] "world"]}]
            (xt/q tu/*node* "SELECT a.a FROM (VALUES (ARRAY [['hello'], 'world'])) a (a)"))))
 
-#_ ;TODO
 (t/deftest test-double-quoted-col-refs
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, \"kebab-case-col\") VALUES (1, 'kebab-case-value')"]])
   (t/is (= [{:xt/id 1, :kebab-case-col "kebab-case-value"}]
@@ -309,17 +311,17 @@ WHERE foo.xt$id = 1"]])]
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t3(xt$id, data) VALUES (1, [2, 3])"]
                            [:sql "INSERT INTO t3(xt$id, data) VALUES (2, [6, 7])"]])
 
-  (t/is (= {{:data [2 3], :data:1 [2 3]} 1
-            {:data [2 3], :data:1 [6 7]} 1
-            {:data [6 7], :data:1 [2 3]} 1
-            {:data [6 7], :data:1 [6 7]} 1}
-           (frequencies (xt/q tu/*node* "SELECT t3.data, t2.data FROM t3, t3 AS t2")))))
+  (t/is (= {{:t3-data [2 3], :t2-data [2 3]} 1
+            {:t3-data [2 3], :t2-data [6 7]} 1
+            {:t3-data [6 7], :t2-data [2 3]} 1
+            {:t3-data [6 7], :t2-data [6 7]} 1}
+           (frequencies (xt/q tu/*node* "SELECT t3.data AS t3_data, t2.data AS t2_data FROM t3, t3 AS t2")))))
 
 (t/deftest test-mutable-data-buffer-bug
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id) VALUES(1)"]])
 
   (t/is (= [{:col [{:foo 5} {:foo 5}]}]
-           (xt/q tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] AS col FROM t1"))))
+           (xt/q tu/*node* "SELECT ARRAY [OBJECT(foo: 5), OBJECT(foo: 5)] AS col FROM t1"))))
 
 (t/deftest test-differing-length-lists-441
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES (1, [2, 3])"]
@@ -337,11 +339,11 @@ WHERE foo.xt$id = 1"]])]
 (t/deftest test-cross-join-ioobe-2343
   (xt/submit-tx tu/*node* [[:sql "
 INSERT INTO t2(xt$id, data)
-VALUES(2, OBJECT ('foo': OBJECT('bibble': false), 'bar': OBJECT('baz': 1002)))"]
+VALUES(2, OBJECT (foo: OBJECT(bibble: false), bar: OBJECT(baz: 1002)))"]
 
                            [:sql "
 INSERT INTO t1(xt$id, data)
-VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]])
+VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:t2d {:foo {:bibble false}, :bar {:baz 1002}},
              :t1d {:foo {:bibble true}, :bar {:baz 1001}}}]
@@ -419,8 +421,8 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   (xt/submit-tx tu/*node*
                 [[:sql "INSERT INTO foo (xt$id, a) VALUES (1, 1)"]
                  [:sql "INSERT INTO foo (xt$id, b) VALUES (2, 2)"]
-                 [:sql "INSERT INTO bar (xt$id, a) VALUES (1, 3)"]
-                 [:sql "INSERT INTO bar (xt$id, b) VALUES (2, 4)"]])
+                 [:sql "INSERT INTO bar (xt$id, c) VALUES (1, 3)"]
+                 [:sql "INSERT INTO bar (xt$id, d) VALUES (2, 4)"]])
 
   (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
            (set (xt/q tu/*node* "SELECT * FROM foo"))))
@@ -428,35 +430,43 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
            (set (xt/q tu/*node* "FROM foo"))))
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "SELECT * FROM foo, bar"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT * EXCLUDE (xt$id) FROM foo, bar"))))
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "FROM foo, bar"))))
+  ;; Thrown due to duplicate column projection in the query on `xt$id`
+  (t/is (thrown-with-msg? 
+         IllegalArgumentException
+         #"Duplicate column projection: xt\$id" 
+         (xt/q tu/*node* "FROM foo, bar")))
+  
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Duplicate column projection: xt\$id"
+         (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar")))
 
-  (t/is (= #{{:xt/id 1, :a 3, :xt/id:1 1, :a:1 1}
-             {:xt/id 2, :b 4, :xt/id:1 1, :a:1 1}
-             {:xt/id 1, :a 3, :xt/id:1 2, :b:1 2}
-             {:xt/id 2, :b 4, :xt/id:1 2, :b:1 2}}
-           (set (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT bar.* EXCLUDE (xt$id), foo.* EXCLUDE (xt$id) FROM foo, bar"))))
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "SELECT * FROM (SELECT * FROM foo, bar) AS baz"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT * FROM (SELECT * EXCLUDE (xt$id) FROM foo, bar) AS baz"))))
 
-  (t/is (= #{{:a 1, :xt/id 1, :a:1 3, :xt/id:1 1}
-             {:a 1, :xt/id 1, :b:1 4, :xt/id:1 2}
-             {:b 2, :xt/id 2, :a:1 3, :xt/id:1 1}
-             {:b 2, :xt/id 2, :b:1 4, :xt/id:1 2}}
-           (set (xt/q tu/*node* "FROM (SELECT * FROM foo, bar) AS baz"))))
+  (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
+           (set (xt/q tu/*node* "FROM (SELECT * EXCLUDE (xt$id) FROM foo, bar) AS baz"))))
+  
+  (t/is (= #{{:xt/id 1 :a 1 :c 3} {:xt/id 1 :b 2 :c 3} {:xt/id 2 :a 1 :d 4} {:xt/id 2 :b 2 :d 4}}
+           (set (xt/q tu/*node* "SELECT bar.*, foo.a, foo.b FROM foo, bar"))))
+  
+  (t/is (= #{{} {:b 2}}
+           (set (xt/q tu/*node* "SELECT * EXCLUDE (xt$id, a) FROM foo"))))
+  
+  (t/is (= #{{:xt/id 1 :new 1} {:xt/id 2 :b 2}}
+           (set (xt/q tu/*node* "SELECT * RENAME a AS new FROM foo")))) 
+
+  (t/is (= #{{:xt/id 1 :new 1} {:xt/id 2 :new2 2}}
+           (set (xt/q tu/*node* "SELECT * RENAME (a AS new, b AS new2)  FROM foo"))))
+
+  (t/is (= #{{} {:new 1}}
+           (set (xt/q tu/*node* "SELECT * EXCLUDE (xt$id, b) RENAME a AS new FROM foo")))) 
 
   (xt/submit-tx tu/*node*
                 [[:sql "INSERT INTO bing (SELECT * FROM foo)"]])
@@ -510,26 +520,26 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     #_(t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL SYSTEM_TIME")))))
 
 (t/deftest test-explain-plan-sql
-  (t/is (= [{:plan
-             "[:rename
- {x1 xt$id, x2 foo}
- [:project
-  [x1 x2]
-  [:rename
-   {xt$id x1, foo x2, a x3, b x4}
-   [:select (= (+ a b) 12) [:scan {:table users} [xt$id foo a b]]]]]]
-"}]
-           (xt/q tu/*node*
-                 "SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"
-                 {:explain? true}))))
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users (xt$id, foo, a, b) VALUES (1, 2, 3, 4)"]])
+  (t/is (= [{:plan (str/trim "
+[:project
+ [{xt$id u.1/xt$id} {foo u.1/foo}]
+ [:rename
+  u.1
+  [:select (= (+ a b) 12) [:scan {:table users} [b foo a xt$id]]]]]
+")}]
+           (-> (xt/q tu/*node*
+                     "SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"
+                     {:explain? true})
+               (update-in [0 :plan] str/trim)))))
 
 (t/deftest test-normalising-nested-cols-2483
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo {:a/b "foo"}}]])
   (t/is (= [{:foo {:a/b "foo"}}] (xt/q tu/*node* "SELECT docs.foo FROM docs")))
-  (t/is (= [{:a/b "foo"}] (xt/q tu/*node* "SELECT docs.foo.a$b FROM docs"))))
+  (t/is (= [{:a/b "foo"}] (xt/q tu/*node* "SELECT (docs.foo).a$b FROM docs"))))
 
 (t/deftest non-namespaced-keys-for-structs-2418
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, OBJECT('c$d': 'bar'))"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, OBJECT(c$d: 'bar'))"]])
   (t/is (= [{:bar {:c/d "bar"}}]
            (xt/q tu/*node* '(from :foo [bar])))))
 
@@ -556,24 +566,24 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
 
 (t/deftest test-nested-field-normalisation
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES(1, OBJECT ('field-name1': OBJECT('field-name2': true),
-                                                                                'field/name3': OBJECT('baz': -4113466)))"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES(1, OBJECT (fieldName1: OBJECT(fieldName2: true),
+                                                                                fieldName3: OBJECT(baz: -4113466)))"]])
 
-  (t/is (= [{:data {:field/name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
+  (t/is (= [{:data {:field-name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
            (xt/q tu/*node* "SELECT t1.data FROM t1"))
         "testing insert worked")
 
   (t/is (= [{:field-name2 true}]
-           (xt/q tu/*node* "SELECT t2.field_name1.field_name2, t2.field$name4.baz
-                            FROM (SELECT t1.data.field_name1, t1.data.field$name4 FROM t1) AS t2"))
+           (xt/q tu/*node* "SELECT (t2.field_name1).field_name2, t2.field$name4.baz
+                            FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"))
         "testing insert worked"))
 
 (t/deftest test-get-field-on-duv-with-struct-2425
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t2(xt$id, data) VALUES(1, 'bar')"]
-                           [:sql "INSERT INTO t2(xt$id, data) VALUES(2, OBJECT('foo': 2))"]])
+                           [:sql "INSERT INTO t2(xt$id, data) VALUES(2, OBJECT(foo: 2))"]])
 
   (t/is (= [{:foo 2} {}]
-           (xt/q tu/*node* "SELECT t2.data.foo FROM t2"))))
+           (xt/q tu/*node* "SELECT (t2.data).foo FROM t2"))))
 
 (t/deftest distinct-null-2535
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, foo) VALUES(1, NULL)"]

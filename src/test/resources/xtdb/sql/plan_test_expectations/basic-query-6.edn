@@ -1,12 +1,6 @@
-[:rename
- {x4 movie_title}
- [:project
-  [x4]
-  [:left-outer-join
-   [{x1 x4} {x2 x5}]
-   [:rename
-    {title x1, movie_year x2}
-    [:scan {:table movie} [title movie_year]]]
-   [:rename
-    {movie_title x4, year x5}
-    [:scan {:table stars_in} [movie_title year]]]]]]
+[:project
+ [{movie_title si.2/movie_title}]
+ [:left-outer-join
+  [{m.1/title si.2/movie_title} {m.1/movie_year si.2/year}]
+  [:rename m.1 [:scan {:table movie} [title movie_year]]]
+  [:rename si.2 [:scan {:table stars_in} [year movie_title]]]]]

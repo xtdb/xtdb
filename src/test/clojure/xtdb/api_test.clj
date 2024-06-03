@@ -214,21 +214,32 @@
           (t/is (= tx1-expected (all-users tx1))))))))
 
 (deftest test-sql-insert
-  (let [tx1 (xt/submit-tx *node*
+  (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01"))
+           (xt/execute-tx *node*
                           [[:sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)"
                             ["dave", "Dave", #inst "2018"]
-                            ["claire", "Claire", #inst "2019"]]])]
+                            ["claire", "Claire", #inst "2019"]]])))
+  
 
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx1))
+  (t/is (= (serde/->tx-committed 1 (time/->instant #inst "2020-01-02"))
+           (xt/execute-tx *node*
+                          [[:sql "INSERT INTO people (xt$id, renamed_name)
+                                  SELECT users.xt$id, users.name
+                                  FROM users
+                                  WHERE users.name = 'Claire'"]])))
 
-    (xt/submit-tx *node*
-                  [[:sql "INSERT INTO people (xt$id, renamed_name, xt$valid_from)
-                            SELECT users.xt$id, users.name, users.xt$valid_from
-                            FROM users FOR VALID_TIME AS OF DATE '2019-06-01'
-                            WHERE users.name = 'Dave'"]])
+  (t/is (= [{:renamed-name "Claire"}]
+           (xt/q *node* "SELECT people.renamed_name FROM people")))
 
-    (t/is (= [{:renamed-name "Dave"}]
-             (xt/q *node* "SELECT people.renamed_name FROM people FOR VALID_TIME AS OF DATE '2019-06-01'")))))
+  (t/is (= (serde/->tx-committed 2 (time/->instant #inst "2020-01-03"))
+           (xt/execute-tx *node*
+                          [[:sql "INSERT INTO people (xt$id, renamed_name, xt$valid_from)
+                                       SELECT users.xt$id, users.name, users.xt$valid_from
+                                       FROM users FOR VALID_TIME AS OF DATE '2019-06-01'
+                                       WHERE users.name = 'Dave'"]])))
+
+  (t/is (= [{:renamed-name "Dave"}]
+           (xt/q *node* "SELECT people.renamed_name FROM people FOR VALID_TIME AS OF DATE '2019-06-01'"))))
 
 (deftest test-sql-insert-app-time-date-398
   (let [tx (xt/submit-tx *node*
@@ -396,14 +407,10 @@
                  (q tx1)))))))
 
 (t/deftest returns-dml-errors-through-execute-tx
-  (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z",
-                               {:message-matches? true, :data {::err/error-key :xtdb.sql/parse-error}})
-           (-> (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])
-               (update :error (fn [err]
-                                ;; massive error message
-                                {:message-matches? (boolean (re-find #"Invalid SQL query: Parse error at line 1, column 48:"
-                                                                     (ex-message err)))
-                                 :data (-> (ex-data err) (dissoc :errs))})))))
+  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])]
+    (t/is (not committed?))
+    (t/is (instance? IllegalArgumentException error))
+    (t/is (re-find #"Errors parsing SQL statement" (ex-message error))))
 
   (t/testing "still an active node"
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('dave', 'Dave')"]])

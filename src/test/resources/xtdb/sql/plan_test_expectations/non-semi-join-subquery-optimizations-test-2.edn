@@ -1,14 +1,8 @@
-[:rename
- {x1 a}
- [:project
-  [x1]
-  [:mega-join
-   []
-   [[:rename {a x1} [:scan {:table foo} [a]]]
-    [:select
-     (= true x5)
-     [:top
-      {:limit 1}
-      [:union-all
-       [:project [{x5 true}] [:rename {c x3} [:scan {:table foo} [c]]]]
-       [:table [{x5 false}]]]]]]]]]
+[:project
+ [{a f.1/a}]
+ [:select
+  (= true xt$sq_2)
+  [:mark-join
+   {xt$sq_2 [true]}
+   [:rename f.1 [:scan {:table foo} [a]]]
+   [:project [{c foo.3/c}] [:rename foo.3 [:scan {:table foo} [c]]]]]]]

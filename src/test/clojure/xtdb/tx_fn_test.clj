@@ -5,7 +5,8 @@
             [xtdb.indexer :as idx]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]))
+            [xtdb.time :as time]
+            [xtdb.serde :as serde]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -260,13 +261,9 @@
                  '(from :casing [xt/id])))))
 
 (t/deftest test-sql-error
-  (xt/submit-tx tu/*node* [[:put-fn :my-fn '(fn [] (q "SELECT t1.foo FROM foo"))]
-                           [:call :my-fn]])
+  (let [res (xt/execute-tx tu/*node* [[:put-fn :my-fn '(fn [] (q "SELECT * FORM foo"))]
+                                      [:call :my-fn]])]
+    (t/is (= (serde/->tx-aborted 0 (time/->instant #inst "2020") nil)
+             (assoc res :error nil)))
 
-  (t/is (= "Invalid SQL query:
-  - Table not in scope: t1 at line 1, column 8"
-
-           (-> (xt/q tu/*node* '(from :xt/txs [{:xt/error error}]))
-               first
-               :error
-               ex-message))))
+    (t/is (re-find #"line 1:9 mismatched input 'FORM'" (ex-message (:error res))))))

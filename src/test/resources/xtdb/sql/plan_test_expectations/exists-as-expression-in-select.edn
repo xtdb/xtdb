@@ -1,15 +1,6 @@
-[:rename
- {x6 xt$column_1}
- [:project
-  [x6]
-  [:apply
-   :cross-join
-   {x1 ?x9}
-   [:rename {y x1, z x2} [:scan {:table x} [y {z (= z 10)}]]]
-   [:top
-    {:limit 1}
-    [:union-all
-     [:project
-      [{x6 true}]
-      [:rename {z x4} [:scan {:table y} [{z (= z ?x9)}]]]]
-     [:table [{x6 false}]]]]]]]
+[:project
+ [{xt$column_1 xt$sq_2}]
+ [:mark-join
+  {xt$sq_2 [{x.1/y z}]}
+  [:rename x.1 [:scan {:table x} [y {z (= z 10)}]]]
+  [:project [{z y.3/z}] [:rename y.3 [:scan {:table y} [z]]]]]]

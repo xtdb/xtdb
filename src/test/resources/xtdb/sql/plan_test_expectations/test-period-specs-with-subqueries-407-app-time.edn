@@ -1,9 +1,11 @@
-[:rename
- {x3 xt$column_1}
- [:project
-  [{x3 1}]
-  [:rename
-   {bar x1}
-   [:scan
-    {:table foo, :for-valid-time [:at (current-timestamp)]}
-    [bar]]]]]
+[:project
+ [{xt$column_1 1}]
+ [:rename
+  tmp.2
+  [:project
+   [{bar foo.1/bar}]
+   [:rename
+    foo.1
+    [:scan
+     {:table foo, :for-valid-time [:at (current-timestamp)]}
+     [bar]]]]]]

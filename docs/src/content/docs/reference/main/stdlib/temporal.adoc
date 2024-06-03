@@ -228,25 +228,25 @@ a| Returns true iff `p1` starts after `p2` ends
 [cols="3,3,8"]
 |===
 | XTQL | SQL |
-| `(date-trunc "unit" date-time)` | `DATE_TRUNC('unit', date_time)`
+| `(date-trunc "unit" date-time)` | `DATE_TRUNC(unit, date_time)`
 | Truncates the date-time to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`
 
-| `(date-trunc "unit" date-time time-zone)` | `DATE_TRUNC('unit', date_time, 'time_zone')`
+| `(date-trunc "unit" date-time time-zone)` | `DATE_TRUNC(unit, date_time, 'time_zone')`
 | Truncates a **timezone aware** date-time to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`, and then converts it to the specified time-zone. The specified time-zone must be a valid time-zone identifier (see link:https://en.wikipedia.org/wiki/List_of_tz_database_time_zones[here])
 
-| `(date-trunc "unit" interval)` | `DATE_TRUNC('unit', interval)`
+| `(date-trunc "unit" interval)` | `DATE_TRUNC(unit, interval)`
 | Truncates the given interval to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`
 
-| `(extract "field" date-time)` | `EXTRACT('field', date_time)`
+| `(extract "field" date-time)` | `EXTRACT(field FROM date_time)`
 | Extracts the given field from the date-time. Field must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE` or `SECOND`. Datetimes with timezones additionally support field values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE`.
 
-| `(extract "field" date)` | `EXTRACT('field', date)`
+| `(extract "field" date)` | `EXTRACT(field FROM date)`
 | Extracts the given field from the date. Field must be one of `YEAR`, `MONTH` or `DAY`.
 
-| `(extract "field" time)` | `EXTRACT('field', time)`
+| `(extract "field" time)` | `EXTRACT(field FROM time)`
 | Extracts the given field from the time. Field must be one of `HOUR`, `MINUTE` or `SECOND`.
 
-| `(extract "field" interval)` | `EXTRACT('field', interval)`
+| `(extract "field" interval)` | `EXTRACT(field FROM interval)`
 | Extracts the given field from the interval. Field must be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` or `SECOND`.
 
 | `(age date-time date-time)` | `AGE(date_time, date_time)` 

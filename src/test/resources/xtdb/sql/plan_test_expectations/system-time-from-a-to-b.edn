@@ -1,7 +1,11 @@
-[:scan
- {:table foo,
-  :for-system-time
-  [:in
-   #time/date "2999-01-01"
-   #time/zoned-date-time "3000-01-01T00:00Z"]}
- [bar]]
+[:project
+ [{bar foo.1/bar}]
+ [:rename
+  foo.1
+  [:scan
+   {:table foo,
+    :for-system-time
+    [:in
+     #time/date "2999-01-01"
+     #time/zoned-date-time "3000-01-01T00:00Z"]}
+   [bar]]]]

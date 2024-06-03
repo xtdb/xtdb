@@ -1,5 +1,5 @@
-[:rename
- {x1 a}
+[:project
+ [{a foo.1/a}]
  [:order-by
-  [[x1 {:direction :asc, :null-ordering :nulls-first}]]
-  [:rename {a x1} [:scan {:table foo} [a]]]]]
+  [[foo.1/a {:direction :asc, :null-ordering :nulls-first}]]
+  [:rename foo.1 [:scan {:table foo} [a]]]]]
