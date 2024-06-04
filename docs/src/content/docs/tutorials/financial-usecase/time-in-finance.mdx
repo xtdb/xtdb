@@ -28,9 +28,9 @@ SQL databases systems typically lose information whenever UPDATE or DELETE are u
 
 <Fiddle>
   <Txs txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
-  <Txs txs="UPDATE trades SET price = 150 WHERE trades.xt$id = 1;" />
+  <Txs txs="UPDATE trades SET price = 150 WHERE xt$id = 1;" />
   <Query q={
-`SELECT trades.xt$id, trades.price
+`SELECT xt$id, price
   FROM trades
 `}
 />
@@ -44,9 +44,9 @@ In XTDB however, there is no need for custom audit tables or timestamp columns t
 
 <Fiddle magicContext="audit">
   <Txs txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
-  <Txs txs="UPDATE trades SET price = 150 WHERE trades.xt$id = 1;" />
+  <Txs txs="UPDATE trades SET price = 150 WHERE xt$id = 1;" />
   <Query q={
-`SELECT trades.xt$id, trades.price, trades.xt$system_from, trades.xt$system_to
+`SELECT xt$id, price, xt$system_from, xt$system_to
   FROM trades FOR ALL SYSTEM_TIME
 `}
 />
@@ -82,7 +82,7 @@ In contrast, XTDB allows applications to refer to previous database states witho
   <Txs systemTime="2020-01-02"
        txs="INSERT INTO trades (xt$id, price) VALUES (1, 150);" />
   <Query q={
-`SELECT trades.xt$id, trades.price
+`SELECT xt$id, price
   FROM trades FOR SYSTEM_TIME AS OF DATE '2020-01-01'
 `} />
 </Fiddle>
@@ -114,7 +114,7 @@ VALUES (1, 100, DATE '2020-01-01');`} />
 VALUES (4, 400, DATE '2020-01-04');`} />
 
   <QueryTemplate q={
-`SELECT trades.xt$id, trades.price
+`SELECT xt$id, price
   FROM trades FOR VALID_TIME AS OF {{validTime}}
               FOR SYSTEM_TIME AS OF DATE '2020-01-31'
 `} />
@@ -138,17 +138,17 @@ VALUES (1, {'price': 100}, DATE '2020-01-01');`} />
        txs={
 `UPDATE trades
 SET info = {'price': 100, 'qty': 5}
-WHERE trades.xt$id = 1;`} />
+WHERE xt$id = 1;`} />
   <Txs systemTime="2020-01-04"
        txs={
 `UPDATE trades
 SET info = {'price': 101,
             'qty': 4,
             'model_params':[DATE '2020-06-01', {'gbp_usd': 1.2617}]}
-WHERE trades.xt$id = 1;`} />
+WHERE xt$id = 1;`} />
 
   <Query q={
-`SELECT trades.xt$id, trades.info, trades.xt$valid_from, trades.xt$valid_to
+`SELECT xt$id, info, xt$valid_from, xt$valid_to
   FROM trades FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
 `} />
 </Fiddle>
@@ -177,14 +177,14 @@ VALUES (1, 100, DATE '2020-01-01');`} />
   <Txs systemTime="2020-01-03"
        txs={
 `UPDATE trades SET price = 105
-WHERE trades.xt$id = 1;`} />
+WHERE xt$id = 1;`} />
   <Txs systemTime="2020-01-10"
        txs={
 `DELETE FROM trades
-WHERE trades.xt$id = 1;`} />
+WHERE xt$id = 1;`} />
 
   <Query q={
-`SELECT trades.xt$id, trades.price, trades.xt$valid_from, trades.xt$valid_to
+`SELECT xt$id, price, xt$valid_from, xt$valid_to
   FROM trades FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
 `} />
 </Fiddle>
@@ -212,24 +212,24 @@ Valid-time in XTDB may be fully controlled by the application, and can therefore
   <Txs systemTime="2020-01-02"
        txs={
 `UPDATE trades SET price = 2000
-WHERE trades.xt$id = 1;`} />
+WHERE xt$id = 1;`} />
   <Txs systemTime="2020-01-04"
        txs={
 `UPDATE trades SET price = 400
-WHERE trades.xt$id = 1;`} />
+WHERE xt$id = 1;`} />
   <Txs systemTime="2020-01-05"
        txs={
 `UPDATE trades
 FOR PORTION OF VALID_TIME FROM DATE '2020-01-02' TO DATE '2020-01-04'
 SET price = 200
-WHERE trades.xt$id = 1;`} />
+WHERE xt$id = 1;`} />
 
   <QueryTemplate q={
-`SELECT trades.xt$id, trades.price, trades.xt$valid_from, trades.xt$valid_to
+`SELECT xt$id, price, xt$valid_from, xt$valid_to
 FROM trades
   FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
   FOR SYSTEM_TIME AS OF {{systemTime}}
-ORDER BY trades.xt$valid_from
+ORDER BY xt$valid_from
 `} />
   <DateRange name="systemTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04","2020-01-05"]} value="2020-01-01" />
 </Fiddle>
@@ -261,10 +261,10 @@ VALUES (1, 200, DATE '2020-01-02');`} />
 FOR PORTION OF VALID_TIME FROM DATE '2020-01-04' TO NULL;`} />
 
   <QueryTemplate q={
-`SELECT trades.xt$id, trades.price, trades.xt$valid_from, trades.xt$valid_to
+`SELECT xt$id, price, xt$valid_from, xt$valid_to
 FROM trades
   FOR VALID_TIME AS OF {{validTime}}
-ORDER BY trades.xt$valid_from
+ORDER BY xt$valid_from
 `} />
   <DateRange name="validTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04"]} value="2020-01-01" />
 </Fiddle>
@@ -301,11 +301,10 @@ VALUES (1, {'risk': 6}, DATE '2021-01-01');`} />
 VALUES (2, {'risk': 11}, DATE '2021-01-05');`} />
 
   <QueryTemplate q={
-`SELECT ps.xt$id, ps.config
+`SELECT xt$id, config
 FROM pricing_strategies
   FOR VALID_TIME AS OF {{validTime}}
-  AS ps
-ORDER BY ps.xt$id
+ORDER BY xt$id
 `} />
   <DateRange name="validTime" dates={["2020-01-01","2020-03-01","2020-03-02","2020-12-01","2020-12-03","2021-01-01","2021-01-05"]} value="2020-01-01" />
 </Fiddle>
