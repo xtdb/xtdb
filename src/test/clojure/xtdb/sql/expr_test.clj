@@ -1023,3 +1023,18 @@
 
   (t/is (= [{:col2 -8}]
            (xt/q tu/*node* "SELECT ALL - - 72 - 27 + + ( - 53 ) col2"))))
+
+(t/deftest test-uuid-literal
+  (t/testing "Planning Success"
+    (t/is (= #uuid "550e8400-e29b-41d4-a716-446655440000"
+             (plan-expr-with-foo "UUID '550e8400-e29b-41d4-a716-446655440000'"))))
+
+  (t/testing "Planning Error"
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Cannot parse UUID: error"
+           (plan-expr-with-foo "UUID 'error'")))) 
+
+  (t/testing "Running"
+    (t/is (= [{:uuid-literal #uuid "550e8400-e29b-41d4-a716-446655440000"}]
+             (xt/q tu/*node* "SELECT UUID '550e8400-e29b-41d4-a716-446655440000' AS uuid_literal")))))

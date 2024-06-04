@@ -9,7 +9,7 @@
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set)
+           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
            (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
@@ -813,6 +813,16 @@
     (catch Exception e
       (add-err! env (->CannotParseDuration d-str (.getMessage e))))))
 
+(defrecord CannotParseUUID [u-str msg]
+  PlanError
+  (error-string [_] (format "Cannot parse UUID: %s - failed with message %s" u-str msg)))
+
+(defn- parse-uuid-literal [u-str env]
+  (try
+    (UUID/fromString u-str)
+    (catch Exception e
+      (add-err! env (->CannotParseUUID u-str (.getMessage e))))))
+
 (defn fn-with-precision [fn-symbol ^ParserRuleContext precision-ctx]
   (if-let [precision (some-> precision-ctx (.getText) (parse-long))]
     (list fn-symbol precision)
@@ -945,6 +955,8 @@
       "true" true
       "false" false
       "unknown" nil))
+  
+  (visitUUIDLiteral [this ctx] (parse-uuid-literal (.accept (.characterString ctx) this) env))
 
   (visitNullLiteral [_ _ctx] nil)
 
