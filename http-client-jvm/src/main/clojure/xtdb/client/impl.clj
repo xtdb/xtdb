@@ -84,10 +84,10 @@
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   IXtdb
   (^java.util.stream.Stream openQuery [client ^String query ^QueryOptions query-opts]
-   (open-query client query (into {:key-fn #xt/key-fn :snake-case-string} query-opts)))
+   (xtp/open-sql-query client query query-opts))
 
   (^java.util.stream.Stream openQuery [client ^XtqlQuery query ^QueryOptions query-opts]
-   (open-query client query (into {:key-fn #xt/key-fn :camel-case-string} query-opts)))
+   (xtp/open-xtql-query client query query-opts))
 
   (submitTx [client opts tx-ops]
     (let [{tx-key :body} (request client :post :tx
@@ -106,6 +106,13 @@
                                                  :await-tx? true}})]
       (swap! !latest-submitted-tx time/max-tx tx-res)
       tx-res))
+
+  xtp/PNode
+  (open-sql-query [client query query-opts]
+    (open-query client query (into {:key-fn #xt/key-fn :snake-case-string} query-opts)))
+
+  (open-xtql-query [client query query-opts]
+    (open-query client query (into {:key-fn #xt/key-fn :camel-case-string} query-opts)))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)

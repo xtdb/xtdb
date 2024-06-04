@@ -478,7 +478,7 @@
                                                            :url (http-url "query")})]
     (t/is (= :application/json content-type)
           "content-type is JSON")
-    (t/is (= [{"foo_bar" "baz"} {"foo_bar" "baz"}] (JsonSerde/decode body))))
+    (t/is (= [{"fooBar" "baz"} {"fooBar" "baz"}] (JsonSerde/decode body))))
 
   (t/testing "camel key-fn"
     (let [{:keys [content-type ^String body]} (http/request {:accept "application/json"
@@ -486,8 +486,8 @@
                                                              :request-method :post
                                                              :content-type :json
                                                              :form-params {:query {"from" "visits", "bind" ["fooBar"]}
-                                                                           :queryOpts {"keyFn" "CAMEL_CASE_STRING"}}
+                                                                           :queryOpts {"keyFn" "SNAKE_CASE_STRING"}}
                                                              :url (http-url "query")})]
       (t/is (= :application/json content-type)
             "content-type is JSON")
-      (t/is (= [{"fooBar" "baz"} {"fooBar" "baz"}] (JsonSerde/decode body))))))
+      (t/is (= [{"foo_bar" "baz"} {"foo_bar" "baz"}] (JsonSerde/decode body))))))

@@ -1,8 +1,10 @@
 (ns ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false}
-    xtdb.protocols)
+    xtdb.protocols
+  (:import [xtdb.api.query QueryOptions]))
 
 (defprotocol PNode
-  (^java.util.stream.Stream open-query [node query opts]))
+  (^java.util.stream.Stream open-sql-query [node ^String query ^QueryOptions opts])
+  (^java.util.stream.Stream open-xtql-query [node query opts]))
 
 (defprotocol PStatus
   (latest-submitted-tx [node])

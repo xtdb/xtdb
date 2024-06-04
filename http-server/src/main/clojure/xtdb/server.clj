@@ -19,11 +19,13 @@
             [ring.util.response :as ring-response]
             [spec-tools.core :as st]
             xtdb.api
+            [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io InputStream OutputStream)
            (java.time Duration ZoneId)
            (java.util Map)
@@ -268,8 +270,17 @@
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
                        {:status 200
-                        :body (xtp/open-query node query (into {:key-fn :snake-case-string}
-                                                               (dissoc query-opts :query)))}))
+                        :body (if (string? query)
+                                (xtp/open-sql-query node query
+                                                    (xt/->QueryOptions (into {:key-fn :snake-case-string}
+                                                                             (dissoc query-opts :query))))
+                                (let [^XtqlQuery query (cond
+                                                         (instance? XtqlQuery query) query
+                                                         (seq? query) (xtql.edn/parse-query query)
+                                                         :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+                                  (xtp/open-xtql-query node query
+                                                       (xt/->QueryOptions (into {:key-fn :camel-case-string}
+                                                                                (dissoc query-opts :query))))))}))
 
           :parameters {:body ::query-body}}})
 
