@@ -73,6 +73,7 @@ literal
     | 'TIMESTAMP' characterString #TimestampLiteral
     | 'INTERVAL' (PLUS | MINUS)? characterString intervalQualifier? #IntervalLiteral
     | 'DURATION' characterString #DurationLiteral
+    | 'UUID' characterString #UUIDLiteral
     | (TRUE | FALSE) #BooleanLiteral
     | NULL #NullLiteral
     ;
