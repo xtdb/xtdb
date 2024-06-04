@@ -206,6 +206,7 @@ allprojects {
 project(":xtdb-core").run {
     tasks["sourcesJar"].dependsOn("generateGrammarSource")
     tasks["dokkaJavadoc"].dependsOn("generateGrammarSource")
+    tasks["dokkaHtmlPartial"].dependsOn("generateGrammarSource")
 }
 
 dependencies {
