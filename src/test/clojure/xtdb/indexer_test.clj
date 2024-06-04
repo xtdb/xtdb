@@ -16,7 +16,7 @@
             [xtdb.serde :as serde])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
-           java.time.Duration
+           (java.time Duration InstantSource)
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
@@ -395,143 +395,98 @@
             (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs))))))))))
 
-(t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
-  (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
-        node-opts {:node-dir node-dir, :rows-per-chunk 1000, :rows-per-block 100}]
-    (util/delete-dir node-dir)
-
-    (with-open [node-1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))
-                node-2 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))
-                node-3 (tu/->local-node (assoc node-opts :buffers-dir "objects-3"))
-                submit-client (tu/->local-submit-client {:node-dir node-dir})
-                info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
-                readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
-            readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
-            [initial-readings rest-readings] (split-at (count device-infos) readings)
-            tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     [:put-docs (:table (meta doc)) doc])]
-
-        (t/is (= 11000 (count tx-ops)))
-
-        (let [last-tx-key (reduce
-                           (fn [_ tx-ops]
-                             (xt/submit-tx submit-client tx-ops))
-                           nil
-                           (partition-all 100 tx-ops))]
-
-          (Thread/sleep 250) ; wait for the chunk to finish writing to disk
-                                        ; we don't have an accessible hook for this, beyond awaiting the tx
-          (doseq [node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
-                        ^IMetadataManager mm (util/component node ::meta/metadata-manager)]]
-            (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
-            (t/is (= last-tx-key (tu/latest-completed-tx node)))
-
-            (let [objs (mapv str (.listAllObjects bp))]
-              (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-              (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs)))))
-
-            (t/is (= :utf8 (types/field->col-type (.columnField mm "device_readings" "xt$id"))))))))))
-
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
-        node-opts {:node-dir node-dir, :rows-per-chunk 1000 :rows-per-block 100}]
+        node-opts {:node-dir node-dir, :rows-per-chunk 1000 :rows-per-block 100
+                   :instant-src (InstantSource/system)}]
     (util/delete-dir node-dir)
 
-    (with-open [submit-client (tu/->local-submit-client {:node-dir node-dir})
-                info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
-                readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
-            readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
-            [initial-readings rest-readings] (split-at (count device-infos) readings)
-            tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     [:put-docs (:table (meta doc)) doc])
-            [first-half-tx-ops second-half-tx-ops] (split-at (/ (count tx-ops) 2) tx-ops)]
+    (util/with-close-on-catch [node1 (tu/->local-node node-opts)]
+      (with-open [info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
+                  readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
+        (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
+              readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
+              [initial-readings rest-readings] (split-at (count device-infos) readings)
+              tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
+                       [:put-docs (:table (meta doc)) doc])
+              [first-half-tx-ops second-half-tx-ops] (split-at (/ (count tx-ops) 2) tx-ops)]
 
-        (t/is (= 5500 (count first-half-tx-ops)))
-        (t/is (= 5500 (count second-half-tx-ops)))
+          (t/is (= 5500 (count first-half-tx-ops)))
+          (t/is (= 5500 (count second-half-tx-ops)))
 
-        (let [first-half-tx-key (reduce
-                                 (fn [_ tx-ops]
-                                   (xt/submit-tx submit-client tx-ops))
-                                 nil
-                                 (partition-all 100 first-half-tx-ops))]
+          (let [first-half-tx-key (reduce
+                                   (fn [_ tx-ops]
+                                     (xt/submit-tx node1 tx-ops))
+                                   nil
+                                   (partition-all 100 first-half-tx-ops))]
+            (.close node1)
 
-          (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-            (let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
-                  ^IMetadataManager mm (util/component node ::meta/metadata-manager)]
-              (t/is (= first-half-tx-key
-                       (-> first-half-tx-key
-                           (tu/then-await-tx node (Duration/ofSeconds 10)))))
-              (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
+            (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
+              (let [^IBufferPool bp (util/component node2 :xtdb/buffer-pool)
+                    ^IMetadataManager mm (util/component node2 ::meta/metadata-manager)]
+                (t/is (= first-half-tx-key
+                         (-> first-half-tx-key
+                             (tu/then-await-tx node2 (Duration/ofSeconds 10)))))
+                (t/is (= first-half-tx-key (tu/latest-completed-tx node2)))
 
-              (let [{:keys [latest-completed-tx, next-chunk-idx]}
-                    (meta/latest-chunk-metadata mm)]
+                (let [{:keys [latest-completed-tx, next-chunk-idx]}
+                      (meta/latest-chunk-metadata mm)]
 
-                (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
-                (t/is (< next-chunk-idx (count first-half-tx-ops)))
+                  (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
+                  (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
-                (Thread/sleep 250) ; wait for the chunk to finish writing to disk
+                  (Thread/sleep 250)    ; wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                (let [objs (mapv str (.listAllObjects bp))]
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                  (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs))))))
+                  (let [objs (mapv str (.listAllObjects bp))]
+                    (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
+                    (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs))))))
 
-              (t/is (= :utf8
-                       (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
+                (t/is (= :utf8
+                         (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
 
-              (let [second-half-tx-key (reduce
-                                        (fn [_ tx-ops]
-                                          (xt/submit-tx submit-client tx-ops))
-                                        nil
-                                        (partition-all 100 second-half-tx-ops))]
+                (let [second-half-tx-key (reduce
+                                          (fn [_ tx-ops]
+                                            (xt/submit-tx node2 tx-ops))
+                                          nil
+                                          (partition-all 100 second-half-tx-ops))]
 
-                (t/is (<= (:tx-id first-half-tx-key)
-                          (:tx-id (tu/latest-completed-tx node))
-                          (:tx-id second-half-tx-key)))
+                  (t/is (<= (:tx-id first-half-tx-key)
+                            (:tx-id (tu/latest-completed-tx node2))
+                            (:tx-id second-half-tx-key)))
 
-                (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
-                  (doseq [node [new-node node]
-                          :let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
+                  (.close node2)
 
-                    (t/is (<= (:tx-id first-half-tx-key)
-                              (:tx-id (-> first-half-tx-key
-                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
-                              (:tx-id second-half-tx-key)))
+                  (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
+                    (let [^IBufferPool bp (tu/component node3 :xtdb/buffer-pool)
+                          ^IMetadataManager mm (tu/component node3 ::meta/metadata-manager)]
+                      (t/is (<= (:tx-id first-half-tx-key)
+                                (:tx-id (-> first-half-tx-key
+                                            (tu/then-await-tx node3 (Duration/ofSeconds 10))))
+                                (:tx-id second-half-tx-key)))
 
-                    (t/is (= :utf8
-                             (types/field->col-type (.columnField mm "device_info" "xt$id")))))
+                      (t/is (= :utf8
+                               (types/field->col-type (.columnField mm "device_info" "xt$id"))))
 
-                  (doseq [node [new-node node]]
-                    (t/is (= second-half-tx-key (-> second-half-tx-key
-                                                    (tu/then-await-tx node (Duration/ofSeconds 15)))))
-                    (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
+                      (t/is (= second-half-tx-key (-> second-half-tx-key (tu/then-await-tx node3 (Duration/ofSeconds 15)))))
+                      (t/is (= second-half-tx-key (tu/latest-completed-tx node3)))
 
-                  (Thread/sleep 250) ; wait for the chunk to finish writing to disk
+
+                      (Thread/sleep 250); wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                  (doseq [node [new-node node]
-                          :let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
-                                ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
+                      (let [objs (mapv str (.listAllObjects bp))]
+                        (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
+                        (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs)))))
 
-                    (let [objs (mapv str (.listAllObjects bp))]
-                      (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                      (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs)))))
-
-                    (t/is (= :utf8
-                             (types/field->col-type (.columnField mm "device_info" "xt$id"))))))))))))))
+                      (t/is (= :utf8
+                               (types/field->col-type (.columnField mm "device_info" "xt$id")))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")

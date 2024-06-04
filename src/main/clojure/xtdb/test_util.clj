@@ -245,21 +245,6 @@
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                    (into {} (filter val)))})))
 
-(defn ->local-submit-client ^xtdb.api.IXtdb [{:keys [^Path node-dir]}]
-  (let [sys (-> {:xtdb/allocator {}
-                 :xtdb/log (Logs/localLog (.resolve node-dir "log"))
-                 :xtdb/default-tz #time/zone "UTC"}
-                (ig/prep)
-                (ig/init))]
-    (reify IXtdb
-      (submitTx [_ tx-opts tx-ops]
-        @(xtdb.log/submit-tx& {:allocator (:xtdb/allocator sys)
-                               :log (:xtdb/log sys)
-                               :default-tz (:xtdb/default-tz sys)}
-                              (vec tx-ops) tx-opts))
-      (close [_]
-        (ig/halt! sys)))))
-
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]
     (try

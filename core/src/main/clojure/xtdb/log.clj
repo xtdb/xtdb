@@ -5,7 +5,6 @@
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             xtdb.protocols
-            [xtdb.sql :as sql]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -39,6 +38,7 @@
 
     (.getTxId (.getTxKey record))))
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^Log$Subscriber subscriber]
   (doto (.newThread subscription-thread-factory
                     (fn []
