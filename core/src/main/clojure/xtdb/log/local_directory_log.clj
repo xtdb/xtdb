@@ -11,18 +11,19 @@
            java.nio.ByteBuffer
            (java.nio.channels Channels ClosedByInterruptException FileChannel)
            (java.nio.file Path)
-           (java.time Duration InstantSource)
+           (java.time InstantSource)
            java.time.temporal.ChronoUnit
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
-           (xtdb.api Xtdb$Config TransactionKey)
-           (xtdb.api.log Log Logs Log$Record Logs$LocalLogFactory)))
+           (xtdb.api Xtdb$Config)
+           (xtdb.api.log Log Logs Log$Record Logs$LocalLogFactory)
+           (xtdb.log INotifyingSubscriberHandler)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
 (def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))
 (def ^:private ^{:tag 'long} footer-size Long/BYTES)
 
-(deftype LocalDirectoryLog [^Path root-path, ^Duration poll-sleep-duration
+(deftype LocalDirectoryLog [^Path root-path, ^INotifyingSubscriberHandler subscriber-handler
                             ^ExecutorService pool, ^BlockingQueue queue, ^Future append-loop-future
                             ^:volatile-mutable ^FileChannel log-channel]
   Log
@@ -71,7 +72,7 @@
         f)))
 
   (subscribe [this after-tx-id subscriber]
-    (xt.log/handle-polling-subscription this after-tx-id {:poll-sleep-duration poll-sleep-duration} subscriber))
+    (.subscribe subscriber-handler this after-tx-id subscriber))
 
   Closeable
   (close [_]
@@ -88,7 +89,8 @@
               (.cancel f true))
             (recur)))))))
 
-(defn- writer-append-loop [^Path root-path, ^BlockingQueue queue, ^InstantSource instant-src, ^long buffer-size]
+(defn- writer-append-loop [^Path root-path, ^BlockingQueue queue, ^InstantSource instant-src,
+                           {:keys [^long buffer-size ^INotifyingSubscriberHandler subscriber-handler]}]
   (with-open [log-channel (util/->file-channel (.resolve root-path "LOG") #{:create :write})]
     (let [elements (ArrayList. buffer-size)]
       (.position log-channel (.size log-channel))
@@ -123,7 +125,9 @@
               (.flush log-out)
               (.force log-channel true)
               (doseq [[^CompletableFuture f, ^Log$Record log-record] elements]
-                (.complete f (.getTxKey log-record)))))
+                (let [tx-key (.getTxKey log-record)]
+                  (.notifyTx subscriber-handler tx-key)
+                  (.complete f (.getTxKey log-record))))))
           (catch ClosedByInterruptException e
             (log/warn e "channel interrupted while closing")
             (doseq [[^CompletableFuture f] elements
@@ -149,6 +153,33 @@
                  buffer-size (.bufferSize buffer-size)
                  poll-sleep-duration (.pollSleepDuration (time/->duration poll-sleep-duration))))))
 
+(defn- latest-submitted-tx [^Path root-path]
+  (let [log-path (.resolve root-path "LOG")]
+    (if-not (util/path-exists log-path)
+      0
+      (with-open [log-channel (util/->file-channel log-path)]
+        (let [size (.size log-channel)]
+          (if (zero? size)
+            0
+            (try
+              (.position log-channel (- size Long/BYTES))
+              (let [log-in (DataInputStream. (BufferedInputStream. (Channels/newInputStream log-channel)))
+                    offset (.readLong log-in)]
+                (.position log-channel offset)
+                (let [read-record-seperator (.read log-in)
+                      record-size (.readInt log-in)]
+                  (if (and (= record-separator read-record-seperator)
+                           ;; offset + record-seperator + record size + system time + record + start of whole record
+                           (= size (+ offset 1 Integer/BYTES Long/BYTES record-size Long/BYTES)))
+                    ;; offset is the latest-submitted-tx
+                    offset
+                    ;; o/w the log file channel is somehow corrupted
+                    (throw (IllegalArgumentException. "LOG file corrupted!")))))
+              (catch IllegalArgumentException e
+                (let [iae (IllegalArgumentException. "LOG file corrupted!")]
+                  (.addSuppressed iae e)
+                  (throw e))))))))))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-log [^Logs$LocalLogFactory factory]
   (let [root-path (.getPath factory)
@@ -157,6 +188,8 @@
 
     (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
           queue (ArrayBlockingQueue. buffer-size)
-          append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue (.getInstantSource factory) buffer-size))]
-
-      (->LocalDirectoryLog root-path (.getPollSleepDuration factory) pool queue append-loop-future nil))))
+          subscriber-handler (xt.log/->notifying-subscriber-handler (latest-submitted-tx root-path))
+          append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue (.getInstantSource factory)
+                                                                          {:buffer-size buffer-size
+                                                                           :subscriber-handler subscriber-handler}))]
+      (->LocalDirectoryLog root-path subscriber-handler pool queue append-loop-future nil))))
