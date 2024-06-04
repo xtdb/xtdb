@@ -23,7 +23,7 @@ If you want to preserve whitespace you can do this:
 <Fiddle>
   <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
   <Query q={
-`SELECT docs.xt$id, docs.foo
+`SELECT xt$id, foo
   FROM docs
 -- You can also put comments :)`}
 />
@@ -88,9 +88,9 @@ Particularly for showing of valid time & system time:
   <Txs systemTime="2020-01-02"
        txs="INSERT INTO docs (xt$id, name) VALUES (1, 'two');" />
   <Query q={
-`SELECT d.xt$id, d.name, d.xt$system_from
-  FROM docs FOR ALL VALID_TIME AS d
-  ORDER BY d.xt$id, d.xt$system_from`} />
+`SELECT xt$id, name, xt$system_from
+  FROM docs FOR ALL VALID_TIME
+  ORDER BY xt$id, xt$system_from`} />
 </Fiddle>
 
 ## Lone Transaction
@@ -131,9 +131,9 @@ Note that it we only have docs from this fiddle.
     INSERT INTO docs (xt$id, name) VALUES (1, 'two');
     INSERT INTO docs (xt$id, name) VALUES (2, 'three');" />
   <Query q={
-`SELECT d.xt$id, d.name, d.xt$system_from
-  FROM docs FOR ALL VALID_TIME AS d
-  ORDER BY d.xt$id, d.xt$system_from`} />
+`SELECT xt$id, name, xt$system_from
+  FROM docs FOR ALL VALID_TIME
+  ORDER BY xt$id, xt$system_from`} />
 </Fiddle>
 
 Note that now we have the transactions from the previous fiddle :)
@@ -146,9 +146,9 @@ This fiddle uses a different context id, so it will not use the context of previ
     INSERT INTO docs (xt$id, name) VALUES (1, 'two');
     INSERT INTO docs (xt$id, name) VALUES (2, 'three');" />
   <Query q={
-`SELECT d.xt$id, d.name, d.xt$system_from
-  FROM docs FOR ALL VALID_TIME AS d
-  ORDER BY d.xt$id, d.xt$system_from`} />
+`SELECT xt$id, name, xt$system_from
+  FROM docs FOR ALL VALID_TIME
+  ORDER BY xt$id, xt$system_from`} />
 </Fiddle>
 
 
@@ -208,9 +208,9 @@ You can override this by adding your own:
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
-                    WHERE o.count > {{count}}
-                    ORDER BY o.xt$id" />
+                    FROM orders
+                    WHERE count > {{count}}
+                    ORDER BY xt$id" />
   <Range name="count" min={0} max={6} step={2} value={0} />
   <OutputVega spec={{
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
@@ -227,9 +227,9 @@ You can also have multiple if you want:
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
-                    WHERE o.count > {{count}}
-                    ORDER BY o.xt$id" />
+                    FROM orders
+                    WHERE count > {{count}}
+                    ORDER BY xt$id" />
   <Range name="count" min={0} max={6} step={2} value={0} />
   <div class="grid grid-cols-2 gap-1">
     <OutputVega spec={{
@@ -275,8 +275,8 @@ import Text from '@components/fiddle/text.astro';
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
-                    WHERE {{#true}}true{{/true}}{{^true}}false{{/true}} {{#enableSearch}}AND o.name LIKE '%{{search}}%'{{/enableSearch}}
+                    FROM orders
+                    WHERE {{#true}}true{{/true}}{{^true}}false{{/true}} {{#enableSearch}}AND name LIKE '%{{search}}%'{{/enableSearch}}
                     LIMIT {{limit}}" />
 
   Putting a label beside an input:
@@ -309,12 +309,12 @@ import Checkbox from "@components/fiddle/checkbox.astro"
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
+                    FROM orders
                     -- Watch as the below changes:
                     {{#useWhere}}
-                    WHERE o.count < 3
+                    WHERE count < 3
                     {{/useWhere}}
-                    ORDER BY o.xt$id" />
+                    ORDER BY xt$id" />
   <Checkbox name="useWhere" checked />
 </Fiddle>
 
@@ -325,9 +325,9 @@ Can be a float or integer.
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
-                    WHERE o.count > {{count}}
-                    ORDER BY o.xt$id" />
+                    FROM orders
+                    WHERE count > {{count}}
+                    ORDER BY xt$id" />
   <Range name="count" min={0} max={6} step={2} />
 </Fiddle>
 
@@ -340,18 +340,18 @@ A customised range input specifically for outputting dates with two varieties:
 You can provide a `start`, `stop` and `step` amount to have a full range of dates:
 
 <Fiddle autoLoad magicContext="orders">
-  <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
-                    FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
-                    ORDER BY o.xt$id" />
+  <QueryTemplate q="SELECT xt$id, count, name, xt$valid_from
+                    FROM orders FOR VALID_TIME AS OF {{validTime}}
+                    ORDER BY xt$id" />
   <DateRange name="validTime" start="2024-01-01" stop="2024-01-05" step="1 day" value="2024-01-04" />
 </Fiddle>
 
 Or you can provide an array of dates:
 
 <Fiddle autoLoad magicContext="orders">
-  <QueryTemplate q="SELECT o.xt$id, o.count, o.name, o.xt$valid_from
-                    FROM orders FOR VALID_TIME AS OF {{validTime}} AS o
-                    ORDER BY o.xt$id" />
+  <QueryTemplate q="SELECT xt$id, count, name, xt$valid_from
+                    FROM orders FOR VALID_TIME AS OF {{validTime}}
+                    ORDER BY xt$id" />
   <DateRange name="validTime" dates={["2024-01-01","2024-01-02","2024-01-05"]} value="2024-01-05" />
 </Fiddle>
 
@@ -361,9 +361,9 @@ A textbox element that allows the user to type in whatever they like:
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
-                    WHERE o.name LIKE '%{{name}}%'
-                    ORDER BY o.xt$id" />
+                    FROM orders
+                    WHERE name LIKE '%{{name}}%'
+                    ORDER BY xt$id" />
   <Text name="name" value="Toy" />
 </Fiddle>
 
@@ -378,9 +378,9 @@ The same table used in the Fiddle. Added by default if no output is provided.
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
-                    WHERE o.count > {{count}}
-                    ORDER BY o.xt$id" />
+                    FROM orders
+                    WHERE count > {{count}}
+                    ORDER BY xt$id" />
   <Range name="count" min={0} max={6} step={2} />
   <OutputTable />
 </Fiddle>
@@ -395,9 +395,9 @@ Data is provided through a dataset named `table`.
 
 <Fiddle autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
-                    FROM orders AS o
-                    WHERE o.count > {{count}}
-                    ORDER BY o.xt$id" />
+                    FROM orders
+                    WHERE count > {{count}}
+                    ORDER BY xt$id" />
   <Range name="count" min={0} max={6} step={2} value={0} />
   <OutputVega spec={{
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',

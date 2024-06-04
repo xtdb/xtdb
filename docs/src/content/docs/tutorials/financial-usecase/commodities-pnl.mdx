@@ -27,9 +27,9 @@ VALUES
 (5, 'W1:COM', 250, 5.20, TIMESTAMP '2024-03-08 13:05:00', 'Alex Green')      -- Wheat
 `} />
   <Query q={`
-SELECT t.*, t.xt$valid_from
+SELECT t.*, xt$valid_from
 FROM commodity_trades as t
-ORDER BY t.xt$id
+ORDER BY xt$id
 `} />
 </Fiddle>
 
@@ -48,8 +48,8 @@ VALUES
 ('W1:COM', 5.25, TIMESTAMP '2024-03-08 17:00:00')
 `} />
   <Query q={`
-SELECT p.xt$id, p.spot_price, p.xt$valid_from
-FROM commodity_spot_prices as p
+SELECT xt$id, spot_price, xt$valid_from
+FROM commodity_spot_prices
 `} />
 </Fiddle>
 
@@ -106,9 +106,9 @@ VALUES
 (7, 'XAG:CUR', 30, 27.30, TIMESTAMP '2024-03-11 11:00:00', 'Jane Smith')
 `} />
   <Query q={`
-SELECT t.*, t.xt$valid_from
+SELECT t.*, xt$valid_from
 FROM commodity_trades as t
-ORDER BY t.xt$id
+ORDER BY xt$id
 `} />
 </Fiddle>
 
@@ -126,8 +126,8 @@ VALUES
 ('W1:COM', 5.27, TIMESTAMP '2024-03-11 17:00:00')
 `} />
   <Query q={`
-SELECT p.xt$id, p.spot_price, p.xt$valid_from
-FROM commodity_spot_prices as p
+SELECT xt$id, spot_price, xt$valid_from
+FROM commodity_spot_prices
 `} />
 </Fiddle>
 
