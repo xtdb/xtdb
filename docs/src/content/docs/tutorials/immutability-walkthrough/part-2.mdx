@@ -70,21 +70,25 @@ Here you can see we have the correct historical price for `2024-01-15`, which is
 Now let's say our CFO wants to know how the prices have increased over Q1?
 
 <Fiddle magicContext="my-context">
-  <Query q="SELECT p.*, xt$valid_from, xt$valid_to
-            FROM product AS p
-	    FOR VALID_TIME FROM DATE '2024-01-01' TO DATE '2024-03-31'
-            ORDER BY xt$valid_from" />
+  <Query q={`
+SELECT p.*, xt$valid_from, xt$valid_to
+FROM product
+  FOR VALID_TIME FROM DATE '2024-01-01' TO DATE '2024-03-31'
+  AS p
+ORDER BY xt$valid_from`} />
 </Fiddle>
 
 When did the bicycle price first exceed $350 ?
 
 <Fiddle magicContext="my-context">
-  <Query q="SELECT p.*, xt$valid_from, xt$valid_to
-            FROM product AS p
-	    FOR VALID_TIME FROM DATE '2024-01-01' TO DATE '2024-03-31'
-            WHERE price > 350
-            ORDER BY xt$valid_from
-            LIMIT 1" />
+  <Query q={`
+SELECT p.*, xt$valid_from, xt$valid_to
+FROM product
+  FOR VALID_TIME FROM DATE '2024-01-01' TO DATE '2024-03-31'
+  AS p
+WHERE price > 350
+ORDER BY xt$valid_from
+LIMIT 1`} />
 </Fiddle>
 
 Yes, it was the price change of `2024-02-01` where the bicycle's
