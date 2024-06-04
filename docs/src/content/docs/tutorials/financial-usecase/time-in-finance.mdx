@@ -133,18 +133,18 @@ XTDB allows applications to handle diverse shapes of evolving, document-like dat
   <Txs systemTime="2020-01-02"
        txs={
 `INSERT INTO trades (xt$id, info, xt$valid_from)
-VALUES (1, {'price': 100}, DATE '2020-01-01');`} />
+VALUES (1, {price: 100}, DATE '2020-01-01');`} />
   <Txs systemTime="2020-01-03"
        txs={
 `UPDATE trades
-SET info = {'price': 100, 'qty': 5}
+SET info = {price: 100, qty: 5}
 WHERE xt$id = 1;`} />
   <Txs systemTime="2020-01-04"
        txs={
 `UPDATE trades
-SET info = {'price': 101,
-            'qty': 4,
-            'model_params':[DATE '2020-06-01', {'gbp_usd': 1.2617}]}
+SET info = {price: 101,
+            qty: 4,
+            model_params:[DATE '2020-06-01', {gbp_usd: 1.2617}]}
 WHERE xt$id = 1;`} />
 
   <Query q={
@@ -289,16 +289,16 @@ For example, imagine you want to reliably update some key data ahead of a seaona
   <Txs systemTime="2020-03-01"
        txs={
 `INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
-VALUES (1, {'risk': 5}, DATE '2020-03-01'),
-       (2, {'risk': 10}, DATE '2020-03-02');`} />
+VALUES (1, {risk: 5}, DATE '2020-03-01'),
+       (2, {risk: 10}, DATE '2020-03-02');`} />
   <Txs systemTime="2020-12-01"
        txs={
 `INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
-VALUES (1, {'risk': 6}, DATE '2021-01-01');`} />
+VALUES (1, {risk: 6}, DATE '2021-01-01');`} />
   <Txs systemTime="2020-12-03"
        txs={
 `INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
-VALUES (2, {'risk': 11}, DATE '2021-01-05');`} />
+VALUES (2, {risk: 11}, DATE '2021-01-05');`} />
 
   <QueryTemplate q={
 `SELECT xt$id, config
