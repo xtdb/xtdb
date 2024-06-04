@@ -146,8 +146,8 @@
 (defn proc-new-bid [{:keys [sut] :as worker}]
   (let [{:keys [i_id u_id i_buyer_id bid max_bid new_bid_id now]} (generate-new-bid-params worker)]
     (when (and i_id u_id)
-      (let [{:keys [imb imb_ib_id] :as _res}
-            (-> (xt/q sut "SELECT imb.imb, imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.xt$id = ?"
+      (let [{:keys [imb, imb_ib_id] :as _res}
+            (-> (xt/q sut "SELECT imb.xt$id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.xt$id = ?"
                       {:args [i_id], :key-fn :snake-case-keyword})
                 first)
             {:keys [curr_bid, curr_max]}
@@ -168,7 +168,7 @@
 
                         ;; if new bid exceeds old, bump it
                         upd_curr_bid
-                        (conj [[:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid.imb = ?"
+                        (conj [[:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid.xt$id = ?"
                                 [bid imb]]])
 
                         ;; we exceed the old max, win the bid.
