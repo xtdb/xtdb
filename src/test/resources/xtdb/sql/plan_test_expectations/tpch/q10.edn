@@ -21,13 +21,13 @@
      c.1/c_phone
      c.1/c_comment]
     [:group-by
-     [c.1/c_custkey
-      c.1/c_name
+     [n.4/n_name
+      c.1/c_custkey
+      c.1/c_comment
       c.1/c_acctbal
       c.1/c_phone
-      n.4/n_name
+      c.1/c_name
       c.1/c_address
-      c.1/c_comment
       {xt$sum_out_5 (sum xt$sum_in_6)}]
      [:map
       [{xt$sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]

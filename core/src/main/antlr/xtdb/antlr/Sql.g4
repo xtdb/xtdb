@@ -584,7 +584,8 @@ queryExpressionBody
     ;
 
 queryTerm
-    : (selectClause fromClause? | fromClause) whereClause? groupByClause? havingClause? windowClause? # QuerySpecification
+    : selectClause fromClause? whereClause? groupByClause? havingClause? windowClause? # QuerySpecification
+    | fromClause whereClause? groupByClause? havingClause? selectClause? windowClause? # QuerySpecification
     | tableValueConstructor # ValuesQuery
     | '(' queryExpressionBody ')' # WrappedQuery
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery

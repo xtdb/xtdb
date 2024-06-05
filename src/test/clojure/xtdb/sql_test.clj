@@ -53,8 +53,14 @@
                                   "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
+          "basic-query-1"
+          (plan-sql "FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960 SELECT si.movieTitle"
+                    {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
+                                  "movie_star" #{"name" "birthdate"}}})))
+
+  (t/is (=plan-file
           "basic-query-2"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950"
+          (plan-sql "FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950 SELECT si.movieTitle"
                     {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
                                   "movie_star" #{"name" "birthdate"}}})))
 
@@ -205,13 +211,28 @@
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
+          "basic-query-20"
+          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle FETCH FIRST 10 ROWS ONLY"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
+
+  (t/is (=plan-file
           "basic-query-21"
           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
+          "basic-query-21"
+          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle OFFSET 5 ROWS"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
+
+  (t/is (=plan-file
           "basic-query-22"
           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 LIMIT 10"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
+
+  (t/is (=plan-file
+          "basic-query-22"
+          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle OFFSET 5 LIMIT 10"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
@@ -739,6 +760,11 @@
     (t/is (= #{{:heads 1, :count-heads 3}}
              (set (xt/q tu/*node*
                         "SELECT heads, COUNT(heads) AS count_heads FROM docs HAVING COUNT(heads) > 1")))
+          "having frequency > 1")
+
+    (t/is (= #{{:heads 1, :count-heads 3}}
+             (set (xt/q tu/*node*
+                        "FROM docs HAVING COUNT(heads) > 1 SELECT heads, COUNT(heads) AS count_heads")))
           "having frequency > 1")
 
     #_ ; this is a Postgres extension to the SQL syntax that we may want to support at a later date.
