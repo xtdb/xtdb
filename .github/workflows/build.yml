@@ -145,7 +145,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: docker/standalone
-          platforms: linux/arm/v7,linux/arm64/v8,linux/amd64
+          platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/xtdb/xtdb-standalone-ea:latest
           build-args: |
@@ -186,7 +186,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: docker/aws
-          platforms: linux/arm/v7,linux/arm64/v8,linux/amd64
+          platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/xtdb/xtdb-aws-ea:latest
           build-args: |
