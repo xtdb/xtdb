@@ -187,13 +187,17 @@
           :metadata-mgr (ig/ref ::meta/metadata-manager)}))
 
 (defmethod ig/init-key ::query-source [_ deps]
-  (let [cache (ConcurrentHashMap.)
+  (let [prepare-cache (ConcurrentHashMap.)
+        plan-cache (ConcurrentHashMap.)
         ref-ctr (RefCounter.)
         deps (-> deps (assoc :ref-ctr ref-ctr))]
     (reify
       IQuerySource
       (prepareRaQuery [_ query wm-src]
-        (prepare-ra query (assoc deps :wm-src wm-src)))
+        (.computeIfAbsent prepare-cache [query wm-src]
+                          (reify Function
+                            (apply [_ _]
+                              (prepare-ra query (assoc deps :wm-src wm-src))))))
 
       (planQuery [_ query wm-src query-opts]
         (let [table-info (scan/tables-with-cols wm-src (:scan-emitter deps))
@@ -208,7 +212,7 @@
               ;;Move all defaulting to this level if/when everyone goes via planQuery
               cache-key (assoc plan-query-opts :query query)]
           (.computeIfAbsent
-           cache
+           plan-cache
            cache-key
            (reify Function
              (apply [_ _]
