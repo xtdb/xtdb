@@ -37,8 +37,14 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
     }
 
     fun promoteChildren(field: Field) {
-        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
-    };
+        if (field.type == ArrowType.Null.INSTANCE) {
+            if (!this.field.isNullable)
+                throw FieldMismatch(this.field.fieldType, field.fieldType)
+        } else {
+            if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
+                throw FieldMismatch(this.field.fieldType, field.fieldType)
+        }
+    }
 
     fun rowCopier(src: ValueVector): IRowCopier
 
