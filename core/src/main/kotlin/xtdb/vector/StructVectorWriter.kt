@@ -7,6 +7,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.complex.replaceChild
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.asKeyword
@@ -114,7 +115,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     override fun structKeyWriter(key: String, fieldType: FieldType) =
         writers[key]?.let {
             if ((it.field.type == fieldType.type && (it.field.isNullable || !fieldType.isNullable)) ||
-                it.field.fieldType == UNION_FIELD_TYPE) it
+                it.field.type is ArrowType.Union) it
             else promoteChild(it, fieldType)
         }
             ?: newChildWriter(key, fieldType)
@@ -154,7 +155,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         if (field.type != this.field.type || (field.isNullable && !field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
         for (child in field.children) {
             var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)
-            if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.fieldType != UNION_FIELD_TYPE)
+            if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.type !is ArrowType.Union)
                 childWriter = promoteChild(childWriter, child.fieldType)
             if (child.children.isNotEmpty()) childWriter.promoteChildren(child)
         }

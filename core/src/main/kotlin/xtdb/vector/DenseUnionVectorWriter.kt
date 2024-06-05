@@ -211,7 +211,7 @@ class DenseUnionVectorWriter(
     }
 
     override fun promoteChildren(field: Field) {
-        if (field.type == UNION_FIELD_TYPE.type) {
+        if (field.type is ArrowType.Union) {
             for (child in field.children) {
                 val legWriter = legWriter(child.type.toLeg(), child.fieldType)
                 if (child.children.isNotEmpty()) legWriter.promoteChildren(child)

@@ -6,6 +6,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.replaceDataVector
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.toFieldType
@@ -99,7 +100,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
             throw FieldMismatch(this.field.fieldType, field.fieldType)
         val child = field.children.single()
-        if ((child.type != elWriter.field.type || (child.isNullable && !elWriter.field.isNullable)) && elWriter.field.fieldType != UNION_FIELD_TYPE)
+        if ((child.type != elWriter.field.type || (child.isNullable && !elWriter.field.isNullable)) && elWriter.field.type !is ArrowType.Union)
             promoteElWriter(child.fieldType)
         if (child.children.isNotEmpty()) elWriter.promoteChildren(child)
     }
