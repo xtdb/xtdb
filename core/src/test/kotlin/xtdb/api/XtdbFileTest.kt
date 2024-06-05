@@ -42,11 +42,7 @@ internal class XtdbFileTest {
         assertEquals(
             listOf(mapOf("id" to "jms")),
 
-            node.openQuery(
-                from("foo") {
-                    bindAll("xt\$id" to "id")
-                }
-            ).toList()
+            node.openQuery("SELECT xt\$id AS id FROM foo").toList()
         )
 
         File("/tmp/test-storage").deleteRecursively()

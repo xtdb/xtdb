@@ -89,17 +89,14 @@
             (serde/->tx-committed tx-key)
             (serde/->tx-aborted tx-key error))))))
 
-  (^Stream openQuery [this ^String query, ^QueryOptions query-opts]
-   (xtp/open-sql-query this query query-opts))
-
-  (^Stream openQuery [this ^XtqlQuery query, ^QueryOptions query-opts]
-   (xtp/open-xtql-query this query query-opts))
+  (openQuery [this query query-opts]
+    (xtp/open-sql-query this query query-opts))
 
   xtp/PNode
   (open-sql-query [this query query-opts]
     (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
-     (-> (.prepareQuery this ^String query query-opts)
-         (then-execute-prepared-query metrics registry query-opts))))
+      (-> (.prepareQuery this ^String query query-opts)
+          (then-execute-prepared-query metrics registry query-opts))))
 
   (open-xtql-query [this query query-opts]
     (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]

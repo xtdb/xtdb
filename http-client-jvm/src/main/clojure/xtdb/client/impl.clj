@@ -83,11 +83,8 @@
 
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   IXtdb
-  (^java.util.stream.Stream openQuery [client ^String query ^QueryOptions query-opts]
+  (openQuery [client query query-opts]
    (xtp/open-sql-query client query query-opts))
-
-  (^java.util.stream.Stream openQuery [client ^XtqlQuery query ^QueryOptions query-opts]
-   (xtp/open-xtql-query client query query-opts))
 
   (submitTx [client opts tx-ops]
     (let [{tx-key :body} (request client :post :tx

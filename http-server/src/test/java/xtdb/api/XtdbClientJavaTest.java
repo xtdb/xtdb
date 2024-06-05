@@ -23,10 +23,8 @@ public class XtdbClientJavaTest {
 
             client.submitTx(putDocs("foo", Map.of("xt/id", "jms")));
 
-            try (var res = client.openQuery(
-                from("foo").bind("xt/id", "fooId").build())) {
-
-                assertEquals(List.of(Map.of("fooId", "jms")), res.toList());
+            try (var res = client.openQuery("SELECT xt$id foo_id FROM foo")) {
+                assertEquals(List.of(Map.of("foo_id", "jms")), res.toList());
             }
 
         } catch (MalformedURLException | URISyntaxException e) {

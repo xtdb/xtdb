@@ -32,13 +32,12 @@ class IXtdbJavaTest {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
             putDocs("docs", Map.of("xt$id", 1, "foo", "bar")));
 
-        try (var res = node.openQuery(
-            from("docs").bindAll("xt$id", "xt$system_from").build())) {
+        try (var res = node.openQuery("SELECT xt$id, xt$system_from FROM docs")) {
 
             assertEquals(
                 List.of(Map.of(
                     "xt$id", 1,
-                    "xt$systemFrom", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
+                    "xt$system_from", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
                 res.toList());
         }
     }

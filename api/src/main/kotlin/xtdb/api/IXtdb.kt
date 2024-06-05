@@ -10,20 +10,6 @@ import java.util.stream.Stream
 interface IXtdb : AutoCloseable {
 
     /**
-     * Opens an XTQL query - see [XtqlQuery] for more details on XTQL.
-     *
-     * By default, this method will block indefinitely until the node has indexed the [requested transaction][QueryOptions.afterTx], or
-     * you can specify a [timeout][QueryOptions.txTimeout].
-     *
-     * @param xtql the XTQL query
-     * @param opts query options
-     * @return the results stream.
-     *         This result stream MUST be explicitly closed when no longer required.
-     */
-    @JvmOverloads
-    fun openQuery(xtql: XtqlQuery, opts: QueryOptions = QueryOptions()) : Stream<Map<String, *>>
-
-    /**
      * Opens an SQL query - see the [SQL documentation](https://docs.xtdb.com/reference/main/sql/queries) for more details on XTDB's SQL support.
      *
      * By default, this method will block indefinitely until the node has indexed the [requested transaction][QueryOptions.afterTx], or
