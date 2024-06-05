@@ -561,6 +561,14 @@
   (log/info "#gag " (.get (b/counter worker gag-id)))
   (log/info "#gav " (.get (b/counter worker gav-id))))
 
+(defn catchup [node]
+  (let [{:keys [latest-completed-tx]} (xt/status node)]
+    (loop [last-tx latest-completed-tx]
+      (Thread/sleep 100)
+      (let [{:keys [latest-completed-tx]} (xt/status node)]
+        (when-not (= last-tx latest-completed-tx)
+          (recur latest-completed-tx))))))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn benchmark [{:keys [seed,
                          threads,
@@ -601,8 +609,8 @@
                      ;; wait for node to catch up
                      {:t :call, :f #(when-not load-phase
                                       ;; otherwise nothing has come through the log yet
-                                      (Thread/sleep 1000)
-                                      #_(tu/then-await-tx (:sut %)))}
+                                      (Thread/sleep 500)
+                                      (catchup (:sut %)))}
                      {:t :call, :f load-stats-into-worker}
                      {:t :call, :f log-stats}
                      {:t :call, :f (fn [_] (log/info "finished setting up worker with stats"))}]}
