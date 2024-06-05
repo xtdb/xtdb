@@ -405,6 +405,22 @@
     "CAST(foo.a AS INT)" '(cast f/a :i32)
     "CAST(42.0 AS INT)" '(cast 42.0 :i32)))
 
+(t/deftest test-postgres-cast-syntax
+  (t/testing "planning"
+    (t/are [sql expected]
+           (= expected (plan-expr-with-foo sql))
+
+      "NULL::INT" '(cast nil :i32)
+      "foo.a::INT" '(cast f/a :i32)
+      "'42.0'::FLOAT" '(cast "42.0" :f32)))
+  
+  (t/testing "used within a query"
+    (t/is (= [{:x 42}]
+             (xt/q tu/*node* "SELECT '42'::INT as x")))
+    
+    (t/is (= [{:x #time/date "2021-10-21"}]
+             (xt/q tu/*node* "SELECT '2021-10-21'::DATE as x")))))
+
 (t/deftest test-cast-string-to-temporal
   (t/is (= [{:timestamp-tz #time/zoned-date-time "2021-10-21T12:34:00Z"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz")))

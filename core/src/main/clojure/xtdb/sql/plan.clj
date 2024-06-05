@@ -914,6 +914,12 @@
 
   (visitCharacterStringType [_ _] {:cast-type :utf8}))
 
+(defn handle-cast-expr [ve {:keys [cast-type cast-opts ->cast-fn]}] 
+  (if ->cast-fn
+    (->cast-fn ve)
+    (cond-> (list 'cast ve cast-type)
+      (not-empty cast-opts) (concat [cast-opts]))))
+
 (defrecord AggregatesDisallowed []
   PlanError
   (error-string [_] "Aggregates are not allowed in this context"))
@@ -1410,12 +1416,14 @@
 
   (visitCastExpr [this ctx]
     (let [ve (-> (.expr ctx) (.accept this))
-          {:keys [cast-type cast-opts ->cast-fn]} (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
-      (if ->cast-fn
-        (->cast-fn ve)
-        (cond-> (list 'cast ve cast-type)
-          (not-empty cast-opts) (concat [cast-opts])))))
+          data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
+      (handle-cast-expr ve data-type)))
 
+  (visitPostgresCastExpr [this ctx]
+    (let [ve (-> (.exprPrimary ctx) (.accept this))
+          data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
+      (handle-cast-expr ve data-type)))
+  
   (visitAggregateFunctionExpr [{:keys [!aggs] :as this} ctx]
     (if-not !aggs
       (add-err! env (->AggregatesDisallowed))

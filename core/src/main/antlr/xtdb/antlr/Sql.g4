@@ -190,7 +190,7 @@ exprPrimary
     | literal # LiteralExpr
     | exprPrimary '.' fieldName #FieldAccess
     | exprPrimary '[' expr ']' #ArrayAccess
-    | exprPrimary '::' dataType #CastExpr
+    | exprPrimary '::' dataType #PostgresCastExpr
     | exprPrimary '||' exprPrimary #ConcatExpr
 
     | parameterSpecification # ParamExpr
