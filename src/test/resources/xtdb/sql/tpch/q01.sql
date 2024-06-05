@@ -1,3 +1,10 @@
+FROM
+  lineitem AS l
+WHERE
+  l.l_shipdate <= DATE '1998-12-01' - INTERVAL '90' DAY
+GROUP BY
+l.l_returnflag,
+l.l_linestatus
 SELECT
   l.l_returnflag,
   l.l_linestatus,
@@ -9,13 +16,6 @@ SELECT
   AVG(l.l_extendedprice)                                      AS avg_price,
   AVG(l.l_discount)                                           AS avg_disc,
   COUNT(*)                                                    AS count_order
-FROM
-  lineitem AS l
-WHERE
-  l.l_shipdate <= DATE '1998-12-01' - INTERVAL '90' DAY
-GROUP BY
-l.l_returnflag,
-l.l_linestatus
 ORDER BY
 l.l_returnflag,
 l.l_linestatus

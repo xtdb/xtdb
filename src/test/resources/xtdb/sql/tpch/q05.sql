@@ -1,6 +1,3 @@
-SELECT
-  n.n_name,
-  SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue
 FROM
   customer AS c,
   orders AS o,
@@ -18,7 +15,7 @@ WHERE
   AND r.r_name = 'ASIA'
   AND o.o_orderdate >= DATE '1994-01-01'
   AND o.o_orderdate < DATE '1994-01-01' + INTERVAL '1' YEAR
-GROUP BY
-n.n_name
-ORDER BY
-revenue DESC
+SELECT
+  n.n_name,
+  SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue
+ORDER BY revenue DESC
