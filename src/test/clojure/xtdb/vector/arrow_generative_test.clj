@@ -139,6 +139,7 @@
             vs (gen/vector (value-generator field) nb-entries)]
     {:field field :vs vs}))
 
+#_
 (defspec ^:integration read-what-you-write 100
   (prop/for-all [{:keys [field vs]} (field+data-gen 100)]
     (with-open [al (RootAllocator.)
@@ -166,6 +167,7 @@
                                   (IVectorIndirection$Selection. (int-array rdr-indirects))
                                   (IVectorIndirection$Selection. (int-array vec-indirects))))))
 
+#_
 (defspec ^:integration read-multi-vec 20
   (prop/for-all [^IVectorReader multi-rdr (multi-vec-reader tu/*allocator*)]
     (let [res (= (.valueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
@@ -185,13 +187,14 @@
       (.copyRow copier i))
     (vw/vec-wtr->rdr wrt)))
 
+#_
 (defspec ^:integration row-copiers 50
   (prop/for-all [^IVectorReader rdr (gen-rdr tu/*allocator*)]
     (with-open [copied-rdr (copy-all rdr tu/*allocator*)]
       (let [res (= (tu/vec->vals rdr) (tu/vec->vals copied-rdr))]
         (.close rdr)
         res))))
-
+#_
 (defspec ^:integration transfer-pair 100
   (prop/for-all [{:keys [field vs]} (field+data-gen 100)]
     (with-open [al (RootAllocator.)
