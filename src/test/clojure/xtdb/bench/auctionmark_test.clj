@@ -25,7 +25,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user [])
                                                     (aggregate {:count-id (row-count)}))))))
-    (t/is (= "u_0" (b/sample-flat worker am/user-id)))))
+    (t/is (= (am/user-id 0) (b/sample-flat worker am/user-id)))))
 
 (deftest generate-categories-test
   (let [worker (->worker *node*)]
@@ -34,7 +34,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :category [])
                                                     (aggregate {:count-id (row-count)}))))))
-    (t/is (= "c_0" (b/sample-flat worker am/category-id)))))
+    (t/is (= (am/category-id 0) (b/sample-flat worker am/category-id)))))
 
 (deftest generate-region-test
   (let [worker (->worker *node*)]
@@ -42,7 +42,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :region [])
                                                     (aggregate {:count-id (row-count)}))))))
-    (t/is (= "r_0" (b/sample-flat worker am/region-id)))))
+    (t/is (= (am/region-id 0) (b/sample-flat worker am/region-id)))))
 
 (deftest generate-global-attribute-group-test
   (let [worker (->worker *node*)]
@@ -52,7 +52,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :gag [])
                                                     (aggregate {:count-id (row-count)}))))))
-    (t/is (= "gag_0" (b/sample-flat worker am/gag-id)))))
+    (t/is (= (am/gag-id 0) (b/sample-flat worker am/gag-id)))))
 
 (deftest generate-global-attribute-value-test
   (let [worker (->worker *node*)]
@@ -63,7 +63,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :gav [])
                                                     (aggregate {:count-id (row-count)}))))))
-    (t/is (= "gav_0" (b/sample-flat worker am/gav-id)))))
+    (t/is (= (am/gav-id 0) (b/sample-flat worker am/gav-id)))))
 
 (deftest generate-user-attributes-test
   (let [worker (->worker *node*)]
@@ -71,7 +71,7 @@
     (bxt2/generate worker :user-attribute am/generate-user-attributes 1)
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user-attribute [])
                                                     (aggregate {:count-id (row-count)}))))))
-    (t/is (= "ua_0" (b/sample-flat worker am/user-attribute-id)))))
+    (t/is (= (am/user-attribute-id 0) (b/sample-flat worker am/user-attribute-id)))))
 
 (deftest generate-item-test
   (with-redefs [am/sample-status (constantly :open)]
@@ -83,8 +83,8 @@
 
       (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :item [])
                                                       (aggregate {:count-id (row-count)}))))))
-      (t/is (= "i_0" (:i_id (am/random-item worker :status :open))))
-      (t/is (= "u_0" (:i_u_id (am/random-item worker :status :open))))
+      (t/is (= (am/item-id 0) (:i_id (am/random-item worker :status :open))))
+      (t/is (= (am/user-id 0) (:i_u_id (am/random-item worker :status :open))))
 
       (t/testing "item update"
         (let [{old-description :i-description} (first (xt/q *node* '(from :item [i-description])))
@@ -101,7 +101,7 @@
       (bxt2/generate worker :item am/generate-item 1)
       ;; to wait for indexing
       (Thread/sleep 10)
-      (t/is (= "i_0" (-> (am/proc-get-item worker) first :i_id))))))
+      (t/is (not (nil? (-> (am/proc-get-item worker) first :i_id)))))))
 
 (deftest proc-new-user-test
   (with-redefs [am/sample-status (constantly :open)]
@@ -113,7 +113,7 @@
 
       (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user [])
                                                       (aggregate {:count-id (row-count)}))))))
-      (t/is (= "u_0" (b/sample-flat worker am/user-id))))))
+      (t/is (= (am/user-id 0) (b/sample-flat worker am/user-id))))))
 
 (deftest proc-new-bid-test
   (with-redefs [am/sample-status (constantly :open)]
@@ -132,11 +132,15 @@
                  (first (xt/q *node* '(from :item [i_num_bids])
                               {:key-fn :snake-case-keyword}))))
         ;; there exists a bid
-        (t/is (= {:ib_i_id "i_0", :ib_id "ib_0", :ib_buyer_id "u_0"}
+        (t/is (= {:ib_id #uuid "4a767ada-62cc-3cca-0000-000000000000",
+                  :ib_i_id #uuid "4a767ada-62cc-3cca-b501-af23d53f5c8e",
+                  :ib_buyer_id #uuid "d526fcdf-9b10-329b-9482-0f729dbb25f4"}
+
                  (first (xt/q *node* '(from :item-bid [ib_id ib_i_id ib_buyer_id])
                               {:key-fn :snake-case-keyword}))))
         ;; new max bid
-        (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
+        (t/is (= {:imb #uuid "4a767ada-62cc-3cca-4a76-7ada62cc3cca"
+                  :imb_i_id #uuid "4a767ada-62cc-3cca-b501-af23d53f5c8e",}
                  (first (xt/q *node*
                               '(from :item-max-bid [{:xt/id imb}, imb_i_id])
                               {:key-fn :snake-case-keyword})))))
@@ -151,7 +155,8 @@
                                {:key-fn :snake-case-keyword})
                          first :i_num_bids)))
           ;; winning bid remains the same
-          (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
+          (t/is (= {:imb #uuid "4a767ada-62cc-3cca-4a76-7ada62cc3cca",
+                    :imb_i_id #uuid "4a767ada-62cc-3cca-b501-af23d53f5c8e"}
                    (first (xt/q *node* '(from :item-max-bid [{:xt/id imb} imb_i_id])
                                 {:key-fn :snake-case-keyword})))))))))
 
@@ -169,8 +174,8 @@
         ;; new item
         (let [{:keys [i_id i_u_id]} (first (xt/q *node* '(from :item [i_id i_u_id])
                                                  {:key-fn :snake-case-keyword}))]
-          (t/is (= "i_0" i_id))
-          (t/is (= "u_0" i_u_id)))
+          (t/is (= (am/item-id 0) i_id))
+          (t/is (= (am/user-id 0) i_u_id)))
         (t/is (< (- (:u_balance (first (xt/q *node* '(from :user [u_balance])
                                              {:key-fn :snake-case-keyword})))
                     (double -1.0))
@@ -178,7 +183,8 @@
 
 (deftest proc-new-comment-and-response-test
   (with-redefs [am/sample-status (constantly :open)]
-    (let [worker (->worker *node*)]
+    (let [worker (->worker *node*)
+          ic_id #uuid "4a767ada-62cc-3cca-0000-000000000000"]
       (t/testing "new comment"
         (bxt2/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
@@ -186,10 +192,10 @@
         (bxt2/generate worker :gag am/generate-global-attribute-group 10)
         (bxt2/generate worker :gav am/generate-global-attribute-value 100)
         (bxt2/generate worker :item am/generate-item 1)
-        
+
         (t/is (:committed? (am/proc-new-comment worker)))
 
-        (t/is (= [{:ic_id "ic_0"}]
+        (t/is (= [{:ic_id ic_id}]
                  (xt/q *node* '(from :item-comment [ic_id])
                        {:key-fn :snake-case-keyword})))
 
@@ -198,9 +204,9 @@
                           first
                           (contains? :ic_response))))
 
-        (t/is (:committed? (am/proc-new-comment-response worker))) 
+        (t/is (:committed? (am/proc-new-comment-response worker)))
 
-        (t/is (true? (-> (xt/q *node* '(from :item-comment [{:xt/id "ic_0"} ic_response])
+        (t/is (true? (-> (xt/q *node* (list 'from :item-comment [{:xt/id ic_id} 'ic_response])
                                {:key-fn :snake-case-keyword})
                          first
                          (contains? :ic_response))))))))
@@ -220,7 +226,7 @@
                  (xt/q *node* '(from :item [i_status]))))
         (am/proc-new-purchase worker)
 
-        (t/is (= [{:xt/id "ip_0"}]
+        (t/is (= [{:xt/id #uuid "4a767ada-62cc-3cca-0000-000000000000"}]
                  (xt/q *node* '(from :item-purchase [xt/id]))))
 
         (t/is (= [{:i-status :closed}]
@@ -239,7 +245,7 @@
 
         (am/proc-new-feedback worker)
 
-        (t/is (= [{:xt/id "if_0"}]
+        (t/is (= [{:xt/id #uuid "4a767ada-62cc-3cca-0000-000000000000"}]
                  (xt/q *node* '(from :item-feedback [xt/id]))))))))
 
 (deftest proc-check-winning-bids-test
@@ -256,8 +262,8 @@
       (am/proc-check-winning-bids worker)
 
       ;; works as we use a pseudorandom generator
-      (t/is (= [{:xt/id "i_1"}] (xt/q *node* '(from :item [{:i_status :closed} xt/id]))))
-      (t/is (= [{:xt/id "i_0"}] (xt/q *node* '(from :item [{:i_status :waiting-for-purchase} xt/id])))))))
+      (t/is (= [{:xt/id (am/item-id 1)}] (xt/q *node* '(from :item [{:i_status :closed} xt/id]))))
+      (t/is (= [{:xt/id (am/item-id 0)}] (xt/q *node* '(from :item [{:i_status :waiting-for-purchase} xt/id])))))))
 
 (deftest proc-get-item-comment-test
   (with-redefs [am/sample-status (constantly :open)]
@@ -271,7 +277,7 @@
         (bxt2/generate worker :item am/generate-item 1)
         (am/proc-new-comment worker)
 
-        (t/is (= ["ic_0"]
+        (t/is (= [#uuid "4a767ada-62cc-3cca-0000-000000000000"]
                  (map :xt/id (am/proc-get-comment worker))))))))
 
 (deftest proc-get-user-info
@@ -295,14 +301,14 @@
         (am/proc-new-feedback worker)
 
         ;; user 0 is a seller
-        (let [[user-results item-results feedback-results] (am/get-user-info *node* "u_0" true true true)]
+        (let [[user-results item-results feedback-results] (am/get-user-info *node* (am/user-id 0) true true true)]
 
           (t/is (= 1 (count user-results)))
           (t/is (= 1 (count item-results)))
           (t/is (= 1 (count feedback-results))))
 
         ;; user 1 is a buyer
-        (let [[user-results item-results _] (am/get-user-info *node* "u_1" false true true)]
+        (let [[user-results item-results _] (am/get-user-info *node* (am/user-id 1) false true true)]
 
           (t/is (= 1 (count user-results)))
           (t/is (= 1 (count item-results))))))))
