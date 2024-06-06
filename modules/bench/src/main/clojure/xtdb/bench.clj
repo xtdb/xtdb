@@ -48,7 +48,8 @@
 (defn sample-gaussian [worker domain]
   (let [random (rng worker)
         long-counter (counter worker domain)]
-    (some-> (min (dec (.get long-counter)) (Math/round (* (.get long-counter) (* 0.5 (+ 1.0 (.nextGaussian random))))))
+    ;; not a real gaussian, we cut of some bits at the tails
+    (some-> (min (dec (.get long-counter)) (max 0 (Math/round (* (.get long-counter) (* 0.5 (+ 1.0 (.nextGaussian random)))))))
             long
             nat-or-nil
             domain)))
