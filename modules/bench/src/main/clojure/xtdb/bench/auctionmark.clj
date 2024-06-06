@@ -633,9 +633,9 @@
                                                      [{:t :call, :transaction :new-comment-response,
                                                        :f (b/wrap-in-catch proc-new-comment-response)}  1.0]
                                                      [{:t :call, :transaction :new-purchase,
-                                                       :f (b/wrap-in-catch proc-new-comment-response)}  2.0]
+                                                       :f (b/wrap-in-catch proc-new-purchase)}  2.0]
                                                      [{:t :call, :transaction :new-feedback,
-                                                       :f (b/wrap-in-catch proc-new-comment-response)}  3.0]
+                                                       :f (b/wrap-in-catch proc-new-feedback)}  3.0]
                                                      [{:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)} 45.0]
                                                      [{:t :call, :transaction :update-item,
                                                        :f (b/wrap-in-catch proc-update-item)} 2.0]
