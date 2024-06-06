@@ -1620,3 +1620,14 @@
 (deftest select-star-on-non-existent-tables-3005
   (t/is (= [] (xt/q tu/*node* "select users.first_name from users")))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM users"))))
+
+(deftest nested-parenthesized-joined-tables-3185
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :x 1}]
+                            [:put-docs :bar {:xt/id 1 :y 1}]
+                            [:put-docs :baz {:xt/id 1 :z 1}]])
+  
+  (t/is (= [{:x 1, :y 1}]
+           (xt/q tu/*node* "SELECT * EXCLUDE xt$id FROM ( foo LEFT JOIN bar ON true )")))
+  
+  (t/is (= [{:x 1, :y 1, :z 1}]
+           (xt/q tu/*node* "SELECT * EXCLUDE xt$id FROM ( foo JOIN (bar JOIN baz ON true) ON true )"))))
