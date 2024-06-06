@@ -17,7 +17,7 @@
 
 (def user-id (comp str->uuid (partial str "u_")))
 (def region-id (comp str->uuid (partial str "r_")))
-(def item-id (comp str->uuid (partial str "i_")))
+(defn item-id [id] id)
 (defn item-bid-id [id] id)
 (def category-id (comp str->uuid (partial str "c_")))
 (defn item-comment-id [id] id)
@@ -73,10 +73,10 @@
 
   The benchmark randomly selects id from a pool of users as an input for u_id parameter using Gaussian distribution. A c_id parameter is randomly selected using a flat histogram from the real auction site’s item category statistic."
   [{:keys [sut] :as worker}]
-  (let [i_id-raw (.getAndIncrement (b/counter worker item-id))
-        ^UUID i_id (item-id i_id-raw)
-        i_id_high_bits (.getMostSignificantBits i_id)
-        u_id (b/sample-gaussian worker user-id)
+  (let [^UUID u_id (b/sample-gaussian worker user-id)
+        i_id-raw (b/increment worker item-id)
+        i_id_high_bits (.getMostSignificantBits u_id)
+        i_id (UUID. i_id_high_bits i_id-raw)
         c_id (sample-category-id worker)
         name (b/random-str worker)
         description (b/random-str worker)
@@ -100,7 +100,6 @@
                                {:args [gav-id gag-id] , :key-fn :snake-case-keyword}))]
               (recur gag-ids gav-ids (into res [gag_name gav_name])))
             (str description " " (str/join " " res))))]
-
     (->> (concat
           [[:put-docs :item
             {:xt/id i_id
@@ -361,8 +360,8 @@
                            (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM item WHERE item.i_u_id = ?
-                                      ORDER BY item.i_end_date
-                                      DESC LIMIT 20"
+                                      ORDER BY item.i_end_date DESC
+                                      LIMIT 20"
                                  {:args [u_id] :key-fn :snake-case-keyword})
 
                            (and buyer-items? (not seller-items?))
@@ -370,8 +369,8 @@
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM user_item AS ui, item
                                       WHERE ui.ui_u_id = ? AND ui.ui_i_id = item.xt$id AND ui.ui_i_u_id = item.i_u_id
-                                      ORDER BY item.i_end_date
-                                      DESC LIMIT 20"
+                                      ORDER BY item.i_end_date DESC
+                                      LIMIT 20"
                                  {:args [u_id] :key-fn :snake-case-keyword}))
         feedback-results (when feedback?
                            (xt/q sut "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
@@ -380,7 +379,8 @@
                                       FROM item_feedback AS if, item, user
                                       WHERE if.if_buyer_id = ? AND if.if_i_id = item.xt$id
                                       AND if.if_u_id = item.i_u_id AND if.if_u_id = user.xt$id
-                                      ORDER BY if.if_date DESC LIMIT 10"
+                                      ORDER BY if.if_date DESC
+                                      LIMIT 10"
                                  {:args [u_id] :key-fn :snake-case-keyword}))]
     [user-results item-results feedback-results]))
 
@@ -513,8 +513,9 @@
        :u_created (b/current-timestamp worker)})))
 
 (defn generate-item [worker]
-  (let [i_id (b/increment worker item-id)
-        i_u_id (b/sample-flat worker user-id)
+  (let [raw_i_id (b/increment worker item-id)
+        ^UUID i_u_id (b/sample-flat worker user-id)
+        i_id (UUID. (.getMostSignificantBits i_u_id) raw_i_id)
         i_c_id (sample-category-id worker)
         i_start_date (b/current-timestamp worker)
         i_end_date (.plus ^Instant (b/current-timestamp worker) (Duration/ofDays 32))

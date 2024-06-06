@@ -6,7 +6,7 @@
             [xtdb.api :as xt]
             [xtdb.test-util :as tu :refer [*node*]])
   (:import (java.time Clock)
-           (java.util Random)
+           (java.util Random UUID)
            (java.util.concurrent ConcurrentHashMap)))
 
 (t/use-fixtures :each tu/with-node)
@@ -83,7 +83,8 @@
 
       (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :item [])
                                                       (aggregate {:count-id (row-count)}))))))
-      (t/is (= (am/item-id 0) (:i_id (am/random-item worker :status :open))))
+      (t/is (= (UUID. (.getMostSignificantBits ^UUID (am/user-id 0)) (am/item-id 0))
+               (:i_id (am/random-item worker :status :open))))
       (t/is (= (am/user-id 0) (:i_u_id (am/random-item worker :status :open))))
 
       (t/testing "item update"
@@ -108,7 +109,6 @@
     (let [worker (->worker *node*)]
       (am/load-categories-tsv worker)
       (bxt2/generate worker :category am/generate-category 1)
-      (bxt2/generate worker :item am/generate-item 1)
       (am/proc-new-user worker)
 
       (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user [])
@@ -132,15 +132,14 @@
                  (first (xt/q *node* '(from :item [i_num_bids])
                               {:key-fn :snake-case-keyword}))))
         ;; there exists a bid
-        (t/is (= {:ib_id #uuid "4a767ada-62cc-3cca-0000-000000000000",
-                  :ib_i_id #uuid "4a767ada-62cc-3cca-b501-af23d53f5c8e",
+        (t/is (= {:ib_id #uuid "d33def0e-b493-3f91-0000-000000000000",
+                  :ib_i_id #uuid "d33def0e-b493-3f91-0000-000000000000",
                   :ib_buyer_id #uuid "d526fcdf-9b10-329b-9482-0f729dbb25f4"}
-
                  (first (xt/q *node* '(from :item-bid [ib_id ib_i_id ib_buyer_id])
                               {:key-fn :snake-case-keyword}))))
         ;; new max bid
-        (t/is (= {:imb #uuid "4a767ada-62cc-3cca-4a76-7ada62cc3cca"
-                  :imb_i_id #uuid "4a767ada-62cc-3cca-b501-af23d53f5c8e",}
+        (t/is (= {:imb_i_id #uuid "d33def0e-b493-3f91-0000-000000000000",
+                  :imb #uuid "d33def0e-b493-3f91-d33d-ef0eb4933f91"}
                  (first (xt/q *node*
                               '(from :item-max-bid [{:xt/id imb}, imb_i_id])
                               {:key-fn :snake-case-keyword})))))
@@ -155,8 +154,8 @@
                                {:key-fn :snake-case-keyword})
                          first :i_num_bids)))
           ;; winning bid remains the same
-          (t/is (= {:imb #uuid "4a767ada-62cc-3cca-4a76-7ada62cc3cca",
-                    :imb_i_id #uuid "4a767ada-62cc-3cca-b501-af23d53f5c8e"}
+          (t/is (= {:imb #uuid "d33def0e-b493-3f91-d33d-ef0eb4933f91",
+                    :imb_i_id #uuid "d33def0e-b493-3f91-0000-000000000000"}
                    (first (xt/q *node* '(from :item-max-bid [{:xt/id imb} imb_i_id])
                                 {:key-fn :snake-case-keyword})))))))))
 
@@ -174,7 +173,8 @@
         ;; new item
         (let [{:keys [i_id i_u_id]} (first (xt/q *node* '(from :item [i_id i_u_id])
                                                  {:key-fn :snake-case-keyword}))]
-          (t/is (= (am/item-id 0) i_id))
+          (t/is (= (UUID. (.getMostSignificantBits ^UUID (am/user-id 0)) (am/item-id 0))
+                   i_id))
           (t/is (= (am/user-id 0) i_u_id)))
         (t/is (< (- (:u_balance (first (xt/q *node* '(from :user [u_balance])
                                              {:key-fn :snake-case-keyword})))
@@ -184,7 +184,7 @@
 (deftest proc-new-comment-and-response-test
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)
-          ic_id #uuid "4a767ada-62cc-3cca-0000-000000000000"]
+          ic_id #uuid "d526fcdf-9b10-329b-0000-000000000000"]
       (t/testing "new comment"
         (bxt2/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
@@ -226,7 +226,7 @@
                  (xt/q *node* '(from :item [i_status]))))
         (am/proc-new-purchase worker)
 
-        (t/is (= [{:xt/id #uuid "4a767ada-62cc-3cca-0000-000000000000"}]
+        (t/is (= [{:xt/id #uuid "d526fcdf-9b10-329b-0000-000000000000"}]
                  (xt/q *node* '(from :item-purchase [xt/id]))))
 
         (t/is (= [{:i-status :closed}]
@@ -245,13 +245,13 @@
 
         (am/proc-new-feedback worker)
 
-        (t/is (= [{:xt/id #uuid "4a767ada-62cc-3cca-0000-000000000000"}]
+        (t/is (= [{:xt/id #uuid "d526fcdf-9b10-329b-0000-000000000000"}]
                  (xt/q *node* '(from :item-feedback [xt/id]))))))))
 
 (deftest proc-check-winning-bids-test
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
-      (bxt2/generate worker :user am/generate-user 1)
+      (bxt2/generate worker :user am/generate-user 2)
       (am/load-categories-tsv worker)
       (bxt2/generate worker :category am/generate-category 10)
       (bxt2/generate worker :gag am/generate-global-attribute-group 10)
@@ -262,8 +262,8 @@
       (am/proc-check-winning-bids worker)
 
       ;; works as we use a pseudorandom generator
-      (t/is (= [{:xt/id (am/item-id 1)}] (xt/q *node* '(from :item [{:i_status :closed} xt/id]))))
-      (t/is (= [{:xt/id (am/item-id 0)}] (xt/q *node* '(from :item [{:i_status :waiting-for-purchase} xt/id])))))))
+      (t/is (= [{:xt/id #uuid "d33def0e-b493-3f91-0000-000000000000"}] (xt/q *node* '(from :item [{:i_status :closed} xt/id]))))
+      (t/is (= [{:xt/id #uuid "d33def0e-b493-3f91-0000-000000000001"}] (xt/q *node* '(from :item [{:i_status :waiting-for-purchase} xt/id])))))))
 
 (deftest proc-get-item-comment-test
   (with-redefs [am/sample-status (constantly :open)]
@@ -277,7 +277,7 @@
         (bxt2/generate worker :item am/generate-item 1)
         (am/proc-new-comment worker)
 
-        (t/is (= [#uuid "4a767ada-62cc-3cca-0000-000000000000"]
+        (t/is (= [#uuid "d526fcdf-9b10-329b-0000-000000000000"]
                  (map :xt/id (am/proc-get-comment worker))))))))
 
 (deftest proc-get-user-info
