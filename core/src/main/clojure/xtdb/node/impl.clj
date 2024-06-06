@@ -14,12 +14,12 @@
            (java.util.concurrent ExecutionException)
            java.util.HashMap
            java.util.List
-           [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb TransactionKey Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis IKeyFn$KeyFn QueryOptions XtqlQuery)
+           xtdb.api.tx.TxOptions
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -65,7 +65,17 @@
                  metrics]
   IXtdb
   (submitTx [this opts tx-ops]
-    (let [system-time (some-> opts .getSystemTime)
+    (xtp/submit-tx this tx-ops opts))
+
+  (executeTx [this opts tx-ops]
+    (xtp/execute-tx this tx-ops opts))
+
+  (openQuery [this query query-opts]
+    (xtp/open-sql-query this query query-opts))
+
+  xtp/PNode
+  (submit-tx [this tx-ops opts]
+    (let [system-time (some-> ^TxOptions opts .getSystemTime)
           tx-key (try
                    @(log/submit-tx& this (vec tx-ops) opts)
                    (catch ExecutionException e
@@ -76,8 +86,8 @@
       (swap! !latest-submitted-tx time/max-tx tx-key)
       tx-key))
 
-  (executeTx [this opts tx-ops]
-    (let [tx-key (.submitTx this opts tx-ops)]
+  (execute-tx [this tx-ops opts]
+    (let [tx-key (xtp/submit-tx this tx-ops opts)]
       (with-open [res (.openQuery this "SELECT txs.\"xt$committed?\" AS is_committed, txs.xt$error AS error FROM xt$txs txs WHERE txs.xt$id = ?"
                                   (let [^List args [(:tx-id tx-key)]]
                                     (-> (QueryOptions/queryOpts)
@@ -89,10 +99,6 @@
             (serde/->tx-committed tx-key)
             (serde/->tx-aborted tx-key error))))))
 
-  (openQuery [this query query-opts]
-    (xtp/open-sql-query this query query-opts))
-
-  xtp/PNode
   (open-sql-query [this query query-opts]
     (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
       (-> (.prepareQuery this ^String query query-opts)

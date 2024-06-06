@@ -159,7 +159,7 @@
 
   (^TransactionKey [^IXtdb node, tx-ops] (submit-tx node tx-ops {}))
   (^TransactionKey [^IXtdb node, tx-ops tx-opts]
-   (.submitTx node (->TxOptions tx-opts) (->TxOpsArray tx-ops))))
+   (xtp/submit-tx node (->TxOpsArray tx-ops) (->TxOptions tx-opts))))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.
@@ -189,7 +189,7 @@
 
   (^TransactionKey [^IXtdb node, tx-ops] (execute-tx node tx-ops {}))
   (^TransactionKey [^IXtdb node, tx-ops tx-opts]
-   (.executeTx node (->TxOptions tx-opts) (->TxOpsArray tx-ops))))
+   (xtp/execute-tx node (->TxOpsArray tx-ops) (->TxOptions tx-opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status

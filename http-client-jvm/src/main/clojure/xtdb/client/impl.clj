@@ -87,6 +87,13 @@
    (xtp/open-sql-query client query query-opts))
 
   (submitTx [client opts tx-ops]
+    (xtp/submit-tx client tx-ops opts))
+
+  (executeTx [client opts tx-ops]
+    (xtp/submit-tx client tx-ops opts))
+
+  xtp/PNode
+  (submit-tx [client tx-ops opts]
     (let [{tx-key :body} (request client :post :tx
                                   {:content-type :transit+json
                                    :form-params {:tx-ops (vec tx-ops)
@@ -95,7 +102,7 @@
       (swap! !latest-submitted-tx time/max-tx tx-key)
       tx-key))
 
-  (executeTx [client opts tx-ops]
+  (execute-tx [client tx-ops opts]
     (let [{tx-res :body} (request client :post :tx
                                   {:content-type :transit+json
                                    :form-params {:tx-ops (vec tx-ops)
@@ -104,7 +111,6 @@
       (swap! !latest-submitted-tx time/max-tx tx-res)
       tx-res))
 
-  xtp/PNode
   (open-sql-query [client query query-opts]
     (open-query client query (into {:key-fn #xt/key-fn :snake-case-string} query-opts)))
 
