@@ -4,8 +4,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
-            [xtdb.bench.xtdb2 :as bxt]
-            [xtdb.test-util :as tu])
+            [xtdb.bench.xtdb2 :as bxt])
   (:import (java.time Duration Instant)
            (java.util ArrayList Random UUID)
            (java.util.concurrent ConcurrentHashMap)
@@ -666,4 +665,4 @@
                              :duration duration
                              :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
                              :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups)}}]}
-            (when sync {:t :call, :f #(tu/then-await-tx (:sut %))})])}))
+            (when sync {:t :call, :f #(catchup (:sut %))})])}))
