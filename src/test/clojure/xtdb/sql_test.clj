@@ -1616,3 +1616,7 @@
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo :bar 1}]])
   (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "ERASE FROM docs WHERE docs.xt$id IN (SELECT docs.xt$id FROM docs WHERE docs.bar = 1)"]])))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
+
+(deftest select-star-on-non-existent-tables-3005
+  (t/is (= [] (xt/q tu/*node* "select users.first_name from users")))
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM users"))))
