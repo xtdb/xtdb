@@ -391,8 +391,8 @@
         (f nil)
         (throw (err/runtime-err :xtdb.indexer/missing-sql-args
                                 {::err/message "Arguments list was expected but not provided"
-                                 :param-count param-count}))) 
-      
+                                 :param-count param-count})))
+
       (let [arg-count (count (seq args))]
         (if (not= arg-count param-count)
           (throw (err/runtime-err :xtdb.indexer/incorrect-sql-arg-count
@@ -411,12 +411,13 @@
         args-rdr (.structKeyReader sql-leg "args")
         upsert-idxer (->upsert-rel-indexer live-idx-tx tx-opts)
         delete-idxer (->delete-rel-indexer live-idx-tx)
-        erase-idxer (->erase-rel-indexer live-idx-tx)]
+        erase-idxer (->erase-rel-indexer live-idx-tx)
+        plan-query-opts (select-keys tx-opts [:default-all-valid-time?])]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)
               tables-with-cols (scan/tables-with-cols wm-src scan-emitter)
-              compiled-query (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
+              compiled-query (sql/compile-query query-str (assoc plan-query-opts :table-info tables-with-cols))
               param-count (:param-count (meta compiled-query))]
           ;; TODO handle error
           (zmatch (r/vector-zip compiled-query)
