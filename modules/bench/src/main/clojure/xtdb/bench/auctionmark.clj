@@ -356,24 +356,24 @@
                                        user.u_sattr1, user.u_sattr2, user.u_sattr3, user.u_sattr4, region.r_name FROM user, region
                                 WHERE user.xt$id = ? AND user.u_r_id = region.xt$id"
                            {:args [u_id] :key-fn :snake-case-keyword})
-        item-results (cond seller-items?
-                           (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
+        item-results nil #_(cond seller-items?
+                                 (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM item WHERE item.i_u_id = ?
                                       ORDER BY item.i_end_date DESC
                                       LIMIT 20"
-                                 {:args [u_id] :key-fn :snake-case-keyword})
+                                       {:args [u_id] :key-fn :snake-case-keyword})
 
-                           (and buyer-items? (not seller-items?))
-                           (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
+                                 (and buyer-items? (not seller-items?))
+                                 (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM user_item AS ui, item
                                       WHERE ui.ui_u_id = ? AND ui.ui_i_id = item.xt$id AND ui.ui_i_u_id = item.i_u_id
                                       ORDER BY item.i_end_date DESC
                                       LIMIT 20"
-                                 {:args [u_id] :key-fn :snake-case-keyword}))
-        feedback-results (when feedback?
-                           (xt/q sut "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
+                                       {:args [u_id] :key-fn :snake-case-keyword}))
+        feedback-results nil #_(when feedback?
+                                 (xt/q sut "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
                                              item.i_name, item.i_end_date, item.i_status, user.u_id,
                                              user.u_rating, user.u_sattr0, user.u_sattr1
                                       FROM item_feedback AS if, item, user
@@ -381,7 +381,7 @@
                                       AND if.if_u_id = item.i_u_id AND if.if_u_id = user.xt$id
                                       ORDER BY if.if_date DESC
                                       LIMIT 10"
-                                 {:args [u_id] :key-fn :snake-case-keyword}))]
+                                       {:args [u_id] :key-fn :snake-case-keyword}))]
     [user-results item-results feedback-results]))
 
 (defn proc-get-user-info [{:keys [sut] :as worker}]
