@@ -29,9 +29,6 @@ private val DEFAULT_ALL_VALID_TIME_KEY: Keyword = Keyword.intern("default-all-va
 private val EXPLAIN_KEY: Keyword? = Keyword.intern("explain?")
 private val KEY_FN_KEY: Keyword = Keyword.intern("key-fn")
 
-
-
-
 @Serializable
 data class QueryOptions(
     @JvmField @Serializable(ArgsSerde::class) val args: Map<String, *>? = null,

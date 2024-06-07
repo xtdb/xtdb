@@ -14,12 +14,12 @@
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.tx-ops :as tx-ops])
   (:import (java.io Writer)
            (java.util List Map)
+           [java.util.stream Stream]
            (xtdb.api IXtdb TransactionKey)
-           (xtdb.api.query Basis QueryOptions XtqlQuery)
+           (xtdb.api.query Basis QueryOptions)
            (xtdb.api.tx TxOp TxOptions)
            xtdb.types.ClojureForm))
 
@@ -31,6 +31,7 @@
 
   (time/->instant instant))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->ClojureForm [form]
   (ClojureForm. form))
 
@@ -105,14 +106,10 @@
   ([node query opts]
    (let [^QueryOptions query-opts (->QueryOptions (-> (into {:default-all-valid-time? false} opts)
                                                       (time/after-latest-submitted-tx node)))]
-     (with-open [res (if (string? query)
-                       (xtp/open-sql-query node query query-opts)
-
-                       (let [^XtqlQuery query (cond
-                                                (instance? XtqlQuery query) query
-                                                (seq? query) (xtql.edn/parse-query query)
-                                                :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-                         (xtp/open-xtql-query node query query-opts)))]
+     (with-open [^Stream res (cond
+                               (string? query) (xtp/open-sql-query node query query-opts)
+                               (seq? query) (xtp/open-xtql-query node query query-opts)
+                               :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
        (vec (.toList res))))))
 
 (defn- ->TxOptions [tx-opts]
@@ -123,12 +120,6 @@
                      (TxOptions. (some-> system-time expect-instant)
                                  default-tz
                                  (boolean default-all-valid-time?)))))
-
-(defn- ->TxOpsArray [tx-ops]
-  (->> (for [tx-op tx-ops]
-         (cond-> tx-op
-           (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
-       (into-array TxOp)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
@@ -159,7 +150,7 @@
 
   (^TransactionKey [^IXtdb node, tx-ops] (submit-tx node tx-ops {}))
   (^TransactionKey [^IXtdb node, tx-ops tx-opts]
-   (xtp/submit-tx node (->TxOpsArray tx-ops) (->TxOptions tx-opts))))
+   (xtp/submit-tx node (vec tx-ops) (->TxOptions tx-opts))))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.
@@ -189,7 +180,7 @@
 
   (^TransactionKey [^IXtdb node, tx-ops] (execute-tx node tx-ops {}))
   (^TransactionKey [^IXtdb node, tx-ops tx-opts]
-   (xtp/execute-tx node (->TxOpsArray tx-ops) (->TxOptions tx-opts))))
+   (xtp/execute-tx node (vec tx-ops) (->TxOptions tx-opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status

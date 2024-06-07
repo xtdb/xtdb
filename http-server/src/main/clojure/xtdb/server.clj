@@ -18,14 +18,12 @@
             [ring.adapter.jetty9 :as j]
             [ring.util.response :as ring-response]
             [spec-tools.core :as st]
-            xtdb.api
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
-            [xtdb.util :as util]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.util :as util])
   (:import (java.io InputStream OutputStream)
            (java.time Duration ZoneId)
            (java.util Map)
@@ -124,12 +122,11 @@
                            (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
 
    :post {:handler (fn [{:keys [^IXtdb node] :as req}]
-                     (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])
-                           tx-op-array (into-array TxOp tx-ops)]
+                     (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])]
                        {:status 200
                         :body (if await-tx?
-                                (.executeTx node opts tx-op-array)
-                                (.submitTx node opts tx-op-array))}))
+                                (xtp/execute-tx node tx-ops opts)
+                                (xtp/submit-tx node tx-ops opts))}))
 
           ;; TODO spec-tools doesn't handle multi-spec with a vector,
           ;; so we just check for vector and then conform later.
@@ -242,12 +239,9 @@
     mf/Decode
     (decode [_ data _]
       (with-open [^InputStream data data]
-        (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)
-              query (.query query-request)]
+        (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)]
           (-> (into {} (.queryOpts query-request))
-              (assoc :query (if (instance? XtqlQuery query)
-                              query
-                              (.sql ^SqlQuery query)))))))))
+              (assoc :query (.sql query-request))))))))
 
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts
@@ -270,17 +264,16 @@
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
                        {:status 200
-                        :body (if (string? query)
-                                (xtp/open-sql-query node query
-                                                    (xt/->QueryOptions (into {:key-fn :snake-case-string}
-                                                                             (dissoc query-opts :query))))
-                                (let [^XtqlQuery query (cond
-                                                         (instance? XtqlQuery query) query
-                                                         (seq? query) (xtql.edn/parse-query query)
-                                                         :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-                                  (xtp/open-xtql-query node query
-                                                       (xt/->QueryOptions (into {:key-fn :camel-case-string}
-                                                                                (dissoc query-opts :query))))))}))
+                        :body (cond
+                                (string? query) (xtp/open-sql-query node query
+                                                                    (xt/->QueryOptions (into {:key-fn :snake-case-string}
+                                                                                             (dissoc query-opts :query))))
+
+                                (seq? query) (xtp/open-xtql-query node query
+                                                                  (xt/->QueryOptions (into {:key-fn :camel-case-string}
+                                                                                           (dissoc query-opts :query))))
+
+                                :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))}))
 
           :parameters {:body ::query-body}}})
 

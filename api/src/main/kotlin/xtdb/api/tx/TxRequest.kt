@@ -6,4 +6,4 @@ import kotlinx.serialization.Serializable
  * @suppress
  */
 @Serializable
-data class TxRequest(val txOps: List<TxOp>, val opts: TxOptions? = null)
+data class TxRequest(val txOps: List<TxOp.Sql>, val opts: TxOptions? = null)

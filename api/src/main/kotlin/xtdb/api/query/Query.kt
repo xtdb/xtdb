@@ -17,131 +17,24 @@ import xtdb.api.query.XtqlQuery.OrderNulls.FIRST
 import xtdb.api.query.XtqlQuery.OrderNulls.LAST
 import xtdb.jsonIAE
 
-@Serializable(Query.Serde::class)
-sealed interface Query {
-    /**
-     * @suppress
-     */
-    object Serde : JsonContentPolymorphicSerializer<Query>(Query::class) {
-        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Query> = when (element) {
-            is JsonObject -> when {
-                "sql" in element -> SqlQuery.serializer()
-                else -> XtqlQuery.serializer()
-            }
-
-            else -> XtqlQuery.serializer()
-        }
-    }
-}
+sealed interface Query
 
 @Serializable
 data class SqlQuery(@JvmField val sql: String) : Query
 
-@Serializable(XtqlQuery.Serde::class)
 sealed interface XtqlQuery : Query {
 
-    /**
-     * @suppress
-     */
-    object Serde : JsonContentPolymorphicSerializer<XtqlQuery>(XtqlQuery::class) {
-        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<XtqlQuery> = when (element) {
-            is JsonArray -> Pipeline.serializer()
-            is JsonObject -> when {
-                "from" in element -> From.serializer()
-                "rel" in element -> Relation.serializer()
-                "unify" in element -> Unify.serializer()
-                "unionAll" in element -> UnionAll.serializer()
-                else -> throw jsonIAE("xtql/malformed-query", element)
-            }
+    sealed interface QueryTail
 
-            else -> throw jsonIAE("xtql/malformed-query", element)
-        }
-    }
+    sealed interface UnifyClause
 
-    @Serializable(QueryTail.Serde::class)
-    sealed interface QueryTail {
-        /**
-         * @suppress
-         */
-        object Serde : JsonContentPolymorphicSerializer<QueryTail>(QueryTail::class) {
-            override fun selectDeserializer(element: JsonElement): DeserializationStrategy<QueryTail> = when (element) {
-                is JsonObject -> when {
-                    "aggregate" in element -> Aggregate.serializer()
-                    "limit" in element -> Limit.serializer()
-                    "offset" in element -> Offset.serializer()
-                    "orderBy" in element -> OrderBy.serializer()
-                    "return" in element -> Return.serializer()
-                    "unnest" in element -> Unnest.serializer()
-                    "where" in element -> Where.serializer()
-                    "with" in element -> With.serializer()
-                    "without" in element -> Without.serializer()
-                    else -> throw jsonIAE("xtql/malformed-query-tail", element)
-                }
+    data class Pipeline(@JvmField val query: XtqlQuery, @JvmField val tails: List<QueryTail>) : XtqlQuery
 
-                else -> throw jsonIAE("xtql/malformed-query-tail", element)
-            }
-        }
-    }
+    data class Unify(@JvmField val clauses: List<UnifyClause>) : XtqlQuery
 
-    @Serializable(UnifyClause.Serde::class)
-    sealed interface UnifyClause {
-        /**
-         * @suppress
-         */
-        object Serde : JsonContentPolymorphicSerializer<UnifyClause>(UnifyClause::class) {
-            override fun selectDeserializer(element: JsonElement): DeserializationStrategy<UnifyClause> =
-                when (element) {
-                    is JsonObject -> when {
-                        "call" in element -> Call.serializer()
-                        "from" in element -> From.serializer()
-                        "join" in element -> Join.serializer()
-                        "leftJoin" in element -> LeftJoin.serializer()
-                        "rel" in element -> Relation.serializer()
-                        "unnest" in element -> Unnest.serializer()
-                        "where" in element -> Where.serializer()
-                        "with" in element -> With.serializer()
-                        else -> throw jsonIAE("xtql/malformed-unify-clause", element)
-                    }
-
-                    else -> throw jsonIAE("xtql/malformed-unify-clause", element)
-                }
-        }
-    }
-
-    @Serializable(Pipeline.Serde::class)
-    data class Pipeline(@JvmField val query: XtqlQuery, @JvmField val tails: List<QueryTail>) : XtqlQuery {
-        internal object Serde : KSerializer<Pipeline> {
-            override val descriptor: SerialDescriptor =
-                buildClassSerialDescriptor("xtdb.api.query.Query.Pipeline", JsonArray.serializer().descriptor)
-
-            override fun serialize(encoder: Encoder, value: Pipeline) {
-                require(encoder is JsonEncoder)
-                encoder.encodeJsonElement(buildJsonArray {
-                    add(encoder.json.encodeToJsonElement(value.query))
-                    for (tail in value.tails) add(encoder.json.encodeToJsonElement(tail))
-                })
-            }
-
-            override fun deserialize(decoder: Decoder): Pipeline {
-                require(decoder is JsonDecoder)
-                val element = decoder.decodeJsonElement()
-                if (element !is JsonArray) throw jsonIAE("xtql/malformed-pipeline", element)
-                val query = decoder.json.decodeFromJsonElement<XtqlQuery>(element[0])
-                val tails: MutableList<QueryTail> = mutableListOf()
-                for (tailElement in element.subList(1, element.size))
-                    tails.add(decoder.json.decodeFromJsonElement(tailElement))
-                return Pipeline(query, tails)
-            }
-        }
-    }
-
-    @Serializable
-    data class Unify(@JvmField @SerialName("unify") val clauses: List<UnifyClause>) : XtqlQuery
-
-    @Serializable
     data class From(
-        @JvmField @SerialName("from") val table: String,
-        @JvmField @SerialName("bind") val bindings: List<Binding>? = null,
+        @JvmField val table: String,
+        @JvmField val bindings: List<Binding>? = null,
         @JvmField val forValidTime: TemporalFilter? = null,
         @JvmField val forSystemTime: TemporalFilter? = null,
         @JvmField val projectAllCols: Boolean = false,
@@ -164,31 +57,26 @@ sealed interface XtqlQuery : Query {
         }
     }
 
-    @Serializable
-    data class Where(@JvmField @SerialName("where") val preds: List<Expr>) : QueryTail, UnifyClause
+    data class Where(@JvmField val preds: List<Expr>) : QueryTail, UnifyClause
 
-    @Serializable
-    data class With(@JvmField @SerialName("with") val bindings: List<Binding>) : QueryTail, UnifyClause {
+    data class With(@JvmField val bindings: List<Binding>) : QueryTail, UnifyClause {
         class Builder : Binding.ABuilder<Builder, With>() {
             override fun build() = With(getBindings())
         }
     }
 
-    @Serializable
-    data class Without(@JvmField @SerialName("without") val cols: List<String>) : QueryTail
+    data class Without(@JvmField val cols: List<String>) : QueryTail
 
-    @Serializable
-    data class Return(@JvmField @SerialName("return") val cols: List<Binding>) : QueryTail {
+    data class Return(@JvmField val cols: List<Binding>) : QueryTail {
         class Builder : Binding.ABuilder<Builder, Return>() {
             override fun build() = Return(getBindings())
         }
     }
 
-    @Serializable
     data class Call(
-        @JvmField @SerialName("call") val ruleName: String,
+        @JvmField val ruleName: String,
         @JvmField val args: List<Expr>,
-        @JvmField @SerialName("bind") val bindings: List<Binding>? = null,
+        @JvmField val bindings: List<Binding>? = null,
     ) : UnifyClause {
 
         fun binding(bindings: List<Binding>) = copy(bindings = bindings)
@@ -198,51 +86,37 @@ sealed interface XtqlQuery : Query {
         fun binding(bindings: List<Binding>): IJoin
     }
 
-    @Serializable
     data class Join(
-        @JvmField @SerialName("join") val query: XtqlQuery,
+        @JvmField val query: XtqlQuery,
         @JvmField val args: List<Binding>? = null,
-        @JvmField @SerialName("bind") val bindings: List<Binding>? = null,
+        @JvmField val bindings: List<Binding>? = null,
     ) : IJoin {
         override fun binding(bindings: List<Binding>) = copy(bindings = bindings)
     }
 
-    @Serializable
     data class LeftJoin(
-        @JvmField @SerialName("leftJoin") val query: XtqlQuery,
+        @JvmField val query: XtqlQuery,
         @JvmField val args: List<Binding>? = null,
-        @JvmField @SerialName("bind") val bindings: List<Binding>? = null,
+        @JvmField val bindings: List<Binding>? = null,
     ) : IJoin {
 
         override fun binding(bindings: List<Binding>) = copy(bindings = bindings)
     }
 
-    @Serializable
-    data class Aggregate(@JvmField @SerialName("aggregate") val cols: List<Binding>) : QueryTail {
+    data class Aggregate(@JvmField val cols: List<Binding>) : QueryTail {
         class Builder : Binding.ABuilder<Builder, Aggregate>() {
             override fun build() = Aggregate(getBindings())
         }
     }
 
-    @Serializable
     enum class OrderDirection {
-        @SerialName("asc")
-        ASC,
-
-        @SerialName("desc")
-        DESC
+        ASC, DESC
     }
 
-    @Serializable
     enum class OrderNulls {
-        @SerialName("first")
-        FIRST,
-
-        @SerialName("last")
-        LAST
+        FIRST, LAST
     }
 
-    @Serializable(OrderSpec.Serde::class)
     data class OrderSpec(
         @JvmField val expr: Expr,
         @JvmField val direction: OrderDirection? = null,
@@ -252,108 +126,32 @@ sealed interface XtqlQuery : Query {
         fun desc() = copy(direction = DESC)
         fun nullsFirst() = copy(nulls = FIRST)
         fun nullsLast() = copy(nulls = LAST)
-
-        internal object Serde : KSerializer<OrderSpec> {
-            override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.query.Query.OrderSpec")
-            override fun serialize(encoder: Encoder, value: OrderSpec) {
-                require(encoder is JsonEncoder)
-                if (value.nulls == null && value.direction == null && value.expr is Expr.LogicVar) encoder.encodeString(
-                    value.expr.lv
-                )
-                else encoder.encodeJsonElement(
-                    buildJsonObject {
-                        put("val", encoder.json.encodeToJsonElement(value.expr))
-                        if (value.direction != null) {
-                            put(
-                                "dir", when (value.direction) {
-                                    DESC -> "desc"
-                                    else -> "asc"
-                                }
-                            )
-                        }
-                        if (value.nulls != null) {
-                            put(
-                                "nulls", when (value.nulls) {
-                                    FIRST -> "first"
-                                    else -> "last"
-                                }
-                            )
-                        }
-                    })
-            }
-
-            override fun deserialize(decoder: Decoder): OrderSpec {
-                require(decoder is JsonDecoder)
-                when (val element = decoder.decodeJsonElement()) {
-                    is JsonPrimitive -> when {
-                        element.isString -> return OrderSpec(element.contentOrNull?.let { lVar(it) }
-                            ?: throw jsonIAE("xtql/malformed-order-spec", element))
-
-                        else -> throw jsonIAE("xtql/malformed-order-spec", element)
-                    }
-
-                    is JsonObject -> {
-                        val expr = decoder.json.decodeFromJsonElement<Expr>(
-                            element["val"] ?: throw jsonIAE("xtql/malformed-order-spec", element)
-                        )
-                        val direction = element["dir"]?.let { decoder.json.decodeFromJsonElement<OrderDirection>(it) }
-                        val nulls = element["nulls"]?.let { decoder.json.decodeFromJsonElement<OrderNulls>(it) }
-                        return OrderSpec(expr, direction, nulls)
-                    }
-
-                    else -> throw jsonIAE("xtql/malformed-order-spec", element)
-                }
-            }
-        }
     }
 
-    @Serializable
-    data class OrderBy(@JvmField @SerialName("orderBy") val orderSpecs: List<OrderSpec?>) : QueryTail
+    data class OrderBy(@JvmField val orderSpecs: List<OrderSpec?>) : QueryTail
 
-    @Serializable
-    data class UnionAll(@JvmField @SerialName("unionAll") val queries: List<XtqlQuery>) : XtqlQuery
+    data class UnionAll(@JvmField val queries: List<XtqlQuery>) : XtqlQuery
 
-    @Serializable
-    data class Limit(@JvmField @SerialName("limit") val length: Long) : QueryTail
+    data class Limit(@JvmField val length: Long) : QueryTail
 
-    @Serializable
-    data class Offset(@JvmField @SerialName("offset") val length: Long) : QueryTail
+    data class Offset(@JvmField val length: Long) : QueryTail
 
-    @Serializable(Relation.Serde::class)
-    abstract class Relation : XtqlQuery, UnifyClause {
-        internal object Serde : JsonContentPolymorphicSerializer<Relation>(Relation::class) {
-            override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Relation> = when (element) {
-                is JsonObject -> when {
-                    "rel" in element ->
-                        if (element["rel"] is JsonArray) DocsRelation.serializer()
-                        else ParamRelation.serializer()
+    abstract class Relation : XtqlQuery, UnifyClause
 
-                    else -> throw jsonIAE("xtql/malformed-relation", element)
-
-                }
-
-                else -> throw jsonIAE("xtql/malformed-relation", element)
-            }
-        }
-    }
-
-    @Serializable
     data class DocsRelation(
-        @JvmField @SerialName("rel") val documents: List<Map<String, Expr>>,
-        @JvmField @SerialName("bind") val bindings: List<Binding>,
+        @JvmField val documents: List<Map<String, Expr>>,
+        @JvmField val bindings: List<Binding>,
     ) :
         Relation() {
         fun bindings(bindings: List<Binding>) = copy(bindings = bindings)
     }
 
-    @Serializable
     data class ParamRelation(
-        @JvmField @SerialName("rel") val param: Param,
-        @JvmField @SerialName("bind") val bindings: List<Binding?>,
+        @JvmField val param: Param,
+        @JvmField val bindings: List<Binding?>,
     ) : Relation()
 
-    @Serializable
-    data class Unnest(@JvmField @SerialName("unnest") val binding: Binding) : QueryTail, UnifyClause
+    data class Unnest(@JvmField val binding: Binding) : QueryTail, UnifyClause
 }
 
 object Queries {

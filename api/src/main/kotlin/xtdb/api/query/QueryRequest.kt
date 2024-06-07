@@ -7,6 +7,6 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class QueryRequest(
-    @JvmField val query: Query,
+    @JvmField val sql: String,
     @JvmField val queryOpts: QueryOptions? = null
 )

@@ -26,21 +26,6 @@
 
 (defn- http-url [endpoint] (str "http://localhost:" tu/*http-port* "/" endpoint))
 
-(defn- decode-transit* [^String s]
-  (let [rdr (transit/reader (ByteArrayInputStream. (.getBytes s)) :json {:handlers serde/transit-read-handlers})]
-    (loop [res []]
-      (let [value-read (try
-                         (transit/read rdr)
-                         (catch RuntimeException e
-                           (if (instance? EOFException (.getCause e))
-                             ::finished
-                             (throw e))))]
-        (if (= ::finished value-read)
-          res
-          (recur (conj res value-read)))))))
-
-(defn- decode-transit [^String s] (first (decode-transit* s)))
-
 (defn- decode-json* [^String s]
   (let [json-lines (str/split-lines s)]
     (loop [res [] lns json-lines]
@@ -63,69 +48,6 @@
         [:sql "DELETE FROM docs WHERE docs.bar = 2"]
         [:sql "ERASE FROM docs WHERE docs.xt$id = 4"]]
        (mapv tx-ops/parse-tx-op)))
-
-(deftest transit-test
-  (xt/submit-tx *node* [[:put-docs :foo {:xt/id 1}]])
-  (Thread/sleep 100)
-
-  (t/is (= {:latest-completed-tx
-            #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"},
-            :latest-submitted-tx
-            #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}}
-           (-> (http/request {:accept :transit+json
-                              :as :string
-                              :request-method :get
-                              :url (http-url "status")})
-               :body
-               decode-transit))
-        "testing status")
-
-  (t/is (= #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}
-           (-> (http/request {:accept :transit+json
-                              :as :string
-                              :request-method :post
-                              :content-type :transit+json
-                              :form-params {:tx-ops possible-tx-ops}
-                              :transit-opts xtc/transit-opts
-                              :url (http-url "tx")})
-               :body
-               decode-transit))
-        "testing tx")
-
-  (t/is (= #xt/tx-result {:tx-id 2,
-                          :system-time #time/instant "2020-01-03T00:00:00Z",
-                          :committed? true}
-           (-> (http/request {:accept :transit+json
-                              :as :string
-                              :request-method :post
-                              :content-type :transit+json
-                              :form-params {:tx-ops possible-tx-ops
-                                            :await-tx? true}
-                              :transit-opts xtc/transit-opts
-                              :url (http-url "tx")})
-               :body
-               decode-transit))
-        "testing await-tx")
-
-  (t/is (= [{:xt/id 1}]
-           (xt/q *node* '(from :docs [xt/id])
-                 {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
-
-  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2}]])]
-    (t/is (= #{{:xt/id 1} {:xt/id 2}}
-             (-> (http/request {:accept :transit+json
-                                :as :string
-                                :request-method :post
-                                :content-type :transit+json
-                                :form-params {:query '(from :docs [xt/id])
-                                              :basis {:at-tx tx}
-                                              :key-fn #xt/key-fn :kebab-case-keyword}
-                                :transit-opts xtc/transit-opts
-                                :url (http-url "query")})
-                 :body
-                 decode-transit*
-                 set))
-          "testing query")))
 
 (deftest json-response-test
   (xt/submit-tx *node* [[:put-docs :foo {:xt/id 1}]])
@@ -232,17 +154,12 @@
                 :stringified "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :i64]"}
                (ex-data body))))))
 
-(defn- inst->str [^java.util.Date d] (str (.toInstant d)))
-
 (def json-tx-ops
-  [{"putDocs" [{"xt/id" 1}], "into" "docs"}
-   {"putDocs" [{"xt/id" 2}], "into" "docs"}
-   {"deleteDocs" [1], "from" "docs"}
-   {"putDocs" [{"xt/id" 3}]
-    "into" "docs"
-    "validFrom" (inst->str #inst "2050")
-    "validTo" (inst->str #inst "2051")}
-   {"eraseDocs" [3], "from" "docs"}
+  [{"sql" "INSERT INTO docs (xt$id) VALUES (1)"}
+   {"sql" "INSERT INTO docs (xt$id) VALUES (2)"}
+   {"sql" "DELETE FROM docs WHERE xt$id = 1"}
+   {"sql" "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (3, DATE '2050-01-01', DATE '2051-01-01')"}
+   {"sql" "ERASE FROM docs WHERE xt$id = 3"}
    {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"}
    {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"}
    {"sql" "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"}
@@ -256,191 +173,66 @@
   (let [_tx1 (xt/submit-tx *node* [[:put-docs :docs {:xt/id 1}]])
         {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
 
-    (t/is (= tx2
-             (-> (http/request {:accept :transit+json
+    (t/is (= {"txId" 1, "systemTime" "2020-01-02T00:00:00Z"}
+             (-> (http/request {:accept :json
                                 :as :string
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:txOps json-tx-ops}
                                 :url (http-url "tx")})
                  :body
-                 decode-transit))
+                 decode-json))
           "testing tx")
 
     (t/is (= [{:xt/id 2}]
              (xt/q *node* '(from :docs [xt/id])
-                   {:basis {:at-tx tx2}})))
+                   {:after-tx tx2})))
 
-
-    (t/is (= [{:xt/id 2}]
-             (-> (http/request {:accept :transit+json
+    (t/is (= [{"xt/id" 2}]
+             (-> (http/request {:accept :json
                                 :as :string
                                 :request-method :post
                                 :content-type :json
-                                :form-params {:query {"from" "docs", "bind" ["xt/id"]}
+                                :form-params {:sql "SELECT docs.xt$id FROM docs"
                                               :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
                                                           :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body
-                 decode-transit*))
-          "testing query")
-
-    (t/is (= [{:xt/id 2}]
-             (-> (http/request {:accept :transit+json
-                                :as :string
-                                :request-method :post
-                                :content-type :json
-                                :form-params {:query {"from" "docs", "bind" ["xt/id"]}
-                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
-                                                          :keyFn "SNAKE_CASE_KEYWORD"}}
-                                :url (http-url "query")})
-                 :body
-                 decode-transit*))
-          "testing query opts")
-
-    (t/is (= [{:xt/id 2}]
-             (-> (http/request {:accept :transit+json
-                                :as :string
-                                :request-method :post
-                                :content-type :json
-                                :form-params {:query {"sql" "SELECT docs.xt$id FROM docs"}
-                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
-                                                          :keyFn "KEBAB_CASE_KEYWORD"}}
-                                :url (http-url "query")})
-                 :body
-                 decode-transit*))
+                 decode-json))
           "testing sql query")
 
     (t/testing "malformed tx request "
       (let [{:keys [status body] :as _resp}
-            (http/request {:accept :transit+json
+            (http/request {:accept :json
                            :as :string
                            :request-method :post
                            :content-type :json
-                           :form-params {:txOps [{"evict" "docs" "ids" [3]}]}
+                           :form-params {:txOps [{"sql" 1}]}
                            :url (http-url "tx")
                            :throw-exceptions? false})
-            body (decode-transit body)]
-        (t/is (= 400 status))
-        (t/is (= "Illegal argument: 'xtql/malformed-tx-op'" (ex-message body)))
-        (t/is (= {::err/error-key :xtql/malformed-tx-op}
-                 (-> (ex-data body) (select-keys [::err/error-key]))))))
-
-    (t/testing "malformed query request (see xt:instat)"
-      (let [{:keys [status body] :as _resp}
-            (http/request {:accept :transit+json
-                           :as :string
-                           :request-method :post
-                           :content-type :json
-                           :form-params {:query {"from" "docs", "bind" ["xt/id"]}
-                                         :queryOpts {:basis {:atTx
-                                                             {"tx-id" tx-id
-                                                              "system-time" {"@type" "xt:instat" "@value" (str system-time)}}}}}
-                           :url (http-url "query")
-                           :throw-exceptions? false})
-            body (decode-transit body)]
+            body (decode-json body)]
         (t/is (= 400 status))
         (t/is (= "Error decoding JSON!" (ex-message body)))
         (t/is (= {:xtdb.error/error-key :malformed-request}
                  (-> (ex-data body) (select-keys [::err/error-key]))))))
 
-
-    (t/testing "XTDml"
-      (let [insert {"insertInto" "docs2" "query" {"from" "docs" "bind" ["xt/id"]}}
-            tx3 (-> (http/request {:accept :transit+json
-                                   :as :string
-                                   :request-method :post
-                                   :content-type :json
-                                   :form-params {:txOps [insert]}
-                                   :url (http-url "tx")})
-                    :body
-                    decode-transit)]
-
-        (t/is (= [{:xt/id 2}]
-                 (xt/q *node* '(from :docs2 [xt/id version])
-                       {:basis {:at-tx tx3}}))
-              "insert-into"))
-
-      (let [update {"update" "docs2"
-                    "bind" [{"xt/id" {"xt:param" "$uid"}}]
-                    "set" [{"version" 3}]
-                    "argRows" [{"uid" 2}]}
-            tx4 (-> (http/request {:accept :transit+json
-                                   :as :string
-                                   :request-method :post
-                                   :content-type :json
-                                   :form-params {:txOps [update]}
-                                   :url (http-url "tx")})
-                    :body
-                    decode-transit)]
-
-        (t/is (= [{:xt/id 2 :version 3}]
-                 (xt/q *node* '(from :docs2 [xt/id version])
-                       {:basis {:at-tx tx4}}))
-              "update"))
-
-      (let [delete {"deleteFrom" "docs2"
-                    "bind" [{"xt/id" 2}]}
-            tx5 (-> (http/request {:accept :transit+json
-                                   :as :string
-                                   :request-method :post
-                                   :content-type :json
-                                   :form-params {:txOps [delete]}
-                                   :url (http-url "tx")})
-                    :body
-                    decode-transit)]
-        (t/testing "delete"
-          (t/is (= [] (xt/q *node* '(from :docs2 [xt/id version])
-                            {:basis {:at-tx tx5}})))
-          (t/is (= #{{:xt/id 2} {:xt/id 2 :version 3}}
-                   (set (xt/q *node* '(from :docs2 {:bind [xt/id version]
-                                                    :for-valid-time :all-time})
-                              {:basis {:at-tx tx5}}))))))
-
-      (xt/submit-tx tu/*node* [[:put-docs :docs2 {:xt/id 3}]])
-      (let [erase {"eraseFrom" "docs2"
-                   "bind" [{"xt/id" 3}]}
-            tx6 (-> (http/request {:accept :transit+json
-                                   :as :string
-                                   :request-method :post
-                                   :content-type :json
-                                   :form-params {:txOps [erase]}
-                                   :url (http-url "tx")})
-                    :body
-                    decode-transit)]
-        (t/is (= [] (xt/q *node* '(from :docs2 {:bind [{:xt/id 3} xt/id version]
-                                                :for-valid-time :all-time})
-                          {:basis {:at-tx tx6}}))
-              "erase"))
-
-      ;; using docs in combination with docs3
-      (let [assert+put [{"assertExists" {"from" "docs", "bind" ["xt/id"]}}
-                        {"into" "docs3" "putDocs" [{"xt/id" 1}]}]
-            tx7 (-> (http/request {:accept :transit+json
-                                   :as :string
-                                   :request-method :post
-                                   :content-type :json
-                                   :form-params {:txOps assert+put}
-                                   :url (http-url "tx")})
-                    :body
-                    decode-transit)]
-        (t/is (= [{:xt/id 1}] (xt/q *node* '(from :docs3 [xt/id])
-                                    {:basis {:at-tx tx7}}))
-              "assert-exists"))
-
-      (let [assert+put [{"assertNotExists" {"from" "docs2", "bind" ["xt/id"]}}
-                        {"from" "docs3", "deleteDocs" [1]}]
-            tx7 (-> (http/request {:accept :transit+json
-                                   :as :string
-                                   :request-method :post
-                                   :content-type :json
-                                   :form-params {:txOps assert+put}
-                                   :url (http-url "tx")})
-                    :body
-                    decode-transit)]
-        (t/is (= [] (xt/q *node* '(from :docs3 [xt/id])
-                          {:basis {:at-tx tx7}}))
-              "assert-not-exists")))))
+    (t/testing "malformed query request (see xt:instat)"
+      (let [{:keys [status body] :as _resp}
+            (http/request {:accept :json
+                           :as :string
+                           :request-method :post
+                           :content-type :json
+                           :form-params {:sql "SELECT xt$id FROM docs"
+                                         :queryOpts {:basis {:atTx
+                                                             {"tx-id" tx-id
+                                                              "system-time" {"@type" "xt:instat" "@value" (str system-time)}}}}}
+                           :url (http-url "query")
+                           :throw-exceptions? false})
+            body (decode-json body)]
+        (t/is (= 400 status))
+        (t/is (= "Error decoding JSON!" (ex-message body)))
+        (t/is (= {:xtdb.error/error-key :malformed-request}
+                 (-> (ex-data body) (select-keys [::err/error-key]))))))))
 
 (deftest json-both-ways-test
   (t/is (= [{"foo_bar" 1} {"foo_bar" 2}]
@@ -448,7 +240,7 @@
                               :as :string
                               :request-method :post
                               :content-type :json
-                              :form-params {:query {"rel" [{"foo-bar" 1} {"foo-bar" 2}] "bind" ["foo-bar"]}
+                              :form-params {:sql "SELECT * FROM (VALUES 1, 2) vals (foo_bar)"
                                             :queryOpts {:keyFn "SNAKE_CASE_STRING"}}
                               :url (http-url "query")})
                :body
@@ -460,34 +252,10 @@
                               :as :string
                               :request-method :post
                               :content-type :json
-                              :form-params {:query {"sql" "SELECT LEAST(?,2), LEAST(3,4) FROM (VALUES (1)) x"}
+                              :form-params {:sql "SELECT LEAST(?,2), LEAST(3,4) FROM (VALUES (1)) x"
                                             :queryOpts {:args [1]
                                                         :keyFn "CAMEL_CASE_STRING"}}
                               :url (http-url "query")})
                :body
                decode-json*))
         "testing sql query with args"))
-
-(deftest accept-json
-  (xt/submit-tx *node* [[:put-docs :visits {:xt/id 1 :foo-bar "baz"} {:xt/id 2 :foo-bar "baz"}]])
-  (let [{:keys [content-type ^String body]} (http/request {:accept "application/json"
-                                                           :as :string
-                                                           :request-method :post
-                                                           :content-type :json
-                                                           :form-params {:query {"from" "visits", "bind" ["foo_bar"]}}
-                                                           :url (http-url "query")})]
-    (t/is (= :application/json content-type)
-          "content-type is JSON")
-    (t/is (= [{"fooBar" "baz"} {"fooBar" "baz"}] (JsonSerde/decode body))))
-
-  (t/testing "camel key-fn"
-    (let [{:keys [content-type ^String body]} (http/request {:accept "application/json"
-                                                             :as :string
-                                                             :request-method :post
-                                                             :content-type :json
-                                                             :form-params {:query {"from" "visits", "bind" ["fooBar"]}
-                                                                           :queryOpts {"keyFn" "SNAKE_CASE_STRING"}}
-                                                             :url (http-url "query")})]
-      (t/is (= :application/json content-type)
-            "content-type is JSON")
-      (t/is (= [{"foo_bar" "baz"} {"foo_bar" "baz"}] (JsonSerde/decode body))))))

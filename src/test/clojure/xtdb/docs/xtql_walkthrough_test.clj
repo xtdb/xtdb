@@ -16,12 +16,6 @@
   (-> (slurp (io/resource "docs/xtql_tutorial_examples.yaml"))
       (yaml/parse-string :keywords false)))
 
-(defn json-example-query [name]
-  (-> (get examples name)
-      JsonSerde/jsonRemoveComments
-      (JsonSerde/decode XtqlQuery)
-      x-edn/unparse-query))
-
 (defn json-example-dml [name]
   (-> (get examples name)
       JsonSerde/jsonRemoveComments
@@ -78,7 +72,6 @@
                   (from :users [{:xt/id user-id} first-name last-name])
                   ;; end::bo-xtql-1[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "bo-json-1")))
            (set (xt/q tu/*node* (sql-example "bo-sql-1")))))
 
   (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
@@ -88,7 +81,6 @@
                  (from :users [{:xt/id "ivan"} first-name last-name])
                  ;; end::bo-xtql-2[]
                  ,)
-           (xt/q tu/*node* (json-example-query "bo-json-2"))
            (xt/q tu/*node* (sql-example "bo-sql-2"))))
 
   (t/is (= [{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
@@ -101,7 +93,6 @@
                      (limit 10))
                  ;; end::bo-xtql-3[]
                  ,)
-           (xt/q tu/*node* (json-example-query "bo-json-3"))
            (xt/q tu/*node* (sql-example "bo-sql-3")))))
 
 (deftest joins
@@ -120,7 +111,6 @@
                          (from :articles [{:author-id user-id} title content]))
                   ;; end::joins-xtql-1[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "joins-json-1")))
            (set (xt/q tu/*node* (sql-example "joins-sql-1")))))
 
   (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
@@ -134,7 +124,6 @@
                          (where (<> uid1 uid2)))
                   ;; end::joins-xtql-2[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "joins-json-2")))
            (set (xt/q tu/*node* (sql-example "joins-sql-2")))))
 
   (t/is (= #{{:cid "ivan", :order-value 150, :currency :gbp}
@@ -150,7 +139,6 @@
                       (limit 100))
                   ;; end::joins-xtql-3[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "joins-json-3")))
            (set (xt/q tu/*node* (sql-example "joins-sql-3")))))
 
   (t/is (= [{:cid "petr"}]
@@ -163,7 +151,6 @@
                      (limit 100))
                  ;; end::joins-xtql-4[]
                  ,)
-           (xt/q tu/*node* (json-example-query "joins-json-4"))
            (xt/q tu/*node* (sql-example "joins-sql-4")))))
 
 (deftest projections
@@ -180,7 +167,6 @@
                       (with {:full-name (concat first-name " " last-name)}))
                   ;; end::proj-xtql-1[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "proj-json-1")))
            (set (xt/q tu/*node* (sql-example "proj-sql-1")))))
 
   (t/is (= #{{:full-name "Ivan Ivanov", :title "First", :content "My first blog"}
@@ -194,7 +180,6 @@
                       (return {:full-name (concat first-name " " last-name)} title content))
                   ;; end::proj-xtql-2[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "proj-json-2")))
            (set (xt/q tu/*node* (sql-example "proj-sql-2")))))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :title "Second", :content "My second blog"}
@@ -208,7 +193,6 @@
                       (without :user-id))
                   ;; end::proj-xtql-3[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "proj-json-3")))
            (set (xt/q tu/*node* (sql-example "proj-sql-3"))))))
 
 (deftest aggregations
@@ -234,7 +218,6 @@
                      (limit 100))
                  ;; end::aggr-xtql-1[]
                  ,))
-             (set (xt/q tu/*node* (json-example-query "aggr-json-1")))
              (set (xt/q tu/*node* (sql-example "aggr-sql-1")))))))
 
 
@@ -276,8 +259,7 @@
                                                  (limit 10))
                                              {:args [article-id]})}))
                  ;; end::pull-xtql-1[]
-                 ,))
-             (set (xt/q tu/*node* (json-example-query "pull-json-1")))))))
+                 ))))))
             ;; No SQL for this one
 
 (deftest bitemporality
@@ -292,7 +274,6 @@
                                :bind [first-name last-name]})
                  ;; end::bitemp-xtql-1[]
                  ,)
-           (xt/q tu/*node* (json-example-query "bitemp-json-1"))
            (xt/q tu/*node* (sql-example "bitemp-sql-1"))))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
@@ -305,7 +286,6 @@
                                 :bind [first-name last-name]})
                   ;; end::bitemp-xtql-2[]
                   ,))
-           (set (xt/q tu/*node* (json-example-query "bitemp-json-2")))
            (set (xt/q tu/*node* (sql-example "bitemp-sql-2")))))
 
   (t/is (= [{:user-id "petr"}]
@@ -318,8 +298,7 @@
                         (from :users {:for-valid-time (at #inst "2023")
                                       :bind [{:xt/id user-id}]}))
                  ;; end::bitemp-xtql-3[]
-                 ,)
-           (xt/q tu/*node* (json-example-query "bitemp-json-3")))))
+                 ))))
 
 (deftest DML-Insert-xtql
   (xt/submit-tx tu/*node* old-users)
@@ -347,27 +326,6 @@
             (xt/q tu/*node*
                   '(from :users [first-name last-name
                                  xt/valid-from xt/valid-to]))))))
-
-(deftest DML-Insert-xtql-json
-  (xt/submit-tx tu/*node* old-users)
-
-  (t/is (= []
-           (xt/q tu/*node*
-                 '(from :users [first-name last-name]))))
-
-  (xt/submit-tx tu/*node* [(json-example-dml "DML-Insert-json")])
-
-  (t/is (= #{{:first-name "Ivan"
-              :last-name "Ivanov"
-              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
-             {:first-name "Petr"
-              :last-name "Petrov"
-              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
-           (set
-            (xt/q tu/*node*
-                  '(from :users [first-name last-name
-                                 xt/valid-from xt/valid-to]))))))
-
 
 (deftest DML-Insert-sql
   (xt/submit-tx tu/*node* old-users)
@@ -404,20 +362,6 @@
 
   (t/is (empty? (xt/q tu/*node* '(from :comments [{:post-id $post-id}])
                       {:args {:post-id 1}})))
-
-  (t/is (not (empty?
-              (xt/q tu/*node* '(from :comments {:bind [{:post-id $post-id}]
-                                                :for-valid-time :all-time})
-                    {:args {:post-id 1}})))))
-
-(deftest DML-Delete-xtql-json
-  (xt/submit-tx tu/*node* comments)
-
-  (xt/submit-tx tu/*node*
-                [(json-example-dml "DML-Delete-json")])
-
-  (t/is (= [] (xt/q tu/*node* '(from :comments [xt/id {:post-id $post-id}])
-                    {:args {:post-id 1}})))
 
   (t/is (not (empty?
               (xt/q tu/*node* '(from :comments {:bind [{:post-id $post-id}]
@@ -512,7 +456,7 @@
                           (from :promotions {:bind [promotion-type]
                                              :for-valid-time (from #inst "2023-12-26")})))))))
 
-(deftest DML-Delete-bitemporal-xtql-json
+(deftest DML-Delete-bitemporal-xtql
   (xt/submit-tx tu/*node* promotions)
 
   (t/is (= #{{:promotion-type "christmas"}
@@ -524,7 +468,7 @@
                           (from :promotions {:bind [promotion-type]
                                              :for-valid-time (from #inst "2023-12-26")}))))))
 
-  (xt/submit-tx tu/*node* [(json-example-dml "DML-Delete-bitemporal-json")])
+  (xt/submit-tx tu/*node* [[:sql (sql-example "DML-Delete-bitemporal-sql")]])
 
   (t/is (= #{{:promotion-type "general"}}
            (set
@@ -585,20 +529,6 @@
 
   (t/is (not (empty? (xt/q tu/*node* '(from :comments {:bind [] :for-valid-time :all-time}))))))
 
-
-(deftest DML-Delete-everything-json
-  (xt/submit-tx tu/*node* comments)
-
-  (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
-
-  (xt/submit-tx tu/*node*
-                [(json-example-dml "DML-Delete-everything-json")])
-
-  (t/is (empty? (xt/q tu/*node* '(from :comments []))))
-
-  (t/is (not (empty? (xt/q tu/*node* '(from :comments {:bind [] :for-valid-time :all-time}))))))
-
-
 (deftest DML-Update-xtql
   (xt/submit-tx tu/*node*
     [[:put-docs :documents {:xt/id "doc-id", :version 1}]])
@@ -615,19 +545,6 @@
         {:doc-id "doc-id"}]])
     ;; end::DML-Update-xtql[]
     ,)
-
-  (t/is (= [{:version 2}]
-           (xt/q tu/*node* '(from :documents [version])))))
-
-(deftest DML-Update-json
-  (xt/submit-tx tu/*node*
-                [[:put-docs :documents {:xt/id "doc-id", :version 1}]])
-
-  (t/is (= [{:version 1}]
-           (xt/q tu/*node* '(from :documents [version]))))
-
-  (let [node tu/*node*]
-    (xt/submit-tx node [(json-example-dml "DML-Update-json")]))
 
   (t/is (= [{:version 2}]
            (xt/q tu/*node* '(from :documents [version])))))
@@ -670,26 +587,9 @@
   (t/is (= [{:comment-count 2}]
            (xt/q tu/*node* '(from :posts [comment-count])))))
 
-(deftest DML-Update-bitemporal-json
-  (xt/submit-tx tu/*node*
-                [[:put-docs :posts {:xt/id "my-post-id" :comment-count 1}]
-                 [:put-docs :comments {:xt/id 1, :post-id "my-post-id"}]])
-
-  (t/is (= [{:comment-count 1}]
-           (xt/q tu/*node* '(from :posts [comment-count]))))
-
-  (let [node tu/*node*]
-    (xt/submit-tx node
-                  [[:put-docs :comments {:xt/id (random-uuid), :post-id "my-post-id"}]
-                   (json-example-dml "DML-Update-bitemporal-json")]))
-
-  (t/is (= [{:comment-count 2}]
-           (xt/q tu/*node* '(from :posts [comment-count])))))
-
 #_ ;; TODO: Uncomment when supported: https://github.com/xtdb/xtdb/issues/3050
 (deftest DML-Update-bitemporal-sql
   (xt/submit-tx tu/*node*
-
     [[:put-docs :posts {:xt/id "my-post-id" :comment-count 1}]
      [:put-docs :comments {:xt/id 1, :post-id "my-post-id"}]])
 
@@ -705,7 +605,6 @@
   (t/is (= [{:comment-count 2}]
            (xt/q tu/*node* '(from :posts [comment-count])))))
 
-
 (deftest DML-Erase-xtql
   (xt/submit-tx tu/*node*
     [[:put-docs :users {:xt/id "user-id", :email "jms@example.com"}]])
@@ -718,17 +617,6 @@
       [[:erase {:from :users, :bind '[{:email "jms@example.com"}]}]])
     ;; end::DML-Erase-xtql[]
     ,)
-
-  (t/is (empty? (xt/q tu/*node* '(from :users []))))
-  (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
-
-(deftest DML-Erase-json
-  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id "user-id", :email "jms@example.com"}]])
-
-  (t/is (not (empty? (xt/q tu/*node* '(from :users [])))))
-
-  (xt/submit-tx tu/*node*
-                [(json-example-dml "DML-Erase-json")])
 
   (t/is (empty? (xt/q tu/*node* '(from :users []))))
   (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
@@ -790,19 +678,3 @@
     (t/is (= [{:xt/committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed?])
                    {:args {:tx-id tx-id}})))))
-
-(deftest DML-Assert-Not-json
-  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :james, :email "james@example.com"}]])
-
-  (let [{my-tx-id :tx-id}
-        (xt/submit-tx tu/*node*
-                      [(json-example-dml "DML-Assert-Not-json")
-                       [:put-docs :users {:xt/id :james, :email "james@example.com"}]])]
-    (t/is (=
-           [{:xt/committed? false
-             :xt/error (err/runtime-err :xtdb/assert-failed
-                                        {::err/message "Precondition failed: assert-not-exists"
-                                         :row-count 1})}]
-           (-> (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
-                     {:args {:tx-id my-tx-id}})
-               )))))

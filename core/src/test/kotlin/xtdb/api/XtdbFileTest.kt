@@ -4,8 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
-import xtdb.api.query.Queries.from
-import xtdb.api.tx.TxOps.putDocs
+import xtdb.api.tx.TxOps.sql
 import java.io.File
 import kotlin.io.path.Path
 
@@ -36,7 +35,7 @@ internal class XtdbFileTest {
 
         // can use the created node
         assertDoesNotThrow {
-            node.submitTx(putDocs("foo", mapOf("xt\$id" to "jms")))
+            node.submitTx(sql("INSERT INTO foo (xt\$id) VALUES ('jms')"))
         }
 
         assertEquals(

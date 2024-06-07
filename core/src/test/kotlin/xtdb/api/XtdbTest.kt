@@ -5,15 +5,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.query.Basis
-import xtdb.api.query.Exprs.expr
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_STRING
-import xtdb.api.query.Queries.from
-import xtdb.api.query.Queries.pipeline
 import xtdb.api.query.Queries.relation
-import xtdb.api.query.Queries.with
 import xtdb.api.query.QueryOptions
 import xtdb.api.query.queryOpts
-import xtdb.api.tx.TxOps.putDocs
 import xtdb.api.tx.TxOps.sql
 import java.time.Instant
 import java.time.LocalDate
@@ -38,7 +33,7 @@ internal class XtdbTest {
 
     @Test
     fun startsInMemoryNode() {
-        node.executeTx(putDocs("foo", mapOf("xt\$id" to "jms")))
+        node.executeTx(sql("INSERT INTO foo (xt\$id) VALUES ('jms')"))
 
         assertEquals(
             listOf(mapOf("foo_id" to "jms")),
@@ -51,7 +46,7 @@ internal class XtdbTest {
 
     @Test
     fun `test query opts`() {
-        node.executeTx(putDocs("docs2", mapOf("xt\$id" to 1, "foo" to "bar")))
+        node.executeTx(sql("INSERT INTO docs2 (xt\$id, foo) VALUES (1, 'bar')"))
 
         assertEquals(
             listOf(mapOf("my_foo" to "bar")),

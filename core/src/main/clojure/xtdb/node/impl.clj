@@ -9,7 +9,9 @@
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.tx-ops :as tx-ops]
+            [xtdb.util :as util]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io Closeable Writer)
            (java.util.concurrent ExecutionException)
            java.util.HashMap
@@ -19,7 +21,7 @@
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis IKeyFn$KeyFn QueryOptions XtqlQuery)
-           xtdb.api.tx.TxOptions
+           [xtdb.api.tx TxOp TxOptions]
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -55,6 +57,12 @@
     (-> (q/open-cursor-as-stream bound-query query-opts)
         (metrics/wrap-query (:query-timer metrics) registry))))
 
+(defn- ->TxOps [tx-ops]
+  (->> tx-ops
+       (mapv (fn [tx-op]
+               (cond-> tx-op
+                 (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
+
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
                  ^Log log
@@ -77,7 +85,7 @@
   (submit-tx [this tx-ops opts]
     (let [system-time (some-> ^TxOptions opts .getSystemTime)
           tx-key (try
-                   @(log/submit-tx& this (vec tx-ops) opts)
+                   @(log/submit-tx& this (->TxOps tx-ops) opts)
                    (catch ExecutionException e
                      (throw (ex-cause e))))
           tx-key (cond-> tx-key
@@ -106,7 +114,7 @@
 
   (open-xtql-query [this query query-opts]
     (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
-      (-> (.prepareQuery this ^XtqlQuery query query-opts)
+      (-> (.prepareQuery this (xtql.edn/parse-query query) query-opts)
           (then-execute-prepared-query metrics registry query-opts))) )
 
   xtp/PStatus

@@ -11,8 +11,8 @@
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
-           (xtdb.api TransactionKey TransactionResult TransactionAborted TransactionCommitted)
-           (xtdb.api.query IKeyFn IKeyFn$KeyFn XtqlQuery)
+           (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
+           (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$XtqlAndArgs TxOp$XtqlOp TxOps TxOptions)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -80,6 +80,9 @@
 
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))
+
+(defn- render-binding [binding]
+  (xtql.edn/unparse-binding identity identity binding))
 
 (defn- render-query [^XtqlQuery query]
   (xtql.edn/unparse-query query))
@@ -325,6 +328,7 @@
           IntervalMonthDayNano (transit/write-handler "xtdb.interval/month-day-nano"
                                                       #(vector (str (.period ^IntervalMonthDayNano %))
                                                                (str (.duration ^IntervalMonthDayNano %))))
+          Binding (transit/write-handler "xtdb.query/binding" render-binding)
           XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
 
           TxOp$Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
