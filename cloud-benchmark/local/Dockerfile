@@ -28,6 +28,9 @@ ENTRYPOINT ["java", \
     "-Dlogback.configurationFile=logback.xml", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
+    "-Xmx1500m", "-Xms1500m", \
+    "-XX:MaxDirectMemorySize=2000m", \
+    "-XX:MaxMetaspaceSize=500m", \
     ## UNCOMMENT BELOW If you want to run a Yourkit agent for Remote Profiling
     # "-agentpath:/usr/local/YourKit-JavaProfiler-2024.3/bin/linux-x86-64/libyjpagent.so=port=10001,listen=all", \
     "-cp","xtdb-local-auctionmark.jar", \
