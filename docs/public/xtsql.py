@@ -422,9 +422,8 @@ class XtdbConsole(cmd.Cmd):
         print2('import_system_time cleared')
         
     def do_recent_transactions(self, arg):
-        'Show the 10 most recent transactions by running `SELECT * FROM xt$txs ORDER BY xt$txs.xt$id DESC LIMIT 20;`'
-        result = Xtdb(self.url, self.accept,
-                           self.txtimeout).sql_query('SELECT * FROM xt$txs ORDER BY xt$txs.xt$id DESC LIMIT 20;')
+        'Show the 10 most recent transactions by running `SELECT * FROM xt.txs ORDER BY xt$id DESC LIMIT 20;`'
+        result = Xtdb(self.url, self.accept, self.txtimeout).sql_query('SELECT * FROM xt.txs ORDER BY xt$id DESC LIMIT 20;')
         if self.tabulate:
                 result2 = [pretty_format(item) for item in result]
                 print2(markdownSimpleTable(prepare_for_tabulate(result2)))

@@ -74,7 +74,7 @@ You can set system time on a transaction like so:
 <Fiddle>
   <Txs systemTime="2020-01-01"
        txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one');" />
-  <Query q="SELECT * FROM xt$txs" />
+  <Query q="SELECT * FROM xt.txs" />
 </Fiddle>
 
 ## Multiple Transactions

@@ -128,21 +128,21 @@
     (t/is (= #{{:tx-id 0,
                 :tx-time #time/zoned-date-time "2012-01-01T00:00Z[UTC]",
                 :committed? true,
-                :err [nil nil]}
+                :error [nil nil]}
                {:tx-id 1,
                 :tx-time #time/zoned-date-time "2011-01-01T00:00Z[UTC]",
                 :committed? false,
-                :err ["specified system-time older than current tx"
-                      {::err/error-key :invalid-system-time
-                       :tx-key #xt/tx-key {:tx-id 1, :system-time #time/instant "2011-01-01T00:00:00Z"},
-                       :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2012-01-01T00:00:00Z"}}]}
+                :error ["specified system-time older than current tx"
+                        {::err/error-key :invalid-system-time
+                         :tx-key #xt/tx-key {:tx-id 1, :system-time #time/instant "2011-01-01T00:00:00Z"},
+                         :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2012-01-01T00:00:00Z"}}]}
                {:tx-id 2,
                 :tx-time #time/zoned-date-time "2020-01-03T00:00Z[UTC]",
                 :committed? true,
-                :err [nil nil]}}
+                :error [nil nil]}}
              (->> (xt/q *node*
-                        '(from :xt/txs [{:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?, :xt/error err}]))
-                  (into #{} (map #(update % :err (juxt ex-message ex-data)))))))))
+                        '(from :xt/txs [{:xt/id tx-id, :committed committed?} tx-time error]))
+                  (into #{} (map #(update % :error (juxt ex-message ex-data)))))))))
 
 (def ^:private devs
   [[:put-docs :users {:xt/id :jms, :name "James"}]
@@ -408,9 +408,9 @@
 
 (t/deftest returns-dml-errors-through-execute-tx
   (let [{:keys [committed? error]} (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])]
-    (t/is (not committed?))
-    (t/is (instance? IllegalArgumentException error))
-    (t/is (re-find #"Errors parsing SQL statement" (ex-message error))))
+    (t/is (false? committed?))
+    (t/is (thrown-with-msg? IllegalArgumentException #"Errors parsing SQL statement"
+                            (throw error))))
 
   (t/testing "still an active node"
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('dave', 'Dave')"]])
@@ -592,13 +592,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
              (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
 
     (t/is (= [{:xt/id 2,
-               :xt/error ["Precondition failed: assert-not-exists"
-                          {::err/error-key :xtdb/assert-failed,
-                           :row-count 1}]}]
+               :error ["Precondition failed: assert-not-exists"
+                       {::err/error-key :xtdb/assert-failed,
+                        :row-count 1}]}]
 
-             (->> (xt/q tu/*node* '(from :xt/txs [{:xt/committed? false} xt/id xt/error]))
+             (->> (xt/q tu/*node* '(from :xt/txs [{:committed false} xt/id error]))
                   (map (fn [row]
-                         (update row :xt/error (juxt ex-message ex-data))))))))
+                         (update row :error (juxt ex-message ex-data))))))))
 
   (t/testing "assert-exists"
     (t/is (= (serde/map->TxAborted
@@ -620,14 +620,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
              (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
 
     (t/is (= [{:xt/id 3,
-               :xt/error ["Precondition failed: assert-exists"
-                          {::err/error-key :xtdb/assert-failed,
-                           :row-count 0}]}]
+               :error ["Precondition failed: assert-exists"
+                       {::err/error-key :xtdb/assert-failed,
+                        :row-count 0}]}]
 
-             (->> (xt/q tu/*node* '(-> (from :xt/txs [{:xt/committed? false} xt/id xt/error])
+             (->> (xt/q tu/*node* '(-> (from :xt/txs [{:committed false} xt/id error])
                                        (where (> xt/id 2))))
                   (map (fn [row]
-                         (update row :xt/error (juxt ex-message ex-data)))))))))
+                         (update row :error (juxt ex-message ex-data)))))))))
 
 (t/deftest test-xtql-with-param-2933
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
@@ -774,18 +774,18 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
     (xt/submit-tx tu/*node* [[:put-docs :start {:xt/id 1 :foo "bar"}]])
     (xt/submit-tx tu/*node* [[:insert-into :failing '(from :start [foo])]])
 
-    (t/is (= [{:xt/committed? false
-               :xt/error #xt/runtime-err [:xtdb.indexer/missing-xt-id-column "Runtime error: 'xtdb.indexer/missing-xt-id-column'"
+    (t/is (= [{:committed? false
+               :error #xt/runtime-err [:xtdb.indexer/missing-xt-id-column "Runtime error: 'xtdb.indexer/missing-xt-id-column'"
                                           {:column-names ["foo"]}]}]
-             (xt/q tu/*node* '(from :xt/txs [{:xt/id 1} xt/committed? xt/error])))))
+             (xt/q tu/*node* '(from :xt/txs [{:xt/id 1, :committed committed?} error])))))
 
   (t/testing "insert-into with failing query"
     (xt/submit-tx tu/*node* [[:insert-into :failing '(-> (rel [{}] [])
                                                          (with {:xt/id (+ 1 "2")}))]])
 
-    (t/is (= [{:xt/committed? false,
-               :xt/error #xt/illegal-arg [:xtdb.expression/function-type-mismatch "+ not applicable to types i64 and utf8" {}]}]
-             (xt/q tu/*node* '(from :xt/txs [{:xt/id 2} xt/committed? xt/error]))))))
+    (t/is (= [{:committed? false,
+               :error #xt/illegal-arg [:xtdb.expression/function-type-mismatch "+ not applicable to types i64 and utf8" {}]}]
+             (xt/q tu/*node* '(from :xt/txs [{:xt/id 2, :committed committed?} error]))))))
 
 (deftest test-xt-id-not-allowed-in-update-3188
   (t/testing "update with xt/id in set"

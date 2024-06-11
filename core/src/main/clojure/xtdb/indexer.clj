@@ -548,13 +548,13 @@
                (doto (.structKeyWriter doc-writer "xt$id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))
 
-               (doto (.structKeyWriter doc-writer "xt$tx_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
+               (doto (.structKeyWriter doc-writer "tx_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
                  (.writeLong system-time-µs))
 
-               (doto (.structKeyWriter doc-writer "xt$committed?" (FieldType/notNullable  #xt.arrow/type :bool))
+               (doto (.structKeyWriter doc-writer "committed" (FieldType/notNullable  #xt.arrow/type :bool))
                  (.writeBoolean (nil? t)))
 
-               (let [e-wtr (.structKeyWriter doc-writer "xt$error" (FieldType/nullable #xt.arrow/type :transit))]
+               (let [e-wtr (.structKeyWriter doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
                  (if (or (nil? t) (= t abort-exn))
                    (.writeNull e-wtr)
                    (.writeObject e-wtr t)))

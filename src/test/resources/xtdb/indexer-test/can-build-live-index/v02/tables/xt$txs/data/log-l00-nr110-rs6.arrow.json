@@ -59,7 +59,7 @@
           },
           "children" : [ ]
         },{
-          "name" : "xt$tx_time",
+          "name" : "tx_time",
           "nullable" : false,
           "type" : {
             "name" : "timestamp",
@@ -68,14 +68,14 @@
           },
           "children" : [ ]
         },{
-          "name" : "xt$committed?",
+          "name" : "committed",
           "nullable" : false,
           "type" : {
             "name" : "bool"
           },
           "children" : [ ]
         },{
-          "name" : "xt$error",
+          "name" : "error",
           "nullable" : true,
           "type" : {
             "name" : "TransitType"
@@ -143,17 +143,17 @@
           "VALIDITY" : [1,1,1,1,1,1],
           "DATA" : ["9977","7215","5826","0","2837","8684"]
         },{
-          "name" : "xt$tx_time",
+          "name" : "tx_time",
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
           "DATA" : [1578268800000000,1578096000000000,1578009600000000,1577836800000000,1577923200000000,1578182400000000]
         },{
-          "name" : "xt$committed?",
+          "name" : "committed",
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
           "DATA" : [0,1,1,1,1,1]
         },{
-          "name" : "xt$error",
+          "name" : "error",
           "count" : 6,
           "VALIDITY" : [1,0,0,0,0,0],
           "OFFSET" : [0,197,197,197,197,197,197],

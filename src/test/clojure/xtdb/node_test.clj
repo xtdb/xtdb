@@ -374,11 +374,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                {:tx-id 2, :tx-time (time/->zdt #inst "2020-01-03"), :committed? true}
                {:tx-id 3, :tx-time (time/->zdt #inst "2020-01-04"), :committed? false}}
              (set (xt/q tu/*node*
-                        '(from :xt/txs [{:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?}])))))
+                        '(from :xt/txs [{:xt/id tx-id, :tx-time tx-time, :committed committed?}])))))
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
-                   '(from :xt/txs [{:xt/id $tx-id, :xt/committed? committed?}])
+                   '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
                    {:args {:tx-id 1}})))
 
     (t/is (thrown-with-msg?
@@ -386,7 +386,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            #"xtdb\.call/error-evaluating-tx-fn"
 
            (throw (-> (xt/q tu/*node*
-                            '(from :xt/txs [{:xt/id $tx-id, :xt/error err}])
+                            '(from :xt/txs [{:xt/id $tx-id, :error err}])
                             {:args {:tx-id 3}})
                       first
                       :err))))))
@@ -405,7 +405,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
-                   '(from :xt/txs [{:xt/id $tx-id, :xt/committed? committed?}])
+                   '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
                    {:args {:tx-id 0}})))))
 
 (t/deftest test-nulling-valid-time-columns-2504
@@ -650,12 +650,12 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/execute-tx tu/*node* [[:assert-exists '(from :users [{:xt/id :john}])]])))
 
   (t/is (= [{:xt/id 0,
-             :xt/committed? false,
-             :xt/error #xt/runtime-err [:xtdb/assert-failed
-                                        "Precondition failed: assert-exists"
-                                        {:row-count 0}]}]
+             :committed? false,
+             :error #xt/runtime-err [:xtdb/assert-failed
+                                     "Precondition failed: assert-exists"
+                                     {:row-count 0}]}]
            (xt/q tu/*node*
-                 '(from :xt/txs [xt/id xt/committed? xt/error])))
+                 '(from :xt/txs [xt/id {:committed committed?} error])))
 
         "assert fails on empty table")
 
@@ -668,12 +668,12 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                      [:assert-exists '(from :users [{:xt/id :john}])]])))
 
   (t/is (= [{:xt/id 1,
-             :xt/committed? false,
-             :xt/error #xt/runtime-err [:xtdb/assert-failed
-                                        "Precondition failed: assert-exists"
-                                        {:row-count 0}]}]
+             :committed? false,
+             :error #xt/runtime-err [:xtdb/assert-failed
+                                     "Precondition failed: assert-exists"
+                                     {:row-count 0}]}]
            (xt/q tu/*node*
-                 '(from :xt/txs [{:xt/id 1} xt/id xt/committed? xt/error])))
+                 '(from :xt/txs [{:xt/id 1, :committed committed?} xt/id error])))
         "when the table has an (non-matching) entry the assert also fails"))
 
 (defn- random-maps [n]

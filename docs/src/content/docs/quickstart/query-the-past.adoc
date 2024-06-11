@@ -16,16 +16,16 @@ For convenience, you can easily see the history of prior transactions within `xt
 ----
 -> recent_transactions
 
-| xt$id | xt$committed? | xt$error | xt$tx_time                        |
-|-------|---------------|----------|-----------------------------------|
-| 0     | True          | NULL     | 2024-03-13 18:38:37.398210+00:00  |
+| xt$id | committed | error | tx_time                           |
+|-------|-----------|-------|-----------------------------------|
+| 0     | True      | NULL  | 2024-03-13 18:38:37.398210+00:00  |
 ----
 
 You can see this table directly by running
 
 [source,sql]
 ----
-SELECT * FROM xt$txs;
+SELECT * FROM xt.txs;
 ----
 
 === Basis: re-run queries against past states without explicit snapshots

@@ -200,7 +200,7 @@
 (deftest test-inconsistent-valid-time-range-2494
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id, xt$valid_to) VALUES (1, DATE '2011-01-01')"]])
   (is (= [{:tx-id 0, :committed? false}]
-         (xt/q tu/*node* '(from :xt/txs [{:xt/id tx-id, :xt/committed? committed?}]))))
+         (xt/q tu/*node* '(from :xt/txs [{:xt/id tx-id, :committed committed?}]))))
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (2)"]])
   (xt/submit-tx tu/*node* [[:sql "DELETE FROM xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? WHERE xt_docs.xt$id = 2"
                             [#inst "2011"]]])
@@ -208,9 +208,9 @@
   (is (= #{{:tx-id 0, :committed? false}
            {:tx-id 1, :committed? true}
            {:tx-id 2, :committed? true}}
-         (set (xt/q tu/*node* '(from :xt/txs [{:xt/id tx-id, :xt/committed? committed?}])))))
+         (set (xt/q tu/*node* '(from :xt/txs [{:xt/id tx-id, :committed committed?}])))))
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (3)"]])
   (xt/submit-tx tu/*node* [[:sql "UPDATE xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 'bar' WHERE xt_docs.xt$id = 3"
                             [#inst "2011"]]])
   (is (= [{:committed? true}]
-         (xt/q tu/*node* '(from :xt/txs [{:xt/id 4, :xt/committed? committed?}])))))
+         (xt/q tu/*node* '(from :xt/txs [{:xt/id 4, :committed committed?}])))))

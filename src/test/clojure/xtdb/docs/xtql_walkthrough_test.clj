@@ -631,17 +631,16 @@
   (t/is (empty? (xt/q tu/*node* '(from :users []))))
   (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
 
-#_ ;; TODO see https://github.com/xtdb/xtdb/issues/3110
-(deftest DML-Assert
+(deftest DML-Assert-3110
   (let [node tu/*node*
         {my-tx-id :tx-id} (xt/submit-tx node
-                                        [(xt/assert-exists '(from :users [{:xt/id :james}]))
-                                         (xt/put :orders {:xt/id :james, :item "less bugs"})])]
-    (t/is (= [{:xt/committed? false
-               :xt/error (err/runtime-err :xtdb/assert-failed
-                                          {::err/message "Precondition failed: assert-exists"
-                                           :row-count 1})}]
-             (-> (xt/q node '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
+                                        [[:assert-exists '(from :users [{:xt/id :james}])]
+                                         [:put-docs :orders {:xt/id :james, :item "fewer bugs"}]])]
+    (t/is (= [{:committed? false
+               :error (err/runtime-err :xtdb/assert-failed
+                                       {::err/message "Precondition failed: assert-exists"
+                                        :row-count 0})}]
+             (-> (xt/q node '(from :xt/txs [{:xt/id $tx-id, :committed committed?} error])
                        {:args {:tx-id my-tx-id}}))))))
 
 
@@ -659,13 +658,13 @@
         ;; end::DML-Assert-xtql[]
         ,]
     (t/is (= ;; tag::DML-Assert-query-result[]
-           [{:xt/committed? false
-             :xt/error (err/runtime-err :xtdb/assert-failed
-                                        {::err/message "Precondition failed: assert-not-exists"
-                                         :row-count 1})}]
+           [{:committed? false
+             :error (err/runtime-err :xtdb/assert-failed
+                                     {::err/message "Precondition failed: assert-not-exists"
+                                      :row-count 1})}]
            ;; end::DML-Assert-query-result[]
            (-> ;; tag::DML-Assert-query[]
-            (xt/q node '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
+            (xt/q node '(from :xt/txs [{:xt/id $tx-id, :committed committed?} error])
                   {:args {:tx-id my-tx-id}})
             ;; end::DML-Assert-query[]
             ))))
@@ -675,6 +674,6 @@
   (let [{:keys [tx-id]}
         (xt/submit-tx tu/*node*
                       [[:sql (sql-example "DML-Assert-sql")]])]
-    (t/is (= [{:xt/committed? false}]
-             (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed?])
+    (t/is (= [{:committed? false}]
+             (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
                    {:args {:tx-id tx-id}})))))

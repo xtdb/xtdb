@@ -540,7 +540,10 @@
                                       (when-let [table-cols (get info-schema/unq-pg-catalog tn)]
                                         ['pg_catalog table-cols]))
 
-                                    (add-warning! env (->BaseTableNotFound sn tn)))]
+                                    (add-warning! env (->BaseTableNotFound sn tn)))
+                [sn tn] (if (= sn 'xt)
+                          [nil (symbol (str "xt$" tn))]
+                          [sn tn])]
             (->BaseTable env ctx sn tn table-alias unique-table-alias
                          (->insertion-ordered-set (or cols table-cols))
                          (HashMap.))))))
@@ -2221,7 +2224,9 @@
 
 (defn- xform-table-info [table-info]
   (into {}
-        (for [[tn cns] (into info-schema/table-info table-info)]
+        (for [[tn cns] (merge info-schema/table-info
+                              {'xt/txs #{"xt$id" "committed" "error" "tx_time"}}
+                              table-info)]
           [(symbol tn) (->> cns
                             (map ->col-sym)
                             ^Collection

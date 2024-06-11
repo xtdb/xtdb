@@ -1,17 +1,17 @@
 (ns xtdb.information-schema
-  (:require xtdb.metadata
+  (:require [clojure.string :as str]
+            xtdb.metadata
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import
-   (org.apache.arrow.vector VectorSchemaRoot)
-   (org.apache.arrow.vector.types.pojo Schema Field)
-   xtdb.operator.IRelationSelector
-   (xtdb.vector RelationReader IVectorWriter IRelationWriter)
-   (xtdb ICursor)
-   (xtdb.metadata IMetadataManager)
-   (xtdb.watermark Watermark)))
+  (:import (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector.types.pojo Schema)
+           (xtdb ICursor)
+           (xtdb.metadata IMetadataManager)
+           xtdb.operator.IRelationSelector
+           (xtdb.vector IRelationWriter IVectorWriter RelationReader)
+           (xtdb.watermark Watermark)))
 
 ;;TODO add temporal cols
 
@@ -93,8 +93,8 @@
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
         "table_catalog" (.writeObject col-wtr "xtdb")
-        "table_name" (.writeObject col-wtr table)
-        "table_schema" (.writeObject col-wtr "public")
+        "table_name" (.writeObject col-wtr (name table))
+        "table_schema" (.writeObject col-wtr (namespace table))
         "table_type" (.writeObject col-wtr "BASE TABLE")))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
@@ -105,8 +105,8 @@
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
-        "schemaname" (.writeObject col-wtr "public")
-        "tablename" (.writeObject col-wtr table)
+        "schemaname" (.writeObject col-wtr (namespace table))
+        "tablename" (.writeObject col-wtr (name table))
         "tableowner" (.writeObject col-wtr "xtdb")
         "tablespace" (.writeObject col-wtr nil)))
     (.endRow rel-wtr))
@@ -114,14 +114,14 @@
   rel-wtr)
 
 (defn columns [^IRelationWriter rel-wtr col-rows]
-  (doseq [{:keys [table name type]} col-rows]
+  (doseq [{:keys [table type], col-name :name} col-rows]
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
         "table_catalog" (.writeObject col-wtr "xtdb")
-        "table_name" (.writeObject col-wtr table)
-        "table_schema" (.writeObject col-wtr "public")
-        "column_name" (.writeObject col-wtr name)
+        "table_name" (.writeObject col-wtr (name table))
+        "table_schema" (.writeObject col-wtr (namespace table))
+        "column_name" (.writeObject col-wtr col-name)
         "data_type" (.writeObject col-wtr (pr-str type))))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
@@ -185,10 +185,15 @@
 
 (defn ->cursor [allocator derived-table-schema table col-names col-preds params ^IMetadataManager metadata-mgr ^Watermark wm]
   (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (or (vals (select-keys derived-table-schema col-names)) [])) allocator)]
-    (let [schema-info (merge-with merge
-                                  (.allColumnFields metadata-mgr)
-                                  (some-> (.liveIndex wm)
-                                          (.allColumnFields)))
+    (let [schema-info (-> (merge-with merge
+                                      (.allColumnFields metadata-mgr)
+                                      (some-> (.liveIndex wm)
+                                              (.allColumnFields)))
+                          (update-keys (fn [table]
+                                         (let [parts (str/split table #"\$")]
+                                           (if (= 1 (count parts))
+                                             (symbol "public" (first parts))
+                                             (symbol (str/join "." (butlast parts)) (last parts)))))))
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (case table
                                      information_schema/tables (tables out-rel-wtr schema-info)

@@ -2039,8 +2039,7 @@
   (t/is (= [{:tx-id 0, :committed? false}]
 
            (xt/q tu/*node*
-                 '(from :xt/txs [{:xt/id tx-id,
-                                  :xt/committed? committed?}]))))
+                 '(from :xt/txs [{:xt/id tx-id, :committed committed?}]))))
   (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id 2}]])
   (xt/submit-tx tu/*node* [[:delete-docs {:from :xt-docs, :valid-to #inst "2011"} 2]])
 
@@ -2048,8 +2047,7 @@
              {:tx-id 1, :committed? true}
              {:tx-id 2, :committed? false}}
            (set (xt/q tu/*node*
-                      '(from :xt/txs [{:xt/id tx-id,
-                                       :xt/committed? committed?}]))))))
+                      '(from :xt/txs [{:xt/id tx-id, :committed committed?}]))))))
 
 (deftest test-date-and-time-literals
   (t/is (= [{:a true, :b false, :c true, :d true}]
@@ -2102,31 +2100,6 @@
            (xt/q tu/*node*
                  '(from :xt-docs {:bind [{:xt/id 2} v] :for-valid-time :all-time})))
         "no zero width valid-time intervals"))
-
-#_
-(deftest row-alias-on-txs-tables-2809
-  ;;TODO from-star
-  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id 1 :v 1}]])
-  (xt/submit-tx tu/*node* [[:call :non-existing-fn]])
-
-  (let [txs (->> (xt/q tu/*node*
-                       '{:find [tx]
-                         :where [(match :xt/txs {:xt/* tx})]})
-                 (mapv :tx))]
-
-    (t/is (= [{:xt/tx_time #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
-               :xt/id 1,
-               :xt/committed? false}
-              {:xt/tx_time #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-               :xt/id 0,
-               :xt/committed? true}]
-             (mapv #(dissoc % :xt/error) txs)))
-
-    (t/is (= {:xtdb.error/error-type :runtime-error,
-              :xtdb.error/error-key :xtdb.call/no-such-tx-fn,
-              :xtdb.error/message "Runtime error: ':xtdb.call/no-such-tx-fn'",
-              :fn-id :non-existing-fn}
-             (.getData ^xtdb.RuntimeException (.form ^ClojureForm (:xt/error (first txs))))))))
 
 (deftest test-pull
   (xt/submit-tx tu/*node* [[:put-docs :customers {:xt/id 0, :name "bob"}]
@@ -2344,7 +2317,7 @@
                                       :unify [(from :anything [{:else logic-var}])]}]])
 
   ;; Ingester error after delete
-  (t/is (empty? (xt/q tu/*node* '(from :xt/txs [{:xt/committed? false}])))))
+  (t/is (empty? (xt/q tu/*node* '(from :xt/txs [{:committed false}])))))
 
 (deftest plan-expr-test
   (let [required-vars (comp xtql/required-vars edn/parse-expr)]

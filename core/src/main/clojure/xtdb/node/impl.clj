@@ -95,15 +95,12 @@
       tx-key))
 
   (execute-tx [this tx-ops opts]
-    (let [tx-key (xtp/submit-tx this tx-ops opts)]
-      (with-open [res (.openQuery this "SELECT txs.\"xt$committed?\" AS is_committed, txs.xt$error AS error FROM xt$txs txs WHERE txs.xt$id = ?"
-                                  (let [^List args [(:tx-id tx-key)]]
-                                    (-> (QueryOptions/queryOpts)
-                                        (.args args)
-                                        (.keyFn IKeyFn$KeyFn/KEBAB_CASE_KEYWORD)
-                                        (.build))))]
-        (let [{:keys [is-committed error]} (-> (.findFirst res) (.orElse nil))]
-          (if is-committed
+    (let [{:keys [tx-id] :as tx-key} (xtp/submit-tx this tx-ops opts)]
+      (with-open [res (xtp/open-sql-query this "SELECT committed AS \"committed?\", error FROM xt.txs WHERE xt$id = ?"
+                                          {:args [tx-id]
+                                           :key-fn #xt/key-fn :kebab-case-keyword})]
+        (let [{:keys [committed? error]} (-> (.findFirst res) (.orElse nil))]
+          (if committed?
             (serde/->tx-committed tx-key)
             (serde/->tx-aborted tx-key error))))))
 
