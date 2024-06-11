@@ -14,15 +14,23 @@
 (def load-phase (if-let [lp (System/getenv "AUCTIONMARK_LOAD_PHASE")] 
                   (Boolean/parseBoolean lp)
                   true))
-(def slack-url 
-  (some-> (System/getenv "SLACK_WEBHOOK_URL") (not-empty)))
+(def bench-secrets
+  (some-> (System/getenv "BENCH_SECRETS")
+          (json/parse-string)))
+
+(def slack-url
+  (or (some-> bench-secrets
+              (get "SLACK_WEBHOOK_URL")
+              (not-empty))
+      (some-> (System/getenv "SLACK_WEBHOOK_URL")
+              (not-empty))))
 
 (defn send-error-to-slack [error]
   (when slack-url
     (let [error-message (format
                          ":x: Error thrown within Auctionmark: `%s`! \n\n*Stack Trace:*\n ```%s```"
                          (.getMessage error) 
-                         (with-out-str (st/print-stack-trace error)))]
+                         (with-out-str (st/print-stack-trace error 15)))]
       (http/post slack-url {:headers {"Content-Type" "application/json"}
                             :body (json/generate-string {:text error-message})}))))
 
@@ -44,9 +52,9 @@
         benchmark (am/benchmark am-config)
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (log/info "Running Auctionmark with the following config... \n" am-config)
-    (log/info "Starting node with config... \n" (slurp (io/file "cloud-config.yaml"))) 
+    (log/info "Starting node with config... \n" (slurp (io/file "node-config.yaml"))) 
     (try
-      (with-open [node (xtn/start-node (io/file "cloud-config.yaml"))]
+      (with-open [node (xtn/start-node (io/file "node-config.yaml"))]
         (benchmark-fn node)
         (send-success-to-slack am-config))
       

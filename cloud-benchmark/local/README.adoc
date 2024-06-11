@@ -1,0 +1,15 @@
+= Local Dockerized Auctionmark
+
+Contained within this folder is a local, dockerized version of Auctionmark. 
+
+Various options for configuration:
+
+* Update the Dockerfile to change various bits of surrounding configuration (such as including YourKit, etc.).
+* Update the `local-config.yaml` to change the node configuration.
+* Update the `local-vars.env` file to set/change various settings (need to include them in your `run` command - we do this within the `build-and-run.sh` script).
+** Include a `SLACK_WEBHOOK_URL` to send slack notifications of your local run to Slack.
+** Update the various Auctionmark settings.
+
+You can use the `build.sh` script to build the local dockerized Auctionmark, and `run.sh` to run it with the various extra bits of config passed in (local-vars file, exposed Yourkit ports, etc)
+
+NOTE: You may at points want to test the Cloud environments against this local version of Auctionmark. (ie, to test running auctionmark on docker in the cloud though without the various bits of infrastructure, to test some of the more 'local' components). This can be accomplished by building the local docker container, and then tagging and pushing it accordingly for use in the cloud.

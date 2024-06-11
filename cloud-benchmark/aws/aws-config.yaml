@@ -1,4 +1,4 @@
-
+# CONFIG FOR RUNNING WITH AWS INFRA
 txLog: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
   topicName: !Env XTDB_TOPIC_NAME

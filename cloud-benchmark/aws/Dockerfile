@@ -28,5 +28,5 @@ ENV XTDB_VERSION=${XTDB_VERSION}
 LABEL org.opencontainers.image.version=${XTDB_VERSION}
 LABEL org.opencontainers.image.revision=${GIT_SHA}
 
-ADD aws-config.yaml cloud-config.yaml
+ADD aws-config.yaml node-config.yaml
 ADD build/libs/xtdb-aws-bench.jar xtdb-aws-bench.jar
