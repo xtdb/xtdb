@@ -1,0 +1,6 @@
+# CONFIG FOR LOCAL STORES
+txLog: !Local
+  path: /var/lib/xtdb/local-log
+
+storage: !Local
+  path: /var/lib/xtdb/local-buffers

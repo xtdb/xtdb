@@ -5,11 +5,12 @@
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.bench.xtdb2 :as bxt]
-            [xtdb.test-util :as tu])
+            [xtdb.indexer :as idx])
   (:import (java.time Duration Instant)
            (java.util ArrayList Random UUID)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.function BiFunction)))
+           (java.util.function BiFunction)
+           (xtdb.api TransactionKey)))
 
 (defn random-price [worker] (.nextDouble (b/rng worker)))
 
@@ -588,6 +589,10 @@
         (when-not (= last-tx latest-completed-tx)
           (recur latest-completed-tx))))))
 
+(defn then-await-tx ^TransactionKey [node]
+  (let [{:keys [latest-submitted-tx]} (xt/status node)]
+    (idx/await-tx latest-submitted-tx node nil)))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn benchmark [{:keys [seed,
                          threads,
@@ -666,4 +671,4 @@
                              :duration duration
                              :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
                              :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups)}}]}
-            (when sync {:t :call, :f #(tu/then-await-tx (:sut %))})])}))
+            (when sync {:t :call, :f #(then-await-tx (:sut %))})])}))

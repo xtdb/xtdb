@@ -21,6 +21,7 @@ include("lang:test-harness")
 project(":lang:test-harness").name = "test-harness"
 
 include("docker:standalone","docker:aws")
+include("cloud-benchmark", "cloud-benchmark:aws", "cloud-benchmark:local")
 
 include("modules:jdbc", "modules:kafka", "modules:s3", "modules:azure", "modules:google-cloud")
 project(":modules:jdbc").name = "xtdb-jdbc"
