@@ -171,7 +171,7 @@
         nil))))
 
 (defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-iid]
-  (let [lp '[:scan {:table xt$tx_fns} [{xt$iid (= xt$iid ?iid)} xt$id xt$fn]]
+  (let [lp '[:scan {:table xt$tx_fns} [{xt$iid (= xt$iid ?iid)} xt$id fn]]
         ^xtdb.query.PreparedQuery pq (.prepareRaQuery q-src lp wm-src)]
     (with-open [bq (.bind pq
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
@@ -189,9 +189,9 @@
                          (when (pos? (.rowCount ^RelationReader in-rel))
                            (aset !fn-doc 0 (first (vr/rel->rows in-rel)))))))
 
-        (let [{fn-id :xt/id, fn-body :xt/fn, :as fn-doc} (or (aget !fn-doc 0)
-                                                             (throw (err/runtime-err :xtdb.call/no-such-tx-fn
-                                                                                     {:fn-iid (util/byte-buffer->uuid fn-iid)})))]
+        (let [{fn-id :xt/id, fn-body :fn, :as fn-doc} (or (aget !fn-doc 0)
+                                                          (throw (err/runtime-err :xtdb.call/no-such-tx-fn
+                                                                                  {:fn-iid (util/byte-buffer->uuid fn-iid)})))]
 
           (when-not (instance? ClojureForm fn-body)
             (throw (err/illegal-arg :xtdb.call/invalid-tx-fn {:fn-doc (dissoc fn-doc :xt/iid)})))

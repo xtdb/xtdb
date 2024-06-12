@@ -70,7 +70,7 @@
                     "key" : "ARROW:extension:metadata"
                   }]
                 },{
-                  "name" : "xt$fn",
+                  "name" : "fn",
                   "nullable" : false,
                   "type" : {
                     "name" : "TransitType"
@@ -180,7 +180,7 @@
                   "OFFSET" : [0,3,6],
                   "DATA" : ["foo","bar"]
                 },{
-                  "name" : "xt$fn",
+                  "name" : "fn",
                   "count" : 2,
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,68,136],
