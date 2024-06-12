@@ -129,10 +129,10 @@
     [[:put-docs :table {:xt/id \"my-id\", ...}]
      [:delete-docs :table \"my-id\"]
 
-     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+     [:sql \"INSERT INTO foo (_id, a, b) VALUES ('foo', ?, ?)\"
       [0 1]]
 
-     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+     [:sql \"INSERT INTO foo (_id, a, b) VALUES ('foo', ?, ?)\"
       [2 3] [4 5] [6 7]]
 
      [:sql \"UPDATE foo SET b = 1\"]]
@@ -159,10 +159,10 @@
     [[:put-docs :table {:xt/id \"my-id\", ...}]
      [:delete-docs :table \"my-id\"]
 
-     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+     [:sql \"INSERT INTO foo (_id, a, b) VALUES ('foo', ?, ?)\"
       [0 1]]
 
-     [:sql \"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\"
+     [:sql \"INSERT INTO foo (_id, a, b) VALUES ('foo', ?, ?)\"
       [2 3] [4 5] [6 7]]
 
      [:sql \"UPDATE foo SET b = 1\"]]

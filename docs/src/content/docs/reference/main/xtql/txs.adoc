@@ -82,7 +82,7 @@ Example:
 [source,sql]
 ----
 INSERT INTO users
-SELECT xt$id, first_name AS given_name, last_name AS family_name FROM old_users
+SELECT _id, first_name AS given_name, last_name AS family_name FROM old_users
 ----
 +
 [source,json]

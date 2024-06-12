@@ -10,7 +10,7 @@ Let's imagine that we operate a simple portfolio risk system which only tracks v
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2001-01-01"
-       txs="INSERT INTO assets (xt$id, product, amount)
+       txs="INSERT INTO assets (_id, product, amount)
             VALUES
             (1, 'my-product-1', 340),
             (2, 'my-product-2', 10)" />
@@ -27,13 +27,13 @@ Oh gosh, does our portfolio include any products managed by XY Bank?
 
 <Fiddle magicContext="my-context">
   <Txs hidden={true}
-       txs="INSERT INTO assets (xt$id, product, amount)
+       txs="INSERT INTO assets (_id, product, amount)
             VALUES
             (1, 'my-product-1', 625),
             (2, 'my-product-2', 31),
             (3, 'my-product-3', 1920),
             (4, 'my-product-4', 206)" />
-  <Query q="SELECT * FROM assets ORDER BY xt$id" />
+  <Query q="SELECT * FROM assets ORDER BY _id" />
 </Fiddle>
 
 Right, we probably should have done that integration work to keep track of what we bought from who owned what...
@@ -41,7 +41,7 @@ Right, we probably should have done that integration work to keep track of what 
 Not to worry, with a bit of manual effort and research we can add a table of which products are owned by various entities:
 
 <Fiddle magicContext="my-context">
-  <Txs txs="INSERT INTO products (xt$id, name, owner)
+  <Txs txs="INSERT INTO products (_id, name, owner)
             VALUES
             (1, 'my-product-1', 'XY Bank'),
             (2, 'my-product-2', 'Standard Dollar'),
@@ -58,7 +58,7 @@ SELECT a.*
   FROM assets AS a
   INNER JOIN products AS p ON a.product = p.name
   WHERE p.owner = 'XY Bank'
-  ORDER BY a.xt$id`} />
+  ORDER BY a._id`} />
 </Fiddle>
 
 Ok, that's a lot. But we can manage.
@@ -69,7 +69,7 @@ We didn't keep track of when that happened!
 Let's add that in:
 
 <Fiddle magicContext="my-context">
-  <Txs txs="INSERT INTO products (xt$id, name, owner, xt$valid_from, xt$valid_to)
+  <Txs txs="INSERT INTO products (_id, name, owner, _valid_from, _valid_to)
             VALUES
             -- Product 1's history
             (1, 'my-product-1', 'Standard Dollar', DATE '2018-01-01', DATE '2020-01-01'),
@@ -95,7 +95,7 @@ SELECT a.*
   FROM assets AS a
   INNER JOIN products AS p ON a.product = p.name
   WHERE p.owner = 'XY Bank'
-  ORDER BY a.xt$id`} />
+  ORDER BY a._id`} />
 </Fiddle>
 
 Nope!
@@ -104,7 +104,7 @@ Let's start with figuring out when was each product last not owned by XY Bank:
 
 <Fiddle magicContext="my-context">
   <Query q={`
-SELECT name, max(xt$valid_from)
+SELECT name, max(_valid_from)
   FROM products FOR ALL VALID_TIME
   WHERE owner <> 'XY Bank'
   GROUP BY name
@@ -121,7 +121,7 @@ Should a prospective new investor a year from now ask why did we not sell these 
 
 <Fiddle magicContext="my-context">
   <Query q={`
-SELECT xt$id, name, owner, xt$system_from
+SELECT _id, name, owner, _system_from
   FROM products FOR ALL SYSTEM_TIME
 `} />
 </Fiddle>

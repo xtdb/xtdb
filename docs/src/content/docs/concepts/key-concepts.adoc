@@ -50,10 +50,10 @@ In addition to any user-defined columns asserted for a given row, XTDB maintains
 
 These columns are:
 
-- `xt$system_from`
-- `xt$system_to`
-- `xt$valid_from`
-- `xt$valid_to`
+- `_system_from`
+- `_system_to`
+- `_valid_from`
+- `_valid_to`
 
 The columns are not visible unless explicitly queried. The values of these columns are maintained automatically and the respective pairs of columns always form 'closed-open' periods (i.e. inclusive of 'from', exclusive of 'to').
 

@@ -38,7 +38,7 @@
 
 (t/deftest round-trips-lists
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
-                                 [:sql "INSERT INTO docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
+                                 [:sql "INSERT INTO docs (_id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                   [4]]])]
     (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
 
@@ -50,7 +50,7 @@
     (t/is (= [{:xt/id :foo, :list [1 2 ["foo" "bar"]]}
               {:xt/id "bar", :list [4 2 8]}]
              (xt/q *node*
-                   "SELECT b.xt$id, b.list FROM docs b"
+                   "SELECT b._id, b.list FROM docs b"
                    {:tx-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
@@ -61,7 +61,7 @@
              (xt/q *node* '(from :docs [{:xt/id id} v]))))
 
     (t/is (= [{:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]
-             (xt/q *node* "SELECT b.xt$id, b.v FROM docs b")))))
+             (xt/q *node* "SELECT b._id, b.v FROM docs b")))))
 
 (t/deftest round-trips-structs
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
@@ -80,11 +80,11 @@
             ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
             }]
 
-    (xt/execute-tx *node* [[:sql "INSERT INTO foo (xt$id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
+    (xt/execute-tx *node* [[:sql "INSERT INTO foo (_id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
                             (mapv vs [:dt :ts :tstz :tm])]])
 
     (t/is (= [(assoc vs :xt/id "foo")]
-             (xt/q *node* "SELECT f.xt$id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
+             (xt/q *node* "SELECT f._id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
                    {:default-tz (ZoneId/of "Europe/London")})))
 
     (let [lits [[:dt "DATE '2022-08-01'"]
@@ -96,11 +96,11 @@
                 [:tmtz "TIME '11:21:14.932254-08:00'"]]]
 
       (xt/execute-tx *node* (vec (for [[t lit] lits]
-                                   [:sql (format "INSERT INTO bar (xt$id, v) VALUES (?, %s)" lit)
+                                   [:sql (format "INSERT INTO bar (_id, v) VALUES (?, %s)" lit)
                                     [(name t)]])))
       (t/is (= (set (for [[t _lit] lits]
                       {:xt/id (name t), :v (get vs t)}))
-               (set (xt/q *node* "SELECT b.xt$id, b.v FROM bar b"
+               (set (xt/q *node* "SELECT b._id, b.v FROM bar b"
                           {:default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-system-time-47
@@ -171,12 +171,12 @@
 
 (t/deftest test-basic-sql-dml
   (letfn [(all-users [tx]
-            (->> (xt/q *node* "SELECT u.first_name, u.last_name, u.xt$valid_from, u.xt$valid_to FROM users u"
+            (->> (xt/q *node* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users u"
                        {:basis {:at-tx tx}
                         :default-all-valid-time? true})
                  (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
 
-    (let [tx1 (xt/submit-tx *node* [[:sql "INSERT INTO users (xt$id, first_name, last_name, xt$valid_from) VALUES (?, ?, ?, ?)"
+    (let [tx1 (xt/submit-tx *node* [[:sql "INSERT INTO users (_id, first_name, last_name, _valid_from) VALUES (?, ?, ?, ?)"
                                      ["dave", "Dave", "Davis", #inst "2018"]
                                      ["claire", "Claire", "Cooper", #inst "2019"]
                                      ["alan", "Alan", "Andrews", #inst "2020"]
@@ -190,7 +190,7 @@
 
       (t/is (= tx1-expected (all-users tx1)))
 
-      (let [tx2 (xt/submit-tx *node* [[:sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u.xt$id = ?"
+      (let [tx2 (xt/submit-tx *node* [[:sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u._id = ?"
                                        ["dave"]]])
             tx2-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
@@ -200,7 +200,7 @@
         (t/is (= tx2-expected (all-users tx2)))
         (t/is (= tx1-expected (all-users tx1)))
 
-        (let [tx3 (xt/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO NULL AS u SET first_name = 'Sue' WHERE u.xt$id = ?"
+        (let [tx3 (xt/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO NULL AS u SET first_name = 'Sue' WHERE u._id = ?"
                                          ["susan"]]])
 
               tx3-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
@@ -216,39 +216,39 @@
 (deftest test-sql-insert
   (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01"))
            (xt/execute-tx *node*
-                          [[:sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)"
+                          [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
                             ["dave", "Dave", #inst "2018"]
                             ["claire", "Claire", #inst "2019"]]])))
   
 
   (t/is (= (serde/->tx-committed 1 (time/->instant #inst "2020-01-02"))
            (xt/execute-tx *node*
-                          [[:sql "INSERT INTO people (xt$id, renamed_name)
-                                  SELECT users.xt$id, users.name
+                          [[:sql "INSERT INTO people (_id, renamed_name)
+                                  SELECT users._id, users.name
                                   FROM users
                                   WHERE users.name = 'Claire'"]])))
 
   (t/is (= [{:renamed-name "Claire"}]
-           (xt/q *node* "SELECT people.renamed_name FROM people")))
+           (xt/q *node* "SELECT renamed_name FROM people")))
 
   (t/is (= (serde/->tx-committed 2 (time/->instant #inst "2020-01-03"))
            (xt/execute-tx *node*
-                          [[:sql "INSERT INTO people (xt$id, renamed_name, xt$valid_from)
-                                       SELECT users.xt$id, users.name, users.xt$valid_from
+                          [[:sql "INSERT INTO people (_id, renamed_name, _valid_from)
+                                       SELECT users._id, users.name, users._valid_from
                                        FROM users FOR VALID_TIME AS OF DATE '2019-06-01'
                                        WHERE users.name = 'Dave'"]])))
 
   (t/is (= [{:renamed-name "Dave"}]
-           (xt/q *node* "SELECT people.renamed_name FROM people FOR VALID_TIME AS OF DATE '2019-06-01'"))))
+           (xt/q *node* "SELECT renamed_name FROM people FOR VALID_TIME AS OF DATE '2019-06-01'"))))
 
 (deftest test-sql-insert-app-time-date-398
   (let [tx (xt/submit-tx *node*
-                         [[:sql "INSERT INTO foo (xt$id, xt$valid_from) VALUES ('foo', DATE '2018-01-01')"]])]
+                         [[:sql "INSERT INTO foo (_id, _valid_from) VALUES ('foo', DATE '2018-01-01')"]])]
 
     (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
-             (xt/q *node* "SELECT foo.xt$id, foo.xt$valid_from, foo.xt$valid_to FROM foo")))))
+             (xt/q *node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")))))
 
 (deftest test-dml-default-all-valid-time-flag-339
   (let [tt1 (time/->zdt #inst "2020-01-01")
@@ -256,10 +256,10 @@
         tt5 (time/->zdt #inst "2020-01-05")]
     (letfn [(q []
               (set (xt/q *node*
-                         "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                         "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo"
                          {:default-all-valid-time? true})))]
       (xt/submit-tx *node*
-                    [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
+                    [[:sql "INSERT INTO foo (_id, version) VALUES (?, ?)"
                       ["foo", 0]]])
 
       (t/is (= #{{:version 0, :xt/valid-from tt1}}
@@ -267,7 +267,7 @@
 
       (t/testing "update as-of-now"
         (xt/submit-tx *node*
-                      [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]]
+                      [[:sql "UPDATE foo SET version = 1 WHERE foo._id = 'foo'"]]
                       {:default-all-valid-time? false})
 
         (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}
@@ -278,7 +278,7 @@
         (xt/submit-tx *node*
                       [[:sql (str "UPDATE foo "
                                         "FOR PORTION OF VALID_TIME FROM ? TO ? "
-                                        "SET version = 2 WHERE foo.xt$id = 'foo'")
+                                        "SET version = 2 WHERE foo._id = 'foo'")
                         [tt1 tt2]]]
                       {:default-all-valid-time? false})
         (t/is (= #{{:version 2, :xt/valid-from tt1, :xt/valid-to tt2}
@@ -287,7 +287,7 @@
 
       (t/testing "UPDATE for-all-time"
         (xt/submit-tx *node*
-                      [[:sql "UPDATE foo SET version = 3 WHERE foo.xt$id = 'foo'"]]
+                      [[:sql "UPDATE foo SET version = 3 WHERE foo._id = 'foo'"]]
                       {:default-all-valid-time? true})
 
         (t/is (= #{{:version 3, :xt/valid-from tt1, :xt/valid-to tt2}
@@ -296,7 +296,7 @@
 
       (t/testing "DELETE as-of-now"
         (xt/submit-tx *node*
-                      [[:sql "DELETE FROM foo WHERE foo.xt$id = 'foo'"]]
+                      [[:sql "DELETE FROM foo WHERE foo._id = 'foo'"]]
                       {:default-all-valid-time? false})
 
         (t/is (= #{{:version 3, :xt/valid-from tt1, :xt/valid-to tt2}
@@ -306,7 +306,7 @@
       (t/testing "UPDATE FOR ALL VALID_TIME"
         (xt/submit-tx *node*
                       [[:sql "UPDATE foo FOR ALL VALID_TIME
-                                    SET version = 4 WHERE foo.xt$id = 'foo'"]]
+                                    SET version = 4 WHERE foo._id = 'foo'"]]
                       {:default-all-valid-time? false})
 
         (t/is (= #{{:version 4, :xt/valid-from tt1, :xt/valid-to tt2}
@@ -316,7 +316,7 @@
       (t/testing "DELETE FOR ALL VALID_TIME"
         (xt/submit-tx *node*
                       [[:sql "DELETE FROM foo FOR ALL VALID_TIME
-                                    WHERE foo.xt$id = 'foo'"]]
+                                    WHERE foo._id = 'foo'"]]
                       {:default-all-valid-time? false})
 
         (t/is (= #{} (q)))))))
@@ -325,35 +325,35 @@
   (let [tt1 (time/->zdt #inst "2020-01-01")
         tt2 (time/->zdt #inst "2020-01-02")]
     (xt/submit-tx *node*
-                  [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
+                  [[:sql "INSERT INTO foo (_id, version) VALUES (?, ?)"
                     ["foo", 0]]])
 
     (t/is (= [{:version 0, :xt/valid-from tt1}]
              (xt/q *node*
-                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                   "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo"
                    {:default-all-valid-time? false})))
 
     (t/is (= [{:version 0, :xt/valid-from tt1}]
              (xt/q *node*
-                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo")))
+                   "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo")))
 
     (xt/submit-tx *node*
-                  [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]])
+                  [[:sql "UPDATE foo SET version = 1 WHERE foo._id = 'foo'"]])
 
     (t/is (= [{:version 1, :xt/valid-from tt2}]
              (xt/q *node*
-                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"))
+                   "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo"))
           "without flag it returns as of now")
 
     (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}
                {:version 1, :xt/valid-from tt2}}
              (set (xt/q *node*
-                        "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                        "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo"
                         {:default-all-valid-time? true}))))
 
     (t/is (= [{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}]
              (xt/q *node*
-                   (str "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to "
+                   (str "SELECT foo.version, foo._valid_from, foo._valid_to "
                         "FROM foo FOR VALID_TIME AS OF ?")
                    {:args [tt1]
                     :default-all-valid-time? true}))
@@ -362,7 +362,7 @@
     (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}
                {:version 1, :xt/valid-from tt2}}
              (set (xt/q *node*
-                        "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to
+                        "SELECT foo.version, foo._valid_from, foo._valid_to
                              FROM foo FOR ALL VALID_TIME"
                         {:default-all-valid-time? false})))
           "FOR ALL VALID_TIME ignores flag and returns all app-time")))
@@ -370,11 +370,11 @@
 (t/deftest test-erase
   (letfn [(q [tx]
             (set (xt/q *node*
-                       "SELECT foo.xt$id, foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                       "SELECT foo._id, foo.version, foo._valid_from, foo._valid_to FROM foo"
                        {:basis {:at-tx tx}
                         :default-all-valid-time? true})))]
     (let [tx1 (xt/submit-tx *node*
-                            [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
+                            [[:sql "INSERT INTO foo (_id, version) VALUES (?, ?)"
                               ["foo", 0]
                               ["bar", 0]]])
           tx2 (xt/submit-tx *node* [[:sql "UPDATE foo SET version = 1"]])
@@ -398,7 +398,7 @@
                (q tx2)))
 
       (let [tx3 (xt/submit-tx *node*
-                              [[:sql "ERASE FROM foo WHERE foo.xt$id = 'foo'"]])]
+                              [[:sql "ERASE FROM foo WHERE foo._id = 'foo'"]])]
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx3)))
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx2)))
 
@@ -407,33 +407,33 @@
                  (q tx1)))))))
 
 (t/deftest returns-dml-errors-through-execute-tx
-  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])]
+  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"]])]
     (t/is (false? committed?))
     (t/is (thrown-with-msg? IllegalArgumentException #"Errors parsing SQL statement"
                             (throw error))))
 
   (t/testing "still an active node"
-    (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('dave', 'Dave')"]])
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (_id, name) VALUES ('dave', 'Dave')"]])
 
     (t/is (= [{:name "Dave"}]
              (xt/q tu/*node* "SELECT users.name FROM users")))))
 
 (t/deftest aborts-insert-if-end-lt-start-401-425
   (letfn [(q-all []
-            (->> (xt/q tu/*node* "SELECT foo.xt$id, foo.xt$valid_from, foo.xt$valid_to FROM foo")
+            (->> (xt/q tu/*node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")
                  (into {} (map (juxt :xt/id (juxt :xt/valid-from :xt/valid-to))))))]
 
-    (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (1)"]])
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
     (xt/submit-tx tu/*node* [[:sql "
-INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to)
+INSERT INTO foo (_id, _valid_from, _valid_to)
 VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
     (t/is (= {1 [(time/->zdt #inst "2020-01-01") nil]}
              (q-all)))
 
     (t/testing "continues indexing after abort"
-      (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (3)"]])
+      (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (3)"]])
 
       (t/is (= {1 [(time/->zdt #inst "2020-01-01") nil]
                 3 [(time/->zdt #inst "2020-01-03") nil]}
@@ -442,7 +442,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 (deftest test-insert-from-other-table-with-as-of-now
   (xt/submit-tx *node*
                 [[:sql
-                   "INSERT INTO posts (xt$id, user_id, text, xt$valid_from)
+                   "INSERT INTO posts (_id, user_id, text, _valid_from)
                     VALUES (9012, 5678, 'Happy 2050!', DATE '2050-01-01')"]])
 
   (t/is (= [{:text "Happy 2050!"}]
@@ -452,7 +452,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (xt/q *node* "SELECT posts.text FROM posts")))
 
   (xt/submit-tx *node*
-                [[:sql "INSERT INTO t1 SELECT posts.xt$id, posts.text FROM posts"]])
+                [[:sql "INSERT INTO t1 SELECT posts._id, posts.text FROM posts"]])
 
   (t/is (= []
            (xt/q *node* "SELECT t1.text FROM t1 FOR ALL VALID_TIME"))))
@@ -670,8 +670,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :kebab-case-keyword})))
 
-  (t/is (= [{"xt$id" :petr "first-name" "Petr", "last-name" "Petrov"}
-            {"xt$id" :ivan "first-name" "Ivan", "last-name" "Ivanov"}]
+  (t/is (= [{"_id" :petr "first-name" "Petr", "last-name" "Petrov"}
+            {"_id" :ivan "first-name" "Ivan", "last-name" "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :kebab-case-string})))
 
@@ -680,8 +680,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :snake-case-keyword})))
 
-  (t/is (= [{"xt$id" :petr, "first_name" "Petr", "last_name" "Petrov"}
-            {"xt$id" :ivan, "first_name" "Ivan", "last_name" "Ivanov"}]
+  (t/is (= [{"_id" :petr, "first_name" "Petr", "last_name" "Petrov"}
+            {"_id" :ivan, "first_name" "Ivan", "last_name" "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :snake-case-string})))
 
@@ -690,8 +690,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :camel-case-keyword})))
 
-  (t/is (= [{"xt$id" :petr, "firstName" "Petr", "lastName" "Petrov"}
-            {"xt$id" :ivan, "firstName" "Ivan", "lastName" "Ivanov"}]
+  (t/is (= [{"_id" :petr, "firstName" "Petr", "lastName" "Petrov"}
+            {"_id" :ivan, "firstName" "Ivan", "lastName" "Ivanov"}]
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :camel-case-string})))
 
@@ -741,15 +741,34 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (set (xt/q tu/*node* '(from :users2 [*]))))))
 
 (t/deftest test-explain-plan-2383
+  (xt/submit-tx tu/*node* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
+                           [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
+
   (t/is (= '[{:plan
               "[:project
- [name age]
+ [name age xt$valid_from xt$valid_to]
  [:scan
   {:table people, :for-valid-time nil, :for-system-time nil}
-  [{xt$id (= xt$id ?pid)} name age]]]
+  [{xt$id (= xt$id ?pid)} name age xt$valid_from xt$valid_to]]]
 "}]
            (xt/q tu/*node*
-                 '(from :people [{:xt/id $pid} name age])
+                 '(from :people [{:xt/id $pid} name age xt/valid-from xt/valid-to])
+                 {:explain? true})))
+
+  (t/is (= '[{:plan
+              "[:project
+ [{name people.1/name}
+  {age people.1/age}
+  {xt$valid_from people.1/xt$valid_from}
+  {xt$valid_to people.1/xt$valid_to}]
+ [:rename
+  people.1
+  [:scan
+   {:table people}
+   [age xt$valid_to name xt$valid_from {xt$id (= xt$id ?_0)}]]]]
+"}]
+           (xt/q tu/*node*
+                 "SELECT name, age, _validFrom, _valid_to FROM people WHERE _id = ?"
                  {:explain? true}))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019

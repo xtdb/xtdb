@@ -167,12 +167,12 @@ For example, imagine 'for each order, get me the customer name, order-id and ord
 
 [source,sql]
 ----
-SELECT c.customer_name, o.xt$id AS order_id, o.order_value
+SELECT c.customer_name, o._id AS order_id, o.order_value
 FROM customers c
-  JOIN orders o ON (o.customer_id = c.xt$id)
+  JOIN orders o ON (o.customer_id = c._id)
 ----
 
-In XTQL, we specify the join condition by re-using a logic variable (`customer_id`), constraining the two input tables to have the same value for `o.customer_id` and `c.xt$id` (customer table primary key):
+In XTQL, we specify the join condition by re-using a logic variable (`customer_id`), constraining the two input tables to have the same value for `o.customer_id` and `c._id` (customer table primary key):
 
 .JSON
 [%collapsible%open]
@@ -182,11 +182,11 @@ In XTQL, we specify the join condition by re-using a logic variable (`customer_i
 [
   {
     "unify": [
-      // bind `customer_id` to the `xt$id` of the `customers` table
-      { "from": "customers", "bind": [ { "xt$id": "customerId" }, "customerName" ] },
+      // bind `customer_id` to the `_id` of the `customers` table
+      { "from": "customers", "bind": [ { "_id": "customerId" }, "customerName" ] },
 
       // also bind `customer_id` to the `customer_id` of the `orders` table
-      { "from": "orders", "bind": [ { "xt$id": "orderId" }, "customerId", "orderValue" ] }
+      { "from": "orders", "bind": [ { "_id": "orderId" }, "customerId", "orderValue" ] }
     ]
   },
 
@@ -220,7 +220,7 @@ These queries are evaluated on XTDB's single writer thread, so are guaranteed th
 
 We can submit link:/reference/main/xtql/txs#_insert_into['insert' operations] to XTDB - these evaluate a query, and insert every result into the given table.
 
-e.g. `INSERT INTO users2 SELECT xt$id, first_name AS given_name, last_name AS family_name FROM users`:
+e.g. `INSERT INTO users2 SELECT _id, first_name AS given_name, last_name AS family_name FROM users`:
 
 .JSON
 [%collapsible%open]
@@ -231,7 +231,7 @@ e.g. `INSERT INTO users2 SELECT xt$id, first_name AS given_name, last_name AS fa
   "insert": "users2",
   "query": {
     "from": "users",
-    "bind": [ "xt$id", {"firstName": "givenName"}, {"lastName": "familyName"}]
+    "bind": [ "_id", {"firstName": "givenName"}, {"lastName": "familyName"}]
   }
 }
 ----
@@ -252,7 +252,7 @@ e.g. `INSERT INTO users2 SELECT xt$id, first_name AS given_name, last_name AS fa
 
 link:/reference/main/xtql/txs#_update_table[Update operations] find rows, and specify which fields to update.
 
-Here, we're incrementing a 'version' attribute - `UPDATE docs SET version = version + 1 WHERE xt$id = ?`
+Here, we're incrementing a 'version' attribute - `UPDATE docs SET version = version + 1 WHERE _id = ?`
 
 .JSON
 [%collapsible%open]
@@ -261,7 +261,7 @@ Here, we're incrementing a 'version' attribute - `UPDATE docs SET version = vers
 ----
 {
   "update": "documents",
-  "bind": [ { "xt$id": "$docId", "version": "v" }],
+  "bind": [ { "_id": "$docId", "version": "v" }],
   "set": { "version": { "@call": "+", "@args": [ "v", 1 ] } }
 }
 

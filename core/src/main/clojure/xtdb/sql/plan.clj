@@ -1681,7 +1681,7 @@
 
 (defrecord InsertWithoutXtId []
   PlanError
-  (error-string [_] "INSERT does not contain mandatory xt$id column"))
+  (error-string [_] "INSERT does not contain mandatory _id column"))
 
 (defrecord QueryPlanVisitor [env scope]
   SqlVisitor

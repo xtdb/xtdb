@@ -34,7 +34,7 @@ components:
       description: Document
       type: object
       properties:
-        xt$id:
+        _id:
           $ref: '#/components/schemas/Id'
       additionalProperties:
         $ref: '#/components/schemas/TypedAny'
@@ -117,7 +117,7 @@ components:
         sql:
           type: string
           description: A SQL operation
-          example: "INSERT INTO docs(xt$id, name) VALUES (1, 'Turing')"
+          example: "INSERT INTO docs(_id, name) VALUES (1, 'Turing')"
         argRows:
           $ref: '#/components/schemas/ArgRows'
 
@@ -350,7 +350,7 @@ components:
 
   examples:
     DocumentLargeExample:
-      xt$id: "my-id"
+      _id: "my-id"
       an-integer: 12
       my-duration:
         '@type': "xt:duration"

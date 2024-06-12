@@ -50,14 +50,14 @@
 
 (deftest deserialize-tx-op-test
   (t/testing "sql"
-    (let [v #xt.tx/sql {:sql "INSERT INTO docs (xt$id, foo) VALUES (1, \"bar\")"}]
+    (let [v #xt.tx/sql {:sql "INSERT INTO docs (_id, foo) VALUES (1, \"bar\")"}]
       (t/is (= v (roundtrip-tx-op v))))
 
-    (let [v #xt.tx/sql {:sql "INSERT INTO docs (xt$id, foo) VALUES (?, ?)", :arg-rows [[1 "bar"] [2 "toto"]]}]
+    (let [v #xt.tx/sql {:sql "INSERT INTO docs (_id, foo) VALUES (?, ?)", :arg-rows [[1 "bar"] [2 "toto"]]}]
       (t/is (= v (roundtrip-tx-op v))))
 
     (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                            (-> {"sql" "INSERT INTO docs (xt$id, foo) VALUES (?, ?)"
+                            (-> {"sql" "INSERT INTO docs (_id, foo) VALUES (?, ?)"
                                  "arg_rows" [1 "bar"]}
                                 encode
                                 decode-tx-op)))))
@@ -69,11 +69,11 @@
   (JsonSerde/decode s TxRequest))
 
 (deftest deserialize-tx-test
-  (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (xt$id) VALUES (1)"}],
+  (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (_id) VALUES (1)"}],
                       (TxOptions.))]
     (t/is (= v (roundtrip-tx v))))
 
-  (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (xt$id) VALUES (1)"}],
+  (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (_id) VALUES (1)"}],
                       (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
                                   #time/zone "America/Los_Angeles"
                                   false))]
@@ -96,7 +96,7 @@
 
 (deftest deserialize-query-map-test
   (let [tx-key (serde/->TxKey 1 #time/instant "2023-12-06T09:31:27.570827956Z")
-        v (QueryRequest. "SELECT xt$id FROM docs"
+        v (QueryRequest. "SELECT _id FROM docs"
                          (-> (QueryOptions/queryOpts)
                              (.args {"id" :foo})
                              (.basis (Basis. tx-key Instant/EPOCH))

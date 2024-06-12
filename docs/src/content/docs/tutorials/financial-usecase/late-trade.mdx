@@ -17,14 +17,14 @@ For example, a set of trades entering our risk system may look something like th
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-01-15T16:59:00"
-       txs="INSERT INTO trades (xt$id, symbol, volume, xt$valid_from)
+       txs="INSERT INTO trades (_id, symbol, volume, _valid_from)
             VALUES
             (1, 'XAU:CUR', 150, TIMESTAMP '2024-01-15 10:00:00'),
             (2, 'NG1:COM', 430, TIMESTAMP '2024-01-15 11:15:00'),
             (3, 'XAU:CUR', 200, TIMESTAMP '2024-01-15 12:05:00')" />
-  <Query q="SELECT t.*, xt$valid_from AS trade_date
+  <Query q="SELECT t.*, _valid_from AS trade_date
             FROM trades AS t
-            ORDER BY xt$id" />
+            ORDER BY _id" />
 </Fiddle>
 
 However sometimes a trade is booked right at the end of the day, after the standard End-of-Day reporting window has closed, and therefore isn't available and processed by the system until sometime later.
@@ -33,25 +33,25 @@ Let's say this trade was entered after the market close:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-01-15T19:10:00"
-       txs="INSERT INTO trades (xt$id, symbol, volume, xt$valid_from)
+       txs="INSERT INTO trades (_id, symbol, volume, _valid_from)
             VALUES
             (4, 'W1:COM', 320, TIMESTAMP '2024-01-15 16:50:00')" />
-  <Query q="SELECT t.*, xt$valid_from AS trade_date
+  <Query q="SELECT t.*, _valid_from AS trade_date
             FROM trades AS t
-            ORDER BY xt$id" />
+            ORDER BY _id" />
 </Fiddle>
 
 The following day sees more trades entered into the system:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-01-16T16:59:00"
-       txs="INSERT INTO trades (xt$id, symbol, volume, xt$valid_from)
+       txs="INSERT INTO trades (_id, symbol, volume, _valid_from)
             VALUES
             (5, 'W1:COM', 100, TIMESTAMP '2024-01-16 12:10:00'),
 	    (6, 'W1:COM', 120, TIMESTAMP '2024-01-16 14:55:00')" />
-  <Query q="SELECT t.*, xt$valid_from AS trade_date
+  <Query q="SELECT t.*, _valid_from AS trade_date
             FROM trades AS t
-            ORDER BY xt$id" />
+            ORDER BY _id" />
 </Fiddle>
 
 We can re-run our final risk reports for yesterday, which includes the late-arriving trade, but not the new trades for today:
@@ -60,7 +60,7 @@ We can re-run our final risk reports for yesterday, which includes the late-arri
   <Query q="SELECT *
             FROM trades FOR ALL VALID_TIME
             WHERE VALID_TIME CONTAINS TIMESTAMP '2024-01-16 17:00:00'
-            ORDER BY xt$id" />
+            ORDER BY _id" />
 </Fiddle>
 
 Now our reports can be made consistent and reproducible whilst accounting for late-arriving data, great!

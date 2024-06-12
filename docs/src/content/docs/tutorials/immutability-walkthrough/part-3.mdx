@@ -16,7 +16,7 @@ Let's pretend the day today is `2024-01-01`, and we insert a product:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-01-01"
-       txs="INSERT INTO product (xt$id, name, price)
+       txs="INSERT INTO product (_id, name, price)
             VALUES
             (1, 'Pendleton Electric Bicycle', 340)" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
@@ -42,11 +42,11 @@ But let's say, we want to insert some historical data into our database, all the
 
 This could be an import of historical product prices from another system into our XTDB golden store.
 
-We achieve this in XT by setting the `xt$valid_from` and `xt$valid_to` column
+We achieve this in XT by setting the `_valid_from` and `_valid_to` column
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-01-01"
-       txs="INSERT INTO product (xt$id, name, price, xt$valid_from, xt$valid_to)
+       txs="INSERT INTO product (_id, name, price, _valid_from, _valid_to)
             VALUES
             (1, 'Pendleton Electric Bicycle', 300, DATE '2022-01-01', DATE '2024-01-01')" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />

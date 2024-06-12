@@ -1,16 +1,16 @@
 bo-sql-1: |
   -- tag::bo-sql-1[]
-  SELECT users.xt$id AS user_id, users.first_name, users.last_name FROM users
+  SELECT users._id AS user_id, users.first_name, users.last_name FROM users
   -- end::bo-sql-1[]
 
 bo-sql-2: |
   -- tag::bo-sql-2[]
-  SELECT users.first_name, users.last_name FROM users WHERE users.xt$id = 'ivan'
+  SELECT users.first_name, users.last_name FROM users WHERE users._id = 'ivan'
   -- end::bo-sql-2[]
 
 bo-sql-3: |
   -- tag::bo-sql-3[]
-  SELECT users.xt$id AS user_id, users.first_name, users.last_name
+  SELECT users._id AS user_id, users.first_name, users.last_name
   FROM users
   ORDER BY last_name, first_name
   LIMIT 10
@@ -18,31 +18,31 @@ bo-sql-3: |
 
 joins-sql-1: |
   -- tag::joins-sql-1[]
-  SELECT u.xt$id AS user_id, u.first_name, u.last_name, a.title, a.content
-  FROM users u JOIN articles a ON u.xt$id = a.author_id
+  SELECT u._id AS user_id, u.first_name, u.last_name, a.title, a.content
+  FROM users u JOIN articles a ON u._id = a.author_id
   -- end::joins-sql-1[]
 
 joins-sql-2: |
   -- tag::joins-sql-2[]
-  SELECT u1.xt$id AS uid1, u2.xt$id AS uid2, u1.age
+  SELECT u1._id AS uid1, u2._id AS uid2, u1.age
   FROM users u1
     JOIN users u2 ON (u1.age = u2.age)
-  WHERE u1.xt$id <> u2.xt$id
+  WHERE u1._id <> u2._id
   -- end::joins-sql-2[]
 
 joins-sql-3: |
   -- tag::joins-sql-3[]
-  SELECT c.xt$id AS cid, o.currency, o.order_value
+  SELECT c._id AS cid, o.currency, o.order_value
   FROM customers c
-    LEFT JOIN orders o ON (c.xt$id = o.customer_id)
+    LEFT JOIN orders o ON (c._id = o.customer_id)
   LIMIT 100
   -- end::joins-sql-3[]
 
 joins-sql-4: |
   -- tag::joins-sql-4[]
-  SELECT c.xt$id AS cid
+  SELECT c._id AS cid
   FROM customers c
-  WHERE c.xt$id NOT IN (SELECT orders.customer_id FROM orders)
+  WHERE c._id NOT IN (SELECT orders.customer_id FROM orders)
   LIMIT 100
   -- end::joins-sql-4[]
 
@@ -56,22 +56,22 @@ proj-sql-2: |
   -- tag::proj-sql-2[]
   SELECT (u.first_name || ' ' || u.last_name) AS full_name, a.title, a.content
   FROM users AS u
-    JOIN articles a ON u.xt$id = a.author_id
+    JOIN articles a ON u._id = a.author_id
   -- end::proj-sql-2[]
 
 proj-sql-3: |
   -- tag::proj-sql-3[]
   SELECT u.first_name, u.last_name, a.title, a.content
   FROM users AS u
-    JOIN articles a ON u.xt$id = a.author_id
+    JOIN articles a ON u._id = a.author_id
   -- end::proj-sql-3[]
 
 aggr-sql-1: |
   -- tag::aggr-sql-1[]
-  SELECT c.xt$id AS cid, o.currency, COUNT(o.xt$id) AS order_count, COALESCE(SUM(o.order_value), 0) AS total_value
+  SELECT c._id AS cid, o.currency, COUNT(o._id) AS order_count, COALESCE(SUM(o.order_value), 0) AS total_value
   FROM customers c
-    LEFT JOIN orders o ON (c.xt$id = o.customer_id)
-  GROUP BY c.xt$id, o.currency
+    LEFT JOIN orders o ON (c._id = o.customer_id)
+  GROUP BY c._id, o.currency
   ORDER BY total_value DESC
   LIMIT 100
   -- end::aggr-sql-1[]
@@ -89,8 +89,8 @@ bitemp-sql-2: |
 DML-Insert-sql: |
   -- tag::DML-Insert-sql[]
   INSERT INTO users
-  SELECT ou.xt$id, ou.given_name AS first_name, ou.surname AS last_name,
-         ou.xt$valid_from, ou.xt$valid_to
+  SELECT ou._id, ou.given_name AS first_name, ou.surname AS last_name,
+         ou._valid_from, ou._valid_to
   FROM old_users AS ou
   -- end::DML-Insert-sql[]
 
@@ -102,7 +102,7 @@ DML-Delete-sql: |
 DML-Delete-additional-unify-clauses-sql: |
   -- tag::DML-Delete-additional-unify-clauses-sql[]
   DELETE FROM comments
-  WHERE comments.post_id IN (SELECT posts.xt$id FROM posts WHERE posts.author_id = ?)
+  WHERE comments.post_id IN (SELECT posts._id FROM posts WHERE posts.author_id = ?)
   -- end::DML-Delete-additional-unify-clauses-sql[]
 
 DML-Delete-bitemporal-sql: |
@@ -121,12 +121,12 @@ DML-Update-sql: |
   -- tag::DML-Update-sql[]
   UPDATE documents
   SET version = documents.version + 1
-  WHERE documents.xt$id = ?
+  WHERE documents._id = ?
   -- end::DML-Update-sql[]
 
 DML-Update-bitemporal-sql-1: |
   -- tag::DML-Update-bitemporal-sql-1[]
-  INSERT INTO comments (xt$id, post_id) VALUES (?, ?)
+  INSERT INTO comments (_id, post_id) VALUES (?, ?)
   -- end::DML-Update-bitemporal-sql-1[]
 
 DML-Update-bitemporal-sql-2: |

@@ -22,9 +22,9 @@ public class XtdbClientJavaTest {
 
              var client = XtdbClient.openClient(new URI("http://localhost:3000").toURL())) {
 
-            client.submitTx(sql("INSERT INTO foo (xt$id) VALUES ('jms')"));
+            client.submitTx(sql("INSERT INTO foo (_id) VALUES ('jms')"));
 
-            try (var res = client.openQuery("SELECT xt$id foo_id FROM foo")) {
+            try (var res = client.openQuery("SELECT _id foo_id FROM foo")) {
                 assertEquals(List.of(Map.of("foo_id", "jms")), res.toList());
             }
 

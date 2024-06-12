@@ -4,9 +4,9 @@ title: SQL Basics
 
 XTDB implements a SQL API that closely follows the ISO standard specifications and draws inspiration from Postgres where needed, however unlike most SQL systems XTDB does not require an explicit schema to be declared upfront.
 
-The only caveat is that each record in XTDB must contain a user-provided `xt$id` primary key column, but other columns are fully dynamic - meaning each row in XTDB has the flexibility of a document in a document database.
+The only caveat is that each record in XTDB must contain a user-provided `_id` primary key column, but other columns are fully dynamic - meaning each row in XTDB has the flexibility of a document in a document database.
 
-Note: `xt$` is a reserved prefix convention for namepacing system-mandated columns and other XTDB-specific database objects.
+Note: `_` is a reserved prefix convention for namepacing system-mandated columns and other XTDB-specific database objects.
 
 === Insert a row into a new table
 
@@ -14,7 +14,7 @@ To run your first INSERT transaction, simply enter the following into `xtsql`:
 
 [source,sql]
 ----
-INSERT INTO people (xt$id, name) VALUES (6, 'fred');
+INSERT INTO people (_id, name) VALUES (6, 'fred');
 ----
 
 Here the `people` table has not been defined anywhere beforehand - the table is created dynamically during the INSERT statement, along with any supplied columns and inferrable type information.
@@ -34,7 +34,7 @@ If we now INSERT another row with a slightly different shape, XTDB will graceful
 
 [source,sql]
 ----
-INSERT INTO people (xt$id, name, likes)
+INSERT INTO people (_id, name, likes)
   VALUES (9, 'bob', ['fishing', 3.14, {'dynamic':'data'}]);
 ----
 
@@ -42,7 +42,7 @@ Re-running our `SELECT * FROM people` you should now see:
 
 [source,text]
 ----
-| xt$id | likes                                   | name    |
+| _id | likes                                   | name    |
 |-------|-----------------------------------------|---------|
 | 6     | None                                    | 'fred'  |
 | 9     | ['fishing', 3.14, {'dynamic': 'data'}]  | 'bob'   |

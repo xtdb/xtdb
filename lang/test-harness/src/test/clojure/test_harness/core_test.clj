@@ -59,10 +59,10 @@
       (is (= [] (query token "{\"sql\":\"SELECT * FROM foo\"}")))
 
       ;; Submit a transaction
-      (tx token "{\"txOps\":[{\"sql\":\"INSERT INTO foo(xt$id, bar) VALUES (1, 'baz')\"}]}")
+      (tx token "{\"txOps\":[{\"sql\":\"INSERT INTO foo(_id, bar) VALUES (1, 'baz')\"}]}")
 
       ;; Query the results
-      (is (= [{:xt$id 1 :bar "baz"}]
+      (is (= [{:_id 1 :bar "baz"}]
              (query token "{\"sql\":\"SELECT * FROM foo\"}")))
 
       ;; Tear down the node
@@ -81,9 +81,9 @@
           token2 (setup)]
 
       ;; Submit only to token1
-      (tx token1 "{\"txOps\":[{\"sql\":\"INSERT INTO foo(xt$id, bar) VALUES (1, 'baz')\"}]}")
+      (tx token1 "{\"txOps\":[{\"sql\":\"INSERT INTO foo(_id, bar) VALUES (1, 'baz')\"}]}")
 
-      (is (= [{:xt$id 1 :bar "baz"}]
+      (is (= [{:_id 1 :bar "baz"}]
              (query token1 "{\"sql\":\"SELECT * FROM foo\"}")))
 
       (is (= [] (query token2 "{\"sql\":\"SELECT * FROM foo\"}")))))

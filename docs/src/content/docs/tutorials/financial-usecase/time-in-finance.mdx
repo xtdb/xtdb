@@ -27,10 +27,10 @@ IT systems of all kinds are plagued by many time-related complexities, from misc
 SQL databases systems typically lose information whenever UPDATE or DELETE are used. They also don't record or track the any changes to data by default.
 
 <Fiddle>
-  <Txs txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
-  <Txs txs="UPDATE trades SET price = 150 WHERE xt$id = 1;" />
+  <Txs txs="INSERT INTO trades (_id, price) VALUES (1, 100);" />
+  <Txs txs="UPDATE trades SET price = 150 WHERE _id = 1;" />
   <Query q={
-`SELECT xt$id, price
+`SELECT _id, price
   FROM trades
 `}
 />
@@ -43,10 +43,10 @@ As a consequence, software engineers working in financial domains are forced to 
 In XTDB however, there is no need for custom audit tables or timestamp columns to litter the application schema, because a full audit history is maintained automatically, and the history of the entire database can be 'replayed' with microsecond granularity.
 
 <Fiddle magicContext="audit">
-  <Txs txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
-  <Txs txs="UPDATE trades SET price = 150 WHERE xt$id = 1;" />
+  <Txs txs="INSERT INTO trades (_id, price) VALUES (1, 100);" />
+  <Txs txs="UPDATE trades SET price = 150 WHERE _id = 1;" />
   <Query q={
-`SELECT xt$id, price, xt$system_from, xt$system_to
+`SELECT _id, price, _system_from, _system_to
   FROM trades FOR ALL SYSTEM_TIME
 `}
 />
@@ -78,11 +78,11 @@ In contrast, XTDB allows applications to refer to previous database states witho
 
 <Fiddle>
   <Txs systemTime="2020-01-01"
-       txs="INSERT INTO trades (xt$id, price) VALUES (1, 100);" />
+       txs="INSERT INTO trades (_id, price) VALUES (1, 100);" />
   <Txs systemTime="2020-01-02"
-       txs="INSERT INTO trades (xt$id, price) VALUES (1, 150);" />
+       txs="INSERT INTO trades (_id, price) VALUES (1, 150);" />
   <Query q={
-`SELECT xt$id, price
+`SELECT _id, price
   FROM trades FOR SYSTEM_TIME AS OF DATE '2020-01-01'
 `} />
 </Fiddle>
@@ -102,19 +102,19 @@ Similarly to using system-time for snapshot-free reporting, valid-time can be us
 <Fiddle autoLoad>
   <Txs systemTime="2020-01-02"
        txs={
-`INSERT INTO trades (xt$id, price, xt$valid_from)
+`INSERT INTO trades (_id, price, _valid_from)
 VALUES (2, 200, DATE '2020-01-02');`} />
   <Txs systemTime="2020-01-03"
        txs={
-`INSERT INTO trades (xt$id, price, xt$valid_from)
+`INSERT INTO trades (_id, price, _valid_from)
 VALUES (1, 100, DATE '2020-01-01');`} />
   <Txs systemTime="2020-01-04"
        txs={
-`INSERT INTO trades (xt$id, price, xt$valid_from)
+`INSERT INTO trades (_id, price, _valid_from)
 VALUES (4, 400, DATE '2020-01-04');`} />
 
   <QueryTemplate q={
-`SELECT xt$id, price
+`SELECT _id, price
   FROM trades FOR VALID_TIME AS OF {{validTime}}
               FOR SYSTEM_TIME AS OF DATE '2020-01-31'
 `} />
@@ -132,23 +132,23 @@ XTDB allows applications to handle diverse shapes of evolving, document-like dat
 <Fiddle>
   <Txs systemTime="2020-01-02"
        txs={
-`INSERT INTO trades (xt$id, info, xt$valid_from)
+`INSERT INTO trades (_id, info, _valid_from)
 VALUES (1, {price: 100}, DATE '2020-01-01');`} />
   <Txs systemTime="2020-01-03"
        txs={
 `UPDATE trades
 SET info = {price: 100, qty: 5}
-WHERE xt$id = 1;`} />
+WHERE _id = 1;`} />
   <Txs systemTime="2020-01-04"
        txs={
 `UPDATE trades
 SET info = {price: 101,
             qty: 4,
             model_params: [DATE '2020-06-01', {gbp_usd: 1.2617}]}
-WHERE xt$id = 1;`} />
+WHERE _id = 1;`} />
 
   <Query q={
-`SELECT xt$id, info, xt$valid_from, xt$valid_to
+`SELECT _id, info, _valid_from, _valid_to
   FROM trades FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
 `} />
 </Fiddle>
@@ -172,19 +172,19 @@ Applications can set the `valid_to` column explicitly to correspond with data li
 <Fiddle>
   <Txs systemTime="2020-01-02"
        txs={
-`INSERT INTO trades (xt$id, price, xt$valid_from)
+`INSERT INTO trades (_id, price, _valid_from)
 VALUES (1, 100, DATE '2020-01-01');`} />
   <Txs systemTime="2020-01-03"
        txs={
 `UPDATE trades SET price = 105
-WHERE xt$id = 1;`} />
+WHERE _id = 1;`} />
   <Txs systemTime="2020-01-10"
        txs={
 `DELETE FROM trades
-WHERE xt$id = 1;`} />
+WHERE _id = 1;`} />
 
   <Query q={
-`SELECT xt$id, price, xt$valid_from, xt$valid_to
+`SELECT _id, price, _valid_from, _valid_to
   FROM trades FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
 `} />
 </Fiddle>
@@ -208,28 +208,28 @@ Valid-time in XTDB may be fully controlled by the application, and can therefore
 <Fiddle autoLoad>
   <Txs systemTime="2020-01-01"
        txs={
-`INSERT INTO trades (xt$id, price) VALUES (1, 100);`} />
+`INSERT INTO trades (_id, price) VALUES (1, 100);`} />
   <Txs systemTime="2020-01-02"
        txs={
 `UPDATE trades SET price = 2000
-WHERE xt$id = 1;`} />
+WHERE _id = 1;`} />
   <Txs systemTime="2020-01-04"
        txs={
 `UPDATE trades SET price = 400
-WHERE xt$id = 1;`} />
+WHERE _id = 1;`} />
   <Txs systemTime="2020-01-05"
        txs={
 `UPDATE trades
 FOR PORTION OF VALID_TIME FROM DATE '2020-01-02' TO DATE '2020-01-04'
 SET price = 200
-WHERE xt$id = 1;`} />
+WHERE _id = 1;`} />
 
   <QueryTemplate q={
-`SELECT xt$id, price, xt$valid_from, xt$valid_to
+`SELECT _id, price, _valid_from, _valid_to
 FROM trades
   FOR VALID_TIME FROM DATE '2020-01-01' TO DATE '2020-01-31'
   FOR SYSTEM_TIME AS OF {{systemTime}}
-ORDER BY xt$valid_from
+ORDER BY _valid_from
 `} />
   <DateRange name="systemTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04","2020-01-05"]} value="2020-01-01" />
 </Fiddle>
@@ -249,11 +249,11 @@ By using `valid_to`, the process of removing expired trades can happen implicitl
 <Fiddle autoLoad>
   <Txs systemTime="2020-01-01"
        txs={
-`INSERT INTO trades (xt$id, price, xt$valid_from)
+`INSERT INTO trades (_id, price, _valid_from)
 VALUES (1, 100, DATE '2020-01-01');`} />
   <Txs systemTime="2020-01-02"
        txs={
-`INSERT INTO trades (xt$id, price, xt$valid_from)
+`INSERT INTO trades (_id, price, _valid_from)
 VALUES (1, 200, DATE '2020-01-02');`} />
   <Txs systemTime="2020-01-03"
        txs={
@@ -261,10 +261,10 @@ VALUES (1, 200, DATE '2020-01-02');`} />
 FOR PORTION OF VALID_TIME FROM DATE '2020-01-04' TO NULL;`} />
 
   <QueryTemplate q={
-`SELECT xt$id, price, xt$valid_from, xt$valid_to
+`SELECT _id, price, _valid_from, _valid_to
 FROM trades
   FOR VALID_TIME AS OF {{validTime}}
-ORDER BY xt$valid_from
+ORDER BY _valid_from
 `} />
   <DateRange name="validTime" dates={["2020-01-01","2020-01-02","2020-01-03","2020-01-04"]} value="2020-01-01" />
 </Fiddle>
@@ -288,23 +288,23 @@ For example, imagine you want to reliably update some key data ahead of a seaona
 <Fiddle autoLoad>
   <Txs systemTime="2020-03-01"
        txs={
-`INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
+`INSERT INTO pricing_strategies (_id, config, _valid_from)
 VALUES (1, {risk: 5}, DATE '2020-03-01'),
        (2, {risk: 10}, DATE '2020-03-02');`} />
   <Txs systemTime="2020-12-01"
        txs={
-`INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
+`INSERT INTO pricing_strategies (_id, config, _valid_from)
 VALUES (1, {risk: 6}, DATE '2021-01-01');`} />
   <Txs systemTime="2020-12-03"
        txs={
-`INSERT INTO pricing_strategies (xt$id, config, xt$valid_from)
+`INSERT INTO pricing_strategies (_id, config, _valid_from)
 VALUES (2, {risk: 11}, DATE '2021-01-05');`} />
 
   <QueryTemplate q={
-`SELECT xt$id, config
+`SELECT _id, config
 FROM pricing_strategies
   FOR VALID_TIME AS OF {{validTime}}
-ORDER BY xt$id
+ORDER BY _id
 `} />
   <DateRange name="validTime" dates={["2020-01-01","2020-03-01","2020-03-02","2020-12-01","2020-12-03","2021-01-01","2021-01-05"]} value="2020-01-01" />
 </Fiddle>
@@ -324,27 +324,27 @@ For example, you can construct queries for questions like: "What are the estimat
 <Fiddle autoLoad>
   <Txs systemTime="2020-01-01"
        txs={
-`INSERT INTO portfolio (xt$id, name)
+`INSERT INTO portfolio (_id, name)
 VALUES
 (1, 'Tech Fund');
 
-INSERT INTO portfolio_security (xt$id, portfolio_id, security_id, xt$valid_from)
+INSERT INTO portfolio_security (_id, portfolio_id, security_id, _valid_from)
 VALUES
 (1, 1, 101, DATE '2020-01-01'),
 (2, 1, 102, DATE '2020-01-02');
 
-INSERT INTO market_data (xt$id, security_id, return, xt$valid_from)
+INSERT INTO market_data (_id, security_id, return, _valid_from)
 VALUES
 (1, 101, 0.05, DATE '2020-01-03'),
 (2, 101, 0.07, DATE '2020-01-04'),
 (3, 102, -0.02, DATE '2020-01-05'),
 (4, 102, 0.04, DATE '2020-01-06');
 
-INSERT INTO portfolio_security (xt$id, portfolio_id, security_id, xt$valid_from)
+INSERT INTO portfolio_security (_id, portfolio_id, security_id, _valid_from)
 VALUES
 (3, 1, 101, DATE '2020-01-15');
 
-INSERT INTO market_data (xt$id, security_id, return, xt$valid_from)
+INSERT INTO market_data (_id, security_id, return, _valid_from)
 VALUES
 (5, 101, 0.01, DATE '2020-01-07'),
 (6, 101, -0.03, DATE '2020-01-08'),
@@ -383,9 +383,9 @@ SELECT
 FROM
     Security_Stats ss
 JOIN
-    portfolio FOR VALID_TIME AS OF {{validTimePortfolio}} p ON p.xt$id = ss.portfolio_id
+    portfolio FOR VALID_TIME AS OF {{validTimePortfolio}} p ON p._id = ss.portfolio_id
 GROUP BY
-    p.xt$id
+    p._id
 `} />
   <div class="flex flex-row gap-2 items-center">
     Portfolio as-of:

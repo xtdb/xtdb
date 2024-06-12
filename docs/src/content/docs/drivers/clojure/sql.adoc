@@ -15,7 +15,7 @@ For example:
 
 [source,clojure]
 ----
-(xt/q node "SELECT u.first_name, u.last_name FROM users u WHERE xt$id = ?"
+(xt/q node "SELECT u.first_name, u.last_name FROM users u WHERE _id = ?"
       {:args ["James"], :default-all-valid-time? true})
 ----
 

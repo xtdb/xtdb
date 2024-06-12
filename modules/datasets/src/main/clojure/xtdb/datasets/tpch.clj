@@ -80,8 +80,8 @@
 (defn- tpch-table->dml [^TpchTable table]
   (format "INSERT INTO %s (%s) VALUES (%s)"
           (.getTableName table)
-          (->> (cons "xt$id" (for [^TpchColumn col (.getColumns table)]
-                               (.getColumnName col)))
+          (->> (cons "_id" (for [^TpchColumn col (.getColumns table)]
+                             (.getColumnName col)))
                (str/join ", "))
           (->> (repeat (inc (count (.getColumns table))) "?")
                (str/join ", "))))

@@ -4,10 +4,8 @@
             [clojure.test :as t :refer [deftest testing]]
             [xtdb.api :as xt]
             [xtdb.error :as err]
-            [xtdb.test-util :as tu]
-            [xtdb.xtql.edn :as x-edn])
+            [xtdb.test-util :as tu])
   (:import (xtdb JsonSerde)
-           (xtdb.api.query XtqlQuery)
            (xtdb.api.tx TxOp)))
 
 (t/use-fixtures :each tu/with-node)
@@ -15,11 +13,6 @@
 (def examples
   (-> (slurp (io/resource "docs/xtql_tutorial_examples.yaml"))
       (yaml/parse-string :keywords false)))
-
-(defn json-example-dml [name]
-  (-> (get examples name)
-      JsonSerde/jsonRemoveComments
-      (JsonSerde/decode TxOp)))
 
 (defn sql-example [name]
   (get examples name))

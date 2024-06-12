@@ -5,7 +5,7 @@ import { Binding, ToBindings, toBindings } from './binding.mjs'
 type EntityId = any
 
 type XtdbDocument = {
-    "xt$id": EntityId
+    "_id": EntityId
 }
 
 class PutDocs {

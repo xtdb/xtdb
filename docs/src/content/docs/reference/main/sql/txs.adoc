@@ -21,10 +21,10 @@ e.g.
 ----
 (require '[xtdb.api :as xt])
 
-(xt/execute-tx node [[:sql "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')"]
+(xt/execute-tx node [[:sql "INSERT INTO users (_id, name) VALUES ('jms', 'James')"]
 
                      ;; with args - pass multiple vectors if required.
-                     [:sql "INSERT INTO users (xt$id, name) VALUES (?, ?)"
+                     [:sql "INSERT INTO users (_id, name) VALUES (?, ?)"
                       ["jms", "James"]
                       ["jdt", "Jeremy"]]])
 
@@ -37,7 +37,7 @@ There is a table and column name mapping between SQL and XTQL: documents inserte
 
 For example, `:foo.bar/baz-quux` in XTQL is referenced in SQL as `foo$bar$baz_quux`.
 
-The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `xt$id`, `xt$valid_from` and `xt$valid_to` respectively.
+The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `_id`, `_valid_from` and `_valid_to` respectively.
 
 This mapping is reversed when querying SQL documents from XTQL.
 ====
@@ -54,9 +54,9 @@ documents :: VALUES (<value> [ , ... ]) [ , ... ]
            | <select_query>
 ----
 
-* Documents must contain an `xt$id` column.
+* Documents must contain an `_id` column.
 * By default, the document will be inserted for valid-time between now and end-of-time.
-  This can be overridden by including `xt$valid_from` and/or `xt$valid_to` columns in the document.
+  This can be overridden by including `_valid_from` and/or `_valid_to` columns in the document.
 * If the document already exists, 'insert' currently behaves like an upsert - it will overwrite the existing document for the valid-time range specified (or now -> end-of-time if not provided).
 
 
@@ -78,7 +78,7 @@ for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
 * If `for_valid_time` is not provided, the effective valid-time range of the update depends on the `:default-all-valid-time?` transaction argument.
   If it is true, the update will be effective for all valid time (including in the past); otherwise it will be effective from now to the end of time.
   (SQL:2011 specifies that updates without this clause should be effective for all valid time; the flag is an XTDB addition.)
-* The `xt$id` column cannot be updated - instead, users should delete this document and re-insert a new one.
+* The `_id` column cannot be updated - instead, users should delete this document and re-insert a new one.
 * The valid-time columns cannot be updated outside of the `for_valid_time` clause (i.e. not in the `SET` clause).
 
 

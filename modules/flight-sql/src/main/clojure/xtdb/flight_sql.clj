@@ -2,10 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.indexer]
-            [xtdb.indexer :as idx]
             [xtdb.node :as xtn]
             [xtdb.query]
-            [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -13,8 +11,8 @@
   (:import [com.google.protobuf Any ByteString]
            [java.nio ByteBuffer]
            [java.util ArrayList HashMap Map]
-           [java.util.concurrent CompletableFuture ConcurrentHashMap]
-           [java.util.function BiConsumer BiFunction Consumer]
+           [java.util.concurrent ConcurrentHashMap]
+           [java.util.function BiFunction Consumer]
            [org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key FlightStream Location PutResult Result Ticket]
            [org.apache.arrow.flight.sql FlightSqlProducer]
            [org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery]
@@ -101,21 +99,24 @@
               (xt/execute-tx node [dml])))
 
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
-            (with-open [res (.openCursor bq)
-                        vsr (VectorSchemaRoot/create (fields->schema (.columnFields bq)) allocator)]
-              (.start listener vsr)
+            (try
+              (with-open [res (.openCursor bq)
+                          vsr (VectorSchemaRoot/create (fields->schema (.columnFields bq)) allocator)]
+                (.start listener vsr)
 
-              (.forEachRemaining res
-                                 (reify Consumer
-                                   (accept [_ in-rel]
-                                     (.clear vsr)
-                                     ;; HACK getting results in a Clojure data structure, putting them back in to a VSR
-                                     ;; because we can get DUVs in the in-rel but the output just expects mono vecs.
+                (let [out-wtr (vw/root->writer vsr)]
+                  (.forEachRemaining res
+                                     (reify Consumer
+                                       (accept [_ in-rel]
+                                         (.clear out-wtr)
+                                         (vw/append-rel out-wtr in-rel)
+                                         (.syncRowCount out-wtr)
+                                         (.putNext listener)))))
 
-                                     (populate-root vsr (vr/rel->rows in-rel #xt/key-fn :snake-case-string))
-                                     (.putNext listener))))
-
-              (.completed listener)))]
+                (.completed listener))
+              (catch Throwable t
+                (log/error t)
+                (throw t))))]
 
     (reify FlightSqlProducer
       (acceptPutStatement [_ cmd _ctx _flight-stream ack-stream]

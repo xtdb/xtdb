@@ -1,7 +1,6 @@
 (ns xtdb.flight-sql-test
   (:require [clojure.test :as t]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [xtdb.api :as xt]
             [xtdb.flight-sql]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
@@ -51,21 +50,21 @@
         @!res))))
 
 (t/deftest test-client
-  (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (xt$id, name) VALUES ('jms', 'James'), ('hak', 'Håkan')" empty-call-opts)))
+  (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James'), ('hak', 'Håkan')" empty-call-opts)))
 
   (t/is (= #{{:xt/id "jms", :name "James"}
              {:xt/id "hak", :name "Håkan"}}
-           (set (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
+           (set (-> (.execute *client* "SELECT _id, name FROM users" empty-call-opts)
                     (flight-info->rows))))))
 
 #_ ; FIXME upgrade from Arrow 14 -> 15 killed this one.
 (t/deftest test-jdbc-client
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (_id, name) VALUES ('jms', 'James')"]])
 
   ;; NOTE FSQL JDBC driver doesn't seem happy with prepared statement updates
   ;; see https://issues.apache.org/jira/browse/ARROW-18294
   #_
-  (with-open [ps (jdbc/prepare *conn* ["INSERT INTO users (xt$id, name) VALUES ('jms', 'James')"])]
+  (with-open [ps (jdbc/prepare *conn* ["INSERT INTO users (_id, name) VALUES ('jms', 'James')"])]
     ;; NOTE: next.jdbc submits everything as just `execute` rather than `executeUpdate`
     ;; FSQL depends on this difference, so we call `.executeUpdate` directly
     (.executeUpdate ps))
@@ -73,52 +72,52 @@
   ;; and ideally we'd do this with params - but this fails with 'parameter index out of range'
   ;; despite us returning some parameter metadata on the prepared statement
   #_
-  (with-open [ps (jdbc/prepare *conn* ["INSERT INTO users (xt$id, name) VALUES (?, ?)"])]
+  (with-open [ps (jdbc/prepare *conn* ["INSERT INTO users (_id, name) VALUES (?, ?)"])]
     (.executeUpdate ps)
     (jdbc-prep/set-parameters ps ["hak" "Håkan"])
     (.executeUpdate ps))
 
   #_ ; or batches
-  (jdbc/execute-batch! *conn* "INSERT INTO users (xt$id, name) VALUES (?, ?)"
+  (jdbc/execute-batch! *conn* "INSERT INTO users (_id, name) VALUES (?, ?)"
                        [["jms" "James"], ["hak" "Håkan"]] {})
 
-  (t/is (= #{{:xt$id "jms", :name "James"}}
-           (set (jdbc/execute! *conn* ["SELECT users.xt$id, users.name FROM users"]))))
+  (t/is (= #{{:_id "jms", :name "James"}}
+           (set (jdbc/execute! *conn* ["SELECT users._id, users.name FROM users"]))))
 
   (jdbc/with-transaction [tx *conn*]
     #_ ; FSQL JDBC doesn't seem happy with params in a query
-    (t/is (= [] (jdbc/execute! tx ["SELECT users.xt$id FROM users WHERE users.id = ?" "foo"])))
+    (t/is (= [] (jdbc/execute! tx ["SELECT users._id FROM users WHERE users.id = ?" "foo"])))
 
-    (with-open [ps (jdbc/prepare tx ["SELECT users.xt$id, users.name FROM users"])]
-      (t/is (= #{{:xt$id "jms", :name "James"}} (set (jdbc/execute! ps)))))))
+    (with-open [ps (jdbc/prepare tx ["SELECT users._id, users.name FROM users"])]
+      (t/is (= #{{:_id "jms", :name "James"}} (set (jdbc/execute! ps)))))))
 
 (t/deftest test-transaction
   (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
-    (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (xt$id, name) VALUES ('jms', 'James'), ('hak', 'Håkan')" fsql-tx empty-call-opts)))
+    (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James'), ('hak', 'Håkan')" fsql-tx empty-call-opts)))
     (t/is (= []
-             (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
+             (-> (.execute *client* "SELECT users._id, users.name FROM users" empty-call-opts)
                  (flight-info->rows))))
     (.commit *client* fsql-tx empty-call-opts)
 
     (t/is (= #{{:xt/id "jms", :name "James"}
                {:xt/id "hak", :name "Håkan"}}
-             (set (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
+             (set (-> (.execute *client* "SELECT users._id, users.name FROM users" empty-call-opts)
                       (flight-info->rows)))))))
 
 (t/deftest test-prepared-stmts
-  (with-open [ps (.prepare *client* "INSERT INTO users (xt$id, name) VALUES (?, ?)" empty-call-opts)
-              param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field 'xt$id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
+  (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" empty-call-opts)
+              param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '_id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
     (.setParameters ps param-root)
 
-    (tu/populate-root param-root [{:xt$id "jms", :name "James"}
-                                  {:xt$id "mat", :name "Matt"}])
+    (tu/populate-root param-root [{:_id "jms", :name "James"}
+                                  {:_id "mat", :name "Matt"}])
     (.executeUpdate ps empty-call-opts)
 
-    (tu/populate-root param-root [{:xt$id "hak", :name "Håkan"}
-                                  {:xt$id "wot", :name "Dan"}])
+    (tu/populate-root param-root [{:_id "hak", :name "Håkan"}
+                                  {:_id "wot", :name "Dan"}])
     (.executeUpdate ps empty-call-opts))
 
-  (with-open [ps (.prepare *client* "SELECT users.name FROM users WHERE users.xt$id >= ?" empty-call-opts)
+  (with-open [ps (.prepare *client* "SELECT users.name FROM users WHERE users._id >= ?" empty-call-opts)
               param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '$1 :utf8)]) tu/*allocator*)]
     (.setParameters ps param-root)
 
@@ -140,18 +139,18 @@
             (set (-> (.execute *client* "SELECT users.name FROM users" empty-call-opts)
                      (flight-info->rows))))]
     (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
-      (with-open [ps (.prepare *client* "INSERT INTO users (xt$id, name) VALUES (?, ?)" fsql-tx empty-call-opts)
-                  param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field 'xt$id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
+      (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" fsql-tx empty-call-opts)
+                  param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '_id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
         (.setParameters ps param-root)
 
-        (tu/populate-root param-root [{:xt$id "jms", :name "James"}
-                                      {:xt$id "mat", :name "Matt"}])
+        (tu/populate-root param-root [{:_id "jms", :name "James"}
+                                      {:_id "mat", :name "Matt"}])
         (.executeUpdate ps empty-call-opts)
 
         (t/is (= #{} (q)))
 
-        (tu/populate-root param-root [{:xt$id "hak", :name "Håkan"}
-                                      {:xt$id "wot", :name "Dan"}])
+        (tu/populate-root param-root [{:_id "hak", :name "Håkan"}
+                                      {:_id "wot", :name "Dan"}])
         (.executeUpdate ps empty-call-opts)
 
         (t/is (= #{} (q))))

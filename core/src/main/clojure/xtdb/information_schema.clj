@@ -8,6 +8,7 @@
   (:import (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
+           xtdb.api.query.IKeyFn
            (xtdb.metadata IMetadataManager)
            xtdb.operator.IRelationSelector
            (xtdb.vector IRelationWriter IVectorWriter RelationReader)
@@ -121,19 +122,19 @@
         "table_catalog" (.writeObject col-wtr "xtdb")
         "table_name" (.writeObject col-wtr (name table))
         "table_schema" (.writeObject col-wtr (namespace table))
-        "column_name" (.writeObject col-wtr col-name)
+        "column_name" (.writeObject col-wtr (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) col-name))
         "data_type" (.writeObject col-wtr (pr-str type))))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
   rel-wtr)
 
 (defn pg-attribute [^IRelationWriter rel-wtr col-rows]
-  (doseq [{:keys [idx table name _type]} col-rows]
+  (doseq [{:keys [idx table _type] col-name :name} col-rows]
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
         "attrelid" (.writeInt col-wtr (hash table))
-        "attname" (.writeObject col-wtr name)
+        "attname" (.writeObject col-wtr (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) col-name))
         "atttypid" (.writeInt col-wtr 114) ;; = json - avoiding circular dep on pgwire.clj
         "attlen" (.writeShort col-wtr -1)
         "attnum" (.writeShort col-wtr idx)))

@@ -42,11 +42,11 @@
         [:put-docs {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
          {:xt/id 3}]
         [:erase-docs :docs 3]
-        [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"]
-        [:sql "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"]
-        [:sql "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"]
+        [:sql "INSERT INTO docs (_id, bar, toto) VALUES (3, 1, 'toto')"]
+        [:sql "INSERT INTO docs (_id, bar, toto) VALUES (4, 1, 'toto')"]
+        [:sql "UPDATE docs SET bar = 2 WHERE docs._id = 3"]
         [:sql "DELETE FROM docs WHERE docs.bar = 2"]
-        [:sql "ERASE FROM docs WHERE docs.xt$id = 4"]]
+        [:sql "ERASE FROM docs WHERE docs._id = 4"]]
        (mapv tx-ops/parse-tx-op)))
 
 (deftest json-response-test
@@ -155,16 +155,16 @@
                (ex-data body))))))
 
 (def json-tx-ops
-  [{"sql" "INSERT INTO docs (xt$id) VALUES (1)"}
-   {"sql" "INSERT INTO docs (xt$id) VALUES (2)"}
-   {"sql" "DELETE FROM docs WHERE xt$id = 1"}
-   {"sql" "INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (3, DATE '2050-01-01', DATE '2051-01-01')"}
-   {"sql" "ERASE FROM docs WHERE xt$id = 3"}
-   {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (3, 1, 'toto')"}
-   {"sql" "INSERT INTO docs (xt$id, bar, toto) VALUES (4, 1, 'toto')"}
-   {"sql" "UPDATE docs SET bar = 2 WHERE docs.xt$id = 3"}
+  [{"sql" "INSERT INTO docs (_id) VALUES (1)"}
+   {"sql" "INSERT INTO docs (_id) VALUES (2)"}
+   {"sql" "DELETE FROM docs WHERE _id = 1"}
+   {"sql" "INSERT INTO docs (_id, _valid_from, _valid_to) VALUES (3, DATE '2050-01-01', DATE '2051-01-01')"}
+   {"sql" "ERASE FROM docs WHERE _id = 3"}
+   {"sql" "INSERT INTO docs (_id, bar, toto) VALUES (3, 1, 'toto')"}
+   {"sql" "INSERT INTO docs (_id, bar, toto) VALUES (4, 1, 'toto')"}
+   {"sql" "UPDATE docs SET bar = 2 WHERE docs._id = 3"}
    {"sql" "DELETE FROM docs WHERE docs.bar = 2"}
-   {"sql" "ERASE FROM docs WHERE docs.xt$id = 4"}])
+   {"sql" "ERASE FROM docs WHERE docs._id = 4"}])
 
 (defn- tx-key->json-tx-key [{:keys [tx-id system-time] :as _tx-key}]
   {"txId" tx-id "systemTime" (str system-time)})
@@ -193,7 +193,7 @@
                                 :as :string
                                 :request-method :post
                                 :content-type :json
-                                :form-params {:sql "SELECT docs.xt$id FROM docs"
+                                :form-params {:sql "SELECT docs._id FROM docs"
                                               :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
                                                           :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
@@ -222,7 +222,7 @@
                            :as :string
                            :request-method :post
                            :content-type :json
-                           :form-params {:sql "SELECT xt$id FROM docs"
+                           :form-params {:sql "SELECT _id FROM docs"
                                          :queryOpts {:basis {:atTx
                                                              {"tx-id" tx-id
                                                               "system-time" {"@type" "xt:instat" "@value" (str system-time)}}}}}
@@ -247,7 +247,7 @@
                decode-json*))))
 
 (deftest testing-sql-query-with-args-3167
-  (t/is (= [{"xt$column1" 1, "xt$column2" 3}]
+  (t/is (= [{"_column1" 1, "_column2" 3}]
            (-> (http/request {:accept "application/jsonl"
                               :as :string
                               :request-method :post

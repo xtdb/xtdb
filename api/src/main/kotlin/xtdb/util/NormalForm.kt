@@ -6,17 +6,14 @@ import clojure.lang.Keyword
 import clojure.lang.Symbol
 import com.github.benmanes.caffeine.cache.Caffeine
 
-/**
- * upper case letter preceded by a character that isn't upper-case nor an underscore
- */
-private val UPPER_REGEX = Regex("(?<=[^\\p{Lu}_])\\p{Lu}")
-
 internal fun normalForm0(s: String): String = s
     .replace('-', '_')
+    .replace(Regex("^_"), "xt\\$")
     .split('.', '/', '$')
     .joinToString(separator = "$") {
+        // upper case letter preceded by a character that isn't upper-case nor an underscore
         it
-            .replace(UPPER_REGEX) { ch -> "_${ch.value}" }
+            .replace(Regex("(?<=[^\\p{Lu}_])\\p{Lu}")) { ch -> "_${ch.value}" }
             .lowercase()
     }
 
