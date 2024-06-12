@@ -4,8 +4,6 @@ package xtdb.api.tx
 
 import clojure.lang.Keyword
 import kotlinx.serialization.*
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import xtdb.AnySerde
 import xtdb.IllegalArgumentException
@@ -24,27 +22,10 @@ private const val XT_TXS = "xt/tx_fns"
 private const val XT_ID = "xt/id"
 private const val XT_FN = "xt/fn"
 
-@Serializable(TxOp.Serde::class)
 sealed interface TxOp {
-    /**
-     * @suppress
-     */
-    object Serde : JsonContentPolymorphicSerializer<TxOp>(TxOp::class) {
-        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<TxOp> = when {
-            "putDocs" in element.jsonObject -> PutDocs.serializer()
-            "deleteDocs" in element.jsonObject -> DeleteDocs.serializer()
-            "eraseDocs" in element.jsonObject -> EraseDocs.serializer()
-            "call" in element.jsonObject -> Call.serializer()
-            "sql" in element.jsonObject -> Sql.serializer()
-            "argRows" in element.jsonObject -> XtqlAndArgs.serializer()
-            else -> XtqlOp.serializer()
-        }
-    }
-
-    @Serializable
     data class PutDocs(
-        @JvmField @SerialName("into") val tableName: String,
-        @JvmField @SerialName("putDocs") val docs: List<Map<String, *>>,
+        @JvmField val tableName: String,
+        @JvmField val docs: List<Map<String, *>>,
         @JvmField val validFrom: Instant? = null,
         @JvmField val validTo: Instant? = null,
     ) : TxOp {
@@ -54,10 +35,9 @@ sealed interface TxOp {
         fun during(validFrom: Instant?, validTo: Instant?) = copy(validFrom = validFrom, validTo = validTo)
     }
 
-    @Serializable
     data class DeleteDocs(
-        @JvmField @SerialName("from") val tableName: String,
-        @JvmField @SerialName("deleteDocs") val docIds: List<*>,
+        @JvmField val tableName: String,
+        @JvmField val docIds: List<*>,
         @JvmField val validFrom: Instant? = null,
         @JvmField val validTo: Instant? = null,
     ) : TxOp {
@@ -67,10 +47,9 @@ sealed interface TxOp {
         fun during(validFrom: Instant?, validTo: Instant?) = copy(validFrom = validFrom, validTo = validTo)
     }
 
-    @Serializable
     data class EraseDocs(
-        @JvmField @SerialName("from") val tableName: String,
-        @JvmField @SerialName("eraseDocs") val docIds: List<*>,
+        @JvmField val tableName: String,
+        @JvmField val docIds: List<*>,
     ) : TxOp
 
     @Serializable
@@ -87,74 +66,32 @@ sealed interface TxOp {
         @JvmField val argBytes: ByteBuffer? = null,
     ) : TxOp
 
-    @Serializable(XtqlAndArgs.Serde::class)
     data class XtqlAndArgs(
         @JvmField val op: XtqlOp,
         @JvmField val argRows: List<Map<String, *>>? = null,
     ) : TxOp {
 
-        internal object Serde : KSerializer<XtqlAndArgs> {
-            // TODO add argRows
-            override val descriptor = XtqlOp.serializer().descriptor
-
-            override fun deserialize(decoder: Decoder): XtqlAndArgs {
-                require(decoder is JsonDecoder)
-                val jsonElement = decoder.decodeJsonElement().jsonObject
-                return XtqlAndArgs(
-                    decoder.json.decodeFromJsonElement<XtqlOp>(JsonObject(jsonElement - "argRows")),
-                    decoder.json.decodeFromJsonElement<List<Map<String, Any>>?>(jsonElement["argRows"]!!)
-                )
-            }
-
-            override fun serialize(encoder: Encoder, value: XtqlAndArgs) {
-                require(encoder is JsonEncoder)
-                val op = encoder.json.encodeToJsonElement(value.op)
-
-                @Suppress("UNCHECKED_CAST") val argRows = encoder.json.encodeToJsonElement(value.argRows as List<Map<String, Any>>?)
-
-                return encoder.encodeJsonElement(JsonObject(op.jsonObject + ("argRows" to argRows)))
-            }
-        }
-
         fun argRows(argRows: List<Map<String, *>>?) = copy(argRows = argRows)
         fun argRows(vararg argRows: Map<String, *>) = argRows(argRows.toList())
     }
 
-    @Serializable(XtqlOp.Serde::class)
     sealed interface XtqlOp : TxOp {
-
-        /**
-         * @suppress
-         */
-        object Serde : JsonContentPolymorphicSerializer<XtqlOp>(XtqlOp::class) {
-            override fun selectDeserializer(element: JsonElement): DeserializationStrategy<XtqlOp> = when {
-                "insertInto" in element.jsonObject -> Insert.serializer()
-                "update" in element.jsonObject -> Update.serializer()
-                "deleteFrom" in element.jsonObject -> Delete.serializer()
-                "eraseFrom" in element.jsonObject -> Erase.serializer()
-                "assertExists" in element.jsonObject -> AssertExists.serializer()
-                "assertNotExists" in element.jsonObject -> AssertNotExists.serializer()
-                else -> throw jsonIAE("xtql/malformed-tx-op", element)
-            }
-        }
 
         fun argRows(argRows: List<Map<String, *>>?) = XtqlAndArgs(this, argRows)
         fun argRows(vararg argRows: Map<String, *>) = argRows(argRows.toList())
     }
 
-    @Serializable
     data class Insert(
-        @JvmField @SerialName("insertInto") val table: String,
+        @JvmField val table: String,
         @JvmField val query: XtqlQuery,
     ) : XtqlOp
 
-    @Serializable
     data class Update(
-        @JvmField @SerialName("update") val table: String,
+        @JvmField val table: String,
         @JvmField val forValidTime: TemporalExtents? = null,
-        @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
-        @JvmField @SerialName("set") val setSpecs: List<Binding>,
-        @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null,
+        @JvmField val bindSpecs: List<Binding>? = null,
+        @JvmField val setSpecs: List<Binding>,
+        @JvmField val unifyClauses: List<UnifyClause>? = null,
     ) : XtqlOp {
 
         fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
@@ -162,12 +99,11 @@ sealed interface TxOp {
         fun unify(unifyClauses: List<UnifyClause>) = copy(unifyClauses = unifyClauses)
     }
 
-    @Serializable
     data class Delete(
-        @JvmField @SerialName("deleteFrom") val table: String,
+        @JvmField val table: String,
         @JvmField val forValidTime: TemporalExtents? = null,
-        @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
-        @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null,
+        @JvmField val bindSpecs: List<Binding>? = null,
+        @JvmField val unifyClauses: List<UnifyClause>? = null,
     ) : XtqlOp {
 
         fun forValidTime(forValidTime: TemporalExtents) = copy(forValidTime = forValidTime)
@@ -175,26 +111,22 @@ sealed interface TxOp {
         fun unify(unifyClauses: List<UnifyClause>?) = copy(unifyClauses = unifyClauses)
     }
 
-    @Serializable
     data class Erase(
-        @JvmField @SerialName("eraseFrom") val table: String,
-        @JvmField @SerialName("bind") val bindSpecs: List<Binding>? = null,
-        @JvmField @SerialName("unify") val unifyClauses: List<UnifyClause>? = null,
+        @JvmField val table: String,
+        @JvmField val bindSpecs: List<Binding>? = null,
+        @JvmField val unifyClauses: List<UnifyClause>? = null,
     ) : XtqlOp {
 
         fun binding(bindSpecs: List<Binding>?) = copy(bindSpecs = bindSpecs)
         fun unify(unifyClauses: List<UnifyClause>?) = Erase(table, bindSpecs, unifyClauses)
     }
 
-    @Serializable
-    data class AssertExists(@JvmField @SerialName("assertExists") val query: XtqlQuery) : XtqlOp
+    data class AssertExists(@JvmField val query: XtqlQuery) : XtqlOp
 
-    @Serializable
-    data class AssertNotExists(@JvmField @SerialName("assertNotExists") val query: XtqlQuery) : XtqlOp
+    data class AssertNotExists(@JvmField val query: XtqlQuery) : XtqlOp
 
-    @Serializable
     data class Call(
-        @JvmField @SerialName("call") val fnId: Any,
+        @JvmField val fnId: Any,
         @JvmField val args: List<Any>,
     ) : TxOp
 

@@ -56,14 +56,14 @@
           token (setup)]
 
       ;; Query to show it's empty
-      (is (= [] (query token "{\"query\":{\"sql\":\"SELECT * FROM foo\"}}")))
+      (is (= [] (query token "{\"sql\":\"SELECT * FROM foo\"}")))
 
       ;; Submit a transaction
       (tx token "{\"txOps\":[{\"sql\":\"INSERT INTO foo(xt$id, bar) VALUES (1, 'baz')\"}]}")
 
       ;; Query the results
       (is (= [{:xt$id 1 :bar "baz"}]
-             (query token "{\"query\":{\"sql\":\"SELECT * FROM foo\"}}")))
+             (query token "{\"sql\":\"SELECT * FROM foo\"}")))
 
       ;; Tear down the node
       (let [response (http/get (http-url "/teardown?" token))]
@@ -72,7 +72,7 @@
       ;; Get a 404 to show it's gone
       (let [response (http/post (http-url "/" token "/query")
                                 {:content-type :json
-                                 :body "{\"query\":{\"sql\":\"SELECT * FROM foo\"}}"
+                                 :body "{\"sql\":\"SELECT * FROM foo\"}"
                                  :throw-exceptions? false})]
         (is (= 404 (:status response))))))
 
@@ -84,13 +84,13 @@
       (tx token1 "{\"txOps\":[{\"sql\":\"INSERT INTO foo(xt$id, bar) VALUES (1, 'baz')\"}]}")
 
       (is (= [{:xt$id 1 :bar "baz"}]
-             (query token1 "{\"query\":{\"sql\":\"SELECT * FROM foo\"}}")))
+             (query token1 "{\"sql\":\"SELECT * FROM foo\"}")))
 
-      (is (= [] (query token2 "{\"query\":{\"sql\":\"SELECT * FROM foo\"}}")))))
+      (is (= [] (query token2 "{\"sql\":\"SELECT * FROM foo\"}")))))
 
   (testing "Can set custom token"
     (let [token "my-custom-token"
           response (http/get (http-url "/setup?" token))]
       (is (= 200 (:status response)))
 
-      (query token "{\"query\":{\"sql\":\"SELECT * FROM foo\"}}"))))
+      (query token "{\"sql\":\"SELECT * FROM foo\"}"))))

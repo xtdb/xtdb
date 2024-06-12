@@ -6,36 +6,6 @@ import kotlinx.serialization.encodeToString
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.query.*
-import xtdb.api.query.Expr.Bool.FALSE
-import xtdb.api.query.Expr.Bool.TRUE
-import xtdb.api.query.Expr.Null
-import xtdb.api.query.Exprs.lVar
-import xtdb.api.query.Exprs.list
-import xtdb.api.query.Exprs.map
-import xtdb.api.query.Exprs.param
-import xtdb.api.query.Exprs.q
-import xtdb.api.query.Exprs.set
-import xtdb.api.query.Exprs.`val`
-import xtdb.api.query.Queries.aggregate
-import xtdb.api.query.Queries.from
-import xtdb.api.query.Queries.join
-import xtdb.api.query.Queries.leftJoin
-import xtdb.api.query.Queries.limit
-import xtdb.api.query.Queries.offset
-import xtdb.api.query.Queries.orderBy
-import xtdb.api.query.Queries.orderSpec
-import xtdb.api.query.Queries.pipeline
-import xtdb.api.query.Queries.relation
-import xtdb.api.query.Queries.returning
-import xtdb.api.query.Queries.unify
-import xtdb.api.query.Queries.unnest
-import xtdb.api.query.Queries.where
-import xtdb.api.query.Queries.with
-import xtdb.api.query.Queries.without
-import xtdb.api.tx.TxOp
-import xtdb.api.tx.TxOps.insert
-import xtdb.api.tx.TxOps.putDocs
-import xtdb.api.tx.TxOps.update
 import xtdb.api.txKey
 import java.time.*
 import java.util.*
@@ -174,280 +144,17 @@ class JsonSerdeTest {
         )
     }
 
-    private fun TxOp.assertRoundTripTxOp(expectedJson: String) {
-        val actualJson = JSON_SERDE.encodeToString(this)
-        assertEquals(expectedJson, actualJson)
-        assertEquals(this, JSON_SERDE.decodeFromString(TxOp.Serde, actualJson))
-    }
-
-    @Test
-    fun shouldDeserializeTxOp() {
-        putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
-            .assertRoundTripTxOp(
-                """{
-                  "into": "foo",
-                  "putDocs": [{
-                    "xt/id": "foo",
-                    "bar": {
-                      "@type": "xt:instant",
-                      "@value": "2023-01-01T12:34:56.789Z"
-                    }
-                  }]
-                }
-                """.trimJson()
-            )
-        putDocs("foo", mapOf("xt/id" to "foo", "bar" to Instant.parse("2023-01-01T12:34:56.789Z")))
-            .startingFrom(Instant.EPOCH)
-            .until(Instant.parse("2023-01-01T12:34:56.789Z"))
-            .assertRoundTripTxOp(
-                """{
-                  "into": "foo",
-                  "putDocs": [{
-                    "xt/id": "foo",
-                      "bar": {
-                        "@type": "xt:instant",
-                        "@value": "2023-01-01T12:34:56.789Z"
-                      }
-                  }],
-                 "validFrom": "1970-01-01T00:00:00Z",
-                 "validTo": "2023-01-01T12:34:56.789Z"
-                }
-                """.trimJson()
-            )
-        TxOp.XtqlAndArgs(insert("foo", from("docs").bind("xt/id").build()))
-            .assertRoundTripTxOp(
-                """{
-                  "insertInto": "foo",
-                  "query": {
-                    "from": "docs",
-                    "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-                  },
-                  "argRows": null
-                }
-                """.trimJson()
-            )
-        update("foo", listOf(Binding("version", `val`(1L)))).binding(listOf(Binding("xt/id")))
-            .assertRoundTripTxOp(
-                """{
-                    "update": "foo",
-                    "bind":[{"xt/id":{"xt:lvar":"xt/id"}}],
-                    "set":[{"version":1}]
-                    }
-                """.trimJson()
-            )
-
-        update("foo", listOf(Binding("version", TRUE))).binding(listOf(Binding("xt/id")))
-            .assertRoundTripTxOp(
-                """{
-                    "update": "foo",
-                    "bind":[{"xt/id":{"xt:lvar":"xt/id"}}],
-                    "set":[{"version":true}]
-                    }
-                """.trimJson()
-            )
-    }
-
-    private fun Expr.assertRoundTripExpr(expectedJson: String) {
-        val actualJson = JSON_SERDE.encodeToString(this)
-        assertEquals(expectedJson, actualJson)
-        assertEquals(this, JSON_SERDE.decodeFromString<Expr>(actualJson))
-    }
-
-    @Test
-    fun shouldDeserializeExpr() {
-        Null.assertRoundTripExpr("null")
-        TRUE.assertRoundTripExpr("true")
-        FALSE.assertRoundTripExpr("false")
-        `val`("foo").assertRoundTripExpr(""""foo"""")
-        `val`(Instant.parse("2023-01-01T12:34:56.789Z")).assertRoundTripExpr(
-            """{"@type":"xt:instant","@value":"2023-01-01T12:34:56.789Z"}"""
-        )
-        lVar("foo").assertRoundTripExpr("""{"xt:lvar":"foo"}""")
-        list(listOf(TRUE, FALSE)).assertRoundTripExpr("[true, false]".trimJson())
-        set(listOf(TRUE, FALSE)).assertRoundTripExpr(
-            """{
-                "@type": "xt:set",
-                "@value": [true, false]
-                }
-            """.trimJson()
-        )
-        map(mapOf("foo" to `val`(1L))).assertRoundTripExpr(
-            """{
-                "foo": 1
-                }
-            """.trimJson()
-        )
-        q(from("docs").bind("xt/id").build()).assertRoundTripExpr(
-            """{
-               "xt:q": 
-                 {
-                  "from": "docs",
-                  "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-                 }
-              }
-           """.trimJson()
-        )
-    }
-
     private inline fun <reified T : Any> T.assertRoundTrip2(expectedJson: String) {
         val actualJson = JSON_SERDE.encodeToString(this)
         assertEquals(expectedJson, actualJson)
         assertEquals(this, JSON_SERDE.decodeFromString<T>(actualJson))
     }
 
-    private inline fun <reified T : Any> T.assertRoundTrip2(inJson: String, outJson: String) {
-        val actualJson = JSON_SERDE.encodeToString(this)
-        assertEquals(outJson, actualJson)
-        assertEquals(this, JSON_SERDE.decodeFromString<T>(inJson))
-    }
-
-    @Test
-    fun shouldDeserializeQuery() {
-        from("docs").bind("xt/id").build().assertRoundTrip2(
-            """{
-                "from": "docs",
-                "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-               }
-            """.trimJson()
-        )
-        from("docs")
-            .bind("xt/id")
-            .forValidTime(TemporalFilters.at(Instant.parse("2020-01-01T00:00:00Z")))
-            .forSystemTime(TemporalFilter.AllTime)
-            .build().assertRoundTrip2(
-                """{
-                "from": "docs",
-                "bind": [{"xt/id":{"xt:lvar":"xt/id"}}],
-                "forValidTime": {"at": {"@type":"xt:instant", "@value": "2020-01-01T00:00:00Z"}},
-                "forSystemTime": "allTime"
-               }
-            """.trimJson()
-            )
-        pipeline(
-            from("docs").bind("xt/id").build(),
-            where(TRUE)
-        ).assertRoundTrip2(
-            """[{
-                "from": "docs",
-                "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-                },
-                {"where": [true]}
-               ]
-            """.trimJson()
-        )
-        unify(
-            from("docs").bind("xt/id").build(),
-            from("docs").bind("xt/id").build()
-        ).assertRoundTrip2(
-            """{
-                "unify": 
-                  [{
-                     "from": "docs",
-                     "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-                   }, 
-                   {
-                     "from": "docs",
-                     "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-                   }
-                  ]
-                }
-            """.trimJson()
-        )
-        relation(param("foo"), Binding("xt/id", lVar("xt/id")))
-            .assertRoundTrip2(
-                """{
-                    "rel": {"xt:param": "foo"},
-                    "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-                   }
-                """.trimJson()
-            )
-        relation(listOf(mapOf("xt/id" to `val`(1)), mapOf("xt/id" to `val`(2))), Binding("xt/id", lVar("xt/id")))
-            .assertRoundTrip2(
-                """{
-                    "rel": [{"xt/id": 1}, {"xt/id": 2}],
-                    "bind": [{"xt/id":{"xt:lvar":"xt/id"}}]
-                   }
-                """.trimJson()
-            )
-
-    }
-
-    @Test
-    fun shouldDeserializeQueryTail() {
-        where(TRUE).assertRoundTrip2(
-            """{"where":[true]}"""
-        )
-        limit(10).assertRoundTrip2(
-            """{"limit":10}"""
-        )
-        offset(10).assertRoundTrip2(
-            """{"offset":10}"""
-        )
-        orderBy(orderSpec(lVar("foo"))).assertRoundTrip2(
-            """
-                {"orderBy": ["foo"]}
-            """.trimJson()
-        )
-        orderBy(orderSpec(lVar("foo")).desc().nullsLast()).assertRoundTrip2(
-            """
-                {"orderBy": [{"val": {"xt:lvar": "foo"}, "dir": "desc", "nulls": "last"}]}
-            """.trimJson()
-        )
-        returning(listOf(Binding("a", lVar("a")), Binding("b", lVar("b")))).assertRoundTrip2(
-            """{"return": ["a", {"b": {"xt:lvar": "b"}}]}""".trimJson(),
-            """{"return": [{"a": {"xt:lvar": "a"}}, {"b": {"xt:lvar": "b"}}]}""".trimJson()
-        )
-        unnest(Binding("a", lVar("b"))).assertRoundTrip2(
-            """{
-                "unnest": {"a": {"xt:lvar": "b"}}
-               }
-            """.trimJson()
-        )
-        with().bindAll("a" to "b", "c" to "d").build().assertRoundTrip2(
-            """{"with": [{"a": {"xt:lvar": "b"}}, {"c": {"xt:lvar": "d"}}]}""".trimJson()
-        )
-        without("a", "b").assertRoundTrip2(
-            """{"without": ["a", "b"]}""".trimJson()
-        )
-        aggregate().bindAll("a" to "b", "c" to "d").build().assertRoundTrip2(
-            """{
-                "aggregate": [{"a": {"xt:lvar": "b"}}, {"c": {"xt:lvar": "d"}}]
-               }
-            """.trimJson()
-        )
-    }
-
-    @Test
-    fun shouldDeserializeUnify() {
-        val from = from("docs").bind("xt/id").build()
-        unify(
-            from,
-            where(TRUE),
-            unnest(Binding("a")),
-            with().bindAll("a" to "b", "c" to "d").build(),
-            join(from),
-            leftJoin(from),
-            relation(param("foo"), Binding("xt/id", lVar("xt/id")))
-        ).assertRoundTrip2(
-            """{
-                "unify": [{"from":"docs",
-                           "bind":[{"xt/id":{"xt:lvar":"xt/id"}}]},
-                          {"where":[true]},
-                          {"unnest":{"a":{"xt:lvar":"a"}}},
-                          {"with":[{"a":{"xt:lvar":"b"}},{"c":{"xt:lvar":"d"}}]},
-                          {"join":{"from":"docs","bind":[{"xt/id":{"xt:lvar":"xt/id"}}]}},
-                          {"leftJoin":{"from":"docs","bind":[{"xt/id":{"xt:lvar":"xt/id"}}]}},
-                          {"rel":{"xt:param":"foo"},"bind":[{"xt/id":{"xt:lvar":"xt/id"}}]}]
-               }
-            """.trimJson()
-        )
-    }
-
     @Test
     fun shouldDeserializeQueryRequest() {
         val txKey = txKey(1, Instant.EPOCH)
         QueryRequest(
-            from("docs").bind("xt/id").build(),
+            "SELECT * FROM foo",
             queryOpts()
                 .args(mapOf("foo" to "bar"))
                 .basis(Basis(txKey, Instant.EPOCH))
@@ -460,7 +167,7 @@ class JsonSerdeTest {
                 .build()
         ).assertRoundTrip2(
             """{
-                "query": {"from":"docs","bind":[{"xt/id":{"xt:lvar":"xt/id"}}]},
+                "sql": "SELECT * FROM foo",
                 "queryOpts": {"args":{"foo":"bar"},
                               "basis":{"atTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
                                        "currentTime": "1970-01-01T00:00:00Z"},

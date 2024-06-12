@@ -20,11 +20,6 @@ Let's walk through a brief introduction to XTQL:
 include::{test}[tags=bo-xtql-1,indent=0]
 ----
 +
-[source,json]
-----
-include::{example}[tags=bo-json-1,indent=0]
-----
-+
 [source,sql]
 ----
 include::{example}[tags=bo-sql-1,indent=0]
@@ -37,11 +32,6 @@ include::{example}[tags=bo-sql-1,indent=0]
 include::{test}[tags=bo-xtql-2,indent=0]
 ----
 +
-[source,json]
-----
-include::{example}[tags=bo-json-2,indent=0]
-----
-+
 [source,sql]
 ----
 include::{example}[tags=bo-sql-2,indent=0]
@@ -52,11 +42,6 @@ include::{example}[tags=bo-sql-2,indent=0]
 [source,clojure]
 ----
 include::{test}[tags=bo-xtql-3,indent=0]
-----
-+
-[source,json]
-----
-include::{example}[tags=bo-json-3,indent=0]
 ----
 +
 [source,sql]
@@ -79,11 +64,6 @@ In this case, we re-use the `user-id` logic variable to indicate that the `:xt/i
 include::{test}[tags=joins-xtql-1,indent=0]
 ----
 +
-[source,json]
-----
-include::{example}[tags=joins-json-1,indent=0]
-----
-+
 [source,sql]
 ----
 include::{example}[tags=joins-sql-1,indent=0]
@@ -98,11 +78,6 @@ include::{example}[tags=joins-sql-1,indent=0]
 include::{test}[tags=joins-xtql-2,indent=0]
 ----
 +
-[source,json]
-----
-include::{example}[tags=joins-json-2,indent=0]
-----
-+
 [source,sql]
 ----
 include::{example}[tags=joins-sql-2,indent=0]
@@ -113,11 +88,6 @@ include::{example}[tags=joins-sql-2,indent=0]
 [source,clojure]
 ----
 include::{test}[tags=joins-xtql-3,indent=0]
-----
-+
-[source,json]
-----
-include::{example}[tags=joins-json-3,indent=0]
 ----
 +
 [source,sql]
@@ -131,11 +101,6 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 [source,clojure]
 ----
 include::{test}[tags=joins-xtql-4,indent=0]
-----
-+
-[source,json]
-----
-include::{example}[tags=joins-json-4,indent=0]
 ----
 +
 [source,sql]
@@ -154,11 +119,6 @@ include::{example}[tags=joins-sql-4,indent=0]
 include::{test}[tags=proj-xtql-1,indent=0]
 ----
 +
-[source,json]
-----
-include::{example}[tags=proj-json-1,indent=0]
-----
-+
 [source,sql]
 ----
 include::{example}[tags=proj-sql-1,indent=0]
@@ -173,11 +133,6 @@ We can also use link:../reference/main/xtql/queries.html#_with[`with`] within li
 include::{test}[tags=proj-xtql-2,indent=0]
 ----
 +
-[source,json]
-----
-include::{example}[tags=proj-json-2,indent=0]
-----
-+
 [source,sql]
 ----
 include::{example}[tags=proj-sql-2,indent=0]
@@ -187,11 +142,6 @@ include::{example}[tags=proj-sql-2,indent=0]
 [source,clojure]
 ----
 include::{test}[tags=proj-xtql-3,indent=0]
-----
-+
-[source,json]
-----
-include::{example}[tags=proj-json-3,indent=0]
 ----
 +
 [source,sql]
@@ -206,11 +156,6 @@ To count/sum/average values, we use link:../reference/main/xtql/queries.html#_ag
 [source,clojure]
 ----
 include::{test}[tags=aggr-xtql-1,indent=0]
-----
-
-[source,json]
-----
-include::{example}[tags=aggr-json-1,indent=0]
 ----
 
 [source,sql]
@@ -238,11 +183,6 @@ include::{test}[tags=pull-xtql-1,indent=0]
 ;; Lots of nested left-joins, array-aggs, and vendor-specific JSON functions required there to guarantee this same output.
 ----
 
-[source,json]
-----
-include::{example}[tags=pull-json-1,indent=0]
-----
-
 In this example, we use link:../reference/main/xtql/queries.html#_subqueries[`pull`] to pull back a single map - we know that there's only one author per article (in our system).
 When it's a one-to-many relationship, we use link:../reference/main/xtql/queries.html#_subqueries[`pull*`] - this returns any matches in a vector.
 
@@ -266,13 +206,6 @@ include::{test}[tags=bitemp-xtql-1,indent=0]
 include::{test}[tags=bitemp-xtql-2,indent=0]
 ----
 +
-[source,json]
-----
-include::{example}[tags=bitemp-json-1,indent=0]
-
-include::{example}[tags=bitemp-json-2,indent=0]
-----
-+
 [source,sql]
 ----
 include::{example}[tags=bitemp-sql-1,indent=0]
@@ -287,11 +220,6 @@ include::{example}[tags=bitemp-sql-2,indent=0]
 [source,clojure]
 ----
 include::{test}[tags=bitemp-xtql-3,indent=0]
-----
-+
-[source,json]
-----
-include::{example}[tags=bitemp-json-3,indent=0]
 ----
 
 == DML

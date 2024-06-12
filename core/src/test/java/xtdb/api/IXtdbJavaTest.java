@@ -12,6 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static xtdb.api.query.Queries.from;
 import static xtdb.api.tx.TxOps.putDocs;
+import static xtdb.api.tx.TxOps.sql;
 import static xtdb.api.tx.TxOptions.txOpts;
 
 class IXtdbJavaTest {
@@ -30,15 +31,14 @@ class IXtdbJavaTest {
     @Test
     void javaApiTest() {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
-            putDocs("docs", Map.of("xt$id", 1, "foo", "bar")));
+                sql("INSERT INTO docs (xt$id, foo) VALUES (1, 'bar')"));
 
-        try (var res = node.openQuery(
-            from("docs").bindAll("xt$id", "xt$system_from").build())) {
+        try (var res = node.openQuery("SELECT xt$id, xt$system_from FROM docs")) {
 
             assertEquals(
                 List.of(Map.of(
-                    "xt$id", 1,
-                    "xt$systemFrom", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
+                    "xt$id", 1L,
+                    "xt$system_from", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
                 res.toList());
         }
     }

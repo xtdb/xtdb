@@ -9,17 +9,19 @@
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.tx-ops :as tx-ops]
+            [xtdb.util :as util]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (java.io Closeable Writer)
            (java.util.concurrent ExecutionException)
            java.util.HashMap
            java.util.List
-           [java.util.stream Stream]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb TransactionKey Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis IKeyFn$KeyFn QueryOptions XtqlQuery)
+           [xtdb.api.tx TxOp TxOptions]
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -55,6 +57,12 @@
     (-> (q/open-cursor-as-stream bound-query query-opts)
         (metrics/wrap-query (:query-timer metrics) registry))))
 
+(defn- ->TxOps [tx-ops]
+  (->> tx-ops
+       (mapv (fn [tx-op]
+               (cond-> tx-op
+                 (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
+
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
                  ^Log log
@@ -65,9 +73,19 @@
                  metrics]
   IXtdb
   (submitTx [this opts tx-ops]
-    (let [system-time (some-> opts .getSystemTime)
+    (xtp/submit-tx this tx-ops opts))
+
+  (executeTx [this opts tx-ops]
+    (xtp/execute-tx this tx-ops opts))
+
+  (openQuery [this query query-opts]
+    (xtp/open-sql-query this query query-opts))
+
+  xtp/PNode
+  (submit-tx [this tx-ops opts]
+    (let [system-time (some-> ^TxOptions opts .getSystemTime)
           tx-key (try
-                   @(log/submit-tx& this (vec tx-ops) opts)
+                   @(log/submit-tx& this (->TxOps tx-ops) opts)
                    (catch ExecutionException e
                      (throw (ex-cause e))))
           tx-key (cond-> tx-key
@@ -76,8 +94,8 @@
       (swap! !latest-submitted-tx time/max-tx tx-key)
       tx-key))
 
-  (executeTx [this opts tx-ops]
-    (let [tx-key (.submitTx this opts tx-ops)]
+  (execute-tx [this tx-ops opts]
+    (let [tx-key (xtp/submit-tx this tx-ops opts)]
       (with-open [res (.openQuery this "SELECT txs.\"xt$committed?\" AS is_committed, txs.xt$error AS error FROM xt$txs txs WHERE txs.xt$id = ?"
                                   (let [^List args [(:tx-id tx-key)]]
                                     (-> (QueryOptions/queryOpts)
@@ -89,15 +107,15 @@
             (serde/->tx-committed tx-key)
             (serde/->tx-aborted tx-key error))))))
 
-  (^Stream openQuery [this ^String query, ^QueryOptions query-opts]
-   (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
-     (-> (.prepareQuery this query query-opts)
-         (then-execute-prepared-query metrics registry query-opts))))
+  (open-sql-query [this query query-opts]
+    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+      (-> (.prepareQuery this ^String query query-opts)
+          (then-execute-prepared-query metrics registry query-opts))))
 
-  (^Stream openQuery [this ^XtqlQuery query, ^QueryOptions query-opts]
-   (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
-     (-> (.prepareQuery this query query-opts)
-         (then-execute-prepared-query metrics registry query-opts))))
+  (open-xtql-query [this query query-opts]
+    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
+      (-> (.prepareQuery this (xtql.edn/parse-query query) query-opts)
+          (then-execute-prepared-query metrics registry query-opts))) )
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)

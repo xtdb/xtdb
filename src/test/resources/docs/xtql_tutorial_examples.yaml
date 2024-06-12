@@ -1,40 +1,12 @@
-bo-json-1: |
-  // tag::bo-json-1[]
-  {
-    "from": "users",
-    "bind": [ { "xt$id": { "xt:lvar": "userId" } }, "firstName", "lastName" ]
-  }
-  // end::bo-json-1[]
-
 bo-sql-1: |
   -- tag::bo-sql-1[]
   SELECT users.xt$id AS user_id, users.first_name, users.last_name FROM users
   -- end::bo-sql-1[]
 
-bo-json-2: |
-  // tag::bo-json-2[]
-  {
-    "from": "users",
-    "bind": [ { "xt$id": "ivan" }, "firstName", "lastName" ]
-  }
-  // end::bo-json-2[]
-
 bo-sql-2: |
   -- tag::bo-sql-2[]
   SELECT users.first_name, users.last_name FROM users WHERE users.xt$id = 'ivan'
   -- end::bo-sql-2[]
-
-bo-json-3: |
-  // tag::bo-json-3[]
-  [
-    {
-      "from": "users",
-      "bind": [{ "xt$id": {"xt:lvar": "userId"}}, "firstName", "lastName"]
-    },
-    { "orderBy": ["lastName", "firstName"] },
-    { "limit": 10 }
-  ]
-  // end::bo-json-3[]
 
 bo-sql-3: |
   -- tag::bo-sql-3[]
@@ -44,47 +16,11 @@ bo-sql-3: |
   LIMIT 10
   -- end::bo-sql-3[]
 
-joins-json-1: |
-  // tag::joins-json-1[]
-  {
-    "unify": [
-      {
-        "from": "users",
-        "bind": [ { "xt$id": {"xt:lvar": "userId"}}, "firstName", "lastName" ]
-      },
-      {
-        "from": "articles",
-        "bind": [ { "authorId": {"xt:lvar": "userId"}}, "title", "content" ]
-      }
-    ]
-  }
-  // end::joins-json-1[]
-
 joins-sql-1: |
   -- tag::joins-sql-1[]
   SELECT u.xt$id AS user_id, u.first_name, u.last_name, a.title, a.content
   FROM users u JOIN articles a ON u.xt$id = a.author_id
   -- end::joins-sql-1[]
-
-joins-json-2: |
-  // tag::joins-json-2[]
-  {
-    "unify": [
-      {
-        "from": "users",
-        "bind": [ { "xt$id": {"xt:lvar": "uid1"}}, "age" ]
-      },
-      {
-        "from": "users",
-        "bind": [ { "xt$id": {"xt:lvar": "uid2"}}, "age" ]
-      },
-      {
-        "where": [ { "xt:call": "<>",
-                     "args": [ {"xt:lvar": "uid1"}, {"xt:lvar": "uid2"} ] } ]
-      }
-    ]
-  }
-  // end::joins-json-2[]
 
 joins-sql-2: |
   -- tag::joins-sql-2[]
@@ -94,33 +30,6 @@ joins-sql-2: |
   WHERE u1.xt$id <> u2.xt$id
   -- end::joins-sql-2[]
 
-joins-json-3: |
-  // tag::joins-json-3[]
-  [
-    {
-      "unify": [
-        {
-          "from": "customers",
-          "bind": [{ "xt$id": {"xt:lvar": "cid"}}]
-        },
-        {
-          "leftJoin": {
-            "from": "orders",
-            "bind": [
-              {"xt$id": {"xt:lvar": "oid"}},
-              {"customerId": {"xt:lvar": "cid"}},
-              "currency",
-              "orderValue"
-            ]
-          },
-          "bind": ["cid", "currency", "orderValue"]
-        }
-      ]
-    },
-    { "limit": 100 }
-  ]
-  // end::joins-json-3[]
-
 joins-sql-3: |
   -- tag::joins-sql-3[]
   SELECT c.xt$id AS cid, o.currency, o.order_value
@@ -128,32 +37,6 @@ joins-sql-3: |
     LEFT JOIN orders o ON (c.xt$id = o.customer_id)
   LIMIT 100
   -- end::joins-sql-3[]
-
-joins-json-4: |
-  // tag::joins-json-4[]
-  [
-    {
-      "unify": [
-        { "from": "customers", "bind": [ { "xt$id": { "xt:lvar": "cid" } } ] },
-        {
-          "where": [
-            {
-              "xt:call": "not",
-              "args": [ {
-                "xt:exists": {
-                  "from": "orders",
-                  "bind": [ { "customerId": { "xt:param": "$cid" } } ]
-                },
-                "args": [ "cid" ]
-              } ]
-            }
-          ]
-        }
-      ]
-    },
-    { "limit": 100 }
-  ]
-  // end::joins-json-4[]
 
 joins-sql-4: |
   -- tag::joins-sql-4[]
@@ -163,61 +46,11 @@ joins-sql-4: |
   LIMIT 100
   -- end::joins-sql-4[]
 
-proj-json-1: |
-  // tag::proj-json-1[]
-  [
-    {
-      "from": "users",
-      "bind": ["firstName", "lastName"]
-    },
-    {
-      "with": [
-        {
-          "fullName": {
-            "xt:call": "concat",
-            "args": [{"xt:lvar": "firstName"}, " ", {"xt:lvar": "lastName"}]
-          }
-        }
-      ]
-    }
-  ]
-  // end::proj-json-1[]
-
 proj-sql-1: |
   -- tag::proj-sql-1[]
   SELECT u.first_name, u.last_name, (u.first_name || ' ' || u.last_name) AS full_name
   FROM users AS u
   -- end::proj-sql-1[]
-
-proj-json-2: |
-  // tag::proj-json-2[]
-  [
-    {
-      "unify": [
-        {
-          "from": "users",
-          "bind": [ { "xt$id": {"xt:lvar": "userId"}}, "firstName", "lastName" ]
-        },
-        {
-          "from": "articles",
-          "bind": [ { "authorId": {"xt:lvar": "userId"}}, "title", "content" ]
-        }
-      ]
-    },
-    {
-      "return": [
-        {
-          "fullName": {
-            "xt:call": "concat",
-            "args": [{"xt:lvar": "firstName"}, " ", {"xt:lvar": "lastName"}]
-          }
-        },
-        "title",
-        "content"
-      ]
-    }
-  ]
-  // end::proj-json-2[]
 
 proj-sql-2: |
   -- tag::proj-sql-2[]
@@ -226,66 +59,12 @@ proj-sql-2: |
     JOIN articles a ON u.xt$id = a.author_id
   -- end::proj-sql-2[]
 
-proj-json-3: |
-  // tag::proj-json-3[]
-  [
-    {
-      "unify": [
-        {
-          "from": "users",
-          "bind": [ { "xt$id": {"xt:lvar": "userId"}}, "firstName", "lastName" ]
-        },
-        {
-          "from": "articles",
-          "bind": [ { "authorId": {"xt:lvar": "userId"}}, "title", "content" ]
-        }
-      ]
-    },
-    { "without": [ "userId" ] }
-  ]
-  // end::proj-json-3[]
-
 proj-sql-3: |
   -- tag::proj-sql-3[]
   SELECT u.first_name, u.last_name, a.title, a.content
   FROM users AS u
     JOIN articles a ON u.xt$id = a.author_id
   -- end::proj-sql-3[]
-
-aggr-json-1: |
-  // tag::aggr-json-1[]
-  [
-    {
-      "unify": [
-        {
-          "from": "customers",
-          "bind": [ { "xt$id": {"xt:lvar": "cid"} } ]
-        },
-        {
-          "leftJoin": {
-            "from": "orders",
-            "bind": [ { "xt$id": {"xt:lvar": "oid"}}, {"customerId": {"xt:lvar": "cid"}}, "currency", "orderValue"]
-          },
-          "bind": [ "oid", "cid", "currency", "orderValue" ]
-        }
-      ]
-    },
-    {
-      "aggregate": [
-        "cid",
-        "currency",
-        { "orderCount": { "xt:call": "count", "args": [ {"xt:lvar": "oid"} ] } },
-        { "totalValue": { "xt:call": "sum", "args": [ {"xt:lvar": "orderValue"} ] } } ]
-    },
-    {
-       "with": [
-         { "totalValue": { "xt:call": "coalesce", "args": [ { "xt:lvar": "totalValue" }, 0 ] } }
-       ]
-    },
-    { "orderBy": [ { "val": {"xt:lvar": "totalValue"}, "dir": "desc" } ] },
-    { "limit": 100 }
-  ]
-  // end::aggr-json-1[]
 
 aggr-sql-1: |
   -- tag::aggr-sql-1[]
@@ -297,61 +76,6 @@ aggr-sql-1: |
   LIMIT 100
   -- end::aggr-sql-1[]
 
-pull-json-1: |
-  // tag::pull-json-1[]
-  [
-    {
-      "from": "articles",
-      "bind": [{"xt$id": {"xt:lvar": "articleId"}}, "title", "content", "authorId"]
-    },
-    {
-      "with": [
-        {
-          "author": {
-            "xt:pull": {
-              "from": "authors",
-              "bind": [{"xt$id": {"xt:param": "$authorId"}}, "firstName", "lastName"]
-            },
-            "args": ["authorId"]
-          }
-        },
-        {
-          "comments": {
-            "xt:pullMany": [
-              {
-                "from": "comments",
-                "bind": [ { "articleId": { "xt:param": "$articleId" } }, "createdAt", "comment" ]
-              },
-              { "orderBy": [ { "val": { "xt:lvar": "createdAt" }, "dir": "desc" } ] },
-              { "limit": 10 }
-            ],
-
-            "args": ["articleId"]
-          }
-        }
-      ]
-    }
-  ]
-  // end::pull-json-1[]
-
-bitemp-json-1: |
-  // tag::bitemp-json-1[]
-  {
-    "from": "users",
-    "forValidTime": { "at": { "@value": "2020-01-01", "@type": "xt:date" } },
-    "bind": [ "firstName", "lastName" ]
-  }
-  // end::bitemp-json-1[]
-
-bitemp-json-2: |
-  // tag::bitemp-json-2[]
-  {
-    "from": "users",
-    "forValidTime": "allTime",
-    "bind": [ "firstName", "lastName" ]
-  }
-  // end::bitemp-json-2[]
-
 bitemp-sql-1: |
   -- tag::bitemp-sql-1[]
   SELECT users.first_name, users.last_name FROM users FOR VALID_TIME AS OF DATE '2020-01-01'
@@ -362,23 +86,6 @@ bitemp-sql-2: |
   SELECT users.first_name, users.last_name FROM users FOR ALL VALID_TIME
   -- end::bitemp-sql-2[]
 
-bitemp-json-3: |
-  // tag::bitemp-json-3[]
-  {
-    "unify": [
-      {
-        "from": "users",
-        "forValidTime": { "at": { "@value": "2018-01-01", "@type": "xt:date" } },
-        "bind": [ { "xt$id": {"xt:lvar": "userId"}} ]
-      }, {
-        "from": "users",
-        "forValidTime": { "at": { "@value": "2023-01-01", "@type": "xt:date" } },
-        "bind": [ { "xt$id": {"xt:lvar": "userId"}} ]
-      }
-    ]
-  }
-  // end::bitemp-json-3[]
-
 DML-Insert-sql: |
   -- tag::DML-Insert-sql[]
   INSERT INTO users
@@ -387,51 +94,16 @@ DML-Insert-sql: |
   FROM old_users AS ou
   -- end::DML-Insert-sql[]
 
-DML-Insert-json: |
-  // tag::DML-Insert-json[]
-  {
-    "insertInto": "users",
-    "query": {
-      "from": "oldUsers",
-      "bind": [
-        "xt$id",
-        { "givenName": { "xt:lvar": "firstName" } },
-        { "surname": { "xt:lvar": "lastName" } },
-        "xt$validFrom",
-        "xt$validTo"
-      ]
-    }
-  }
-  // end::DML-Insert-json[]
-
 DML-Delete-sql: |
   -- tag::DML-Delete-sql[]
   DELETE FROM comments WHERE comments.post_id = ?
   -- end::DML-Delete-sql[]
-
-DML-Delete-json: |
-  // tag::DML-Delete-json[]
-  {
-    "deleteFrom": "comments",
-    "bind": [ { "postId": { "xt:param": "$postId" } } ],
-    "argRows": [ { "postId": 1 } ]
-  }
-  // end::DML-Delete-json[]
 
 DML-Delete-additional-unify-clauses-sql: |
   -- tag::DML-Delete-additional-unify-clauses-sql[]
   DELETE FROM comments
   WHERE comments.post_id IN (SELECT posts.xt$id FROM posts WHERE posts.author_id = ?)
   -- end::DML-Delete-additional-unify-clauses-sql[]
-
-DML-Delete-bitemporal-json: |
-  // tag::DML-Delete-bitemporal-json[]
-  {
-    "deleteFrom": "promotions",
-    "forValidTime": { "from": { "@type": "xt:instant", "@value": "2023-12-26T00:00:00Z" } },
-    "bind": [ { "promotionType": "christmas" } ]
-  }
-  // end::DML-Delete-bitemporal-json[]
 
 DML-Delete-bitemporal-sql: |
   -- tag::DML-Delete-bitemporal-sql[]
@@ -445,34 +117,12 @@ DML-Delete-everything-sql: |
   DELETE FROM comments
   -- end::DML-Delete-everything-sql[]
 
-DML-Delete-everything-json: |
-  // tag::DML-Delete-everything-json[]
-  { "deleteFrom": "comments" }
-  // end::DML-Delete-everything-json[]
-
 DML-Update-sql: |
   -- tag::DML-Update-sql[]
   UPDATE documents
   SET version = documents.version + 1
   WHERE documents.xt$id = ?
   -- end::DML-Update-sql[]
-
-DML-Update-json: |
-  // tag::DML-Update-json[]
-  {
-    "update": "documents",
-    "bind": [ { "xt/id": { "xt:param": "$doc-id" } }, { "version": { "xt:lvar": "v" } } ],
-    "set": [
-      {
-        "version": {
-          "xt:call": "+",
-          "args": [ { "xt:lvar": "v" }, 1 ]
-        }
-      }
-    ],
-    "argRows": [ { "doc-id": "doc-id" } ]
-  }
-  // end::DML-Update-json[]
 
 DML-Update-bitemporal-sql-1: |
   -- tag::DML-Update-bitemporal-sql-1[]
@@ -486,102 +136,12 @@ DML-Update-bitemporal-sql-2: |
   WHERE p.post_id = ?
   -- end::DML-Update-bitemporal-sql-2[]
 
-DML-Update-bitemporal-json: |
-  // tag::DML-Update-bitemporal-json[]
-  {
-    "update": "posts",
-    "set": [ { "commentCount": { "xt:lvar": "cc" } } ],
-    "bind": [ { "xt$id": { "xt:param": "$postId" } } ],
-
-    "unify": [ {
-      "with": [
-        {
-          "cc": {
-            "xt:q": [
-              {
-                "from": "comments",
-                "bind": [ { "postId": { "xt:param": "$postId" } } ]
-              },
-              {
-                "aggregate": [ { "cc": { "xt:call": "rowCount", "args": [] } } ]
-              }
-            ]
-          }
-        }
-      ]
-    } ],
-
-    "argRows": [ { "postId": "my-post-id" } ]
-  }
-  // end::DML-Update-bitemporal-json[]
-
 DML-Erase-sql: |
   -- tag::DML-Erase-sql[]
   ERASE FROM users WHERE users.email = 'jms@example.com'
   -- end::DML-Erase-sql[]
 
-DML-Erase-json: |
-  // tag::DML-Erase-json[]
-  {
-    "eraseFrom": "users",
-    "bind": [ { "email": "jms@example.com" } ]
-  }
-  // end::DML-Erase-json[]
-
 DML-Assert-Not-sql: |
   -- tag::DML-Assert-sql[]
   ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@juxt.pro')
   -- end::DML-Assert-sql[]
-
-DML-Assert-Not-json: |
-  // tag::DML-Assert-Not-json[]
-  {
-    "assertNotExists": {
-      "from": "users",
-      "bind": [ { "email": { "xt:param": "$email" } } ]
-    },
-
-    "argRows": [ { "email": "james@example.com" } ]
-  }
-  // end::DML-Assert-Not-json[]
-
-DML-Assert-Not-Tx-Table-json: |
-  // tag::DML-Assert-Not-Tx-Table-json[]
-  // The transaction payload
-  [
-    {
-      "assertNotExists": {
-        "from": "users",
-        "bind": [ { "email": { "xt:param": "$email" } } ]
-      },
-
-      "argRows": [ { "email": "james@example.com" } ]
-    }
-    {
-      "into": "docs",
-      "putDocs": [ { "xt/id": "james", "email": "james@example.com" } ]
-    }
-  ]
-
-  // querying the tx/txs table
-  {
-    "from": "xt$txs",
-    "bind": [ { "xt$id": { "xt:param": "$txId" } }, "xt$committed?", "xt$error" ]
-  }
-
-  // result
-  {
-    "xt$committed?": false,
-    "xt$error": {
-      "@type": "xt:error",
-      "@value": {
-        "xtdb.error/message": "Precondition failed: assert-not-exists",
-        "xtdb.error/class": "xtdb.RuntimeException",
-        "xtdb.error/error-key": "xtdb/assert-failed",
-        "xtdb.error/data": {
-          "row-count": 1
-        }
-      }
-    }
-  }
-  // end::DML-Assert-Not-Tx-Table-json[]

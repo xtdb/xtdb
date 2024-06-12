@@ -110,7 +110,7 @@ class Xtdb:
         except Exception as e:
             raise Exception(f"Error in submitTx request: {e}")
 
-    def query(self, query: Query, opts=None):
+    def query(self, sql: str, opts=None):
         if not opts:
             opts = {}
 
@@ -125,7 +125,7 @@ class Xtdb:
             opts["basis"]["atTx"] = self._at_tx
 
         try:
-            req_data = json.dumps({"query": query, "queryOpts": opts}, cls=XtdbJsonEncoder)
+            req_data = json.dumps({"sql": sql, "queryOpts": opts}, cls=XtdbJsonEncoder)
             print(req_data)
 
             resp = self._http.request(
@@ -323,7 +323,7 @@ class Cursor(object):
         # If only queries found, execute as queries
         elif all([not _is_tx(op) for op in operations]):
             for op in operations:
-                self._results = self.client.query(Sql(op))
+                self._results = self.client.query(op)
 
         # Cannot mix them
         else:

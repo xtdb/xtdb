@@ -14,24 +14,14 @@
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.tx-ops :as tx-ops])
   (:import (java.io Writer)
-           java.util.concurrent.ExecutionException
-           java.util.function.Function
-           java.util.List
-           java.util.Map
+           (java.util List Map)
            [java.util.stream Stream]
            (xtdb.api IXtdb TransactionKey)
-           (xtdb.api.query Basis QueryOptions XtqlQuery)
+           (xtdb.api.query Basis QueryOptions)
            (xtdb.api.tx TxOp TxOptions)
            xtdb.types.ClojureForm))
-
-(defmacro ^:private rethrowing-cause [form]
-  `(try
-     ~form
-     (catch ExecutionException e#
-       (throw (.getCause e#)))))
 
 (defn- expect-instant [instant]
   (when-not (s/valid? ::time/datetime-value instant)
@@ -41,6 +31,7 @@
 
   (time/->instant instant))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->ClojureForm [form]
   (ClojureForm. form))
 
@@ -52,6 +43,21 @@
   (print-dup clj-form w))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn ->QueryOptions [{:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
+  (-> (QueryOptions/queryOpts)
+      (cond-> (instance? Map args) (.args ^Map args)
+              (sequential? args) (.args ^List args)
+              after-tx (.afterTx after-tx)
+              basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
+              default-tz (.defaultTz default-tz)
+              tx-timeout (.txTimeout tx-timeout)
+              (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
+              (some? explain?) (.explain explain?))
+
+      (.keyFn (serde/read-key-fn key-fn))
+
+      (.build)))
+
 (defn q
   "query an XTDB node.
 
@@ -98,39 +104,13 @@
   ([node query] (q node query {}))
 
   ([node query opts]
-   (let [opts (-> (into {:default-all-valid-time? false} opts)
-                  (time/after-latest-submitted-tx node))]
-
-     (with-open [res (xtp/open-query node query opts)]
+   (let [^QueryOptions query-opts (->QueryOptions (-> (into {:default-all-valid-time? false} opts)
+                                                      (time/after-latest-submitted-tx node)))]
+     (with-open [^Stream res (cond
+                               (string? query) (xtp/open-sql-query node query query-opts)
+                               (seq? query) (xtp/open-xtql-query node query query-opts)
+                               :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
        (vec (.toList res))))))
-
-(defn ->QueryOptions [{:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
-  (-> (QueryOptions/queryOpts)
-      (cond-> (instance? Map args) (.args ^Map args)
-              (sequential? args) (.args ^List args)
-              after-tx (.afterTx after-tx)
-              basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
-              default-tz (.defaultTz default-tz)
-              tx-timeout (.txTimeout tx-timeout)
-              (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
-              (some? explain?) (.explain explain?))
-
-      (.keyFn (serde/read-key-fn key-fn))
-
-      (.build)))
-
-(extend-protocol xtp/PNode
-  IXtdb
-  (open-query [this query clj-query-opts]
-    (let [^QueryOptions query-opts (->QueryOptions clj-query-opts)]
-      (if (string? query)
-        (.openQuery this ^String query query-opts)
-
-        (let [^XtqlQuery query (cond
-                                 (instance? XtqlQuery query) query
-                                 (seq? query) (xtql.edn/parse-query query)
-                                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-          (.openQuery this query query-opts))))))
 
 (defn- ->TxOptions [tx-opts]
   (cond
@@ -140,12 +120,6 @@
                      (TxOptions. (some-> system-time expect-instant)
                                  default-tz
                                  (boolean default-all-valid-time?)))))
-
-(defn- ->TxOpsArray [tx-ops]
-  (->> (for [tx-op tx-ops]
-         (cond-> tx-op
-           (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
-       (into-array TxOp)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
@@ -176,7 +150,7 @@
 
   (^TransactionKey [^IXtdb node, tx-ops] (submit-tx node tx-ops {}))
   (^TransactionKey [^IXtdb node, tx-ops tx-opts]
-   (.submitTx node (->TxOptions tx-opts) (->TxOpsArray tx-ops))))
+   (xtp/submit-tx node (vec tx-ops) (->TxOptions tx-opts))))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.
@@ -206,7 +180,7 @@
 
   (^TransactionKey [^IXtdb node, tx-ops] (execute-tx node tx-ops {}))
   (^TransactionKey [^IXtdb node, tx-ops tx-opts]
-   (.executeTx node (->TxOptions tx-opts) (->TxOpsArray tx-ops))))
+   (xtp/execute-tx node (vec tx-ops) (->TxOptions tx-opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status
@@ -215,6 +189,7 @@
   [node]
   (xtp/status node))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
 
