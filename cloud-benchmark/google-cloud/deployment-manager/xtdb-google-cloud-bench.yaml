@@ -1,0 +1,31 @@
+imports:
+- path: xtdb-bench-stack.jinja
+- path: xtdb-bench-k8s-cluster.jinja
+
+resources:
+- name: xtdb-bench-stack
+  type: xtdb-bench-stack.jinja
+  properties:
+    # Object Store Config
+    bucket_location: EUROPE-WEST2
+    bucket_location_type: region
+    object_store_bucketname: xtdb-am-bench-object-store
+    notifications_pubsub_topic_name: xtdb-am-bench-object-store-notif-topic
+
+    # Custom Role Config - role name should have unique suffix each time
+    custom_role_name: xtdb_auctionmark_bench_role
+    custom_role_additional_permissions: []
+
+- name: xtdb-bench-k8s-cluster
+  type: xtdb-bench-k8s-cluster.jinja
+  properties:
+    # Custom role from the above 
+    custom_role_name: xtdb_auctionmark_bench_role
+    
+    # Unique prefix used by created service accounts
+    service_account_prefix: xtdb-bench-sa
+
+    # K8S Cluster Info
+    cluster_name: xtdb-cluster
+    cluster_location: europe-west1-b
+    cluster_machine_type: n2-standard-2
