@@ -20,7 +20,6 @@
            (java.time Clock Instant ZoneId ZoneOffset)
            java.util.List
            (java.util.concurrent CountDownLatch TimeUnit)
-           #_org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
            (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
@@ -160,13 +159,13 @@
     (dotimes [_ 5]
       (with-open [rs (.executeQuery stmt2)]
         (is (= true (.next rs)))
-        (is (= "\"hello, world2\"" (str (.getObject rs 1))))
+        (is (= "hello, world2" (str (.getObject rs 1))))
         (is (= false (.next rs)))))
 
     (dotimes [_ 5]
       (with-open [rs (.executeQuery stmt)]
         (is (= true (.next rs)))
-        (is (= "\"hello, world\"" (str (.getObject rs 1))))
+        (is (= "hello, world" (str (.getObject rs 1))))
         (is (= false (.next rs)))))))
 
 (deftest parameterized-query-test
@@ -283,7 +282,8 @@
   (with-open [conn (jdbc-conn)]
     (doseq [{:keys [json-type, json, sql, clj, clj-pred] :as example} json-representation-examples]
       (testing (str "SQL expression " sql " should parse to " clj " (" (when json (str json ", ")) json-type ")")
-        (with-open [stmt (.prepareStatement conn (format "SELECT %s FROM (VALUES (1)) a (a)" sql))]
+        (with-open [stmt (.prepareStatement conn (format "SELECT a FROM (VALUES (%s), (ARRAY [])) a (a)" sql))]
+          ;; empty array to force polymoprhic/json return
           (with-open [rs (.executeQuery stmt)]
             ;; one row in result set
             (.next rs)
@@ -357,14 +357,29 @@
   (testing "accept thread"
     (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*))))))
 
+(defn <-pgobject
+  "Transform PGobject containing `json` or `jsonb` value to Clojure
+  data."
+  [^org.postgresql.util.PGobject v]
+  (let [type  (.getType v)
+        value (.getValue v)]
+    (if (#{"jsonb" "json"} type)
+      (when value
+        (json/read-str value))
+      value)))
+
 (defn q [conn sql]
   (->> (jdbc/execute! conn sql)
-           (mapv (fn [row] (update-vals row (comp json/read-str str))))))
+       (mapv (fn [row]
+               (update-vals row
+                            (fn [v]
+                              (if (instance? org.postgresql.util.PGobject v)
+                                (<-pgobject v)
+                                v)))))))
 
 (defn q-seq [conn sql]
   (->> (jdbc/execute! conn sql {:builder-fn result-set/as-arrays})
-       (rest)
-       (mapv (fn [row] (mapv (comp json/read-str str) row)))))
+       (rest)))
 
 (defn ping [conn]
   (-> (q conn ["select 'ping' ping"])
@@ -647,7 +662,7 @@
     (require-server)
     (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select 'ping' ping")]
       (is (= 0 exit))
-      (is (str/includes? out " \"ping\"\n(1 row)")))))
+      (is (str/includes? out " ping\n(1 row)")))))
 
 (when (psql-available?)
   (deftest psql-interactive-test
@@ -693,87 +708,6 @@
            (send "select 'ping';\n")
            (is (str/includes? (read) "ping"))))))))
 
-(def pg-param-representation-examples
-  "A library of examples to test pg parameter oid handling.
-
-  e.g set this object as a param, round trip it - does it match the json result?
-
-  :param (the java object, e.g (int 42))
-  :json the expected (parsed via data.json) json representation
-  :json-cast (a function to apply to the json, useful for downcast for floats)"
-  [{:param nil
-    :json nil}
-
-   {:param true
-    :json true}
-
-   {:param false
-    :json false}
-
-   {:param (byte 42)
-    :json 42}
-
-   {:param (byte -42)
-    :json -42}
-
-   {:param (short 257)
-    :json 257}
-
-   {:param (short -257)
-    :json -257}
-
-   {:param (int 92767)
-    :json 92767}
-
-   {:param (int -92767)
-    :json -92767}
-
-   {:param (long 4147483647)
-    :json 4147483647}
-
-   {:param (long -4147483647)
-    :json -4147483647}
-
-   {:param (float Math/PI)
-    :json (float Math/PI)
-    :json-cast float}
-
-   {:param (+ 1.0 (double Float/MAX_VALUE))
-    :json (+ 1.0 (double Float/MAX_VALUE))}
-
-   {:param ""
-    :json ""}
-
-   {:param "hello, world!"
-    :json "hello, world!"}
-
-   {:param "😎"
-    :json "😎"}])
-
-(deftest pg-param-representation-test
-  (with-open [conn (jdbc-conn)
-              stmt (.prepareStatement conn "select a.a from (values (?)) a (a)")]
-    (doseq [{:keys [param, json, json-cast]
-             :or {json-cast identity}}
-            pg-param-representation-examples]
-      (testing (format "param %s (%s)" param (class param))
-
-        (.clearParameters stmt)
-
-        (condp instance? param
-          Byte (.setByte stmt 1 param)
-          Short (.setShort stmt 1 param)
-          Integer (.setInt stmt 1 param)
-          Long (.setLong stmt 1 param)
-          Float (.setFloat stmt 1 param)
-          Double (.setDouble stmt 1 param)
-          String (.setString stmt 1 param)
-          (.setObject stmt 1 param))
-
-        (with-open [rs (.executeQuery stmt)]
-          (is (.next rs))
-          ;; may want more fine-grained json assertions than this, it depends on data.json behaviour
-          (is (= json (json-cast (json/read-str (str (.getObject rs 1)))))))))))
 
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
@@ -1267,6 +1201,7 @@
 
 (deftest test-column-order
   (with-open [conn (jdbc-conn)]
+
     (let [sql #(q-seq conn [%])]
       (q conn ["INSERT INTO foo(_id, col0, col1) VALUES (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c')"])
 
@@ -1275,3 +1210,57 @@
 
       (is (= [[2 20 "b"] [1 10 "a"] [3 30 "c"]]
              (sql "SELECT * FROM foo"))))))
+
+;; https://github.com/pgjdbc/pgjdbc/blob/8afde800bce64e9b22a7da10ca6c515017cf7db1/pgjdbc/src/main/java/org/postgresql/jdbc/PgConnection.java#L403
+;; List of types/oids that support binary format
+
+(deftest test-postgres-types
+  (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" false)]
+    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8 , var_char, bool, timestamptz) VALUES (?, ?, ?, ?, ?, ?, ?, TIMESTAMP '3000-03-15 20:40:31+03:44')"
+                 #uuid "9e8b41a0-723f-4e6b-babb-c4e6afd17ef2" Long/MIN_VALUE Integer/MAX_VALUE Short/MIN_VALUE Double/MAX_VALUE "aa" true]))
+  ;; no float4 for text format due to a bug in pgjdbc where it sends it as a float8 causing a union type.
+  (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" true)]
+    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8, float4, var_char, bool, timestamptz) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TIMESTAMP '3000-03-15 20:40:31Z')"
+                 #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6" Long/MAX_VALUE Integer/MIN_VALUE Short/MAX_VALUE Double/MIN_VALUE Float/MAX_VALUE "bb" false])
+    ;;binary format is only requested for server side preparedStatements in pgjdbc
+    ;;threshold one should mean we test the text and binary format for each type
+    (let [sql #(jdbc/execute! conn [%])
+          res [{:float8 Double/MIN_VALUE,
+                :float4 Float/MAX_VALUE,
+                :int2 Short/MAX_VALUE,
+                :timestamptz "3000-03-15T20:40:31Z",
+                :var_char "bb",
+                :int4 Integer/MIN_VALUE,
+                :int8 Long/MAX_VALUE,
+                :_id #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6",
+                :bool false}
+               {:float8 Double/MAX_VALUE,
+                :float4 nil,
+                :int2 Short/MIN_VALUE,
+                :timestamptz "3000-03-15T20:40:31+03:44",
+                :var_char "aa",
+                :int4 Integer/MAX_VALUE,
+                :int8 Long/MIN_VALUE,
+                :_id #uuid "9e8b41a0-723f-4e6b-babb-c4e6afd17ef2",
+                :bool true}]]
+
+
+      (is (=
+           res
+           (->> (sql "SELECT * FROM foo")
+                (map #(update % :timestamptz <-pgobject))))
+          "text")
+
+      (is (=
+           res
+           (->> (sql "SELECT * FROM foo")
+                (map #(update % :timestamptz <-pgobject))))
+          "binary"))))
+
+
+(deftest test-odbc-queries
+  (with-open [conn (jdbc-conn)]
+
+    ;; ODBC issues this query by default
+    (is (= []
+           (q-seq conn ["select oid, typbasetype from pg_type where typname = 'lo'"])))))
