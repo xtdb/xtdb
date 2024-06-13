@@ -6,9 +6,14 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            [java.io Writer]
+           [java.nio.charset StandardCharsets]
+           [java.nio ByteBuffer]
+           [java.util UUID]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           xtdb.api.query.IKeyFn
            xtdb.Types
+           [xtdb.vector IVectorReader]
            (xtdb.vector.extensions TransitType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -704,3 +709,171 @@
 (defn with-nullable-fields [fields]
   (->> fields
        (into {} (map (juxt key (comp #(merge-fields % null-field) val))))))
+
+(defn- read-utf8 [^bytes barr] (String. barr StandardCharsets/UTF_8))
+
+(defn utf8
+  "Returns the utf8 byte-array for the given string"
+  ^bytes [s]
+  (.getBytes (str s) StandardCharsets/UTF_8))
+
+(def pg-types
+  {:undefined {:typname "undefined"
+               :oid 0
+               :read-text (fn [ba] (some-> ba read-utf8))}
+   :int8 {:typname "int8"
+          :oid 20
+          :typlen 8
+          :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getLong))
+          :read-text (fn [ba] (-> ba read-utf8 Long/parseLong))
+          :write-binary (fn [^IVectorReader rdr idx]
+                          (when-not (.isNull rdr idx)
+                            (let [bb (doto (ByteBuffer/allocate 8)
+                                       (.putLong (.getLong rdr idx)))]
+                              (.array bb))))
+          :write-text (fn [^IVectorReader rdr idx]
+                        (when-not (.isNull rdr idx)
+                          (utf8 (.getLong rdr idx))))}
+   :int4 {:typname "int4"
+          :oid 23
+          :typlen 4
+          :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getInt))
+          :read-text (fn [ba] (-> ba read-utf8 Integer/parseInt))
+          :write-binary (fn [^IVectorReader rdr idx]
+                          (when-not (.isNull rdr idx)
+                            (let [bb (doto (ByteBuffer/allocate 4)
+                                       (.putInt (.getInt rdr idx)))]
+                              (.array bb))))
+          :write-text (fn [^IVectorReader rdr idx]
+                        (when-not (.isNull rdr idx)
+                          (utf8 (.getInt rdr idx))))}
+   :int2 {:typname "int2"
+          :oid 21
+          :typlen 2
+          :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getShort))
+          :read-text (fn [ba] (-> ba read-utf8 Short/parseShort))
+          :write-binary (fn [^IVectorReader rdr idx]
+                          (when-not (.isNull rdr idx)
+                            (let [bb (doto (ByteBuffer/allocate 2)
+                                       (.putShort (.getShort rdr idx)))]
+                              (.array bb))))
+          :write-text (fn [^IVectorReader rdr idx]
+                        (when-not (.isNull rdr idx)
+                          (utf8 (.getShort rdr idx))))}
+   ;;
+   ;;Java boolean maps to both bit and bool, opting to support latter only for now
+   #_#_:bit {:typname "bit"
+         :oid 1500
+         :typlen 1
+         :read-binary (fn [ba] (-> ba ByteBuffer/wrap .get))
+         :read-text (fn [ba] (-> ba read-utf8 Byte/parseByte))
+         :write-binary (fn [^IVectorReader rdr idx]
+                         (when-not (.isNull rdr idx)
+                           (let [bb (doto (ByteBuffer/allocate 1)
+                                      (.put (.getByte rdr idx)))]
+                             (.array bb))))
+         :write-text (fn [^IVectorReader rdr idx]
+                       (when-not (.isNull rdr idx)
+                         (utf8 (.getByte rdr idx))))}
+
+   :float4 {:typname "float4"
+            :oid 700
+            :typlen 4
+            :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getFloat))
+            :read-text (fn [ba] (-> ba read-utf8 Float/parseFloat))
+            :write-binary (fn [^IVectorReader rdr idx]
+                            (when-not (.isNull rdr idx)
+                              (let [bb (doto (ByteBuffer/allocate 4)
+                                         (.putFloat (.getFloat rdr idx)))]
+                                (.array bb))))
+            :write-text (fn [^IVectorReader rdr idx]
+                          (when-not (.isNull rdr idx)
+                            (utf8 (.getFloat rdr idx))))}
+   :float8 {:typname "float8"
+            :oid 701
+            :typlen 8
+            :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getDouble))
+            :read-text (fn [ba] (-> ba read-utf8 Double/parseDouble))
+            :write-binary (fn [^IVectorReader rdr idx]
+                            (when-not (.isNull rdr idx)
+                              (let [bb (doto (ByteBuffer/allocate 8)
+                                         (.putDouble (.getDouble rdr idx)))]
+                                (.array bb))))
+            :write-text (fn [^IVectorReader rdr idx]
+                          (when-not (.isNull rdr idx)
+                            (utf8 (.getDouble rdr idx))))}
+   :uuid {:typname "uuid"
+          :oid 2950
+          :typlen 16
+          :read-binary (fn [ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
+          :read-text (fn [ba] (UUID/fromString (read-utf8 ba)))
+          :write-binary (fn [^IVectorReader rdr idx]
+                          (let [ba ^bytes (byte-array 16)]
+                            (.get (.getBytes rdr idx) ba)
+                            ba))
+          :write-text (fn [^IVectorReader rdr idx]
+                        (utf8 (util/byte-buffer->uuid (.getBytes rdr idx))))}
+
+   :varchar {:typname "varchar"
+             :oid 1043
+             :read-text read-utf8
+             :write-text (fn [^IVectorReader rdr idx]
+                           (when-not (.isNull rdr idx)
+                             (let [bb (.getBytes rdr idx)
+                                   ba ^bytes (byte-array (.remaining bb))]
+                               (.get bb ba)
+                               ba)))}
+   ;;same as varchar which makes this technically lossy in roundtrip
+   ;;text is arguably more correct for us than varchar
+   :text {:typname "text"
+          :oid 25
+          :read-text read-utf8
+          :write-text (fn [^IVectorReader rdr idx]
+                        (when-not (.isNull rdr idx)
+                          (let [bb (.getBytes rdr idx)
+                                ba ^bytes (byte-array (.remaining bb))]
+                            (.get bb ba)
+                            ba)))}
+   :boolean {:typname "boolean"
+             :oid 16
+             :read-text (fn [ba] (Boolean/parseBoolean (read-utf8 ba)))
+             :write-text (fn [^IVectorReader rdr idx]
+                           (when-not (.isNull rdr idx)
+                             (utf8 (if (.getBoolean rdr idx) "t" "f"))))}
+   ;; json-write-text is essentially the default in send-query-result so no need to specify here
+   :json {:typname "json"
+          :oid 114}})
+
+(def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
+
+(defn col-type->pg-type [col-type]
+  (get
+   {:utf8 :text
+    :i64 :int8
+    :i32 :int4
+    :i16 :int2
+    :i8 :bit
+    :f64 :float8
+    :f32 :float4
+    :uuid :uuid
+    :bool :boolean}
+   col-type
+   :json))
+
+(defn field->pg-type [field]
+  (let [field-name (str (key (first field)))]
+    (assoc (set/rename-keys
+            (let [col-type (field->col-type (val (first field)))]
+              (if (and (vector? col-type) (= :union (first col-type)))
+                (let [col-types (disj (last col-type) :null)]
+                  (if (= 1 (count col-types))
+                    (pg-types (col-type->pg-type (first col-types)))
+                    (pg-types (col-type->pg-type col-types))))
+                (pg-types (col-type->pg-type col-type))))
+            {:oid :column-oid})
+           :field-name
+           field-name
+           :column-name
+           (.denormalize
+            ^IKeyFn (identity #xt/key-fn :snake-case-string)
+            field-name))))
