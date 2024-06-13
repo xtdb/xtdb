@@ -83,19 +83,100 @@
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (=
-         #{{:attrelid 732573471, :atttypid 114, :attname "col2", :attlen -1}
-           {:attrelid -598393539, :atttypid 114, :attname "_id", :attlen -1}
-           {:attrelid 127091884, :atttypid 114, :attname "_id", :attlen -1}
-           {:attrelid 732573471, :atttypid 114, :attname "_id", :attlen -1}
-           {:attrelid -598393539, :atttypid 114, :attname "tx_time", :attlen -1}
-           {:attrelid -598393539, :atttypid 114, :attname "committed", :attlen -1}
-           {:attrelid 732573471, :atttypid 114, :attname "col1", :attlen -1}
-           {:attrelid -598393539, :atttypid 114, :attname "error", :attlen -1}
-           {:attrelid 127091884, :atttypid 114, :attname "col1", :attlen -1}}
+  (t/is (= #{{:atttypmod -1,
+              :attrelid 127091884,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen -1,
+              :atttypid 114,
+              :attnum 0,
+              :attname "_id",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid 732573471,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen -1,
+              :atttypid 114,
+              :attnum 0,
+              :attname "_id",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid 127091884,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen -1,
+              :atttypid 114,
+              :attnum 1,
+              :attname "col1",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid 732573471,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen 8,
+              :atttypid 20,
+              :attnum 1,
+              :attname "col2",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid 732573471,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen 8,
+              :atttypid 20,
+              :attnum 2,
+              :attname "col1",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid -598393539,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen -1,
+              :atttypid 114,
+              :attnum 3,
+              :attname "error",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid -598393539,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen 8,
+              :atttypid 20,
+              :attnum 2,
+              :attname "_id",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid -598393539,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen -1,
+              :atttypid 114,
+              :attnum 0,
+              :attname "tx_time",
+              :attisdropped false}
+             {:atttypmod -1,
+              :attrelid -598393539,
+              :attidentity "",
+              :attgenerated "",
+              :attnotnull false,
+              :attlen -1,
+              :atttypid 16,
+              :attnum 1,
+              :attname "committed",
+              :attisdropped false}}
            (set (tu/query-ra '[:scan
                                {:table pg_catalog/pg_attribute}
-                               [attrelid attname atttypid attlen]]
+                               [attrelid attname atttypid attlen attnum attisdropped
+                                attnotnull atttypmod attidentity attgenerated]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-tables
@@ -114,6 +195,134 @@
                                {:table pg_catalog/pg_tables}
                                [schemaname tablename tableowner tablespace]]
                              {:node tu/*node*})))))
+
+(deftest test-pg-class
+  (xt/submit-tx tu/*node* test-data)
+
+  (t/is (= #{{:relkind "r",
+              :relnamespace 1106696632,
+              :oid 732573471,
+              :relname "baseball"}
+             {:relkind "r",
+              :relnamespace 1106696632,
+              :oid -598393539,
+              :relname "txs"}
+             {:relkind "r",
+              :relnamespace 1106696632,
+              :oid 127091884,
+              :relname "beanie"}}
+           (set (tu/query-ra '[:scan
+                               {:table pg_catalog/pg_class}
+                               [oid relname relnamespace relkind]]
+                             {:node tu/*node*})))))
+
+(deftest test-pg-type
+  (xt/submit-tx tu/*node* test-data)
+  (t/is (= #{{:typtypmod -1,
+              :oid 700,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "float4",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 114,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "json",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 701,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "float8",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 21,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "int2",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 2950,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "uuid",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 1043,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "varchar",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 25,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "text",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 20,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "int8",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 0,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "undefined",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 23,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "int4",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 16,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "boolean",
+              :typnamespace -2125819141,
+              :typbasetype 0}}
+           (set (tu/query-ra '[:scan
+                               {:table pg_catalog/pg_type}
+                               [oid
+                                typname
+                                typnamespace
+                                typowner
+                                typtype
+                                typbasetype
+                                typnotnull
+                                typtypmod]]
+                             {:node tu/*node*})))))
+(deftest test-pg-description
+  (t/is (= []
+           (tu/query-ra '[:scan
+                          {:table pg_catalog/pg_desciption}
+                          [objoid classoid objsubid description]]
+                        {:node tu/*node*}))))
 
 (deftest test-pg-views
   (t/is (= []
