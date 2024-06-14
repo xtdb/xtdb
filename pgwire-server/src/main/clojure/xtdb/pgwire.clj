@@ -562,63 +562,6 @@
 
 ;;; server impl
 
-(defn- start-server [server {:keys [accept-so-timeout]
-                             :or {accept-so-timeout 5000}}]
-  (let [{:keys [server-status, server-state, accept-thread, ^ServerSocket accept-socket, port]} server
-        {:keys [silent-start]} @server-state
-        start-exc (atom nil)]
-
-    ;; sanity check its a new server
-    (when-not (compare-and-set! server-status :new :starting)
-      (throw (Exception. (format "Server must be :new to start, port %d" port))))
-
-    (try
-      ;; set a socket timeout so we can interrupt the accept-thread
-      ;; can be set to nil as an option if you want to allow no timeout
-      (when accept-so-timeout
-        (.setSoTimeout accept-socket accept-so-timeout))
-
-      ;; start the accept thread, which will listen for connections
-      (let [is-running (promise)]
-
-        ;; wait for the :running state
-        (add-watch server-status [:accept-watch port]
-                   (fn [_ _ _ ns]
-                     (when (= :running ns)
-                       (deliver is-running true))))
-
-        (.start ^Thread accept-thread)
-
-        ;; wait for a small amount of time for a :running state
-        (when (= :timeout (deref is-running (* 5 1000) :timeout))
-          (log/error "Server accept thread did not start properly" port)
-          (reset! server-status :error-on-start))
-
-        (remove-watch server-status [:accept-watch port]))
-
-      (catch Throwable e
-        (when-not silent-start
-          (log/error e "Exception caught on server start" port))
-        (reset! server-status :error-on-start)
-        (reset! start-exc e)))
-
-    ;; run clean up if we didn't start for any reason
-    (when (not= :running @server-status)
-      (cleanup-server-resources server))
-
-    ;; check if we could not clean up due to a clean up error
-    (when (compare-and-set! server-status :error-on-cleanup :error-on-start)
-      (log/fatal "Server resources could not be freed, please restart xtdb" port))
-
-    ;; we will have only cleaned up if there was some problem
-    (compare-and-set! server-status :cleaned-up :error-on-start)
-
-    (when-not silent-start
-      (when-some [exc @start-exc]
-        (throw exc))))
-
-  nil)
-
 (defn- set-session-parameter [conn parameter value]
   (let [parameter (-> (util/->kebab-case-kw parameter)
                       ((some-fn {:application-time-defaults :app-time-defaults} identity)))]
@@ -1795,29 +1738,10 @@
 
   (log/trace "exiting accept loop"))
 
-(defn- create-server
-  "node: if provided, uses the given node for all connections; otherwise, creates a transient, in-memory node for each new connection"
-  [node {:keys [port num-threads drain-wait unsafe-init-state]}]
-
-  (let [self (atom nil)
-        clock (Clock/systemDefaultZone)
-        default-state {:clock clock
-                       :drain-wait drain-wait
-                       :parameters {"server_version" "14"
-                                    "server_encoding" "UTF8"
-                                    "client_encoding" "UTF8"}}]
-    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
-      (let [srvr (map->Server {:port (.getLocalPort accept-socket)
-                               :accept-socket accept-socket
-                               :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self node)) (str "pgwire-server-accept-" port))
-                               :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
-                               :server-status (atom :new)
-                               :server-state (atom (merge unsafe-init-state default-state))})]
-        (reset! self srvr)
-        srvr))))
-
 (defn serve
   "Creates and starts a pgwire server.
+
+  node: if provided, uses the given node for all connections; otherwise, creates a transient, in-memory node for each new connection
 
   Options:
 
@@ -1825,14 +1749,77 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   ([node] (serve node {}))
-  ([node opts]
-   (let [defaults {:port 5432
-                   :num-threads 42
-                   ;; 5 seconds of draining
-                   :drain-wait 5000}
-         cfg (merge defaults opts)]
-     (doto (create-server node cfg)
-       (start-server cfg)))))
+  ([node {:keys [port num-threads drain-wait accept-so-timeout]
+          :or {port 5432
+               num-threads 42
+               drain-wait 5000
+               accept-so-timeout 5000}}]
+   (util/with-close-on-catch [accept-socket (ServerSocket. port)]
+     (let [self (atom nil)
+           accept-thread (Thread. ^Runnable (fn [] (accept-loop @self node)) (str "pgwire-server-accept-" port))
+           server-status (atom :new)
+           server (map->Server {:port (.getLocalPort accept-socket)
+                                :accept-socket accept-socket
+                                :accept-thread accept-thread
+                                :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
+                                :server-status server-status
+                                :server-state (atom {:clock (Clock/systemDefaultZone)
+                                                     :drain-wait drain-wait
+                                                     :parameters {"server_version" "14"
+                                                                  "server_encoding" "UTF8"
+                                                                  "client_encoding" "UTF8"}})})]
+       (reset! self server)
+
+       (let [start-exc (atom nil)]
+
+         ;; sanity check its a new server
+         (when-not (compare-and-set! server-status :new :starting)
+           (throw (Exception. (format "Server must be :new to start, port %d" port))))
+
+         (try
+           ;; set a socket timeout so we can interrupt the accept-thread
+           ;; can be set to nil as an option if you want to allow no timeout
+           (when accept-so-timeout
+             (.setSoTimeout accept-socket accept-so-timeout))
+
+           ;; start the accept thread, which will listen for connections
+           (let [is-running (promise)]
+
+             ;; wait for the :running state
+             (add-watch server-status [:accept-watch port]
+                        (fn [_ _ _ ns]
+                          (when (= :running ns)
+                            (deliver is-running true))))
+
+             (.start ^Thread accept-thread)
+
+             ;; wait for a small amount of time for a :running state
+             (when (= :timeout (deref is-running (* 5 1000) :timeout))
+               (log/error "Server accept thread did not start properly" port)
+               (reset! server-status :error-on-start))
+
+             (remove-watch server-status [:accept-watch port]))
+
+           (catch Throwable e
+             (log/error e "Exception caught on server start" port)
+             (reset! server-status :error-on-start)
+             (reset! start-exc e)))
+
+         ;; run clean up if we didn't start for any reason
+         (when (not= :running @server-status)
+           (cleanup-server-resources server))
+
+         ;; check if we could not clean up due to a clean up error
+         (when (compare-and-set! server-status :error-on-cleanup :error-on-start)
+           (log/fatal "Server resources could not be freed, please restart xtdb" port))
+
+         ;; we will have only cleaned up if there was some problem
+         (compare-and-set! server-status :cleaned-up :error-on-start)
+
+         (when-some [exc @start-exc]
+           (throw exc))
+
+         server)))))
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads]}]
   (.module config (cond-> (PgwireServer$Factory.)
