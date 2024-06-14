@@ -18,7 +18,7 @@ For example, let's assume that over the course of the day your colleagues have m
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_trades
-(xt$id, symbol, quantity, price, xt$valid_from, trader_name)
+(_id, symbol, quantity, price, _valid_from, trader_name)
 VALUES
 (1, 'XAU:CUR', 100, 1800.50, TIMESTAMP '2024-03-08 10:00:00', 'John Doe'),   -- Gold
 (2, 'XAG:CUR', 500, 25.30, TIMESTAMP '2024-03-08 11:00:00', 'Jane Smith'),   -- Silver
@@ -27,9 +27,9 @@ VALUES
 (5, 'W1:COM', 250, 5.20, TIMESTAMP '2024-03-08 13:05:00', 'Alex Green')      -- Wheat
 `} />
   <Query q={`
-SELECT t.*, xt$valid_from
+SELECT t.*, _valid_from
 FROM commodity_trades as t
-ORDER BY xt$id
+ORDER BY _id
 `} />
 </Fiddle>
 
@@ -39,7 +39,7 @@ At the end of the day, the market closes with the following prices:
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_spot_prices
-(xt$id, spot_price, xt$valid_from)
+(_id, spot_price, _valid_from)
 VALUES
 ('XAU:CUR', 1805.50, TIMESTAMP '2024-03-08 17:00:00'),
 ('XAG:CUR', 25.35, TIMESTAMP '2024-03-08 17:00:00'),
@@ -48,7 +48,7 @@ VALUES
 ('W1:COM', 5.25, TIMESTAMP '2024-03-08 17:00:00')
 `} />
   <Query q={`
-SELECT xt$id, spot_price, xt$valid_from
+SELECT _id, spot_price, _valid_from
 FROM commodity_spot_prices
 `} />
 </Fiddle>
@@ -59,20 +59,20 @@ Let's extract the information we need to calculate our P&L:
 <Fiddle magicContext="my-context">
   <Query q={`
 SELECT
-    ct.xt$id as trade_id,
+    ct._id as trade_id,
     ct.symbol,
     ct.quantity,
     ct.price as trade_price,
     csp.spot_price,
-    ct.xt$valid_from as trade_timestamp,
+    ct._valid_from as trade_timestamp,
     ct.trader_name,
-    csp.xt$valid_from as spot_price_timestamp
+    csp._valid_from as spot_price_timestamp
 FROM
     commodity_trades ct
 INNER JOIN
     commodity_spot_prices csp
 ON
-    ct.symbol = csp.xt$id
+    ct.symbol = csp._id
 `} />
 </Fiddle>
 
@@ -88,7 +88,7 @@ FROM
 INNER JOIN
     commodity_spot_prices csp
 ON
-    ct.symbol = csp.xt$id
+    ct.symbol = csp._id
 `} />
   <OutputTraffic />
 </Fiddle>
@@ -100,15 +100,15 @@ On the Monday morning, after a pleasant weekend's break, you come back into the 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
-INSERT INTO commodity_trades (xt$id, symbol, quantity, price, xt$valid_from, trader_name)
+INSERT INTO commodity_trades (_id, symbol, quantity, price, _valid_from, trader_name)
 VALUES
 (6, 'XAU:CUR', 1000, 2590.40, TIMESTAMP '2024-03-11 10:00:00', 'John Doe'),
 (7, 'XAG:CUR', 30, 27.30, TIMESTAMP '2024-03-11 11:00:00', 'Jane Smith')
 `} />
   <Query q={`
-SELECT t.*, xt$valid_from
+SELECT t.*, _valid_from
 FROM commodity_trades as t
-ORDER BY xt$id
+ORDER BY _id
 `} />
 </Fiddle>
 
@@ -117,7 +117,7 @@ At the end of this Monday trading day, the market closes with the following pric
 <Fiddle magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
-INSERT INTO commodity_spot_prices (xt$id, spot_price, xt$valid_from)
+INSERT INTO commodity_spot_prices (_id, spot_price, _valid_from)
 VALUES
 ('XAU:CUR', 2010.50, TIMESTAMP '2024-03-11 17:00:00'),
 ('XAG:CUR', 25.25, TIMESTAMP '2024-03-11 17:00:00'),
@@ -126,7 +126,7 @@ VALUES
 ('W1:COM', 5.27, TIMESTAMP '2024-03-11 17:00:00')
 `} />
   <Query q={`
-SELECT xt$id, spot_price, xt$valid_from
+SELECT _id, spot_price, _valid_from
 FROM commodity_spot_prices
 `} />
 </Fiddle>
@@ -142,7 +142,7 @@ FROM
 INNER JOIN
     commodity_spot_prices csp
 ON
-    ct.symbol = csp.xt$id
+    ct.symbol = csp._id
 `} />
   <OutputTraffic />
 </Fiddle>
@@ -164,7 +164,7 @@ FROM
 INNER JOIN
     commodity_spot_prices FOR VALID_TIME AS OF {{pricesFrom}} csp
 ON
-    ct.symbol = csp.xt$id
+    ct.symbol = csp._id
 `} />
   <div class="flex flex-col">
     <div class="flex flex-row gap-2">

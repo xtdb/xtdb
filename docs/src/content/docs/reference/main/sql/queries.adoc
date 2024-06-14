@@ -64,11 +64,11 @@ Nested sub-queries allow you to easily create tree-shaped results, using `NEST_M
 --
 [source,sql]
 ----
-SELECT c.xt$id AS customer_id, c.name,
-       NEST_MANY(SELECT o.xt$id AS order_id, o.value
+SELECT c._id AS customer_id, c.name,
+       NEST_MANY(SELECT o._id AS order_id, o.value
                  FROM orders o
-                 WHERE o.customer_id = c.xt$id
-                 ORDER BY o.xt$id)
+                 WHERE o.customer_id = c._id
+                 ORDER BY o._id)
          AS orders
 FROM customers c"
 ----
@@ -96,12 +96,12 @@ FROM customers c"
 --
 [source,sql]
 ----
-SELECT o.xt$id AS order_id, o.value,
+SELECT o._id AS order_id, o.value,
        NEST_ONE(SELECT c.name FROM customers c
-                WHERE c.xt$id = o.customer_id)
+                WHERE c._id = o.customer_id)
          AS customer
 FROM orders o
-ORDER BY o.xt$id
+ORDER BY o._id
 ----
 
 =>
@@ -135,7 +135,7 @@ There is a table and column name mapping between SQL and XTQL: documents inserte
 
 For example, `:foo.bar/baz-quux` in XTQL is referenced in SQL as `foo$bar$baz_quux`.
 
-The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `xt$id`, `xt$valid_from` and `xt$valid_to` respectively.
+The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `_id`, `_valid_from` and `_valid_to` respectively.
 
 This mapping is reversed when querying SQL documents from XTQL.
 ====

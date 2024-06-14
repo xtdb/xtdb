@@ -31,14 +31,14 @@ class IXtdbJavaTest {
     @Test
     void javaApiTest() {
         node.submitTx(txOpts().systemTime(Instant.parse("2020-01-01T12:34:56.000Z")).build(),
-                sql("INSERT INTO docs (xt$id, foo) VALUES (1, 'bar')"));
+                sql("INSERT INTO docs (_id, foo) VALUES (1, 'bar')"));
 
-        try (var res = node.openQuery("SELECT xt$id, xt$system_from FROM docs")) {
+        try (var res = node.openQuery("SELECT _id, _system_from FROM docs")) {
 
             assertEquals(
                 List.of(Map.of(
-                    "xt$id", 1L,
-                    "xt$system_from", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
+                    "_id", 1L,
+                    "_system_from", ZonedDateTime.parse("2020-01-01T12:34:56Z[UTC]"))),
                 res.toList());
         }
     }

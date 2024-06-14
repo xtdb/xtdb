@@ -101,6 +101,7 @@ identifier
     : (REGULAR_IDENTIFIER
         | 'START' | 'END'
         | 'AGE'
+        | 'COMMITTED' | 'UNCOMMITTED'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier

@@ -186,7 +186,7 @@ data class QueryOptions(
         /**
          * Specifies the casing of object keys in the query results.
          *
-         * If not provided, will default to [IKeyFn.KeyFn.CAMEL_CASE_STRING] - e.g. `firstName`, `xt$id`, `xt$validTime`.
+         * If not provided, will default to [IKeyFn.KeyFn.CAMEL_CASE_STRING] - e.g. `firstName`, `_id`, `_validTime`.
          *
          * @see IKeyFn
          * @see IKeyFn.KeyFn

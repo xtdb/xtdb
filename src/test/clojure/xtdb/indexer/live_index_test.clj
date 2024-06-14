@@ -108,14 +108,14 @@
      {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3}]]
    [[:erase-docs :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
    ;; sql
-   [[:sql "INSERT INTO foo (xt$id, bar, toto) VALUES (1, 1, 'toto')"]
-    [:sql "UPDATE foo SET bar = 2 WHERE foo.xt$id = 1"]
+   [[:sql "INSERT INTO foo (_id, bar, toto) VALUES (1, 1, 'toto')"]
+    [:sql "UPDATE foo SET bar = 2 WHERE foo._id = 1"]
     [:sql "DELETE FROM foo WHERE foo.bar = 2"]
-    [:sql "INSERT INTO foo (xt$id, bar) VALUES (2, 2)"]]
+    [:sql "INSERT INTO foo (_id, bar) VALUES (2, 2)"]]
    ;; sql erase
-   [[:sql "ERASE FROM foo WHERE foo.xt$id = 2"]]
+   [[:sql "ERASE FROM foo WHERE foo._id = 2"]]
    ;; abort
-   [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]]])
+   [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]]])
 
 (t/deftest can-build-live-index
   (let [node-dir (util/->path "target/can-build-live-index")]

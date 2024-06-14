@@ -97,7 +97,7 @@
             (let [{:keys [gag_name gav_name]}
                   (first (xt/q sut
                                "SELECT gag.gag_name, gav.gav_name, gag.gag_c_id FROM gag, gav
-                                   WHERE gav.xt$id = ? AND gag.xt$id = ? AND gav.gav_gag_id = gag.xt$id"
+                                   WHERE gav._id = ? AND gag._id = ? AND gav.gav_gag_id = gag._id"
                                {:args [gav-id gag-id] , :key-fn :snake-case-keyword}))]
               (recur gag-ids gav-ids (into res [gag_name gav_name])))
             (str description " " (str/join " " res))))]
@@ -125,7 +125,7 @@
               :ii_i_id i_id
               :ii_u_id u_id
               :ii_path image}])
-          (when u_id [[:sql "UPDATE user SET u_balance = user.u_balance - 1 WHERE user.xt$id = ? "
+          (when u_id [[:sql "UPDATE user SET u_balance = user.u_balance - 1 WHERE user._id = ? "
                        [u_id]]]))
          (xt/submit-tx sut))))
 
@@ -151,12 +151,12 @@
   (let [{:keys [^UUID i_id u_id i_buyer_id bid max_bid ^UUID new_bid_id now]} (generate-new-bid-params worker)]
     (when (and i_id u_id)
       (let [{:keys [imb, imb_ib_id] :as _res}
-            (-> (xt/q sut "SELECT imb.xt$id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.xt$id = ?"
+            (-> (xt/q sut "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb._id = ?"
                       {:args [i_id], :key-fn :snake-case-keyword})
                 first)
             {:keys [curr_bid, curr_max]}
             (-> (xt/q sut "SELECT ib.ib_bid AS curr_bid, ib.ib_max_bid AS curr_max FROM item_bid AS ib
-                           WHERE ib.xt$id = ?"
+                           WHERE ib._id = ?"
                       {:args [imb_ib_id] :key-fn :snake-case-keyword})
                 first)
             new_bid_win (or (nil? imb_ib_id) (< curr_max max_bid))
@@ -166,12 +166,12 @@
         (xt/submit-tx sut
                       ;; increment number of bids on item
                       (cond->
-                          [[:sql "UPDATE item SET i_num_bids = item.i_num_bids + 1 WHERE item.xt$id = ?"
+                          [[:sql "UPDATE item SET i_num_bids = item.i_num_bids + 1 WHERE item._id = ?"
                             [i_id]]]
 
                         ;; if new bid exceeds old, bump it
                         upd_curr_bid
-                        (conj [[:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid.xt$id = ?"
+                        (conj [[:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid._id = ?"
                                 [bid imb]]])
 
                         ;; we exceed the old max, win the bid.
@@ -231,7 +231,7 @@
                                     :new_item_comment_id
                                     item-comment-id)]
     (conj-custom-state worker :item-comment-ids ic_id)
-    (xt/execute-tx sut [[:sql "INSERT INTO item_comment (xt$id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
+    (xt/execute-tx sut [[:sql "INSERT INTO item_comment (_id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
                                VALUES (?, ?, ?, ?, ?, ?, ?)"
                          [ic_id ic_id i_id seller_id buyer_id now question]]])))
 
@@ -240,12 +240,12 @@
   (let [ic_id (random-custom-state worker :item-comment-ids) #_(b/sample-flat worker item-comment-id)
         comment (b/random-str worker)
         ;; TODO should probably be moved to the sampling logic
-        {item_id :ic_i_id seller_id :ic_u_id} (first (xt/q sut "SELECT * FROM item_comment AS ic WHERE ic.xt$id = ?"
+        {item_id :ic_i_id seller_id :ic_u_id} (first (xt/q sut "SELECT * FROM item_comment AS ic WHERE ic._id = ?"
                                                            {:args [ic_id]
                                                             :key-fn :snake-case-keyword}))]
     (when ic_id
       (xt/execute-tx sut [[:sql "UPDATE item_comment AS ic SET ic_response = ?
-                               WHERE ic.xt$id = ? AND ic.ic_i_id = ? AND ic.ic_u_id = ?"
+                               WHERE ic._id = ? AND ic.ic_i_id = ? AND ic.ic_u_id = ?"
                            [comment ic_id item_id seller_id]]]))))
 
 (defn proc-new-purchase [{:keys [sut] :as worker}]
@@ -259,11 +259,11 @@
         now (b/current-timestamp worker)]
     ;; TODO properly test with imb
     (when (and i_id i_u_id #_ buyer_id)
-      (xt/submit-tx sut [[:sql "INSERT INTO item_purchase (xt$id, ip_id, ip_ib_id, ip_ib_i_id, ip_ib_u_id, ip_date)
+      (xt/submit-tx sut [[:sql "INSERT INTO item_purchase (_id, ip_id, ip_ib_id, ip_ib_i_id, ip_ib_u_id, ip_date)
                                 VALUES(?, ?, ?, ?, ?, ?)"
                           [ip_id ip_id bid_id i_id i_u_id now]]
                          [:sql "UPDATE item SET i_status = ?
-                                WHERE item.xt$id = ?"
+                                WHERE item._id = ?"
                           [:closed i_id]]]))))
 
 (defn proc-new-feedback [{:keys [sut] :as worker}]
@@ -279,7 +279,7 @@
         now (b/current-timestamp worker)]
     ;; TODO properly test with imb
     (when (and i_id i_u_id #_buyer_id)
-      (xt/submit-tx sut [[:sql "INSERT INTO item_feedback (xt$id, if_id, if_i_id, if_u_id, if_buyer_id, if_rating, if_date, if_comment)
+      (xt/submit-tx sut [[:sql "INSERT INTO item_feedback (_id, if_id, if_i_id, if_u_id, if_buyer_id, if_rating, if_date, if_comment)
                                 VALUES(?, ?, ?, ?, ?, ?, ?, ?)"
                           [if_id if_id i_id i_u_id buyer_id rating now comment]]]))))
 
@@ -291,7 +291,7 @@
         {:keys [i_id]} (random-item worker :status :open)]
     (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price, item.i_num_bids,
                       item.i_end_date, item.i_status
-               FROM item WHERE item.xt$id = ?"
+               FROM item WHERE item._id = ?"
           {:args [i_id] :key-fn :snake-case-keyword})))
 
 ;; TODO aborted transactions
@@ -300,7 +300,7 @@
         description (b/random-str worker)]
     (xt/submit-tx sut [[:sql "UPDATE item
                               SET i_description = ?
-                              WHERE item.xt$id = ?"
+                              WHERE item._id = ?"
                         [description i_id]]])))
 
 (defrecord UserItem [item_id user_id item_status max_bid_id buyer_id])
@@ -311,13 +311,13 @@
     (xt/submit-tx sut
                   (cond-> []
                     (seq items-without-bid)
-                    (conj (into [:sql "UPDATE item SET i_status = ? WHERE item.xt$id = ?"]
+                    (conj (into [:sql "UPDATE item SET i_status = ? WHERE item._id = ?"]
                                 (map #(vector :closed (:item_id %)) items-without-bid)))
 
                     (seq items-with-bid)
-                    (into [(into [:sql "UPDATE item SET i_status = ? WHERE item.xt$id = ?"]
+                    (into [(into [:sql "UPDATE item SET i_status = ? WHERE item._id = ?"]
                                  (map #(vector :waiting-for-purchase (:item_id %)) items-with-bid))
-                           (into [:sql "INSERT INTO user_item(xt$id, ui_u_id, ui_i_id, ui_i_u_id, ui_created)
+                           (into [:sql "INSERT INTO user_item(_id, ui_u_id, ui_i_id, ui_i_u_id, ui_created)
                                         VALUES(?, ?, ?, ?, ?)"]
                                  (map (fn [{:keys [buyer_id item_id ^UUID user_id]}]
                                         [(UUID. (.getMostSignificantBits user_id) (b/increment worker user-item-id))
@@ -339,7 +339,7 @@
                                 (first (xt/q sut "SELECT imb.imb_ib_id AS max_bid_id, ib.ib_buyer_id AS buyer_id
                                            FROM item_max_bid AS imb, item_bid AS ib
                                            WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?
-                                           AND ib.xt$id = imb.imb_ib_id AND ib.ib_i_id = imb.imb_i_id AND ib.ib_u_id = imb.imb_u_id"
+                                           AND ib._id = imb.imb_ib_id AND ib.ib_i_id = imb.imb_i_id AND ib.ib_u_id = imb.imb_u_id"
                                              {:args [item_id user_id]
                                               :key-fn :snake-case-keyword}))]
                          (assoc due-item :max_bid_id max_bid_id :buyer_id buyer_id)
@@ -355,7 +355,7 @@
 (defn get-user-info [sut u_id seller-items? buyer-items? feedback?]
   (let [user-results (xt/q sut "SELECT user.u_id, user.u_rating, user.u_created, user.u_balance, user.u_sattr0,
                                        user.u_sattr1, user.u_sattr2, user.u_sattr3, user.u_sattr4, region.r_name FROM user, region
-                                WHERE user.xt$id = ? AND user.u_r_id = region.xt$id"
+                                WHERE user._id = ? AND user.u_r_id = region._id"
                            {:args [u_id] :key-fn :snake-case-keyword})
         item-results nil #_(cond seller-items?
                                  (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
@@ -369,7 +369,7 @@
                                  (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM user_item AS ui, item
-                                      WHERE ui.ui_u_id = ? AND ui.ui_i_id = item.xt$id AND ui.ui_i_u_id = item.i_u_id
+                                      WHERE ui.ui_u_id = ? AND ui.ui_i_id = item._id AND ui.ui_i_u_id = item.i_u_id
                                       ORDER BY item.i_end_date DESC
                                       LIMIT 20"
                                        {:args [u_id] :key-fn :snake-case-keyword}))
@@ -378,8 +378,8 @@
                                              item.i_name, item.i_end_date, item.i_status, user.u_id,
                                              user.u_rating, user.u_sattr0, user.u_sattr1
                                       FROM item_feedback AS if, item, user
-                                      WHERE if.if_buyer_id = ? AND if.if_i_id = item.xt$id
-                                      AND if.if_u_id = item.i_u_id AND if.if_u_id = user.xt$id
+                                      WHERE if.if_buyer_id = ? AND if.if_i_id = item._id
+                                      AND if.if_u_id = item.i_u_id AND if.if_u_id = user._id
                                       ORDER BY if.if_date DESC
                                       LIMIT 10"
                                        {:args [u_id] :key-fn :snake-case-keyword}))]

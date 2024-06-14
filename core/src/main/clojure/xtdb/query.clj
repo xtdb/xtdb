@@ -97,7 +97,7 @@
 (defn open-args [^BufferAllocator allocator, args]
   (vw/open-params allocator
                   (->> args
-                       (into {} (map-indexed (fn [idx v ]
+                       (into {} (map-indexed (fn [idx v]
                                                (if (map-entry? v)
                                                  (MapEntry/create (param-sym (str (symbol (key v)))) (val v))
                                                  (MapEntry/create (symbol (str "?_" idx)) v))))))))
@@ -126,9 +126,9 @@
 
        (reify PreparedQuery
          (bind [_ {:keys [args params basis default-tz default-all-valid-time?]}]
-
            (util/with-close-on-catch [args (open-args allocator args)]
              ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
+
              (let [params (or params args)
                    {:keys [current-time]} basis
                    current-time (or current-time (.instant expr/*clock*))

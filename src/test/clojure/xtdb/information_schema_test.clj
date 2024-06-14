@@ -18,19 +18,19 @@
               :column-name "col1",
               :data-type "[:union #{:utf8 :i64}]"}
              {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "xt$txs",
-              :column-name "xt$tx_time",
+              :table-schema "xt",
+              :table-name "txs",
+              :column-name "tx_time",
               :data-type "[:timestamp-tz :micro \"UTC\"]"}
              {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "xt$txs",
-              :column-name "xt$id",
+              :table-schema "xt",
+              :table-name "txs",
+              :column-name "_id",
               :data-type ":i64"}
              {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "beanie",
-              :column-name "xt$id",
+              :column-name "_id",
               :data-type ":keyword"}
              {:table-catalog "xtdb",
               :table-schema "public",
@@ -38,9 +38,9 @@
               :column-name "col2",
               :data-type ":i64"}
              {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "xt$txs",
-              :column-name "xt$error",
+              :table-schema "xt",
+              :table-name "txs",
+              :column-name "error",
               :data-type "[:union #{:null :transit}]"}
              {:table-catalog "xtdb",
               :table-schema "public",
@@ -50,12 +50,12 @@
              {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "baseball",
-              :column-name "xt$id",
+              :column-name "_id",
               :data-type ":keyword"}
              {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "xt$txs",
-              :column-name "xt$committed?",
+              :table-schema "xt",
+              :table-name "txs",
+              :column-name "committed",
               :data-type ":bool"}}
            (set (tu/query-ra '[:scan
                                {:table information_schema/columns}
@@ -70,8 +70,8 @@
               :table-name "beanie",
               :table-type "BASE TABLE"}
              {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "xt$txs",
+              :table-schema "xt",
+              :table-name "txs",
               :table-type "BASE TABLE"}
              {:table-catalog "xtdb",
               :table-schema "public",
@@ -84,15 +84,15 @@
   (xt/submit-tx tu/*node* test-data)
 
   (t/is (=
-         #{{:attrelid 159967295, :atttypid 114, :attname "col2", :attlen -1}
-           {:attrelid 93927094, :atttypid 114, :attname "xt$id", :attlen -1}
-           {:attrelid 499408916, :atttypid 114, :attname "xt$id", :attlen -1}
-           {:attrelid 159967295, :atttypid 114, :attname "xt$id", :attlen -1}
-           {:attrelid 93927094, :atttypid 114, :attname "xt$tx_time", :attlen -1}
-           {:attrelid 93927094, :atttypid 114, :attname "xt$committed?", :attlen -1}
-           {:attrelid 159967295, :atttypid 114, :attname "col1", :attlen -1}
-           {:attrelid 93927094, :atttypid 114, :attname "xt$error", :attlen -1}
-           {:attrelid 499408916, :atttypid 114, :attname "col1", :attlen -1}}
+         #{{:attrelid 732573471, :atttypid 114, :attname "col2", :attlen -1}
+           {:attrelid -598393539, :atttypid 114, :attname "_id", :attlen -1}
+           {:attrelid 127091884, :atttypid 114, :attname "_id", :attlen -1}
+           {:attrelid 732573471, :atttypid 114, :attname "_id", :attlen -1}
+           {:attrelid -598393539, :atttypid 114, :attname "tx_time", :attlen -1}
+           {:attrelid -598393539, :atttypid 114, :attname "committed", :attlen -1}
+           {:attrelid 732573471, :atttypid 114, :attname "col1", :attlen -1}
+           {:attrelid -598393539, :atttypid 114, :attname "error", :attlen -1}
+           {:attrelid 127091884, :atttypid 114, :attname "col1", :attlen -1}}
            (set (tu/query-ra '[:scan
                                {:table pg_catalog/pg_attribute}
                                [attrelid attname atttypid attlen]]
@@ -101,9 +101,9 @@
 (deftest test-pg-tables
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= #{{:schemaname "public",
+  (t/is (= #{{:schemaname "xt",
               :tableowner "xtdb",
-              :tablename "xt$txs"}
+              :tablename "txs"}
              {:schemaname "public",
               :tableowner "xtdb",
               :tablename "baseball"}
@@ -134,19 +134,19 @@
                            [:put-docs :beanie {:xt/id :bar, :col1 123}]
                            [:put-docs :baseball {:xt/id :baz, :col1 123 :col2 456}]])
 
-  (t/is (= [{:column-name "xt$id"}]
+  (t/is (= [{:column-name "_id"}]
            (xt/q tu/*node*
                  "SELECT information_schema.columns.column_name FROM information_schema.columns LIMIT 1")))
 
-  (t/is (= #{{:attrelid 159967295, :attname "col2"}
-             {:attrelid 159967295, :attname "xt$id"}}
+  (t/is (= #{{:attrelid 732573471, :attname "col2"}
+             {:attrelid 732573471, :attname "_id"}}
            (set
             (xt/q tu/*node*
                   "SELECT pg_attribute.attname, pg_attribute.attrelid FROM pg_attribute LIMIT 2"))))
 
   (t/is (= [{:table-name "baseball",
              :data-type ":keyword",
-             :column-name "xt$id",
+             :column-name "_id",
              :table-catalog "xtdb",
              :table-schema "public"}]
            (xt/q tu/*node*
@@ -158,7 +158,7 @@
                            [:put-docs :baseball {:xt/id :baz, :col1 123 :col2 456}]])
 
   (t/is (=
-         #{{:table-name "xt$txs", :table-schema "public"}
+         #{{:table-name "txs", :table-schema "xt"}
            {:table-name "beanie", :table-schema "public"}
            {:table-name "baseball", :table-schema "public"}}
          (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name table_schema]]
@@ -185,7 +185,7 @@
    (=
     #{{:table-name "baseball"}
       {:table-name "beanie"}
-      {:table-name "xt$txs"}}
+      {:table-name "txs"}}
     (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name unknown_col]]
                       {:node tu/*node*})))
    "cols that don't exist don't error/projected as nulls/absents"))

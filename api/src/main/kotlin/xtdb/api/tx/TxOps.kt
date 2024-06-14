@@ -3,8 +3,9 @@
 package xtdb.api.tx
 
 import clojure.lang.Keyword
-import kotlinx.serialization.*
-import kotlinx.serialization.json.*
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
 import xtdb.AnySerde
 import xtdb.IllegalArgumentException
 import xtdb.InstantSerde
@@ -12,7 +13,6 @@ import xtdb.api.query.Binding
 import xtdb.api.query.TemporalFilter.TemporalExtents
 import xtdb.api.query.XtqlQuery
 import xtdb.api.query.XtqlQuery.UnifyClause
-import xtdb.jsonIAE
 import xtdb.types.ClojureForm
 import xtdb.util.normalForm
 import java.nio.ByteBuffer
@@ -20,7 +20,7 @@ import java.time.Instant
 
 private const val XT_TXS = "xt/tx_fns"
 private const val XT_ID = "xt/id"
-private const val XT_FN = "xt/fn"
+private const val FN = "fn"
 
 sealed interface TxOp {
     data class PutDocs(
@@ -144,7 +144,7 @@ object TxOps {
     fun putDocs(tableName: String, vararg docs: Map<String, *>) = putDocs(tableName, docs.toList())
 
     @JvmStatic
-    fun putFn(fnId: Any, fnForm: Any) = putDocs(XT_TXS, listOf(mapOf(XT_ID to fnId, XT_FN to ClojureForm(fnForm))))
+    fun putFn(fnId: Any, fnForm: Any) = putDocs(XT_TXS, listOf(mapOf(XT_ID to fnId, FN to ClojureForm(fnForm))))
 
     @JvmStatic
     fun deleteDocs(tableName: String, docIds: List<*>) = TxOp.DeleteDocs(tableName, docIds)

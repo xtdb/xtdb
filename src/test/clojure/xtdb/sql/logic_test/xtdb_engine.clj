@@ -10,6 +10,7 @@
   (:import [java.time Instant]
            (org.antlr.v4.runtime ParserRuleContext)
            (xtdb.antlr SqlVisitor SqlVisitor)
+           xtdb.api.query.IKeyFn
            xtdb.node.impl.Node))
 
 (defn- create-table [node {:keys [table-name columns]}]
@@ -44,8 +45,8 @@
 (defn- execute-sql-query [node sql-statement variables {:keys [direct-sql] :as opts}]
   (let [!cache (atom {})
         plan-stmt plan/plan-statement]
-    ;; we remove xt$id from non-direct SLT queries because `SELECT *` doesn't expect it to be there
 
+    ;; we remove xt$id from non-direct SLT queries because `SELECT *` doesn't expect it to be there
     (with-redefs [plan/plan-statement (fn self
                                         ([sql] (self sql {}))
                                         ([sql opts]
@@ -63,7 +64,7 @@
             ;; TODO hoping that there'll be a better means of getting hold of this soon
             projection (->> (:col-syms (or (get @!cache sql-statement)
                                            (plan/plan-statement sql-statement {:table-info (node->table-info node)})))
-                            (mapv str))]
+                            (mapv (comp #(.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) %) str)))]
         (vec
          (for [row res]
            (mapv row projection)))))))

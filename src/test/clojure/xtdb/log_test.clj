@@ -95,16 +95,16 @@
 
 (t/deftest can-write-sql-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-sql.json")
-                         [[:sql "INSERT INTO foo (xt$id) VALUES (0)"]
+                         [[:sql "INSERT INTO foo (_id) VALUES (0)"]
 
-                          [:sql "INSERT INTO foo (xt$id, foo, bar) VALUES (?, ?, ?)"
+                          [:sql "INSERT INTO foo (_id, foo, bar) VALUES (?, ?, ?)"
                            [1 nil 3.3]
                            [2 "hello" 12]]
 
-                          [:sql "UPDATE foo FOR PORTION OF VALID_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt$id = ?"
+                          [:sql "UPDATE foo FOR PORTION OF VALID_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE _id = ?"
                            [1]]
 
-                          [:sql "DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt$id = ?"
+                          [:sql "DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE _id = ?"
                            [1]]]))
 
 (t/deftest can-write-xtql

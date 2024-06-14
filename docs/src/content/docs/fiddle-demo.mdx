@@ -14,16 +14,16 @@ Allows you to embed a miniature instance of [xt-fiddle](https://fiddle.xtdb.com)
 You can add a `Fiddle` to the page with pre-set transactions & query like so:
 
 <Fiddle>
-  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs" />
 </Fiddle>
 
 If you want to preserve whitespace you can do this:
 
 <Fiddle>
-  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q={
-`SELECT xt$id, foo
+`SELECT _id, foo
   FROM docs
 -- You can also put comments :)`}
 />
@@ -35,7 +35,7 @@ Sometimes you just want to show of the query, you can hide the transactions like
 
 <Fiddle>
   <Txs hidden={true}
-       txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+       txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs" />
 </Fiddle>
 
@@ -43,7 +43,7 @@ Sometimes you just want to show of the query, you can hide the transactions like
 You can do the same with the query of course:
 
 <Fiddle>
-  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query hidden={true} q="SELECT * FROM docs"/>
 </Fiddle>
 
@@ -52,7 +52,7 @@ You can do the same with the query of course:
 You can tell Fiddle to load it's results on page load by using the `autoLoad` property:
 
 <Fiddle autoLoad>
-  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs"/>
 </Fiddle>
 
@@ -63,7 +63,7 @@ This is particularly useful for [Templated Queries](#templated-queries) as we'll
 If you have an error in the transactions/query it looks like this:
 
 <Fiddle autoLoad>
-  <Txs txs="INSERT INTO docs (xt$id, foo) VALUES (1, 'one');" />
+  <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FOM docs" />
 </Fiddle>
 
@@ -73,8 +73,8 @@ You can set system time on a transaction like so:
 
 <Fiddle>
   <Txs systemTime="2020-01-01"
-       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one');" />
-  <Query q="SELECT * FROM xt$txs" />
+       txs="INSERT INTO docs (_id, name) VALUES (1, 'one');" />
+  <Query q="SELECT * FROM xt.txs" />
 </Fiddle>
 
 ## Multiple Transactions
@@ -84,13 +84,13 @@ Particularly for showing of valid time & system time:
 
 <Fiddle>
   <Txs systemTime="2020-01-01"
-       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one');" />
+       txs="INSERT INTO docs (_id, name) VALUES (1, 'one');" />
   <Txs systemTime="2020-01-02"
-       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'two');" />
+       txs="INSERT INTO docs (_id, name) VALUES (1, 'two');" />
   <Query q={
-`SELECT xt$id, name, xt$system_from
+`SELECT _id, name, _system_from
   FROM docs FOR ALL VALID_TIME
-  ORDER BY xt$id, xt$system_from`} />
+  ORDER BY _id, _system_from`} />
 </Fiddle>
 
 ## Lone Transaction
@@ -99,7 +99,7 @@ If you have a transaction on it's own then it won't be rendered with an editor:
 
 <Fiddle>
   <Txs txs="INSERT INTO docs
-            (xt$id, name)
+            (_id, name)
             VALUES
             (1, 'one');" />
 </Fiddle>
@@ -119,7 +119,7 @@ For example:
 
 <Fiddle magicContext="my-context">
   <Txs systemTime="2020-01-01"
-       txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one');" />
+       txs="INSERT INTO docs (_id, name) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs" />
 </Fiddle>
 
@@ -128,12 +128,12 @@ Note that it we only have docs from this fiddle.
 <Fiddle magicContext="my-context">
   <Txs systemTime="2020-01-02"
        txs="
-    INSERT INTO docs (xt$id, name) VALUES (1, 'two');
-    INSERT INTO docs (xt$id, name) VALUES (2, 'three');" />
+    INSERT INTO docs (_id, name) VALUES (1, 'two');
+    INSERT INTO docs (_id, name) VALUES (2, 'three');" />
   <Query q={
-`SELECT xt$id, name, xt$system_from
+`SELECT _id, name, _system_from
   FROM docs FOR ALL VALID_TIME
-  ORDER BY xt$id, xt$system_from`} />
+  ORDER BY _id, _system_from`} />
 </Fiddle>
 
 Note that now we have the transactions from the previous fiddle :)
@@ -143,12 +143,12 @@ This fiddle uses a different context id, so it will not use the context of previ
 <Fiddle magicContext="different-context">
   <Txs systemTime="2020-01-02"
        txs="
-    INSERT INTO docs (xt$id, name) VALUES (1, 'two');
-    INSERT INTO docs (xt$id, name) VALUES (2, 'three');" />
+    INSERT INTO docs (_id, name) VALUES (1, 'two');
+    INSERT INTO docs (_id, name) VALUES (2, 'three');" />
   <Query q={
-`SELECT xt$id, name, xt$system_from
+`SELECT _id, name, _system_from
   FROM docs FOR ALL VALID_TIME
-  ORDER BY xt$id, xt$system_from`} />
+  ORDER BY _id, _system_from`} />
 </Fiddle>
 
 
@@ -161,7 +161,7 @@ import Range from "@components/fiddle/range.astro"
 
 <Fiddle autoLoad magicContext="orders">
   <Txs txs="INSERT INTO orders
-            (xt$id, name, count, xt$valid_from)
+            (_id, name, count, _valid_from)
             VALUES
             (1, 'Bike',        4, DATE '2024-01-01'),
             (2, 'Ice Cream',   3, DATE '2024-01-02'),
@@ -210,14 +210,14 @@ You can override this by adding your own:
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <Range name="count" min={0} max={6} step={2} value={0} />
   <OutputVega spec={{
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
     data: { name: "table" },
     mark: "bar",
     encoding: {
-      x: { field: 'xt$id', type: 'ordinal' },
+      x: { field: '_id', type: 'ordinal' },
       y: { field: 'count', type: 'quantitative' }
     }
   }} />
@@ -229,7 +229,7 @@ You can also have multiple if you want:
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <Range name="count" min={0} max={6} step={2} value={0} />
   <div class="grid grid-cols-2 gap-1">
     <OutputVega spec={{
@@ -237,7 +237,7 @@ You can also have multiple if you want:
       data: { name: "table" },
       mark: "bar",
       encoding: {
-        x: { field: 'xt$id', type: 'ordinal' },
+        x: { field: '_id', type: 'ordinal' },
         y: { field: 'count', type: 'quantitative' }
       }
     }} />
@@ -252,9 +252,9 @@ See [Available Outputs](#available-outputs) for a showcase.
 Please note that the fiddle expects **exactly one** query:
 
 <Fiddle>
-  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one')" />
+  <Txs txs="INSERT INTO docs (_id, name) VALUES (1, 'one')" />
   <Query q="SELECT * FROM docs" />
-  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (2, 'two')" />
+  <Txs txs="INSERT INTO docs (_id, name) VALUES (2, 'two')" />
   <Query q="this won't be run" />
 </Fiddle>
 
@@ -262,7 +262,7 @@ The query is always run last:
 
 <Fiddle>
   <Query q="SELECT * FROM docs" />
-  <Txs txs="INSERT INTO docs (xt$id, name) VALUES (1, 'one')" />
+  <Txs txs="INSERT INTO docs (_id, name) VALUES (1, 'one')" />
 </Fiddle>
 
 ## Styling Tips
@@ -314,7 +314,7 @@ import Checkbox from "@components/fiddle/checkbox.astro"
                     {{#useWhere}}
                     WHERE count < 3
                     {{/useWhere}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <Checkbox name="useWhere" checked />
 </Fiddle>
 
@@ -327,7 +327,7 @@ Can be a float or integer.
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <Range name="count" min={0} max={6} step={2} />
 </Fiddle>
 
@@ -340,18 +340,18 @@ A customised range input specifically for outputting dates with two varieties:
 You can provide a `start`, `stop` and `step` amount to have a full range of dates:
 
 <Fiddle autoLoad magicContext="orders">
-  <QueryTemplate q="SELECT xt$id, count, name, xt$valid_from
+  <QueryTemplate q="SELECT _id, count, name, _valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <DateRange name="validTime" start="2024-01-01" stop="2024-01-05" step="1 day" value="2024-01-04" />
 </Fiddle>
 
 Or you can provide an array of dates:
 
 <Fiddle autoLoad magicContext="orders">
-  <QueryTemplate q="SELECT xt$id, count, name, xt$valid_from
+  <QueryTemplate q="SELECT _id, count, name, _valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <DateRange name="validTime" dates={["2024-01-01","2024-01-02","2024-01-05"]} value="2024-01-05" />
 </Fiddle>
 
@@ -363,7 +363,7 @@ A textbox element that allows the user to type in whatever they like:
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE name LIKE '%{{name}}%'
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <Text name="name" value="Toy" />
 </Fiddle>
 
@@ -380,7 +380,7 @@ The same table used in the Fiddle. Added by default if no output is provided.
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <Range name="count" min={0} max={6} step={2} />
   <OutputTable />
 </Fiddle>
@@ -397,14 +397,14 @@ Data is provided through a dataset named `table`.
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
-                    ORDER BY xt$id" />
+                    ORDER BY _id" />
   <Range name="count" min={0} max={6} step={2} value={0} />
   <OutputVega spec={{
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
     data: { name: "table" },
     mark: "bar",
     encoding: {
-      x: { field: 'xt$id', type: 'ordinal' },
+      x: { field: '_id', type: 'ordinal' },
       y: { field: 'count', type: 'quantitative' }
     }
   }} />
@@ -416,7 +416,7 @@ TODO: Put this somewhere?
 
 <Fiddle autoLoad>
   <Txs hidden txs={`
-INSERT INTO customer (xt$id, address, preference, xt$valid_from, xt$valid_to)
+INSERT INTO customer (_id, address, preference, _valid_from, _valid_to)
 VALUES
 -- Customer 1
 (1, 'address 1', 'preference 1', DATE '2024-01-01', DATE '2024-01-05'),
@@ -447,13 +447,13 @@ VALUES
     </div>
   </div>
   <QueryTemplate q={`
-SELECT CAST(customer.xt$id AS INTEGER) AS id,
+SELECT CAST(customer._id AS INTEGER) AS id,
    customer.address,
    customer.preference,
-   customer.xt$valid_from AS valid_from,
-   customer.xt$valid_to AS valid_to
+   customer._valid_from AS valid_from,
+   customer._valid_to AS valid_to
 FROM customer FOR VALID_TIME FROM {{from}} TO {{to}}
-ORDER BY CAST (customer.xt$id AS INTEGER), customer.xt$valid_from`} />
+ORDER BY CAST (customer._id AS INTEGER), customer._valid_from`} />
 
   <OutputVega spec={{
     data: { name: "table" },

@@ -25,11 +25,12 @@
            (xtdb.antlr SqlVisitor)
            [xtdb.api PgwireServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
+           xtdb.api.query.IKeyFn
            xtdb.IResultCursor
            xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
-           [xtdb.vector RelationReader]))
+           [xtdb.vector IVectorReader RelationReader]))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -1237,7 +1238,8 @@
 (defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
                              {:keys [query, ^IResultCursor result-cursor fields]}]
 
-  (let [projection (mapv ffirst fields)
+  (let [projection (doto (mapv ffirst fields)
+                     prn)
         json-bytes (comp utf8 json/json-str json-clj)
 
         ;; this query has been cancelled!
@@ -1267,10 +1269,16 @@
 
            :else
            (try
-             (dotimes [idx (.rowCount ^RelationReader rel)]
-               (let [row (mapv (fn [col-name] (.getObject (.readerForName ^RelationReader rel (str col-name)) idx)) projection)]
-                 (cmd-write-msg conn msg-data-row {:vals (mapv json-bytes row)})
-                 (vswap! n-rows-out inc)))
+             (let [^RelationReader rel rel
+                   rdrs (mapv (fn [col-name]
+                                (.readerForName rel (str col-name)))
+                              projection)]
+               (dotimes [idx (.rowCount ^RelationReader rel)]
+                 (let [row (mapv (fn [^IVectorReader rdr]
+                                   (.getObject rdr idx))
+                                 rdrs)]
+                   (cmd-write-msg conn msg-data-row {:vals (mapv json-bytes row)})
+                   (vswap! n-rows-out inc))))
 
              ;; allow interrupts - this can happen if we are blocking during the row reduce and our conn is forced to close.
              (catch InterruptedException e
@@ -1397,7 +1405,8 @@
         (fn [col]
           (if (map? col)
             (merge defaults col)
-            (assoc defaults :column-name (str col))))
+            (assoc defaults :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string)
+                                                       (str col)))))
         data {:columns (mapv apply-defaults cols)}]
     (cmd-write-msg conn msg-row-description data)))
 

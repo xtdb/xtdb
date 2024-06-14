@@ -14,16 +14,16 @@ In this part, we will understand how to update past data, but we will also learn
 First, let's insert three versions of the same product into different points in the past with three different prices:
 
 <Fiddle magicContext="my-context">
-  <Txs txs="INSERT INTO product (xt$id, name, price, xt$valid_from)
+  <Txs txs="INSERT INTO product (_id, name, price, _valid_from)
             VALUES
             (1, 'Pendleton Electric Bicycle', 300, TIMESTAMP '2022-01-01 00:00:00')" />
-  <Txs txs="INSERT INTO product (xt$id, name, price, xt$valid_from)
+  <Txs txs="INSERT INTO product (_id, name, price, _valid_from)
             VALUES
             (1, 'Pendleton Electric Bicycle', 400, TIMESTAMP '2023-01-01 00:00:00')" />
-  <Txs txs="INSERT INTO product (xt$id, name, price, xt$valid_from)
+  <Txs txs="INSERT INTO product (_id, name, price, _valid_from)
             VALUES
             (1, 'Pendleton Electric Bicycle', 500, TIMESTAMP '2024-01-01 00:00:00')" />
-  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$tx_time" />
+  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time" />
 </Fiddle>
 
 Let's prove to ourselves that querying at various points in the past, gives us the correct data:
@@ -46,12 +46,12 @@ Let's correct the price for **2023**:
 
 <Fiddle magicContext="my-context">
   <Txs txs={
-`INSERT INTO product (xt$id, name, price, xt$valid_from, xt$valid_to)
+`INSERT INTO product (_id, name, price, _valid_from, _valid_to)
 VALUES
 (1, 'Pendleton Electric Bicycle', 350,
  TIMESTAMP '2023-01-01 00:00:00',
  TIMESTAMP '2024-01-01 00:00:00')`} />
-  <Query hidden={true} q="SELECT * FROM xt$txs ORDER BY xt$tx_time DESC LIMIT 1" />
+  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
 </Fiddle>
 
 Now when we query in **2023**, we get the updated price back:
@@ -76,10 +76,10 @@ For example, querying against SYSTEM_TIME, we should see the original, unmutated
 
 <Fiddle magicContext="my-context">
   <Query q="SELECT product.*,
-            xt$system_from,
-            xt$system_to,
-            xt$valid_from,
-            xt$valid_to
+            _system_from,
+            _system_to,
+            _valid_from,
+            _valid_to
             FROM product FOR ALL SYSTEM_TIME FOR ALL VALID_TIME" />
 </Fiddle>
 

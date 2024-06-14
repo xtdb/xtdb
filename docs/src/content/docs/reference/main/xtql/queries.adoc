@@ -399,10 +399,10 @@ Because this query uses the `customer-id` logic variable twice, we add a constra
 
 [source,sql]
 ----
-SELECT c.xt$id AS customer_id, customer_name,
-       o.xt$id AS order_id, o.order_value
+SELECT c._id AS customer_id, customer_name,
+       o._id AS order_id, o.order_value
 FROM customers c
-  JOIN orders o ON (c.xt$id = o.customer_id)
+  JOIN orders o ON (c._id = o.customer_id)
 ----
 
 * In link:#_rel[rel] and link:#_from[from] clauses any logic variables specified in its binding specs are unified.

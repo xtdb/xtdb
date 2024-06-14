@@ -8,28 +8,28 @@ In XTDB all data, including nested data, is able to be stored in tables without 
 
 Additionally XTDB allows for INSERTs into tables that don't exist until the moment you insert into them.
 
-The only hard requirement in XTDB is that all INSERTs to any table must specify a value for the `xt$id` column. This is a mandatory, user-provided primary key that is unique per table (i.e. the same `xt$id` can be safely used in isolation across multiple tables).
+The only hard requirement in XTDB is that all INSERTs to any table must specify a value for the `_id` column. This is a mandatory, user-provided primary key that is unique per table (i.e. the same `_id` can be safely used in isolation across multiple tables).
 
 For details about the exact range of supported data types, see link:/reference/main/data-types[XTDB Data Types].
 
 == Temporal columns
 
-In addition to `xt$id`, which is the only mandatory column, 2 pairs of system-maintained temporal columns exist which track *system time* and *valid time* periods respectively:
+In addition to `_id`, which is the only mandatory column, 2 pairs of system-maintained temporal columns exist which track *system time* and *valid time* periods respectively:
 
 [cols="1,1"]
 |===
 |SQL Column Name |XTDB Type
 
-|`xt$system_from`
+|`_system_from`
 | TIMESTAMP WITH TIMEZONE
 
-|`xt$system_to`
+|`_system_to`
 | TIMESTAMP WITH TIMEZONE
 
-|`xt$valid_from`
+|`_valid_from`
 | TIMESTAMP WITH TIMEZONE
 
-|`xt$valid_to`
+|`_valid_to`
 | TIMESTAMP WITH TIMEZONE
 
 |===
@@ -37,7 +37,7 @@ In addition to `xt$id`, which is the only mandatory column, 2 pairs of system-ma
 As implied by the nature of these columns, no rows written into XTDB are ever mutated directly, and only new rows can be inserted. The only exceptions to this principle are:
 
 . the existence of the `ERASE` operation, which can permanently delete entire rows for explicit data retention policies, and,
-. the need to 'close' the `xt$system_to` period for the now-superseded row
+. the need to 'close' the `_system_to` period for the now-superseded row
 
 == How temporal columns are maintained
 
@@ -45,7 +45,7 @@ XTDB tracks both the *system time* when data is inserted (or `UPDATE`-d) into th
 
 The *system time* columns are useful for audit purposes for providing a stable, immutable 'basis' for running repeatable queries (i.e. queries that return the same answer today as they did last week). These columns cannot be modified. The timestamp used is governed by XTDB's single-writer Write-Ahead Log component which is used for serial transaction processing.
 
-The *valid time* columns can be updated and modified at will, but only for _new_ versions of a given record (i.e. a new row sharing the same `xt$id` in the same table).
+The *valid time* columns can be updated and modified at will, but only for _new_ versions of a given record (i.e. a new row sharing the same `_id` in the same table).
 
 *Valid time* is useful for scenarios where it is crucial to be able offer time-travel queries whilst supporting link:https://tidyfirst.substack.com/p/eventual-business-consistency[out of order] arrival of information, and including *corrections* to past data while maintaining a general sense of *immutability*.
 

@@ -289,7 +289,7 @@ def markdownSimpleTable(data):
     tableString = "\n".join(rows)
     return tableString
 
-def prepare_for_tabulate(data, special_key='xt$id'):
+def prepare_for_tabulate(data, special_key='_id'):
     # return data
     if any(special_key in row for row in data):
         sorted_keys = sorted({key for row in data for key in row if key != special_key})
@@ -422,9 +422,8 @@ class XtdbConsole(cmd.Cmd):
         print2('import_system_time cleared')
         
     def do_recent_transactions(self, arg):
-        'Show the 10 most recent transactions by running `SELECT * FROM xt$txs ORDER BY xt$txs.xt$id DESC LIMIT 20;`'
-        result = Xtdb(self.url, self.accept,
-                           self.txtimeout).sql_query('SELECT * FROM xt$txs ORDER BY xt$txs.xt$id DESC LIMIT 20;')
+        'Show the 10 most recent transactions by running `SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20;`'
+        result = Xtdb(self.url, self.accept, self.txtimeout).sql_query('SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20;')
         if self.tabulate:
                 result2 = [pretty_format(item) for item in result]
                 print2(markdownSimpleTable(prepare_for_tabulate(result2)))

@@ -691,7 +691,7 @@
                               {:xt/id :mark}]])
     (t/is
      (= [{:xt/id :matthew}]
-        (xt/q tu/*node* "SELECT docs.xt$id FROM docs FOR VALID_TIME AS OF ?" {:args [#inst "2016"]})))))
+        (xt/q tu/*node* "SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" {:args [#inst "2016"]})))))
 
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file
@@ -906,33 +906,33 @@
   (t/is
    (=plan-file
     "multiple-references-to-temporal-cols"
-    (plan-sql "SELECT foo.xt$valid_from, foo.xt$valid_to, foo.xt$system_from, foo.xt$system_to
+    (plan-sql "SELECT foo._valid_from, foo._valid_to, foo._system_from, foo._system_to
                 FROM foo FOR SYSTEM_TIME FROM DATE '2001-01-01' TO DATE '2002-01-01'
-                WHERE foo.xt$valid_from = 4 AND foo.xt$valid_to > 10
-                AND foo.xt$system_from = 20 AND foo.xt$system_to <= 23
+                WHERE foo._valid_from = 4 AND foo._valid_to > 10
+                AND foo._system_from = 20 AND foo._system_to <= 23
                 AND foo.VALID_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"
               {:table-info {"foo" {}}}))))
 
 (deftest test-sql-insert-plan
   (t/is (=plan-file "test-sql-insert-plan-1"
-                    (plan-sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)")))
+                    (plan-sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)")))
 
   (t/is (=plan-file "test-sql-insert-plan-2"
                     (plan-sql "INSERT INTO users
-                               SELECT bar.xt$id, bar.name, bar.xt$valid_from
-                               FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")))
+                               SELECT bar._id, bar.name, bar._valid_from
+                               FROM (VALUES (?, ?, ?)) AS bar(_id, name, _valid_from)")))
 
   (t/is (=plan-file "test-sql-insert-plan-3"
-                    (plan-sql "INSERT INTO users (xt$id, name, xt$valid_from)
-                               SELECT bar.xt$id, bar.name, bar.xt$valid_from
-                               FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")))
+                    (plan-sql "INSERT INTO users (_id, name, _valid_from)
+                               SELECT bar._id, bar.name, bar._valid_from
+                               FROM (VALUES (?, ?, ?)) AS bar(_id, name, _valid_from)")))
 
   (t/is (=plan-file "test-sql-insert-plan-309"
-                    (plan-sql "INSERT INTO customer (xt$id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
+                    (plan-sql "INSERT INTO customer (_id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
         "#309")
 
   (t/is (=plan-file "test-sql-insert-plan-398"
-                    (plan-sql "INSERT INTO foo (xt$id, xt$valid_from) VALUES ('foo', DATE '2018-01-01')"))))
+                    (plan-sql "INSERT INTO foo (_id, _valid_from) VALUES ('foo', DATE '2018-01-01')"))))
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
@@ -1015,7 +1015,7 @@
     (plan-sql
      "SELECT f.VALID_TIME OVERLAPS f.SYSTEM_TIME
         FROM foo
-        AS f (xt$system_from, xt$system_to, xt$valid_from, xt$valid_to)"
+        AS f (_system_from, _system_to, _valid_from, _valid_to)"
      {:table-info {"foo" #{}}})))
 
   (t/is
@@ -1084,12 +1084,12 @@
   (t/is
    (=plan-file
     "test-period-specs-with-dml-subqueries-and-defaults-407" ;;also #424
-    (plan-sql "INSERT INTO prop_owner (xt$id, customer_number, property_number, xt$valid_from, xt$valid_to)
+    (plan-sql "INSERT INTO prop_owner (_id, customer_number, property_number, _valid_from, _valid_to)
                 SELECT 1,
                 145,
                 7797, DATE '1998-01-03', tmp.app_start
                 FROM
-                (SELECT MIN(Prop_Owner.xt$system_from) AS app_start
+                (SELECT MIN(Prop_Owner._system_from) AS app_start
                 FROM Prop_Owner
                 FOR ALL SYSTEM_TIME
                 WHERE Prop_Owner.id = 1) AS tmp"
@@ -1114,7 +1114,7 @@
   (t/is (=plan-file
           "test-delimited-identifiers-in-insert-column-list-2549"
           (plan-sql
-            "INSERT INTO posts (\"xt$id\", \"user-id\") VALUES (1234, 5678)"))))
+            "INSERT INTO posts (_id, \"user-id\") VALUES (1234, 5678)"))))
 
 (deftest test-table-period-specification-ordering-2260
   (let [opts {:table-info {"foo" #{"bar"}}}
@@ -1165,11 +1165,11 @@
            (set (xt/q tu/*node* "SELECT * FROM docs ORDER BY 1 + 1"))))
 
   (t/is (= [{:xt/id 3} {:xt/id 2} {:xt/id 1}]
-           (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY docs.x"))
+           (xt/q tu/*node* "SELECT docs._id FROM docs ORDER BY docs.x"))
         "projected away order col")
 
   (t/is (= [{:xt/id 1} {:xt/id 2} {:xt/id 3}]
-           (xt/q tu/*node* "SELECT docs.xt$id FROM docs ORDER BY 1"))
+           (xt/q tu/*node* "SELECT docs._id FROM docs ORDER BY 1"))
         "order by column idx"))
 
 (deftest test-order-by-unqualified-derived-column-refs
@@ -1218,7 +1218,7 @@
               :x 1,
               :y "c",
               :xt/id 3}}
-           (set (xt/q tu/*node* "SELECT docs.*, docs.xt$valid_from FROM docs"))))
+           (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs"))))
 
   (t/is (= #{{:x 2,
               :y "b",
@@ -1232,7 +1232,7 @@
               :y "c",
               :xt/id 3,
               :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
-             (set (xt/q tu/*node* "SELECT docs.*, docs.xt$valid_from FROM docs WHERE docs.xt$system_to = docs.xt$valid_to")))))
+             (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs WHERE docs._system_to = docs._valid_to")))))
 
 (t/deftest test-select-star-asterisk-clause
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3 :y "a"}]
@@ -1240,22 +1240,22 @@
                            [:put-docs :docs {:xt/id 3 :x 1 :y "c"}]])
 
   (t/is (= [{:xt/id 1, :x 3, :y "a"}]
-           (xt/q tu/*node* "SELECT * FROM docs WHERE xt$id = 1")))
+           (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 1")))
 
   (t/is (= [{:xt/id 1, :y "a"}]
-           (xt/q tu/*node* "SELECT * EXCLUDE x FROM docs WHERE xt$id = 1")))
+           (xt/q tu/*node* "SELECT * EXCLUDE x FROM docs WHERE _id = 1")))
 
   (t/is (= [{:xt/id 1}]
-           (xt/q tu/*node* "SELECT * EXCLUDE (x, y) FROM docs WHERE xt$id = 1")))
+           (xt/q tu/*node* "SELECT * EXCLUDE (x, y) FROM docs WHERE _id = 1")))
 
   (t/is (= [{:xt/id 1, :x 3, :z "a"}]
-           (xt/q tu/*node* "SELECT * RENAME y AS z FROM docs WHERE xt$id = 1")))
+           (xt/q tu/*node* "SELECT * RENAME y AS z FROM docs WHERE _id = 1")))
 
   (t/is (= [{:xt/id 1, :y 3, :z "a"}]
-           (xt/q tu/*node* "SELECT * RENAME (x AS y, y AS z) FROM docs WHERE xt$id = 1")))
+           (xt/q tu/*node* "SELECT * RENAME (x AS y, y AS z) FROM docs WHERE _id = 1")))
 
   (t/is (= [{:xt/id 1, :y 3}]
-           (xt/q tu/*node* "SELECT * EXCLUDE y RENAME (x AS y, y AS z) FROM docs WHERE xt$id = 1"))))
+           (xt/q tu/*node* "SELECT * EXCLUDE y RENAME (x AS y, y AS z) FROM docs WHERE _id = 1"))))
 
 (deftest test-select-star-qualified-join
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]
@@ -1270,7 +1270,7 @@
            (xt/q tu/*node* "FROM foo JOIN bar ON true")))
 
   (t/is (= [{:bar-id 2, :a "one", :foo-id 1}]
-           (xt/q tu/*node* "SELECT * RENAME (foo.xt$id AS foo_id, bar.xt$id AS bar_id) FROM foo JOIN bar ON true"))))
+           (xt/q tu/*node* "SELECT * RENAME (foo._id AS foo_id, bar._id AS bar_id) FROM foo JOIN bar ON true"))))
 
 (deftest test-expand-asterisk-parenthesized-joined-table
   ;;Parens in the place of a table primary creates a parenthesized_joined_table
@@ -1284,7 +1284,7 @@
   (t/is (= [{:foo-id 1 :bar-id 2 :a "one"}]
 
            (xt/q tu/*node*
-                 "SELECT * RENAME (foo.xt$id AS foo_id, bar.xt$id AS bar_id) FROM ( foo LEFT JOIN bar ON true )"))))
+                 "SELECT * RENAME (foo._id AS foo_id, bar._id AS bar_id) FROM ( foo LEFT JOIN bar ON true )"))))
 
 (deftest test-select-star-lateral-join
   (xt/submit-tx tu/*node* [[:put-docs :y {:xt/id 1 :b "one"}]])
@@ -1417,17 +1417,17 @@
 
 (t/deftest test-nest
   (t/is (=plan-file "test-nest-one"
-          (plan-sql "SELECT xt$id AS order_id, value,
-                            NEST_ONE(SELECT c.name FROM customers c WHERE c.xt$id = o.customer_id) AS customer
+          (plan-sql "SELECT _id AS order_id, value,
+                            NEST_ONE(SELECT c.name FROM customers c WHERE c._id = o.customer_id) AS customer
                      FROM orders o"
                     {:table-info {"orders" #{"xt$id" "value" "customer_id"}
                                   "customers" #{"xt$id" "name"}}})))
 
   (t/is (=plan-file "test-nest-many"
-          (plan-sql "SELECT c.xt$id AS customer_id, c.name,
-                            NEST_MANY(SELECT o.xt$id AS order_id, o.value
+          (plan-sql "SELECT c._id AS customer_id, c.name,
+                            NEST_MANY(SELECT o._id AS order_id, o.value
                                       FROM orders o
-                                      WHERE o.customer_id = c.xt$id)
+                                      WHERE o.customer_id = c._id)
                               AS orders
                      FROM customers c"
                     {:table-info {"orders" #{"xt$id" "value" "customer_id"}
@@ -1443,24 +1443,24 @@
              {:customer {:name "bob"}, :order-id 1, :value 8.99}
              {:customer {:name "alice"}, :order-id 2, :value 12.34}}
            (set (xt/q tu/*node*
-                      "SELECT o.xt$id AS order_id, o.value,
-                              NEST_ONE(SELECT c.name FROM customers c WHERE c.xt$id = o.customer_id) AS customer
+                      "SELECT o._id AS order_id, o.value,
+                              NEST_ONE(SELECT c.name FROM customers c WHERE c._id = o.customer_id) AS customer
                        FROM orders o"))))
 
   (t/is (= #{{:orders [{:order-id 1, :value 8.99} {:order-id 0, :value 26.20}], :name "bob", :customer-id 0}
              {:orders [{:order-id 2, :value 12.34}], :name "alice", :customer-id 1}}
            (set (xt/q tu/*node*
-                      "SELECT c.xt$id AS customer_id, c.name,
-                              NEST_MANY(SELECT o.xt$id AS order_id, o.value
+                      "SELECT c._id AS customer_id, c.name,
+                              NEST_MANY(SELECT o._id AS order_id, o.value
                                         FROM orders o
-                                        WHERE o.customer_id = c.xt$id)
+                                        WHERE o.customer_id = c._id)
                                 AS orders
                        FROM customers c")))))
 
 (deftest test-invalid-xt-id-in-query-3324
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0 :name "bob"}]])
-  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo.xt$id = NULL")))
-  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo.xt$id = ?" {:args [nil]}))))
+  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo._id = NULL")))
+  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo._id = ?" {:args [nil]}))))
 
 #_ ; TODO Add this?
 (deftest test-random-fn
@@ -1470,56 +1470,56 @@
 (t/deftest test-tx-ops-sql-params
   (t/testing "correct number of args"
     (t/is (= (serde/->tx-committed 0 #time/instant "2020-01-01T00:00:00Z")
-             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [1 "dan"] [2 "james"]]])))
+             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [1 "dan"] [2 "james"]]])))
 
     (t/is (= [{:u-name "dan", :xt/id 1}
               {:u-name "james", :xt/id 2}]
-             (xt/q tu/*node* "SELECT users.xt$id, users.u_name FROM users ORDER BY xt$id"))))
+             (xt/q tu/*node* "SELECT users._id, users.u_name FROM users ORDER BY _id"))))
 
   (t/testing "no arg rows provided when args expected"
     (t/is (= (serde/->tx-aborted 1
                                  #time/instant "2020-01-02T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/missing-sql-args "Arguments list was expected but not provided" {:param-count 2}])
-             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)"]]))))
+             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)"]]))))
 
   (t/testing "incorrect number of args on all arg-row"
     (t/is (= (serde/->tx-aborted 2
                                  #time/instant "2020-01-03T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "1 arguments were provided and 2 arguments were provided" {:param-count 2, :arg-count 1}])
-             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [3] [4]]]))))
+             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))))
 
   (t/testing "incorrect number of args on one row"
     (t/is (thrown-with-msg?
            IllegalArgumentException
            #"All SQL arg-rows must have the same number of columns"
-           (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(xt$id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
+           (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
 
 (t/deftest test-case-sensitivity-in-delimited-cols
-  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "INSERT INTO T1(xt$id, col1, col2) VALUES(1,'fish',1000)"]])))
-  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, COL1, COL2) VALUES(2,'dog',2000)"]])))
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "INSERT INTO T1(_id, col1, col2) VALUES(1,'fish',1000)"]])))
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1(_id, COL1, COL2) VALUES(2,'dog',2000)"]])))
 
   (t/is (= [{:xt/id 2, :col1 "dog", :col2 2000}
             {:xt/id 1, :col1 "fish", :col2 1000}]
-           (xt/q tu/*node* "SELECT t1.XT$ID, T1.col1, t1.COL2 FROM T1")
-           (xt/q tu/*node* "SELECT \"t1\".xt$id, T1.\"col1\", t1.COL2 FROM t1")))
+           (xt/q tu/*node* "SELECT t1._ID, T1.col1, t1.COL2 FROM T1")
+           (xt/q tu/*node* "SELECT \"t1\"._id, T1.\"col1\", t1.COL2 FROM t1")))
 
   (t/is (:committed? (xt/execute-tx tu/*node* [[:sql
-                                                "INSERT INTO \"T1\"(xt$id, \"CoL1\", \"col2\") VALUES(3,'cat',3000)"]])))
+                                                "INSERT INTO \"T1\"(_id, \"CoL1\", \"col2\") VALUES(3,'cat',3000)"]])))
 
   (t/is (= [{:xt/id 3, :CoL1 "cat", :col2 3000}]
            (xt/q tu/*node*
-                 "SELECT \"T1\".xt$id, \"T1\".\"CoL1\", \"T1\".COL2 FROM \"T1\"")))
+                 "SELECT \"T1\"._id, \"T1\".\"CoL1\", \"T1\".COL2 FROM \"T1\"")))
 
   (t/is (= [{:xt/id 3, :col2 3000}]
            (xt/q tu/*node*
-                 "SELECT \"T1\".xt$id, \"T1\".col1, \"T1\".COL2 FROM \"T1\""))
+                 "SELECT \"T1\"._id, \"T1\".col1, \"T1\".COL2 FROM \"T1\""))
         "can't refer to it as `col1`, have to quote")
 
   (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "UPDATE T1 SET Col1 = 'cat' WHERE t1.COL2 IN (313, 2000)"]])))
 
   (t/is (= [{:xt/id 2, :col1 "cat", :col2 2000}
             {:xt/id 1, :col1 "fish", :col2 1000}]
-           (xt/q tu/*node* "SELECT t1.xt$id, T1.col1, \"t1\".col2 FROM t1")))
+           (xt/q tu/*node* "SELECT t1._id, T1.col1, \"t1\".col2 FROM t1")))
 
   (t/is (= [{:col1 "cat", :avg 2000.0} {:col1 "fish", :avg 1000.0}]
            (xt/q tu/*node* "SELECT T1.col1, AVG(t1.col2) avg FROM t1 GROUP BY T1.col1")))
@@ -1531,12 +1531,12 @@
   (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "DELETE FROM T1 WHERE t1.Col1 = 'fish'"]])))
 
   (t/is (= [{:xt/id 2}]
-           (xt/q tu/*node* "SELECT t1.XT$ID FROM T1")))
+           (xt/q tu/*node* "SELECT t1._ID FROM T1")))
 
   (t/is (:committed? (xt/execute-tx tu/*node* [[:sql
                                                 "DELETE FROM \"T1\" WHERE \"T1\".\"col2\" IN (2000, 3000)"]])))
 
-  (t/is (= [] (xt/q tu/*node* "SELECT \"T1\".xt$id FROM \"T1\""))))
+  (t/is (= [] (xt/q tu/*node* "SELECT \"T1\"._id FROM \"T1\""))))
 
 (t/deftest test-ordering-of-intersect-and-union
   (xt/submit-tx tu/*node* [[:put-docs :t1 {:xt/id 1 :x 1}]
@@ -1603,9 +1603,9 @@
            (xt/q tu/*node* "SELECT x FROM foo1 EXCEPT SELECT x FROM foo2 UNION SELECT x FROM foo3"))))
 
 (deftest test-join-cond-subqueries
-  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, x) VALUES (1, 1), (2, 2)"]
-                            [:sql "INSERT INTO bar (xt$id, x) VALUES (1, 1), (2, 3)"]
-                            [:sql "INSERT INTO baz (xt$id, x) VALUES (1, 2)"]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, x) VALUES (1, 1), (2, 2)"]
+                            [:sql "INSERT INTO bar (_id, x) VALUES (1, 1), (2, 3)"]
+                            [:sql "INSERT INTO baz (_id, x) VALUES (1, 2)"]])
   (t/is (= [{:x 2, :bar-x 3} {:x 2, :bar-x 1} {:x 1}] 
            (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON foo.x = (SELECT baz.x FROM baz)")))
   
@@ -1614,7 +1614,7 @@
 
 (deftest test-erase-with-subquery
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo :bar 1}]])
-  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "ERASE FROM docs WHERE docs.xt$id IN (SELECT docs.xt$id FROM docs WHERE docs.bar = 1)"]])))
+  (t/is (:committed? (xt/execute-tx tu/*node* [[:sql "ERASE FROM docs WHERE docs._id IN (SELECT docs._id FROM docs WHERE docs.bar = 1)"]])))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (deftest select-star-on-non-existent-tables-3005
@@ -1627,7 +1627,7 @@
                             [:put-docs :baz {:xt/id 1 :z 1}]])
   
   (t/is (= [{:x 1, :y 1}]
-           (xt/q tu/*node* "SELECT * EXCLUDE xt$id FROM ( foo LEFT JOIN bar ON true )")))
+           (xt/q tu/*node* "SELECT * EXCLUDE _id FROM ( foo LEFT JOIN bar ON true )")))
   
   (t/is (= [{:x 1, :y 1, :z 1}]
-           (xt/q tu/*node* "SELECT * EXCLUDE xt$id FROM ( foo JOIN (bar JOIN baz ON true) ON true )"))))
+           (xt/q tu/*node* "SELECT * EXCLUDE _id FROM ( foo JOIN (bar JOIN baz ON true) ON true )"))))

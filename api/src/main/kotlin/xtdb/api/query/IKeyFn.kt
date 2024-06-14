@@ -20,7 +20,9 @@ private fun String.denormaliseToKeyword(transform: String.() -> String = { this 
     }
 }
 
-private fun String.kebabCase() = replace('_', '-')
+private fun String.denormaliseToString() = replace(Regex("^xt\\$"), "_")
+
+private fun String.kebabCase() = replace(Regex("(?<!^)_"), "-")
 
 private fun String.camelCase() = replace(Regex("_.")) { match -> match.value.drop(1).uppercase() }
 
@@ -45,7 +47,7 @@ fun interface IKeyFn<out V> {
     @Serializable
     enum class KeyFn : IKeyFn<Any> {
         KEBAB_CASE_STRING {
-            override fun denormalize(key: String) = key.kebabCase()
+            override fun denormalize(key: String) = key.kebabCase().denormaliseToString()
         },
 
         KEBAB_CASE_KEYWORD {
@@ -53,7 +55,7 @@ fun interface IKeyFn<out V> {
         },
 
         SNAKE_CASE_STRING {
-            override fun denormalize(key: String) = key
+            override fun denormalize(key: String) = key.denormaliseToString()
         },
 
         SNAKE_CASE_KEYWORD {
@@ -61,7 +63,7 @@ fun interface IKeyFn<out V> {
         },
 
         CAMEL_CASE_STRING {
-            override fun denormalize(key: String) = key.camelCase()
+            override fun denormalize(key: String) = key.camelCase().denormaliseToString()
         },
 
         CAMEL_CASE_KEYWORD {

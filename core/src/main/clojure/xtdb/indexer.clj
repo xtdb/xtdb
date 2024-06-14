@@ -171,7 +171,7 @@
         nil))))
 
 (defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-iid]
-  (let [lp '[:scan {:table xt$tx_fns} [{xt$iid (= xt$iid ?iid)} xt$id xt$fn]]
+  (let [lp '[:scan {:table xt$tx_fns} [{xt$iid (= xt$iid ?iid)} xt$id fn]]
         ^xtdb.query.PreparedQuery pq (.prepareRaQuery q-src lp wm-src)]
     (with-open [bq (.bind pq
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
@@ -189,9 +189,9 @@
                          (when (pos? (.rowCount ^RelationReader in-rel))
                            (aset !fn-doc 0 (first (vr/rel->rows in-rel)))))))
 
-        (let [{fn-id :xt/id, fn-body :xt/fn, :as fn-doc} (or (aget !fn-doc 0)
-                                                             (throw (err/runtime-err :xtdb.call/no-such-tx-fn
-                                                                                     {:fn-iid (util/byte-buffer->uuid fn-iid)})))]
+        (let [{fn-id :xt/id, fn-body :fn, :as fn-doc} (or (aget !fn-doc 0)
+                                                          (throw (err/runtime-err :xtdb.call/no-such-tx-fn
+                                                                                  {:fn-iid (util/byte-buffer->uuid fn-iid)})))]
 
           (when-not (instance? ClojureForm fn-body)
             (throw (err/illegal-arg :xtdb.call/invalid-tx-fn {:fn-doc (dissoc fn-doc :xt/iid)})))
@@ -548,13 +548,13 @@
                (doto (.structKeyWriter doc-writer "xt$id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))
 
-               (doto (.structKeyWriter doc-writer "xt$tx_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
+               (doto (.structKeyWriter doc-writer "tx_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
                  (.writeLong system-time-µs))
 
-               (doto (.structKeyWriter doc-writer "xt$committed?" (FieldType/notNullable  #xt.arrow/type :bool))
+               (doto (.structKeyWriter doc-writer "committed" (FieldType/notNullable  #xt.arrow/type :bool))
                  (.writeBoolean (nil? t)))
 
-               (let [e-wtr (.structKeyWriter doc-writer "xt$error" (FieldType/nullable #xt.arrow/type :transit))]
+               (let [e-wtr (.structKeyWriter doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
                  (if (or (nil? t) (= t abort-exn))
                    (.writeNull e-wtr)
                    (.writeObject e-wtr t)))

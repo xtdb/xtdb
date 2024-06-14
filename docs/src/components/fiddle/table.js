@@ -7,10 +7,10 @@ function tableOrder(a, b) {
     if (a === b) {
         return 0;
     }
-    if (a === 'xt$id') {
+    if (a === '_id') {
         return -1;
     }
-    if (b === 'xt$id') {
+    if (b === '_id') {
         return 1;
     }
     return a < b ? -1 : 1;
