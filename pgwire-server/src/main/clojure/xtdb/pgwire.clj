@@ -36,30 +36,17 @@
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
 (defn- cleanup-connection-resources [conn]
-  (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
+  (let [{:keys [cid, server, ^Socket socket, conn-status]} conn
 
-        {:keys [port server-state]} server]
+        {:keys [server-state]} server]
 
     (reset! conn-status :cleaning-up)
-
-    (when (realized? out)
-      (try
-        (.close ^OutputStream @out)
-        (catch Throwable e
-          (log/error e "Exception caught closing socket out" {:port port, :cid cid}))))
-
-    (when (realized? in)
-      (try
-        (.close ^InputStream @in)
-        (catch Throwable e
-          (log/error e "Exception caught closing socket in" {:port port, :cid cid}))))
 
     (when-not (.isClosed socket)
       (try
         (.close socket)
         (catch Throwable e
           (log/error e "Exception caught closing conn socket"))))
-
 
     (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
       (swap! server-state update :connections
@@ -925,12 +912,12 @@
   "Writes out a single message given a definition (msg-def) and optional data record."
   ([conn msg-def]
    (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out @(:out conn)]
+   (let [^DataOutputStream out (:out conn)]
      (.writeByte out (byte (:char8 msg-def)))
      (.writeInt out 4)))
   ([conn msg-def data]
    (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out @(:out conn)
+   (let [^DataOutputStream out (:out conn)
          bytes-out (ByteArrayOutputStream.)
          msg-out (DataOutputStream. bytes-out)
          _ ((:write msg-def) msg-out data)
@@ -1068,8 +1055,8 @@
   "A command that negotiates startup with the client, including ssl negotiation, and sending the state of the servers
   :parameters."
   [conn]
-  (let [in @(:in conn)
-        ^DataOutputStream out @(:out conn)
+  (let [in (:in conn)
+        ^DataOutputStream out (:out conn)
 
         {:keys [version] :as msg} (read-version in)
 
@@ -1420,7 +1407,7 @@
 (defn cmd-flush
   "Flushes any pending output to the client."
   [conn]
-  (.flush ^OutputStream @(:out conn)))
+  (.flush ^OutputStream (:out conn)))
 
 (defn cmd-parse
   "Responds to a msg-parse message that creates a prepared-statement."
@@ -1628,7 +1615,7 @@
 
         ;; go idle until we receive another msg from the client
         :else
-        (let [{:keys [msg-char8, msg-in]} (read-typed-msg @in)
+        (let [{:keys [msg-char8, msg-in]} (read-typed-msg in)
               msg-var (client-msgs msg-char8)]
 
           (log/trace "Read client msg"
@@ -1673,8 +1660,8 @@
   [server, ^Socket conn-socket, node]
   (let [{:keys [server-state, port]} server
         cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
-        in (delay (DataInputStream. (.getInputStream conn-socket)))
-        out (delay (DataOutputStream. (.getOutputStream conn-socket)))
+        in (DataInputStream. (.getInputStream conn-socket))
+        out (DataOutputStream. (.getOutputStream conn-socket))
         conn-status (atom :new)
         conn-state (atom {:close-promise (promise)
                           :session {:access-mode :read-only
@@ -1699,10 +1686,6 @@
 
     ;; first try and initialise the connection
     (try
-      ;; try make in/out
-      @in
-      @out
-
       ;; registering the connection in allows us to address it from the server
       ;; important for shutdowns.
       (let [conn-in-map (-> (swap! server-state update-in [:connections cid] (fn [e] (or e conn)))
@@ -1848,10 +1831,7 @@
 
   :port (default 5432). Provide '0' to open a socket on an unused port.
   :num-threads (bounds the number of client connections, default 42)
-
-  Returns the opaque server object.
-
-  Stop with .close (its Closeable)"
+  "
   ([node] (serve node {}))
   ([node opts]
    (let [defaults {:port 5432
