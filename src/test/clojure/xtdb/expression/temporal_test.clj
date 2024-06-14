@@ -8,7 +8,7 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.time.format DateTimeParseException)
+           java.time.temporal.ChronoUnit
            (org.apache.arrow.vector PeriodDuration)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -835,12 +835,12 @@
       (t/is (= #time/duration "PT-9H-15M-43.342S"
                (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/date-time "2022-08-01T02:31:26.684")))
 
-      (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- time/end-of-time  #time/date-time "2022-08-01T02:31:26.684")))
-      (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" time/end-of-time)))
-      (t/is (thrown-with-msg? RuntimeException #"cannot subtract infinite timestamps"
-                              (test-arithmetic '- time/end-of-time time/end-of-time))))))
+      (t/is (= (Duration/ofNanos Long/MAX_VALUE)
+               (test-arithmetic '- time/end-of-time  #time/date-time "2022-08-01T02:31:26.684")))
+      (t/is (= (Duration/ofNanos Long/MAX_VALUE)
+               (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" time/end-of-time)))
+      (t/is (= (Duration/ofNanos Long/MAX_VALUE)
+               (test-arithmetic '- time/end-of-time time/end-of-time))))))
 
 (tct/defspec test-lt
   (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])

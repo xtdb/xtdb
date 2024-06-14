@@ -75,18 +75,6 @@
               ~tgt-eot-v
               ~inner)))))))
 
-(defn- wrap-throw-eot2
-  ([->call-code] (wrap-throw-eot2 ->call-code `Long/MAX_VALUE `Long/MAX_VALUE))
-  ([->call-code left-eot-v right-eot-v]
-   (let [left-sym (gensym 'left)
-         right-sym (gensym 'right)]
-     (fn [[left right & args]]
-       (let [inner (->call-code (into [left-sym right-sym] args))]
-         `(let [~left-sym ~left, ~right-sym ~right]
-            (if (or (= ~left-sym ~left-eot-v) (= ~right-sym ~right-eot-v))
-              (throw (RuntimeException. "cannot subtract infinite timestamps"))
-              ~inner)))))))
-
 (defn- ensure-interval-precision-valid [^long precision]
   (cond
     (< precision 1)
@@ -682,7 +670,7 @@
 (defmethod expr/codegen-call [:+ :timestamp-tz :time-local] [{[[_ ts-unit tz], [_time time-unit]] :arg-types}]
   (-> (with-arg-unit-conversion ts-unit time-unit
         #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%)))
-      (update :->call-code wrap-handle-eot2 `Long/MAX_VALUE (time-unit->eot-v time-unit) `Long/MAX_VLAUE)))
+      (update :->call-code wrap-handle-eot2 `Long/MAX_VALUE (time-unit->eot-v time-unit) `Long/MAX_VALUE)))
 
 (defmethod expr/codegen-call [:+ :date :duration] [{[_ [_ dur-unit :as arg2]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
@@ -777,12 +765,12 @@
 (defmethod expr/codegen-call [:- :timestamp-tz :timestamp-tz] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
   (-> (with-arg-unit-conversion x-unit y-unit
         #(do [:duration %]) #(do `(Math/subtractExact ~@%)))
-      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+      (update :->call-code wrap-handle-eot2)))
 
 (defmethod expr/codegen-call [:- :timestamp-local :timestamp-local] [{[[_ x-unit], [_ y-unit]] :arg-types}]
   (-> (with-arg-unit-conversion x-unit y-unit
         #(do [:duration %]) #(do `(Math/subtractExact ~@%)))
-      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+      (update :->call-code wrap-handle-eot2)))
 
 (defmethod expr/codegen-call [:- :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
   (-> expr (recall-with-cast x [:timestamp-local y-unit])))
@@ -864,14 +852,12 @@
 ;;;; Boolean operations
 
 (defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-tz] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
-  (-> (with-arg-unit-conversion x-unit y-unit
-        (constantly :i32) #(do `(Long/compare ~@%)))
-      (update :compare>call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+  (with-arg-unit-conversion x-unit y-unit
+    (constantly :i32) #(do `(Long/compare ~@%))))
 
 (defmethod expr/codegen-call [:compare :timestamp-local :timestamp-local] [{[[_ x-unit], [_ y-unit]] :arg-types}]
-  (-> (with-arg-unit-conversion x-unit y-unit
-        (constantly :i32) #(do `(Long/compare ~@%)))
-      (update :compare>call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+  (with-arg-unit-conversion x-unit y-unit
+    (constantly :i32) #(do `(Long/compare ~@%))))
 
 (defmethod expr/codegen-call [:compare :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
   (-> expr (recall-with-cast x [:timestamp-local y-unit])))
