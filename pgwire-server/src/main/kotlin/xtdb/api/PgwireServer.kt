@@ -18,6 +18,11 @@ object PgwireServer {
     ) : XtdbModule.Factory {
         override val moduleKey = "xtdb.pgwire-server"
 
+        /**
+         * Port to start the Pgwire server on. Default is 5432.
+         *
+         * Specify '0' to have the server choose an available port.
+         */
         fun port(port: Int) = apply { this.port = port }
         fun numThreads(numThreads: Int) = apply { this.numThreads = numThreads }
 

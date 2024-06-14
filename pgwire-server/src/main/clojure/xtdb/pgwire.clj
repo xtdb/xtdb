@@ -15,7 +15,7 @@
            [java.lang Thread$State]
            [java.net ServerSocket Socket SocketException]
            [java.nio.charset StandardCharsets]
-           [java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime]
+           [java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map]
            [java.util.concurrent ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
@@ -29,7 +29,7 @@
            xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
-           [xtdb.vector IVectorReader RelationReader]))
+           [xtdb.vector RelationReader]))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -74,48 +74,44 @@
     ;; TODO wait for close?
     (cleanup-connection-resources conn)))
 
-(defn- cleanup-server-resources [server]
-  (let [{:keys [port
-                accept-socket
-                ^Thread accept-thread
-                ^ExecutorService thread-pool
-                server-state
-                server-status]} server]
+(defn- cleanup-server-resources [{:keys [^long port
+                                         ^ServerSocket accept-socket
+                                         ^Thread accept-thread
+                                         ^ExecutorService thread-pool
+                                         server-state
+                                         server-status]}]
+  ;; TODO revisit these transitions
+  (or (compare-and-set! server-status :draining :cleaning-up)
+      (compare-and-set! server-status :running :cleaning-up)
+      (compare-and-set! server-status :error :cleaning-up)
+      (compare-and-set! server-status :error-on-start :cleaning-up))
 
-    ;; TODO revisit these transitions
-    (or (compare-and-set! server-status :draining :cleaning-up)
-        (compare-and-set! server-status :running :cleaning-up)
-        (compare-and-set! server-status :error :cleaning-up)
-        (compare-and-set! server-status :error-on-start :cleaning-up))
+  (when-not (.isClosed accept-socket)
+    (log/trace "Closing accept socket" port)
+    (.close accept-socket))
 
-    (when (realized? accept-socket)
-      (let [^ServerSocket socket @accept-socket]
-        (when-not (.isClosed socket)
-          (log/trace "Closing accept socket" port)
-          (.close socket))))
+  (when-not (#{Thread$State/NEW, Thread$State/TERMINATED} (.getState accept-thread))
+    (log/trace "Closing accept thread")
+    (.interrupt accept-thread)
+    (.join accept-thread (* 5 1000))
+    (when-not (= Thread$State/TERMINATED (.getState accept-thread))
+      (log/error "Could not shut down accept-thread gracefully" {:port port, :thread (.getName accept-thread)})
+      (compare-and-set! server-status :cleaning-up :error-on-cleanup)
+      (swap! server-state assoc :accept-thread-misbehaving true)))
 
-    (when-not (#{Thread$State/NEW, Thread$State/TERMINATED} (.getState accept-thread))
-      (log/trace "Closing accept thread")
-      (.interrupt accept-thread)
-      (.join accept-thread (* 5 1000))
-      (when-not (= Thread$State/TERMINATED (.getState accept-thread))
-        (log/error "Could not shut down accept-thread gracefully" {:port port, :thread (.getName accept-thread)})
-        (compare-and-set! server-status :cleaning-up :error-on-cleanup)
-        (swap! server-state assoc :accept-thread-misbehaving true)))
+  ;; force stopping conns
+  (doseq [conn (vals (:connections @server-state))]
+    (stop-connection conn))
 
-    ;; force stopping conns
-    (doseq [conn (vals (:connections @server-state))]
-      (stop-connection conn))
+  (when-not (.isShutdown thread-pool)
+    (log/trace "Closing thread pool")
+    (.shutdownNow thread-pool)
+    (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
+      (log/error "Could not shutdown thread pool gracefully" {:port port})
+      (compare-and-set! server-status :cleaning-up :error-on-cleanup)
+      (swap! server-state assoc :thread-pool-misbehaving true)))
 
-    (when-not (.isShutdown thread-pool)
-      (log/trace "Closing thread pool")
-      (.shutdownNow thread-pool)
-      (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
-        (log/error "Could not shutdown thread pool gracefully" {:port port})
-        (compare-and-set! server-status :cleaning-up :error-on-cleanup)
-        (swap! server-state assoc :thread-pool-misbehaving true)))
-
-    (compare-and-set! server-status :cleaning-up :cleaned-up)))
+  (compare-and-set! server-status :cleaning-up :cleaned-up))
 
 
 ;;; Server
@@ -133,8 +129,8 @@
 
 (defrecord Server [port
 
-                   ;; (delay) server socket and thread for accepting connections
-                   accept-socket
+                   ;; server socket and thread for accepting connections
+                   ^ServerSocket accept-socket
                    ^Thread accept-thread
 
                    ;; a thread pool for handing off connections (currently using blocking io)
@@ -145,7 +141,7 @@
 
                    ;; atom to hold server state, such as current connections, and the connection :cid counter.
                    server-state]
-  Closeable
+  XtdbModule
   (close [this]
     (let [drain-wait (:drain-wait @server-state 5000)
           drain (not (contains? #{0, nil} drain-wait))]
@@ -171,8 +167,9 @@
 
       (cleanup-server-resources this)
 
-      (when-not (= :cleaned-up @server-status)
-        (log/fatal "Server resources could not be freed, please restart xtdb" port)))))
+      (if (= :cleaned-up @server-status)
+        (log/info "PGWire server stopped")
+        (log/fatal "Server resources could not be freed, please restart XTDB" port)))))
 
 ;;; Connection
 ;; Represents a single client connection to the server
@@ -580,7 +577,7 @@
 
 (defn- start-server [server {:keys [accept-so-timeout]
                              :or {accept-so-timeout 5000}}]
-  (let [{:keys [server-status, server-state, accept-thread, accept-socket, port]} server
+  (let [{:keys [server-status, server-state, accept-thread, ^ServerSocket accept-socket, port]} server
         {:keys [injected-start-exc, silent-start]} @server-state
         start-exc (atom nil)]
 
@@ -589,14 +586,10 @@
       (throw (Exception. (format "Server must be :new to start, port %d" port))))
 
     (try
-
-      ;; try and bind the socket (this throws if we cannot get the port)
-      @accept-socket
-
       ;; set a socket timeout so we can interrupt the accept-thread
       ;; can be set to nil as an option if you want to allow no timeout
       (when accept-so-timeout
-        (.setSoTimeout ^ServerSocket @accept-socket accept-so-timeout))
+        (.setSoTimeout accept-socket accept-so-timeout))
 
       ;; start the accept thread, which will listen for connections
       (let [is-running (promise)]
@@ -1774,14 +1767,12 @@
   (when-not (compare-and-set! server-status :starting :running)
     (throw (Exception. "Accept loop requires a newly initialised server")))
 
-  (log/info "PGWire server listening on" port)
-
   (try
     (loop []
       (cond
         (Thread/interrupted) (throw (InterruptedException.))
 
-        (.isClosed ^ServerSocket @accept-socket)
+        (.isClosed accept-socket)
         (log/trace "Accept socket closed, exiting accept loop")
 
         (#{:draining :running} @server-status)
@@ -1789,10 +1780,10 @@
           (try
             ;; set a low timeout to leave accept early if needed
             (when (= :draining @server-status)
-              (.setSoTimeout ^ServerSocket @accept-socket 10))
+              (.setSoTimeout accept-socket 10))
 
             ;; accept next connection (blocks until interrupt (with so-timeout) or close)
-            (let [conn-socket (.accept ^ServerSocket @accept-socket)]
+            (let [conn-socket (.accept accept-socket)]
               (when-some [exc (:injected-accept-exc @server-state)]
                 (swap! server-state dissoc :injected-accept-exc)
                 (.close conn-socket)
@@ -1806,7 +1797,7 @@
                   (err-cannot-connect-now "server shutting down")
                   (.close conn-socket))))
             (catch SocketException e
-              (when (and (not (.isClosed ^ServerSocket @accept-socket))
+              (when (and (not (.isClosed accept-socket))
                          (not= "Socket closed" (.getMessage e)))
                 (log/warn e "Accept socket exception" {:port port})))
             (catch java.net.SocketTimeoutException e
@@ -1823,7 +1814,7 @@
     ;; so it can be inspected.
     (catch Throwable e
       (compare-and-set! server-status :running :error)
-      (util/try-close @accept-socket)
+      (util/try-close accept-socket)
       (when-not (:silent-accept @server-state)
         (log/error e "Exception caught on accept thread" {:port port}))))
 
@@ -1839,22 +1830,23 @@
                        :drain-wait drain-wait
                        :parameters {"server_version" "14"
                                     "server_encoding" "UTF8"
-                                    "client_encoding" "UTF8"}}
-        srvr (map->Server {:port port
-                           :accept-socket (delay (ServerSocket. port))
-                           :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self node)) (str "pgwire-server-accept-" port))
-                           :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
-                           :server-status (atom :new)
-                           :server-state (atom (merge unsafe-init-state default-state))})]
-    (reset! self srvr)
-    srvr))
+                                    "client_encoding" "UTF8"}}]
+    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
+      (let [srvr (map->Server {:port (.getLocalPort accept-socket)
+                               :accept-socket accept-socket
+                               :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self node)) (str "pgwire-server-accept-" port))
+                               :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
+                               :server-status (atom :new)
+                               :server-state (atom (merge unsafe-init-state default-state))})]
+        (reset! self srvr)
+        srvr))))
 
 (defn serve
   "Creates and starts a pgwire server.
 
   Options:
 
-  :port (default 5432)
+  :port (default 5432). Provide '0' to open a socket on an unused port.
   :num-threads (bounds the number of client connections, default 42)
 
   Returns the opaque server object.
@@ -1879,9 +1871,11 @@
 (defn open-server [node ^PgwireServer$Factory module]
   (let [port (.getPort module)
         num-threads (.getNumThreads module)
-        srv (serve node {:port port, :num-threads num-threads})]
+        {:keys [port] :as srv} (serve node {:port port, :num-threads num-threads})]
     (log/info "PGWire server started on port:" port)
-    (reify XtdbModule
-      (close [_]
-        (util/try-close ^Closeable srv)
-        (log/info "PGWire server stopped")))))
+    srv))
+
+(defn pg-port [node]
+  (or (some-> (util/component node ::server)
+              (:port))
+      (throw (IllegalStateException. "No Postgres wire server running."))))

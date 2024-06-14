@@ -10,6 +10,13 @@ import java.util.stream.Stream
 interface IXtdb : AutoCloseable {
 
     /**
+     * Returns the port of the Postgres wire server, if one is running.
+     *
+     * @throws IllegalStateException if the Postgres wire server is not running.
+     */
+    val pgPort: Int
+
+    /**
      * Opens an SQL query - see the [SQL documentation](https://docs.xtdb.com/reference/main/sql/queries) for more details on XTDB's SQL support.
      *
      * By default, this method will block indefinitely until the node has indexed the [requested transaction][QueryOptions.afterTx], or

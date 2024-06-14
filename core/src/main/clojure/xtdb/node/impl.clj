@@ -72,6 +72,12 @@
                  system, close-fn, registry
                  metrics]
   IXtdb
+  (getPgPort [this]
+    (or (some-> (util/component this :xtdb/modules)
+                (get "xtdb.pgwire-server")
+                (:port))
+        (throw (IllegalStateException. "No Postgres wire server running."))))
+
   (submitTx [this opts tx-ops]
     (xtp/submit-tx this tx-ops opts))
 

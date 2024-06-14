@@ -38,12 +38,11 @@
   ([opts]
    (require-node)
    (when-not *port*
-     (set! *port* (tu/free-port))
-     (->> (merge {:num-threads 1}
-                 opts
-                 {:port *port*})
-          (pgwire/serve *node*)
-          (set! *server*)))))
+     (set! *server* (->> (merge {:num-threads 1}
+                                opts
+                                {:port 0})
+                         (pgwire/serve *node*)))
+     (set! *port* (:port *server*)))))
 
 (t/use-fixtures :once
 
@@ -70,8 +69,9 @@
           (util/try-close *node*))))))
 
 (defn- jdbc-url [& params]
-  (require-server)
-  (assert *port* "*port* must be bound")
+  (when-not *port*
+    (require-server))
+
   (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
     (format "jdbc:postgresql://:%s/xtdb%s" *port* param-str)))
 
@@ -314,7 +314,7 @@
    (check-server-resources-freed *server*))
   ([server]
    (testing "accept socket"
-     (is (.isClosed @(:accept-socket server))))
+     (is (.isClosed (:accept-socket server))))
 
    (testing "accept thread"
      (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
@@ -326,13 +326,13 @@
 (deftest server-resources-freed-on-close-test
   (require-node)
   (doseq [close-method [#(.close %)]]
-    (with-open [server (pgwire/serve *node* {:port (tu/free-port)})]
+    (with-open [server (pgwire/serve *node* {:port 0})]
       (close-method server)
       (check-server-resources-freed server))))
 
 (deftest server-resources-freed-if-exc-on-start-test
   (require-node)
-  (with-open [server (pgwire/serve *node* {:port (tu/free-port)
+  (with-open [server (pgwire/serve *node* {:port 0
                                            :unsafe-init-state
                                            {:silent-start true
                                             :injected-start-exc (Exception. "boom!")}})]
@@ -441,24 +441,24 @@
 
 (deftest accept-thread-socket-close-stops-thread-test
   (require-server)
-  (.close @(:accept-socket *server*))
+  (.close (:accept-socket *server*))
   (.join (:accept-thread *server*) 1000)
   (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*)))))
 
 (deftest accept-thread-socket-close-allows-cleanup-test
   (require-server)
-  (.close @(:accept-socket *server*))
+  (.close (:accept-socket *server*))
   (.join (:accept-thread *server*) 1000)
   (.close *server*)
   (check-server-resources-freed))
 
 (deftest accept-socket-timeout-set-by-default-test
   (require-server)
-  (is (pos? (.getSoTimeout @(:accept-socket *server*)))))
+  (is (pos? (.getSoTimeout (:accept-socket *server*)))))
 
 (deftest accept-socket-timeout-can-be-unset-test
   (require-server {:accept-so-timeout nil})
-  (is (= 0 (.getSoTimeout @(:accept-socket *server*)))))
+  (is (= 0 (.getSoTimeout (:accept-socket *server*)))))
 
 (defn- get-connections []
   (vals (:connections @(:server-state *server*))))
@@ -717,14 +717,6 @@
 
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {"b" 42}}] rs)))))
-
-(deftest start-stop-as-module-test
-  (tu/with-log-level 'xtdb.pgwire :info
-    (let [port (tu/free-port)]
-      (with-open [_node (xtn/start-node {:pgwire-server {:port port
-                                                         :num-threads 3}})
-                  conn (jdbc-conn)]
-        (is (= "ping" (ping conn)))))))
 
 (deftest open-close-transaction-does-not-crash-test
   (with-open [conn (jdbc-conn)]
@@ -1257,10 +1249,15 @@
                 (map #(update % :timestamptz <-pgobject))))
           "binary"))))
 
-
 (deftest test-odbc-queries
   (with-open [conn (jdbc-conn)]
 
     ;; ODBC issues this query by default
     (is (= []
            (q-seq conn ["select oid, typbasetype from pg_type where typname = 'lo'"])))))
+
+(t/deftest test-pg-port
+  (util/with-open [node (xtn/start-node {::pgwire/server {:port 0}})]
+    (binding [*port* (.getPgPort node)]
+      (with-open [conn (jdbc-conn)]
+        (t/is (= "ping" (ping conn)))))))
