@@ -1238,8 +1238,7 @@
 (defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
                              {:keys [query, ^IResultCursor result-cursor fields]}]
 
-  (let [projection (doto (mapv ffirst fields)
-                     prn)
+  (let [projection (mapv ffirst fields)
         json-bytes (comp utf8 json/json-str json-clj)
 
         ;; this query has been cancelled!
@@ -1247,7 +1246,6 @@
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
         closing? #(= :closing @conn-status)
         n-rows-out (volatile! 0)]
-
 
     (.forEachRemaining
      result-cursor
