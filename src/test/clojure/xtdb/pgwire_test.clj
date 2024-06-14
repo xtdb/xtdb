@@ -365,7 +365,6 @@
   (.interrupt (:accept-thread *server*))
   (.join (:accept-thread *server*) 1000)
 
-  (is (:accept-interrupted @(:server-state *server*)))
   (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*)))))
 
 (deftest accept-thread-interrupt-allows-server-shutdown-test
