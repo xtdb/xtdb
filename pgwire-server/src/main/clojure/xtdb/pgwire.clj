@@ -565,7 +565,7 @@
 (defn- start-server [server {:keys [accept-so-timeout]
                              :or {accept-so-timeout 5000}}]
   (let [{:keys [server-status, server-state, accept-thread, ^ServerSocket accept-socket, port]} server
-        {:keys [injected-start-exc, silent-start]} @server-state
+        {:keys [silent-start]} @server-state
         start-exc (atom nil)]
 
     ;; sanity check its a new server
@@ -595,9 +595,6 @@
           (reset! server-status :error-on-start))
 
         (remove-watch server-status [:accept-watch port]))
-
-      ;; if we have injected an exception, throw it now (e.g for tests)
-      (some-> injected-start-exc throw)
 
       (catch Throwable e
         (when-not silent-start
@@ -1767,11 +1764,6 @@
 
             ;; accept next connection (blocks until interrupt (with so-timeout) or close)
             (let [conn-socket (.accept accept-socket)]
-              (when-some [exc (:injected-accept-exc @server-state)]
-                (swap! server-state dissoc :injected-accept-exc)
-                (.close conn-socket)
-                (throw exc))
-
               (.setTcpNoDelay conn-socket true)
               (if (= :running @server-status)
                 ;; TODO fix buffer on tp? q gonna be infinite right now

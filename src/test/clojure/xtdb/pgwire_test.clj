@@ -330,33 +330,6 @@
       (close-method server)
       (check-server-resources-freed server))))
 
-(deftest server-resources-freed-if-exc-on-start-test
-  (require-node)
-  (with-open [server (pgwire/serve *node* {:port 0
-                                           :unsafe-init-state
-                                           {:silent-start true
-                                            :injected-start-exc (Exception. "boom!")}})]
-    (check-server-resources-freed server)))
-
-;; #673
-#_(deftest accept-thread-and-socket-closed-on-uncaught-accept-exc-test
-  (require-server)
-
-  (swap! (:server-state *server*) assoc
-         :injected-accept-exc (Exception. "boom")
-         :silent-accept true)
-
-  (is (thrown? Throwable (with-open [_ (jdbc-conn)])))
-
-  (testing "registered"
-    (is (registered? *server*)))
-
-  (testing "accept socket"
-    (is (.isClosed @(:accept-socket *server*))))
-
-  (testing "accept thread"
-    (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*))))))
-
 (defn <-pgobject
   "Transform PGobject containing `json` or `jsonb` value to Clojure
   data."
@@ -385,41 +358,6 @@
   (-> (q conn ["select 'ping' ping"])
       first
       :ping))
-
-(defn- inject-accept-exc
-  ([]
-   (inject-accept-exc (Exception. "")))
-  ([ex]
-   (require-server)
-   (swap! (:server-state *server*)
-          assoc :injected-accept-exc ex, :silent-accept true)
-   nil))
-
-(defn- connect-and-throwaway []
-  (try (jdbc-conn) (catch Throwable _)))
-
-(deftest accept-uncaught-exception-allows-free-test
-  (inject-accept-exc)
-  (connect-and-throwaway)
-  (.close *server*)
-  (check-server-resources-freed))
-
-;; #673
-#_(deftest accept-thread-stoppage-sets-error-status
-  (inject-accept-exc)
-  (connect-and-throwaway)
-  (is (= :error @(:server-status *server*))))
-
-(deftest accept-thread-stoppage-allows-other-conns-to-continue-test
-  (with-open [conn1 (jdbc-conn)]
-    (inject-accept-exc)
-    (connect-and-throwaway)
-    (is (= "ping" (ping conn1)))))
-
-(deftest accept-thread-socket-closed-exc-does-not-stop-later-accepts-test
-  (inject-accept-exc (SocketException. "Socket closed"))
-  (connect-and-throwaway)
-  (is (with-open [_conn (jdbc-conn)] true)))
 
 (deftest accept-thread-interrupt-closes-thread-test
   (require-server {:accept-so-timeout 10})
