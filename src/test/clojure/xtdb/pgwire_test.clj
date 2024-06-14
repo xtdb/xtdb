@@ -9,8 +9,8 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as result-set])
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as result-set])
   (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)

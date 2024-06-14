@@ -41,7 +41,7 @@ dependencies {
     // https://github.com/apache/arrow/issues/34516
     testImplementation("org.apache.arrow", "flight-sql-jdbc-driver", "15.0.2")
 
-    testImplementation("pro.juxt.clojars-mirrors.com.github.seancorfield", "next.jdbc", "1.2.674")
+    testImplementation("com.github.seancorfield", "next.jdbc", "1.3.939")
 
     devImplementation(sourceSets.main.get().output)
 }
