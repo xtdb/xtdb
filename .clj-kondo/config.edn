@@ -5,8 +5,7 @@
            xtdb.util/with-close-on-catch clojure.core/with-open
            xtdb.util/with-open clojure.core/with-open
            clojure.test.check.clojure-test/defspec clojure.test/deftest
-           clojure.test.check.properties/for-all clojure.core/for
-           juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc/with-transaction next.jdbc/with-transaction}
+           clojure.test.check.properties/for-all clojure.core/for}
  :hooks {:analyze-call {xtdb.pgwire/def-msg hooks/pgwire-def-msg}}
  :linters {:not-empty? {:level :off}
            :unresolved-symbol {:level :error

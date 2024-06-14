@@ -1,6 +1,6 @@
 (ns xtdb.flight-sql-test
   (:require [clojure.test :as t]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [next.jdbc :as jdbc]
             [xtdb.flight-sql]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]

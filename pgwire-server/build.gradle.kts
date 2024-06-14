@@ -32,5 +32,7 @@ dependencies {
     api("org.clojure", "data.json", "2.4.0")
     api("org.clojure", "tools.logging", "1.2.4")
 
+    testImplementation("com.github.seancorfield", "next.jdbc", "1.3.939")
+
     api(kotlin("stdlib-jdk8"))
 }

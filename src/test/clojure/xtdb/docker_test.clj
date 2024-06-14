@@ -7,7 +7,7 @@
             [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.tools.logging :as log]
             [xtdb.test-util :as tu]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+            [next.jdbc :as jdbc])
   (:import (java.net Socket)
            (java.util List)
            (java.util.concurrent TimeUnit)
