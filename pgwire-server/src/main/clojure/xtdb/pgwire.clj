@@ -523,7 +523,7 @@
                         :value (.accept (.validTimeDefaults ctx) this)})
 
                      (visitValidTimeDefaultAsOfNow [_ _] :as-of-now)
-                     (visitValidTimeDefaultIsoStandard [_ _] :iso-standard)
+                     (visitValidTimeDefaultIsoStandard [_ _] :all-valid-time)
 
                      (visitSetTimeZoneStatement [_ ctx]
                        {:statement-type :set-time-zone
@@ -1338,7 +1338,7 @@
 
         {:keys [transaction], {:keys [^Clock clock] :as session} :session} @conn-state
 
-        default-all-valid-time? (not= :as-of-now (get-in session [:parameters :app-time-defaults]))
+        default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))
 
         stmt {:query query,
               :transformed-query transformed-query
@@ -1441,7 +1441,7 @@
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (execute-tx conn dml-buf {:default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))})]
+      (if-let [err (execute-tx conn dml-buf {:default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))
@@ -1592,7 +1592,7 @@
                     {{:keys [^Clock clock, latest-submitted-tx] :as session} :session
                      {:keys [basis]} :transaction} @conn-state
 
-                    default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))
+                    default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))
 
                     query-opts {:basis (or basis {:current-time (.instant clock)})
                                 :after-tx latest-submitted-tx ;;TODO any need for this if we are sending explicit basis?

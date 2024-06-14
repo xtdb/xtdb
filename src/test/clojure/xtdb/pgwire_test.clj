@@ -1148,11 +1148,12 @@
 (deftest set-app-time-defaults-test
   (with-open [conn (jdbc-conn)]
     (let [sql #(q conn [%])]
-      (sql "SET valid_time_defaults TO as_of_now")
-
       (sql "START TRANSACTION READ WRITE")
       (sql "INSERT INTO foo (_id, version) VALUES ('foo', 0)")
       (sql "COMMIT")
+
+      (is (= [{:version 0, :_valid_from "2020-01-01T00:00Z", :_valid_to nil}]
+             (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
       (sql "UPDATE foo SET version = 1 WHERE _id = 'foo'")
@@ -1164,7 +1165,25 @@
       (sql "SET valid_time_defaults iso_standard")
       (is (= (set [{:version 0, :_valid_from "2020-01-01T00:00Z", :_valid_to "2020-01-02T00:00Z"}
                    {:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}])
-             (set (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))))))
+             (set (q conn ["SELECT version, _valid_from, _valid_to FROM foo"]))))
+
+      (sql "SET valid_time_defaults TO as_of_now")
+      (is (= [{:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+             (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
+
+      (sql "START TRANSACTION READ WRITE")
+      (sql "SET valid_time_defaults iso_standard")
+      (sql "UPDATE foo SET version = 2 WHERE _id = 'foo'")
+      (sql "COMMIT")
+
+      (sql "SET valid_time_defaults as_of_now")
+      (is (= [{:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+             (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
+
+      (sql "SET valid_time_defaults iso_standard")
+      (is (= [{:version 2, :_valid_from "2020-01-01T00:00Z", :_valid_to "2020-01-02T00:00Z"}
+              {:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+             (q conn ["SELECT version, _valid_from, _valid_to FROM foo"]))))))
 
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
