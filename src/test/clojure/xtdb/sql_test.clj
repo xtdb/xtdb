@@ -1204,7 +1204,7 @@
   (t/is (= #{{:x 2, :new-y "b", :xt/id 2}
              {:x 3, :new-y "a", :xt/id 1}
              {:x 1, :new-y "c", :xt/id 3}}
-           (set (xt/q tu/*node* "SELECT docs.* RENAME docs.y AS new_y FROM docs"))))
+           (set (xt/q tu/*node* "SELECT docs.* RENAME y AS new_y FROM docs"))))
 
   (t/is (= #{{:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 2,
@@ -1233,6 +1233,15 @@
               :xt/id 3,
               :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
              (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs WHERE docs._system_to = docs._valid_to")))))
+
+(t/deftest able-to-select-star-from-two-tables-bug-3389
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :x 1}]
+                            [:put-docs :bar {:xt/id 2, :y 2}]])
+
+  (t/is (= [{:foo-id 1, :x 1, :bar-id 2, :y 2}]
+           (xt/q tu/*node* "SELECT foo.* RENAME _id AS foo_id,
+                                   bar.* RENAME _id AS bar_id
+                            FROM foo, bar"))))
 
 (t/deftest test-select-star-asterisk-clause
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3 :y "a"}]
@@ -1631,3 +1640,4 @@
   
   (t/is (= [{:x 1, :y 1, :z 1}]
            (xt/q tu/*node* "SELECT * EXCLUDE _id FROM ( foo JOIN (bar JOIN baz ON true) ON true )"))))
+

@@ -12,7 +12,7 @@
            (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
-           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)))
 
 (defn- ->insertion-ordered-set [coll]
@@ -79,7 +79,7 @@
 
 (defn- find-decl [scope chain]
   (let [[match & more-matches] (find-decls scope chain)]
-    (assert (nil? more-matches) (str "multiple decls: " {:matches (cons match more-matches)}))
+    (assert (nil? more-matches) (str "multiple decls: " {:matches (cons match more-matches), :chain chain}))
     match))
 
 (defrecord AmbiguousColumnReference [chain]
@@ -704,13 +704,10 @@
                                                                             (throw (UnsupportedOperationException. "schema not supported")))
 
                                                                           (if-let [table-cols (available-cols scope [table-name])]
-                                                                            (let [renames (->> (for [^SqlParser$RenameColumnContext rename-pair (some-> (.renameClause ctx)
-                                                                                                                                                        (.renameColumn))]
-                                                                                                 (let [chain (rseq (-> (.columnReference rename-pair) .identifierChain .identifier
-                                                                                                                       (->> (mapv identifier-sym))))
-                                                                                                       out-col-name (.columnName (.asClause rename-pair))
-                                                                                                       sym (find-decl scope chain)]
-
+                                                                            (let [renames (->> (for [^SqlParser$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
+                                                                                                                                                                 (.qualifiedRenameColumn))]
+                                                                                                 (let [sym (find-decl scope [(identifier-sym (.identifier rename-pair)) table-name])
+                                                                                                       out-col-name (.columnName (.asClause rename-pair))]
                                                                                                    (MapEntry/create sym (identifier-sym out-col-name))))
                                                                                                (into {}))
                                                                                   excludes (when-let [exclude-ctx (.excludeClause ctx)]

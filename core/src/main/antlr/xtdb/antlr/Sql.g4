@@ -555,7 +555,7 @@ selectList
     | selectSublist (',' selectSublist)* # SelectListCols ;
 
 selectSublist : derivedColumn | qualifiedAsterisk ;
-qualifiedAsterisk : identifierChain '.' ASTERISK excludeClause? renameClause?;
+qualifiedAsterisk : identifierChain '.' ASTERISK excludeClause? qualifiedRenameClause?;
 
 renameClause
     : 'RENAME' renameColumn
@@ -563,6 +563,13 @@ renameClause
     ;
 
 renameColumn : columnReference asClause ;
+
+qualifiedRenameClause
+    : 'RENAME' qualifiedRenameColumn
+    | 'RENAME' '(' qualifiedRenameColumn (',' qualifiedRenameColumn )* ')'
+    ;
+
+qualifiedRenameColumn : identifier asClause ;
 
 excludeClause
     : 'EXCLUDE' identifier
