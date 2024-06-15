@@ -110,26 +110,25 @@
                        ;; a positive integer that identifies the connection on this server
                        ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
                        cid
+
                        ;; atom to mediate lifecycle transitions (see Connection lifecycle comment)
                        conn-status
+
                        ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
                        conn-state
+
                        ;; io
                        ^DataInputStream in
                        ^DataOutputStream out]
 
   Closeable
   (close [this]
+    (reset! conn-status :cleaning-up)
+
+    (when-not (.isClosed socket)
+      (util/try-close socket))
+
     (let [{:keys [server-state]} server]
-
-      (reset! conn-status :cleaning-up)
-
-      (when-not (.isClosed socket)
-        (try
-          (.close socket)
-          (catch Throwable e
-            (log/error e "Exception caught closing conn socket"))))
-
       (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
         (swap! server-state update :connections
                (fn [conns]
@@ -138,7 +137,9 @@
                    conns)))))
 
     (when close-node?
-      (util/close node))))
+      (util/close node))
+
+    (log/debug "Connection ended" {:cid cid})))
 
 ;; best the server/conn records are opaque when printed as they contain mutual references
 (defmethod print-method Server [wtr o] ((get-method print-method Object) wtr o))
@@ -1448,16 +1449,44 @@
           ;;so now be ready to accept a new query
           (cmd-send-ready conn))))))
 
+(defn- handle-msg [{:keys [msg-char8, msg-in]} {:keys [cid, conn-state] :as conn}]
+  (let [msg-var (client-msgs msg-char8)]
+
+    (log/trace "Read client msg"
+               {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
+
+    (when (:skip-until-sync @conn-state)
+      (if (= msg-var #'msg-sync)
+        (cmd-enqueue-cmd conn [#'cmd-sync])
+        (log/trace "Skipping msg until next sync due to error in extended protocol"
+                   {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
+
+    (when-not msg-var
+      (cmd-send-error conn (err-protocol-violation "unknown client message")))
+
+    (when (and msg-var (not (:skip-until-sync @conn-state)))
+      (let [msg-data ((:read @msg-var) msg-in)]
+        (condp = msg-var
+          #'msg-simple-query (cmd-simple-query conn msg-data)
+          #'msg-terminate (cmd-terminate conn)
+          #'msg-close (cmd-close conn msg-data)
+          #'msg-parse (cmd-parse conn msg-data)
+          #'msg-bind (cmd-bind conn msg-data)
+          #'msg-sync (cmd-sync conn)
+          #'msg-execute (cmd-execute conn msg-data)
+          #'msg-describe (cmd-describe conn msg-data)
+          #'msg-flush (cmd-flush conn)
+
+          ;; ignored by xt
+          #'msg-password nil
+
+          (cmd-send-error conn (err-protocol-violation "unknown client message")))))))
+
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
 
-(defn- conn-loop [conn]
-  (let [{:keys [cid, server, ^Socket socket, in, conn-status, conn-state]} conn
-        {:keys [port !closing?]} server]
-
-    (when-not (compare-and-set! conn-status :new :running)
-      (log/error "Connect loop requires a newly initialised connection" {:cid cid, :port port}))
-
+(defn- conn-loop [{:keys [cid, server, ^Socket socket, in, conn-status, conn-state] :as conn}]
+  (let [{:keys [port !closing?]} server]
     (cmd-startup conn)
 
     (loop []
@@ -1502,39 +1531,8 @@
 
         ;; go idle until we receive another msg from the client
         :else
-        (let [{:keys [msg-char8, msg-in]} (read-typed-msg in)
-              msg-var (client-msgs msg-char8)]
-
-          (log/trace "Read client msg"
-                     {:port port, :cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
-
-          (when (:skip-until-sync @conn-state)
-            (if (= msg-var #'msg-sync)
-              (cmd-enqueue-cmd conn [#'cmd-sync])
-              (log/trace "Skipping msg until next sync due to error in extended protocol"
-                         {:port port, :cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
-
-          (when-not msg-var
-            (cmd-send-error conn (err-protocol-violation "unknown client message")))
-
-          (when (and msg-var (not (:skip-until-sync @conn-state)))
-            (let [msg-data ((:read @msg-var) msg-in)]
-              (condp = msg-var
-                #'msg-simple-query (cmd-simple-query conn msg-data)
-                #'msg-terminate (cmd-terminate conn)
-                #'msg-close (cmd-close conn msg-data)
-                #'msg-parse (cmd-parse conn msg-data)
-                #'msg-bind (cmd-bind conn msg-data)
-                #'msg-sync (cmd-sync conn)
-                #'msg-execute (cmd-execute conn msg-data)
-                #'msg-describe (cmd-describe conn msg-data)
-                #'msg-flush (cmd-flush conn)
-
-                ;; ignored by xt
-                #'msg-password nil
-
-                (cmd-send-error conn (err-protocol-violation "unknown client message")))))
-
+        (do
+          (handle-msg (read-typed-msg in) conn)
           (recur))))))
 
 (defn- connect
@@ -1544,81 +1542,60 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [server, ^Socket conn-socket, node]
-  (let [{:keys [server-state, port]} server
-        cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
-        in (DataInputStream. (.getInputStream conn-socket))
-        out (DataOutputStream. (.getOutputStream conn-socket))
-        conn-status (atom :new)
-        conn-state (atom {:close-promise (promise)
-                          :session {:access-mode :read-only
-                                    :clock (:clock @server-state)}})
+  [{:keys [server-state, port] :as server} ^Socket conn-socket, node]
+  (let [close-promise (promise)
+        {:keys [cid] :as conn} (util/with-close-on-catch [_ conn-socket]
+                                   (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
+                                         in (DataInputStream. (.getInputStream conn-socket))
+                                         out (DataOutputStream. (.getOutputStream conn-socket))
 
-        create-node? (nil? node)
+                                         create-node? (nil? node)
 
-        node (or node
-                 (do
-                   (log/debug "starting in-memory node")
-                   (xtn/start-node)))
-
-        conn (map->Connection {:server server,
-                               :node node
-                               :close-node? create-node?
-                               :socket conn-socket,
-                               :cid cid,
-                               :conn-status conn-status
-                               :conn-state conn-state
-                               :in in
-                               :out out})]
-
-    ;; first try and initialise the connection
+                                         node (or node
+                                                  (do
+                                                    (log/debug "starting in-memory node")
+                                                    (xtn/start-node)))]
+                                     (map->Connection {:cid cid,
+                                                       :server server,
+                                                       :node node
+                                                       :close-node? create-node?
+                                                       :socket conn-socket, :in in, :out out
+                                                       :conn-status (atom :running)
+                                                       :conn-state (atom {:close-promise close-promise
+                                                                          :session {:access-mode :read-only
+                                                                                    :clock (:clock @server-state)}})})))]
     (try
-      ;; registering the connection in allows us to address it from the server
-      ;; important for shutdowns.
-      (let [conn-in-map (-> (swap! server-state update-in [:connections cid] (fn [e] (or e conn)))
-                            (get-in [:connections cid]))]
-        (when-not (identical? conn-in-map conn)
-          (compare-and-set! conn-status :new :error-on-start)))
+      (swap! server-state assoc-in [:connections cid] conn)
 
-      (catch Throwable e
-        (compare-and-set! conn-status :new :error-on-start)
-        (log/error e "An exception was caught on connection start" {:port port, :cid cid})))
+      (log/trace "Starting connection loop" {:port port, :cid cid})
+      (conn-loop conn)
+      (catch SocketException e
+        (when (= "Broken pipe (Write failed)" (.getMessage e))
+          (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
+          (.close conn-socket))
 
-    ;; if we succeeded, start the conn loop
-    (when (= :new @conn-status)
-      (try
-        (log/trace "Starting connection loop" {:port port, :cid cid})
-        (conn-loop conn)
-        (catch SocketException e
-          (when (= "Broken pipe (Write failed)" (.getMessage e))
-            (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
-            (.close conn-socket))
+        (when (= "Connection reset by peer" (.getMessage e))
+          (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
+          (.close conn-socket))
 
-          (when (= "Connection reset by peer" (.getMessage e))
-            (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
-            (.close conn-socket))
+        ;; socket being closed is normal, otherwise log.
+        (when-not (.isClosed conn-socket)
+          (log/error e "An exception was caught during connection" {:port port, :cid cid})))
 
-          ;; socket being closed is normal, otherwise log.
-          (when-not (.isClosed conn-socket)
-            (log/error e "An exception was caught during connection" {:port port, :cid cid})))
-        (catch EOFException _
-          (log/trace "Connection closed by client" {:port port, :cid cid}))
-        (catch Throwable e
-          (log/error e "An exception was caught during connection" {:port port, :cid cid}))))
+      (catch EOFException _
+        (log/trace "Connection closed by client" {:port port, :cid cid}))
 
-    ;; right now we'll deregister and cleanup regardless, but later we may
-    ;; want to leave conns around for a bit, so you can look at their state and debug
-    (cleanup-connection-resources conn)
-    (when create-node?
-      (log/debug "closing in-memory node")
-      (util/close node))
+      (catch IOException e
+        (log/debug e "IOException in connection" {:port port, :cid cid}))
 
-    (log/trace "Connection ended" {:cid cid, :port port})
+      (catch InterruptedException _)
 
-    ;; can be used to co-ordinate waiting for close
-    (when-some [close-promise (:close-promise @conn-state)]
-      (when-not (realized? close-promise)
-        (deliver close-promise true)))))
+      (finally
+        (util/close conn)
+
+        ;; can be used to co-ordinate waiting for close
+        (when-not (realized? close-promise)
+          (deliver close-promise true))))))
 
 (defn- accept-loop
   "Runs an accept loop on the current thread (intended to be the Server's :accept-thread).
