@@ -73,7 +73,7 @@
     (require-server))
 
   (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
-    (format "jdbc:postgresql://:%s/xtdb%s" *port* param-str)))
+    (format "jdbc:postgresql://localhost:%s/xtdb%s" *port* (or param-str ""))))
 
 (deftest connect-with-next-jdbc-test
   (with-open [_ (jdbc/get-connection (jdbc-url))])
@@ -389,14 +389,6 @@
   (.close *server*)
   (check-server-resources-freed))
 
-(deftest accept-socket-timeout-set-by-default-test
-  (require-server)
-  (is (pos? (.getSoTimeout (:accept-socket *server*)))))
-
-(deftest accept-socket-timeout-can-be-unset-test
-  (require-server {:accept-so-timeout nil})
-  (is (= 0 (.getSoTimeout (:accept-socket *server*)))))
-
 (defn- get-connections []
   (vals (:connections @(:server-state *server*))))
 
@@ -490,10 +482,9 @@
 ;; and observe that connection continue until the multi-message extended interaction is done
 ;; (when we introduce read transactions I will probably extend this to short-lived transactions)
 (deftest close-drains-active-extended-queries-before-stopping-test
-  (require-server {:num-threads 10
-                   :accept-so-timeout 10})
+  (require-server {:num-threads 10})
   (let [cmd-parse @#'pgwire/cmd-parse
-        server-status (:server-status *server*)
+        {:keys [!closing?]} *server*
         latch (CountDownLatch. 10)]
     ;; redefine parse to block when we ping
     (with-redefs [pgwire/cmd-parse
@@ -505,7 +496,7 @@
                         ;; delay until we see a draining state
                         (loop [wait-until (+ (System/currentTimeMillis) 5000)]
                           (when (and (< (System/currentTimeMillis) wait-until)
-                                     (not= :draining @server-status))
+                                     (not @!closing?))
                             (recur wait-until)))
                         (cmd-parse conn cmd))))]
       (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))

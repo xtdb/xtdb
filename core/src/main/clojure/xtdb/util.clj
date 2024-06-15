@@ -315,7 +315,7 @@
   [^CompletableFuture fut f]
   (.thenCompose fut (->jfn f)))
 
-(def uncaught-exception-handler
+(def ^Thread$UncaughtExceptionHandler uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
     (uncaughtException [_ _thread throwable]
       (log/error throwable "Uncaught exception:"))))
