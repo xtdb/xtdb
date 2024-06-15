@@ -35,32 +35,6 @@
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
-(defn- cleanup-connection-resources [conn]
-  (let [{:keys [cid, server, ^Socket socket, conn-status]} conn
-
-        {:keys [server-state]} server]
-
-    (reset! conn-status :cleaning-up)
-
-    (when-not (.isClosed socket)
-      (try
-        (.close socket)
-        (catch Throwable e
-          (log/error e "Exception caught closing conn socket"))))
-
-    (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
-      (swap! server-state update :connections
-             (fn [conns]
-               (if (identical? conn (get conns cid))
-                 (dissoc conns cid)
-                 conns))))))
-
-(defn stop-connection [conn]
-  (let [{:keys [conn-status]} conn]
-    (reset! conn-status :closing)
-    ;; TODO wait for close?
-    (cleanup-connection-resources conn)))
-
 ;;; Server
 ;; Represents a single postgres server on a particular port
 ;; the server currently is a blocking IO server (no nio / netty)
@@ -106,8 +80,7 @@
                 :else (do (Thread/sleep 10) (recur))))))
 
         ;; force stopping conns
-        (doseq [conn (vals (:connections @server-state))]
-          (stop-connection conn))
+        (util/try-close (vals (:connections @server-state)))
 
         (when-not (.isShutdown thread-pool)
           (log/trace "Closing thread pool")
@@ -132,7 +105,7 @@
 
 (defrecord Connection [^Server server
                        node close-node?
-                       socket
+                       ^Socket socket
 
                        ;; a positive integer that identifies the connection on this server
                        ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
@@ -147,7 +120,22 @@
 
   Closeable
   (close [this]
-    (stop-connection this)
+    (let [{:keys [server-state]} server]
+
+      (reset! conn-status :cleaning-up)
+
+      (when-not (.isClosed socket)
+        (try
+          (.close socket)
+          (catch Throwable e
+            (log/error e "Exception caught closing conn socket"))))
+
+      (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
+        (swap! server-state update :connections
+               (fn [conns]
+                 (if (identical? this (get conns cid))
+                   (dissoc conns cid)
+                   conns)))))
 
     (when close-node?
       (util/close node))))
