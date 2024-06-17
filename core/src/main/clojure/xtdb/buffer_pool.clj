@@ -195,7 +195,7 @@
          (util/atomic-move tmp-path file-path)))))
 
   (listAllObjects [_]
-    (with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
+    (util/with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
       (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
                        :when (Files/isRegularFile path (make-array LinkOption 0))]
                    (.relativize disk-store path))))))
@@ -203,7 +203,7 @@
   (listObjects [_ dir]
     (let [dir (.resolve disk-store dir)]
       (when (Files/exists dir (make-array LinkOption 0))
-        (with-open [dir-stream (Files/newDirectoryStream dir)]
+        (util/with-open [dir-stream (Files/newDirectoryStream dir)]
           (vec (sort (for [^Path path dir-stream]
                        (.relativize disk-store path))))))))
 
@@ -324,7 +324,7 @@
             (<= (.remaining mmap-buffer) (int min-multipart-part-size)))
       @(.putObject object-store k mmap-buffer)
 
-      (with-open [arrow-buf (util/->arrow-buf-view allocator mmap-buffer)]
+      (util/with-open [arrow-buf (util/->arrow-buf-view allocator mmap-buffer)]
         (upload-multipart-buffers object-store k (arrow-buf->parts arrow-buf))
         nil))))
 
@@ -409,7 +409,7 @@
     
             (.thenRun (fn []
                         (let [tmp-path (create-tmp-path local-disk-cache)]
-                          (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
+                          (util/with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
                             (.write file-ch buffer))
     
                           (let [file-path (.resolve local-disk-cache k)]
@@ -463,11 +463,11 @@
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 
 (defn get-footer ^ArrowFooter [^IBufferPool bp ^Path path]
-  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
+  (util/with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
     (util/read-arrow-footer arrow-buf)))
 
 (defn open-record-batch ^ArrowRecordBatch [^IBufferPool bp ^Path path block-idx]
-  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
+  (util/with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
     (try
       (let [footer (util/read-arrow-footer arrow-buf)
             blocks (.getRecordBatches footer)
