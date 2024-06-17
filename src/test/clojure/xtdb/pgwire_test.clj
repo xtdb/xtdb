@@ -4,22 +4,21 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as result-set])
+            [xtdb.util :as util])
   (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)
            (java.lang Thread$State)
-           (java.net SocketException)
            (java.sql Connection)
            (java.time Clock Instant ZoneId ZoneOffset)
-           java.util.List
            (java.util.concurrent CountDownLatch TimeUnit)
+           java.util.List
            (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
