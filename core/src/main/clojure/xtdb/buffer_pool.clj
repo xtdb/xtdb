@@ -327,6 +327,7 @@
       (with-open [arrow-buf (util/->arrow-buf-view allocator mmap-buffer)]
         (upload-multipart-buffers object-store k (arrow-buf->parts arrow-buf))
         nil))))
+
 (defrecord RemoteBufferPool [allocator
                              ^ArrowBufLRU memory-store
                              ^Path local-disk-cache
@@ -467,12 +468,15 @@
 
 (defn open-record-batch ^ArrowRecordBatch [^IBufferPool bp ^Path path block-idx]
   (with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
-    (let [footer (util/read-arrow-footer arrow-buf)
-          blocks (.getRecordBatches footer)
-          block (nth blocks block-idx nil)]
-      (if-not block
-        (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
-        (util/->arrow-record-batch-view block arrow-buf)))))
+    (try
+      (let [footer (util/read-arrow-footer arrow-buf)
+            blocks (.getRecordBatches footer)
+            block (nth blocks block-idx nil)]
+        (if-not block
+          (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
+          (util/->arrow-record-batch-view block arrow-buf)))
+      (catch Exception e
+        (throw (ex-info "Failed opening record batch" {:path path :block-idx block-idx} e))))))
 
 (defn open-vsr ^VectorSchemaRoot [bp ^Path path allocator]
   (let [footer (get-footer bp path)
