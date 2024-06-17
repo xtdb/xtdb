@@ -12,7 +12,6 @@ dependencies {
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
     api(project(":modules:datasets"))
-    api(project(":modules:xtdb-jdbc"))
     api(project(":modules:xtdb-kafka"))
     api(project(":modules:xtdb-s3"))
 

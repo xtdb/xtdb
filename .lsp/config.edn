@@ -11,7 +11,6 @@
                 "http-client-jvm/src/main/clojure"
                 "pgwire-server/src/main/clojure"
 
-                "modules/jdbc/src/main/clojure"
                 "modules/kafka/src/main/clojure"
                 "modules/s3/src/main/clojure" "modules/s3/src/main/java"
                 "modules/bench/src/main/clojure"

@@ -224,7 +224,6 @@ dependencies {
     projectDep(":xtdb-http-client-jvm")
     projectDep(":xtdb-pgwire-server")
 
-    projectDep(":modules:xtdb-jdbc")
     projectDep(":modules:xtdb-kafka")
     projectDep(":modules:xtdb-s3")
     projectDep(":modules:xtdb-azure")

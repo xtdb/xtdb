@@ -109,7 +109,7 @@ XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x 
 2.x is split across multiple projects which are maintained within this repository.
 
 * `api` contains the user API to XTDB 2.x.
-* `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, JDBC, S3 DB etc.).
+* `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, S3 DB etc.).
   Implementations of these storage options are located in their own projects.
 * `http-server` and `http-client-jvm` contain the HTTP server implementation, and a remote client for JVM users.
 * Storage and other modules are under `modules`.
