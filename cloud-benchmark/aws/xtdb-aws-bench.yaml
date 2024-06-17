@@ -64,7 +64,12 @@ Parameters:
   AuctionmarkLoadPhase:
     Type: String
     Default: 'True'
-    Description: Whether or not to run the load phase of Auctionmark
+    Description: Whether or not to run the load phase of Auctionmark in the full benchmark
+  
+  AuctionmarkRunLoadPhaseOnly:
+    Type: String
+    Default: 'False'
+    Description: Whether or not to ONLY run the load phase porion of Auctionmark
 
 Metadata: 
   AWS::CloudFormation::Interface: 
@@ -92,6 +97,7 @@ Metadata:
           - AuctionmarkDuration
           - AuctionmarkScaleFactor
           - AuctionmarkLoadPhase
+          - AuctionmarkRunLoadPhaseOnly
 
 
 Resources:
@@ -221,6 +227,8 @@ Resources:
               Value: !Ref AuctionmarkScaleFactor
             - Name: AUCTIONMARK_LOAD_PHASE
               Value: !Ref AuctionmarkLoadPhase
+            - Name: AUCTIONMARK_LOAD_PHASE_ONLY
+              Value: !Ref AuctionmarkRunLoadPhaseOnly
           Secrets:
             - Name: "BENCH_SECRETS"
               ValueFrom: !Ref BenchSecrets

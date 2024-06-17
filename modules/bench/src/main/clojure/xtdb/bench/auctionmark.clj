@@ -593,6 +593,23 @@
   (let [{:keys [latest-submitted-tx]} (xt/status node)]
     (idx/await-tx latest-submitted-tx node nil)))
 
+(defn load-phase-only [{:keys [seed scale-factor] :or {seed 0 scale-factor 0.1}}]
+  (let [sf scale-factor]
+    {:title "Auction Mark Load Phase"
+     :seed seed
+     :tasks [{:t :do
+              :stage :load
+              :tasks [{:t :call, :f (fn [_] (log/info "start load stage"))}
+                      {:t :call, :f load-categories-tsv}
+                      {:t :call, :f [bxt/generate :region generate-region 75]}
+                      {:t :call, :f [bxt/generate :category generate-category 16908]}
+                      {:t :call, :f [bxt/generate :user generate-user (* sf 1e6)]}
+                      {:t :call, :f [bxt/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
+                      {:t :call, :f [bxt/generate :item generate-item (* sf 1e6 10)]}
+                      {:t :call, :f [bxt/generate :gag generate-global-attribute-group 100]}
+                      {:t :call, :f [bxt/generate :gav generate-global-attribute-value 1000]}
+                      {:t :call, :f (fn [_] (log/info "finished load stage"))}]}]}))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn benchmark [{:keys [seed,
                          threads,

@@ -7,14 +7,18 @@
             [xtdb.bench :as b]
             [xtdb.bench.auctionmark :as am]
             [xtdb.bench.measurement :as bm]
-            [xtdb.node :as xtn]) 
+            [xtdb.node :as xtn])
   (:import [clojure.lang ExceptionInfo]))
 
 (def run-duration (or (System/getenv "AUCTIONMARK_DURATION") "PT24H"))
 (def scale-factor (or (some-> (System/getenv "AUCTIONMARK_SCALE_FACTOR") (Float/parseFloat)) 0.1))
-(def load-phase (if-let [lp (System/getenv "AUCTIONMARK_LOAD_PHASE")] 
+(def load-phase (if-let [lp (System/getenv "AUCTIONMARK_LOAD_PHASE")]
                   (Boolean/parseBoolean lp)
                   true))
+(def load-phase-only? (if-let [lp (System/getenv "AUCTIONMARK_LOAD_PHASE_ONLY")]
+                        (Boolean/parseBoolean lp)
+                        false))
+
 (def bench-secrets
   (some-> (System/getenv "BENCH_SECRETS")
           (json/parse-string)))
@@ -25,6 +29,11 @@
               (not-empty))
       (some-> (System/getenv "SLACK_WEBHOOK_URL")
               (not-empty))))
+
+(defn send-message-to-slack [message]
+  (when slack-url
+    (http/post slack-url {:headers {"Content-Type" "application/json"}
+                          :body (json/generate-string {:text message})})))
 
 ;; If ex-info contains `system` suggests integrant runtime error 
 ;; - get the cause instead, as that's more useful to us
@@ -40,20 +49,27 @@
                   e)
           error-message (format
                          ":x: Error thrown within Auctionmark: *%s*! \n\n*Stack Trace:*\n ```%s```"
-                         (.getMessage error) 
+                         (.getMessage error)
                          (with-out-str (st/print-cause-trace error 15)))]
-      (http/post slack-url {:headers {"Content-Type" "application/json"}
-                            :body (json/generate-string {:text error-message})}))))
+      (send-message-to-slack error-message))))
 
-(defn send-success-to-slack [{:keys [duration scale-factor load-phase]}]
-  (when slack-url
-    (let [success-message (format
-                           ":white_check_mark: Auctionmark successfully ran for *%s*! \n\n*Scale Factor*: `%s` \n*Load-Phase*: `%s`"
-                           duration scale-factor load-phase) ]
-      (http/post slack-url {:headers {"Content-Type" "application/json"}
-                            :body (json/generate-string {:text success-message})}))))
+(defn run-load-phase-only [node]
+  (let [am-config {:seed 0
+                   :scale-factor scale-factor}
+        load-phase-bench (am/load-phase-only am-config)
+        load-phase-fn (b/compile-benchmark load-phase-bench bm/wrap-task)]
+    (log/info "Running Load Phase with the following config... \n" am-config)
+    (try
+      (load-phase-fn node)
+      (send-message-to-slack
+       (format ":white_check_mark: Auctionmark Load Phase successfully ran for *Scale Factor*: `%s`" scale-factor))
 
-(defn -main [] 
+      (catch Exception e
+        (log/error "Error running Auctionmark Load Phase: " (.getMessage e))
+        (send-error-to-slack e)
+        (throw e)))))
+
+(defn run-full-auctionmark [node]
   (let [am-config {:seed 0
                    :threads 8
                    :duration run-duration
@@ -62,14 +78,21 @@
                    :sync false}
         benchmark (am/benchmark am-config)
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
-    (log/info "Running Auctionmark with the following config... \n" am-config)
-    (log/info "Starting node with config... \n" (slurp (io/file "node-config.yaml"))) 
+    (log/info "Running Auctionmark Benchmark with the following config... \n" am-config)
     (try
-      (with-open [node (xtn/start-node (io/file "node-config.yaml"))]
-        (benchmark-fn node)
-        (send-success-to-slack am-config))
-      
+      (benchmark-fn node)
+      (send-message-to-slack
+       (format
+        ":white_check_mark: Auctionmark successfully ran for *%s*! \n\n*Scale Factor*: `%s` \n*Load-Phase*: `%s`" run-duration scale-factor load-phase))
+
       (catch Exception e
         (log/error "Error running Auctionmark: " (.getMessage e))
         (send-error-to-slack e)
         (throw e)))))
+
+(defn -main []
+  (log/info "Starting node with config... \n" (slurp (io/file "node-config.yaml")))
+  (with-open [node (xtn/start-node (io/file "node-config.yaml"))]
+    (if load-phase-only?
+      (run-load-phase-only node)
+      (run-full-auctionmark node))))
