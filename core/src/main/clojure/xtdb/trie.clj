@@ -73,8 +73,8 @@
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 4))) false
                            (types/col-type->field "nil" :null)
                            (types/col-type->field "branch-iid" [:list [:union #{:null :i32}]])
-                           (types/->field "branch-recency" #xt.arrow/type [:map {:sorted? true}] false
-                                          (types/->field "recency-el" #xt.arrow/type :struct false
+                           (types/->field "branch-recency" (types/->arrow-type [:map {:sorted? true}]) false
+                                          (types/->field "recency-el" (types/->arrow-type :struct) false
                                                          (types/col-type->field "recency" types/temporal-col-type)
                                                          (types/col-type->field "idx" [:union #{:null :i32}])))
 

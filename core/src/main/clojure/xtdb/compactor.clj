@@ -8,8 +8,9 @@
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
+           [java.time Duration]
            [java.util ArrayList Arrays Comparator HashSet LinkedList PriorityQueue]
-           [java.util.concurrent Executors TimeUnit]
+           [java.util.concurrent Executors Semaphore TimeUnit]
            [java.util.concurrent.locks ReentrantLock]
            (java.util.function Predicate)
            [org.apache.arrow.memory BufferAllocator]
@@ -25,9 +26,9 @@
            xtdb.vector.RelationReader))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ICompactor
-  (^void compactAll [])
-  (^void signalBlock []))
+(defprotocol PCompactor
+  (-compact-all! [compactor])
+  (signal-block! [compactor]))
 
 (defn- ->reader->copier [^IRelationWriter data-wtr]
   (let [iid-wtr (.colWriter data-wtr "xt$iid")
@@ -251,97 +252,118 @@
                   (assoc job :table-path table-path)))]
 
         (let [lock (ReentrantLock.)
-              job-finished (.newCondition lock)
-              compact-requested (.newCondition lock)
-              !active-jobs (HashSet.)
-              thread-pool (Executors/newThreadPerTaskExecutor (-> (Thread/ofVirtual)
-                                                                  (.name "xtdb.compactor-" 0)
-                                                                  (.factory)))]
+              wake-up-mgr (.newCondition lock)
+              nothing-to-do (.newCondition lock)
+              active-task-limit (Semaphore. threads)
 
-          (letfn [(available-job []
-                    (let [jobs (shuffle (available-jobs))]
-                      (.lock lock)
-                      (try
-                        (some (fn [{:keys [out-trie-key] :as job}]
-                                (when (.add !active-jobs out-trie-key)
-                                  job))
-                              jobs)
-                        (finally
-                          (.unlock lock)))))
+              !queued-jobs (HashSet.)
+              !available-jobs (atom #{})
+              task-pool (Executors/newThreadPerTaskExecutor (-> (Thread/ofVirtual)
+                                                                (.name "xtdb.compactor-" 0)
+                                                                (.factory)))]
 
-                  (compactor-loop []
+          (letfn [(compactor-task [{:keys [out-trie-key] :as job}]
+                    (.acquire active-task-limit)
                     (try
-                      (loop []
-                        (when (Thread/interrupted)
-                          (throw (InterruptedException.)))
+                      (when (do
+                              (.lock lock)
+                              (try
+                                (contains? @!available-jobs out-trie-key)
+                                (finally
+                                  (.unlock lock))))
 
-                        (if-let [{:keys [out-trie-key] :as job} (available-job)]
-                          (do
-                            (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job)
-                            (.lock lock)
-                            (try
-                              (.remove !active-jobs out-trie-key)
-                              (.signalAll job-finished)
-                              (finally
-                                (.unlock lock))))
+                        (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job))
 
-                          (do
-                            (.lock lock)
-                            (try
-                              (.await compact-requested 5 TimeUnit/SECONDS)
-                              (catch Throwable t
-                                (throw t))
-                              (finally
-                                (.unlock lock)))))
+                      (finally
+                        (.release active-task-limit)))
 
-                        (recur))
+                    (.lock lock)
+                    (try
+                      (.remove !queued-jobs out-trie-key)
+                      (.signalAll wake-up-mgr)
+                      (finally
+                        (.unlock lock))))]
 
-                      (catch InterruptedException _)
-                      (catch Throwable t
-                        (log/warn t "uncaught compactor-loop error"))))]
+            (let [mgr-thread (-> (Thread/ofPlatform)
+                                 (.name "xtdb.compactor.manager")
+                                 (.uncaughtExceptionHandler util/uncaught-exception-handler)
+                                 (.start (fn []
+                                           (try
+                                             (while true
+                                               (when (Thread/interrupted)
+                                                 (throw (InterruptedException.)))
 
-            (dotimes [_ threads]
-              (.execute thread-pool compactor-loop))
+                                               (.lock lock)
+                                               (try
+                                                 (let [available-jobs (available-jobs)
+                                                       available-job-keys (into #{} (map :out-trie-key) available-jobs)]
+                                                   (reset! !available-jobs available-job-keys)
+                                                   (if (and (empty? available-jobs)
+                                                            (empty? !queued-jobs))
+                                                     (do
+                                                       (log/trace "nothing to do")
+                                                       (.signalAll nothing-to-do))
 
-            (reify ICompactor
-              (compactAll [_]
-                (log/info "compact-all")
-                (.lock lock)
-                (try
-                  (.signalAll compact-requested)
-                  (finally
-                    (.unlock lock)))
+                                                     (doseq [{:keys [out-trie-key] :as job} available-jobs
+                                                             :when (.add !queued-jobs out-trie-key)]
+                                                       (log/trace "submitting" out-trie-key)
+                                                       (.submit task-pool ^Runnable #(compactor-task job))))
 
-                (loop []
+                                                   (log/trace "sleeping")
+                                                   (.await wake-up-mgr))
+                                                 (finally
+                                                   (.unlock lock))))
+
+                                             (catch InterruptedException _))
+
+                                           (log/debug "main compactor thread exiting"))))]
+
+              (reify PCompactor
+                (-compact-all! [_]
+                  (log/info "compact-all")
                   (.lock lock)
-                  (when-not (try
-                              (cond
-                                (not (.isEmpty !active-jobs)) (do (.await job-finished) false)
-                                (not (empty? (available-jobs))) (do (.await job-finished 5 TimeUnit/SECONDS) false)
-                                :else true)
-                              (finally
-                                (.unlock lock)))
-                    (recur))))
+                  (try
+                    (.signalAll wake-up-mgr)
+                    (.await nothing-to-do)
+                    (log/info "all compacted")
+                    (finally
+                      (.unlock lock))))
 
-              (signalBlock [_]
-                (.lock lock)
-                (try
-                  (.signalAll compact-requested)
-                  (finally
-                    (.unlock lock))))
+                (signal-block! [_]
+                  (log/debug "signal")
+                  (.lock lock)
+                  (try
+                    (.signalAll wake-up-mgr)
+                    (finally
+                      (.unlock lock))))
 
-              AutoCloseable
-              (close [_]
-                (.shutdownNow thread-pool)
-                (when-not (.awaitTermination thread-pool 20 TimeUnit/SECONDS)
-                  (log/warn "could not close compaction thread-pool after 20s"))
+                AutoCloseable
+                (close [_]
+                  (.shutdownNow task-pool)
+                  (.interrupt mgr-thread)
+                  (when-not (.awaitTermination task-pool 20 TimeUnit/SECONDS)
+                    (log/warn "could not close compaction thread-pool after 20s"))
 
-                (util/close allocator)))))))))
+                  (when-not (.join mgr-thread (Duration/ofSeconds 5))
+                    (log/warn "could not close compaction manager after 5s"))
+
+                  (util/close allocator))))))))))
 
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn compact-all! [node]
-  (let [^ICompactor compactor (util/component node :xtdb/compactor)]
-    (.compactAll compactor)))
+  (-compact-all! (util/component node :xtdb/compactor)))
+
+(derive ::no-op :xtdb/compactor)
+
+(defrecord NoOp []
+  PCompactor
+  (signal-block! [_])
+
+  AutoCloseable
+  (close [_]))
+
+(defmethod ig/init-key ::no-op [_ _]
+  (->NoOp))

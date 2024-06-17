@@ -1,21 +1,20 @@
 (ns xtdb.indexer.live-table-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as live-index]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.serde :as serde])
+            [xtdb.vector.reader :as vr])
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            xtdb.IBufferPool
-           (xtdb.api TransactionKey)
            (xtdb.indexer.live_index ILiveIndex TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)
@@ -168,7 +167,7 @@
       (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
             mm (tu/component node ::meta/metadata-manager)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm
+        (util/with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm (c/->NoOp)
                                                                         nil nil (HashMap.)
                                                                         nil (StampedLock.)
                                                                         (RefCounter.)

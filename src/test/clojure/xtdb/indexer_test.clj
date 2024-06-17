@@ -389,11 +389,11 @@
 
           (let [objs (mapv str (.listAllObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-            (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs))))))))))
+            (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/log-l00.+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l00.+?\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/meta/log-l00.+?\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00.+?\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00.+?\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -439,11 +439,11 @@
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                   (let [objs (mapv str (.listAllObjects bp))]
                     (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                    (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs))))))
+                    (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/log-l00.+\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/log-l00.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/log-l00.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00.+?\.arrow" %) objs))))))
 
                 (t/is (= :utf8
                          (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
@@ -479,11 +479,11 @@
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                       (let [objs (mapv str (.listAllObjects bp))]
                         (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                        (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/.+?\.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/.+?\.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/.+?\.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/.+?\.arrow" %) objs)))))
+                        (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/log-l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00-.+.arrow" %) objs)))))
 
                       (t/is (= :utf8
                                (types/field->col-type (.columnField mm "device_info" "xt$id")))))))))))))))

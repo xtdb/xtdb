@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
+            [xtdb.compactor :as c]
             [xtdb.metadata :as meta]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -239,7 +240,7 @@
       AutoCloseable
       (close [_] (util/close wms)))))
 
-(deftype LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
+(deftype LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr, compactor
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
                     ^Map tables,
@@ -364,6 +365,7 @@
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
+      (c/signal-block! compactor)
       (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
 
   (force-flush! [this tx-key expected-last-chunk-tx-id]
@@ -385,13 +387,14 @@
   {:allocator (ig/ref :xtdb/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :metadata-mgr (ig/ref ::meta/metadata-manager)
+   :compactor (ig/ref :xtdb/compactor)
    :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr ^IndexerConfig config]}]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr compactor ^IndexerConfig config]}]
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (let [tables (HashMap.)]
-        (->LiveIndex allocator buffer-pool metadata-mgr
+        (->LiveIndex allocator buffer-pool metadata-mgr compactor
                      latest-completed-tx latest-completed-tx
                      tables
 
