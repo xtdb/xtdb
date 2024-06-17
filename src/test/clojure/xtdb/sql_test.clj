@@ -1641,3 +1641,11 @@
   (t/is (= [{:x 1, :y 1, :z 1}]
            (xt/q tu/*node* "SELECT * EXCLUDE _id FROM ( foo JOIN (bar JOIN baz ON true) ON true )"))))
 
+(t/deftest test-select-same-col-twice-3025
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+
+  (t/is (= [{:something 1 :other 1}]
+           (xt/q tu/*node* '(from :docs [{:xt/id something} {:xt/id other}]))))
+
+  (t/is (= [{:something 1 :other 1}]
+           (xt/q tu/*node* "SELECT _id as something, _id as other FROM docs"))))
