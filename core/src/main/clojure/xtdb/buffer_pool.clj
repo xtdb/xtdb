@@ -344,7 +344,7 @@
             (CompletableFuture/completedFuture cached-buffer))
 
         :else
-        (let [buffer-cache-path (.resolve local-disk-cache (str k))
+        (let [buffer-cache-path (.resolve local-disk-cache k)
               start-ns (System/nanoTime)]
           (-> (if (util/path-exists buffer-cache-path)
                 ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
@@ -355,9 +355,9 @@
               (util/then-apply
                 (fn [path]
                   (let [nio-buffer (util/->mmap-path path)
-                        close-fn (fn [] (util/delete-file path))
-                        create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer close-fn)
+                        create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                         [_ buf] (cache-compute memory-store k create-arrow-buf)]
+
                     buf))))))))
 
   (listAllObjects [_] (.listAllObjects object-store))
@@ -476,7 +476,7 @@
           (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
           (util/->arrow-record-batch-view block arrow-buf)))
       (catch Exception e
-        (throw (ex-info "Failed opening record batch" {:path path :block-idx block-idx} e))))))
+        (throw (ex-info (format "Failed opening record batch '%s'" path) {:path path :block-idx block-idx} e))))))
 
 (defn open-vsr ^VectorSchemaRoot [bp ^Path path allocator]
   (let [footer (get-footer bp path)
