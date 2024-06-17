@@ -1649,3 +1649,13 @@
 
   (t/is (= [{:something 1 :other 1}]
            (xt/q tu/*node* "SELECT _id as something, _id as other FROM docs"))))
+
+(deftest test-delete-with-unqualified-col-3017
+  (xt/submit-tx tu/*node* [[:put-docs :table {:xt/id 1 :col "val"}]])
+
+  (t/is (= [{:xt/id 1, :col "val"}]
+           (xt/q tu/*node* "SELECT * FROM table")))
+
+  (xt/submit-tx tu/*node* [[:sql "DELETE FROM table WHERE col = 'val'"]])
+
+  (t/is (empty? (xt/q tu/*node* "SELECT * FROM table"))))
