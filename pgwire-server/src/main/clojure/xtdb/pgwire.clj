@@ -96,13 +96,6 @@
 ;; each connection holds some state under :conn-state (such as prepared statements, session params and such)
 ;; and is registered under the :connections map under the servers :server-state.
 
-;;; Connection lifecycle
-;; new -> running        -> closing -> cleaning-up -> cleaned-up
-;;     -> error-on-start
-;;
-;; Like the server, we use an atom :conn-status to mediate life-cycle state changes to control for concurrency
-;; unlike the server, a connections lifetime is entirely bounded by a blocking (connect) call - so shutdowns should be more predictable.
-
 (defrecord Connection [^Server server
                        node close-node?
                        ^Socket socket
@@ -112,7 +105,7 @@
                        cid
 
                        ;; atom to mediate lifecycle transitions (see Connection lifecycle comment)
-                       conn-status
+                       !closing?
 
                        ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
                        conn-state
@@ -122,19 +115,12 @@
                        ^DataOutputStream out]
 
   Closeable
-  (close [this]
-    (reset! conn-status :cleaning-up)
-
+  (close [_]
     (when-not (.isClosed socket)
       (util/try-close socket))
 
     (let [{:keys [server-state]} server]
-      (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
-        (swap! server-state update :connections
-               (fn [conns]
-                 (if (identical? this (get conns cid))
-                   (dissoc conns cid)
-                   conns)))))
+      (swap! server-state update :connections dissoc cid))
 
     (when close-node?
       (util/close node))
@@ -889,8 +875,8 @@
 
 (defn cmd-terminate
   "Causes the connection to start closing."
-  [{:keys [conn-status]}]
-  (compare-and-set! conn-status :running :closing))
+  [{:keys [!closing?]}]
+  (reset! !closing? true))
 
 (defn cmd-startup-pg30 [conn msg-in]
   (let [{:keys [server]} conn
@@ -987,16 +973,13 @@
   [{:keys [conn-state]} & cmds]
   (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
-(defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
-                             {:keys [query, ^IResultCursor result-cursor fields result-format] :as x}]
-
-
+(defn cmd-send-query-result [{:keys [!closing?, conn-state] :as conn}
+                             {:keys [query, ^IResultCursor result-cursor fields result-format]}]
   (let [json-bytes (comp types/utf8 json/json-str json-clj)
 
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-        closing? #(= :closing @conn-status)
         n-rows-out (volatile! 0)]
 
     (.forEachRemaining
@@ -1015,8 +998,7 @@
              (log/trace "query interrupted by server (forced shutdown)")
              (throw (InterruptedException.)))
 
-           (closing?)
-           (log/trace "query result stream stopping (conn closing)")
+           @!closing? (log/trace "query result stream stopping (conn closing)")
 
            :else
            (try
@@ -1485,8 +1467,8 @@
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
 
-(defn- conn-loop [{:keys [cid, server, ^Socket socket, in, conn-status, conn-state] :as conn}]
-  (let [{:keys [port !closing?]} server]
+(defn- conn-loop [{:keys [cid, server, ^Socket socket, in, conn-state], !conn-closing? :!closing?, :as conn}]
+  (let [{:keys [port], !server-closing? :!closing?} server]
     (cmd-startup conn)
 
     (loop []
@@ -1494,12 +1476,12 @@
       (cond
         ;; the connection is closing right now
         ;; let it close.
-        (not= :running @conn-status)
+        @!conn-closing?
         (log/trace "Connection loop exiting (closing)" {:port port, :cid cid})
 
         ;; if the server is closing, we may later allow connections to finish their queries
         ;; (consider policy - server has a drain limit but maybe better to be explicit here as well)
-        (and @!closing?
+        (and @!server-closing?
              (not= :extended (:protocol @conn-state))
              ;; for now we allow buffered commands to be run
              ;; before closing - there probably needs to be limits to this
@@ -1508,12 +1490,12 @@
         (do (log/trace "Connection loop exiting (draining)" {:port port, :cid cid})
             ;; TODO I think I should send an error, but if I do it causes a crash on the client?
             #_(cmd-send-error conn (err-admin-shutdown "draining connections"))
-            (compare-and-set! conn-status :running :closing))
+            (reset! !conn-closing? true))
 
         ;; well, it won't have been us, as we would drain first
         (.isClosed socket)
         (do (log/trace "Connection closed unexpectedly" {:port port, :cid cid})
-            (compare-and-set! conn-status :running :closing))
+            (reset! !conn-closing? true))
 
         ;; we have queued a command to be processed
         ;; a command represents something we want the server to do for the client
@@ -1560,7 +1542,7 @@
                                                        :node node
                                                        :close-node? create-node?
                                                        :socket conn-socket, :in in, :out out
-                                                       :conn-status (atom :running)
+                                                       :!closing? (atom false)
                                                        :conn-state (atom {:close-promise close-promise
                                                                           :session {:access-mode :read-only
                                                                                     :clock (:clock @server-state)}})})))]
