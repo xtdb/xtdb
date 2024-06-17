@@ -35,97 +35,10 @@
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
-(defn- cleanup-connection-resources [conn]
-  (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
-
-        {:keys [port server-state]} server]
-
-    (reset! conn-status :cleaning-up)
-
-    (when (realized? out)
-      (try
-        (.close ^OutputStream @out)
-        (catch Throwable e
-          (log/error e "Exception caught closing socket out" {:port port, :cid cid}))))
-
-    (when (realized? in)
-      (try
-        (.close ^InputStream @in)
-        (catch Throwable e
-          (log/error e "Exception caught closing socket in" {:port port, :cid cid}))))
-
-    (when-not (.isClosed socket)
-      (try
-        (.close socket)
-        (catch Throwable e
-          (log/error e "Exception caught closing conn socket"))))
-
-
-    (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
-      (swap! server-state update :connections
-             (fn [conns]
-               (if (identical? conn (get conns cid))
-                 (dissoc conns cid)
-                 conns))))))
-
-(defn stop-connection [conn]
-  (let [{:keys [conn-status]} conn]
-    (reset! conn-status :closing)
-    ;; TODO wait for close?
-    (cleanup-connection-resources conn)))
-
-(defn- cleanup-server-resources [{:keys [^long port
-                                         ^ServerSocket accept-socket
-                                         ^Thread accept-thread
-                                         ^ExecutorService thread-pool
-                                         server-state
-                                         server-status]}]
-  ;; TODO revisit these transitions
-  (or (compare-and-set! server-status :draining :cleaning-up)
-      (compare-and-set! server-status :running :cleaning-up)
-      (compare-and-set! server-status :error :cleaning-up)
-      (compare-and-set! server-status :error-on-start :cleaning-up))
-
-  (when-not (.isClosed accept-socket)
-    (log/trace "Closing accept socket" port)
-    (.close accept-socket))
-
-  (when-not (#{Thread$State/NEW, Thread$State/TERMINATED} (.getState accept-thread))
-    (log/trace "Closing accept thread")
-    (.interrupt accept-thread)
-    (.join accept-thread (* 5 1000))
-    (when-not (= Thread$State/TERMINATED (.getState accept-thread))
-      (log/error "Could not shut down accept-thread gracefully" {:port port, :thread (.getName accept-thread)})
-      (compare-and-set! server-status :cleaning-up :error-on-cleanup)
-      (swap! server-state assoc :accept-thread-misbehaving true)))
-
-  ;; force stopping conns
-  (doseq [conn (vals (:connections @server-state))]
-    (stop-connection conn))
-
-  (when-not (.isShutdown thread-pool)
-    (log/trace "Closing thread pool")
-    (.shutdownNow thread-pool)
-    (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
-      (log/error "Could not shutdown thread pool gracefully" {:port port})
-      (compare-and-set! server-status :cleaning-up :error-on-cleanup)
-      (swap! server-state assoc :thread-pool-misbehaving true)))
-
-  (compare-and-set! server-status :cleaning-up :cleaned-up))
-
-
 ;;; Server
 ;; Represents a single postgres server on a particular port
 ;; the server currently is a blocking IO server (no nio / netty)
 ;; the server does not own the lifecycle of its associated node
-
-;;; Server lifecycle
-;; new -> starting        -> running -> draining -> cleaning-up -> cleaned-up
-;;     -> error-on-start  -> error                              -> error-on-cleanup
-;;
-;; lifecycle changes are mediated through the :server-status field, which holds an atom that
-;; can be used to control state transitions from any thread.
-;; The :draining status is used to stop connections when they have finished their current query
 
 (defrecord Server [port
 
@@ -136,40 +49,46 @@
                    ;; a thread pool for handing off connections (currently using blocking io)
                    ^ExecutorService thread-pool
 
-                   ;; atom to mediate lifecycle transitions (see Server lifecycle comment)
-                   server-status
+                   !closing?
 
                    ;; atom to hold server state, such as current connections, and the connection :cid counter.
                    server-state]
   XtdbModule
-  (close [this]
-    (let [drain-wait (:drain-wait @server-state 5000)
-          drain (not (contains? #{0, nil} drain-wait))]
+  (close [_]
+    (when (compare-and-set! !closing? false true)
+      (when-not (#{Thread$State/NEW, Thread$State/TERMINATED} (.getState accept-thread))
+        (log/trace "Closing accept thread")
+        (.interrupt accept-thread)
+        (when-not (.join accept-thread (Duration/ofSeconds 5))
+          (log/error "Could not shut down accept-thread gracefully" {:port port, :thread (.getName accept-thread)})))
 
-      (when (and drain (compare-and-set! server-status :running :draining))
-        (log/trace "Server draining connections")
-        (let [wait-until (+ (System/currentTimeMillis) drain-wait)]
-          (loop []
-            (cond
-              ;; connections all closed, proceed
-              (empty? (:connections @server-state)) nil
+      (let [drain-wait (:drain-wait @server-state 5000)]
+        (when-not (contains? #{0, nil} drain-wait)
+          (log/trace "Server draining connections")
+          (let [wait-until (+ (System/currentTimeMillis) drain-wait)]
+            (loop []
+              (cond
+                ;; connections all closed, proceed
+                (empty? (:connections @server-state)) nil
 
-              (Thread/interrupted)
-              (do (log/warn "Interrupted during drain, force closing")
-                  (swap! server-state assoc :force-close true))
+                (Thread/interrupted) (log/warn "Interrupted during drain, force closing")
 
-              ;; timeout
-              (< wait-until (System/currentTimeMillis))
-              (do (log/warn "Could not drain connections in time, force closing")
-                  (swap! server-state assoc :force-close true))
+                ;; timeout
+                (< wait-until (System/currentTimeMillis))
+                (log/warn "Could not drain connections in time, force closing")
 
-              :else (do (Thread/sleep 10) (recur))))))
+                :else (do (Thread/sleep 10) (recur))))))
 
-      (cleanup-server-resources this)
+        ;; force stopping conns
+        (util/try-close (vals (:connections @server-state)))
 
-      (if (= :cleaned-up @server-status)
-        (log/info "PGWire server stopped")
-        (log/fatal "Server resources could not be freed, please restart XTDB" port)))))
+        (when-not (.isShutdown thread-pool)
+          (log/trace "Closing thread pool")
+          (.shutdownNow thread-pool)
+          (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
+            (log/error "Could not shutdown thread pool gracefully" {:port port})))
+
+        (log/info "PGWire server stopped")))))
 
 ;;; Connection
 ;; Represents a single client connection to the server
@@ -177,34 +96,36 @@
 ;; each connection holds some state under :conn-state (such as prepared statements, session params and such)
 ;; and is registered under the :connections map under the servers :server-state.
 
-;;; Connection lifecycle
-;; new -> running        -> closing -> cleaning-up -> cleaned-up
-;;     -> error-on-start
-;;
-;; Like the server, we use an atom :conn-status to mediate life-cycle state changes to control for concurrency
-;; unlike the server, a connections lifetime is entirely bounded by a blocking (connect) call - so shutdowns should be more predictable.
-
 (defrecord Connection [^Server server
                        node close-node?
-                       socket
+                       ^Socket socket
 
                        ;; a positive integer that identifies the connection on this server
                        ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
                        cid
+
                        ;; atom to mediate lifecycle transitions (see Connection lifecycle comment)
-                       conn-status
+                       !closing?
+
                        ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
                        conn-state
+
                        ;; io
                        ^DataInputStream in
                        ^DataOutputStream out]
 
   Closeable
-  (close [this]
-    (stop-connection this)
+  (close [_]
+    (when-not (.isClosed socket)
+      (util/try-close socket))
+
+    (let [{:keys [server-state]} server]
+      (swap! server-state update :connections dissoc cid))
 
     (when close-node?
-      (util/close node))))
+      (util/close node))
+
+    (log/debug "Connection ended" {:cid cid})))
 
 ;; best the server/conn records are opaque when printed as they contain mutual references
 (defmethod print-method Server [wtr o] ((get-method print-method Object) wtr o))
@@ -575,66 +496,6 @@
 
 ;;; server impl
 
-(defn- start-server [server {:keys [accept-so-timeout]
-                             :or {accept-so-timeout 5000}}]
-  (let [{:keys [server-status, server-state, accept-thread, ^ServerSocket accept-socket, port]} server
-        {:keys [injected-start-exc, silent-start]} @server-state
-        start-exc (atom nil)]
-
-    ;; sanity check its a new server
-    (when-not (compare-and-set! server-status :new :starting)
-      (throw (Exception. (format "Server must be :new to start, port %d" port))))
-
-    (try
-      ;; set a socket timeout so we can interrupt the accept-thread
-      ;; can be set to nil as an option if you want to allow no timeout
-      (when accept-so-timeout
-        (.setSoTimeout accept-socket accept-so-timeout))
-
-      ;; start the accept thread, which will listen for connections
-      (let [is-running (promise)]
-
-        ;; wait for the :running state
-        (add-watch server-status [:accept-watch port]
-                   (fn [_ _ _ ns]
-                     (when (= :running ns)
-                       (deliver is-running true))))
-
-        (.start ^Thread accept-thread)
-
-        ;; wait for a small amount of time for a :running state
-        (when (= :timeout (deref is-running (* 5 1000) :timeout))
-          (log/error "Server accept thread did not start properly" port)
-          (reset! server-status :error-on-start))
-
-        (remove-watch server-status [:accept-watch port]))
-
-      ;; if we have injected an exception, throw it now (e.g for tests)
-      (some-> injected-start-exc throw)
-
-      (catch Throwable e
-        (when-not silent-start
-          (log/error e "Exception caught on server start" port))
-        (reset! server-status :error-on-start)
-        (reset! start-exc e)))
-
-    ;; run clean up if we didn't start for any reason
-    (when (not= :running @server-status)
-      (cleanup-server-resources server))
-
-    ;; check if we could not clean up due to a clean up error
-    (when (compare-and-set! server-status :error-on-cleanup :error-on-start)
-      (log/fatal "Server resources could not be freed, please restart xtdb" port))
-
-    ;; we will have only cleaned up if there was some problem
-    (compare-and-set! server-status :cleaned-up :error-on-start)
-
-    (when-not silent-start
-      (when-some [exc @start-exc]
-        (throw exc))))
-
-  nil)
-
 (defn- set-session-parameter [conn parameter value]
   (let [parameter (-> (util/->kebab-case-kw parameter)
                       ((some-fn {:application-time-defaults :app-time-defaults} identity)))]
@@ -925,12 +786,12 @@
   "Writes out a single message given a definition (msg-def) and optional data record."
   ([conn msg-def]
    (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out @(:out conn)]
+   (let [^DataOutputStream out (:out conn)]
      (.writeByte out (byte (:char8 msg-def)))
      (.writeInt out 4)))
   ([conn msg-def data]
    (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out @(:out conn)
+   (let [^DataOutputStream out (:out conn)
          bytes-out (ByteArrayOutputStream.)
          msg-out (DataOutputStream. bytes-out)
          _ ((:write msg-def) msg-out data)
@@ -1014,8 +875,8 @@
 
 (defn cmd-terminate
   "Causes the connection to start closing."
-  [{:keys [conn-status]}]
-  (compare-and-set! conn-status :running :closing))
+  [{:keys [!closing?]}]
+  (reset! !closing? true))
 
 (defn cmd-startup-pg30 [conn msg-in]
   (let [{:keys [server]} conn
@@ -1068,8 +929,8 @@
   "A command that negotiates startup with the client, including ssl negotiation, and sending the state of the servers
   :parameters."
   [conn]
-  (let [in @(:in conn)
-        ^DataOutputStream out @(:out conn)
+  (let [in (:in conn)
+        ^DataOutputStream out (:out conn)
 
         {:keys [version] :as msg} (read-version in)
 
@@ -1112,16 +973,13 @@
   [{:keys [conn-state]} & cmds]
   (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
-(defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
-                             {:keys [query, ^IResultCursor result-cursor fields result-format] :as x}]
-
-
+(defn cmd-send-query-result [{:keys [!closing?, conn-state] :as conn}
+                             {:keys [query, ^IResultCursor result-cursor fields result-format]}]
   (let [json-bytes (comp types/utf8 json/json-str json-clj)
 
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-        closing? #(= :closing @conn-status)
         n-rows-out (volatile! 0)]
 
     (.forEachRemaining
@@ -1140,8 +998,7 @@
              (log/trace "query interrupted by server (forced shutdown)")
              (throw (InterruptedException.)))
 
-           (closing?)
-           (log/trace "query result stream stopping (conn closing)")
+           @!closing? (log/trace "query result stream stopping (conn closing)")
 
            :else
            (try
@@ -1420,7 +1277,7 @@
 (defn cmd-flush
   "Flushes any pending output to the client."
   [conn]
-  (.flush ^OutputStream @(:out conn)))
+  (.flush ^OutputStream (:out conn)))
 
 (defn cmd-parse
   "Responds to a msg-parse message that creates a prepared-statement."
@@ -1574,16 +1431,44 @@
           ;;so now be ready to accept a new query
           (cmd-send-ready conn))))))
 
+(defn- handle-msg [{:keys [msg-char8, msg-in]} {:keys [cid, conn-state] :as conn}]
+  (let [msg-var (client-msgs msg-char8)]
+
+    (log/trace "Read client msg"
+               {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
+
+    (when (:skip-until-sync @conn-state)
+      (if (= msg-var #'msg-sync)
+        (cmd-enqueue-cmd conn [#'cmd-sync])
+        (log/trace "Skipping msg until next sync due to error in extended protocol"
+                   {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
+
+    (when-not msg-var
+      (cmd-send-error conn (err-protocol-violation "unknown client message")))
+
+    (when (and msg-var (not (:skip-until-sync @conn-state)))
+      (let [msg-data ((:read @msg-var) msg-in)]
+        (condp = msg-var
+          #'msg-simple-query (cmd-simple-query conn msg-data)
+          #'msg-terminate (cmd-terminate conn)
+          #'msg-close (cmd-close conn msg-data)
+          #'msg-parse (cmd-parse conn msg-data)
+          #'msg-bind (cmd-bind conn msg-data)
+          #'msg-sync (cmd-sync conn)
+          #'msg-execute (cmd-execute conn msg-data)
+          #'msg-describe (cmd-describe conn msg-data)
+          #'msg-flush (cmd-flush conn)
+
+          ;; ignored by xt
+          #'msg-password nil
+
+          (cmd-send-error conn (err-protocol-violation "unknown client message")))))))
+
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
 
-(defn- conn-loop [conn]
-  (let [{:keys [cid, server, ^Socket socket, in, conn-status, conn-state]} conn
-        {:keys [port server-status]} server]
-
-    (when-not (compare-and-set! conn-status :new :running)
-      (log/error "Connect loop requires a newly initialised connection" {:cid cid, :port port}))
-
+(defn- conn-loop [{:keys [cid, server, ^Socket socket, in, conn-state], !conn-closing? :!closing?, :as conn}]
+  (let [{:keys [port], !server-closing? :!closing?} server]
     (cmd-startup conn)
 
     (loop []
@@ -1591,12 +1476,12 @@
       (cond
         ;; the connection is closing right now
         ;; let it close.
-        (not= :running @conn-status)
+        @!conn-closing?
         (log/trace "Connection loop exiting (closing)" {:port port, :cid cid})
 
-        ;; if the server is draining, we may later allow connections to finish their queries
+        ;; if the server is closing, we may later allow connections to finish their queries
         ;; (consider policy - server has a drain limit but maybe better to be explicit here as well)
-        (and (= :draining @server-status)
+        (and @!server-closing?
              (not= :extended (:protocol @conn-state))
              ;; for now we allow buffered commands to be run
              ;; before closing - there probably needs to be limits to this
@@ -1605,12 +1490,12 @@
         (do (log/trace "Connection loop exiting (draining)" {:port port, :cid cid})
             ;; TODO I think I should send an error, but if I do it causes a crash on the client?
             #_(cmd-send-error conn (err-admin-shutdown "draining connections"))
-            (compare-and-set! conn-status :running :closing))
+            (reset! !conn-closing? true))
 
         ;; well, it won't have been us, as we would drain first
         (.isClosed socket)
         (do (log/trace "Connection closed unexpectedly" {:port port, :cid cid})
-            (compare-and-set! conn-status :running :closing))
+            (reset! !conn-closing? true))
 
         ;; we have queued a command to be processed
         ;; a command represents something we want the server to do for the client
@@ -1628,39 +1513,8 @@
 
         ;; go idle until we receive another msg from the client
         :else
-        (let [{:keys [msg-char8, msg-in]} (read-typed-msg @in)
-              msg-var (client-msgs msg-char8)]
-
-          (log/trace "Read client msg"
-                     {:port port, :cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
-
-          (when (:skip-until-sync @conn-state)
-            (if (= msg-var #'msg-sync)
-              (cmd-enqueue-cmd conn [#'cmd-sync])
-              (log/trace "Skipping msg until next sync due to error in extended protocol"
-                         {:port port, :cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
-
-          (when-not msg-var
-            (cmd-send-error conn (err-protocol-violation "unknown client message")))
-
-          (when (and msg-var (not (:skip-until-sync @conn-state)))
-            (let [msg-data ((:read @msg-var) msg-in)]
-              (condp = msg-var
-                #'msg-simple-query (cmd-simple-query conn msg-data)
-                #'msg-terminate (cmd-terminate conn)
-                #'msg-close (cmd-close conn msg-data)
-                #'msg-parse (cmd-parse conn msg-data)
-                #'msg-bind (cmd-bind conn msg-data)
-                #'msg-sync (cmd-sync conn)
-                #'msg-execute (cmd-execute conn msg-data)
-                #'msg-describe (cmd-describe conn msg-data)
-                #'msg-flush (cmd-flush conn)
-
-                ;; ignored by xt
-                #'msg-password nil
-
-                (cmd-send-error conn (err-protocol-violation "unknown client message")))))
-
+        (do
+          (handle-msg (read-typed-msg in) conn)
           (recur))))))
 
 (defn- connect
@@ -1670,85 +1524,60 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [server, ^Socket conn-socket, node]
-  (let [{:keys [server-state, port]} server
-        cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
-        in (delay (DataInputStream. (.getInputStream conn-socket)))
-        out (delay (DataOutputStream. (.getOutputStream conn-socket)))
-        conn-status (atom :new)
-        conn-state (atom {:close-promise (promise)
-                          :session {:access-mode :read-only
-                                    :clock (:clock @server-state)}})
+  [{:keys [server-state, port] :as server} ^Socket conn-socket, node]
+  (let [close-promise (promise)
+        {:keys [cid] :as conn} (util/with-close-on-catch [_ conn-socket]
+                                   (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
+                                         in (DataInputStream. (.getInputStream conn-socket))
+                                         out (DataOutputStream. (.getOutputStream conn-socket))
 
-        create-node? (nil? node)
+                                         create-node? (nil? node)
 
-        node (or node
-                 (do
-                   (log/debug "starting in-memory node")
-                   (xtn/start-node)))
-
-        conn (map->Connection {:server server,
-                               :node node
-                               :close-node? create-node?
-                               :socket conn-socket,
-                               :cid cid,
-                               :conn-status conn-status
-                               :conn-state conn-state
-                               :in in
-                               :out out})]
-
-    ;; first try and initialise the connection
+                                         node (or node
+                                                  (do
+                                                    (log/debug "starting in-memory node")
+                                                    (xtn/start-node)))]
+                                     (map->Connection {:cid cid,
+                                                       :server server,
+                                                       :node node
+                                                       :close-node? create-node?
+                                                       :socket conn-socket, :in in, :out out
+                                                       :!closing? (atom false)
+                                                       :conn-state (atom {:close-promise close-promise
+                                                                          :session {:access-mode :read-only
+                                                                                    :clock (:clock @server-state)}})})))]
     (try
-      ;; try make in/out
-      @in
-      @out
+      (swap! server-state assoc-in [:connections cid] conn)
 
-      ;; registering the connection in allows us to address it from the server
-      ;; important for shutdowns.
-      (let [conn-in-map (-> (swap! server-state update-in [:connections cid] (fn [e] (or e conn)))
-                            (get-in [:connections cid]))]
-        (when-not (identical? conn-in-map conn)
-          (compare-and-set! conn-status :new :error-on-start)))
+      (log/trace "Starting connection loop" {:port port, :cid cid})
+      (conn-loop conn)
+      (catch SocketException e
+        (when (= "Broken pipe (Write failed)" (.getMessage e))
+          (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
+          (.close conn-socket))
 
-      (catch Throwable e
-        (compare-and-set! conn-status :new :error-on-start)
-        (log/error e "An exception was caught on connection start" {:port port, :cid cid})))
+        (when (= "Connection reset by peer" (.getMessage e))
+          (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
+          (.close conn-socket))
 
-    ;; if we succeeded, start the conn loop
-    (when (= :new @conn-status)
-      (try
-        (log/trace "Starting connection loop" {:port port, :cid cid})
-        (conn-loop conn)
-        (catch SocketException e
-          (when (= "Broken pipe (Write failed)" (.getMessage e))
-            (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
-            (.close conn-socket))
+        ;; socket being closed is normal, otherwise log.
+        (when-not (.isClosed conn-socket)
+          (log/error e "An exception was caught during connection" {:port port, :cid cid})))
 
-          (when (= "Connection reset by peer" (.getMessage e))
-            (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
-            (.close conn-socket))
+      (catch EOFException _
+        (log/trace "Connection closed by client" {:port port, :cid cid}))
 
-          ;; socket being closed is normal, otherwise log.
-          (when-not (.isClosed conn-socket)
-            (log/error e "An exception was caught during connection" {:port port, :cid cid})))
-        (catch EOFException _
-          (log/trace "Connection closed by client" {:port port, :cid cid}))
-        (catch Throwable e
-          (log/error e "An exception was caught during connection" {:port port, :cid cid}))))
+      (catch IOException e
+        (log/debug e "IOException in connection" {:port port, :cid cid}))
 
-    ;; right now we'll deregister and cleanup regardless, but later we may
-    ;; want to leave conns around for a bit, so you can look at their state and debug
-    (cleanup-connection-resources conn)
-    (when create-node?
-      (log/debug "closing in-memory node")
-      (util/close node))
+      (catch InterruptedException _)
 
-    (log/trace "Connection ended" {:cid cid, :port port})
+      (finally
+        (util/close conn)
 
-    ;; can be used to co-ordinate waiting for close
-    (when-some [close-promise (:close-promise @conn-state)]
-      (when-not (realized? close-promise)
-        (deliver close-promise true)))))
+        ;; can be used to co-ordinate waiting for close
+        (when-not (realized? close-promise)
+          (deliver close-promise true))))))
 
 (defn- accept-loop
   "Runs an accept loop on the current thread (intended to be the Server's :accept-thread).
@@ -1756,16 +1585,10 @@
   While the server is running, tries to .accept connections on its :accept-socket. Once accepted,
   a connection is created on the servers :thread-pool via the (connect) function."
   [{:keys [^ServerSocket accept-socket,
-           server-status,
-           server-state
-           ^ExecutorService thread-pool,
-           port]
+           ^ExecutorService thread-pool]
     :as server}
 
    node]
-
-  (when-not (compare-and-set! server-status :starting :running)
-    (throw (Exception. "Accept loop requires a newly initialised server")))
 
   (try
     (loop []
@@ -1775,92 +1598,65 @@
         (.isClosed accept-socket)
         (log/trace "Accept socket closed, exiting accept loop")
 
-        (#{:draining :running} @server-status)
+        :else
         (do
           (try
-            ;; set a low timeout to leave accept early if needed
-            (when (= :draining @server-status)
-              (.setSoTimeout accept-socket 10))
-
-            ;; accept next connection (blocks until interrupt (with so-timeout) or close)
+            ;; accept next connection (blocks until interrupt or close)
             (let [conn-socket (.accept accept-socket)]
-              (when-some [exc (:injected-accept-exc @server-state)]
-                (swap! server-state dissoc :injected-accept-exc)
-                (.close conn-socket)
-                (throw exc))
-
               (.setTcpNoDelay conn-socket true)
-              (if (= :running @server-status)
-                ;; TODO fix buffer on tp? q gonna be infinite right now
-                (.submit thread-pool ^Runnable (fn [] (connect server conn-socket node)))
-                (do
-                  (err-cannot-connect-now "server shutting down")
-                  (.close conn-socket))))
+              ;; TODO fix buffer on tp? q gonna be infinite right now
+              (.submit thread-pool ^Runnable (fn [] (connect server conn-socket node))))
             (catch SocketException e
               (when (and (not (.isClosed accept-socket))
                          (not= "Socket closed" (.getMessage e)))
-                (log/warn e "Accept socket exception" {:port port})))
-            (catch java.net.SocketTimeoutException e
-              (when (not= "Accept timed out" (.getMessage e))
-                (log/warn e "Accept time out" {:port port})))
+                (log/warn e "Accept socket exception")))
             (catch IOException e
-              (log/warn e "Accept IO exception" {:port port})))
+              (log/warn e "Accept IO exception")))
           (recur))))
 
-    (catch InterruptedException _
-      (swap! server-state assoc :accept-interrupted true))
+    (catch InterruptedException _)
 
-    ;; for the unknowns, do not stop - leave in an error state
-    ;; so it can be inspected.
-    (catch Throwable e
-      (compare-and-set! server-status :running :error)
-      (util/try-close accept-socket)
-      (when-not (:silent-accept @server-state)
-        (log/error e "Exception caught on accept thread" {:port port}))))
+    (finally
+      (util/try-close accept-socket)))
 
   (log/trace "exiting accept loop"))
 
-(defn- create-server
-  "node: if provided, uses the given node for all connections; otherwise, creates a transient, in-memory node for each new connection"
-  [node {:keys [port num-threads drain-wait unsafe-init-state]}]
-
-  (let [self (atom nil)
-        clock (Clock/systemDefaultZone)
-        default-state {:clock clock
-                       :drain-wait drain-wait
-                       :parameters {"server_version" "14"
-                                    "server_encoding" "UTF8"
-                                    "client_encoding" "UTF8"}}]
-    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
-      (let [srvr (map->Server {:port (.getLocalPort accept-socket)
-                               :accept-socket accept-socket
-                               :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self node)) (str "pgwire-server-accept-" port))
-                               :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
-                               :server-status (atom :new)
-                               :server-state (atom (merge unsafe-init-state default-state))})]
-        (reset! self srvr)
-        srvr))))
-
 (defn serve
   "Creates and starts a pgwire server.
+
+  node: if provided, uses the given node for all connections; otherwise, creates a transient, in-memory node for each new connection
 
   Options:
 
   :port (default 5432). Provide '0' to open a socket on an unused port.
   :num-threads (bounds the number of client connections, default 42)
-
-  Returns the opaque server object.
-
-  Stop with .close (its Closeable)"
+  "
   ([node] (serve node {}))
-  ([node opts]
-   (let [defaults {:port 5432
-                   :num-threads 42
-                   ;; 5 seconds of draining
-                   :drain-wait 5000}
-         cfg (merge defaults opts)]
-     (doto (create-server node cfg)
-       (start-server cfg)))))
+  ([node {:keys [port num-threads drain-wait]
+          :or {port 5432
+               num-threads 42
+               drain-wait 5000}}]
+   (util/with-close-on-catch [accept-socket (ServerSocket. port)]
+     (let [port (.getLocalPort accept-socket)
+           server (map->Server {:port port
+                                :accept-socket accept-socket
+                                :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
+                                :!closing? (atom false)
+                                :server-state (atom {:clock (Clock/systemDefaultZone)
+                                                     :drain-wait drain-wait
+                                                     :parameters {"server_version" "14"
+                                                                  "server_encoding" "UTF8"
+                                                                  "client_encoding" "UTF8"}})})
+           accept-thread (-> (Thread/ofVirtual)
+                             (.name (str "pgwire-server-accept-" port))
+                             (.uncaughtExceptionHandler util/uncaught-exception-handler)
+                             (.unstarted (fn []
+                                           (accept-loop server node))))
+
+           server (assoc server :accept-thread accept-thread)]
+
+       (.start accept-thread)
+       server))))
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads]}]
   (.module config (cond-> (PgwireServer$Factory.)

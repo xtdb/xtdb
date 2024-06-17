@@ -73,7 +73,7 @@
     (require-server))
 
   (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
-    (format "jdbc:postgresql://:%s/xtdb%s" *port* param-str)))
+    (format "jdbc:postgresql://localhost:%s/xtdb%s" *port* (or param-str ""))))
 
 (deftest connect-with-next-jdbc-test
   (with-open [_ (jdbc/get-connection (jdbc-url))])
@@ -330,33 +330,6 @@
       (close-method server)
       (check-server-resources-freed server))))
 
-(deftest server-resources-freed-if-exc-on-start-test
-  (require-node)
-  (with-open [server (pgwire/serve *node* {:port 0
-                                           :unsafe-init-state
-                                           {:silent-start true
-                                            :injected-start-exc (Exception. "boom!")}})]
-    (check-server-resources-freed server)))
-
-;; #673
-#_(deftest accept-thread-and-socket-closed-on-uncaught-accept-exc-test
-  (require-server)
-
-  (swap! (:server-state *server*) assoc
-         :injected-accept-exc (Exception. "boom")
-         :silent-accept true)
-
-  (is (thrown? Throwable (with-open [_ (jdbc-conn)])))
-
-  (testing "registered"
-    (is (registered? *server*)))
-
-  (testing "accept socket"
-    (is (.isClosed @(:accept-socket *server*))))
-
-  (testing "accept thread"
-    (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*))))))
-
 (defn <-pgobject
   "Transform PGobject containing `json` or `jsonb` value to Clojure
   data."
@@ -386,48 +359,12 @@
       first
       :ping))
 
-(defn- inject-accept-exc
-  ([]
-   (inject-accept-exc (Exception. "")))
-  ([ex]
-   (require-server)
-   (swap! (:server-state *server*)
-          assoc :injected-accept-exc ex, :silent-accept true)
-   nil))
-
-(defn- connect-and-throwaway []
-  (try (jdbc-conn) (catch Throwable _)))
-
-(deftest accept-uncaught-exception-allows-free-test
-  (inject-accept-exc)
-  (connect-and-throwaway)
-  (.close *server*)
-  (check-server-resources-freed))
-
-;; #673
-#_(deftest accept-thread-stoppage-sets-error-status
-  (inject-accept-exc)
-  (connect-and-throwaway)
-  (is (= :error @(:server-status *server*))))
-
-(deftest accept-thread-stoppage-allows-other-conns-to-continue-test
-  (with-open [conn1 (jdbc-conn)]
-    (inject-accept-exc)
-    (connect-and-throwaway)
-    (is (= "ping" (ping conn1)))))
-
-(deftest accept-thread-socket-closed-exc-does-not-stop-later-accepts-test
-  (inject-accept-exc (SocketException. "Socket closed"))
-  (connect-and-throwaway)
-  (is (with-open [_conn (jdbc-conn)] true)))
-
 (deftest accept-thread-interrupt-closes-thread-test
   (require-server {:accept-so-timeout 10})
 
   (.interrupt (:accept-thread *server*))
   (.join (:accept-thread *server*) 1000)
 
-  (is (:accept-interrupted @(:server-state *server*)))
   (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*)))))
 
 (deftest accept-thread-interrupt-allows-server-shutdown-test
@@ -451,14 +388,6 @@
   (.join (:accept-thread *server*) 1000)
   (.close *server*)
   (check-server-resources-freed))
-
-(deftest accept-socket-timeout-set-by-default-test
-  (require-server)
-  (is (pos? (.getSoTimeout (:accept-socket *server*)))))
-
-(deftest accept-socket-timeout-can-be-unset-test
-  (require-server {:accept-so-timeout nil})
-  (is (= 0 (.getSoTimeout (:accept-socket *server*)))))
 
 (defn- get-connections []
   (vals (:connections @(:server-state *server*))))
@@ -553,10 +482,9 @@
 ;; and observe that connection continue until the multi-message extended interaction is done
 ;; (when we introduce read transactions I will probably extend this to short-lived transactions)
 (deftest close-drains-active-extended-queries-before-stopping-test
-  (require-server {:num-threads 10
-                   :accept-so-timeout 10})
+  (require-server {:num-threads 10})
   (let [cmd-parse @#'pgwire/cmd-parse
-        server-status (:server-status *server*)
+        {:keys [!closing?]} *server*
         latch (CountDownLatch. 10)]
     ;; redefine parse to block when we ping
     (with-redefs [pgwire/cmd-parse
@@ -568,7 +496,7 @@
                         ;; delay until we see a draining state
                         (loop [wait-until (+ (System/currentTimeMillis) 5000)]
                           (when (and (< (System/currentTimeMillis) wait-until)
-                                     (not= :draining @server-status))
+                                     (not @!closing?))
                             (recur wait-until)))
                         (cmd-parse conn cmd))))]
       (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))
