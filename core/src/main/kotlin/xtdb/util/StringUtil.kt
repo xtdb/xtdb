@@ -171,4 +171,17 @@ object StringUtil {
         newBuf.position(0)
         return newBuf
     }
+
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    @JvmStatic
+    fun String.parseCString(): String =
+        // Java has String.translateEscapes, but it doesn't handle \x or \u
+
+        replace(Regex("\\\\([0-7]{1,3}|x(\\p{XDigit}{1,2})|u(\\p{XDigit}{1,4})|U(\\p{XDigit}{1,8})|[^0-7xuU])")) {
+            val s = it.value
+            when (s[1]) {
+                'x', 'u', 'U' -> Character.toChars(s.substring(2).toUInt(16).toInt()).concatToString()
+                else -> (s as java.lang.String).translateEscapes()
+            }
+        }
 }

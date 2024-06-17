@@ -13,7 +13,8 @@
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
            (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
-           (xtdb.types IntervalMonthDayNano)))
+           (xtdb.types IntervalMonthDayNano)
+           xtdb.util.StringUtil))
 
 (defn- ->insertion-ordered-set [coll]
   (LinkedHashSet. ^Collection (vec coll)))
@@ -937,8 +938,12 @@
 
   (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
 
-  (visitCharacterString [_ ctx]
+  (visitSqlStandardString [_ ctx]
     (trim-quotes-from-string (.getText ctx)))
+
+  (visitCEscapesString [_ ctx]
+    (let [str (.getText ctx)]
+      (StringUtil/parseCString (subs str 2 (dec (count str))))))
 
   (visitDateLiteral [this ctx] (parse-date-literal (.accept (.characterString ctx) this) env))
   (visitTimeLiteral [this ctx] (parse-time-literal (.accept (.characterString ctx) this) env))

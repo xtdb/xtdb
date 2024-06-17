@@ -1659,3 +1659,8 @@
   (xt/submit-tx tu/*node* [[:sql "DELETE FROM table WHERE col = 'val'"]])
 
   (t/is (empty? (xt/q tu/*node* "SELECT * FROM table"))))
+
+(deftest test-c-style-escapes-3415
+  (t/is (= ["A" "A" "A" "" "%" "😁" "\n" "'"]
+           (->> (xt/q tu/*node* "VALUES E'\\x41', E'\\101', E'\\U00000041', E'', E'%', E'\\U0001F601', E'\\n', E'\\''")
+                (mapv :xt/column-1)))))

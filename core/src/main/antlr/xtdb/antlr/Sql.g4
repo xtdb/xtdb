@@ -83,7 +83,22 @@ UNSIGNED_FLOAT : DIGIT+ ('.' DIGIT+ EXPONENT? | EXPONENT) ;
 UNSIGNED_INTEGER : DIGIT+ ;
 
 CHARACTER_STRING : '\'' ('\'\'' | ~('\''|'\n'))* '\'' ;
-characterString : CHARACTER_STRING ;
+C_ESCAPES_STRING : 'E\''
+  ( '\\' [0-7] [0-7]? [0-7]?
+  | '\\x' HEX_DIGIT HEX_DIGIT
+  | '\\u' HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT
+  | '\\U' HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT
+  | '\\' ('b' | 'f' | 'n' | 'r' | 't' | '\\' | '\'' | '"')
+  | '\'\''
+  | ~('\\' | '\'')
+  )*
+  '\'' ;
+
+characterString
+    : CHARACTER_STRING #SqlStandardString
+    | C_ESCAPES_STRING #CEscapesString
+    ;
+
 BINARY_STRING : 'X(\'' HEX_DIGIT* '\')' ;
 
 intervalQualifier : startField 'TO' endField | singleDatetimeField ;
