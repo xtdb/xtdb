@@ -19,11 +19,3 @@ dependencies {
     api("cheshire","cheshire","5.10.1")
 }
 
-sourceSets {
-    main {
-        resources {
-            srcDir("../src/test/resources")
-        }
-    }
-}
-
