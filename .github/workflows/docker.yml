@@ -1,0 +1,83 @@
+name: XTDB Docker images
+run-name: XTDB Docker images
+
+on: [push]
+
+jobs:
+  deploy-standalone-docker:
+    name: Deploy XTDB Standalone Docker Image
+    runs-on: ubuntu-latest
+    if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/docker-latest'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Build Uberjar
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          arguments: :docker:standalone:shadowJar
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Standalone Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: docker/standalone
+          platforms: linux/arm64/v8,linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ghcr.io/xtdb/xtdb-standalone-ea:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            XTDB_VERSION="dev-SNAPSHOT"
+
+  deploy-aws-docker:
+    name: Deploy XTDB AWS Docker Image
+    runs-on: ubuntu-latest
+    if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/docker-latest'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Build Uberjar
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          arguments: :docker:aws:shadowJar
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push AWS Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: docker/aws
+          platforms: linux/arm64/v8,linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ghcr.io/xtdb/xtdb-aws-ea:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            XTDB_VERSION="dev-SNAPSHOT"
