@@ -233,6 +233,7 @@ dependencies {
     projectDep(":modules:c1-import")
     projectDep(":modules:datasets")
     projectDep(":modules:xtdb-flight-sql")
+    projectDep(":cloud-benchmark")
 
     api("ch.qos.logback", "logback-classic", "1.4.5")
 
