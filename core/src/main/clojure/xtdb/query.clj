@@ -30,6 +30,7 @@
             [xtdb.xtql :as xtql]
             [xtdb.xtql.edn :as xtql.edn])
   (:import clojure.lang.MapEntry
+           (com.github.benmanes.caffeine.cache Caffeine)
            java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util.concurrent ConcurrentHashMap)
@@ -182,22 +183,27 @@
 
 (defmethod ig/prep-key ::query-source [_ opts]
   (merge opts
-         {:allocator (ig/ref :xtdb/allocator)
+         {:prepare-cache-size 1000 
+          :plan-cache-size 1000
+          :allocator (ig/ref :xtdb/allocator)
           :scan-emitter (ig/ref ::scan/scan-emitter)
           :metadata-mgr (ig/ref ::meta/metadata-manager)}))
 
-(defmethod ig/init-key ::query-source [_ deps]
-  (let [prepare-cache (ConcurrentHashMap.)
-        plan-cache (ConcurrentHashMap.)
+(defn ->caffeine-cache [size]
+  (-> (Caffeine/newBuilder) (.maximumSize size) (.build)))
+
+(defmethod ig/init-key ::query-source [_ {:keys [prepare-cache-size plan-cache-size] :as deps}]
+  (let [prepare-cache (->caffeine-cache prepare-cache-size)
+        plan-cache (->caffeine-cache plan-cache-size)
         ref-ctr (RefCounter.)
         deps (-> deps (assoc :ref-ctr ref-ctr))]
     (reify
       IQuerySource
       (prepareRaQuery [_ query wm-src]
-        (.computeIfAbsent prepare-cache [query wm-src]
-                          (reify Function
-                            (apply [_ _]
-                              (prepare-ra query (assoc deps :wm-src wm-src))))))
+        (.get prepare-cache [query wm-src]
+              (reify Function
+                (apply [_ _]
+                  (prepare-ra query (assoc deps :wm-src wm-src))))))
 
       (planQuery [_ query wm-src query-opts]
         (let [table-info (scan/tables-with-cols wm-src (:scan-emitter deps))
@@ -211,22 +217,20 @@
               ;;TODO defaults to true in rewrite plan so needs defaulting pre-cache,
               ;;Move all defaulting to this level if/when everyone goes via planQuery
               cache-key (assoc plan-query-opts :query query)]
-          (.computeIfAbsent
-           plan-cache
-           cache-key
-           (reify Function
-             (apply [_ _]
-               (let [plan (cond
-                            (string? query) (sql/compile-query query plan-query-opts)
+          (.get plan-cache cache-key
+                (reify Function
+                  (apply [_ _]
+                    (let [plan (cond
+                                 (string? query) (sql/compile-query query plan-query-opts)
 
-                            (seq? query) (xtql/compile-query (xtql.edn/parse-query query) plan-query-opts)
+                                 (seq? query) (xtql/compile-query (xtql.edn/parse-query query) plan-query-opts)
 
-                            (instance? Query query) (xtql/compile-query query plan-query-opts)
+                                 (instance? Query query) (xtql/compile-query query plan-query-opts)
 
-                            :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-                 (if (:explain? query-opts)
-                   [:table [{:plan (with-out-str (pp/pprint plan))}]]
-                   plan)))))))
+                                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+                      (if (:explain? query-opts)
+                        [:table [{:plan (with-out-str (pp/pprint plan))}]]
+                        plan)))))))
 
       AutoCloseable
       (close [_]
