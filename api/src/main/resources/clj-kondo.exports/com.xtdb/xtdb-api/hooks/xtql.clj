@@ -1,4 +1,4 @@
-(ns hooks.xtql
+(ns ^:no-doc hooks.xtql
   (:require [clj-kondo.hooks-api :as api]))
 
 (def source-op?

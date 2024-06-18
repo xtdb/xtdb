@@ -3,20 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
-    `maven-publish`
-    signing
     kotlin("jvm")
-    kotlin("plugin.serialization")
-    id("org.jetbrains.dokka")
-}
-
-publishing {
-    publications.create("maven", MavenPublication::class) {
-        pom {
-            name.set("XTDB Cloud Benchmark")
-            description.set("XTDB 3Cloud Benchmark")
-        }
-    }
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
