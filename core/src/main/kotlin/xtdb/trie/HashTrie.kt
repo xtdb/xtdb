@@ -52,6 +52,7 @@ interface HashTrie<N : Node<N>> {
 
         @JvmStatic
         fun bucketFor(pointer: ArrowBufPointer, level: Int): Byte {
+            assert(level * LEVEL_BITS < pointer.length * java.lang.Byte.SIZE)
             val bitIdx = level * LEVEL_BITS
             val byteIdx = bitIdx / java.lang.Byte.SIZE
             val bitOffset = bitIdx % java.lang.Byte.SIZE

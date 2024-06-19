@@ -98,8 +98,7 @@
 
       (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 18)))
       (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 30)))
-      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 63)))
-      (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 104))))))
+      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 63))))))
 
 (def txs
   [[[:put-docs :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
