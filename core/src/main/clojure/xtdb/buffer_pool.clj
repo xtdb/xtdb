@@ -180,19 +180,25 @@
                 (CompletableFuture/failedFuture (os/obj-missing-exception k)))
               (util/then-apply
                 (fn [path]
-                  (let [nio-buffer (util/->mmap-path path)
-                        create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                        [_ buf] (cache-compute memory-store k create-arrow-buf)]
-                    buf))))))))
+                  (try
+                    (let [nio-buffer (util/->mmap-path path)
+                          create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+                          [_ buf] (cache-compute memory-store k create-arrow-buf)]
+                      buf)
+                    (catch ClosedByInterruptException _
+                      (throw (InterruptedException.)))))))))))
 
   (putObject [_ k buffer]
     (CompletableFuture/completedFuture
-     (let [tmp-path (create-tmp-path disk-store)]
-       (util/write-buffer-to-path buffer tmp-path)
+     (try
+       (let [tmp-path (create-tmp-path disk-store)]
+         (util/write-buffer-to-path buffer tmp-path)
 
-       (let [file-path (.resolve disk-store k)]
-         (util/create-parents file-path)
-         (util/atomic-move tmp-path file-path)))))
+         (let [file-path (.resolve disk-store k)]
+           (util/create-parents file-path)
+           (util/atomic-move tmp-path file-path)))
+       (catch ClosedByInterruptException _
+         (throw (InterruptedException.))))))
 
   (listAllObjects [_]
     (util/with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
