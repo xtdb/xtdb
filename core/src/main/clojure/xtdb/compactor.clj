@@ -329,7 +329,7 @@
                       (log/info "all compacted")
                       (throw (ex-info "timed out waiting for compaction"
                                       {:available-jobs @!available-jobs
-                                       :queued-jobs (into {} !queued-jobs)})))
+                                       :queued-jobs (into #{} !queued-jobs)})))
                     (finally
                       (.unlock lock))))
 
