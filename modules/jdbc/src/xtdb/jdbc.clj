@@ -5,7 +5,7 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy]
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]

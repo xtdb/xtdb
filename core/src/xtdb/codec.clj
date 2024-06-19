@@ -6,7 +6,7 @@
             [xtdb.query-state :as cqs]
             [xtdb.io :as xio]
             [xtdb.memory :as mem]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy]
             [clojure.set :as set])
   (:import [clojure.lang APersistentMap APersistentSet BigInt IHashEq Keyword]
            xtdb.codec.MathCodec
@@ -129,7 +129,7 @@
   ;; but we can't thaw this because nippy thaws it straight to PersistentTreeSet
   ;; which doesn't allow incomparable keys
   (cond
-    *consistent-ids?* (#'nippy/write-coll out @#'nippy/id-sorted-set (sort-set coll))
+    *consistent-ids?* (#'nippy/write-coll out @#'nippy/id-sorted-set-lg (sort-set coll))
     *consistent-values?* (#'nippy/write-set out (sort-set coll))
     :else (#'nippy/write-set out coll)))
 
@@ -163,27 +163,31 @@
       ;; have to maintain id-sorted-map here because it's on tx-logs,
       ;; but we can't thaw this because nippy thaws it straight to PersistentTreeMap
       ;; which doesn't allow incomparable keys
-      *consistent-ids?* (#'nippy/write-kvs out @#'nippy/id-sorted-map (sort-map m))
-      *consistent-values?* (#'nippy/write-map out (sort-map m))
-      :else (#'nippy/write-map out (->kv-reduce m)))
+      *consistent-ids?* (#'nippy/write-kvs out @#'nippy/id-sorted-map-lg (sort-map m))
+      *consistent-values?* (#'nippy/write-map out (sort-map m) false)
+      :else (#'nippy/write-map out (->kv-reduce m) false))
     (catch Exception e
       (prn *consistent-ids?* *consistent-values?* m)
       (throw e))))
 
-(extend-protocol nippy/IFreezable1
+(extend-protocol nippy/IFreezable
   Set
+  (-freezable? [_] true)
   (-freeze-without-meta! [this out]
     (freeze-set out this))
 
   APersistentSet
+  (-freezable? [_] true)
   (-freeze-without-meta! [this out]
     (freeze-set out this))
 
   Map
+  (-freezable? [_] true)
   (-freeze-without-meta! [this out]
     (freeze-map out this))
 
   APersistentMap
+  (-freezable? [_] true)
   (-freeze-without-meta! [this out]
     (freeze-map out this)))
 

@@ -17,7 +17,7 @@
                  [org.slf4j/slf4j-api]
                  [org.clojure/spec.alpha]
                  [pro.juxt.clojars-mirrors.com.stuartsierra/dependency "1.0.0"]
-                 [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
+                 [pro.juxt.clojars-mirrors.com.taoensso/nippy]
                  [org.clojure/tools.reader]
                  [org.clojure/data.json]
                  [org.clojure/tools.cli]

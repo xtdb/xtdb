@@ -9,7 +9,7 @@
             [xtdb.kv.index-store :as kvi]
             [xtdb.memory :as mem]
             [xtdb.system :as sys]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy])
   (:import clojure.lang.Box
            [java.io Closeable File]
            java.nio.file.Path))

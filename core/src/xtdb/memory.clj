@@ -1,7 +1,7 @@
 (ns ^:no-doc xtdb.memory
   (:require [clojure.tools.logging :as log]
             [xtdb.io :as xio]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy])
   (:import xtdb.ByteUtils
            [java.io DataInputStream DataOutputStream]
            java.nio.Buffer

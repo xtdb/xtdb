@@ -6,7 +6,7 @@
             [xtdb.io :as xio]
             [xtdb.memory :as mem]
             [xtdb.system :as sys]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy])
   (:import clojure.lang.MapEntry
            [java.io Closeable DataInputStream DataOutputStream]
            [java.nio.file Files LinkOption OpenOption Path StandardOpenOption]

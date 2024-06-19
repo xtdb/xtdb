@@ -86,7 +86,7 @@
    [org.slf4j/slf4j-simple "1.7.36"]
    [org.slf4j/jcl-over-slf4j "1.7.36"]
    [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
-   [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
+   [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.4.2-1"]
    [ring/ring-devel "1.9.5"]
    [software.amazon.awssdk/s3 "2.19.21"]
    [software.amazon.awssdk/cloudwatch "2.19.21"]

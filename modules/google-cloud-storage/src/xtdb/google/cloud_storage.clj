@@ -3,7 +3,7 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy]
             [xtdb.api :as xt]
             [xtdb.checkpoint :as cp]
             [xtdb.document-store :as ds]

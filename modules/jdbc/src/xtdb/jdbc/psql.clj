@@ -1,6 +1,6 @@
 (ns ^:no-doc xtdb.jdbc.psql
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy]
             [xtdb.jdbc :as j]
             [xtdb.system :as sys]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]

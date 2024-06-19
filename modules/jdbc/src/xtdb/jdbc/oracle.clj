@@ -1,7 +1,7 @@
 (ns ^:no-doc xtdb.jdbc.oracle
   (:require [xtdb.jdbc :as j]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy])
   (:import [oracle.sql BLOB TIMESTAMP]))
 
 (defn- table-exists? [pool tbl-name]

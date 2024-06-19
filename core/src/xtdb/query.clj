@@ -7,7 +7,7 @@
             [clojure.walk :as w]
             [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
             [juxt.clojars-mirrors.eql.v2021v02v28.edn-query-language.core :as eql]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy]
             [xtdb.api :as xt]
             [xtdb.bus :as bus]
             [xtdb.cache :as cache]

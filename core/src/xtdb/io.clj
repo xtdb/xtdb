@@ -5,7 +5,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy])
   (:import (clojure.lang Box MapEntry)
            [java.io DataInputStream DataOutputStream File IOException Reader]
            (java.lang AutoCloseable)

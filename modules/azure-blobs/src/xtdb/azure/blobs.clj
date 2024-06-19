@@ -2,7 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [juxt.clojars.mirrors.nippy.v3v4v2.taoensso.nippy :as nippy]
             [xtdb.checkpoint :as cp]
             [xtdb.api :as xt]
             [xtdb.db :as db]
