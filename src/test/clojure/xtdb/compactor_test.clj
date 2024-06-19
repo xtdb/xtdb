@@ -351,3 +351,19 @@
           (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (tu/bad-uuid-seq 500) (q))))))))
+
+(t/deftest test-more-than-a-page-of-versions
+  (let [node-dir (util/->path "target/compactor/test-more-than-a-page-of-versions")]
+    (util/delete-dir node-dir)
+
+    (binding [c/*page-size* 8
+              c/*l1-file-size-rows* 32
+              c/*ignore-signal-block?* true]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+        (dotimes [n 100]
+          (xt/submit-tx node [[:put-docs :foo {:xt/id "foo", :v n}]]))
+        (tu/then-await-tx node)
+        (c/compact-all! node (Duration/ofSeconds 5))))
+
+    (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-more-than-a-page-of-versions")))
+                   (.resolve node-dir "objects/v02/tables/foo") #"log-l01-(.+)\.arrow")))

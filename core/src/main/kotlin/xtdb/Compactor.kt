@@ -16,6 +16,8 @@ import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneOffset.UTC
 import java.util.*
+import java.util.stream.IntStream
+import kotlin.math.ceil
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
 internal fun Selection.partitionSlices(partIdxs: IntArray) =
@@ -87,6 +89,33 @@ internal fun IntArray.recencyPartitions(
     return res.mapValuesTo(sortedMapOf()) { it.value.toArray() }
 }
 
+internal fun IntArray.recencyPartitions(
+    recencies: IVectorReader,
+    pageLimit: Int,
+): SortedMap<InstantMicros, Selection> {
+    if (isEmpty()) return sortedMapOf()
+
+    val partCount = ceil(size.toDouble() / pageLimit).toInt()
+    val partSize = ceil(size.toDouble() / partCount).toInt()
+
+    val sortedByRecency =
+        IntStream.range(0, size).boxed()
+            .sorted { l, r -> recencies.getLong(r).compareTo(recencies.getLong(l)) }
+            .mapToInt { it }
+            .toArray()
+
+    // split sortedByRecency into sub-arrays of size partSize
+    val res = sortedMapOf<InstantMicros, Selection>()
+
+    for (sortedIdx in sortedByRecency.indices step partSize) {
+        val part = sortedByRecency.sliceArray(sortedIdx until (sortedIdx + partSize).coerceAtMost(size))
+        val recency = recencies.getLong(part.first())
+        res[recency] = part.sortedArray() // preserve the initial sort order
+    }
+
+    return res
+}
+
 @Suppress("unused")
 @JvmOverloads
 fun writeRelation(
@@ -108,19 +137,19 @@ fun writeRelation(
             trieDataWriter.clear()
             pos
         } else {
-            fun writeRecencyBranch(g: RecencyGranularity) =
+            fun writeRecencyBranch(parts: SortedMap<InstantMicros, Selection>): Int =
                 trieWriter.writeRecencyBranch(
-                    sel.recencyPartitions(recencies, g)
-                        .mapValuesTo(sortedMapOf()) { innerSel ->
-                            writeSubtree(depth + 1, innerSel.value)
-                        }
+                    parts.mapValuesTo(sortedMapOf()) { innerSel ->
+                        writeSubtree(depth + 1, innerSel.value)
+                    }
                 )
 
             // Year, IID[0], Quarter, IID[1], Month, IID[2..]
+            // then, when we've run out of IID, we know that it's all versions of the same IID, so we page by recency
             when (depth) {
-                0 -> writeRecencyBranch(YEAR)
-                2 -> writeRecencyBranch(QUARTER)
-                4 -> writeRecencyBranch(MONTH)
+                0 -> writeRecencyBranch(sel.recencyPartitions(recencies, YEAR))
+                2 -> writeRecencyBranch(sel.recencyPartitions(recencies, QUARTER))
+                4 -> writeRecencyBranch(sel.recencyPartitions(recencies, MONTH))
 
                 else -> {
                     val iidDepth = when (depth) {
@@ -128,12 +157,16 @@ fun writeRelation(
                         else -> depth - 3
                     }
 
-                    trieWriter.writeIidBranch(
-                        sel.iidPartitions(iidReader, iidDepth)
-                            .map { innerSel ->
-                                if (innerSel == null) -1 else writeSubtree(depth + 1, innerSel)
-                            }
-                            .toIntArray())
+                    if (iidDepth < 64) {
+                        trieWriter.writeIidBranch(
+                            sel.iidPartitions(iidReader, iidDepth)
+                                .map { innerSel ->
+                                    if (innerSel == null) -1 else writeSubtree(depth + 1, innerSel)
+                                }
+                                .toIntArray())
+                    } else {
+                        writeRecencyBranch(sel.recencyPartitions(recencies, pageLimit))
+                    }
                 }
             }
         }
