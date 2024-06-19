@@ -2,7 +2,7 @@
   "RocksDB KV backend for XTDB."
   (:require [clojure.tools.logging :as log]
             [xtdb.kv :as kv]
-            [xtdb.rocksdb.loader]
+            xtdb.rocksdb.loader
             [xtdb.memory :as mem]
             [xtdb.system :as sys]
             [xtdb.io :as xio]
