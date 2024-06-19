@@ -7,9 +7,17 @@
            java.security.MessageDigest
            xtdb.ByteUtils))
 
-(def ^:const ^:private gcrypt-enabled? (not (Boolean/parseBoolean (System/getenv "XTDB_DISABLE_LIBGCRYPT"))))
-(def ^:const ^:private openssl-enabled? (not (Boolean/parseBoolean (System/getenv "XTDB_DISABLE_LIBCRYPTO"))))
-(def ^:const ^:private byte-utils-sha1-enabled? (Boolean/parseBoolean (System/getenv "XTDB_ENABLE_BYTEUTILS_SHA1")))
+(def ^:const ^:private gcrypt-enabled?
+  (not (Boolean/parseBoolean (or (System/getenv "XTDB_DISABLE_LIBGCRYPT")
+                                 (System/getProperty "xtdb.disable-libgcrypt")))))
+
+(def ^:const ^:private openssl-enabled?
+  (not (Boolean/parseBoolean (or (System/getenv "XTDB_DISABLE_LIBCRYPTO")
+                                 (System/getProperty "xtdb.disable-libcrypto")))))
+
+(def ^:const ^:private byte-utils-sha1-enabled?
+  (Boolean/parseBoolean (or (System/getenv "XTDB_ENABLE_BYTEUTILS_SHA1")
+                            (System/getProperty "xtdb.enable-byteutils-sha1"))))
 
 ;; NOTE: Using name without dash as it's supported both by
 ;; MessageDigest and libgcrypt.

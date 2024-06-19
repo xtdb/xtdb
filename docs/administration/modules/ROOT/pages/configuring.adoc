@@ -461,8 +461,8 @@ You can also use refs - for example, to depend on the XTDB node:
 
 | MALLOC_ARENA_MAX | | If you're using RocksDB and seeing out-of-memory issues, we recommend setting the environment variable `MALLOC_ARENA_MAX=2` - see link:https://github.com/facebook/rocksdb/issues/4112[this issue] for more details.
 
-| XTDB_ENABLE_BYTEUTILS_SHA1 | | Set to use XT's Java SHA1 implementation rather than system libraries.
-| XTDB_DISABLE_LIBCRYPTO | | Set to disable use of libcrypto (OpenSSL) for SHA1 hashing
-| XTDB_DISABLE_LIBGCRYPT | | Set to disable use of libgcrypt for SHA1 hashing.
+| XTDB_ENABLE_BYTEUTILS_SHA1 | xtdb.enable-byteutils-sha1 | Set to use XT's Java SHA1 implementation rather than system libraries.
+| XTDB_DISABLE_LIBCRYPTO | xtdb.disable-libcrypto | Set to disable use of libcrypto (OpenSSL) for SHA1 hashing
+| XTDB_DISABLE_LIBGCRYPT | xtdb.disable-libgcrypt | Set to disable use of libgcrypt for SHA1 hashing.
 
 |===
