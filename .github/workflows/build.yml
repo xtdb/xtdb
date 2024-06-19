@@ -1,7 +1,11 @@
 name: XTDB CI
 run-name: XTDB CI
 
-on: [push]
+on:
+  push:
+    branches-ignore:
+      - docs-live
+      - docker-latest
 
 jobs:
   test:

@@ -1,13 +1,16 @@
 name: XTDB Docker images
 run-name: XTDB Docker images
 
-on: [push]
+on:
+  push:
+    branches:
+      - docker-latest
 
 jobs:
   deploy-standalone-docker:
     name: Deploy XTDB Standalone Docker Image
     runs-on: ubuntu-latest
-    if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/docker-latest'
+    if: github.repository == 'xtdb/xtdb'
     permissions:
       contents: read
       packages: write
@@ -46,7 +49,7 @@ jobs:
   deploy-aws-docker:
     name: Deploy XTDB AWS Docker Image
     runs-on: ubuntu-latest
-    if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/docker-latest'
+    if: github.repository == 'xtdb/xtdb'
     permissions:
       contents: read
       packages: write
