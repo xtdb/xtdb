@@ -13,7 +13,8 @@
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.serde :as serde])
+            [xtdb.serde :as serde]
+            [xtdb.compactor :as c])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            (java.time Duration InstantSource)
@@ -207,78 +208,80 @@
               "re-using the original tx basis should see the same result")))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
-  (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        tx-ops [[:put-docs :xt_docs {:xt/id "foo"
-                                     :list [12.0 "foo"]}]
-                [:put-docs :xt_docs {:xt/id 24}]
-                [:put-docs :xt_docs {:xt/id "bar"
-                                     :list [#inst "2020-01-01" false]}]
-                [:put-docs :xt_docs {:xt/id :baz
-                                     :struct {:a 1, :b "b"}}]
-                [:put-docs :xt_docs {:xt/id 52}]
-                [:put-docs :xt_docs {:xt/id :quux
-                                     :struct {:a true, :c "c"}}]]]
-    (util/delete-dir node-dir)
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
+          tx-ops [[:put-docs :xt_docs {:xt/id "foo"
+                                       :list [12.0 "foo"]}]
+                  [:put-docs :xt_docs {:xt/id 24}]
+                  [:put-docs :xt_docs {:xt/id "bar"
+                                       :list [#inst "2020-01-01" false]}]
+                  [:put-docs :xt_docs {:xt/id :baz
+                                       :struct {:a 1, :b "b"}}]
+                  [:put-docs :xt_docs {:xt/id 52}]
+                  [:put-docs :xt_docs {:xt/id :quux
+                                       :struct {:a true, :c "c"}}]]]
+      (util/delete-dir node-dir)
 
-    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-      (-> (xt/submit-tx node tx-ops)
-          (tu/then-await-tx node (Duration/ofMillis 2000)))
+      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+        (-> (xt/submit-tx node tx-ops)
+            (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-      (tu/finish-chunk! node)
+        (tu/finish-chunk! node)
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
-                     (.resolve node-dir "objects")))))
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
+                       (.resolve node-dir "objects"))))))
 
 (t/deftest test-multi-block-metadata
-  (let [node-dir (util/->path "target/multi-block-metadata")
-        tx0 [[:put-docs :xt_docs {:xt/id "foo"
-                                  :list [12.0 "foo"]}]
-             [:put-docs :xt_docs {:xt/id :bar
-                                  :struct {:a 1, :b "b"}}]
-             [:put-docs :xt_docs {:xt/id "baz"
-                                  :list [#inst "2020-01-01" false]}]
-             [:put-docs :xt_docs {:xt/id 24}]]
-        tx1 [[:put-docs :xt_docs {:xt/id 52}]
-             [:put-docs :xt_docs {:xt/id :quux
-                                  :struct {:a true, :b {:c "c", :d "d"}}}]]]
-    (util/delete-dir node-dir)
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/multi-block-metadata")
+          tx0 [[:put-docs :xt_docs {:xt/id "foo"
+                                    :list [12.0 "foo"]}]
+               [:put-docs :xt_docs {:xt/id :bar
+                                    :struct {:a 1, :b "b"}}]
+               [:put-docs :xt_docs {:xt/id "baz"
+                                    :list [#inst "2020-01-01" false]}]
+               [:put-docs :xt_docs {:xt/id 24}]]
+          tx1 [[:put-docs :xt_docs {:xt/id 52}]
+               [:put-docs :xt_docs {:xt/id :quux
+                                    :struct {:a true, :b {:c "c", :d "d"}}}]]]
+      (util/delete-dir node-dir)
 
-    (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
-      (xt/submit-tx node tx0)
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
+        (xt/submit-tx node tx0)
 
-      (-> (xt/submit-tx node tx1)
-          (tu/then-await-tx node (Duration/ofMillis 200)))
+        (-> (xt/submit-tx node tx1)
+            (tu/then-await-tx node (Duration/ofMillis 200)))
 
-      (tu/finish-chunk! node)
+        (tu/finish-chunk! node)
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
-                     (.resolve node-dir "objects"))
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
+                       (.resolve node-dir "objects"))
 
-      (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
-        (t/is (= (types/->field "xt$id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
-                                (types/col-type->field :utf8)
-                                (types/col-type->field :keyword)
-                                (types/col-type->field :i64))
-                 (.columnField mm "xt_docs" "xt$id")))
+        (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
+          (t/is (= (types/->field "xt$id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
+                                  (types/col-type->field :utf8)
+                                  (types/col-type->field :keyword)
+                                  (types/col-type->field :i64))
+                   (.columnField mm "xt_docs" "xt$id")))
 
-        (t/is (= (types/->field "list" #xt.arrow/type :list true
-                                (types/->field "$data$" #xt.arrow/type :union false
-                                               (types/col-type->field :f64)
-                                               (types/col-type->field :utf8)
-                                               (types/col-type->field [:timestamp-tz :micro "UTC"])
-                                               (types/col-type->field :bool)))
-                 (.columnField mm "xt_docs" "list")))
+          (t/is (= (types/->field "list" #xt.arrow/type :list true
+                                  (types/->field "$data$" #xt.arrow/type :union false
+                                                 (types/col-type->field :f64)
+                                                 (types/col-type->field :utf8)
+                                                 (types/col-type->field [:timestamp-tz :micro "UTC"])
+                                                 (types/col-type->field :bool)))
+                   (.columnField mm "xt_docs" "list")))
 
-        (t/is (= (types/->field "struct" #xt.arrow/type :struct true
-                                (types/->field "a" #xt.arrow/type :union false
-                                               (types/->field "i64" #xt.arrow/type :i64 true)
-                                               (types/->field "bool" #xt.arrow/type :bool true))
-                                (types/->field "b" #xt.arrow/type :union false
-                                               (types/->field "utf8" #xt.arrow/type :utf8 true)
-                                               (types/->field "struct" #xt.arrow/type :struct true
-                                                              (types/->field "c" #xt.arrow/type :utf8 true)
-                                                              (types/->field "d" #xt.arrow/type :utf8 true))))
-                 (.columnField mm "xt_docs" "struct")))))))
+          (t/is (= (types/->field "struct" #xt.arrow/type :struct true
+                                  (types/->field "a" #xt.arrow/type :union false
+                                                 (types/->field "i64" #xt.arrow/type :i64 true)
+                                                 (types/->field "bool" #xt.arrow/type :bool true))
+                                  (types/->field "b" #xt.arrow/type :union false
+                                                 (types/->field "utf8" #xt.arrow/type :utf8 true)
+                                                 (types/->field "struct" #xt.arrow/type :struct true
+                                                                (types/->field "c" #xt.arrow/type :utf8 true)
+                                                                (types/->field "d" #xt.arrow/type :utf8 true))))
+                   (.columnField mm "xt_docs" "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip
   (with-open [node (xtn/start-node {})]

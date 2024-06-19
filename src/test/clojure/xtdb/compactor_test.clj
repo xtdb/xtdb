@@ -239,7 +239,8 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 32
-              c/*l1-file-size-rows* 256]
+              c/*l1-file-size-rows* 256
+              c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]

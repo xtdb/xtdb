@@ -30,6 +30,8 @@
   (-compact-all! [compactor timeout])
   (signal-block! [compactor]))
 
+(def ^:dynamic *ignore-signal-block?* false)
+
 (defn- ->reader->copier [^IRelationWriter data-wtr]
   (let [iid-wtr (.colWriter data-wtr "xt$iid")
         sf-wtr (.colWriter data-wtr "xt$system_from")
@@ -244,7 +246,8 @@
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator, ^IBufferPool buffer-pool, metadata-mgr, ^long threads]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (let [page-size *page-size*
-          l1-file-size-rows *l1-file-size-rows*]
+          l1-file-size-rows *l1-file-size-rows*
+          ignore-signal-block? *ignore-signal-block?*]
       (letfn [(available-jobs []
                 (for [table-path (.listObjects buffer-pool util/tables-dir)
                       job (compaction-jobs (trie/list-meta-files buffer-pool table-path)
@@ -331,12 +334,16 @@
                       (.unlock lock))))
 
                 (signal-block! [_]
-                  (log/debug "signal")
-                  (.lock lock)
-                  (try
-                    (.signalAll wake-up-mgr)
-                    (finally
-                      (.unlock lock))))
+                  (if ignore-signal-block?
+                    (log/debug "ignoring signal")
+
+                    (do
+                      (log/debug "signal")
+                      (.lock lock)
+                      (try
+                        (.signalAll wake-up-mgr)
+                        (finally
+                          (.unlock lock))))))
 
                 AutoCloseable
                 (close [_]
