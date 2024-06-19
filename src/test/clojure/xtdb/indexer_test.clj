@@ -78,90 +78,91 @@
   4757)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
-  (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02"))]
-    (util/delete-dir node-dir)
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
+          last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02"))]
+      (util/delete-dir node-dir)
 
-    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^BufferAllocator a (tu/component node :xtdb/allocator)
-            ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
-            mm (tu/component node ::meta/metadata-manager)
-            ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+        (let [^BufferAllocator a (tu/component node :xtdb/allocator)
+              ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+              mm (tu/component node ::meta/metadata-manager)
+              ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
 
-        (t/is (nil? (meta/latest-chunk-metadata mm)))
+          (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-        (t/is (= last-tx-key
-                 (last (for [tx-ops txs]
-                         (xt/submit-tx node tx-ops)))))
+          (t/is (= last-tx-key
+                   (last (for [tx-ops txs]
+                           (xt/submit-tx node tx-ops)))))
 
-        (t/is (= last-tx-key
-                 (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+          (t/is (= last-tx-key
+                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
 
-        (tu/finish-chunk! node)
+          (tu/finish-chunk! node)
 
-        (t/is (= {:latest-completed-tx last-tx-key
-                  :next-chunk-idx 6}
-                 (-> (meta/latest-chunk-metadata mm)
-                     (select-keys [:latest-completed-tx :next-chunk-idx]))))
+          (t/is (= {:latest-completed-tx last-tx-key
+                    :next-chunk-idx 6}
+                   (-> (meta/latest-chunk-metadata mm)
+                       (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-chunk-as-arrow-ipc-file-format")))
-                       (.resolve node-dir "objects"))
+          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-chunk-as-arrow-ipc-file-format")))
+                         (.resolve node-dir "objects"))
 
-        #_ ; TODO port to buffer pool test that doesn't depend on the structure of the indexer
-        (t/testing "buffer pool"
-          (let [buffer-name "chunk-00/device_info/metadata.arrow"
-                ^ArrowBuf buffer @(.getBuffer bp buffer-name)
-                footer (util/read-arrow-footer buffer)]
-            (t/is (= 1 (count (.buffers ^BufferPool bp))))
-            (t/is (instance? ArrowBuf buffer))
-            (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+          #_ ; TODO port to buffer pool test that doesn't depend on the structure of the indexer
+          (t/testing "buffer pool"
+            (let [buffer-name "chunk-00/device_info/metadata.arrow"
+                  ^ArrowBuf buffer @(.getBuffer bp buffer-name)
+                  footer (util/read-arrow-footer buffer)]
+              (t/is (= 1 (count (.buffers ^BufferPool bp))))
+              (t/is (instance? ArrowBuf buffer))
+              (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-            (with-open [^ArrowBuf same-buffer @(.getBuffer bp buffer-name)]
-              (t/is (identical? buffer same-buffer))
-              (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
+              (with-open [^ArrowBuf same-buffer @(.getBuffer bp buffer-name)]
+                (t/is (identical? buffer same-buffer))
+                (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
 
-            (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+              (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-            (t/is (= 1 (count (.getRecordBatches footer))))
-            (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
-                        record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
-              (.load (VectorLoader. metadata-batch) record-batch)
-              (t/is (= 2 (.getRowCount metadata-batch)))
-              (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
-                                   (.rowIndex "xt$id" -1))]
-                (t/is (= "xt$id" (-> (vr/vec->reader (.getVector metadata-batch "columns"))
-                                     (.listElementReader)
-                                     (.structKeyReader "col-name")
-                                     (.getObject id-col-idx))))
-                (let [^StructVector cols-data-vec (-> ^ListVector (.getVector metadata-batch "columns")
-                                                      (.getDataVector))
-                      ^StructVector utf8-type-vec (-> cols-data-vec
-                                                      ^StructVector (.getChild "types")
-                                                      (.getChild "utf8"))]
-                  (t/is (= "device-info-demo000000"
-                           (-> (vr/vec->reader (.getChild utf8-type-vec "min"))
-                               (.getObject id-col-idx))))
-                  (t/is (= "device-info-demo000001"
-                           (-> (vr/vec->reader (.getChild utf8-type-vec "max"))
-                               (.getObject id-col-idx))))
+              (t/is (= 1 (count (.getRecordBatches footer))))
+              (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
+                          record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
+                (.load (VectorLoader. metadata-batch) record-batch)
+                (t/is (= 2 (.getRowCount metadata-batch)))
+                (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
+                                     (.rowIndex "xt$id" -1))]
+                  (t/is (= "xt$id" (-> (vr/vec->reader (.getVector metadata-batch "columns"))
+                                       (.listElementReader)
+                                       (.structKeyReader "col-name")
+                                       (.getObject id-col-idx))))
+                  (let [^StructVector cols-data-vec (-> ^ListVector (.getVector metadata-batch "columns")
+                                                        (.getDataVector))
+                        ^StructVector utf8-type-vec (-> cols-data-vec
+                                                        ^StructVector (.getChild "types")
+                                                        (.getChild "utf8"))]
+                    (t/is (= "device-info-demo000000"
+                             (-> (vr/vec->reader (.getChild utf8-type-vec "min"))
+                                 (.getObject id-col-idx))))
+                    (t/is (= "device-info-demo000001"
+                             (-> (vr/vec->reader (.getChild utf8-type-vec "max"))
+                                 (.getObject id-col-idx))))
 
-                  (let [^BigIntVector count-vec (.getChild cols-data-vec "count")]
-                    (t/is (= 2 (.get count-vec id-col-idx)))
+                    (let [^BigIntVector count-vec (.getChild cols-data-vec "count")]
+                      (t/is (= 2 (.get count-vec id-col-idx)))
 
-                    (let [tp (.getTransferPair count-vec a)]
-                      (with-open [to (.getTo tp)]
-                        (t/is (zero? (.getValueCount to)))
-                        (.splitAndTransfer tp 0 12)
-                        (t/is  (= (.memoryAddress (.getDataBuffer count-vec))
-                                  (.memoryAddress (.getDataBuffer to))))
-                        (t/is (= 12 (.getValueCount to)))))))))
+                      (let [tp (.getTransferPair count-vec a)]
+                        (with-open [to (.getTo tp)]
+                          (t/is (zero? (.getValueCount to)))
+                          (.splitAndTransfer tp 0 12)
+                          (t/is  (= (.memoryAddress (.getDataBuffer count-vec))
+                                    (.memoryAddress (.getDataBuffer to))))
+                          (t/is (= 12 (.getValueCount to)))))))))
 
-            (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+              (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-            (let [size (.getSize (.getReferenceManager ^ArrowBuf buffer))]
-              (t/is (= size (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
-              (.close buffer)
-              (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))))))))
+              (let [size (.getSize (.getReferenceManager ^ArrowBuf buffer))]
+                (t/is (= size (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
+                (.close buffer)
+                (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))))))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
   (with-open [node (xtn/start-node {})]
