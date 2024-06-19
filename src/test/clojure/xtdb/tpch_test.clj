@@ -10,7 +10,8 @@
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import (java.nio.file Path)))
+  (:import (java.nio.file Path)
+           [java.time Duration]))
 
 (def ^:dynamic *node* nil)
 
@@ -29,7 +30,7 @@
           (tu/then-await-tx last-tx node)
           (tu/finish-chunk! node)
 
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofMinutes 5))
 
           (binding [*node* node]
             (f)))))))

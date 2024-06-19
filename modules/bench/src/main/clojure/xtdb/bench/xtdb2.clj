@@ -32,7 +32,7 @@
   (li/finish-chunk! (util/component node :xtdb.indexer/live-index)))
 
 (defn compact! [node]
-  (c/compact-all! node))
+  (c/compact-all! node (Duration/ofMinutes 10)))
 
 (defn ->local-node ^xtdb.api.IXtdb [{:keys [node-dir ^String buffers-dir
                                             rows-per-chunk log-limit page-limit instant-src]

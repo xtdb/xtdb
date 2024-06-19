@@ -93,7 +93,7 @@
                      (tpch/submit-docs! node 0.05))]
         (time (tu/then-await-tx last-tx node (Duration/ofHours 1)))
         (time (tu/finish-chunk! node))
-        (time (c/compact-all! node)))))
+        (time (c/compact-all! node (Duration/ofMinutes 5))))))
 
   (do
     (newline)

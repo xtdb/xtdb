@@ -11,7 +11,8 @@
             [xtdb.trie-test :refer [->trie-file-name]]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]))
+            [xtdb.vector.writer :as vw])
+  (:import [java.time Duration]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -254,19 +255,19 @@
 
           (submit! (range 100))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (range 100) (q)))
 
           (submit! (range 100 200))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (range 200) (q)))
 
           (submit! (range 200 500))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (range 500) (q)))
 
@@ -294,19 +295,19 @@
 
           (submit! (range 500))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (set (range 500)) (set (q))))
 
           (submit! (range 500 1000))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (set (range 1000)) (set (q))))
 
           (submit! (range 1000 2000))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (set (range 2000)) (set (q))))
 
@@ -334,18 +335,18 @@
 
           (submit! (tu/bad-uuid-seq 100))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (tu/bad-uuid-seq 100) (q)))
 
           (submit! (tu/bad-uuid-seq 100 200))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (tu/bad-uuid-seq 200) (q)))
 
           (submit! (tu/bad-uuid-seq 200 500))
           (tu/then-await-tx node)
-          (c/compact-all! node)
+          (c/compact-all! node (Duration/ofSeconds 5))
 
           (t/is (= (tu/bad-uuid-seq 500) (q))))))))

@@ -27,7 +27,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defprotocol PCompactor
-  (-compact-all! [compactor])
+  (-compact-all! [compactor timeout])
   (signal-block! [compactor]))
 
 (defn- ->reader->copier [^IRelationWriter data-wtr]
@@ -313,13 +313,20 @@
                                            (log/debug "main compactor thread exiting"))))]
 
               (reify PCompactor
-                (-compact-all! [_]
+                (-compact-all! [_ timeout]
                   (log/info "compact-all")
                   (.lock lock)
                   (try
                     (.signalAll wake-up-mgr)
-                    (.await nothing-to-do)
-                    (log/info "all compacted")
+                    (if (if timeout
+                          (.await nothing-to-do (.toMillis ^Duration timeout) TimeUnit/MILLISECONDS)
+                          (do
+                            (.await nothing-to-do)
+                            true))
+                      (log/info "all compacted")
+                      (throw (ex-info "timed out waiting for compaction"
+                                      {:available-jobs @!available-jobs
+                                       :queued-jobs (into {} !queued-jobs)})))
                     (finally
                       (.unlock lock))))
 
@@ -352,8 +359,9 @@
   (util/close compactor))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn compact-all! [node]
-  (-compact-all! (util/component node :xtdb/compactor)))
+(defn compact-all!
+  ([node] (compact-all! node nil))
+  ([node timeout] (-compact-all! (util/component node :xtdb/compactor) timeout)))
 
 (derive ::no-op :xtdb/compactor)
 
