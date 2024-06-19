@@ -19,6 +19,7 @@
            (java.util Collections Comparator Date IdentityHashMap Iterator Map PriorityQueue Properties)
            [java.util.concurrent ThreadFactory ExecutorService LinkedBlockingQueue ThreadPoolExecutor TimeUnit RejectedExecutionHandler]
            (java.util.concurrent.locks StampedLock)
+           [java.util.function Supplier]
            (xtdb.api ICursor)))
 
 (s/def ::port (s/int-in 1 65536))
@@ -51,9 +52,19 @@
       (.start cleaner-thread)))
   (.put ref->cleanup-action (PhantomReference. object reference-queue) action))
 
+(def ^:private ^ThreadLocal thread-local-utc-date-format
+  ;; SimpleDateFormat is not thread-safe, so we use a ThreadLocal proxy for access.
+  ;; http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4228335
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (doto (SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss.SSS-00:00")
+         ;; RFC3339 says to use -00:00 when the timezone is unknown (+00:00 implies a known GMT)
+         (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))))))
+
 (defn format-rfc3339-date [^Date d]
   (when d
-    (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))
+    (.format ^SimpleDateFormat (.get thread-local-utc-date-format) d)))
 
 (defn parse-rfc3339-or-millis-date [d]
   (if (re-find #"^\d+$" d)
