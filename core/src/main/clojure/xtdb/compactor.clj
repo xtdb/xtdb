@@ -265,13 +265,7 @@
           (letfn [(compactor-task [{:keys [out-trie-key] :as job}]
                     (.acquire active-task-limit)
                     (try
-                      (when (do
-                              (.lock lock)
-                              (try
-                                (contains? @!available-jobs out-trie-key)
-                                (finally
-                                  (.unlock lock))))
-
+                      (when (contains? @!available-jobs out-trie-key)
                         (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job))
 
                       (finally
@@ -339,8 +333,13 @@
 
                 AutoCloseable
                 (close [_]
-                  (.shutdownNow task-pool)
-                  (.interrupt mgr-thread)
+                  (.lock lock)
+                  (try
+                    (.shutdownNow task-pool)
+                    (.interrupt mgr-thread)
+                    (finally
+                      (.unlock lock)))
+
                   (when-not (.awaitTermination task-pool 20 TimeUnit/SECONDS)
                     (log/warn "could not close compaction thread-pool after 20s"))
 
