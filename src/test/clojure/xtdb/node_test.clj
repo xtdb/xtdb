@@ -4,13 +4,17 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
+            [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
+            [xtdb.query :as query]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
            [xtdb.api.tx TxOps]
-           [xtdb.query IQuerySource]))
+           [xtdb.node.impl IXtdbInternal]
+           [xtdb.query IQuerySource]
+           [java.time ZonedDateTime]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -719,3 +723,181 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
          (t/is (not (identical? pq1 pq4))
                "changing table-info causes previous cache-hits to miss")))))
+
+(deftest test-prepared-statements
+  (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
+                                    [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])]
+    (tu/then-await-tx tx tu/*node*))
+
+  (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
+        column-fields [{'xt$id
+                        #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}
+                       {'a
+                        #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}
+                       {'b
+                        #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}]]
+
+    (t/is (=
+           (concat
+            column-fields
+            [{'xt$column_2 #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :i64 true]]}])
+           (.columnFields pq))
+          "param type is assumed to be nullable")
+
+     (with-open [bq (.bind pq {:args [42]})
+                 cursor (.openCursor bq)]
+
+       (t/is (=
+              (concat
+               column-fields
+               [{'xt$column_2 #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}])
+              (.columnFields bq))
+             "now param value has been supplied we know its type is non-null")
+
+       (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
+                (tu/<-cursor cursor))))
+
+     (t/testing "preparedQuery rebound with different param types"
+       (with-open [bq (.bind pq {:args ["fish"]})
+                   cursor (.openCursor bq)]
+
+         (t/is (=
+                (concat
+                 column-fields
+                 [{'xt$column_2 #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}])
+                (.columnFields bq))
+               "now param value has been supplied we know its type is non-null")
+
+         (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
+                  (tu/<-cursor cursor)))))
+
+     (t/testing "statement invalidation"
+
+       (with-open [bq (.bind pq {:args [42]})]
+
+         (let [res [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
+                     {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
+
+           (t/testing "relevant schema unchanged since preparing query"
+
+             (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])]
+               (tu/then-await-tx tx tu/*node*))
+
+             (with-open [cursor (.openCursor bq)]
+
+               (t/is (= res (tu/<-cursor cursor)))))
+
+           (t/testing "irrelevant schema changed since preparing query"
+
+             (let [tx (xt/submit-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])]
+               (tu/then-await-tx tx tu/*node*))
+
+             (with-open [cursor (.openCursor bq)]
+
+               (t/is (= res (tu/<-cursor cursor))))))
+
+         (t/testing "relevant schema changed since preparing query"
+
+           (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])]
+             (tu/then-await-tx tx tu/*node*))
+
+           (t/is (thrown-with-msg? xtdb.RuntimeException
+                                   #"Relevant table schema has changed since preparing query, please prepare again"
+                                   (.openCursor bq))))))))
+
+(deftest test-prepared-statements-default-all-valid-time
+  (tu/then-await-tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :version 1}]]) tu/*node*)
+  (tu/then-await-tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :version 2}]]) tu/*node*)
+
+  (t/testing "perpare and bind both default-valid-time to as of now"
+    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? false})]
+
+      (with-open [bq (.bind pq {:default-all-valid-time? false})
+                  cursor (.openCursor bq)]
+
+        (t/is (= [[{:xt/id 1, :version 2}]]
+                 (tu/<-cursor cursor))))))
+
+  (t/testing "perpare and bind both default-valid-time to all time"
+    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? true})]
+
+      (with-open [bq (.bind pq {:default-all-valid-time? true})
+                  cursor (.openCursor bq)]
+
+        (t/is (= [[{:xt/id 1, :version 2}
+                   {:xt/id 1, :version 1}]]
+                 (tu/<-cursor cursor))))))
+
+  (t/testing "prepared for as of now, but bound for all time"
+    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? false})]
+
+      (with-open [bq (.bind pq {:default-all-valid-time? true})
+                  cursor (.openCursor bq)]
+
+        (t/is (= [[{:xt/id 1, :version 2} {:xt/id 1, :version 1}]]
+                 (tu/<-cursor cursor))))))
+
+  (t/testing "prepared for as of now, but bound for as of now, rebound all time"
+    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? false})]
+
+      (with-open [bq (.bind pq {:default-all-valid-time? false})
+                  cursor (.openCursor bq)]
+
+        (t/is (= [[{:xt/id 1, :version 2}]]
+                 (tu/<-cursor cursor))))
+
+      (with-open [bq (.bind pq {:default-all-valid-time? true})
+                  cursor (.openCursor bq)]
+
+        (t/is (= [[{:xt/id 1, :version 2} {:xt/id 1, :version 1}]]
+                 (tu/<-cursor cursor))))))
+
+  (t/testing "prepared for all time, but bound for as of now"
+    ;; TODO fails because we plan `true` into the into the logical plan as part of SQL planning
+    ;; `{:table foo, :for-valid-time :all-time}` and at this time there is no part of bind/openCursor
+    ;; which can replan the SQL. We could choose to throw an error here as per schema change, but really
+    ;; we should just fix the underlying issue either make this a bind time var, or perhaps move SQL
+    ;; planning under query/prepareRaQuery
+    ;; this doesn't apply the outher way round as per
+    #_(let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? true})]
+
+      (with-open [bq (.bind pq {:default-all-valid-time? false})
+                  cursor (.openCursor bq)]
+
+        (t/is (= [[{:xt/id 1, :version 2}]]
+                 (tu/<-cursor cursor)))))))
+
+(deftest test-prepared-statements-default-tz
+
+  (t/testing "default-tz supplied at prepare"
+    (let [ptz #xt.time/zone "America/New_York"
+          pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz})]
+
+      (t/testing "and not at bind"
+        (with-open [bq (.bind pq {})
+                    cursor (.openCursor bq)]
+
+          (t/is (= ptz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
+
+      (t/testing "and and also at bind"
+        (let [tz #xt.time/zone "Asia/Bangkok"]
+          (with-open [bq (.bind pq {:default-tz tz})
+                      cursor (.openCursor bq)]
+
+            (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))
+
+  (t/testing "default-tz not supplied at prepare"
+    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT CURRENT_TIMESTAMP x" {})]
+
+      (t/testing "and not at bind"
+        (with-open [bq (.bind pq {})
+                    cursor (.openCursor bq)]
+
+          (t/is (= #xt.time/zone "Z" (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
+
+      (t/testing "but at bind"
+        (let [tz #xt.time/zone "Asia/Bangkok"]
+          (with-open [bq (.bind pq {:default-tz tz})
+                      cursor (.openCursor bq)]
+
+            (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))

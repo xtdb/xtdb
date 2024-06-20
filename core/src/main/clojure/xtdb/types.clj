@@ -718,10 +718,14 @@
   (.getBytes (str s) StandardCharsets/UTF_8))
 
 (def pg-types
-  {:undefined {:typname "undefined"
-               :oid 0
-               :read-text (fn [ba] (some-> ba read-utf8))}
+  {:unknown {:typname "unknown"
+             :col-type :null
+             :oid 0
+             ;;unknown is only an input (param) type therefore needs no write fn
+             ;;untyped nulls are returned as text in result sets
+             :read-text (fn [_ba] nil)}
    :int8 {:typname "int8"
+          :col-type :i64
           :oid 20
           :typlen 8
           :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getLong))
@@ -735,6 +739,7 @@
                         (when-not (.isNull rdr idx)
                           (utf8 (.getLong rdr idx))))}
    :int4 {:typname "int4"
+          :col-type :i32
           :oid 23
           :typlen 4
           :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getInt))
@@ -748,6 +753,7 @@
                         (when-not (.isNull rdr idx)
                           (utf8 (.getInt rdr idx))))}
    :int2 {:typname "int2"
+          :col-type :i16
           :oid 21
           :typlen 2
           :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getShort))
@@ -777,6 +783,7 @@
                          (utf8 (.getByte rdr idx))))}
 
    :float4 {:typname "float4"
+            :col-type :f32
             :oid 700
             :typlen 4
             :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getFloat))
@@ -790,6 +797,7 @@
                           (when-not (.isNull rdr idx)
                             (utf8 (.getFloat rdr idx))))}
    :float8 {:typname "float8"
+            :col-type :f64
             :oid 701
             :typlen 8
             :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getDouble))
@@ -803,6 +811,7 @@
                           (when-not (.isNull rdr idx)
                             (utf8 (.getDouble rdr idx))))}
    :uuid {:typname "uuid"
+          :col-type :uuid
           :oid 2950
           :typlen 16
           :read-binary (fn [ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
@@ -815,6 +824,7 @@
                         (utf8 (util/byte-buffer->uuid (.getBytes rdr idx))))}
 
    :varchar {:typname "varchar"
+             :col-type :utf8
              :oid 1043
              :read-text read-utf8
              :write-text (fn [^IVectorReader rdr idx]
@@ -826,6 +836,7 @@
    ;;same as varchar which makes this technically lossy in roundtrip
    ;;text is arguably more correct for us than varchar
    :text {:typname "text"
+          :col-type :utf8
           :oid 25
           :read-text read-utf8
           :write-text (fn [^IVectorReader rdr idx]
@@ -835,6 +846,7 @@
                             (.get bb ba)
                             ba)))}
    :boolean {:typname "boolean"
+             :col-type :bool
              :oid 16
              :read-text (fn [ba] (Boolean/parseBoolean (read-utf8 ba)))
              :write-text (fn [^IVectorReader rdr idx]
@@ -852,11 +864,12 @@
     :i64 :int8
     :i32 :int4
     :i16 :int2
-    :i8 :bit
+    #_#_:i8 :bit
     :f64 :float8
     :f32 :float4
     :uuid :uuid
-    :bool :boolean}
+    :bool :boolean
+    :null :text}
    col-type
    :json))
 

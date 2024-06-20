@@ -41,6 +41,10 @@
 ;; the server currently is a blocking IO server (no nio / netty)
 ;; the server does not own the lifecycle of its associated node
 
+;; Notes:
+;; repl became unresponsive when protcol was stuck in the wrong state
+;; :extended when it should have been :simple, maybe this is nothing.
+
 (defrecord Server [port
 
                    ;; server socket and thread for accepting connections
@@ -1170,6 +1174,10 @@
 (defn cmd-describe-portal [conn {:keys [fields]}]
   (cmd-send-row-description conn fields))
 
+(defn cmd-describe-prepared-stmt [conn {:keys [arg-types fields]}]
+  (cmd-write-msg conn msg-parameter-description {:parameter-oids arg-types})
+  (cmd-send-row-description conn fields))
+
 (defn cmd-begin [{:keys [node conn-state] :as conn} access-mode]
   (swap! conn-state
          (fn [{:keys [session] :as st}]
@@ -1217,14 +1225,13 @@
                  (Object.))
         {:keys [statement-type canned-response] :as describe-target} (get-in @conn-state [coll-k describe-name])]
 
-   (if (= :prepared-stmt describe-type)
-     nil
-
-     (case statement-type
-       :empty-query (cmd-write-msg conn msg-no-data)
-       :canned-response (cmd-describe-canned-response conn canned-response)
-       :query (cmd-describe-portal conn describe-target)
-       (cmd-write-msg conn msg-no-data)))))
+    (case statement-type
+      :empty-query (cmd-write-msg conn msg-no-data)
+      :canned-response (cmd-describe-canned-response conn canned-response)
+      :query (if (= :prepared-stmt describe-type)
+               (cmd-describe-prepared-stmt conn describe-target)
+               (cmd-describe-portal conn describe-target))
+      (cmd-write-msg conn msg-no-data))))
 
 (defn cmd-set-session-parameter [conn parameter value]
   (set-session-parameter conn parameter value)
@@ -1300,91 +1307,97 @@
   [conn]
   (.flush ^OutputStream (:out conn)))
 
-(defn cmd-parse
+(defn parse
   "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state cid server] :as conn}
+  [{:keys [conn-state cid server node] :as conn}
    {:keys [stmt-name query arg-types]}]
-  ;; put the conn in the extend protocol
-  ;; TODO if/when simple query mode calls through to this cmd, will need to move this/make it dynamic
-  (swap! conn-state assoc :protocol :extended)
 
   (log/trace "Parsing" {:stmt-name stmt-name,
                         :query query
                         :port (:port server)
                         :cid cid})
 
-  (let [{:keys [err] :as stmt} (try
-                                 (interpret-sql query)
-                                 (catch Throwable t
-                                   (prn (ex-message t))
-                                   (throw t)))
+  (let [{:keys [err statement-type] :as stmt} (try
+                                                (interpret-sql query)
+                                                (catch Throwable t
+                                                  (prn (ex-message t))
+                                                  (throw t)))
         unsupported-arg-types (remove supported-param-oids arg-types)
         stmt (when-not err (assoc stmt :arg-types arg-types))
         err (or err
                 (when-some [oid (first unsupported-arg-types)]
                   (err-protocol-violation (format "parameter type oid(%s) currently unsupported by xt" oid)))
                 (permissibility-err conn stmt))]
+
     (if err
       (cmd-send-error conn err)
-      (do
-        (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt)
-        (cmd-write-msg conn msg-parse-complete)))))
+      (-> (if (= :query statement-type)
+            (try
+              (let [{:keys [^Clock clock, latest-submitted-tx] :as session} (:session @conn-state)
+                    default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))
+                    query-opts {:after-tx latest-submitted-tx
+                                :tx-timeout (Duration/ofSeconds 1)
+                                :param-types (map #(get-in types/pg-types-by-oid [% :col-type]) arg-types)
+                                :default-tz (.getZone clock)
+                                :default-all-valid-time? default-all-valid-time?}
+                    pq (.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt) query-opts)]
+                {:prepared-stmt (assoc stmt :prepared-stmt pq :fields (map types/field->pg-type (.columnFields pq)))
+                 :prep-outcome :success})
+              (catch InterruptedException e
+                (log/trace e "Interrupt thrown compiling query")
+                (throw e))
+              (catch Throwable e
+                (log/error e)
+                (cmd-send-error
+                 conn
+                 (err-pg-exception e "unexpected server error compiling query"))))
+            {:prepared-stmt stmt
+             :prep-outcome :success})
+          (assoc :stmt-name stmt-name)))))
 
-(defn cmd-bind [{:keys [conn-state node] :as conn}
+(defn cmd-parse
+  "Responds to a msg-parse message that creates a prepared-statement."
+  [{:keys [conn-state] :as conn} msg-data]
+  (swap! conn-state assoc :protocol :extended)
+  (let [{:keys [prepared-stmt prep-outcome stmt-name]} (parse conn msg-data)]
+    (when (= :success prep-outcome)
+      (swap! conn-state assoc-in [:prepared-statements stmt-name] prepared-stmt)
+      (cmd-write-msg conn msg-parse-complete))))
+
+(defn cmd-bind [{:keys [conn-state] :as conn}
                 {:keys [portal-name stmt-name params] :as bind-msg}]
   (let [{:keys [statement-type] :as stmt} (get-in @conn-state [:prepared-statements stmt-name])]
     (if stmt
-      (let [stmt-with-bind-msg
+      (let [{:keys [prepared-stmt] :as stmt-with-bind-msg}
             ;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during execute-tx.
             (merge stmt bind-msg)
             {:keys [portal bind-outcome]}
-            ;;if statement is a query, compile and bind it, else use the statment as a portal
+            ;;if statement is a query, bind it, else use the statment as a portal
             (if (= :query statement-type)
               (let [xtify-param (->xtify-param stmt-with-bind-msg)
                     xt-params (vec (map-indexed xtify-param params))
 
-                    {{:keys [^Clock clock, latest-submitted-tx] :as session} :session
+                    {{:keys [^Clock clock] :as session} :session
                      {:keys [basis]} :transaction} @conn-state
 
                     default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))
 
                     query-opts {:basis (or basis {:current-time (.instant clock)})
-                                :after-tx latest-submitted-tx ;;TODO any need for this if we are sending explicit basis?
-                                :tx-timeout (Duration/ofSeconds 1)
                                 :default-tz (.getZone clock)
                                 :args xt-params
-                                :default-all-valid-time? default-all-valid-time?
-                                :key-fn :snake-case-string}
+                                :default-all-valid-time? default-all-valid-time?}]
 
-                    ;;TODO explicit basis means its okay to send the same query-opts twice for now, rather than have to check what tables
-                    ;;are reffed by compiled-query and see if they have changed by the time bound-query runs, as these 2 requests are fired in quick
-                    ;;succession. Will nee changing when parse is moved to its own phase.
+                (try
+                  (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
 
-                    {:keys [prepared-query prep-outcome]}
-                    (try
-                      {:prepared-query (.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt-with-bind-msg) query-opts)
-                       :prep-outcome :success}
-                      (catch InterruptedException e
-                        (log/trace e "Interrupt thrown compiling query")
-                        (throw e))
-                      (catch Throwable e
-                        (log/error e)
-                        (cmd-send-error
-                         conn
-                         (err-pg-exception e "unexpected server error compiling query"))))]
-
-                (when (= :success prep-outcome)
-                  (try
-                    (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-query query-opts)]
-
-                      {:portal (assoc stmt-with-bind-msg :bound-query bound-query :fields (map types/field->pg-type (.columnFields bound-query)))
-                       :bind-outcome :success})
-                    (catch InterruptedException e
-                      (log/trace e "Interrupt thrown binding prepared statement")
-                      (throw e))
-                    (catch Throwable e
-                      (log/error e)
-                      (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement"))))))
+                    {:portal (assoc stmt-with-bind-msg :bound-query bound-query :fields (map types/field->pg-type (.columnFields bound-query)))
+                     :bind-outcome :success})
+                  (catch InterruptedException e
+                    (log/trace e "Interrupt thrown binding prepared statement")
+                    (throw e))
+                  (catch Throwable e
+                    (log/error e)
+                    (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement")))))
 
               {:portal stmt-with-bind-msg
                :bind-outcome :success})]
@@ -1428,33 +1441,37 @@
     (cmd-send-error conn (err-protocol-violation "no such portal"))))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
-  (let [{:keys [err statement-type] :as stmt} (interpret-sql query)
-        stmt-name ""
-        portal-name ""]
-    (swap! conn-state assoc :protocol :simple)
-    (if-some [err (or err (permissibility-err conn stmt))]
-      (do
-        (cmd-send-error conn err)
-        (cmd-send-ready conn))
-      (do
-        (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt)
-        (if (= :success (cmd-bind conn {:portal-name portal-name
+  ;;TODO I think it would be technically better if simple-query avoided
+  ;;registering stmts and portals in the conn-stat and instead called the
+  ;;various query statges directly, passing any state directly, to
+  ;;remove the chance that simple-query side effects/resources can be
+  ;;addressed by extended cmds/msgs.
+  (swap! conn-state assoc :protocol :simple)
+
+  (let [portal-name ""
+        {:keys [prepared-stmt prep-outcome stmt-name] :as x}
+        (parse conn {:query query :stmt-name ""})]
+
+    (when (= :success prep-outcome)
+
+      (swap! conn-state assoc-in [:prepared-statements stmt-name] prepared-stmt)
+
+      (when (= :success (cmd-bind conn {:portal-name portal-name
                                         :stmt-name stmt-name}))
 
-          (do (when (#{:query :canned-response} statement-type)
-                ;; Client only expects to see a RowDescription (result of cmd-descibe)
-                ;; for certain statement types
-                (cmd-describe conn {:describe-type :portal
-                                    :describe-name portal-name}))
+        (when (#{:query :canned-response} (:statement-type prepared-stmt))
+          ;; Client only expects to see a RowDescription (result of cmd-descibe)
+          ;; for certain statement types
+          (cmd-describe conn {:describe-type :portal
+                              :describe-name portal-name}))
 
-              (cmd-execute conn {:portal-name portal-name})
-              (close-portal conn portal-name)
+        (cmd-execute conn {:portal-name portal-name})
+        (close-portal conn portal-name))
 
-              (cmd-send-ready conn))
+       ;;close/remove stmt
+      (swap! conn-state update :prepared-statements dissoc stmt-name)))
 
-          ;;parse/bind failed, cmd-bind already sent the error message on our behalf
-          ;;so now be ready to accept a new query
-          (cmd-send-ready conn))))))
+  (cmd-send-ready conn))
 
 (defn- handle-msg [{:keys [msg-char8, msg-in]} {:keys [cid, conn-state] :as conn}]
   (let [msg-var (client-msgs msg-char8)]

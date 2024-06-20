@@ -130,9 +130,8 @@
    (let [{:keys [after-tx tx-timeout] :as query-opts}
          (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
      (.awaitTx indexer after-tx tx-timeout)
-
      (let [plan (.planQuery q-src query wm-src query-opts)]
-       (.prepareRaQuery q-src plan wm-src))))
+       (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (^PreparedQuery prepareQuery [_ ^XtqlQuery query, query-opts]
    (let [{:keys [after-tx tx-timeout] :as query-opts}
@@ -140,7 +139,7 @@
      (.awaitTx indexer after-tx tx-timeout)
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
-       (.prepareRaQuery q-src plan wm-src))))
+       (.prepareRaQuery q-src plan wm-src query-opts))))
 
   Closeable
   (close [_]

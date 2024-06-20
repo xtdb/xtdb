@@ -24,13 +24,14 @@
             xtdb.operator.top
             xtdb.operator.unnest
             [xtdb.sql :as sql]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql]
             [xtdb.xtql.edn :as xtql.edn])
   (:import clojure.lang.MapEntry
-           (com.github.benmanes.caffeine.cache Caffeine)
+           (com.github.benmanes.caffeine.cache Caffeine Cache)
            java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util.concurrent ConcurrentHashMap)
@@ -57,12 +58,13 @@
   ;; NOTE we could arguably take the actual params here rather than param-fields
   ;; but if we were to make params a VSR this would then make BoundQuery a closeable resource
   ;; ... or at least raise questions about who then owns the params
+  (columnFields [])
   (^xtdb.query.BoundQuery bind [queryOpts]
    "queryOpts :: {:params, :table-args, :basis, :default-tz}"))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IQuerySource
-  (^xtdb.query.PreparedQuery prepareRaQuery [ra-query wm-src])
+  (^xtdb.query.PreparedQuery prepareRaQuery [ra-query wm-src query-opts])
   (^clojure.lang.PersistentVector planQuery [query wm-src query-opts]))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
@@ -92,76 +94,117 @@
 
 (defn- param-sym [v]
   (-> (symbol (str "?" v))
-      util/symbol->normal-form-symbol
-      (with-meta {:param? true})))
+      util/symbol->normal-form-symbol))
+
+(defn mapify-params [params]
+  (->> params
+       (into {} (map-indexed (fn [idx v]
+                               (if (map-entry? v)
+                                 (MapEntry/create (param-sym (str (symbol (key v)))) (val v))
+                                 (MapEntry/create (symbol (str "?_" idx)) v)))))))
 
 (defn open-args [^BufferAllocator allocator, args]
-  (vw/open-params allocator
-                  (->> args
-                       (into {} (map-indexed (fn [idx v]
-                                               (if (map-entry? v)
-                                                 (MapEntry/create (param-sym (str (symbol (key v)))) (val v))
-                                                 (MapEntry/create (symbol (str "?_" idx)) v))))))))
+  (vw/open-params allocator (mapify-params args)))
+
+(defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^IWatermarkSource wm-src]}
+                 conformed-query scan-cols default-tz default-all-valid-time? param-fields]
+  (.computeIfAbsent cache
+                    {:scan-fields (when (and (seq scan-cols) scan-emitter)
+                                    (with-open [wm (.openWatermark wm-src)]
+                                      (.scanFields scan-emitter wm scan-cols)))
+                     :default-tz default-tz
+                     :default-all-valid-time? default-all-valid-time?
+                     :last-known-chunk (when metadata-mgr
+                                         (.lastEntry (.chunksMetadata metadata-mgr)))
+                     :param-fields param-fields}
+                    (reify Function
+                      (apply [_ emit-opts]
+                        (binding [expr/*clock* (Clock/fixed (.instant expr/*clock*) default-tz)]
+                          ;; only the tz in the clock is relevant at expr compile time
+                          (lp/emit-expr conformed-query (assoc emit-opts :scan-emitter scan-emitter)))))))
+
+(defn ->column-fields [ordered-outer-projection fields]
+  (if ordered-outer-projection
+    (mapv #(hash-map (str %) (get fields %)) ordered-outer-projection)
+    (mapv #(hash-map (key %) (val %)) fields)))
 
 (defn prepare-ra ^xtdb.query.PreparedQuery
   ;; this one used from zero-dep tests
-  (^xtdb.query.PreparedQuery [query] (prepare-ra query {:ref-ctr (RefCounter.)}))
+  (^xtdb.query.PreparedQuery [query] (prepare-ra query {:ref-ctr (RefCounter.)} {}))
 
-  (^xtdb.query.PreparedQuery [query, {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator, ^IMetadataManager metadata-mgr,
-                                             ^RefCounter ref-ctr ^IWatermarkSource wm-src]}]
+  (^xtdb.query.PreparedQuery [query, {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
+                                             ^RefCounter ref-ctr ^IWatermarkSource wm-src] :as deps}
+                              {:keys [param-types default-tz default-all-valid-time? table-info]}]
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
        (throw (err/illegal-arg :malformed-query
                                {:plan query
                                 :explain (s/explain-data ::lp/logical-plan query)})))
 
-     (let [scan-cols (->> (lp/child-exprs conformed-query)
-                          (into #{} (comp (filter (comp #{:scan} :op))
-                                          (mapcat scan/->scan-cols))))
+     (let [tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
+           scan-cols (->> tables
+                          (into #{} (mapcat scan/->scan-cols)))
+
+
 
            _ (assert (or scan-emitter (empty? scan-cols)))
 
-           cache (ConcurrentHashMap.)
+           relevant-schema-at-prepare-time
+           (when (and table-info scan-emitter)
+             (with-open [wm (.openWatermark wm-src)]
+               (->> tables
+                    (map #(str (get-in % [:scan-opts :table])))
+                    (mapcat #(map (partial vector %) (get table-info %)))
+                    (.scanFields scan-emitter wm))))
 
-           ordered-outer-projection (:named-projection (meta query))]
+           cache (ConcurrentHashMap.)
+           ordered-outer-projection (:named-projection (meta query))
+           param-fields (mapify-params (map (comp types/col-type->field types/col-type->nullable-col-type) param-types))
+           default-tz (or default-tz (.getZone expr/*clock*))]
 
        (reify PreparedQuery
-         (bind [_ {:keys [args params basis default-tz default-all-valid-time?]}]
+         (columnFields [_]
+           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz default-all-valid-time? param-fields)]
+             ;; could store column-fields in the cache/map too
+             (->column-fields ordered-outer-projection fields)))
+         (bind [_ {:keys [args params basis default-tz default-all-valid-time?]
+                   :or {default-tz default-tz
+                        default-all-valid-time? default-all-valid-time?}}]
+
+           ;; TODO throw if basis is in the future?
            (util/with-close-on-catch [args (open-args allocator args)]
              ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
-
              (let [params (or params args)
+                   {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz default-all-valid-time? (expr/->param-fields params))
                    {:keys [current-time]} basis
                    current-time (or current-time (.instant expr/*clock*))
-                   default-tz (or default-tz (.getZone expr/*clock*))
-                   clock (Clock/fixed current-time default-tz)
+                   clock (Clock/fixed current-time default-tz)]
 
-                   {:keys [fields ->cursor]} (.computeIfAbsent cache
-                                                               {:scan-fields (when (and (seq scan-cols) scan-emitter)
-                                                                               (with-open [wm (.openWatermark wm-src)]
-                                                                                 (.scanFields scan-emitter wm scan-cols)))
-                                                                :param-fields (expr/->param-fields params)
-                                                                :default-tz default-tz
-                                                                :default-all-valid-time? default-all-valid-time?
-                                                                :last-known-chunk (when metadata-mgr
-                                                                                    (.lastEntry (.chunksMetadata metadata-mgr)))}
-                                                               (reify Function
-                                                                 (apply [_ emit-opts]
-                                                                   (binding [expr/*clock* clock]
-                                                                     (lp/emit-expr conformed-query (assoc emit-opts :scan-emitter scan-emitter))))))]
                (reify
                  BoundQuery
                  (columnFields [_]
-                   (if ordered-outer-projection
-                     (mapv #(hash-map (str %) (get fields %)) ordered-outer-projection)
-                     (mapv #(hash-map (key %) (val %)) fields)))
+                   (->column-fields ordered-outer-projection fields))
                  (openCursor [_]
+                   (when relevant-schema-at-prepare-time
+                     (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
+                                                          (.scanFields scan-emitter wm
+                                                                       (mapcat #(map (partial vector (key %)) (val %))
+                                                                               (scan/tables-with-cols wm-src scan-emitter))))]
+
+                       ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
+                       ;;especially given our "per path schema" principal.
+                       (when-not (= relevant-schema-at-prepare-time
+                                    (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
+                         (throw (err/runtime-err :prepared-query-out-of-date
+                                                 ;;TODO consider adding the schema diff to the error, potentially quite large.
+                                                 {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
                    (.acquire ref-ctr)
                    (let [^BufferAllocator allocator
                          (if allocator
                            (util/->child-allocator allocator "BoundQuery/openCursor")
                            (RootAllocator.))
-                         wm (some-> wm-src (.openWatermark))]
+                         wm (some-> wm-src (.openWatermark))
+]
                      (try
                        (binding [expr/*clock* clock]
                          (-> (->cursor {:allocator allocator, :watermark wm
@@ -192,19 +235,14 @@
 (defn ->caffeine-cache ^com.github.benmanes.caffeine.cache.Cache [size]
   (-> (Caffeine/newBuilder) (.maximumSize size) (.build)))
 
-(defmethod ig/init-key ::query-source [_ {:keys [prepare-cache-size plan-cache-size] :as deps}]
-  (let [prepare-cache (->caffeine-cache prepare-cache-size)
-        plan-cache (->caffeine-cache plan-cache-size)
+(defmethod ig/init-key ::query-source [_ {:keys [plan-cache-size] :as deps}]
+  (let [plan-cache (->caffeine-cache plan-cache-size)
         ref-ctr (RefCounter.)
         deps (-> deps (assoc :ref-ctr ref-ctr))]
     (reify
       IQuerySource
-      (prepareRaQuery [_ query wm-src]
-        (.get prepare-cache [query wm-src]
-              (reify Function
-                (apply [_ _]
-                  (prepare-ra query (assoc deps :wm-src wm-src))))))
-
+      (prepareRaQuery [_ query wm-src query-opts]
+        (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src (:scan-emitter deps)))))
       (planQuery [_ query wm-src query-opts]
         (let [table-info (scan/tables-with-cols wm-src (:scan-emitter deps))
               plan-query-opts
@@ -217,7 +255,7 @@
               ;;TODO defaults to true in rewrite plan so needs defaulting pre-cache,
               ;;Move all defaulting to this level if/when everyone goes via planQuery
               cache-key (assoc plan-query-opts :query query)]
-          (.get plan-cache cache-key
+          (.get ^Cache plan-cache cache-key
                 (reify Function
                   (apply [_ _]
                     (let [plan (cond
