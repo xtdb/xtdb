@@ -53,7 +53,9 @@
                "../docs/reference/modules/ROOT/examples/test"
                "../docs/about/modules/ROOT/examples/test"]
 
-  :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
+  :jvm-opts ["-server" "-Xmx8g"
+             "-Dlogback.configurationFile=test-resources/logback-test.xml"
+             "-Dxtdb.enable-java-time-print-methods=true"]
 
   :profiles {:dev {:dependencies []}
 

@@ -160,7 +160,8 @@
 
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"
-             "-Dclojure.spec.check-asserts=true"]
+             "-Dclojure.spec.check-asserts=true"
+             "-Dxtdb.enable-java-time-print-methods=true"]
 
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
              :with-s3-tests {:jvm-opts ["-Dxtdb.s3.test-bucket=crux-s3-test"]}

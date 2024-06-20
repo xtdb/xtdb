@@ -649,3 +649,17 @@
   ;; will segfault on early versions, exception here is ok, :remote config does not throw.
   (when-not (= :remote every-api/*node-type*)
     (t/is (thrown-with-msg? IllegalStateException #"closing" (xt/db *api*)))))
+
+(t/deftest local-date-and-time-3261
+  (when-not (= :local-kafka-transit every-api/*node-type*)
+    (xt/submit-tx *api*
+                  [[::xt/put {:xt/id :foo,
+                              :date #xtdb/local-date "2020-01-01"
+                              :time #xtdb/local-time "12:00:00"}]])
+
+    (xt/sync *api*)
+
+    (t/is (= {:xt/id :foo,
+              :date #xtdb/local-date "2020-01-01",
+              :time #xtdb/local-time "12:00:00"}
+             (xt/entity (xt/db *api*) :foo)))))

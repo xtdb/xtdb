@@ -751,8 +751,8 @@
 (defn local-time-reader [s] (LocalTime/parse s))
 (defn local-date-time-reader [s] (LocalDateTime/parse s))
 
-(when (or (System/getenv "XTDB_ENABLE_JAVA_TIME_PRINT_METHODS")
-          (System/getProperty "xtdb.enable-java-time-print-methods"))
+(when (or (Boolean/parseBoolean (System/getenv "XTDB_ENABLE_JAVA_TIME_PRINT_METHODS"))
+          (Boolean/parseBoolean (System/getProperty "xtdb.enable-java-time-print-methods")))
   (defmethod print-dup Duration [^Duration d, ^Writer w]
     (.write w (format "#xtdb/duration \"%s\"" d)))
 
