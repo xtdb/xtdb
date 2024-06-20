@@ -43,7 +43,7 @@
                               vw/empty-params)]
        (let [^PreparedQuery pq (if node
                                  (let [^IQuerySource q-src (util/component node ::q/query-source)]
-                                   (.prepareRaQuery q-src query indexer))
+                                   (.prepareRaQuery q-src query indexer query-opts))
                                  (q/prepare-ra query))
              bq (.bind pq (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz :default-all-valid-time?])
                               (assoc :params params-rel)))]

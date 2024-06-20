@@ -15,7 +15,7 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection)
+           (java.sql Connection Types JDBCType)
            (java.time Clock Instant ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
@@ -89,6 +89,30 @@
         :unsupported
         (throw e)))))
 
+(defn rs->maps [rs]
+  (let [md (.getMetaData rs)]
+    (-> (loop [res []]
+          (if (.next rs)
+            (recur (->>
+                    (for [idx (range 1 (inc (.getColumnCount md)))]
+                      {(.getColumnName md idx) (.getObject rs idx)})
+                    (into {})
+                    (conj res)))
+            res))
+        (vec))))
+
+(defn result-metadata [stmt-or-result-set]
+  (let [md (.getMetaData stmt-or-result-set)]
+    (-> (for [idx (range 1 (inc (.getColumnCount md)))]
+          {(.getColumnName md idx) (.getColumnTypeName md idx)})
+        (vec))))
+
+(defn param-metadata [stmt]
+  (let [md (.getParameterMetaData stmt)]
+    (-> (for [idx (range 1 (inc (.getParameterCount md)))]
+          (.getParameterTypeName md idx))
+        (vec))))
+
 (deftest ssl-test
   (t/are [sslmode expect] (= expect (try-sslmode sslmode))
     "disable" :ok
@@ -130,8 +154,8 @@
   (with-open [conn (jdbc-conn "preferQueryMode" "simple")
               stmt (.createStatement conn)
               rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
-    (is (= true (.next rs)))
-    (is (= false (.next rs)))))
+    (is (= [{"a" "hello, world"}]
+           (rs->maps rs)))))
 
 ;;TODO ADD support for multiple statments in a single simple query
 #_(deftest mulitiple-statement-simple-query-test
@@ -1225,3 +1249,105 @@
               {:_id 1, :committed true, :error nil}
               {:_id 0, :committed true, :error nil}]
              (q conn ["SELECT * EXCLUDE tx_time FROM xt.txs"])))))
+
+(deftest test-null-type
+  (with-open [conn (jdbc-conn "prepareThreshold" -1)
+              stmt (.prepareStatement conn "SELECT ?")]
+
+    (t/testing "untyped null param"
+
+      (.setObject stmt 1 nil)
+
+      ;;pgjdbc throws a java.lang.AssertionError: Misuse of castNonNull: called with a null argument
+      ;;when JRE assertions are enabled (as they are in test tasks)
+      ;;this error is likely happening because we opt to describe the param type of null and unknown params
+      ;;as unknown rather than as text (or some other inferred type). This is a departure from pg but
+      ;;arguably more true for xtdb.
+      ;;
+      ;;We could do a pg does and eagerly infer a type, however I think we should wait to see if there is a
+      ;;need for clients to be able to describe untyped null/unknown params before making a decision here.
+      #_(t/is (= [nil] (param-metadata stmt)))
+
+      (with-open [rs (.executeQuery stmt)]
+
+        (t/is (= [{"_column_1" "text"}] (result-metadata stmt) (result-metadata rs))
+              "untyped nulls are of type text in result sets")
+        (t/is (= [{"_column_1" nil}] (rs->maps rs)))))
+
+    (t/testing "updating param to non null value"
+
+      (.setObject stmt 1 4)
+
+      (t/is (= ["int8"] (param-metadata stmt)))
+
+      (with-open [rs (.executeQuery stmt)]
+        (t/is (= [{"_column_1" "int8"}] (result-metadata stmt) (result-metadata rs)))
+        (t/is (= [{"_column_1" 4}] (rs->maps rs)))))))
+
+(deftest test-prepared-statements-with-unknown-params
+  (with-open [conn (jdbc-conn "prepareThreshold" -1)
+              stmt (.prepareStatement conn "SELECT ?")]
+
+    ;;see above
+    #_(t/testing "unknown param types are assumed to be of type null"
+
+      (t/is (= [nil] (param-metadata stmt))))
+
+    (t/testing "Once a param value is supplied statement updates correctly and can be executed"
+
+      (.setObject stmt 1 #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6")
+
+      (t/is (= ["uuid"] (param-metadata stmt)))
+
+      (with-open [rs (.executeQuery stmt)]
+
+        (t/is (= [{"_column_1" "uuid"}] (result-metadata stmt) (result-metadata rs)))
+        (t/is (= [{"_column_1" #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6"}] (rs->maps rs)))))))
+
+(deftest test-prepared-statments
+  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+    (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a, b) VALUES (1, 'one', 2)"))
+    (with-open [stmt (.prepareStatement conn "SELECT foo.*, ? FROM foo")]
+
+
+      (t/testing "server side prepared statments where param types are known"
+
+        (.setObject stmt 1 true Types/BOOLEAN)
+
+        (with-open [rs (.executeQuery stmt)]
+
+          (t/is (= [{"_id" "int8"} {"a" "text"} {"b" "int8"} {"_column_2" "bool"}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+
+          (t/is (=
+                 [{"_id" 1, "a" "one", "b" 2, "_column_2" true}]
+                 (rs->maps rs)))))
+
+      (t/testing "param types can be rebound for the same prepared statment"
+
+        (.setObject stmt 1 44.4 Types/DOUBLE)
+
+        (with-open [rs (.executeQuery stmt)]
+
+          (t/is (= [{"_id" "int8"} {"a" "text"} {"b" "int8"} {"_column_2" "float8"}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+          (t/is (=
+                 [{"_id" 1, "a" "one", "b" 2, "_column_2" 44.4}]
+                 (rs->maps rs)))))
+
+      (t/testing "relevant schema change reported to pgwire client"
+
+        (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a, b) VALUES (2, 1, 1)"))
+
+        ;;TODO we just return our own custom error here, rather than 'cached plan must not change result type'
+        ;;might be worth confirming if there is a specific error type/message that matters for pgjdbc as there
+        ;;appears to be retry logic built into the driver
+        ;;https://jdbc.postgresql.org/documentation/server-prepare/#re-execution-of-failed-statements
+        (t/is (thrown-with-msg?
+               PSQLException
+               #"ERROR: Relevant table schema has changed since preparing query, please prepare again"
+               (with-open [_rs (.executeQuery stmt)])))))))

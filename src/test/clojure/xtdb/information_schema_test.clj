@@ -287,7 +287,7 @@
               :typtype "b",
               :typowner 1376455703,
               :typnotnull false,
-              :typname "undefined",
+              :typname "unknown",
               :typnamespace -2125819141,
               :typbasetype 0}
              {:typtypmod -1,

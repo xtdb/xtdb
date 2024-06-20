@@ -170,7 +170,7 @@
               ticket-handle (new-id)
               basis {:at-tx (.latestCompletedTx idxer)}
               plan (.planQuery q-src sql wm-src {:basis basis})
-              bq (-> (.prepareRaQuery q-src plan wm-src)
+              bq (-> (.prepareRaQuery q-src plan wm-src {})
                      ;; HACK need to get the basis from somewhere...
                      (.bind {:basis basis}))
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
@@ -221,7 +221,7 @@
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
-                   (not (dml? plan)) (assoc :prepd-query (.prepareRaQuery q-src plan wm-src)))]
+                   (not (dml? plan)) (assoc :prepd-query (.prepareRaQuery q-src plan wm-src {})))]
           (.put stmts ps-id (HashMap. ^Map ps))
 
           (.onNext listener
