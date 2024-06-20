@@ -189,7 +189,7 @@
           :scan-emitter (ig/ref ::scan/scan-emitter)
           :metadata-mgr (ig/ref ::meta/metadata-manager)}))
 
-(defn ->caffeine-cache [size]
+(defn ->caffeine-cache ^com.github.benmanes.caffeine.cache.Cache [size]
   (-> (Caffeine/newBuilder) (.maximumSize size) (.build)))
 
 (defmethod ig/init-key ::query-source [_ {:keys [prepare-cache-size plan-cache-size] :as deps}]
