@@ -24,7 +24,6 @@ dependencies {
     implementation("org.clojure", "clojure", "1.11.1")
     api("org.clojure", "spec.alpha", "0.3.218")
 
-    api("com.widdindustries", "time-literals", "0.1.10")
     api("com.cognitect", "transit-clj", "1.0.333")
     api("com.cognitect", "transit-java", "1.0.371")
 

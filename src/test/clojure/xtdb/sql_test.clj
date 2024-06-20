@@ -1206,15 +1206,15 @@
              {:x 1, :new-y "c", :xt/id 3}}
            (set (xt/q tu/*node* "SELECT docs.* RENAME y AS new_y FROM docs"))))
 
-  (t/is (= #{{:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+  (t/is (= #{{:xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 2,
               :y "b",
               :xt/id 2}
-             {:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             {:xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 3,
               :y "a",
               :xt/id 1}
-             {:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             {:xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 1,
               :y "c",
               :xt/id 3}}
@@ -1223,15 +1223,15 @@
   (t/is (= #{{:x 2,
               :y "b",
               :xt/id 2,
-              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
              {:x 3,
               :y "a",
               :xt/id 1,
-              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
              {:x 1,
               :y "c",
               :xt/id 3,
-              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
+              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
              (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs WHERE docs._system_to = docs._valid_to")))))
 
 (t/deftest able-to-select-star-from-two-tables-bug-3389
@@ -1478,7 +1478,7 @@
 
 (t/deftest test-tx-ops-sql-params
   (t/testing "correct number of args"
-    (t/is (= (serde/->tx-committed 0 #time/instant "2020-01-01T00:00:00Z")
+    (t/is (= (serde/->tx-committed 0 #xt.time/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [1 "dan"] [2 "james"]]])))
 
     (t/is (= [{:u-name "dan", :xt/id 1}
@@ -1487,13 +1487,13 @@
 
   (t/testing "no arg rows provided when args expected"
     (t/is (= (serde/->tx-aborted 1
-                                 #time/instant "2020-01-02T00:00:00Z"
+                                 #xt.time/instant "2020-01-02T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/missing-sql-args "Arguments list was expected but not provided" {:param-count 2}])
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)"]]))))
 
   (t/testing "incorrect number of args on all arg-row"
     (t/is (= (serde/->tx-aborted 2
-                                 #time/instant "2020-01-03T00:00:00Z"
+                                 #xt.time/instant "2020-01-03T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "1 arguments were provided and 2 arguments were provided" {:param-count 2, :arg-count 1}])
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))))
 

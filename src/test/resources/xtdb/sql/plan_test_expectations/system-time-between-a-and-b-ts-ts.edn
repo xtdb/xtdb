@@ -8,8 +8,8 @@
     [{xt$system_from
       (<=
        xt$system_from
-       #time/zoned-date-time "3000-01-01T00:00Z")}
+       #xt.time/zoned-date-time "3000-01-01T00:00Z")}
      {system_time_end
-      (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}
+      (> system_time_end #xt.time/zoned-date-time "2999-01-01T00:00Z")}
      bar
      {_table (= _table "foo")}]]]]]

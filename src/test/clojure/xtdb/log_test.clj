@@ -123,4 +123,4 @@
 
                          {:system-time (time/->instant #inst "2021")
                           :default-all-valid-time? false
-                          :default-tz #time/zone "Europe/London"}))
+                          :default-tz #xt.time/zone "Europe/London"}))

@@ -26,7 +26,7 @@
          l.3
          [:scan
           {:table lineitem}
-          [{l_shipdate (> l_shipdate #time/date "1995-03-15")}
+          [{l_shipdate (> l_shipdate #xt.time/date "1995-03-15")}
            l_discount
            l_orderkey
            l_extendedprice]]]
@@ -41,5 +41,5 @@
           {:table orders}
           [o_custkey
            o_shippriority
-           {o_orderdate (< o_orderdate #time/date "1995-03-15")}
+           {o_orderdate (< o_orderdate #xt.time/date "1995-03-15")}
            o_orderkey]]]]]]]]]]]

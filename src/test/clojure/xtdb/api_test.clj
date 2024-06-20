@@ -73,11 +73,11 @@
              (set (xt/q *node* '(from :docs [{:xt/id id} struct])))))))
 
 (deftest round-trips-temporal
-  (let [vs {:dt #time/date "2022-08-01"
-            :ts #time/date-time "2022-08-01T14:34"
-            :tstz #time/zoned-date-time "2022-08-01T14:34+01:00"
-            :tm #time/time "13:21:14.932254"
-            ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
+  (let [vs {:dt #xt.time/date "2022-08-01"
+            :ts #xt.time/date-time "2022-08-01T14:34"
+            :tstz #xt.time/zoned-date-time "2022-08-01T14:34+01:00"
+            :tm #xt.time/time "13:21:14.932254"
+            ;; :tmtz #xt.time/offset-time "11:21:14.932254-08:00" ; TODO #323
             }]
 
     (xt/execute-tx *node* [[:sql "INSERT INTO foo (_id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
@@ -126,18 +126,18 @@
       (t/is (= #{:foo :baz} (q-at tx3))))
 
     (t/is (= #{{:tx-id 0,
-                :tx-time #time/zoned-date-time "2012-01-01T00:00Z[UTC]",
+                :tx-time #xt.time/zoned-date-time "2012-01-01T00:00Z[UTC]",
                 :committed? true,
                 :error [nil nil]}
                {:tx-id 1,
-                :tx-time #time/zoned-date-time "2011-01-01T00:00Z[UTC]",
+                :tx-time #xt.time/zoned-date-time "2011-01-01T00:00Z[UTC]",
                 :committed? false,
                 :error ["specified system-time older than current tx"
                         {::err/error-key :invalid-system-time
-                         :tx-key #xt/tx-key {:tx-id 1, :system-time #time/instant "2011-01-01T00:00:00Z"},
-                         :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2012-01-01T00:00:00Z"}}]}
+                         :tx-key #xt/tx-key {:tx-id 1, :system-time #xt.time/instant "2011-01-01T00:00:00Z"},
+                         :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt.time/instant "2012-01-01T00:00:00Z"}}]}
                {:tx-id 2,
-                :tx-time #time/zoned-date-time "2020-01-03T00:00Z[UTC]",
+                :tx-time #xt.time/zoned-date-time "2020-01-03T00:00Z[UTC]",
                 :committed? true,
                 :error [nil nil]}}
              (->> (xt/q *node*
@@ -579,7 +579,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
     (t/is (= (serde/map->TxAborted
               {:tx-id 2,
-               :system-time #time/instant "2020-01-03T00:00:00Z",
+               :system-time #xt.time/instant "2020-01-03T00:00:00Z",
                :committed? false,
                :error #xt/runtime-err [:xtdb/assert-failed "Precondition failed: assert-not-exists" {:row-count 1}]})
 
@@ -603,7 +603,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
   (t/testing "assert-exists"
     (t/is (= (serde/map->TxAborted
               {:tx-id 3,
-               :system-time #time/instant "2020-01-04T00:00:00Z",
+               :system-time #xt.time/instant "2020-01-04T00:00:00Z",
                :committed? false,
                :error #xt/runtime-err [:xtdb/assert-failed "Precondition failed: assert-exists" {:row-count 0}]})
              (xt/execute-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])

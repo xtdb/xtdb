@@ -61,7 +61,7 @@ Main article: link:/config/tx-log/kafka[Kafka]
         ;; -- optional
 
         ;; :create-topic? true
-        ;; :poll-duration #time/duration "PT1S"
+        ;; :poll-duration #xt.time/duration "PT1S"
         ;; :properties-file "kafka.properties"
         ;; :properties-map {}
         ;; :replication-factor 1

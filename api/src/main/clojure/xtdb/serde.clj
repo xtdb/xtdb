@@ -2,23 +2,19 @@
     xtdb.serde
   (:require [clojure.string :as str]
             [cognitect.transit :as transit]
-            [time-literals.read-write :as time-literals]
             [xtdb.error :as err]
+            [xtdb.mirrors.time-literals :as tl]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql.edn :as xtql.edn])
   (:import [java.io ByteArrayOutputStream Writer]
-           (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime)
+           (java.time Duration Period)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$XtqlAndArgs TxOp$XtqlOp TxOps TxOptions)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
-
-(when-not (or (some-> (System/getenv "XTDB_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
-              (some-> (System/getProperty "xtdb.no-java-time-literals") Boolean/valueOf))
-  (time-literals/print-time-literals-clj!))
 
 (defrecord TxKey [tx-id system-time]
   TransactionKey
@@ -263,9 +259,7 @@
 
 (def transit-read-handlers
   (merge transit/default-read-handlers
-         (-> time-literals/tags
-             (update-keys str)
-             (update-vals transit/read-handler))
+         tl/transit-read-handlers
          {"xtdb/clj-form" (transit/read-handler #(ClojureForm. %))
           "xtdb/tx-key" (transit/read-handler map->TxKey)
           "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
@@ -292,22 +286,7 @@
 
 (def transit-write-handlers
   (merge transit/default-write-handlers
-         (-> {Period "time/period"
-              LocalDate "time/date"
-              LocalDateTime "time/date-time"
-              ZonedDateTime "time/zoned-date-time"
-              OffsetTime "time/offset-time"
-              Instant "time/instant"
-              OffsetDateTime "time/offset-date-time"
-              ZoneId "time/zone"
-              DayOfWeek "time/day-of-week"
-              LocalTime "time/time"
-              Month "time/month"
-              Duration "time/duration"
-              Year "time/year"
-              YearMonth "time/year-month"
-              MonthDay "time/month-day"}
-             (update-vals #(transit/write-handler % str)))
+         tl/transit-write-handlers
          {TxKey (transit/write-handler "xtdb/tx-key" #(into {} %))
           TxCommitted (transit/write-handler "xtdb/tx-result" #(into {} %))
           TxAborted (transit/write-handler "xtdb/tx-result" #(into {} %))

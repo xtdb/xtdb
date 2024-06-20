@@ -439,6 +439,6 @@ Main article: link:{txs}#_transaction_options[transaction options]
 ----
 {;; -- optional
  :system-time #inst "2024-01-01"
- :default-tz #time/zone "America/Los_Angeles"
+ :default-tz #xt.time/zone "America/Los_Angeles"
  :default-all-valid-time? false}
 ----

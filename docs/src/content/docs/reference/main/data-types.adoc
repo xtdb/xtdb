@@ -23,7 +23,7 @@ XTDB data types are implemented using Apache Arrow.
 |`DATE`
 |Date Without Time
 |`DATE '2007-06-29'`
-|`#time/date "2007-06-29"`
+|`#xt.time/date "2007-06-29"`
 
 |`DOUBLE`
 |64-bit Floating Point Number
@@ -53,7 +53,7 @@ XTDB data types are implemented using Apache Arrow.
 |`PERIOD`
 | <a pair of TIMESTAMPs>
 |`PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
-|`(period #time/date "1998-01-05" #time/date "1998-01-12")`
+|`(period #xt.time/date "1998-01-05" #xt.time/date "1998-01-12")`
 
 |`SMALLINT`
 |16-bit Signed Integer
@@ -65,21 +65,21 @@ XTDB data types are implemented using Apache Arrow.
 TIMEZONE]`
 |Timestamp without a Timezone offset
 |`TIMESTAMP '16:00:00'`
-|`#time/date-time "2007-06-29T16:00:00"`
+|`#xt.time/date-time "2007-06-29T16:00:00"`
 
 |`TIMESTAMP +
 WITH +
 TIMEZONE`
 |Timestamp with a Timezone offset
 |`TIMESTAMP '16:00:00+04:00'`
-|`#time/zoned-date-time "2007-06-29T16:00:00+04:00"`
+|`#xt.time/zoned-date-time "2007-06-29T16:00:00+04:00"`
 
 |`TIME +
 [WITHOUT +
 TIMEZONE]`
 |Time of day with nanosecond precision
 |`TIME '22:15:04.1237'`
-|`#time/time "22:15:04.1237"`
+|`#xt.time/time "22:15:04.1237"`
 
 |`UUID`
 |Universally Unique Identifier
@@ -109,7 +109,7 @@ TIMEZONE]`
 |`DURATION`
 | Duration of time
 |`DURATION 'PT1H3M5S'`
-|`#time/duration "PT1H3M5S"`
+|`#xt.time/duration "PT1H3M5S"`
 
 |===
 

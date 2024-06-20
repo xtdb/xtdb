@@ -476,7 +476,7 @@ Expr :: <defined separately>
 ;; as a 'tail' operator
 (-> (from :users [username date-of-birth])
     (where (> (current-timestamp)
-              (+ date-of-birth #time/period "P18Y"))))
+              (+ date-of-birth #xt.time/period "P18Y"))))
 
 ;; in `unify`
 (unify (from :customers [{:xt/id customer-id} customer-name vip?])

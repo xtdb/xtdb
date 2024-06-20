@@ -8,7 +8,7 @@
                         l-extendedprice l-discount l-tax
                         l-returnflag l-linestatus])
 
-       (where (<= l-shipdate #time/date "1998-09-02"))
+       (where (<= l-shipdate #xt.time/date "1998-09-02"))
 
        (aggregate l-returnflag
                   l-linestatus
@@ -48,10 +48,10 @@
   (-> '(-> (unify (from :customer [{:xt/id c, :c-mktsegment segment}])
 
                   (from :orders [{:xt/id o, :o-custkey c} o-shippriority o-orderdate])
-                  (where (< o-orderdate #time/date "1995-03-15"))
+                  (where (< o-orderdate #xt.time/date "1995-03-15"))
 
                   (from :lineitem [{:l-orderkey o} l-discount l-extendedprice l-shipdate])
-                  (where (> l-shipdate #time/date "1995-03-15")))
+                  (where (> l-shipdate #xt.time/date "1995-03-15")))
 
            (aggregate {:l-orderkey o}
                       {:revenue (sum (* l-extendedprice (- 1 l-discount)))}
@@ -63,8 +63,8 @@
 
 (def q4
   '(-> (from :orders [{:xt/id o} o-orderdate o-orderpriority])
-       (where (>= o-orderdate #time/date "1993-07-01")
-              (< o-orderdate #time/date "1993-10-01")
+       (where (>= o-orderdate #xt.time/date "1993-07-01")
+              (< o-orderdate #xt.time/date "1993-10-01")
 
               (exists? (-> (from :lineitem [{:l-orderkey $o} l-commitdate l-receiptdate])
                            (where (< l-commitdate l-receiptdate)))
@@ -75,8 +75,8 @@
 
 (def q5
   (-> '(-> (unify (from :orders [{:xt/id o, :o-custkey c} o-orderdate])
-                  (where (>= o-orderdate #time/date "1994-01-01")
-                         (< o-orderdate #time/date "1995-01-01"))
+                  (where (>= o-orderdate #xt.time/date "1994-01-01")
+                         (< o-orderdate #xt.time/date "1995-01-01"))
 
                   (from :lineitem [{:l-orderkey o, :l-suppkey s}
                                    l-extendedprice l-discount])
@@ -92,8 +92,8 @@
 
 (def q6
   '(-> (unify (from :lineitem [l-shipdate l-quantity l-extendedprice l-discount])
-              (where (>= l-shipdate #time/date "1994-01-01")
-                     (< l-shipdate #time/date "1995-01-01")
+              (where (>= l-shipdate #xt.time/date "1994-01-01")
+                     (< l-shipdate #xt.time/date "1995-01-01")
                      (>= l-discount 0.05)
                      (<= l-discount 0.07)
                      (< l-quantity 24.0)))
@@ -105,8 +105,8 @@
               (from :lineitem [{:l-orderkey o, :l-suppkey s}
                                l-shipdate l-discount l-extendedprice])
 
-              (where (>= l-shipdate #time/date "1995-01-01")
-                     (<= l-shipdate #time/date "1996-12-31"))
+              (where (>= l-shipdate #xt.time/date "1995-01-01")
+                     (<= l-shipdate #xt.time/date "1996-12-31"))
 
               (from :supplier [{:xt/id s, :s-nationkey n1}])
               (from :nation [{:xt/id n1, :n-name supp-nation}])
@@ -126,8 +126,8 @@
 
 (def q8
   '(-> (unify (from :orders [{:xt/id o, :o-custkey c} o-orderdate])
-              (where (>= o-orderdate #time/date "1995-01-01")
-                     (<= o-orderdate #time/date "1996-12-31"))
+              (where (>= o-orderdate #xt.time/date "1995-01-01")
+                     (<= o-orderdate #xt.time/date "1996-12-31"))
 
               (from :lineitem [{:xt/id l, :l-orderkey o, :l-suppkey s, :l-partkey p}
                                l-extendedprice l-discount])
@@ -173,8 +173,8 @@
 
 (def q10
   '(-> (unify (from :orders [{:xt/id o, :o-custkey c} o-orderdate])
-              (where (>= o-orderdate #time/date "1993-10-01")
-                     (< o-orderdate #time/date "1994-01-01"))
+              (where (>= o-orderdate #xt.time/date "1993-10-01")
+                     (< o-orderdate #xt.time/date "1994-01-01"))
 
               (from :customer [{:xt/id c, :c-nationkey n}
                                c-name c-address c-phone
@@ -216,8 +216,8 @@
                   ;; TODO `in?`
                   (where (in? l-shipmode $ship-modes)
 
-                         (>= l-receiptdate #time/date "1994-01-01")
-                         (< l-receiptdate #time/date "1995-01-01")
+                         (>= l-receiptdate #xt.time/date "1994-01-01")
+                         (< l-receiptdate #xt.time/date "1995-01-01")
                          (< l-commitdate l-receiptdate)
                          (< l-shipdate l-commitdate))
 
@@ -242,8 +242,8 @@
 
 (def q14
   '(-> (unify (from :lineitem [{:l-partkey p} l-shipdate l-extendedprice l-discount])
-              (where (>= l-shipdate #time/date "1995-09-01")
-                     (< l-shipdate #time/date "1995-10-01"))
+              (where (>= l-shipdate #xt.time/date "1995-09-01")
+                     (< l-shipdate #xt.time/date "1995-10-01"))
 
               (from :part [{:xt/id p} p-type]))
 
@@ -257,8 +257,8 @@
 (def q15
   '(letfn [(revenue []
              (q (-> (from :lineitem [{:l-suppkey s} l-shipdate l-extendedprice l-discount])
-                    (where (>= l-shipdate #time/date "1996-01-01")
-                           (< l-shipdate #time/date "1996-04-01"))
+                    (where (>= l-shipdate #xt.time/date "1996-01-01")
+                           (< l-shipdate #xt.time/date "1996-04-01"))
                     (aggregate s {:total-revenue (sum (* l-extendedprice (- 1 l-discount)))}))))]
 
      (-> (unify (call (revenue) [s total-revenue])
@@ -368,8 +368,8 @@
               (where (> ps-availqty
                         (* 0.5
                            (q (-> (unify (from :lineitem [{:l-partkey $p, :l-suppkey $s} l-shipdate l-quantity])
-                                         (where (>= l-shipdate #time/date "1994-01-01")
-                                                (< l-shipdate #time/date "1995-01-01")))
+                                         (where (>= l-shipdate #xt.time/date "1994-01-01")
+                                                (< l-shipdate #xt.time/date "1995-01-01")))
                                   (aggregate {:sum-quantity (sum l-quantity)}))
                               {:args [s p]})))))
 

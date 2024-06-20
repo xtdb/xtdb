@@ -11,6 +11,6 @@
      {:table t1,
       :for-system-time
       [:between
-       #time/date "3001-01-01"
-       #time/zoned-date-time "3002-01-01T00:00Z"]}
+       #xt.time/date "3001-01-01"
+       #xt.time/zoned-date-time "3002-01-01T00:00Z"]}
      []]]]]]

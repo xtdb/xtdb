@@ -19,9 +19,9 @@
            (<
             o_orderdate
             (+
-             #time/date "1993-07-01"
+             #xt.time/date "1993-07-01"
              (single-field-interval "3" "MONTH" 2 6)))
-           (>= o_orderdate #time/date "1993-07-01"))}
+           (>= o_orderdate #xt.time/date "1993-07-01"))}
          o_orderkey
          o_orderpriority]]]
       [:project

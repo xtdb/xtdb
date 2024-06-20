@@ -5,7 +5,7 @@
    {xt$valid_from
     (greatest
      xt$valid_from
-     (cast #time/date "2021-07-01" [:timestamp-tz :micro "UTC"]))}
+     (cast #xt.time/date "2021-07-01" [:timestamp-tz :micro "UTC"]))}
    {xt$valid_to
     (least
      xt$valid_to
@@ -24,5 +24,5 @@
     u.1
     [:scan
      {:table users,
-      :for-valid-time [:between #time/date "2021-07-01" nil]}
+      :for-valid-time [:between #xt.time/date "2021-07-01" nil]}
      [xt$valid_from xt$iid xt$valid_to last_name {id (= id ?_0)}]]]]]]

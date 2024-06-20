@@ -17,13 +17,13 @@
 (deftest test-json-ld-roundtripping
   (let [v {"keyword" :foo/bar
            "set-key" #{:foo :baz}
-           "instant" #time/instant "2023-12-06T09:31:27.570827956Z"
-           "date" #time/date "2020-01-01"
-           "date-time" #time/date-time "2020-01-01T12:34:56.789"
-           "zoned-date-time" #time/zoned-date-time "2020-01-01T12:34:56.789Z"
-           "time-zone" #time/zone "America/Los_Angeles"
-           "duration" #time/duration "PT3H1M35.23S"
-           "period" #time/period "P18Y"
+           "instant" #xt.time/instant "2023-12-06T09:31:27.570827956Z"
+           "date" #xt.time/date "2020-01-01"
+           "date-time" #xt.time/date-time "2020-01-01T12:34:56.789"
+           "zoned-date-time" #xt.time/zoned-date-time "2020-01-01T12:34:56.789Z"
+           "time-zone" #xt.time/zone "America/Los_Angeles"
+           "duration" #xt.time/duration "PT3H1M35.23S"
+           "period" #xt.time/period "P18Y"
            "uuid" (UUID/randomUUID)}]
     (t/is (= v
              (roundtrip-json-ld v))
@@ -74,8 +74,8 @@
     (t/is (= v (roundtrip-tx v))))
 
   (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (_id) VALUES (1)"}],
-                      (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
-                                  #time/zone "America/Los_Angeles"
+                      (TxOptions. #xt.time/instant "2020-01-01T12:34:56.789Z"
+                                  #xt.time/zone "America/Los_Angeles"
                                   false))]
 
     (t/is (= v (roundtrip-tx v))
@@ -95,14 +95,14 @@
   (JsonSerde/decode v QueryRequest))
 
 (deftest deserialize-query-map-test
-  (let [tx-key (serde/->TxKey 1 #time/instant "2023-12-06T09:31:27.570827956Z")
+  (let [tx-key (serde/->TxKey 1 #xt.time/instant "2023-12-06T09:31:27.570827956Z")
         v (QueryRequest. "SELECT _id FROM docs"
                          (-> (QueryOptions/queryOpts)
                              (.args {"id" :foo})
                              (.basis (Basis. tx-key Instant/EPOCH))
                              (.afterTx tx-key)
-                             (.txTimeout #time/duration "PT3H")
-                             (.defaultTz #time/zone "America/Los_Angeles")
+                             (.txTimeout #xt.time/duration "PT3H")
+                             (.defaultTz #xt.time/zone "America/Los_Angeles")
                              (.defaultAllValidTime true)
                              (.explain true)
                              (.keyFn #xt/key-fn :kebab-case-keyword)

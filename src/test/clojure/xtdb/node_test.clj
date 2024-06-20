@@ -351,16 +351,16 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-txs-table-485
   (tu/with-log-level 'xtdb.indexer :error
-    (t/is (= (serde/->tx-committed 0 #time/instant "2020-01-01T00:00:00Z")
+    (t/is (= (serde/->tx-committed 0 #xt.time/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 
-    (t/is (= (serde/->tx-aborted 1 #time/instant "2020-01-02T00:00:00Z" nil)
+    (t/is (= (serde/->tx-aborted 1 #xt.time/instant "2020-01-02T00:00:00Z" nil)
              (xt/execute-tx tu/*node* [TxOps/abort])))
 
-    (t/is (= (serde/->tx-committed 2 #time/instant "2020-01-03T00:00:00Z")
+    (t/is (= (serde/->tx-committed 2 #xt.time/instant "2020-01-03T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))
 
-    (t/is (= (serde/->tx-aborted 3 #time/instant "2020-01-04T00:00:00Z"
+    (t/is (= (serde/->tx-aborted 3 #xt.time/instant "2020-01-04T00:00:00Z"
                                  #xt/runtime-err [:xtdb.call/error-evaluating-tx-fn
                                                   "Runtime error: 'xtdb.call/error-evaluating-tx-fn'"
                                                   {:fn-id :tx-fn-fail, :args []}])
@@ -393,11 +393,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
-    (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z"
+    (t/is (= (serde/->tx-aborted 0 #xt.time/instant "2020-01-01T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/invalid-valid-times
                                                   "Runtime error: 'xtdb.indexer/invalid-valid-times'"
-                                                  {:valid-from #time/instant "2030-01-01T00:00:00Z"
-                                                   :valid-to #time/instant "2020-01-01T00:00:00Z"}])
+                                                  {:valid-from #xt.time/instant "2030-01-01T00:00:00Z"
+                                                   :valid-to #xt.time/instant "2020-01-01T00:00:00Z"}])
              (xt/execute-tx tu/*node*
                             [[:sql "INSERT INTO docs (_id, _valid_from, _valid_to)
                                VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
@@ -645,7 +645,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                  (xt/q node '(from :docs [{:xt/id e} inst]))))))))
 
 (deftest assert-exists-on-empty-tables-3061
-  (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z"
+  (t/is (= (serde/->tx-aborted 0 #xt.time/instant "2020-01-01T00:00:00Z"
                                  #xt/runtime-err [:xtdb/assert-failed
                                                   "Precondition failed: assert-exists"
                                                   {:row-count 0}])
@@ -661,7 +661,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
         "assert fails on empty table")
 
-  (t/is (= (serde/->tx-aborted 1 #time/instant "2020-01-02T00:00:00Z"
+  (t/is (= (serde/->tx-aborted 1 #xt.time/instant "2020-01-02T00:00:00Z"
                                #xt/runtime-err [:xtdb/assert-failed
                                                 "Precondition failed: assert-exists"
                                                 {:row-count 0}])

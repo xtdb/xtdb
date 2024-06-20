@@ -25,28 +25,28 @@
                                     :default-tz (ZoneOffset/of zone-id)})
                       first :res))
     ;; identity
-    true #time/date-time "2021-08-09T15:43:23" #time/date-time "2021-08-09T15:43:23" "Z"
+    true #xt.time/date-time "2021-08-09T15:43:23" #xt.time/date-time "2021-08-09T15:43:23" "Z"
 
     ;; obvious inequality
-    false #time/date-time "2022-08-09T15:43:23" #time/date-time "2021-08-09T15:43:23" "Z"
+    false #xt.time/date-time "2022-08-09T15:43:23" #xt.time/date-time "2021-08-09T15:43:23" "Z"
 
     ;; added fraction
-    false #time/date-time "2021-08-09T15:43:23" #time/date-time "2021-08-09T15:43:23.3" "Z"
+    false #xt.time/date-time "2021-08-09T15:43:23" #xt.time/date-time "2021-08-09T15:43:23.3" "Z"
 
     ;; trailing zero ok
-    true #time/date-time "2021-08-09T15:43:23" #time/date-time "2021-08-09T15:43:23.0" "Z"
+    true #xt.time/date-time "2021-08-09T15:43:23" #xt.time/date-time "2021-08-09T15:43:23.0" "Z"
 
     ;; equality preserved across tz
-    true #time/date-time "2021-08-09T15:43:23" #time/date-time "2021-08-09T15:43:23" "+02:00"
+    true #xt.time/date-time "2021-08-09T15:43:23" #xt.time/date-time "2021-08-09T15:43:23" "+02:00"
 
     ;; offset equiv
-    true #time/zoned-date-time "2021-08-09T15:43:23+02:00" #time/date-time "2021-08-09T15:43:23" "+02:00"
+    true #xt.time/zoned-date-time "2021-08-09T15:43:23+02:00" #xt.time/date-time "2021-08-09T15:43:23" "+02:00"
 
     ;; offset inequality
-    false #time/zoned-date-time "2021-08-09T15:43:23+02:00" #time/date-time "2021-08-09T15:43:23" "+03:00"))
+    false #xt.time/zoned-date-time "2021-08-09T15:43:23+02:00" #xt.time/date-time "2021-08-09T15:43:23" "+03:00"))
 
 (t/deftest test-cast-temporal
-  (let [current-time #time/instant "2022-08-16T20:04:14.423452Z"]
+  (let [current-time #xt.time/instant "2022-08-16T20:04:14.423452Z"]
     (letfn [(test-cast
               ([src-value tgt-type] (test-cast src-value tgt-type {}))
               ([src-value tgt-type {:keys [default-tz], :or {default-tz ZoneOffset/UTC}}]
@@ -59,60 +59,60 @@
 
       (t/testing "date ->"
         (t/testing "date"
-          (t/is (= #time/date "2022-08-01"
-                   (test-cast #time/date "2022-08-01"
+          (t/is (= #xt.time/date "2022-08-01"
+                   (test-cast #xt.time/date "2022-08-01"
                               [:date :milli]))))
 
         (t/testing "ts"
-          (t/is (= #time/date-time "2022-08-01T00:00:00"
-                   (test-cast #time/date "2022-08-01"
+          (t/is (= #xt.time/date-time "2022-08-01T00:00:00"
+                   (test-cast #xt.time/date "2022-08-01"
                               [:timestamp-local :milli]
                               {:default-tz (ZoneId/of "Europe/London")}))))
 
         (t/testing "tstz"
-          (t/is (= #time/zoned-date-time "2022-07-31T16:00-07:00[America/Los_Angeles]"
-                   (test-cast #time/date "2022-08-01"
+          (t/is (= #xt.time/zoned-date-time "2022-07-31T16:00-07:00[America/Los_Angeles]"
+                   (test-cast #xt.time/date "2022-08-01"
                               [:timestamp-tz :nano "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "Europe/London")})))))
 
       (t/testing "tstz ->"
         (t/testing "date"
-          (t/is (= #time/date "2022-07-31"
-                   (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789+01:00[Europe/London]"
+          (t/is (= #xt.time/date "2022-07-31"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T05:34:56.789+01:00[Europe/London]"
                               [:date :day]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
           (t/is (nil? (test-cast time/end-of-time [:date :day]))))
 
         (t/testing "time"
-          (t/is (= #time/time "12:34:56"
-                   (test-cast #time/zoned-date-time "2022-08-01T12:34:56.789Z"
+          (t/is (= #xt.time/time "12:34:56"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T12:34:56.789Z"
                               [:time-local :second])))
 
-          (t/is (= #time/time "13:34:56"
-                   (test-cast #time/zoned-date-time "2022-08-01T12:34:56.789Z"
+          (t/is (= #xt.time/time "13:34:56"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T12:34:56.789Z"
                               [:time-local :second]
                               {:default-tz (ZoneId/of "Europe/London")})))
 
-          (t/is (= #time/time "05:34:56"
-                   (test-cast #time/zoned-date-time "2022-08-01T13:34:56.789+01:00[Europe/London]"
+          (t/is (= #xt.time/time "05:34:56"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T13:34:56.789+01:00[Europe/London]"
                               [:time-local :second]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
           (t/is (nil? (test-cast time/end-of-time [:time-local :second]))))
 
         (t/testing "ts"
-          (t/is (= #time/date-time "2022-08-01T12:34:56"
-                   (test-cast #time/zoned-date-time "2022-08-01T12:34:56.789Z"
+          (t/is (= #xt.time/date-time "2022-08-01T12:34:56"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T12:34:56.789Z"
                               [:timestamp-local :second])))
 
-          (t/is (= #time/date-time "2022-08-01T13:34:56"
-                   (test-cast #time/zoned-date-time "2022-08-01T12:34:56.789Z"
+          (t/is (= #xt.time/date-time "2022-08-01T13:34:56"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T12:34:56.789Z"
                               [:timestamp-local :second]
                               {:default-tz (ZoneId/of "Europe/London")})))
 
-          (t/is (= #time/date-time "2022-08-01T05:34:56"
-                   (test-cast #time/zoned-date-time "2022-08-01T13:34:56.789+01:00[Europe/London]"
+          (t/is (= #xt.time/date-time "2022-08-01T05:34:56"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T13:34:56.789+01:00[Europe/London]"
                               [:timestamp-local :second]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
@@ -120,12 +120,12 @@
           (t/is (nil? (test-cast time/end-of-time [:timestamp-local :second] {:default-tz (ZoneId/of "America/Los_Angeles")}))))
 
         (t/testing "tstz"
-          (t/is (= #time/zoned-date-time "2022-08-01T13:34:56+01:00[Europe/London]"
-                   (test-cast #time/zoned-date-time "2022-08-01T12:34:56.789012Z"
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T13:34:56+01:00[Europe/London]"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T12:34:56.789012Z"
                               [:timestamp-tz :second "Europe/London"])))
 
-          (t/is (= #time/zoned-date-time "2022-08-01T13:34:56+01:00[Europe/London]"
-                   (test-cast #time/zoned-date-time "2022-08-01T12:34:56Z"
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T13:34:56+01:00[Europe/London]"
+                   (test-cast #xt.time/zoned-date-time "2022-08-01T12:34:56Z"
                               [:timestamp-tz :nano "Europe/London"])))
 
           (t/is (nil? (test-cast time/end-of-time [:timestamp-tz :second "Europe/London"] {:default-tz (ZoneId/of "America/Los_Angeles")})))
@@ -133,62 +133,62 @@
 
       (t/testing "ts ->"
         (t/testing "date"
-          (t/is (= #time/date "2022-08-01"
-                   (test-cast #time/date-time "2022-08-01T05:34:56.789"
+          (t/is (= #xt.time/date "2022-08-01"
+                   (test-cast #xt.time/date-time "2022-08-01T05:34:56.789"
                               [:date :day]
                               {:default-tz (ZoneId/of "America/Los_Angeles")}))))
 
         (t/testing "time"
-          (t/is (= #time/time "05:34:56.789012"
-                   (test-cast #time/date-time "2022-08-01T05:34:56.789012345"
+          (t/is (= #xt.time/time "05:34:56.789012"
+                   (test-cast #xt.time/date-time "2022-08-01T05:34:56.789012345"
                               [:time-local :micro]
                               {:default-tz (ZoneId/of "America/Los_Angeles")}))))
 
         (t/testing "ts"
-          (t/is (= #time/date-time "2022-08-01T05:34:56"
-                   (test-cast #time/date-time "2022-08-01T05:34:56.789"
+          (t/is (= #xt.time/date-time "2022-08-01T05:34:56"
+                   (test-cast #xt.time/date-time "2022-08-01T05:34:56.789"
                               [:timestamp-local :second "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "America/Los_Angeles")}))))
 
         (t/testing "tstz"
-          (t/is (= #time/zoned-date-time "2022-08-01T05:34:56-07:00[America/Los_Angeles]"
-                   (test-cast #time/date-time "2022-08-01T05:34:56.789"
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T05:34:56-07:00[America/Los_Angeles]"
+                   (test-cast #xt.time/date-time "2022-08-01T05:34:56.789"
                               [:timestamp-tz :second "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (= #time/zoned-date-time "2022-08-01T04:34:56-07:00[America/Los_Angeles]"
-                   (test-cast #time/date-time "2022-08-01T12:34:56.789"
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T04:34:56-07:00[America/Los_Angeles]"
+                   (test-cast #xt.time/date-time "2022-08-01T12:34:56.789"
                               [:timestamp-tz :second "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "Europe/London")})))))
 
       (t/testing "time ->"
         (t/testing "date"
           (t/is (thrown? IllegalArgumentException
-                         (test-cast #time/time "12:34:56.789012345" [:date :day]))))
+                         (test-cast #xt.time/time "12:34:56.789012345" [:date :day]))))
 
         (t/testing "time"
-          (t/is (= #time/time "12:34:56.789"
-                   (test-cast #time/time "12:34:56.789012345"
+          (t/is (= #xt.time/time "12:34:56.789"
+                   (test-cast #xt.time/time "12:34:56.789012345"
                               [:time-local :milli]))))
 
         (t/testing "ts"
-          (t/is (= #time/date-time "2022-08-16T12:34:56"
-                   (test-cast #time/time "12:34:56.789012345"
+          (t/is (= #xt.time/date-time "2022-08-16T12:34:56"
+                   (test-cast #xt.time/time "12:34:56.789012345"
                               [:timestamp-local :second]))))
 
         (t/testing "tstz"
-          (t/is (= #time/zoned-date-time "2022-08-16T12:34:56-07:00[America/Los_Angeles]"
-                   (test-cast #time/time "12:34:56.789012345"
+          (t/is (= #xt.time/zoned-date-time "2022-08-16T12:34:56-07:00[America/Los_Angeles]"
+                   (test-cast #xt.time/time "12:34:56.789012345"
                               [:timestamp-tz :second "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (= #time/zoned-date-time "2022-08-16T04:34:56.789012-07:00[America/Los_Angeles]"
-                   (test-cast #time/time "12:34:56.789012345"
+          (t/is (= #xt.time/zoned-date-time "2022-08-16T04:34:56.789012-07:00[America/Los_Angeles]"
+                   (test-cast #xt.time/time "12:34:56.789012345"
                               [:timestamp-tz :micro "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "Europe/London")}))))))))
 
 (t/deftest test-cast-string-and-temporal
-  (let [current-time #time/instant "2022-08-16T20:04:14.423452Z"]
+  (let [current-time #xt.time/instant "2022-08-16T20:04:14.423452Z"]
     (letfn [(test-cast
               ([src-value tgt-type] (test-cast src-value tgt-type nil))
               ([src-value tgt-type cast-opts]
@@ -199,21 +199,21 @@
 
       (t/testing "string ->"
         (t/testing "date"
-          (t/is (= #time/date "2022-08-01" (test-cast "2022-08-01" [:date :day])))
+          (t/is (= #xt.time/date "2022-08-01" (test-cast "2022-08-01" [:date :day])))
           (t/is (thrown-with-msg? RuntimeException
                                   #"'2022-08-01T00:00:00Z' has invalid format for type date"
                                   (test-cast "2022-08-01T00:00:00Z" [:date :day]))))
 
         (t/testing "time"
-          (t/is (= #time/time "12:00:01" (test-cast "12:00:01.111" [:time-local :second])))
-          (t/is (= #time/time "12:00:01.111" (test-cast "12:00:01.111" [:time-local :milli])))
+          (t/is (= #xt.time/time "12:00:01" (test-cast "12:00:01.111" [:time-local :second])))
+          (t/is (= #xt.time/time "12:00:01.111" (test-cast "12:00:01.111" [:time-local :milli])))
           (t/is (thrown-with-msg? RuntimeException
                                   #"'2022-08-01T12:00:01' has invalid format for type time without timezone"
                                   (test-cast "2022-08-01T12:00:01" [:time-local :second]))))
 
         (t/testing "ts"
-          (t/is (= #time/date-time "2022-08-01T05:34:56.789" (test-cast "2022-08-01T05:34:56.789" [:timestamp-local :milli])))
-          (t/is (= #time/date-time "2022-08-01T05:34:56" (test-cast "2022-08-01T05:34:56.789" [:timestamp-local :second])))
+          (t/is (= #xt.time/date-time "2022-08-01T05:34:56.789" (test-cast "2022-08-01T05:34:56.789" [:timestamp-local :milli])))
+          (t/is (= #xt.time/date-time "2022-08-01T05:34:56" (test-cast "2022-08-01T05:34:56.789" [:timestamp-local :second])))
           (t/is (thrown-with-msg? RuntimeException
                                   #"'2022-08-01T05:34:56.789Z' has invalid format for type timestamp without timezone"
                                   (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-local :milli])))
@@ -222,9 +222,9 @@
                                   (test-cast "2022-08-01 05:34:56.789" [:timestamp-local :milli]))))
 
         (t/testing "tstz"
-          (t/is (= #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-tz :milli "UTC"])))
-          (t/is (= #time/zoned-date-time "2022-08-01T05:34:56Z[UTC]" (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-tz :second "UTC"])))
-          (t/is (= #time/zoned-date-time "2022-08-01T04:04:56Z[UTC]" (test-cast "2022-08-01T05:34:56.789+01:30" [:timestamp-tz :second "UTC"])))
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-tz :milli "UTC"])))
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T05:34:56Z[UTC]" (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-tz :second "UTC"])))
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T04:04:56Z[UTC]" (test-cast "2022-08-01T05:34:56.789+01:30" [:timestamp-tz :second "UTC"])))
           (t/is (thrown-with-msg? RuntimeException
                                   #"'2022-08-01 05:34:56.789' has invalid format for type timestamp with timezone"
                                   (test-cast "2022-08-01 05:34:56.789" [:timestamp-tz :second "UTC"])))
@@ -233,19 +233,19 @@
                                   (test-cast "2022-08-01T05:34:56.789" [:timestamp-tz :second "UTC"]))))
         
         (t/testing "duration"
-          (t/is (= #time/duration "PT13M56.123456S" (test-cast "PT13M56.123456S" [:duration :micro])))
-          (t/is (= #time/duration "PT13M56S" (test-cast "PT13M56.123456S" [:duration :second])))
+          (t/is (= #xt.time/duration "PT13M56.123456S" (test-cast "PT13M56.123456S" [:duration :micro])))
+          (t/is (= #xt.time/duration "PT13M56S" (test-cast "PT13M56.123456S" [:duration :second])))
           (t/is (thrown-with-msg? RuntimeException
                                   #"'2022-08-01T00:00:00Z' has invalid format for type duration"
                                   (test-cast "2022-08-01T00:00:00Z" [:duration :micro]))))
 
         (t/testing "with precision"
-          (t/is (= #time/date-time "2022-08-01T05:34:56" (test-cast "2022-08-01T05:34:56.1234" [:timestamp-local :micro] {:precision 0})))
-          (t/is (= #time/date-time "2022-08-01T05:34:56.1234" (test-cast "2022-08-01T05:34:56.123456" [:timestamp-local :micro] {:precision 4})))
-          (t/is (= #time/zoned-date-time "2022-08-01T05:34:56.12Z[UTC]" (test-cast  "2022-08-01T05:34:56.123456Z" [:timestamp-tz :micro "UTC"] {:precision 2})))
-          (t/is (= #time/zoned-date-time "2022-08-01T04:04:56.12345678Z[UTC]" (test-cast "2022-08-01T05:34:56.123456789+01:30" [:timestamp-tz :nano "UTC"] {:precision 8})))
-          (t/is (= #time/time "05:34:56.1234567" (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 7})))
-          (t/is (= #time/duration "PT13M56.1234567S" (test-cast "PT13M56.123456789S" [:duration :nano] {:precision 7})))
+          (t/is (= #xt.time/date-time "2022-08-01T05:34:56" (test-cast "2022-08-01T05:34:56.1234" [:timestamp-local :micro] {:precision 0})))
+          (t/is (= #xt.time/date-time "2022-08-01T05:34:56.1234" (test-cast "2022-08-01T05:34:56.123456" [:timestamp-local :micro] {:precision 4})))
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T05:34:56.12Z[UTC]" (test-cast  "2022-08-01T05:34:56.123456Z" [:timestamp-tz :micro "UTC"] {:precision 2})))
+          (t/is (= #xt.time/zoned-date-time "2022-08-01T04:04:56.12345678Z[UTC]" (test-cast "2022-08-01T05:34:56.123456789+01:30" [:timestamp-tz :nano "UTC"] {:precision 8})))
+          (t/is (= #xt.time/time "05:34:56.1234567" (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 7})))
+          (t/is (= #xt.time/duration "PT13M56.1234567S" (test-cast "PT13M56.123456789S" [:duration :nano] {:precision 7})))
           (t/is (thrown-with-msg? IllegalArgumentException
                                   #"The minimum fractional seconds precision is 0."
                                   (test-cast "05:34:56.123456789" [:time-local :nano] {:precision -1})))
@@ -255,19 +255,19 @@
 
       (t/testing "->string"
         (t/testing "date"
-          (t/is (= "2022-08-01" (test-cast #time/date "2022-08-01" :utf8))))
+          (t/is (= "2022-08-01" (test-cast #xt.time/date "2022-08-01" :utf8))))
 
         (t/testing "time"
-          (t/is (= "12:00:01" (test-cast #time/time "12:00:01" :utf8))))
+          (t/is (= "12:00:01" (test-cast #xt.time/time "12:00:01" :utf8))))
 
         (t/testing "ts"
-          (t/is (= "2022-08-01T05:34:56.789" (test-cast #time/date-time "2022-08-01T05:34:56.789" :utf8))))
+          (t/is (= "2022-08-01T05:34:56.789" (test-cast #xt.time/date-time "2022-08-01T05:34:56.789" :utf8))))
 
         (t/testing "tstz"
-          (t/is (= "2022-08-01T05:34:56.789Z[UTC]" (test-cast #time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8))))
+          (t/is (= "2022-08-01T05:34:56.789Z[UTC]" (test-cast #xt.time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" :utf8))))
         
         (t/testing "duration"
-          (t/is (= "PT13M56.123S" (test-cast #time/duration "PT13M56.123S" :utf8))))))))
+          (t/is (= "PT13M56.123S" (test-cast #xt.time/duration "PT13M56.123S" :utf8))))))))
 
 (t/deftest cast-interval-to-duration
   (letfn [(test-cast
@@ -294,13 +294,13 @@
                               (test-cast #xt/interval-mdn ["P4M8D" "PT0S"] [:duration :micro]))))
 
     (t/testing "casting month-day-nano intervals -> duration"
-      (t/is (= #time/duration "PT25H1S" (test-cast #xt/interval-mdn ["P1D" "PT1H1S"] [:duration :second])))
-      (t/is (= #time/duration "PT3H1M1S" (test-cast #xt/interval-mdn ["P0D" "PT3H1M1S"] [:duration :second])))
-      (t/is (= #time/duration "PT25H1.111111S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :micro]))))
+      (t/is (= #xt.time/duration "PT25H1S" (test-cast #xt/interval-mdn ["P1D" "PT1H1S"] [:duration :second])))
+      (t/is (= #xt.time/duration "PT3H1M1S" (test-cast #xt/interval-mdn ["P0D" "PT3H1M1S"] [:duration :second])))
+      (t/is (= #xt.time/duration "PT25H1.111111S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :micro]))))
 
     (t/testing "casting month-day-nano intervals -> duration with precision"
-      (t/is (= #time/duration "PT25H1.11S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :milli] {:precision 2})))
-      (t/is (= #time/duration "PT25H1.1111111S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :nano] {:precision 7})))
+      (t/is (= #xt.time/duration "PT25H1.11S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :milli] {:precision 2})))
+      (t/is (= #xt.time/duration "PT25H1.1111111S" (test-cast #xt/interval-mdn ["P1D" "PT1H1.111111111S"] [:duration :nano] {:precision 7})))
       (t/is (thrown-with-msg? IllegalArgumentException
                               #"The maximum fractional seconds precision is 9."
                               (test-cast #xt/interval-mdn ["P4M8D" "PT0S"] [:duration :nano] {:precision 10})))
@@ -318,10 +318,10 @@
                                {:basis {}})
                   first :res))]
 
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1.11S"] (test-cast #time/duration "PT3H1.11S" :interval)))
-      (t/is (= #xt/interval-mdn ["P0D" "PT25H1.11S"] (test-cast #time/duration "PT25H1.11S" :interval)))
-      (t/is (= #xt/interval-mdn ["P0D" "PT842H1.11S"] (test-cast #time/duration "P35DT2H1.11S" :interval)))
-      (t/is (= #xt/interval-mdn ["P0D" "PT1M1.111111S"] (test-cast #time/duration "PT1M1.111111S" :interval)))))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1.11S"] (test-cast #xt.time/duration "PT3H1.11S" :interval)))
+      (t/is (= #xt/interval-mdn ["P0D" "PT25H1.11S"] (test-cast #xt.time/duration "PT25H1.11S" :interval)))
+      (t/is (= #xt/interval-mdn ["P0D" "PT842H1.11S"] (test-cast #xt.time/duration "P35DT2H1.11S" :interval)))
+      (t/is (= #xt/interval-mdn ["P0D" "PT1M1.111111S"] (test-cast #xt.time/duration "PT1M1.111111S" :interval)))))
 
   (t/testing "with interval qualifier"
     (letfn [(test-cast
@@ -331,35 +331,35 @@
                                {:basis {}})
                   first :res))]
 
-      (t/is (= #xt/interval-mdn ["P0D" "PT36H"] (test-cast #time/duration "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P1D" "PT0S"] (test-cast #time/duration "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P1D" "PT12H"] (test-cast #time/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M"] (test-cast #time/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10S"] (test-cast #time/duration "PT36H10M10.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10.1111S"] (test-cast #time/duration "PT36H10M10.111111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H"] (test-cast #time/duration "PT3H1M1S" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #time/duration "PT3H1M1S" :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #time/duration "PT3H1M1.111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #time/duration "PT3H1M1.111111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))))
+      (t/is (= #xt/interval-mdn ["P0D" "PT36H"] (test-cast #xt.time/duration "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT0S"] (test-cast #xt.time/duration "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H"] (test-cast #xt.time/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M"] (test-cast #xt.time/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10S"] (test-cast #xt.time/duration "PT36H10M10.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P1D" "PT12H10M10.1111S"] (test-cast #xt.time/duration "PT36H10M10.111111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H"] (test-cast #xt.time/duration "PT3H1M1S" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #xt.time/duration "PT3H1M1S" :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #xt.time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111111S"] (test-cast #xt.time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #xt.time/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M"] (test-cast #xt.time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #xt.time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #xt.time/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1S"] (test-cast #xt.time/duration "PT3H1M1.111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval-mdn ["P0D" "PT3H1M1.111S"] (test-cast #xt.time/duration "PT3H1M1.111111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))))
 
   (t/testing "with invalid interval qualifier"
     (t/is (thrown-with-msg?
            UnsupportedOperationException
            #"Cannot cast a duration to a year-month interval"
-           (tu/query-ra [:project [{'res `(~'cast #time/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
+           (tu/query-ra [:project [{'res `(~'cast #xt.time/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
                          [:table [{}]]]
                         {:basis {}})))
 
     (t/is (thrown-with-msg?
            IllegalArgumentException
            #"The maximum fractional seconds precision is 9."
-           (tu/query-ra [:project [{'res `(~'cast #time/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]
+           (tu/query-ra [:project [{'res `(~'cast #xt.time/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]
                          [:table [{}]]]
                         {:basis {}})))))
 
@@ -541,93 +541,93 @@
 ;; As such, we refer to start time / end time, where age(end time, start time)
 (t/deftest test-age-edge-cases
   ;; Same day, different times
-  (t/is (= #xt/interval-mdn ["P0D" "PT23H"] (age #time/date-time "2021-10-31T23:00" #time/date-time "2021-10-31T00:00")))
+  (t/is (= #xt/interval-mdn ["P0D" "PT23H"] (age #xt.time/date-time "2021-10-31T23:00" #xt.time/date-time "2021-10-31T00:00")))
   ;; End of month to next month (with and without time differences)
-  (t/is (= #xt/interval-mdn ["P0D" "PT2H"] (age #time/date-time "2021-11-01T01:00" #time/date-time "2021-10-31T23:00")))
+  (t/is (= #xt/interval-mdn ["P0D" "PT2H"] (age #xt.time/date-time "2021-11-01T01:00" #xt.time/date-time "2021-10-31T23:00")))
   ;; Leap year
-  (t/is (= #xt/interval-mdn ["P2D" "PT0S"] (age #time/date-time "2020-03-01T12:00" #time/date-time "2020-02-28T12:00")))
+  (t/is (= #xt/interval-mdn ["P2D" "PT0S"] (age #xt.time/date-time "2020-03-01T12:00" #xt.time/date-time "2020-02-28T12:00")))
   ;; Different years
-  (t/is (= #xt/interval-mdn ["P0D" "PT2H"] (age #time/date-time "2021-01-01T01:00" #time/date-time "2020-12-31T23:00")))
+  (t/is (= #xt/interval-mdn ["P0D" "PT2H"] (age #xt.time/date-time "2021-01-01T01:00" #xt.time/date-time "2020-12-31T23:00")))
   ;; More than a month
-  (t/is (= #xt/interval-mdn ["P1M1D" "PT0S"] (age #time/date-time "2021-02-02T00:00" #time/date-time "2021-01-01T00:00")))
+  (t/is (= #xt/interval-mdn ["P1M1D" "PT0S"] (age #xt.time/date-time "2021-02-02T00:00" #xt.time/date-time "2021-01-01T00:00")))
   ;; More than a year
-  (t/is (= #xt/interval-mdn ["P24M" "PT0S"] (age #time/date-time "2021-01-01T00:00" #time/date-time "2019-01-01T00:00")))
+  (t/is (= #xt/interval-mdn ["P24M" "PT0S"] (age #xt.time/date-time "2021-01-01T00:00" #xt.time/date-time "2019-01-01T00:00")))
   ;; Start time after end time (dt1 - dt2)
-  (t/is (= #xt/interval-mdn ["P-12M" "PT0S"] (age #time/date-time "2020-01-01T00:00" #time/date-time "2021-01-01T00:00")))
+  (t/is (= #xt/interval-mdn ["P-12M" "PT0S"] (age #xt.time/date-time "2020-01-01T00:00" #xt.time/date-time "2021-01-01T00:00")))
   ;; Time within the same day but with start time after end time
-  (t/is (= #xt/interval-mdn ["P0D" "PT-1H"] (age #time/date-time "2021-01-01T11:00" #time/date-time "2021-01-01T12:00")))
+  (t/is (= #xt/interval-mdn ["P0D" "PT-1H"] (age #xt.time/date-time "2021-01-01T11:00" #xt.time/date-time "2021-01-01T12:00")))
   ;; Exactly the same start and end time
-  (t/is (= #xt/interval-mdn ["P0D" "PT0S"] (age #time/date-time "2021-01-01T00:00" #time/date-time "2021-01-01T00:00"))))
+  (t/is (= #xt/interval-mdn ["P0D" "PT0S"] (age #xt.time/date-time "2021-01-01T00:00" #xt.time/date-time "2021-01-01T00:00"))))
 
 (t/deftest test-age-fn
   (t/testing "testing with local date times"
     (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P0D" "PT2H"] #time/date-time "2022-05-02T01:00" #time/date-time "2022-05-01T23:00"
-      #xt/interval-mdn ["P6M" "PT0S"] #time/date-time "2022-11-01T00:00" #time/date-time "2022-05-01T00:00"
-      #xt/interval-mdn ["P-6M" "PT0S"] #time/date-time "2022-05-01T00:00" #time/date-time "2022-11-01T00:00"
-      #xt/interval-mdn ["P0D" "PT0S"] #time/date-time "2023-01-01T00:00" #time/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P30D" "PT12H"] #time/date-time "2023-02-01T12:00" #time/date-time "2023-01-02T00:00"
-      #xt/interval-mdn ["P-12M" "PT0S"] #time/date-time "2022-01-01T00:00" #time/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P0D" "PT1H"] #time/date-time "2023-01-01T01:00" #time/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P24M" "PT3H"] #time/date-time "2025-01-01T03:00" #time/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P0D" "PT-23H"] #time/date-time "2023-01-01T01:00" #time/date-time "2023-01-02T00:00"
-      #xt/interval-mdn ["P48M" "PT6M"] #time/date-time "2027-01-01T00:06" #time/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P-48M" "PT-6M"] #time/date-time "2023-01-01T00:00" #time/date-time "2027-01-01T00:06"
-      #xt/interval-mdn ["P29D" "PT23H"] #time/date-time "2023-02-28T23:00" #time/date-time "2023-01-30T00:00"
-      #xt/interval-mdn ["P28D" "PT23H"] #time/date-time "2023-03-29T23:00" #time/date-time "2023-03-01T00:00"
-      #xt/interval-mdn ["P0D" "PT-1M"] #time/date-time "2023-04-01T00:00" #time/date-time "2023-04-01T00:01"
-      #xt/interval-mdn ["P0D" "PT0.001S"] #time/date-time "2023-07-01T12:00:30.501" #time/date-time "2023-07-01T12:00:30.500"
-      #xt/interval-mdn ["P0D" "PT-0.001S"] #time/date-time "2023-07-01T12:00:30.499" #time/date-time "2023-07-01T12:00:30.500"
-      #xt/interval-mdn ["P25M3D" "PT4H5M6.007S"] #time/date-time "2025-02-04T18:06:07.007" #time/date-time "2023-01-01T14:01:01.000"))
+      #xt/interval-mdn ["P0D" "PT2H"] #xt.time/date-time "2022-05-02T01:00" #xt.time/date-time "2022-05-01T23:00"
+      #xt/interval-mdn ["P6M" "PT0S"] #xt.time/date-time "2022-11-01T00:00" #xt.time/date-time "2022-05-01T00:00"
+      #xt/interval-mdn ["P-6M" "PT0S"] #xt.time/date-time "2022-05-01T00:00" #xt.time/date-time "2022-11-01T00:00"
+      #xt/interval-mdn ["P0D" "PT0S"] #xt.time/date-time "2023-01-01T00:00" #xt.time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P30D" "PT12H"] #xt.time/date-time "2023-02-01T12:00" #xt.time/date-time "2023-01-02T00:00"
+      #xt/interval-mdn ["P-12M" "PT0S"] #xt.time/date-time "2022-01-01T00:00" #xt.time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P0D" "PT1H"] #xt.time/date-time "2023-01-01T01:00" #xt.time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P24M" "PT3H"] #xt.time/date-time "2025-01-01T03:00" #xt.time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P0D" "PT-23H"] #xt.time/date-time "2023-01-01T01:00" #xt.time/date-time "2023-01-02T00:00"
+      #xt/interval-mdn ["P48M" "PT6M"] #xt.time/date-time "2027-01-01T00:06" #xt.time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P-48M" "PT-6M"] #xt.time/date-time "2023-01-01T00:00" #xt.time/date-time "2027-01-01T00:06"
+      #xt/interval-mdn ["P29D" "PT23H"] #xt.time/date-time "2023-02-28T23:00" #xt.time/date-time "2023-01-30T00:00"
+      #xt/interval-mdn ["P28D" "PT23H"] #xt.time/date-time "2023-03-29T23:00" #xt.time/date-time "2023-03-01T00:00"
+      #xt/interval-mdn ["P0D" "PT-1M"] #xt.time/date-time "2023-04-01T00:00" #xt.time/date-time "2023-04-01T00:01"
+      #xt/interval-mdn ["P0D" "PT0.001S"] #xt.time/date-time "2023-07-01T12:00:30.501" #xt.time/date-time "2023-07-01T12:00:30.500"
+      #xt/interval-mdn ["P0D" "PT-0.001S"] #xt.time/date-time "2023-07-01T12:00:30.499" #xt.time/date-time "2023-07-01T12:00:30.500"
+      #xt/interval-mdn ["P25M3D" "PT4H5M6.007S"] #xt.time/date-time "2025-02-04T18:06:07.007" #xt.time/date-time "2023-01-01T14:01:01.000"))
 
   (t/testing "testing with zoned date times"
     (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P0D" "PT1H"] #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #time/zoned-date-time "2023-06-01T11:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT0H"] #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #time/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT0S"] #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #time/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT1M"] #time/zoned-date-time "2023-03-26T03:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-03-26T01:59+01:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT-1H-59M"] #time/zoned-date-time "2023-10-29T01:00+01:00[Europe/Berlin]" #time/zoned-date-time "2023-10-29T02:59+01:00[Europe/Berlin]"
-      #xt/interval-mdn ["P-1D" "PT0S"] #time/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]" #time/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]"
-      #xt/interval-mdn ["P1D" "PT0S"] #time/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]" #time/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]"
-      #xt/interval-mdn ["P0D" "PT0S"] #time/zoned-date-time "2023-01-01T12:00-05:00[America/New_York]" #time/zoned-date-time "2023-01-01T18:00+01:00[Europe/Paris]"
-      #xt/interval-mdn ["P12M" "PT0S"] #time/zoned-date-time "2024-03-30T01:00+01:00[Europe/Berlin]" #time/zoned-date-time "2023-03-30T01:00+01:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT3H"] #time/zoned-date-time "2023-05-15T15:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-05-15T12:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P1D" "PT2H"] #time/zoned-date-time "2023-05-16T02:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-05-14T22:00+00:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT3H"] #time/zoned-date-time "2023-05-16T03:00+02:00[Europe/Berlin]" #time/zoned-date-time "2023-05-15T22:00+00:00[Europe/London]"
-      #xt/interval-mdn ["P0D" "PT0.001S"] #time/zoned-date-time "2023-07-01T12:00:30.501+02:00[Europe/Berlin]" #time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT-0.001S"] #time/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P25M3D" "PT3H5M6.007S"] #time/zoned-date-time "2025-02-04T18:06:07.007+01:00[Europe/Paris]" #time/zoned-date-time "2023-01-01T14:01:01.000+00:00[Europe/Paris]"))
+      #xt/interval-mdn ["P0D" "PT1H"] #xt.time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt.time/zoned-date-time "2023-06-01T11:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT0H"] #xt.time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt.time/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT0S"] #xt.time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt.time/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT1M"] #xt.time/zoned-date-time "2023-03-26T03:00+02:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-03-26T01:59+01:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT-1H-59M"] #xt.time/zoned-date-time "2023-10-29T01:00+01:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-10-29T02:59+01:00[Europe/Berlin]"
+      #xt/interval-mdn ["P-1D" "PT0S"] #xt.time/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]" #xt.time/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]"
+      #xt/interval-mdn ["P1D" "PT0S"] #xt.time/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]" #xt.time/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]"
+      #xt/interval-mdn ["P0D" "PT0S"] #xt.time/zoned-date-time "2023-01-01T12:00-05:00[America/New_York]" #xt.time/zoned-date-time "2023-01-01T18:00+01:00[Europe/Paris]"
+      #xt/interval-mdn ["P12M" "PT0S"] #xt.time/zoned-date-time "2024-03-30T01:00+01:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-03-30T01:00+01:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT3H"] #xt.time/zoned-date-time "2023-05-15T15:00+02:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-05-15T12:00+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P1D" "PT2H"] #xt.time/zoned-date-time "2023-05-16T02:00+02:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-05-14T22:00+00:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT3H"] #xt.time/zoned-date-time "2023-05-16T03:00+02:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-05-15T22:00+00:00[Europe/London]"
+      #xt/interval-mdn ["P0D" "PT0.001S"] #xt.time/zoned-date-time "2023-07-01T12:00:30.501+02:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT-0.001S"] #xt.time/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt.time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P25M3D" "PT3H5M6.007S"] #xt.time/zoned-date-time "2025-02-04T18:06:07.007+01:00[Europe/Paris]" #xt.time/zoned-date-time "2023-01-01T14:01:01.000+00:00[Europe/Paris]"))
 
   (t/testing "testing with dates"
     (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P1D" "PT0S"] #time/date "2023-01-02" #time/date "2023-01-01"
-      #xt/interval-mdn ["P-1D" "PT0S"] #time/date "2023-01-01" #time/date "2023-01-02"
-      #xt/interval-mdn ["P30D" "PT0S"] #time/date "2023-01-31" #time/date "2023-01-01"
-      #xt/interval-mdn ["P2D" "PT0S"] #time/date "2020-03-01" #time/date "2020-02-28"
-      #xt/interval-mdn ["P1D" "PT0S"] #time/date "2021-03-01" #time/date "2021-02-28"
-      #xt/interval-mdn ["P12M" "PT0S"] #time/date "2024-01-01" #time/date "2023-01-01"
-      #xt/interval-mdn ["P-12M" "PT0S"] #time/date "2023-01-01" #time/date "2024-01-01"
-      #xt/interval-mdn ["P13M" "PT0S"] #time/date "2024-02-01" #time/date "2023-01-01"
-      #xt/interval-mdn ["P-13M" "PT0S"] #time/date "2023-01-01" #time/date "2024-02-01"
-      #xt/interval-mdn ["P0D" "PT0S"] #time/date "2023-01-01" #time/date "2023-01-01"))
+      #xt/interval-mdn ["P1D" "PT0S"] #xt.time/date "2023-01-02" #xt.time/date "2023-01-01"
+      #xt/interval-mdn ["P-1D" "PT0S"] #xt.time/date "2023-01-01" #xt.time/date "2023-01-02"
+      #xt/interval-mdn ["P30D" "PT0S"] #xt.time/date "2023-01-31" #xt.time/date "2023-01-01"
+      #xt/interval-mdn ["P2D" "PT0S"] #xt.time/date "2020-03-01" #xt.time/date "2020-02-28"
+      #xt/interval-mdn ["P1D" "PT0S"] #xt.time/date "2021-03-01" #xt.time/date "2021-02-28"
+      #xt/interval-mdn ["P12M" "PT0S"] #xt.time/date "2024-01-01" #xt.time/date "2023-01-01"
+      #xt/interval-mdn ["P-12M" "PT0S"] #xt.time/date "2023-01-01" #xt.time/date "2024-01-01"
+      #xt/interval-mdn ["P13M" "PT0S"] #xt.time/date "2024-02-01" #xt.time/date "2023-01-01"
+      #xt/interval-mdn ["P-13M" "PT0S"] #xt.time/date "2023-01-01" #xt.time/date "2024-02-01"
+      #xt/interval-mdn ["P0D" "PT0S"] #xt.time/date "2023-01-01" #xt.time/date "2023-01-01"))
   
   (t/testing "test with mixed types"
     (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P1D" "PT0S"] #time/date "2023-01-02" #time/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P-1D" "PT0S"] #time/date-time "2023-01-01T00:00" #time/date "2023-01-02"
-      #xt/interval-mdn ["P12M" "PT0S"] #time/date "2024-01-01" #time/zoned-date-time "2023-01-01T00:00+00:00[UTC]"
-      #xt/interval-mdn ["P-12M" "PT0S"] #time/zoned-date-time "2023-01-01T00:00+00:00[UTC]" #time/date "2024-01-01"
-      #xt/interval-mdn ["P0D" "PT2H"] #time/date-time "2023-06-01T12:00" #time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]"
-      #xt/interval-mdn ["P0D" "PT2H"] #time/zoned-date-time "2023-06-01T09:00-05:00[America/Chicago]" #time/date-time "2023-06-01T12:00"
-      #xt/interval-mdn ["P6M" "PT0S"] #time/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]" #time/date "2022-05-01"
-      #xt/interval-mdn ["P5M30D" "PT23H"] #time/zoned-date-time "2022-11-01T00:00+01:00[Europe/Paris]" #time/date "2022-05-01"
-      #xt/interval-mdn ["P-6M" "PT0S"] #time/date "2022-05-01" #time/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]"
-      #xt/interval-mdn ["P0D" "PT2H0.001S"] #time/date-time "2023-07-01T12:00:30.501" #time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT-2H-0.001S"] #time/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #time/date-time "2023-07-01T12:00:30.500")))
+      #xt/interval-mdn ["P1D" "PT0S"] #xt.time/date "2023-01-02" #xt.time/date-time "2023-01-01T00:00"
+      #xt/interval-mdn ["P-1D" "PT0S"] #xt.time/date-time "2023-01-01T00:00" #xt.time/date "2023-01-02"
+      #xt/interval-mdn ["P12M" "PT0S"] #xt.time/date "2024-01-01" #xt.time/zoned-date-time "2023-01-01T00:00+00:00[UTC]"
+      #xt/interval-mdn ["P-12M" "PT0S"] #xt.time/zoned-date-time "2023-01-01T00:00+00:00[UTC]" #xt.time/date "2024-01-01"
+      #xt/interval-mdn ["P0D" "PT2H"] #xt.time/date-time "2023-06-01T12:00" #xt.time/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]"
+      #xt/interval-mdn ["P0D" "PT2H"] #xt.time/zoned-date-time "2023-06-01T09:00-05:00[America/Chicago]" #xt.time/date-time "2023-06-01T12:00"
+      #xt/interval-mdn ["P6M" "PT0S"] #xt.time/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]" #xt.time/date "2022-05-01"
+      #xt/interval-mdn ["P5M30D" "PT23H"] #xt.time/zoned-date-time "2022-11-01T00:00+01:00[Europe/Paris]" #xt.time/date "2022-05-01"
+      #xt/interval-mdn ["P-6M" "PT0S"] #xt.time/date "2022-05-01" #xt.time/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]"
+      #xt/interval-mdn ["P0D" "PT2H0.001S"] #xt.time/date-time "2023-07-01T12:00:30.501" #xt.time/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+      #xt/interval-mdn ["P0D" "PT-2H-0.001S"] #xt.time/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt.time/date-time "2023-07-01T12:00:30.500")))
 
 (def ^:private instant-gen
-  (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
-                              (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))
+  (->> (tcg/tuple (tcg/choose (.getEpochSecond #xt.time/instant "2020-01-01T00:00:00Z")
+                              (.getEpochSecond #xt.time/instant "2040-01-01T00:00:00Z"))
                   (->> (tcg/choose 0 #=(long 1e6))
                        (tcg/fmap #(* % 1000))))
        (tcg/fmap (fn [[s ns]]
@@ -734,7 +734,7 @@
 (t/deftest test-temporal-arithmetic
   (letfn [(test-arithmetic
             ([f x y] (test-arithmetic f x y {}))
-            ([f x y {:keys [default-tz], :or {default-tz #time/zone "America/Los_Angeles"}}]
+            ([f x y {:keys [default-tz], :or {default-tz #xt.time/zone "America/Los_Angeles"}}]
              (-> (tu/query-ra [:project [{'res `(~f ~'x ~'y)}]
                                [:table [{}]]]
                               {:default-tz default-tz
@@ -742,103 +742,103 @@
                  first :res)))]
 
     (t/testing "(+ datetime duration)"
-      (t/is (= #time/date-time "2022-08-01T01:15:43.342"
-               (test-arithmetic '+ #time/date "2022-08-01" #time/duration "PT1H15M43.342S")))
+      (t/is (= #xt.time/date-time "2022-08-01T01:15:43.342"
+               (test-arithmetic '+ #xt.time/date "2022-08-01" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (= #time/date-time "2022-08-01T02:31:26.684"
-               (test-arithmetic '+ #time/date-time "2022-08-01T01:15:43.342" #time/duration "PT1H15M43.342S")))
+      (t/is (= #xt.time/date-time "2022-08-01T02:31:26.684"
+               (test-arithmetic '+ #xt.time/date-time "2022-08-01T01:15:43.342" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (= #time/date-time "2022-08-01T02:31:26.684"
-               (test-arithmetic '+ #time/date-time "2022-08-01T01:15:43.342" #time/time "01:15:43.342")))
+      (t/is (= #xt.time/date-time "2022-08-01T02:31:26.684"
+               (test-arithmetic '+ #xt.time/date-time "2022-08-01T01:15:43.342" #xt.time/time "01:15:43.342")))
 
-      (t/is (= #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
-               (test-arithmetic '+ #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/duration "PT1H15M43.342S")))
+      (t/is (= #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
+               (test-arithmetic '+ #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (nil? (test-arithmetic '+ time/end-of-time #time/duration "PT1H15M43.342S"))))
+      (t/is (nil? (test-arithmetic '+ time/end-of-time #xt.time/duration "PT1H15M43.342S"))))
 
     (t/testing "(+ datetime interval)"
-      (t/is (= #time/date "2023-08-01"
-               (test-arithmetic '+ #time/date "2022-08-01" #xt/interval-ym "P1Y")))
+      (t/is (= #xt.time/date "2023-08-01"
+               (test-arithmetic '+ #xt.time/date "2022-08-01" #xt/interval-ym "P1Y")))
 
-      (t/is (= #time/date-time "2022-08-04T01:15:43.342"
-               (test-arithmetic '+ #time/date "2022-08-01" #xt/interval-dt ["P3D" "PT1H15M43.342S"])))
+      (t/is (= #xt.time/date-time "2022-08-04T01:15:43.342"
+               (test-arithmetic '+ #xt.time/date "2022-08-01" #xt/interval-dt ["P3D" "PT1H15M43.342S"])))
 
-      (t/is (= #time/date-time "2022-09-04T02:31:26.684"
-               (test-arithmetic '+ #time/date-time "2022-08-01T01:15:43.342" #xt/interval-mdn ["P1M3D" "PT1H15M43.342S"])))
+      (t/is (= #xt.time/date-time "2022-09-04T02:31:26.684"
+               (test-arithmetic '+ #xt.time/date-time "2022-08-01T01:15:43.342" #xt/interval-mdn ["P1M3D" "PT1H15M43.342S"])))
 
-      (t/is (= #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
-               (test-arithmetic '+ #xt/interval-mdn ["P0D" "PT1H15M43.342S"] #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
+      (t/is (= #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
+               (test-arithmetic '+ #xt/interval-mdn ["P0D" "PT1H15M43.342S"] #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
 
-      (t/is (= #time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]"
-               (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] #time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"))
+      (t/is (= #xt.time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]"
+               (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] #xt.time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"))
             "clock change")
 
       (t/is (nil? (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] time/end-of-time))))
 
     (t/testing "(- datetime duration)"
-      (t/is (= #time/date-time "2022-07-31T22:44:16.658"
-               (test-arithmetic '- #time/date "2022-08-01" #time/duration "PT1H15M43.342S")))
+      (t/is (= #xt.time/date-time "2022-07-31T22:44:16.658"
+               (test-arithmetic '- #xt.time/date "2022-08-01" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (= #time/date-time "2022-08-01T01:15:43.342"
-               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #time/duration "PT1H15M43.342S")))
+      (t/is (= #xt.time/date-time "2022-08-01T01:15:43.342"
+               (test-arithmetic '- #xt.time/date-time "2022-08-01T02:31:26.684" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (= #time/date-time "2022-08-01T01:15:43.342"
-               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #time/time "01:15:43.342")))
+      (t/is (= #xt.time/date-time "2022-08-01T01:15:43.342"
+               (test-arithmetic '- #xt.time/date-time "2022-08-01T02:31:26.684" #xt.time/time "01:15:43.342")))
 
-      (t/is (= #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
-               (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/duration "PT1H15M43.342S")))
+      (t/is (= #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
+               (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (nil? (test-arithmetic '- time/end-of-time #time/duration "PT1H15M43.342S"))
+      (t/is (nil? (test-arithmetic '- time/end-of-time #xt.time/duration "PT1H15M43.342S"))
             "end of time"))
 
     (t/testing "(- datetime interval)"
-      (t/is (= #time/date "2021-05-01"
-               (test-arithmetic '- #time/date "2022-08-01" #xt/interval-ym "P1Y3M")))
+      (t/is (= #xt.time/date "2021-05-01"
+               (test-arithmetic '- #xt.time/date "2022-08-01" #xt/interval-ym "P1Y3M")))
 
-      (t/is (= #time/date-time "2022-07-28T22:44:16.658"
-               (test-arithmetic '- #time/date "2022-08-01" #xt/interval-dt ["P3D" "PT1H15M43.342S"])))
+      (t/is (= #xt.time/date-time "2022-07-28T22:44:16.658"
+               (test-arithmetic '- #xt.time/date "2022-08-01" #xt/interval-dt ["P3D" "PT1H15M43.342S"])))
 
-      (t/is (= #time/date-time "2022-07-29T01:15:43.342"
-               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #xt/interval-mdn ["P3D" "PT1H15M43.342S"])))
+      (t/is (= #xt.time/date-time "2022-07-29T01:15:43.342"
+               (test-arithmetic '- #xt.time/date-time "2022-08-01T02:31:26.684" #xt/interval-mdn ["P3D" "PT1H15M43.342S"])))
 
-      (t/is (= #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
-               (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt/interval-mdn ["P0D" "PT1H15M43.342S"])))
+      (t/is (= #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
+               (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt/interval-mdn ["P0D" "PT1H15M43.342S"])))
 
-      (t/is (= #time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"
-               (test-arithmetic '- #time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-mdn ["P2D" "PT1H"] ))
+      (t/is (= #xt.time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"
+               (test-arithmetic '- #xt.time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-mdn ["P2D" "PT1H"] ))
             "clock change")
 
       (t/is (nil? (test-arithmetic '- time/end-of-time #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
 
     (t/testing "(- date date)"
-      (t/is (= 1 (test-arithmetic '- #time/date "2022-08-01" #time/date "2022-07-31")))
+      (t/is (= 1 (test-arithmetic '- #xt.time/date "2022-08-01" #xt.time/date "2022-07-31")))
 
-      (t/is (= 3 (test-arithmetic '- #time/date "2001-10-01" #time/date "2001-09-28")))
+      (t/is (= 3 (test-arithmetic '- #xt.time/date "2001-10-01" #xt.time/date "2001-09-28")))
 
-      (t/is (= 1 (test-arithmetic '- #time/date "2001-03-01" #time/date "2001-02-28" )))
+      (t/is (= 1 (test-arithmetic '- #xt.time/date "2001-03-01" #xt.time/date "2001-02-28" )))
 
-      (t/is (= 2 (test-arithmetic '- #time/date "2000-03-01" #time/date "2000-02-28"))))
+      (t/is (= 2 (test-arithmetic '- #xt.time/date "2000-03-01" #xt.time/date "2000-02-28"))))
 
     (t/testing "(- datetime datetime)" 
-      (t/is (= #time/duration "PT1H15M43.342S"
-               (test-arithmetic '- #time/date "2022-08-01" #time/date-time "2022-07-31T22:44:16.658")))
+      (t/is (= #xt.time/duration "PT1H15M43.342S"
+               (test-arithmetic '- #xt.time/date "2022-08-01" #xt.time/date-time "2022-07-31T22:44:16.658")))
 
-      (t/is (= #time/duration "PT1H15M43.342S"
-               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #time/date-time "2022-08-01T01:15:43.342")))
+      (t/is (= #xt.time/duration "PT1H15M43.342S"
+               (test-arithmetic '- #xt.time/date-time "2022-08-01T02:31:26.684" #xt.time/date-time "2022-08-01T01:15:43.342")))
 
-      (t/is (= #time/duration "PT1H15M43.342S"
-               (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
+      (t/is (= #xt.time/duration "PT1H15M43.342S"
+               (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
 
-      (t/is (= #time/duration "PT6H44M16.658S"
-               (test-arithmetic '- #time/date "2022-08-01" #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
+      (t/is (= #xt.time/duration "PT6H44M16.658S"
+               (test-arithmetic '- #xt.time/date "2022-08-01" #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
 
-      (t/is (= #time/duration "PT-9H-15M-43.342S"
-               (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/date-time "2022-08-01T02:31:26.684")))
+      (t/is (= #xt.time/duration "PT-9H-15M-43.342S"
+               (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #xt.time/date-time "2022-08-01T02:31:26.684")))
 
       (t/is (= (Duration/ofNanos Long/MAX_VALUE)
-               (test-arithmetic '- time/end-of-time  #time/date-time "2022-08-01T02:31:26.684")))
+               (test-arithmetic '- time/end-of-time  #xt.time/date-time "2022-08-01T02:31:26.684")))
       (t/is (= (Duration/ofNanos Long/MAX_VALUE)
-               (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" time/end-of-time)))
+               (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" time/end-of-time)))
       (t/is (= (Duration/ofNanos Long/MAX_VALUE)
                (test-arithmetic '- time/end-of-time time/end-of-time))))))
 
@@ -1361,14 +1361,14 @@
           (instance? IntervalMonthDayNano res)))))
 
 (deftest test-period-constructor
-  (let [from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"
-        to #time/zoned-date-time "2022-01-01T00:00Z[UTC]"]
+  (let [from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"
+        to #xt.time/zoned-date-time "2022-01-01T00:00Z[UTC]"]
     (t/is (= {:xt/from from :xt/to to}
              (et/project1 '(period x y)
                           {:x from, :y to}))))
 
-  (let [from #time/zoned-date-time "2030-01-01T00:00Z[UTC]"
-        to #time/zoned-date-time "2020-01-01T00:00Z[UTC]"]
+  (let [from #xt.time/zoned-date-time "2030-01-01T00:00Z[UTC]"
+        to #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"]
     (t/is
       (thrown-with-msg?
         RuntimeException

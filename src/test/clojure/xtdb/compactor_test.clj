@@ -150,17 +150,17 @@
   (util/with-open [lt0 (tu/open-live-table "foo")
                    lt1 (tu/open-live-table "foo")]
 
-    (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}
+    (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #xt.time/instant "2020-01-01T00:00:00Z"}
                   [{:xt/id "foo", :v 0}
                    {:xt/id "bar", :v 0}])
 
-    (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #time/instant "2021-01-01T00:00:00Z"}
+    (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #xt.time/instant "2021-01-01T00:00:00Z"}
                   [{:xt/id "bar", :v 1}])
 
-    (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #time/instant "2022-01-01T00:00:00Z"}
+    (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #xt.time/instant "2022-01-01T00:00:00Z"}
                   [{:xt/id "foo", :v 1}])
 
-    (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #time/instant "2023-01-01T00:00:00Z"}
+    (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #xt.time/instant "2023-01-01T00:00:00Z"}
                   [{:xt/id "foo", :v 2}
                    {:xt/id "bar", :v 2}])
 

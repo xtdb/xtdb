@@ -59,49 +59,49 @@
                           {:node tu/*node* :basis {:at-tx tx} :params {'?x (float 3)}})))))
 
 (deftest test-bloom-filter-for-datetime-types-2133
-  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"}]
-                                        [:put-docs :xt_docs {:timestamp #time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
-                                        [:put-docs :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "c"}]
-                                        [:put-docs :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "d"}]]
-                             {:default-tz #time/zone "Z"})
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:timestamp #xt.time/date "2010-01-01" :xt/id "a"}]
+                                        [:put-docs :xt_docs {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
+                                        [:put-docs :xt_docs {:timestamp #xt.time/date-time "2010-01-01T00:00:00" :xt/id "c"}]
+                                        [:put-docs :xt_docs {:timestamp #xt.time/date "2020-01-01" :xt/id "d"}]]
+                             {:default-tz #xt.time/zone "Z"})
                (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 
-    (t/is (= [{:timestamp #time/date "2010-01-01"}
-              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
-              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
+    (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
+              {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table xt_docs}
-                            [{timestamp (= timestamp #time/zoned-date-time "2010-01-01T00:00:00Z")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))
+                            [{timestamp (= timestamp #xt.time/zoned-date-time "2010-01-01T00:00:00Z")}]]
+                          {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))
 
-    (t/is (= [{:timestamp #time/date "2010-01-01"}
-              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
-              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
+    (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
+              {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table xt_docs}
                             [{timestamp (= timestamp ?x)}]]
                           {:node tu/*node* :basis {:at-tx tx}
-                           :default-tz  #time/zone "Z" :params {'?x #time/date "2010-01-01"}})))
+                           :default-tz  #xt.time/zone "Z" :params {'?x #xt.time/date "2010-01-01"}})))
 
-    (t/is (= [{:timestamp #time/date "2010-01-01"}
-              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
-              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
+    (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
+              {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table xt_docs}
-                            [{timestamp (= timestamp #time/date-time "2010-01-01T00:00:00")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
+                            [{timestamp (= timestamp #xt.time/date-time "2010-01-01T00:00:00")}]]
+                          {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))))
 
 (deftest test-bloom-filter-for-time-types
-  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:time #time/time "01:02:03" :xt/id "a"}]
-                                        [:put-docs :xt_docs {:time #time/time "04:05:06" :xt/id "b"}]]
-                             {:default-tz #time/zone "Z"})
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:time #xt.time/time "01:02:03" :xt/id "a"}]
+                                        [:put-docs :xt_docs {:time #xt.time/time "04:05:06" :xt/id "b"}]]
+                             {:default-tz #xt.time/zone "Z"})
                (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 
-    (t/is (= [{:time #time/time "04:05:06"}]
+    (t/is (= [{:time #xt.time/time "04:05:06"}]
              (tu/query-ra '[:scan {:table xt_docs}
-                            [{time (= time #time/time "04:05:06")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
+                            [{time (= time #xt.time/time "04:05:06")}]]
+                          {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))))
 
 (deftest test-min-max-on-xt-id
   (with-open [node (xtn/start-node {:indexer {:page-limit 16}})]

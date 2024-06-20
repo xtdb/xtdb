@@ -270,58 +270,58 @@
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-min-max-temporal-399
-  (t/is (= [{:min #time/duration "PT0.0001S"
-             :max #time/duration "PT15M"}]
+  (t/is (= [{:min #xt.time/duration "PT0.0001S"
+             :max #xt.time/duration "PT15M"}]
            (tu/query-ra '[:group-by [{min (min a)}
                                      {max (max a)}]
-                          [:table [{:a #time/duration "PT10S"}
-                                   {:a #time/duration "PT0.0001S"}
-                                   {:a #time/duration "PT15M"}]]]))
+                          [:table [{:a #xt.time/duration "PT10S"}
+                                   {:a #xt.time/duration "PT0.0001S"}
+                                   {:a #xt.time/duration "PT15M"}]]]))
         "durations")
 
-  (t/is (= [{:min #time/date "2018-05-01",
-             :max #time/date "2022-01-01"}]
+  (t/is (= [{:min #xt.time/date "2018-05-01",
+             :max #xt.time/date "2022-01-01"}]
            (tu/query-ra '[:group-by [{min (min a)}
                                      {max (max a)}]
-                          [:table [{:a #time/date "2022-01-01"}
-                                   {:a #time/date "2022-01-01"}
-                                   {:a #time/date "2018-05-01"}]]]))
+                          [:table [{:a #xt.time/date "2022-01-01"}
+                                   {:a #xt.time/date "2022-01-01"}
+                                   {:a #xt.time/date "2018-05-01"}]]]))
         "dates")
 
-  (t/is (= [{:min #time/date-time "2018-05-01T12:00",
-             :max #time/date-time "2022-01-01T15:34:24.523286"}]
+  (t/is (= [{:min #xt.time/date-time "2018-05-01T12:00",
+             :max #xt.time/date-time "2022-01-01T15:34:24.523286"}]
            (tu/query-ra '[:group-by [{min (min a)}
                                      {max (max a)}]
-                          [:table [{:a #time/date-time "2022-01-01T15:34:24.523284"}
-                                   {:a #time/date-time "2022-01-01T15:34:24.523286"}
-                                   {:a #time/date-time "2018-05-01T12:00"}]]]))
+                          [:table [{:a #xt.time/date-time "2022-01-01T15:34:24.523284"}
+                                   {:a #xt.time/date-time "2022-01-01T15:34:24.523286"}
+                                   {:a #xt.time/date-time "2018-05-01T12:00"}]]]))
         "timestamps")
 
   (t/testing "tstzs"
-    (t/is (= [{:min #time/zoned-date-time "2018-05-01T12:00+01:00[Europe/London]",
-               :max #time/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]
+    (t/is (= [{:min #xt.time/zoned-date-time "2018-05-01T12:00+01:00[Europe/London]",
+               :max #xt.time/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]
              (tu/query-ra '[:group-by [{min (min a)}
                                        {max (max a)}]
-                            [:table [{:a #time/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}
-                                     {:a #time/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
-                                     {:a #time/zoned-date-time "2018-05-01T12:00+01:00[Europe/London]"}]]]))
+                            [:table [{:a #xt.time/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}
+                                     {:a #xt.time/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
+                                     {:a #xt.time/zoned-date-time "2018-05-01T12:00+01:00[Europe/London]"}]]]))
           "preserves TZ if all the same")
 
-    (t/is (= [{:min #time/zoned-date-time "2018-05-01T19:00Z",
-               :max #time/zoned-date-time "2022-08-01T11:58Z"}]
+    (t/is (= [{:min #xt.time/zoned-date-time "2018-05-01T19:00Z",
+               :max #xt.time/zoned-date-time "2022-08-01T11:58Z"}]
              (tu/query-ra '[:group-by [{min (min a)}
                                        {max (max a)}]
-                            [:table [{:a #time/zoned-date-time "2022-08-01T13:34+02:00[Europe/Stockholm]"}
-                                     {:a #time/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
-                                     {:a #time/zoned-date-time "2018-05-01T12:00-07:00[America/Los_Angeles]"}]]]))
+                            [:table [{:a #xt.time/zoned-date-time "2022-08-01T13:34+02:00[Europe/Stockholm]"}
+                                     {:a #xt.time/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
+                                     {:a #xt.time/zoned-date-time "2018-05-01T12:00-07:00[America/Los_Angeles]"}]]]))
           "chooses Z if there are different TZs"))
 
   (t/is (thrown-with-msg? xtdb.RuntimeException
                           #"Incomparable types in min/max aggregate"
                           (tu/query-ra '[:group-by [{min (min a)}
                                                     {max (max a)}]
-                                         [:table [{:a #time/date-time "2022-08-01T13:34"}
-                                                  {:a #time/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
+                                         [:table [{:a #xt.time/date-time "2022-08-01T13:34"}
+                                                  {:a #xt.time/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
                                                   {:a 12}]]]))))
 
 (t/deftest test-array-agg

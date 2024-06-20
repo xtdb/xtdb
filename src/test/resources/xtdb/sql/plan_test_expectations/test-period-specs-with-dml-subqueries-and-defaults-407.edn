@@ -16,7 +16,7 @@
     [{xt$column_1 1}
      {xt$column_2 145}
      {xt$column_3 7797}
-     {xt$column_4 #time/date "1998-01-03"}
+     {xt$column_4 #xt.time/date "1998-01-03"}
      tmp.3/app_start]
     [:rename
      tmp.3

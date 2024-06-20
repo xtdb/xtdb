@@ -418,38 +418,38 @@
     (t/is (= [{:x 42}]
              (xt/q tu/*node* "SELECT '42'::INT as x")))
     
-    (t/is (= [{:x #time/date "2021-10-21"}]
+    (t/is (= [{:x #xt.time/date "2021-10-21"}]
              (xt/q tu/*node* "SELECT '2021-10-21'::DATE as x")))))
 
 (t/deftest test-cast-string-to-temporal
-  (t/is (= [{:timestamp-tz #time/zoned-date-time "2021-10-21T12:34:00Z"}]
+  (t/is (= [{:timestamp-tz #xt.time/zoned-date-time "2021-10-21T12:34:00Z"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz")))
 
-  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00"}]
+  (t/is (= [{:timestamp #xt.time/date-time "2021-10-21T12:34:00"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP) as \"timestamp\"")))
 
-  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00"}]
+  (t/is (= [{:timestamp #xt.time/date-time "2021-10-21T12:34:00"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as \"timestamp\"")))
 
-  (t/is (= [{:duration #time/date "2021-10-21"}]
+  (t/is (= [{:duration #xt.time/date "2021-10-21"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as \"duration\"")))
 
-  (t/is (= [{:time #time/time "12:00:01"}]
+  (t/is (= [{:time #xt.time/time "12:00:01"}]
            (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as \"time\"")))
 
-  (t/is (= [{:duration #time/duration "PT13M56.123456S"}]
+  (t/is (= [{:duration #xt.time/duration "PT13M56.123456S"}]
            (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION) as \"duration\"")))
 
-  (t/is (= [{:duration #time/duration "PT13M56.123456789S"}]
+  (t/is (= [{:duration #xt.time/duration "PT13M56.123456789S"}]
            (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION(9)) as \"duration\"")))
 
-  (t/is (= [{:time #time/time "12:00:01.1234"}]
+  (t/is (= [{:time #xt.time/time "12:00:01.1234"}]
            (xt/q tu/*node* "SELECT CAST('12:00:01.123456' AS TIME(4)) as \"time\"")))
 
-  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:34:00.1234567"}]
+  (t/is (= [{:timestamp #xt.time/date-time "2021-10-21T12:34:00.1234567"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123456789' AS TIMESTAMP(7)) as \"timestamp\"")))
 
-  (t/is (= [{:timestamp-tz #time/zoned-date-time "2021-10-21T12:34:00.12Z"}]
+  (t/is (= [{:timestamp-tz #xt.time/zoned-date-time "2021-10-21T12:34:00.12Z"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123Z' AS TIMESTAMP(2) WITH TIME ZONE) as timestamp_tz")))
 
   (t/is (thrown-with-msg?
@@ -474,10 +474,10 @@
            (xt/q tu/*node* "SELECT CAST(DURATION 'PT13M56.123S' AS VARCHAR) as string"))))
 
 (t/deftest test-cast-interval-to-duration
-  (t/is (= [{:duration #time/duration "PT13M56S"}]
+  (t/is (= [{:duration #xt.time/duration "PT13M56S"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as \"duration\"")))
 
-  (t/is (= [{:duration #time/duration "PT13M56.123456789S"}]
+  (t/is (= [{:duration #xt.time/duration "PT13M56.123456789S"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as \"duration\""))))
 
 (t/deftest test-cast-duration-to-interval
@@ -599,40 +599,40 @@
   (t/are
    [sql expected]
    (= expected (plan-expr-with-foo sql))
-    "TIMESTAMP '3000-03-15 20:40:31'" #time/date-time "3000-03-15T20:40:31"
-    "TIMESTAMP '3000-03-15 20:40:31.11'" #time/date-time "3000-03-15T20:40:31.11"
-    "TIMESTAMP '3000-03-15 20:40:31.2222'" #time/date-time "3000-03-15T20:40:31.2222"
-    "TIMESTAMP '3000-03-15 20:40:31.44444444'" #time/date-time "3000-03-15T20:40:31.44444444"
-    "TIMESTAMP '3000-03-15 20:40:31+03:44'" #time/zoned-date-time "3000-03-15T20:40:31+03:44"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678+13:12'" #time/zoned-date-time "3000-03-15T20:40:31.123456780+13:12"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #time/zoned-date-time"3000-03-15T20:40:31.123456780-14:00"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678+14:00'" #time/zoned-date-time"3000-03-15T20:40:31.123456780+14:00"
-    "TIMESTAMP '3000-03-15 20:40:31-11:44'" #time/zoned-date-time "3000-03-15T20:40:31-11:44"
-    "TIMESTAMP '3000-03-15T20:40:31-11:44'" #time/zoned-date-time "3000-03-15T20:40:31-11:44"
-    "TIMESTAMP '3000-03-15T20:40:31Z'" #time/zoned-date-time "3000-03-15T20:40:31Z"
+    "TIMESTAMP '3000-03-15 20:40:31'" #xt.time/date-time "3000-03-15T20:40:31"
+    "TIMESTAMP '3000-03-15 20:40:31.11'" #xt.time/date-time "3000-03-15T20:40:31.11"
+    "TIMESTAMP '3000-03-15 20:40:31.2222'" #xt.time/date-time "3000-03-15T20:40:31.2222"
+    "TIMESTAMP '3000-03-15 20:40:31.44444444'" #xt.time/date-time "3000-03-15T20:40:31.44444444"
+    "TIMESTAMP '3000-03-15 20:40:31+03:44'" #xt.time/zoned-date-time "3000-03-15T20:40:31+03:44"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678+13:12'" #xt.time/zoned-date-time "3000-03-15T20:40:31.123456780+13:12"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #xt.time/zoned-date-time"3000-03-15T20:40:31.123456780-14:00"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678+14:00'" #xt.time/zoned-date-time"3000-03-15T20:40:31.123456780+14:00"
+    "TIMESTAMP '3000-03-15 20:40:31-11:44'" #xt.time/zoned-date-time "3000-03-15T20:40:31-11:44"
+    "TIMESTAMP '3000-03-15T20:40:31-11:44'" #xt.time/zoned-date-time "3000-03-15T20:40:31-11:44"
+    "TIMESTAMP '3000-03-15T20:40:31Z'" #xt.time/zoned-date-time "3000-03-15T20:40:31Z"
 
-    "TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]'" #time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
+    "TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]'" #xt.time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
     ;; corrects the offset to the zone's offset
-    "TIMESTAMP '3000-04-15T20:40:31+05:00[Europe/London]'" #time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
+    "TIMESTAMP '3000-04-15T20:40:31+05:00[Europe/London]'" #xt.time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
     ;; provides the correct offset for the zone
-    "TIMESTAMP '3000-04-15T20:40:31[Europe/London]'" #time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"))
+    "TIMESTAMP '3000-04-15T20:40:31[Europe/London]'" #xt.time/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"))
 
 (t/deftest test-time-literal
   (t/are
    [sql expected]
    (= expected (plan-expr-with-foo sql))
-    "TIME '20:40:31'" #time/time "20:40:31"
-    "TIME '20:40:31.467'" #time/time "20:40:31.467"
-    "TIME '20:40:31.932254'" #time/time "20:40:31.932254"
-    "TIME '20:40:31-03:44'" #time/offset-time "20:40:31-03:44"
-    "TIME '20:40:31+03:44'" #time/offset-time "20:40:31+03:44"
-    "TIME '20:40:31.467+14:00'" #time/offset-time "20:40:31.467+14:00"))
+    "TIME '20:40:31'" #xt.time/time "20:40:31"
+    "TIME '20:40:31.467'" #xt.time/time "20:40:31.467"
+    "TIME '20:40:31.932254'" #xt.time/time "20:40:31.932254"
+    "TIME '20:40:31-03:44'" #xt.time/offset-time "20:40:31-03:44"
+    "TIME '20:40:31+03:44'" #xt.time/offset-time "20:40:31+03:44"
+    "TIME '20:40:31.467+14:00'" #xt.time/offset-time "20:40:31.467+14:00"))
 
 (t/deftest date-literal
   (t/are
    [sql expected]
    (= expected (plan-expr-with-foo sql))
-    "DATE '3000-03-15'" #time/date "3000-03-15"))
+    "DATE '3000-03-15'" #xt.time/date "3000-03-15"))
 
 (t/deftest interval-literal
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))
@@ -658,28 +658,28 @@
 
 (t/deftest duration-literal
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))
-    "DURATION 'P1D'" #time/duration "PT24H"
-    "DURATION 'PT1H'" #time/duration "PT1H"
-    "DURATION 'PT1M'" #time/duration "PT1M"
-    "DURATION 'PT1H1M1.111111S'" #time/duration "PT1H1M1.111111S"
-    "DURATION 'P1DT1H'" #time/duration "PT25H"
-    "DURATION 'P1DT10H1M1.111111S'" #time/duration "PT34H1M1.111111S"
-    "DURATION 'PT-1H'" #time/duration "PT-1H"
-    "DURATION 'P-1DT2H'" #time/duration "PT-22H"
-    "DURATION 'P-1DT-10H-1M'" #time/duration "PT-34H-1M"))
+    "DURATION 'P1D'" #xt.time/duration "PT24H"
+    "DURATION 'PT1H'" #xt.time/duration "PT1H"
+    "DURATION 'PT1M'" #xt.time/duration "PT1M"
+    "DURATION 'PT1H1M1.111111S'" #xt.time/duration "PT1H1M1.111111S"
+    "DURATION 'P1DT1H'" #xt.time/duration "PT25H"
+    "DURATION 'P1DT10H1M1.111111S'" #xt.time/duration "PT34H1M1.111111S"
+    "DURATION 'PT-1H'" #xt.time/duration "PT-1H"
+    "DURATION 'P-1DT2H'" #xt.time/duration "PT-22H"
+    "DURATION 'P-1DT-10H-1M'" #xt.time/duration "PT-34H-1M"))
 
 
 (t/deftest duration-literal-query
-  (t/is (= [{:duration #time/duration "PT24H"}]
+  (t/is (= [{:duration #xt.time/duration "PT24H"}]
            (xt/q tu/*node* "SELECT DURATION 'P1D' as \"duration\"")))
 
-  (t/is (= [{:duration #time/duration "PT1H"}]
+  (t/is (= [{:duration #xt.time/duration "PT1H"}]
            (xt/q tu/*node* "SELECT DURATION 'PT1H' as \"duration\"")))
 
-  (t/is (= [{:duration #time/duration "PT26H"}]
+  (t/is (= [{:duration #xt.time/duration "PT26H"}]
            (xt/q tu/*node* "SELECT DURATION 'P1DT2H' as \"duration\"")))
 
-  (t/is (= [{:duration #time/duration "PT-22H"}]
+  (t/is (= [{:duration #xt.time/duration "PT-22H"}]
            (xt/q tu/*node* "SELECT DURATION 'P-1DT2H' as \"duration\""))))
 
 (t/deftest test-date-trunc-plan
@@ -687,19 +687,19 @@
     (t/are
      [sql expected]
      (= expected (plan-expr-with-foo sql))
-      "DATE_TRUNC(MICROSECOND, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MICROSECOND" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(MILLISECOND, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLISECOND" #time/date-time "2021-10-21T12:34:56")
-      "date_trunc(second, timestamp '2021-10-21T12:34:56')" '(date_trunc "SECOND" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(MINUTE, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MINUTE" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(HOUR, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "HOUR" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(DAY, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DAY" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(WEEK, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "WEEK" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(QUARTER, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "QUARTER" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(MONTH, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MONTH" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(YEAR, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "YEAR" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(DECADE, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DECADE" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(CENTURY, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "CENTURY" #time/date-time "2021-10-21T12:34:56")
-      "DATE_TRUNC(MILLENNIUM, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLENNIUM" #time/date-time "2021-10-21T12:34:56")))
+      "DATE_TRUNC(MICROSECOND, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MICROSECOND" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(MILLISECOND, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLISECOND" #xt.time/date-time "2021-10-21T12:34:56")
+      "date_trunc(second, timestamp '2021-10-21T12:34:56')" '(date_trunc "SECOND" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(MINUTE, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MINUTE" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(HOUR, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "HOUR" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(DAY, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DAY" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(WEEK, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "WEEK" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(QUARTER, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "QUARTER" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(MONTH, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MONTH" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(YEAR, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "YEAR" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(DECADE, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "DECADE" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(CENTURY, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "CENTURY" #xt.time/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC(MILLENNIUM, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLENNIUM" #xt.time/date-time "2021-10-21T12:34:56")))
 
   (t/testing "INTERVAL behaviour"
     (t/are
@@ -730,20 +730,20 @@
     "END_OF_TIME()" 'xtdb/end-of-time))
 
 (t/deftest test-date-trunc-query
-  (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:34:00Z"}]
+  (t/is (= [{:timestamp #xt.time/zoned-date-time "2021-10-21T12:34:00Z"}]
            (xt/q tu/*node* "SELECT DATE_TRUNC(MINUTE, TIMESTAMP '2021-10-21T12:34:56Z') as \"timestamp\"")))
 
-  (t/is (= [{:timestamp #time/zoned-date-time "2021-10-21T12:00:00Z"}]
+  (t/is (= [{:timestamp #xt.time/zoned-date-time "2021-10-21T12:00:00Z"}]
            (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56Z') as \"timestamp\"")))
 
-  (t/is (= [{:timestamp #time/date "2001-01-01"}]
+  (t/is (= [{:timestamp #xt.time/date "2001-01-01"}]
            (xt/q tu/*node* "select date_trunc(year, DATE '2001-11-27') as \"timestamp\"")))
 
-  (t/is (= [{:timestamp #time/date-time "2021-10-21T12:00:00"}]
+  (t/is (= [{:timestamp #xt.time/date-time "2021-10-21T12:00:00"}]
            (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56') as \"timestamp\""))))
 
 (t/deftest test-date-trunc-with-timezone-query
-  (t/is (= [{:timestamp #time/zoned-date-time "2001-02-16T08:00-05:00"}]
+  (t/is (= [{:timestamp #xt.time/zoned-date-time "2001-02-16T08:00-05:00"}]
            (xt/q tu/*node* "select date_trunc(day, TIMESTAMP '2001-02-16 15:38:11-05:00', 'Australia/Sydney') as \"timestamp\"")))
 
   (t/is (thrown-with-msg?
@@ -769,14 +769,14 @@
     (t/are
      [sql expected]
      (= expected (plan-expr-with-foo sql))
-      "extract(second from timestamp '2021-10-21T12:34:56')" '(extract "SECOND" #time/date-time "2021-10-21T12:34:56")
-      "EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MINUTE" #time/date-time "2021-10-21T12:34:56")
-      "EXTRACT(HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "HOUR" #time/date-time "2021-10-21T12:34:56")
-      "EXTRACT(DAY FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "DAY" #time/date-time "2021-10-21T12:34:56")
-      "EXTRACT(MONTH FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MONTH" #time/date-time "2021-10-21T12:34:56")
-      "EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "YEAR" #time/date-time "2021-10-21T12:34:56")
-      "EXTRACT(TIMEZONE_MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "TIMEZONE_MINUTE" #time/date-time "2021-10-21T12:34:56")
-      "EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "TIMEZONE_HOUR" #time/date-time "2021-10-21T12:34:56")))
+      "extract(second from timestamp '2021-10-21T12:34:56')" '(extract "SECOND" #xt.time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MINUTE" #xt.time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "HOUR" #xt.time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(DAY FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "DAY" #xt.time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(MONTH FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MONTH" #xt.time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "YEAR" #xt.time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(TIMEZONE_MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "TIMEZONE_MINUTE" #xt.time/date-time "2021-10-21T12:34:56")
+      "EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "TIMEZONE_HOUR" #xt.time/date-time "2021-10-21T12:34:56")))
 
   (t/testing "INTERVAL behaviour"
     (t/are
@@ -789,8 +789,8 @@
     (t/are
      [sql expected]
      (= expected (plan-expr-with-foo sql))
-      "EXTRACT(second from time '11:11:11')" '(extract "SECOND" #time/time "11:11:11")
-      "EXTRACT(MINUTE FROM TIME '11:11:11')" '(extract "MINUTE" #time/time "11:11:11"))))
+      "EXTRACT(second from time '11:11:11')" '(extract "SECOND" #xt.time/time "11:11:11")
+      "EXTRACT(MINUTE FROM TIME '11:11:11')" '(extract "MINUTE" #xt.time/time "11:11:11"))))
 
 
 (t/deftest test-extract-query
@@ -880,41 +880,41 @@
 
 (t/deftest test-period-predicates
   (t/are [expected sql] (= expected (plan-expr-with-foo sql))
-    '(and (<= f/xt$valid_from #time/zoned-date-time "2000-01-01T00:00Z")
-          (>= f/xt$valid_to #time/zoned-date-time "2001-01-01T00:00Z"))
+    '(and (<= f/xt$valid_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
+          (>= f/xt$valid_to #xt.time/zoned-date-time "2001-01-01T00:00Z"))
     "foo.VALID_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(and (<= f/xt$valid_from #time/zoned-date-time "2000-01-01T00:00Z")
-          (>= f/xt$valid_to #time/zoned-date-time "2000-01-01T00:00Z"))
+    '(and (<= f/xt$valid_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
+          (>= f/xt$valid_to #xt.time/zoned-date-time "2000-01-01T00:00Z"))
     "foo.VALID_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
 
     ;; also testing all period-predicate permutations
-    '(and (< f/xt$valid_from #time/zoned-date-time "2001-01-01T00:00Z")
-          (> f/xt$valid_to #time/zoned-date-time "2000-01-01T00:00Z"))
+    '(and (< f/xt$valid_from #xt.time/zoned-date-time "2001-01-01T00:00Z")
+          (> f/xt$valid_to #xt.time/zoned-date-time "2000-01-01T00:00Z"))
     "foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (< f/xt$valid_from f/xt$valid_to) (> f/xt$valid_to f/xt$valid_from))
     "foo.VALID_TIME OVERLAPS foo.VALID_TIME"
 
-    '(and (< #time/zoned-date-time "2000-01-01T00:00Z" #time/zoned-date-time "2003-01-01T00:00Z")
-          (> #time/zoned-date-time "2001-01-01T00:00Z" #time/zoned-date-time "2002-01-01T00:00Z"))
+    '(and (< #xt.time/zoned-date-time "2000-01-01T00:00Z" #xt.time/zoned-date-time "2003-01-01T00:00Z")
+          (> #xt.time/zoned-date-time "2001-01-01T00:00Z" #xt.time/zoned-date-time "2002-01-01T00:00Z"))
     "PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')
     OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00+00:00', TIMESTAMP '2003-01-01 00:00:00+00:00')"
 
-    '(and (= f/xt$system_from #time/zoned-date-time "2000-01-01T00:00Z")
-          (= f/xt$system_to #time/zoned-date-time "2001-01-01T00:00Z"))
+    '(and (= f/xt$system_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
+          (= f/xt$system_to #xt.time/zoned-date-time "2001-01-01T00:00Z"))
     "foo.SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(<= f/xt$valid_to #time/zoned-date-time "2000-01-01T00:00Z")
+    '(<= f/xt$valid_to #xt.time/zoned-date-time "2000-01-01T00:00Z")
     "foo.VALID_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(>= f/xt$system_from #time/zoned-date-time "2001-01-01T00:00Z")
+    '(>= f/xt$system_from #xt.time/zoned-date-time "2001-01-01T00:00Z")
     "foo.SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(= f/xt$valid_to #time/zoned-date-time "2000-01-01T00:00Z")
+    '(= f/xt$valid_to #xt.time/zoned-date-time "2000-01-01T00:00Z")
     "foo.VALID_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(= f/xt$valid_from #time/zoned-date-time "2001-01-01T00:00Z")
+    '(= f/xt$valid_from #xt.time/zoned-date-time "2001-01-01T00:00Z")
     "foo.VALID_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
 
 (t/deftest test-period-predicates-point-in-time
@@ -924,8 +924,8 @@
     "foo.valid_time CONTAINS foo.a"
 
     '(and
-      (<= f/xt$valid_from #time/zoned-date-time "2010-01-01T11:10:11Z")
-      (>= f/xt$valid_to #time/zoned-date-time "2010-01-01T11:10:11Z"))
+      (<= f/xt$valid_from #xt.time/zoned-date-time "2010-01-01T11:10:11Z")
+      (>= f/xt$valid_to #xt.time/zoned-date-time "2010-01-01T11:10:11Z"))
     "foo.valid_time CONTAINS TIMESTAMP '2010-01-01T11:10:11Z'"
 
     '(and (<= f/xt$valid_from f/a) (>= f/xt$valid_to f/a))
