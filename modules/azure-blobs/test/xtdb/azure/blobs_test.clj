@@ -23,6 +23,9 @@
                                  (System/getenv "AZURE_SUBSCRIPTION_ID"))))
 
 (t/use-fixtures :once
+  (fn [_f]
+    (log/info "xtdb.azure.blobs tests disabled for now, needs Azure infra set up again"))
+
   (fn [f]
     (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
     (when config-present?
