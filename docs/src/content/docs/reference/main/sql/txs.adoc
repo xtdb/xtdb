@@ -2,45 +2,18 @@
 title: SQL Transactions
 ---
 
-SQL transactions are submitted through `xtdb.api/execute-tx` and `xtdb.api/submit-tx`.
+:icon: /images/icons
+:clojure: /drivers/clojure/sql.html#txs
+:kotlin: /drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/execute-tx.html
 
-* `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns the transaction key of the submitted transaction.
-** `tx-ops`: vector of link:#tx-ops[transaction operations].
-** `opts` (map):
-*** `:default-all-valid-time?` (boolean, default false): whether to default to all valid time if not explicitly specified in the query.
-* `(xt/execute-tx <node> <tx-ops> <opts>?)` : additionally awaits for the transaction to be processed, and returns `{:committed? true|false, :error err}` alongside the transaction key.
+[.lang-icons.right]
+image:{icon}/clojure.svg[Clojure,link={clojure}]
+image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
+
+For examples on how to submit SQL transactions in each client library, see the individual driver documentation:
 
 [#tx-ops]
 == Transaction operations
-
-SQL transaction operations are of the form `[:sql "<sql query>"]`.
-
-e.g.
-
-[source,clojure]
-----
-(require '[xtdb.api :as xt])
-
-(xt/execute-tx node [[:sql "INSERT INTO users (_id, name) VALUES ('jms', 'James')"]
-
-                     ;; with args - pass multiple vectors if required.
-                     [:sql "INSERT INTO users (_id, name) VALUES (?, ?)"
-                      ["jms", "James"]
-                      ["jdt", "Jeremy"]]])
-
-;; => {:tx-id 0, :system-time #xt.time/instant "...", :committed? true}
-----
-
-[NOTE]
-====
-There is a table and column name mapping between SQL and XTQL: documents inserted with XTQL have their hyphens translated to underscores, and their namespace segments converted to `$` symbols, as hyphens, periods and slashes are not valid symbols in SQL identifiers.
-
-For example, `:foo.bar/baz-quux` in XTQL is referenced in SQL as `foo$bar$baz_quux`.
-
-The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `_id`, `_valid_from` and `_valid_to` respectively.
-
-This mapping is reversed when querying SQL documents from XTQL.
-====
 
 === `INSERT`
 
@@ -75,7 +48,7 @@ for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
                 | FOR ALL VALID_TIME | FOR VALID_TIME ALL
 ----
 
-* If `for_valid_time` is not provided, the effective valid-time range of the update depends on the `:default-all-valid-time?` transaction argument.
+* If `for_valid_time` is not provided, the effective valid-time range of the update depends on the `defaultAllValidTime` transaction argument.
   If it is true, the update will be effective for all valid time (including in the past); otherwise it will be effective from now to the end of time.
   (SQL:2011 specifies that updates without this clause should be effective for all valid time; the flag is an XTDB addition.)
 * The `_id` column cannot be updated - instead, users should delete this document and re-insert a new one.
@@ -96,7 +69,7 @@ for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
                 | FOR ALL VALID_TIME
 ----
 
-* If `for_valid_time` is not provided, the effective valid-time range of the delete depends on the `:default-all-valid-time?` transaction argument.
+* If `for_valid_time` is not provided, the effective valid-time range of the delete depends on the `defaultAllValidTime` transaction argument.
   If it is true, the delete will be effective for all valid time (including in the past); otherwise it will be effective from now to the end of time.
   (SQL:2011 specifies that deletes without this clause should be effective for all valid time; the flag is an XTDB addition.)
 
