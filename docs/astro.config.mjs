@@ -58,6 +58,8 @@ export default defineConfig({
                                 { label: '4) Changing an immutable database', link: '/tutorials/immutability-walkthrough/part-4' },
                             ],
                         },
+
+                        { label: 'Introducing XTQL', link: '/tutorials/introducing-xtql' },
                     ],
                 },
 
@@ -85,9 +87,6 @@ export default defineConfig({
                     collapsed: true,
                     items: [
                         { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
-                        { label: 'XTQL Overview', link: '/intro/what-is-xtql' },
-                        { label: 'XTQL Walkthrough', link: '/guides/xtql-walkthrough' },
-
                     ],
                 },
 
