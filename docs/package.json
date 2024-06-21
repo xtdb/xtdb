@@ -27,6 +27,7 @@
     "date-fns": "^3.6.0",
     "highlight.js": "^11.9.0",
     "mustache": "^4.2.0",
+    "railroad-diagrams": "^1.0.0",
     "rehype-highlight": "^6.0.0",
     "sharp": "^0.32.5",
     "tailwindcss": "^3.3.3",

@@ -1,3 +1,6 @@
 [submodule "docs/shared"]
 	path = docs/shared
 	url = https://github.com/xtdb/xtdb-website-shared.git
+[submodule "railroad"]
+	path = docs/lib/railroad
+	url = https://github.com/tabatkins/railroad-diagrams/
