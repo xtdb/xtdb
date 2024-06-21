@@ -107,7 +107,7 @@ export default defineConfig({
                         },
 
                         {
-                            label: 'XTQL',
+                            label: 'XTQL (Clojure)',
                             collapsed: true,
                             items: [
                                 { label: 'Transactions', link: '/reference/main/xtql/txs' },
@@ -179,7 +179,6 @@ export default defineConfig({
                                 { label: 'Getting started', link: '/drivers/clojure/getting-started' },
                                 { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: { target: '_blank' } },
                                 { label: 'Configuration cookbook', link: '/drivers/clojure/configuration' },
-                                { label: 'Transactions cookbook', link: '/drivers/clojure/txs' },
                                 { label: 'Temporal Types cookbook', link: '/drivers/clojure/temporal' },
                                 { label: 'Tutorial: Learn XTQL Today', link: '/tutorials/learn-xtql-today-with-clojure' },
 
