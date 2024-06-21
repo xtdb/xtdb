@@ -8,7 +8,7 @@ The only caveat is that each record in XTDB must contain a user-provided `_id` p
 
 Note: `_` is a reserved prefix convention for namepacing system-mandated columns and other XTDB-specific database objects.
 
-=== Insert a row into a new table
+== Insert a row into a new table
 
 To run your first INSERT transaction, simply enter the following into `xtsql`:
 
@@ -19,7 +19,7 @@ INSERT INTO people (_id, name) VALUES (6, 'fred');
 
 Here the `people` table has not been defined anywhere beforehand - the table is created dynamically during the INSERT statement, along with any supplied columns and inferrable type information.
 
-=== Query for that same row
+== Query for that same row
 
 Querying this data back again is a simple matter of:
 
@@ -28,37 +28,37 @@ Querying this data back again is a simple matter of:
 SELECT * FROM people;
 ----
 
-=== Evolve the table
+== Evolve the table
 
 If we now INSERT another row with a slightly different shape, XTDB will gracefully evolve the schema of the `people` table to reflect the union of all the records it contains:
 
 [source,sql]
 ----
 INSERT INTO people (_id, name, likes)
-  VALUES (9, 'bob', ['fishing', 3.14, {'dynamic':'data'}]);
+  VALUES (9, 'bob', ['fishing', 3.14, {dynamic:'data'}]);
 ----
 
 Re-running our `SELECT * FROM people` you should now see:
 
 [source,text]
 ----
-| _id | likes                                   | name    |
+| _id   | likes                                   | name    |
 |-------|-----------------------------------------|---------|
 | 6     | None                                    | 'fred'  |
 | 9     | ['fishing', 3.14, {'dynamic': 'data'}]  | 'bob'   |
 ----
 
-=== Handling ‘documents’
+== Handling ‘documents’
 
 XTDB is designed to work with JSON-like nested data as a first-class concept (i.e. highly flexible but not restricted to JSON or JSONB types). This means you can easily store deeply-nested document structures:
 
 [source,sql]
 ----
 UPDATE people
-SET info = {'contact': [{'loc': 'home',
-                         'tel': '123'},
-                        {'loc': 'work',
-                         'tel': '456'}]}
+SET info = {contact: [{loc: 'home',
+                       tel: '123'},
+                      {loc: 'work',
+                       tel: '456'}]}
   WHERE people.name = 'fred';
 ----
 

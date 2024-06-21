@@ -19,4 +19,44 @@ For example:
       {:args ["James"], :default-all-valid-time? true})
 ----
 
+[#txs]
+== SQL Transactions
+
+SQL transactions are submitted through `xtdb.api/execute-tx` and `xtdb.api/submit-tx`.
+
+* `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns the transaction key of the submitted transaction.
+** `tx-ops`: vector of link:#tx-ops[transaction operations].
+** `opts` (map):
+*** `:default-all-valid-time?` (boolean, default false): whether to default to all valid time if not explicitly specified in the query.
+* `(xt/execute-tx <node> <tx-ops> <opts>?)` : additionally awaits for the transaction to be processed, and returns `{:committed? true|false, :error err}` alongside the transaction key.
+
+SQL transaction operations are of the form `[:sql "<sql query>"]`.
+
+e.g.
+
+[source,clojure]
+----
+(require '[xtdb.api :as xt])
+
+(xt/execute-tx node [[:sql "INSERT INTO users (_id, name) VALUES ('jms', 'James')"]
+
+                     ;; with args - pass multiple vectors if required.
+                     [:sql "INSERT INTO users (_id, name) VALUES (?, ?)"
+                      ["jms", "James"]
+                      ["jdt", "Jeremy"]]])
+
+;; => {:tx-id 0, :system-time #xt.time/instant "...", :committed? true}
+----
+
+[NOTE]
+====
+There is a table and column name mapping between SQL and XTQL: documents inserted with XTQL have their hyphens translated to underscores, and their namespace segments converted to `$` symbols, as hyphens, periods and slashes are not valid symbols in SQL identifiers.
+
+For example, `:foo.bar/baz-quux` in XTQL is referenced in SQL as `foo$bar$baz_quux`.
+
+The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `_id`, `_valid_from` and `_valid_to` respectively.
+
+This mapping is reversed when querying SQL documents from XTQL.
+====
+
 For more details on XTDB's SQL support, see the link:/reference/main/sql/queries[SQL reference documentation].

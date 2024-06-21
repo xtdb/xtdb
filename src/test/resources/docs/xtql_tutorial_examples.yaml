@@ -1,16 +1,18 @@
 bo-sql-1: |
   -- tag::bo-sql-1[]
-  SELECT users._id AS user_id, users.first_name, users.last_name FROM users
+  SELECT _id AS user_id, first_name, last_name FROM users
   -- end::bo-sql-1[]
 
 bo-sql-2: |
   -- tag::bo-sql-2[]
-  SELECT users.first_name, users.last_name FROM users WHERE users._id = 'ivan'
+  SELECT first_name, last_name
+  FROM users
+  WHERE _id = 'ivan'
   -- end::bo-sql-2[]
 
 bo-sql-3: |
   -- tag::bo-sql-3[]
-  SELECT users._id AS user_id, users.first_name, users.last_name
+  SELECT _id AS user_id, first_name, last_name
   FROM users
   ORDER BY last_name, first_name
   LIMIT 10
@@ -18,8 +20,10 @@ bo-sql-3: |
 
 joins-sql-1: |
   -- tag::joins-sql-1[]
-  SELECT u._id AS user_id, u.first_name, u.last_name, a.title, a.content
-  FROM users u JOIN articles a ON u._id = a.author_id
+  SELECT u._id AS user_id, u.first_name, u.last_name,
+         a.title, a.content
+  FROM users u
+    JOIN articles a ON u._id = a.author_id
   -- end::joins-sql-1[]
 
 joins-sql-2: |
@@ -40,15 +44,15 @@ joins-sql-3: |
 
 joins-sql-4: |
   -- tag::joins-sql-4[]
-  SELECT c._id AS cid
+  SELECT _id AS cid
   FROM customers c
-  WHERE c._id NOT IN (SELECT orders.customer_id FROM orders)
+  WHERE _id NOT IN (SELECT orders.customer_id FROM orders)
   LIMIT 100
   -- end::joins-sql-4[]
 
 proj-sql-1: |
   -- tag::proj-sql-1[]
-  SELECT u.first_name, u.last_name, (u.first_name || ' ' || u.last_name) AS full_name
+  SELECT first_name, last_name, (first_name || ' ' || last_name) AS full_name
   FROM users AS u
   -- end::proj-sql-1[]
 
@@ -76,40 +80,55 @@ aggr-sql-1: |
   LIMIT 100
   -- end::aggr-sql-1[]
 
+pull-sql-1: |
+  -- tag::pull-sql-1[]
+  FROM articles AS a
+  SELECT _id AS article_id, title, content, author_id,
+         NEST_ONE(FROM authors WHERE _id = a.author_id
+                  SELECT first_name, last_name)
+           AS author,
+         NEST_MANY(FROM comments WHERE article_id = a._id
+                   SELECT created_at, comment
+                   ORDER BY created_at DESC
+                   LIMIT 10)
+           AS comments
+  -- end::pull-sql-1[]
+
+
 bitemp-sql-1: |
   -- tag::bitemp-sql-1[]
-  SELECT users.first_name, users.last_name FROM users FOR VALID_TIME AS OF DATE '2020-01-01'
+  SELECT first_name, last_name FROM users FOR VALID_TIME AS OF DATE '2020-01-01'
   -- end::bitemp-sql-1[]
 
 bitemp-sql-2: |
   -- tag::bitemp-sql-2[]
-  SELECT users.first_name, users.last_name FROM users FOR ALL VALID_TIME
+  SELECT first_name, last_name FROM users FOR ALL VALID_TIME
   -- end::bitemp-sql-2[]
 
 DML-Insert-sql: |
   -- tag::DML-Insert-sql[]
   INSERT INTO users
-  SELECT ou._id, ou.given_name AS first_name, ou.surname AS last_name,
-         ou._valid_from, ou._valid_to
-  FROM old_users AS ou
+  SELECT _id, given_name AS first_name, surname AS last_name,
+         _valid_from, _valid_to
+  FROM old_users
   -- end::DML-Insert-sql[]
 
 DML-Delete-sql: |
   -- tag::DML-Delete-sql[]
-  DELETE FROM comments WHERE comments.post_id = ?
+  DELETE FROM comments WHERE post_id = ?
   -- end::DML-Delete-sql[]
 
 DML-Delete-additional-unify-clauses-sql: |
   -- tag::DML-Delete-additional-unify-clauses-sql[]
   DELETE FROM comments
-  WHERE comments.post_id IN (SELECT posts._id FROM posts WHERE posts.author_id = ?)
+  WHERE post_id IN (SELECT _id FROM posts WHERE author_id = ?)
   -- end::DML-Delete-additional-unify-clauses-sql[]
 
 DML-Delete-bitemporal-sql: |
   -- tag::DML-Delete-bitemporal-sql[]
   DELETE FROM promotions
   FOR PORTION OF VALID_TIME FROM DATE '2023-12-26' TO END_OF_TIME
-  WHERE promotions.promotion_type = 'christmas'
+  WHERE promotion_type = 'christmas'
   -- end::DML-Delete-bitemporal-sql[]
 
 DML-Delete-everything-sql: |
@@ -120,8 +139,8 @@ DML-Delete-everything-sql: |
 DML-Update-sql: |
   -- tag::DML-Update-sql[]
   UPDATE documents
-  SET version = documents.version + 1
-  WHERE documents._id = ?
+  SET version = version + 1
+  WHERE _id = ?
   -- end::DML-Update-sql[]
 
 DML-Update-bitemporal-sql-1: |
@@ -132,13 +151,13 @@ DML-Update-bitemporal-sql-1: |
 DML-Update-bitemporal-sql-2: |
   -- tag::DML-Update-bitemporal-sql-2[]
   UPDATE posts AS p
-  SET comment_count = (SELECT COUNT(*) FROM comments WHERE comments.post_id = ?)
-  WHERE p.post_id = ?
+  SET comment_count = (SELECT COUNT(*) FROM comments WHERE post_id = ?)
+  WHERE post_id = ?
   -- end::DML-Update-bitemporal-sql-2[]
 
 DML-Erase-sql: |
   -- tag::DML-Erase-sql[]
-  ERASE FROM users WHERE users.email = 'jms@example.com'
+  ERASE FROM users WHERE email = 'jms@example.com'
   -- end::DML-Erase-sql[]
 
 DML-Assert-Not-sql: |

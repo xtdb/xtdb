@@ -1,300 +1,426 @@
 ---
-title: XTQL Transactions
+title: XTQL Transactions (Clojure)
 ---
 :examples: ../src/test/resources/docs/xtql_dml_json_examples.yaml
 :clojure: /drivers/clojure/txs
-:kotlin: /drivers/kotlin/kdoc/xtdb-api/xtdb.api.tx
 :icon: /images/icons
 
 Transactions in XTDB are submitted to the link:/config/tx-log[transaction log], to be processed asynchronously.
 They each consist of an array of link:#tx-ops[operations].
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link=/drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/submit-tx.html]
-
-For details about how transactions are submitted, see your individual client language documentation:
+This document provides examples for EDN transaction operations, to be submitted to link:{codox}/xtdb.api.html#var-execute-tx[`xt/execute-tx`^] or link:{codox}/xtdb.api.html#var-submit-tx[`xt/submit-tx`^].
 
 
 [#tx-ops]
 == Transaction operations
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_put_docs]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/put-docs.html]
-
-=== `putDocs`
+=== `put-docs`
 
 Upserts documents into the given table, optionally during the given valid time period.
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=put-docs-json,indent=0]
+[:put-docs
+ ;; -- required
+
+ ;; options map
+ ;; * can just provide `<table>` rather than a map if there are
+ ;;   no other options
+ {;; -- required
+
+  ;; table to put docs into (keyword)
+  :into <table>
+
+  ;; --optional
+
+  ;; valid-from, valid-to can be `java.util.Date`, `java.time.Instant`
+  ;; or `java.time.ZonedDateTime`
+  :valid-from #inst "..."
+  :valid-to #inst "..."
+  }
+
+ ;; -- required
+ ;; documents to submit (variadic, 0..n)
+ ;; * each must contain `:xt/id`
+ & <docs>
+ ]
 ----
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#delete-docs]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/delete-docs.html]
+==== Examples
+
+* single document
++
+[source,clojure]
+----
+[:put-docs :my-table {:xt/id :foo}]
+----
+* with options
++
+[source,clojure]
+----
+[:put-docs {:into :my-table, :valid-from #inst "2024-01-01"}
+ {:xt/id :foo, ...}
+ {:xt/id :bar, ...}]
+----
+* dynamically generated
++
+[source,clojure]
+----
+(into [:put-docs {:into :my-table, ...}]
+      (->> (range 100)
+           (map (fn [n]
+                  {:xt/id n, :n-str (str n)}))))
+----
 
 [#delete-docs]
-=== `deleteDocs`
+=== `delete-docs`
 
 Deletes documents from the given table, optionally during the given valid time period.
 The default valid time behaviour is the same as link:#_put_docs[put], above.
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=delete-docs-json,indent=0]
+[:delete-docs
+ ;; -- required
+
+ ;; options map
+ ;; * can just provide `<table>` rather than a map if there are no other options
+ {;; -- required
+
+  ;; table to delete docs from
+  :from <table>
+
+  ;; --optional
+
+  ;; valid-from, valid-to can be `java.util.Date`, `java.time.Instant` or `java.time.ZonedDateTime`
+  :valid-from #inst "..."
+  :valid-to #inst "..."
+  }
+
+ ;; -- required
+ ;; document ids to delete (variadic, 0..n)
+ & <ids>
+ ]
 ----
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#erase-docs]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/erase-docs.html]
+Examples:
+
+* single document
++
+[source,clojure]
+----
+[:delete-docs :my-table :foo]
+----
+* with options
++
+[source,clojure]
+----
+[:delete-docs {:from :my-table, :valid-from #inst "2024-01-01"}
+ :foo :bar ...]
+----
+* dynamically generated
++
+[source,clojure]
+----
+(into [:delete-docs {:from :my-table, ...}]
+      (range 100))
+----
+
 
 [#erase-docs]
-=== `eraseDocs`
-
+=== `erase-docs`
 
 Irrevocably erases documents from the given table (including through system time), for all valid-time.
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=erase-docs-json,indent=0]
+[:erase-docs
+ ;; -- required
+
+ ;; table to erase documents from
+ <table>
+
+ ;; document ids to erase (variadic, 0..n)
+ & <ids>
+ ]
 ----
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_insert_into]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/insert.html]
+Examples:
 
-=== `insertInto`
+* single document
++
+[source,clojure]
+----
+[:erase-docs :my-table :foo]
+----
+* dynamically generated
++
+[source,clojure]
+----
+(into [:erase-docs :my-table] (range 100))
+----
+
+=== `insert-into`
 
 Inserts documents into a table from the given link:./queries[query].
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=insert-into-json,indent=0]
+[:insert-into
+ ;; -- required
+ <table>
+ <query>]
 ----
 
 Example:
 
-* copy from another table:
+* copy from another table
 +
 [source,sql]
 ----
-INSERT INTO users
-SELECT _id, first_name AS given_name, last_name AS family_name FROM old_users
+INSERT INTO users SELECT _id, first_name AS given_name, last_name AS family_name FROM old_users
 ----
 +
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=insert-into-json-ex1,indent=0]
+[:insert-into :users (from :old-users [xt/id {:first-name given-name} {:last-name family-name}])]
 ----
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_update]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/update.html]
 
 === `update`
 
 
 Updates documents in a given table based on the provided query.
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=update-json,indent=0]
+[:insert-into
+ ;; -- required
+ <table>
+ <query>]
 ----
 
 Example:
 
-* Increment a version for a user account, by email:
+* copy from another table
 +
 [source,sql]
 ----
-UPDATE users
-SET version = version + 1
-WHERE email = ?
-
--- with argument 'james@example.com'
+INSERT INTO users SELECT _id, first_name AS given_name, last_name AS family_name FROM old_users
 ----
 +
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=update-json-ex1,indent=0]
+[:insert-into :users (from :old-users [xt/id {:first-name given-name} {:last-name family-name}])]
 ----
-
-See also:
-
-* link:./queries#_temporal_filter[Temporal filters]
-* link:./queries#_binding_specs[Binding specs]
-* link:./queries#_expressions[Expressions]
-* link:./queries#_unify[Unify]
-* link:./queries#_argument_specs[Argument specs]
-
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_delete]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/delete.html]
 
 === `delete`
 
 
 Deletes documents from the given table, based on the provided query.
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=delete-json,indent=0]
+[:delete
+ {;; -- required
+  ;; table: keyword
+  :from <table>
+
+  ;; -- optional
+
+  ;; specify the valid-time of the delete
+  ;; see 'temporal filters'
+  :for-valid-time (from <valid-from>)
+  :for-valid-time (to <valid-to>)
+  :for-valid-time (in <valid-from> <valid-to>)
+
+  ;; select the documents to delete using binding constraints.
+  ;; * if not provided, will delete every document in the table
+  ;; * may also bind logic variables for use in `:unify`
+  ;; see 'binding specs'
+  :bind [& <bindings>]
+
+  ;; extra clauses to unify with (e.g. to join against another table)
+  ;; see 'unify'
+  :unify [& <unify-clauses>]}
+
+ ;; -- optional, variadic (0..n)
+ ;; argument-rows to be used in the `:bind` or `:unify` clauses.
+ ;; * if provided, the delete operation will be executed for every argument-row.
+ ;; * see 'argument specs'
+ & <arg-rows>]
 ----
 
-See also:
+Example:
 
-* link:./queries#_temporal_filter[Temporal filters]
-* link:./queries#_binding_specs[Binding specs]
-* link:./queries#_expressions[Expressions]
-* link:./queries#_unify[Unify]
-* link:./queries#_argument_specs[Argument specs]
-
-Examples:
-
-* `DELETE FROM users WHERE email = 'james@example.com'`
+* delete by email
 +
---
-[source,json]
-----
-include::{examples}[tags=delete-json-ex1,indent=0]
-----
---
-+
-* Deleting using a sub-query
-+
---
 [source,sql]
 ----
-DELETE FROM users
-WHERE author_id IN (SELECT author_id FROM authors WHERE email = 'james@example.com'
+DELETE FROM users WHERE email = 'james@example.com'
 ----
-
-[source,json]
++
+[source,clojure]
 ----
-include::{examples}[tags=delete-json-ex2,indent=0]
+[:delete {:table :users
+          :bind [{:email $email}]}
+ {:email "james@example.com"}]
 ----
---
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_erase]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/erase.html]
 
 === `erase`
 
 Irrevocably erase the document from the given table (for all valid-time, for all system-time), based on the provided query.
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=erase-json,indent=0]
+[:erase
+ {;; -- required
+  ;; table: keyword
+  :from <table>
+
+  ;; -- optional
+
+  ;; select the documents to erase using binding constraints.
+  ;; * if not provided, will erase every document in the table
+  ;; * may also bind logic variables for use in `:unify`
+  ;; see 'binding specs'
+  :bind [& <bindings>]
+
+  ;; extra clauses to unify with (e.g. to join against another table)
+  ;; see 'unify'
+  :unify [& <unify-clauses>]}
+
+ ;; -- optional, variadic (0..n)
+ ;; argument-rows to be used in the `:bind` or `:unify` clauses.
+ ;; * if provided, the erase operation will be executed for every argument-row.
+ ;; * see 'argument specs'
+ & <arg-rows>]
 ----
 
-See also:
+Example:
 
-* link:./queries#_binding_specs[Binding specs]
-* link:./queries#_expressions[Expressions]
-* link:./queries#_unify[Unify]
-* link:./queries#_argument_specs[Argument specs]
-
-Examples:
-
-* erase by email:
+* erase by email
 +
 [source,sql]
 ----
-ERASE FROM users WHERE email = ?
-
--- 'james@example.com' supplied separately as an argument
+ERASE FROM users WHERE email = 'james@example.com'
 ----
 +
---
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=erase-json-ex1,indent=0]
-----
---
-+
-* erasing using a sub-query:
-+
---
-[source,sql]
-----
-ERASE FROM users
-WHERE author_id IN (SELECT author_id FROM authors WHERE email = ?)
-
--- 'james@example.com' supplied separately as an argument
+[:erase {:table :users
+         :bind [{:email $email}]}
+ {:email "james@example.com"}]
 ----
 
-[source,json]
-----
-include::{examples}[tags=erase-json-ex2,indent=0]
-----
---
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#asserts]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/assert-exists.html]
 
 [#asserts]
 === Asserts: `assertExists`, `assertNotExists`
 
 Within a transaction, `assertExists`/`assertNotExists` operations assert that the given query returns at least one row/no rows respectively - if not, the transaction will roll back.
 
-[source,json]
+[source,clojure]
 ----
-include::{examples}[tags=assert-json,indent=0]
+[:assert-exists
+ ;; -- required
+ <query>
+
+ ;; -- optional
+ ;; maps
+ & <arg-rows>]
+
+[:assert-not-exists
+ ;; -- required
+ <query>
+
+ ;; -- optional
+ ;; maps
+ & <arg-rows>]
 ----
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_call]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-ops/call.html]
+Example:
+
+* check email doesn't exist
++
+[source,clojure]
+----
+[;; first, we assert the email doesn't already exist
+ [:assert-not-exists '(from :users [{:email $email}])
+  {:email "james@example.com"}]
+
+ ;; then, if the pre-condition holds, put a document
+ [:put-docs :users {:xt/id :james, :email "james@example.com", ...}]]
+----
+
 
 === `call`
 
 Call a transaction function.
 
-[source,json]
+[source,clojure]
 ----
-{
-  // -- required
-  // function to call
-  fnId: "fn-id",
+[:call
+ ;; -- required
+ <fn-id>
 
-  // -- optional
-  // list of arguments to the function
-  // args: [ ... ]
-}
+ ;; -- optional
+ ;; variadic: arguments to pass to the function
+ & <args>]
 ----
 
-Transaction functions can currently only be defined in link:/config/clojure/txs.adoc#_call[Clojure].
+Example:
 
+* call a function to increment a field:
++
+[source,clojure]
+----
+[:call :increment-version :my-eid]
+----
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#_transaction_options]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-tx-options/index.html]
+Transaction functions are defined using `:put-fn`:
+
+[source,clojure]
+----
+[:put-fn
+ ;; -- required
+
+ <fn-id>
+ <fn-body>]
+----
+
+Transaction functions are evaluated with the Small Clojure Interpreter (https://github.com/babashka/sci[SCI^]).
+They should return a vector of other transaction operations (including invoking other transaction functions).
+If they return false, or throw an exception, the transaction will be rolled back.
+
+There are a few functions available in scope during the transaction function:
+
+* `(q <query> <opts>?)` runs an link:./queries[XTQL]/SQL query
+* `+*current-tx*+`: the current transaction being indexed.
+
+Example:
+
+* function to increment a version
++
+[source,clojure]
+----
+[:put-fn :increment-version
+ '(fn [eid]
+    (let [doc (first (q '(from :my-table [{:xt/id $eid} *])
+                        {:args {:eid eid}}))]
+      [[:put-docs :my-table
+        (-> doc (update :version inc))]]))]
+----
++
+(in practice, use link:#_update[`:update`] for this exact function)
 
 == Transaction options
 
 Transaction options are an optional map of the following keys:
 
-[source,json]
+[source,clojure]
 ----
-{
-  // -- optional
-
-  // overrides system-time for the transaction
-  // * mustn't be earlier than any previous system time
-  "systemTime": "2024-01-01T00:00:00Z",
-
-  // overrides the default time zone for operations in the transaction.
-  // default: "UTC"
-  "defaultTz": "America/Los_Angeles",
-
-  // whether to default to "all valid-time" if not explicitly specified in the query
-  // default: false
-  "defaultAllValidTime": false,
-}
+{;; -- optional
+ :system-time #inst "2024-01-01"
+ :default-tz #xt.time/zone "America/Los_Angeles"
+ :default-all-valid-time? false}
 ----

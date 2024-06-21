@@ -58,6 +58,8 @@ export default defineConfig({
                                 { label: '4) Changing an immutable database', link: '/tutorials/immutability-walkthrough/part-4' },
                             ],
                         },
+
+                        { label: 'Introducing XTQL', link: '/tutorials/introducing-xtql' },
                     ],
                 },
 
@@ -85,9 +87,6 @@ export default defineConfig({
                     collapsed: true,
                     items: [
                         { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
-                        { label: 'XTQL Overview', link: '/intro/what-is-xtql' },
-                        { label: 'XTQL Walkthrough', link: '/guides/xtql-walkthrough' },
-
                     ],
                 },
 
@@ -107,7 +106,7 @@ export default defineConfig({
                         },
 
                         {
-                            label: 'XTQL',
+                            label: 'XTQL (Clojure)',
                             collapsed: true,
                             items: [
                                 { label: 'Transactions', link: '/reference/main/xtql/txs' },
@@ -179,7 +178,6 @@ export default defineConfig({
                                 { label: 'Getting started', link: '/drivers/clojure/getting-started' },
                                 { label: 'Codox ↗', link: '/drivers/clojure/codox/index.html', attrs: { target: '_blank' } },
                                 { label: 'Configuration cookbook', link: '/drivers/clojure/configuration' },
-                                { label: 'Transactions cookbook', link: '/drivers/clojure/txs' },
                                 { label: 'Temporal Types cookbook', link: '/drivers/clojure/temporal' },
                                 { label: 'Tutorial: Learn XTQL Today', link: '/tutorials/learn-xtql-today-with-clojure' },
 
