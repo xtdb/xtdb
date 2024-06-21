@@ -76,6 +76,21 @@ aggr-sql-1: |
   LIMIT 100
   -- end::aggr-sql-1[]
 
+pull-sql-1: |
+  -- tag::pull-sql-1[]
+  FROM articles AS a
+  SELECT _id AS article_id, title, content, author_id,
+         NEST_ONE(FROM authors WHERE _id = a.author_id
+                  SELECT first_name, last_name)
+           AS author,
+         NEST_MANY(FROM comments WHERE article_id = a._id
+                   SELECT created_at, comment
+                   ORDER BY created_at DESC
+                   LIMIT 10)
+           AS comments
+  -- end::pull-sql-1[]
+
+
 bitemp-sql-1: |
   -- tag::bitemp-sql-1[]
   SELECT users.first_name, users.last_name FROM users FOR VALID_TIME AS OF DATE '2020-01-01'

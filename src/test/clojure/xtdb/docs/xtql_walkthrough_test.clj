@@ -246,14 +246,14 @@
                      (with {:author (pull (from :authors [{:xt/id $author-id} first-name last-name])
                                           {:args [author-id]})
 
-
                             :comments (pull* (-> (from :comments [{:article-id $article-id} created-at comment])
                                                  (order-by {:val created-at :dir :desc})
                                                  (limit 10))
                                              {:args [article-id]})}))
                  ;; end::pull-xtql-1[]
-                 ))))))
-            ;; No SQL for this one
+                 ))
+
+             (set (xt/q tu/*node* (sql-example "pull-sql-1")))))))
 
 (deftest bitemporality
 

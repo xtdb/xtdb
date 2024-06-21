@@ -70,7 +70,7 @@ SELECT c._id AS customer_id, c.name,
                  WHERE o.customer_id = c._id
                  ORDER BY o._id)
          AS orders
-FROM customers c"
+FROM customers c
 ----
 
 =>

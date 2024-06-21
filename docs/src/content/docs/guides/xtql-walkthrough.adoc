@@ -1,11 +1,10 @@
 ---
-title: XTQL Walkthrough
+title: XTQL Walkthrough (Clojure)
 ---
 :test: ../src/test/clojure/xtdb/docs/xtql_walkthrough_test.clj
 :example: ../src/test/resources/docs/xtql_tutorial_examples.yaml
 
 XTDB supports two query languages: link:../reference/main/sql/queries.html[SQL], and link:../reference/main/xtql/queries.html[XTQL] - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
-XTQL is described using JSON and is supported by various client language drivers that make writing XTQL ergonomic. Drivers are currently available for Java, Kotlin, and Clojure (with more to come soon!).
 
 XTQL queries are structured pipeline of operations - e.g. scanning a table, joining multiple tables/queries, grouping/aggregations and sorting/limiting.
 
@@ -178,9 +177,13 @@ include::{test}[tags=pull-xtql-1,indent=0]
 ;;      :author {:first-name "...", :last-name "..."}
 ;;      :comments [{:comment "...", :name "..."}, ...]}]
 
-;; SQL?
-;; Yeah, so, erm, 'left as an exercise to the reader'? 😅
-;; Lots of nested left-joins, array-aggs, and vendor-specific JSON functions required there to guarantee this same output.
+----
+
+[source,sql]
+----
+-- using XTDB's 'NEST_ONE'/'NEST_MANY'
+
+include::{example}[tags=pull-sql-1,indent=0]
 ----
 
 In this example, we use link:../reference/main/xtql/queries.html#_subqueries[`pull`] to pull back a single map - we know that there's only one author per article (in our system).
@@ -407,11 +410,6 @@ This query asserts that no user has the email `james@example.com` before inserti
 include::{test}[tags=DML-Assert-xtql,indent=0]
 ----
 
-[source,json]
-----
-include::{example}[tags=DML-Assert-Not-json,indent=0]
-----
-
 [source,sql]
 ----
 -- not implemented yet
@@ -427,11 +425,6 @@ include::{test}[tags=DML-Assert-query,indent=0]
 ;; =>
 
 include::{test}[tags=DML-Assert-query-result,indent=0]
-----
-
-[source,json]
-----
-include::{example}[tags=DML-Assert-Not-Tx-Table-json,indent=0]
 ----
 
 Those familiar with XT1 might recognise this as `::xt/match` - albeit more powerful because you have the full query language available rather than just matching a whole document.
