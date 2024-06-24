@@ -15,6 +15,14 @@ Fuller SQL reference documentation will follow shortly.
 
 For now, the following is a subset of what's currently possible in XTDB SQL:
 
+[railroad]
+----
+const insertInto = rr.Sequence("INSERT", "INTO", "<table-name>")
+const cols = rr.Sequence("(", rr.OneOrMore("<col-name>", ","), ")")
+const values = "<vals>"
+return rr.Diagram(rr.Stack(insertInto, rr.Choice(0, rr.Sequence(cols, "VALUES", values), "<query>"), ))
+----
+
 [source,sql]
 ----
 SELECT <value> [ [ AS ] <column_name> ] [ , ... ]
