@@ -2047,6 +2047,13 @@
              :for-valid-time :all-time}
       (vec (.keySet !reqd-cols))]]))
 
+(def ^:private forbidden-update-cols
+  (into #{'xt$id} (map symbol) (keys types/temporal-col-types)))
+
+(defrecord ForbiddenColumnUpdate [col]
+  PlanError
+  (error-string [_] (format "Cannot UPDATE %s column" (subs (str col) 3))))
+
 (defrecord InsertStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
@@ -2099,6 +2106,10 @@
                             :let [set-target (.setTarget set-clause)]]
                         {(identifier-sym (.columnName set-target))
                          (.accept (.expr (.updateSource set-clause)) expr-visitor)})
+
+          _ (doseq [forbidden-col (set/intersection (set (map (comp key first) set-clauses)) forbidden-update-cols)]
+              (add-err! env (->ForbiddenColumnUpdate forbidden-col)))
+
           set-clauses-cols (set (mapv ffirst set-clauses))
 
           where-selection (when-let [search-clause (.searchCondition ctx)]

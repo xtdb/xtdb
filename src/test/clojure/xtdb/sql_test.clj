@@ -1664,3 +1664,29 @@
   (t/is (= ["A" "A" "A" "" "%" "😁" "\n" "'"]
            (->> (xt/q tu/*node* "VALUES E'\\x41', E'\\101', E'\\U00000041', E'', E'%', E'\\U0001F601', E'\\n', E'\\''")
                 (mapv :xt/column-1)))))
+
+(deftest forbid-updating-core-cols-3433
+  (xt/submit-tx tu/*node* [[:put-docs :table {:xt/id 1}]])
+
+  (letfn [(f [sql]
+            (throw (:error (xt/execute-tx tu/*node* [[:sql sql]]))))]
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Cannot UPDATE id column"
+                            (f "UPDATE table SET _id = DATE '2024-01-01' WHERE _id = 1")))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Cannot UPDATE valid_from column"
+                            (f "UPDATE table SET _valid_from = DATE '2024-01-01' WHERE _id = 1")))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Cannot UPDATE valid_to column"
+                            (f "UPDATE table SET _valid_to = DATE '2024-01-01' WHERE _id = 1")))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Cannot UPDATE system_from column"
+                            (f "UPDATE table SET _system_from = DATE '2024-01-01' WHERE _id = 1")))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Cannot UPDATE system_to column"
+                            (f "UPDATE table SET _system_to = DATE '2024-01-01' WHERE _id = 1")))))
