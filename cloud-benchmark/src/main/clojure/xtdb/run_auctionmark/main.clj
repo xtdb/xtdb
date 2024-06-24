@@ -75,7 +75,8 @@
                    :duration run-duration
                    :scale-factor scale-factor
                    :load-phase load-phase
-                   :sync false}
+                   ;; May as well sync data after running the threads prior to closing the node to check for oddities
+                   :sync true}
         benchmark (am/benchmark am-config)
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (log/info "Running Auctionmark Benchmark with the following config... \n" am-config)
