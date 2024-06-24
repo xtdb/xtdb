@@ -1251,6 +1251,11 @@
   (t/is (= [{:xt/id 1, :x 3, :y "a"}]
            (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 1")))
 
+  (t/is (= [{:xt/id 1, :x 3, :y "a",
+             :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"
+             :xt/system-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _system_from, _system_to, _valid_from, _valid_to FROM docs WHERE _id = 1")))
+
   (t/is (= [{:xt/id 1, :y "a"}]
            (xt/q tu/*node* "SELECT * EXCLUDE x FROM docs WHERE _id = 1")))
 

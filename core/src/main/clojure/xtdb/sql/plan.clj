@@ -658,34 +658,30 @@
           !subqs (HashMap.)
           !aggs (HashMap.)]
 
-      {:projected-cols (.accept sl-ctx
-                                (reify SqlVisitor
-                                  (visitSelectListAsterisk [_ ctx]
-                                    (let [renames (->> (for [^SqlParser$RenameColumnContext rename-pair (some-> (.renameClause ctx)
-                                                                                                                (.renameColumn))]
-                                                         (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
-                                                               out-col-name (.columnName (.asClause rename-pair))
-                                                               sym (find-decl scope chain)]
+      {:projected-cols (vec (concat (when-let [star-ctx (.selectListAsterisk sl-ctx)]
+                                      (let [renames (->> (for [^SqlParser$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
+                                                                                                                  (.renameColumn))]
+                                                           (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
+                                                                 out-col-name (.columnName (.asClause rename-pair))
+                                                                 sym (find-decl scope chain)]
 
-                                                           (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
-                                                       (into {}))
+                                                             (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                         (into {}))
 
-                                          excludes (when-let [exclude-ctx (.excludeClause ctx)]
-                                                     (into #{} (map identifier-sym) (.identifier exclude-ctx)))]
-                                      (->> (for [table-name (available-tables scope)
-                                                 col-name (available-cols scope [table-name])
-                                                 :when (not (contains? excludes col-name))
-                                                 :let [sym (find-decl scope [col-name table-name])]
-                                                 :when (not (contains? excludes sym))]
-                                             sym)
-                                           (map-indexed (fn [col-idx sym]
-                                                          (if-let [renamed-col (get renames sym)]
-                                                            (->ProjectedCol {renamed-col sym} renamed-col)
-                                                            (->projected-col-expr col-idx sym))))
-                                           (into []))))
-
-                                  (visitSelectListCols [_ ctx]
-                                    (->> (.selectSublist ctx)
+                                            excludes (when-let [exclude-ctx (.excludeClause star-ctx)]
+                                                       (into #{} (map identifier-sym) (.identifier exclude-ctx)))]
+                                        (->> (for [table-name (available-tables scope)
+                                                   col-name (available-cols scope [table-name])
+                                                   :when (not (contains? excludes col-name))
+                                                   :let [sym (find-decl scope [col-name table-name])]
+                                                   :when (not (contains? excludes sym))]
+                                               sym)
+                                             (map-indexed (fn [col-idx sym]
+                                                            (if-let [renamed-col (get renames sym)]
+                                                              (->ProjectedCol {renamed-col sym} renamed-col)
+                                                              (->projected-col-expr col-idx sym))))
+                                             (into []))))
+                                    (->> (.selectSublist sl-ctx)
                                          (into [] (comp (map-indexed
                                                          (fn [col-idx ^ParserRuleContext sl-elem]
                                                            (.accept (.getChild sl-elem 0)
@@ -724,7 +720,7 @@
                                                                                                              (->projected-col-expr col-idx sym)))))))
 
                                                                             (throw (UnsupportedOperationException. (str "Table not found: " table-name))))))))))
-                                                        cat))))))
+                                                        cat)))))
        :subqs (not-empty (into {} !subqs))
        :aggs (not-empty (into {} !aggs))})))
 
