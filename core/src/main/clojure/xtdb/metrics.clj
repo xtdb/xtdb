@@ -1,19 +1,23 @@
 (ns xtdb.metrics
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import (com.sun.net.httpserver HttpHandler HttpServer)
-           (io.micrometer.core.instrument Counter Gauge MeterRegistry Timer Timer$Sample)
+           (io.micrometer.cloudwatch2 CloudWatchConfig CloudWatchMeterRegistry)
+           (io.micrometer.core.instrument Clock Counter Gauge MeterRegistry Timer Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
+           (io.micrometer.core.instrument.composite CompositeMeterRegistry)
            (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (io.micrometer.prometheus PrometheusConfig PrometheusMeterRegistry)
            (java.net InetSocketAddress)
            (java.util.function Supplier)
            (java.util.stream Stream)
+           (software.amazon.awssdk.services.cloudwatch CloudWatchAsyncClient)
            (xtdb.api MetricsConfig Xtdb$Config)))
 
 (defn meter-reg ^MeterRegistry
@@ -24,8 +28,23 @@
      (.bindTo metric meter-reg))
    meter-reg))
 
+(defn- aws-env-var? [s]
+  (str/starts-with? s "AWS"))
+
 (defmethod ig/init-key :xtdb/meter-registry [_ {}]
-  (meter-reg (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)))
+  (let [composite-reg (cond-> (CompositeMeterRegistry.)
+                        true
+                        (.add (PrometheusMeterRegistry. PrometheusConfig/DEFAULT))
+
+                        (some aws-env-var? (keys (System/getenv)))
+                        (.add (CloudWatchMeterRegistry.
+                               (reify CloudWatchConfig
+                                 (get [_ _s] nil)
+                                 (namespace [_] "xtdb.metrics"))
+                               Clock/SYSTEM
+                               (CloudWatchAsyncClient/create))))]
+
+    (meter-reg composite-reg)))
 
 (defmethod ig/halt-key! :xtdb/meter-registry [_ ^MeterRegistry registry]
   (.close registry))
@@ -66,14 +85,17 @@
   {:registry (ig/ref :xtdb/meter-registry)
    :port (.getPort opts)})
 
-(defmethod ig/init-key :xtdb/metrics-server [_ {:keys [^PrometheusMeterRegistry registry port]}]
+(defmethod ig/init-key :xtdb/metrics-server [_ {:keys [^CompositeMeterRegistry registry port]}]
   (try
-    (let [port (if (util/port-free? port) port (util/free-port))
+    (let [^PrometheusMeterRegistry prometheus-reg (->> (.getRegistries registry)
+                                                       (filter #(instance? PrometheusMeterRegistry %))
+                                                       first)
+          port (if (util/port-free? port) port (util/free-port))
           http-server (HttpServer/create (InetSocketAddress. port) 0)]
       (.createContext http-server "/metrics"
                       (reify HttpHandler
                         (handle [_this exchange]
-                          (let [response (.getBytes (.scrape registry))]
+                          (let [response (.getBytes (.scrape prometheus-reg))]
                             (.sendResponseHeaders exchange 200 (count response))
                             (with-open [os (.getResponseBody exchange)]
                               (.write os response))))))

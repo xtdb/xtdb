@@ -51,6 +51,8 @@ dependencies {
     // monitoring
     api("io.micrometer", "micrometer-core", "1.12.2")
     api("io.micrometer", "micrometer-registry-prometheus", "1.12.2")
+    api("io.micrometer", "micrometer-registry-cloudwatch2", "1.12.2")
+    api("software.amazon.awssdk", "cloudwatch", "2.26.7")
 
     api(kotlin("stdlib-jdk8"))
     api("com.charleskorn.kaml","kaml","0.56.0")
