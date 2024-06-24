@@ -230,7 +230,6 @@ export default defineConfig({
                     label: 'Appendices',
                     collapsed: true,
                     items: [
-                        { label: 'Mission', link: '/intro/why-xtdb' },
                         { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
                         { label: 'How XTDB works', link: '/intro/data-model' },
                         // { label: 'Architecture', link: '/intro/architecture' },
