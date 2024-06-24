@@ -30,13 +30,20 @@ export default defineConfig({
 
                 { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
 
-                { label: 'Introduction', link: '/index.html' },
+                {
+                    label: 'Introduction',
+                    items: [
+                        { label: 'Welcome', link: '/index.html' },
+                        { label: 'Quickstart', link: '/intro/getting-started' },
+                        { label: 'Community', link: '/intro/community' },
+                        { label: 'Roadmap', link: '/intro/roadmap' },
+                    ]
+                },
 
                 {
                     label: 'Getting Started',
                     collapsed: false,
                     items: [
-                        { label: 'Quickstart', link: '/intro/getting-started' },
                         { label: 'SQL basics', link: '/quickstart/insert-and-query' },
                         { label: 'Query the past', link: '/quickstart/query-the-past' },
                         { label: 'Control the timeline', link: '/quickstart/control-the-timeline' },
@@ -74,7 +81,7 @@ export default defineConfig({
                                 { label: 'Time in Finance', link: '/tutorials/financial-usecase/time-in-finance' },
                                 { label: 'Understanding P&L and Risk', link: '/tutorials/financial-usecase/commodities-pnl' },
                                 { label: 'Late trade adjustments', link: '/tutorials/financial-usecase/late-trade' },
-				{ label: 'Auditing past trade adjustments', link: '/tutorials/financial-usecase/auditing-change' },
+				                { label: 'Auditing past trade adjustments', link: '/tutorials/financial-usecase/auditing-change' },
                                 { label: 'Analysing counterparty risk', link: '/tutorials/financial-usecase/counterparty-risk' },
                                 { label: 'Model backtesting', link: '/tutorials/financial-usecase/backtesting' },
                             ],
@@ -229,8 +236,6 @@ export default defineConfig({
                         // { label: 'Architecture', link: '/intro/architecture' },
                         // { label: 'Bitemporality', link: '/intro/bitemporality' }
 
-                        { label: 'Community', link: '/intro/community' },
-                        { label: 'Roadmap', link: '/intro/roadmap' },
 
                     ],
                 },
