@@ -1695,3 +1695,14 @@
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"Cannot UPDATE system_to column"
                             (f "UPDATE table SET _system_to = DATE '2024-01-01' WHERE _id = 1")))))
+
+(deftest disallow-period-specs-on-ctes-3440
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Period specifications not allowed on CTE reference: my_cte"
+                          (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01'")))
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Period specifications not allowed on CTE reference: my_cte"
+                          (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR VALID_TIME AS OF TIMESTAMP '2024-01-01'"))))

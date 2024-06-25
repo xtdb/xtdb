@@ -240,6 +240,10 @@
   PlanError
   (error-string [_] "Multiple time period specifications were specified"))
 
+(defrecord PeriodSpecificationDisallowedOnCte [table-name]
+  PlanError
+  (error-string [_] (format "Period specifications not allowed on CTE reference: %s" table-name)))
+
 (defrecord BaseTable [env, ^SqlParser$BaseTableContext ctx
                       schema-name table-name table-alias unique-table-alias cols
                       ^Map !reqd-cols]
@@ -529,6 +533,9 @@
           cols (some-> (.tableProjection ctx) (->table-projection))]
       (or (when-not sn
             (when-let [{:keys [plan], cte-cols :col-syms} (get ctes tn)]
+              (when (or (seq (.querySystemTimePeriodSpecification ctx))
+                        (seq (.queryValidTimePeriodSpecification ctx)))
+                (add-err! env (->PeriodSpecificationDisallowedOnCte tn)))
               (->DerivedTable plan table-alias unique-table-alias
                               (->insertion-ordered-set (or cols cte-cols)))))
 
