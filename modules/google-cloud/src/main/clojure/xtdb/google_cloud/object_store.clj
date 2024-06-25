@@ -1,9 +1,10 @@
 (ns xtdb.google-cloud.object-store
-  (:require [xtdb.file-list :as file-list]
+  (:require [clojure.tools.logging :as log]
+            [xtdb.file-list :as file-list]
             [xtdb.object-store :as os]
-            [xtdb.util :as util])
-  (:import (com.google.cloud.storage BlobId BlobInfo Storage Blob$BlobSourceOption
-                                     Storage$BlobSourceOption Storage$BlobWriteOption StorageException)
+            [xtdb.util :as util]
+            [clojure.string :as string])
+  (:import (com.google.cloud.storage Blob$BlobSourceOption BlobId BlobInfo Storage Storage$BlobSourceOption Storage$BlobWriteOption StorageException)
            (java.io Closeable)
            (java.lang AutoCloseable)
            (java.nio ByteBuffer)
@@ -48,6 +49,11 @@
 ;; Want to only put blob if a version doesn't already exist
 (def write-options (into-array Storage$BlobWriteOption [(Storage$BlobWriteOption/doesNotExist)]))
 
+(defn pre-condition-error? [^StorageException e]
+  (and
+   (= (.getCode e) 412)
+   (string/includes? (.getMessage (.getCause e)) "At least one of the pre-conditions you specified did not hold")))
+
 (defn put-blob
   ([{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name byte-buf]
    (let [prefixed-key (util/prefix-key prefix blob-name)
@@ -57,9 +63,16 @@
      (try
        (with-open [writer (.writer storage-service blob-info write-options)]
          (.write writer byte-buf))
-       (catch StorageException e
-         (when-not (= 412 (.getCode e))
-           (throw e)))))))
+       (catch StorageException e 
+         (if (pre-condition-error? e)
+           (log/warnf "Object %s already exists in bucket %s" prefixed-key bucket-name)
+           (throw (ex-info
+                   (format "Error when writing object %s to bucket %s" prefixed-key bucket-name)
+                   {:bucket-name bucket-name
+                    :blob-name blob-name
+                    :blob-id blob-id
+                    :blob-info blob-info}
+                   e))))))))
 
 (defn delete-blob [{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name]
   (let [prefixed-key (util/prefix-key prefix blob-name)
@@ -86,10 +99,8 @@
      (get-blob-range this k start len)))
 
   (putObject [this k buf]
-    (CompletableFuture/completedFuture
-     (do
-       (put-blob this k buf)
-       (.add file-name-cache k))))
+    (-> (CompletableFuture/completedFuture (put-blob this k buf))
+        (util/then-apply (fn [_] (.add file-name-cache k)))))
 
   (listAllObjects [_this]
     (into [] file-name-cache))

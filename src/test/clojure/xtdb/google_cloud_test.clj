@@ -103,6 +103,22 @@
       (t/is (= (mapv util/->path ["alan" "alice"])
                (.listAllObjects ^ObjectStore os-2))))))
 
+(t/deftest ^:google-cloud put-object-twice-shouldnt-throw
+  (let [prefix (random-uuid)
+        wait-time-ms 5000]
+    (with-open [os-1 (object-store prefix)
+                os-2 (object-store prefix)]
+      (t/is (os-test/put-edn os-1 (util/->path "alice") :alice))
+      (t/is (os-test/put-edn os-2 (util/->path "alice") :alice))
+
+      ;; Check alice is there
+      (Thread/sleep wait-time-ms)
+      (t/is (= (mapv util/->path ["alice"])
+               (.listAllObjects ^ObjectStore os-1)))
+
+      (t/is (= (mapv util/->path ["alice"])
+               (.listAllObjects ^ObjectStore os-2))))))
+
 (t/deftest ^:google-cloud node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node
