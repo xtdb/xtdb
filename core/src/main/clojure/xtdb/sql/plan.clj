@@ -2069,6 +2069,9 @@
 (defrecord EraseStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
+(defrecord AssertStmt [query-plan]
+  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
+
 (defrecord StmtVisitor [env scope]
   SqlVisitor
   (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
@@ -2217,7 +2220,16 @@
                                       plan)
                                   
                                     [:project aliased-cols plan])]]
-                                internal-cols)))))
+                                internal-cols))))
+
+  (visitAssertStatement [_ ctx]
+    (let [!subqs (HashMap.)
+          predicate (.accept (.searchCondition ctx)
+                             (map->ExprPlanVisitor {:env env, :scope nil, :!subqs !subqs}))]
+      (->AssertStmt (->QueryExpr (-> [:table [{}]]
+                                     (apply-sqs (not-empty (into {} !subqs)))
+                                     (wrap-predicates predicate))
+                                 [])))))
 
 (defn add-throwing-error-listener [^Recognizer x]
   (doto x
@@ -2309,7 +2321,11 @@
   EraseStmt
   (->logical-plan [{:keys [table query-plan]}]
     [:erase {:table table}
-     (->logical-plan query-plan)]))
+     (->logical-plan query-plan)])
+
+  AssertStmt
+  (->logical-plan [{:keys [query-plan]}]
+    [:assert-exists {} (->logical-plan query-plan)]))
 
 (defn parse-statement ^SqlParser$DirectSqlStatementContext [sql]
   (let [parser (->parser sql)]

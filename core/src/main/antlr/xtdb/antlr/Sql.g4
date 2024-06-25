@@ -45,6 +45,7 @@ directlyExecutableStatement
     | updateStatementSearched
     | deleteStatementSearched
     | eraseStatementSearched
+    | assertStatement
     | sqlTransactionStatement
     | sqlSessionStatement
     | setSessionVariableStatement
@@ -765,6 +766,8 @@ setClause : setTarget '=' updateSource ;
 setTarget : columnName ;
 
 updateSource : expr ;
+
+assertStatement : 'ASSERT' searchCondition ;
 
 /// §17.3 <transaction characteristics>
 

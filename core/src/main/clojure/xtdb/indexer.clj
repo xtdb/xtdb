@@ -358,6 +358,37 @@
             (-> (.liveTable live-idx-tx (str table))
                 (.logErase iid))))))))
 
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode ^IQuerySource q-src, wm-src
+                                                     query, {:keys [basis default-tz default-all-valid-time?]}]
+  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src)
+        ^IntPredicate valid-query-pred (case mode
+                                         :assert-exists (reify IntPredicate
+                                                          (test [_ i] (pos? i)))
+                                         :assert-not-exists (reify IntPredicate
+                                                              (test [_ i] (zero? i))))]
+    (fn eval-query [^RelationReader args]
+      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz
+                                     :default-all-valid-time? default-all-valid-time?})
+                          (.openCursor))]
+
+        (letfn [(test-row-count [row-count]
+                  (when-not (.test valid-query-pred row-count)
+                    (throw (err/runtime-err :xtdb/assert-failed
+                                            {::err/message (format "Precondition failed: %s" (name mode))
+                                             :row-count row-count}))))]
+          (or (.tryAdvance res
+                           (reify Consumer
+                             (accept [_ in-rel]
+                               (let [^RelationReader in-rel in-rel]
+                                 (assert (= 1 (.rowCount in-rel)))
+                                 (assert (= 1 (count (seq in-rel))))
+
+                                 (test-row-count (.getLong ^IVectorReader (first in-rel) 0))))))
+              (test-row-count 0)))
+
+        (assert (not (.tryAdvance res nil))
+                "only expecting one batch in assert")))))
+
 (defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?]} query-opts]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src)]
     (fn eval-query [^RelationReader args]
@@ -441,39 +472,14 @@
                              (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
                                  (wrap-sql-args param-count)))
 
-            (throw (UnsupportedOperationException. "sql query"))))
+            [:assert-exists _query-opts inner-query]
+            (foreach-arg-row allocator args-rdr tx-op-idx
+                             (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
+                                 (wrap-sql-args param-count)))
+
+            (throw (UnsupportedOperationException. (pr-str {:query :sql, :compiled-query compiled-query})))))
 
         nil))))
-
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode ^IQuerySource q-src, wm-src
-                                                     query, {:keys [basis default-tz default-all-valid-time?]}]
-  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src)
-        ^IntPredicate valid-query-pred (case mode
-                                         :assert-exists (reify IntPredicate
-                                                          (test [_ i] (pos? i)))
-                                         :assert-not-exists (reify IntPredicate
-                                                              (test [_ i] (zero? i))))]
-    (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz
-                                     :default-all-valid-time? default-all-valid-time?})
-                          (.openCursor))]
-
-        (doto (.tryAdvance res
-                           (reify Consumer
-                             (accept [_ in-rel]
-                               (let [^RelationReader in-rel in-rel]
-                                 (assert (= 1 (.rowCount in-rel)))
-                                 (assert (= 1 (count (seq in-rel))))
-
-                                 (let [row-count (.getLong ^IVectorReader (first in-rel) 0)]
-                                   (when-not (.test valid-query-pred row-count)
-                                     (throw (err/runtime-err :xtdb/assert-failed
-                                                             {::err/message (format "Precondition failed: %s" (name mode))
-                                                              :row-count row-count}))))))))
-          (assert "expecting a batch in assert"))
-
-        (assert (not (.tryAdvance res nil))
-                "only expecting one batch in assert")))))
 
 (defn- wrap-xtql-args [f]
   (fn [^RelationReader args]

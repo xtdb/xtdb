@@ -1706,3 +1706,15 @@
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Period specifications not allowed on CTE reference: my_cte"
                           (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR VALID_TIME AS OF TIMESTAMP '2024-01-01'"))))
+
+(deftest test-assert-3445
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 1}]])
+  (t/is (true? (:committed? (xt/execute-tx tu/*node* [[:sql "ASSERT (SELECT COUNT(*) FROM docs) = 1"]
+                                                      [:put-docs :docs {:xt/id 2 :x 2}]]))))
+
+  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* [[:sql "ASSERT (SELECT COUNT(*) FROM docs) = 1"]
+                                                             [:put-docs :docs {:xt/id 3 :x 3}]])]
+    (t/is (false? committed?))
+    (t/is (= :xtdb/assert-failed (:xtdb.error/error-key (ex-data error)))))
+
+  (t/is (= [{:doc-count 2}] (xt/q tu/*node* "SELECT COUNT(*) doc_count FROM docs"))))

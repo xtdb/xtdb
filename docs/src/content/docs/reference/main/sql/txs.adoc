@@ -84,3 +84,23 @@ This operation removes data such that even queries as of a previous system-time 
 ----
 ERASE FROM <table> [ WHERE <predicate> ]
 ----
+
+=== `ASSERT`
+
+Rolls back the transaction if the provided predicate is false.
+
+This is used to enforce constraints on the data in a concurrent environment, such as ensuring that a document with a given ID does not already exist.
+
+[source,sql]
+----
+ASSERT <predicate>
+----
+
+* We check to see whether the email address already exists in the database - if not, we can insert the new user.
++
+[source,sql]
+----
+ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')
+
+INSERT INTO users (_id, name, email) VALUES ('james', 'James', 'james@example.com')
+----
