@@ -104,3 +104,17 @@ ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')
 
 INSERT INTO users (_id, name, email) VALUES ('james', 'James', 'james@example.com')
 ----
+* Check the `xt.txs` table for the transaction result to see if the assertion failed.
++
+[source,sql]
+SELECT * FROM xt.txs;
++
+[source,text]
+----
+ _id  | committed |            error              |            tx_time
+------+-----------+-------------------------------+-------------------------------
+    0 | t         | null                          | "2024-06-25T16:45:16.492255Z"
+    1 | t         | null                          | "2024-06-25T16:45:26.985539Z"
+    2 | f         | ... "Precondition failed" ... | "2024-06-25T16:45:32.577224Z"
+(3 rows)
+----

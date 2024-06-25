@@ -19,7 +19,8 @@
            (java.time Clock Instant ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
-           (org.postgresql.util PGobject PSQLException)))
+           (org.postgresql.util PGobject PSQLException)
+           (xtdb JsonSerde)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -1188,3 +1189,31 @@
     (binding [*port* (.getPgPort node)]
       (with-open [conn (jdbc-conn)]
         (t/is (= "ping" (ping conn)))))))
+
+(t/deftest test-assert-3445
+  (with-open [conn (jdbc-conn)]
+    (q conn ["SET TRANSACTION READ WRITE"])
+    (jdbc/with-transaction [tx conn]
+      (jdbc/execute! tx ["INSERT INTO foo (_id) VALUES (1)"]))
+
+    (q conn ["SET TRANSACTION READ WRITE"])
+    (jdbc/with-transaction [tx conn]
+      (jdbc/execute! tx ["ASSERT 1 = (SELECT COUNT(*) FROM foo)"])
+      (jdbc/execute! tx ["INSERT INTO foo (_id) VALUES (2)"]))
+
+    (q conn ["SET TRANSACTION READ WRITE"])
+    (t/is (thrown-with-msg? Exception
+                            #"ERROR: Precondition failed: assert-exists"
+                            (jdbc/with-transaction [tx conn]
+                              (jdbc/execute! tx ["ASSERT 1 = (SELECT COUNT(*) FROM foo)"])
+                              (jdbc/execute! tx ["INSERT INTO foo (_id) VALUES (2)"]))))
+
+    (t/is (= [{:row_count 2}]
+             (q conn ["SELECT COUNT(*) row_count FROM foo"])))
+
+    (t/is (= [{:_id 2, :committed false,
+               :error {"row-count" 0, "error-key" "xtdb/assert-failed",
+                       "message" "Precondition failed: assert-exists"}}
+              {:_id 1, :committed true, :error nil}
+              {:_id 0, :committed true, :error nil}]
+             (q conn ["SELECT * EXCLUDE tx_time FROM xt.txs"])))))

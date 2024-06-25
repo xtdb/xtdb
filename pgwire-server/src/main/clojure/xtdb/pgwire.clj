@@ -21,6 +21,7 @@
            [java.util.function Consumer]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
+           (xtdb JsonSerde)
            (xtdb.antlr SqlVisitor)
            [xtdb.api PgwireServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
@@ -352,6 +353,11 @@
                        {:statement-type :dml, :dml-type :erase
                         :query sql, :transformed-query sql-trimmed})
 
+                     (visitAssertStatement [_ _]
+                       (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
+                       {:statement-type :dml, :dml-type :assert
+                        :query sql, :transformed-query sql-trimmed})
+
                      (visitQueryExpression [_ _]
                        {:statement-type :query, :query sql, :transformed-query sql-trimmed})))
 
@@ -428,6 +434,13 @@
     ;; maps, cannot be created from SQL yet, but working playground requires them
     ;; we are not dealing with the possibility of non kw/string keys, xt shouldn't return maps like that right now.
     (instance? Map obj) (update-vals obj json-clj)
+
+    (or (instance? xtdb.RuntimeException obj)
+        (instance? xtdb.IllegalArgumentException obj))
+    (json-clj (-> (ex-data obj)
+                  (assoc :message (ex-message obj))))
+
+    (instance? clojure.lang.Keyword obj) (json-clj (str (symbol obj)))
 
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
@@ -1094,7 +1107,8 @@
                                ;; otherwise head <rows>
                                :delete "DELETE 0"
                                :update "UPDATE 0"
-                               :erase "ERASE 0")})))
+                               :erase "ERASE 0"
+                               :assert "ASSERT")})))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
