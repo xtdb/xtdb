@@ -149,7 +149,7 @@ class Xtdb(AbstractXtdb):
         else:
             args_value = json.dumps(p, default=self._to_json_ld)
 
-        payload = {"query": {"sql": q[:-1]},
+        payload = {"sql": q,
                    "queryOpts": {# "args": args_value,
                                  "txTimeout": self.txtimeout,
                                  "keyFn": "SNAKE_CASE_STRING",

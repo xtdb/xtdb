@@ -130,7 +130,7 @@ components:
         - query
       type: object
       properties:
-        query:
+        sql:
           type: string
         queryOpts:
           $ref: '#/components/schemas/QueryOpts'
