@@ -43,6 +43,7 @@
   (doto (.newThread subscription-thread-factory
                     (fn []
                       (let [thread (Thread/currentThread)]
+                        (.setPriority thread Thread/MAX_PRIORITY)
                         (.onSubscribe subscriber (reify AutoCloseable
                                                    (close [_]
                                                      (.interrupt thread)
@@ -85,6 +86,7 @@
       (doto (.newThread subscription-thread-factory
                         (fn []
                           (let [thread (Thread/currentThread)]
+                            (.setPriority thread Thread/MAX_PRIORITY)
                             (.onSubscribe subscriber (reify AutoCloseable
                                                        (close [_]
                                                          (.interrupt thread)
