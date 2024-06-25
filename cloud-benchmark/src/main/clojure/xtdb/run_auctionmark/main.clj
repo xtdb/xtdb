@@ -30,6 +30,8 @@
       (some-> (System/getenv "SLACK_WEBHOOK_URL")
               (not-empty))))
 
+(def platform (or (System/getenv "CLOUD_PLATFORM_NAME") "Local"))
+
 (defn send-message-to-slack [message]
   (when slack-url
     (http/post slack-url {:headers {"Content-Type" "application/json"}
@@ -48,7 +50,8 @@
                   (ex-info-handle-integrant-runtime-error e)
                   e)
           error-message (format
-                         ":x: Error thrown within Auctionmark: *%s*! \n\n*Stack Trace:*\n ```%s```"
+                         ":x: Error thrown within (%s) Auctionmark: *%s*! \n\n*Stack Trace:*\n ```%s```"
+                         platform
                          (.getMessage error)
                          (with-out-str (st/print-cause-trace error 15)))]
       (send-message-to-slack error-message))))
@@ -62,7 +65,7 @@
     (try
       (load-phase-fn node)
       (send-message-to-slack
-       (format ":white_check_mark: Auctionmark Load Phase successfully ran for *Scale Factor*: `%s`" scale-factor))
+       (format ":white_check_mark: (%s) Auctionmark Load Phase successfully ran for *Scale Factor*: `%s`"  platform scale-factor))
 
       (catch Exception e
         (log/error "Error running Auctionmark Load Phase: " (.getMessage e))
@@ -84,7 +87,7 @@
       (benchmark-fn node)
       (send-message-to-slack
        (format
-        ":white_check_mark: Auctionmark successfully ran for *%s*! \n\n*Scale Factor*: `%s` \n*Load-Phase*: `%s`" run-duration scale-factor load-phase))
+        ":white_check_mark: (%s) Auctionmark successfully ran for *%s*! \n\n*Scale Factor*: `%s` \n*Load-Phase*: `%s`" platform run-duration scale-factor load-phase))
 
       (catch Exception e
         (log/error "Error running Auctionmark: " (.getMessage e))

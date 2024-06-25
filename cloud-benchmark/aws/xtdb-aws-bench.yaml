@@ -213,6 +213,8 @@ Resources:
               awslogs-region: !Ref 'AWS::Region'
               awslogs-stream-prefix: xtdb
           Environment:
+            - Name: CLOUD_PLATFORM_NAME
+              Value: 'AWS'
             - Name: KAFKA_BOOTSTRAP_SERVERS
               Value: !Ref MSKBootstrapServers
             - Name: XTDB_TOPIC_NAME
