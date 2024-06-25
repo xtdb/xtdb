@@ -37,7 +37,7 @@
     (http/post slack-url {:headers {"Content-Type" "application/json"}
                           :body (json/generate-string {:text message})})))
 
-;; If ex-info contains `system` suggests integrant runtime error 
+;; If ex-info contains `system` suggests integrant runtime error
 ;; - get the cause instead, as that's more useful to us
 ;; See https://github.com/weavejester/integrant/blob/master/src/integrant/core.cljc#L270
 (defn ex-info-handle-integrant-runtime-error [ex]
@@ -46,9 +46,9 @@
 
 (defn send-error-to-slack [e]
   (when slack-url
-    (let [error (if (instance? ExceptionInfo e)
-                  (ex-info-handle-integrant-runtime-error e)
-                  e)
+    (let [^Exception error (if (instance? ExceptionInfo e)
+                             (ex-info-handle-integrant-runtime-error e)
+                             e)
           error-message (format
                          ":x: Error thrown within (%s) Auctionmark: *%s*! \n\n*Stack Trace:*\n ```%s```"
                          platform
@@ -63,7 +63,8 @@
         load-phase-fn (b/compile-benchmark load-phase-bench bm/wrap-task)]
     (log/info "Running Load Phase with the following config... \n" am-config)
     (try
-      (load-phase-fn node)
+      (binding [bm/*registry* (:registry node)]
+        (load-phase-fn node))
       (send-message-to-slack
        (format ":white_check_mark: (%s) Auctionmark Load Phase successfully ran for *Scale Factor*: `%s`"  platform scale-factor))
 
@@ -84,7 +85,8 @@
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (log/info "Running Auctionmark Benchmark with the following config... \n" am-config)
     (try
-      (benchmark-fn node)
+      (binding [bm/*registry* (:registry node)]
+        (benchmark-fn node))
       (send-message-to-slack
        (format
         ":white_check_mark: (%s) Auctionmark successfully ran for *%s*! \n\n*Scale Factor*: `%s` \n*Load-Phase*: `%s`" platform run-duration scale-factor load-phase))
