@@ -1,6 +1,7 @@
 (ns xtdb.trie
   (:require [clojure.string :as str]
             [xtdb.buffer-pool]
+            [xtdb.error :as err]
             [xtdb.metadata :as meta]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -16,10 +17,10 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            org.apache.arrow.vector.ipc.message.ArrowFooter
-           org.apache.arrow.vector.types.UnionMode
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           org.apache.arrow.vector.types.UnionMode
            xtdb.IBufferPool
-           (xtdb.trie MergePlanNode ArrowHashTrie$Leaf HashTrie$Node ITrieWriter LiveHashTrie LiveHashTrie$Leaf ISegment)
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment ITrieWriter LiveHashTrie LiveHashTrie$Leaf MergePlanNode)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -37,7 +38,10 @@
                               (string? eid) (.getBytes (str "s" eid))
                               (keyword? eid) (.getBytes (str "k" eid))
                               (integer? eid) (.getBytes (str "i" eid))
-                              :else (throw (UnsupportedOperationException. (pr-str (class eid)))))]
+                              :else (let [id-type (symbol (.getName (class eid)))]
+                                      (throw (err/runtime-err :xtdb/invalid-id
+                                                              {::err/message (format "Invalid ID type: %s" id-type)
+                                                               :type id-type}))))]
        (-> ^MessageDigest (.get !msg-digest)
            (.digest eid-bytes)
            (Arrays/copyOfRange 0 16))))))

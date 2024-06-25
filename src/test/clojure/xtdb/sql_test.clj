@@ -1718,3 +1718,16 @@
     (t/is (= :xtdb/assert-failed (:xtdb.error/error-key (ex-data error)))))
 
   (t/is (= [{:doc-count 2}] (xt/q tu/*node* "SELECT COUNT(*) doc_count FROM docs"))))
+
+(deftest test-date-id-caught-3446
+  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* [[:sql "INSERT into readings (_id, value) VALUES (DATE '2020-01-06', 4)"]])]
+    (t/is (false? committed?))
+    (t/is (thrown-with-msg? RuntimeException
+                            #"Invalid ID type: java.time.LocalDate"
+                            (throw error)))
+
+    (t/testing "node continues"
+      (xt/execute-tx tu/*node* [[:put-docs :readings {:xt/id 1 :value 4}]])
+
+      (t/is (= [{:xt/id 1, :value 4}]
+               (xt/q tu/*node* "SELECT * FROM readings"))))))
