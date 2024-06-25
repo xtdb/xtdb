@@ -1,5 +1,5 @@
 {:log [:local {:path "/var/lib/xtdb/log"}]
  :storage [:local {:path "/var/lib/xtdb/buffers"}]
- ;; Keeping it simple for now - HTTP server only:
  :http-server {:port 3000}
- :pgwire-server {}}
+ :pgwire-server {}
+ :xtdb/metrics-server {}}

@@ -6,4 +6,6 @@
                                         :sns-topic-arn #env XTDB_SNS_TOPIC}]
                     :local-disk-cache "/var/lib/xtdb/buffers"}]
  
- :http-server {:port 3000}}
+ :http-server {:port 3000}
+
+ :xtdb/metrics-server {}}

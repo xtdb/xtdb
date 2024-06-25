@@ -15,12 +15,11 @@
   (:import (java.io Closeable Writer)
            (java.util.concurrent ExecutionException)
            java.util.HashMap
-           java.util.List
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.api IXtdb TransactionKey Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
-           (xtdb.api.query Basis IKeyFn$KeyFn QueryOptions XtqlQuery)
+           (xtdb.api.query Basis XtqlQuery)
            [xtdb.api.tx TxOp TxOptions]
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)))
@@ -209,7 +208,6 @@
        :xtdb.query/query-source {}
        :xtdb/compactor {}
        :xtdb/meter-registry {}
-       :xtdb/metrics-server {}
 
        :xtdb/buffer-pool (.getStorage opts)
        :xtdb.indexer/live-index (.indexer opts)

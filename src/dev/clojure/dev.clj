@@ -32,6 +32,7 @@
   {::xtdb {:node-opts {:log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
                        :http-server {}
+                       :xtdb/metrics-server {}
                        :pgwire-server {:port 5433}
                        :flight-sql-server {:port 52358}}}})
 

@@ -4,3 +4,5 @@ txLog: !Local
 
 storage: !Local
   path: /var/lib/xtdb/local-buffers
+
+metrics:
