@@ -22,6 +22,7 @@ object Xtdb {
     data class Config(
         var txLog: Log.Factory = inMemoryLog(),
         var storage: Storage.Factory = inMemoryStorage(),
+        var metrics: MetricsConfig? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
         @JvmField val indexer: IndexerConfig = IndexerConfig()
     ) {
@@ -40,6 +41,9 @@ object Xtdb {
         fun open() = requiringResolve("xtdb.node.impl/open-node").invoke(this) as IXtdb
         fun txLog(txLog: Log.Factory) = apply { this.txLog = txLog }
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
+
+        @JvmSynthetic
+        fun metrics(configure: MetricsConfig.() -> Unit = {}) = apply { this.metrics = MetricsConfig().also(configure) }
     }
 
     @JvmStatic

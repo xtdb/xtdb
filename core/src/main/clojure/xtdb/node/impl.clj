@@ -199,23 +199,25 @@
   (util/close modules))
 
 (defn node-system [^Xtdb$Config opts]
-  (-> {:xtdb/node {}
-       :xtdb/allocator {}
-       :xtdb/indexer {}
-       :xtdb.log/watcher {}
-       :xtdb.metadata/metadata-manager {}
-       :xtdb.operator.scan/scan-emitter {}
-       :xtdb.query/query-source {}
-       :xtdb/compactor {}
-       :xtdb/meter-registry {}
+  (let [metrics-cfg (.getMetrics opts)]
+    (-> {:xtdb/node {}
+         :xtdb/allocator {}
+         :xtdb/indexer {}
+         :xtdb.log/watcher {}
+         :xtdb.metadata/metadata-manager {}
+         :xtdb.operator.scan/scan-emitter {}
+         :xtdb.query/query-source {}
+         :xtdb/compactor {}
+         :xtdb/meter-registry {}
 
-       :xtdb/buffer-pool (.getStorage opts)
-       :xtdb.indexer/live-index (.indexer opts)
-       :xtdb/log (.getTxLog opts)
-       :xtdb/modules (.getModules opts)
-       :xtdb/default-tz (.getDefaultTz opts)
-       :xtdb.stagnant-log-flusher/flusher (.indexer opts)}
-      (doto ig/load-namespaces)))
+         :xtdb/buffer-pool (.getStorage opts)
+         :xtdb.indexer/live-index (.indexer opts)
+         :xtdb/log (.getTxLog opts)
+         :xtdb/modules (.getModules opts)
+         :xtdb/default-tz (.getDefaultTz opts)
+         :xtdb.stagnant-log-flusher/flusher (.indexer opts)}
+        (cond-> metrics-cfg (assoc :xtdb/metrics-server metrics-cfg))
+        (doto ig/load-namespaces))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-node ^xtdb.api.IXtdb [opts]
