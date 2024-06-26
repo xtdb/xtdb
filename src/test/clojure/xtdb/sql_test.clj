@@ -843,34 +843,68 @@
 (deftest test-system-time-queries
   (t/testing "AS OF"
     (t/is
-      (=plan-file
-        "system-time-as-of"
-        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"
-                  {:table-info {"foo" #{"bar"}}}))))
+     (=plan-file
+      "system-time-as-of"
+      (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"
+                {:table-info {"foo" #{"bar"}}})))
+
+    (t/is
+     (=plan-file
+      "system-time-as-of"
+      (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"
+                {:table-info {"foo" #{"bar"}}}))))
 
   (t/testing "FROM A to B"
     (t/is
-      (=plan-file
-        "system-time-from-a-to-b"
-        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"
-                  {:table-info {"foo" #{"bar"}}}))))
+     (=plan-file
+      "system-time-from-a-to-b"
+      (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"
+                {:table-info {"foo" #{"bar"}}}))))
 
   (t/testing "BETWEEN A AND B"
     (t/is
-      (=plan-file
-        "system-time-between-subquery"
-        (plan-sql "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00') FROM t2"
-                  {:table-info {"t1" #{}, "t2" #{}}})))
+     (=plan-file
+      "system-time-between-subquery"
+      (plan-sql "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00') FROM t2"
+                {:table-info {"t1" #{}, "t2" #{}}}))))
+
+  (t/is
+   (=plan-file
+    "system-time-between-lateraly-derived-table"
+    (plan-sql "SELECT x.y, y.z FROM x FOR SYSTEM_TIME AS OF DATE '3001-01-01',
+                  LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y"
+              {:table-info {"z" #{"z"}, "x" #{"y"}}}))))
+
+(deftest setting-default-system-time
+  (t/testing "AS OF"
+    (t/is
+     (=plan-file
+      "system-time-as-of"
+      (plan-sql "SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00' SELECT foo.bar FROM foo"
+                {:table-info {"foo" #{"bar"}}})))
 
     (t/is
-      (=plan-file
-        "system-time-between-lateraly-derived-table"
-        (plan-sql "SELECT x.y, y.z FROM x FOR SYSTEM_TIME AS OF DATE '3001-01-01',
-                  LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y"
-                  {:table-info {"z" #{"z"}, "x" #{"y"}}})))))
+     (=plan-file
+      "system-time-as-of"
+      (plan-sql "SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00' SELECT foo.bar FROM foo"
+                {:table-info {"foo" #{"bar"}}}))))
+
+  (t/testing "FROM A to B"
+    (t/is
+     (=plan-file
+      "system-time-from-a-to-b"
+      (plan-sql "SETTING DEFAULT SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00' SELECT foo.bar FROM foo"
+                {:table-info {"foo" #{"bar"}}}))))
+
+  (t/is
+   (=plan-file
+    "system-time-between-lateraly-derived-table"
+    (plan-sql "SETTING DEFAULT SYSTEM_TIME AS OF DATE '3001-01-01'
+                 SELECT x.y, y.z
+                 FROM x, LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y"
+              {:table-info {"z" #{"z"}, "x" #{"y"}}}))))
 
 (deftest test-valid-time-period-spec-queries
-
   (t/testing "AS OF"
     (t/is
      (=plan-file
@@ -893,14 +927,30 @@
                 {:table-info {"t1" #{}}})))))
 
 (deftest test-valid-and-system-time-period-spec-queries
-  (t/testing "BETWEEN A AND B"
-    (t/is
-     (=plan-file
-      "valid-and-system-time-period-spec-between"
-      (plan-sql "SELECT 4 FROM t1
+  (t/is
+   (=plan-file
+    "valid-and-system-time-period-spec-between"
+    (plan-sql "SELECT 4
+               FROM t1
                   FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'
                   FOR VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'"
-                {:table-info {"t1" #{}}})))))
+              {:table-info {"t1" #{}}})))
+
+  (t/is
+   (=plan-file
+    "valid-and-system-time-period-spec-between"
+    (plan-sql "SETTING DEFAULT VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01',
+                       DEFAULT SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'
+               SELECT 4 FROM t1"
+              {:table-info {"t1" #{}}})))
+
+  (t/is
+   (=plan-file
+    "valid-and-system-time-period-spec-between"
+    (plan-sql "SETTING DEFAULT SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01',
+                       DEFAULT VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'
+               SELECT 4 FROM t1"
+              {:table-info {"t1" #{}}}))))
 
 (deftest test-multiple-references-to-temporal-cols
   (t/is
