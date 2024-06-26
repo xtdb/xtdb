@@ -264,7 +264,7 @@
                              (->col-sym (str unique-table-alias) (str col)))))]))
 
   TableRef
-  (plan-table-ref [{{:keys [default-all-valid-time?]} :env, :as this}]
+  (plan-table-ref [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
     (let [expr-visitor (->ExprPlanVisitor env this)]
       (letfn [(<-table-time-period-specification [specs]
                 (case (count specs)
@@ -272,8 +272,9 @@
                   1 (.accept ^ParserRuleContext (first specs) (->TableTimePeriodSpecificationVisitor expr-visitor))
                   :else (add-err! env (->MultipleTimePeriodSpecifications))))]
         (let [for-vt (or (<-table-time-period-specification (.queryValidTimePeriodSpecification ctx))
-                         (when default-all-valid-time? :all-time))
-              for-st (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))]
+                         valid-time-default)
+              for-st (or (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
+                         sys-time-default)]
 
           [:rename unique-table-alias
            [:scan (cond-> {:table (if schema-name
@@ -2084,8 +2085,21 @@
   SqlVisitor
   (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
 
-  (visitQueryExpr [this ctx] (-> (.queryExpression ctx) (.accept this)))
-  (visitQueryExpression [_ ctx] (-> ctx (.accept (->QueryPlanVisitor env scope))))
+  (visitQueryExpr [_ ctx]
+    (let [tt-visitor (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope))
+          valid-time-default (some-> (.settingDefaultTimePeriod ctx)
+                                     (.defaultValidTimePeriod)
+                                     (.tableTimePeriodSpecification)
+                                     (.accept tt-visitor))
+          sys-time-default (some-> (.settingDefaultTimePeriod ctx)
+                                   (.defaultSystemTimePeriod)
+                                   (.tableTimePeriodSpecification)
+                                   (.accept tt-visitor))]
+      (-> (.queryExpression ctx)
+          (.accept (->QueryPlanVisitor (cond-> env
+                                         valid-time-default (assoc :valid-time-default valid-time-default)
+                                         sys-time-default (assoc :sys-time-default sys-time-default))
+                                       scope)))))
 
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 

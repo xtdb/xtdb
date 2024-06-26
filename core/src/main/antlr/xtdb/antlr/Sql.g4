@@ -40,7 +40,7 @@ RECURSIVE: 'RECURSIVE' ;
 directSqlStatement : directlyExecutableStatement ';'? EOF ;
 
 directlyExecutableStatement
-    : queryExpression #QueryExpr
+    : settingDefaultTimePeriod? queryExpression #QueryExpr
     | insertStatement #InsertStmt
     | updateStatementSearched #UpdateStmt
     | deleteStatementSearched #DeleteStmt
@@ -55,6 +55,15 @@ directlyExecutableStatement
     | 'SET' identifier ( 'TO' | '=' ) literal #SetSessionVariableStatement
     | 'SET' 'VALID_TIME_DEFAULTS' ( 'TO' | '=' )? validTimeDefaults #SetValidTimeDefaults
     ;
+
+settingDefaultTimePeriod : 'SETTING'
+   ( (defaultValidTimePeriod (',' defaultSystemTimePeriod)?)
+   | (defaultSystemTimePeriod (',' defaultValidTimePeriod)?)
+   )
+   ;
+
+defaultValidTimePeriod : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification ;
+defaultSystemTimePeriod : 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification ;
 
 sessionCharacteristic : 'TRANSACTION' transactionMode (',' transactionMode)* ;
 
