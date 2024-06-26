@@ -13,15 +13,15 @@ Parameters:
   S3BucketName:
     Description: Name of the S3 bucket to use as the XTDB object store
     Type: String
-  
+
   SNSTopicArn:
     Description: The ARN of the SNS Topic which the S3 sends notifications to
     Type: String
-    
+
   S3AccessPolicyArn:
     Description: ARN of the managed policy offering access to all the S3 permissions necessary for the object store
     Type: String
-  
+
   MSKBootstrapServers:
     Description: Comma separated list containing all Kafka bootstrap server URLs from MSK
     Type: String
@@ -29,7 +29,7 @@ Parameters:
   MSKAccessPolicyArn:
     Description: ARN of the managed policy offering access to all the MSK permissions
     Type: String
-    
+
   # For this template
   DesiredTaskCount:
     Type: Number
@@ -55,7 +55,7 @@ Parameters:
     Type: String
     Default: PT1M
     Description: How long to run Auctionmark for
-  
+
   AuctionmarkScaleFactor:
     Type: String
     Default: '0.1'
@@ -65,15 +65,15 @@ Parameters:
     Type: String
     Default: 'True'
     Description: Whether or not to run the load phase of Auctionmark in the full benchmark
-  
+
   AuctionmarkRunLoadPhaseOnly:
     Type: String
     Default: 'False'
-    Description: Whether or not to ONLY run the load phase porion of Auctionmark
+    Description: Whether or not to ONLY run the load phase portion of Auctionmark
 
-Metadata: 
-  AWS::CloudFormation::Interface: 
-    ParameterGroups: 
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
       - Label:
           default: "Parameters/resources from other stacks"
         Parameters:
@@ -84,9 +84,9 @@ Metadata:
           - S3AccessPolicyArn
           - MSKBootstrapServers
           - MSKAccessPolicyArn
-      - Label: 
+      - Label:
           default: "ECS Task Configuration"
-        Parameters: 
+        Parameters:
           - DesiredTaskCount
           - TaskMemory
           - ImageId
@@ -113,7 +113,7 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: 'xtdb-aws-bench'
-      
+
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -122,7 +122,7 @@ Resources:
 
   BenchSecrets:
     Type: 'AWS::SecretsManager::Secret'
-    Properties: 
+    Properties:
       Name: bench/secrets
       Description: Slack webhook URL
       SecretString: '{"SLACK_WEBHOOK_URL": ""}'
@@ -158,6 +158,15 @@ Resources:
             Principal:
               Service: 'ecs-tasks.amazonaws.com'
             Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: ECSCloudWatchPolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              # Resource: !GetAtt LogGroup.Arn
+              Resource: '*'
       ManagedPolicyArns:
         - !Ref S3AccessPolicyArn
         - !Ref MSKAccessPolicyArn
@@ -205,7 +214,7 @@ Resources:
           MountPoints:
           - ContainerPath: /var/lib/xtdb
             SourceVolume: xtdb-volume
-          MemoryReservation: !Ref TaskMemory 
+          MemoryReservation: !Ref TaskMemory
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -244,7 +253,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      AssumeRolePolicyDocument: 
+      AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Sid: ''
@@ -266,11 +275,11 @@ Resources:
     DependsOn: ECSCluster
     Properties:
       ImageId: !Ref ImageId
-      InstanceType: i3.large
+      InstanceType: i3.2xlarge
       IamInstanceProfile: !Ref EC2InstanceProfile
       SecurityGroups:
         - !Ref SecurityGroupId
-      UserData: 
+      UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
 
@@ -291,19 +300,19 @@ Resources:
           # Send signal to group to mark as successfully created to the scaling group
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
-    
+
   ECSAutoScalingGroup:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       VPCZoneIdentifier: !Ref PublicSubnets
       LaunchConfigurationName: !Ref LaunchConfig
-      MinSize: 1
+      MinSize: 0
       MaxSize: 1
-      DesiredCapacity: 1
+      DesiredCapacity: 0
     UpdatePolicy:
       AutoScalingReplacingUpdate:
         WillReplace: 'true'
-  
+
   ECSService:
     Type: 'AWS::ECS::Service'
     Properties:
