@@ -224,17 +224,17 @@
   (visitTableAllTime [_ _] :all-time)
 
   (visitTableAsOf [_ ctx]
-    [:at (-> ctx (.expr) (.accept expr-visitor))])
+    [:at (-> ctx (.periodSpecificationExpr) (.accept expr-visitor))])
 
   (visitTableBetween [_ ctx]
     [:between
-     (-> ctx (.expr 0) (.accept expr-visitor))
-     (-> ctx (.expr 1) (.accept expr-visitor))])
+     (-> ctx (.periodSpecificationExpr 0) (.accept expr-visitor))
+     (-> ctx (.periodSpecificationExpr 1) (.accept expr-visitor))])
 
   (visitTableFromTo [_ ctx]
     [:in
-     (-> ctx (.expr 0) (.accept expr-visitor))
-     (-> ctx (.expr 1) (.accept expr-visitor))]))
+     (-> ctx (.periodSpecificationExpr 0) (.accept expr-visitor))
+     (-> ctx (.periodSpecificationExpr 1) (.accept expr-visitor))]))
 
 (defrecord MultipleTimePeriodSpecifications []
   PlanError
@@ -998,6 +998,9 @@
                             (dec param-idx))))
         (vary-meta assoc :param? true)))
 
+  (visitPeriodSpecLiteral [this ctx] (-> (.literal ctx) (.accept this)))
+  (visitPeriodSpecParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
+
   (visitFieldAccess [this ctx]
     (let [ve (-> (.exprPrimary ctx) (.accept this))
           field-name (identifier-sym (.fieldName ctx))]
@@ -1315,6 +1318,11 @@
   (visitLocalTimeFunction [_ ctx] (fn-with-precision 'local-time (.precision ctx)))
   (visitLocalTimestampFunction [_ ctx] (fn-with-precision 'local-timestamp (.precision ctx)))
   (visitEndOfTimeFunction [_ _] 'xtdb/end-of-time)
+
+  (visitCurrentInstantFunction0 [this ctx] (-> (.currentInstantFunction ctx) (.accept this)))
+  (visitEndOfTimeFunction0 [this ctx] (-> (.endOfTimeFunction ctx) (.accept this)))
+  (visitPeriodSpecCurrentInstant [this ctx] (-> (.currentInstantFunction ctx) (.accept this)))
+  (visitPeriodSpecEndOfTime [this ctx] (-> (.endOfTimeFunction ctx) (.accept this)))
 
   (visitDateTruncFunction [this ctx]
     (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))

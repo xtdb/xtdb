@@ -294,12 +294,10 @@ exprPrimary
     | 'CURRENT_SCHEMA' # CurrentSchemaFunction
     | 'CURRENT_DATABASE' # CurrentDatabaseFunction
 
-    | 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
+    | currentInstantFunction # CurrentInstantFunction0
+    | endOfTimeFunction # EndOfTimeFunction0
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
     | 'LOCALTIME' ('(' precision ')')? # LocalTimeFunction
-    | 'CURRENT_TIMESTAMP' ('(' precision ')')? # CurrentTimestampFunction
-    | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
-    | 'END_OF_TIME' ( '(' ')' )? # EndOfTimeFunction
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
 
     // interval value functions
@@ -307,6 +305,14 @@ exprPrimary
 
     | 'TRIM_ARRAY' '(' expr ',' expr ')' # TrimArrayFunction
     ;
+
+currentInstantFunction
+    : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
+    | 'CURRENT_TIMESTAMP' ('(' precision ')')? # CurrentTimestampFunction
+    | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
+    ;
+
+endOfTimeFunction : 'END_OF_TIME' ('(' ')')? ;
 
 booleanValue : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
 
@@ -487,20 +493,25 @@ tableProjection : '(' columnNameList ')' ;
 querySystemTimePeriodSpecification
     : 'FOR' 'SYSTEM_TIME' tableTimePeriodSpecification
     | 'FOR' ALL 'SYSTEM_TIME'
-    | 'FOR' 'SYSTEM_TIME' ALL
     ;
 
 queryValidTimePeriodSpecification
    : 'FOR' 'VALID_TIME' tableTimePeriodSpecification
    | 'FOR' ALL 'VALID_TIME'
-   | 'FOR' 'VALID_TIME' ALL 
    ;
 
 tableTimePeriodSpecification
-    : 'AS' 'OF' expr # TableAsOf
+    : 'AS' 'OF' periodSpecificationExpr # TableAsOf
     | 'ALL' # TableAllTime
-    | 'BETWEEN' expr 'AND' expr # TableBetween
-    | 'FROM' expr 'TO' expr # TableFromTo
+    | 'BETWEEN' periodSpecificationExpr 'AND' periodSpecificationExpr # TableBetween
+    | 'FROM' periodSpecificationExpr 'TO' periodSpecificationExpr # TableFromTo
+    ;
+
+periodSpecificationExpr
+    : literal #PeriodSpecLiteral
+    | parameterSpecification #PeriodSpecParam
+    | currentInstantFunction #PeriodSpecCurrentInstant
+    | endOfTimeFunction #PeriodSpecEndOfTime
     ;
 
 tableOrQueryName : tableName ;

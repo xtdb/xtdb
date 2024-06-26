@@ -1731,3 +1731,12 @@
 
       (t/is (= [{:xt/id 1, :value 4}]
                (xt/q tu/*node* "SELECT * FROM readings"))))))
+
+(deftest test-disallow-col-refs-in-period-specs-3447
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"line 1:41 mismatched input 'foo' expecting"
+                          (xt/q tu/*node* "SELECT * FROM docs FOR SYSTEM_TIME AS OF foo")))
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"line 1:42 mismatched input 'bar' expecting"
+                          (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME BETWEEN bar AND baz"))))
