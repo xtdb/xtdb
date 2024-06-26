@@ -40,20 +40,23 @@ RECURSIVE: 'RECURSIVE' ;
 directSqlStatement : directlyExecutableStatement ';'? EOF ;
 
 directlyExecutableStatement
-    : queryExpression
-    | insertStatement
-    | updateStatementSearched
-    | deleteStatementSearched
-    | eraseStatementSearched
-    | assertStatement
-    | sqlTransactionStatement
-    | sqlSessionStatement
-    | setSessionVariableStatement
-    | setValidTimeDefaults
+    : queryExpression #QueryExpr
+    | insertStatement #InsertStmt
+    | updateStatementSearched #UpdateStmt
+    | deleteStatementSearched #DeleteStmt
+    | eraseStatementSearched #EraseStmt
+    | 'ASSERT' searchCondition #AssertStatement
+    | ('START' 'TRANSACTION' | 'BEGIN') transactionCharacteristics? # StartTransactionStatement
+    | 'SET' 'LOCAL'? 'TRANSACTION' transactionCharacteristics # SetTransactionStatement
+    | 'COMMIT' # CommitStatement
+    | 'ROLLBACK' # RollbackStatement
+    | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
+    | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
+    | 'SET' identifier ( 'TO' | '=' ) literal #SetSessionVariableStatement
+    | 'SET' 'VALID_TIME_DEFAULTS' ( 'TO' | '=' )? validTimeDefaults #SetValidTimeDefaults
     ;
 
-setSessionVariableStatement : 'SET' identifier ( 'TO' | '=' ) literal ;
-setValidTimeDefaults : 'SET' 'VALID_TIME_DEFAULTS' ( 'TO' | '=' )? validTimeDefaults ;
+sessionCharacteristic : 'TRANSACTION' transactionMode (',' transactionMode)* ;
 
 validTimeDefaults
   : 'AS_OF_NOW' #ValidTimeDefaultAsOfNow
@@ -718,22 +721,6 @@ sortSpecification : expr orderingSpecification? nullOrdering? ;
 orderingSpecification : 'ASC' | 'DESC' ;
 nullOrdering : 'NULLS' 'FIRST' | 'NULLS' 'LAST' ;
 
-/// §13.4 <SQL procedure statement>
-
-sqlTransactionStatement
-    : ('START' 'TRANSACTION' | 'BEGIN') transactionCharacteristics? # StartTransactionStatement
-    | 'SET' 'LOCAL'? 'TRANSACTION' transactionCharacteristics # SetTransactionStatement
-    | 'COMMIT' # CommitStatement
-    | 'ROLLBACK' # RollbackStatement
-    ;
-
-sqlSessionStatement
-    : 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
-    | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
-    ;
-
-sessionCharacteristic : 'TRANSACTION' transactionMode (',' transactionMode)* ;
-
 /// §14 Data manipulation
 
 /// §14.9 <delete statement: searched>
@@ -777,8 +764,6 @@ setClause : setTarget '=' updateSource ;
 setTarget : columnName ;
 
 updateSource : expr ;
-
-assertStatement : 'ASSERT' searchCondition ;
 
 /// §17.3 <transaction characteristics>
 

@@ -280,7 +280,6 @@
           (.accept (plan/parse-statement sql-trimmed)
                    (reify SqlVisitor
                      (visitDirectSqlStatement [this ctx] (.accept (.directlyExecutableStatement ctx) this))
-                     (visitDirectlyExecutableStatement [this ctx] (-> (.getChild ctx 0) (.accept this)))
 
                      (visitSetSessionVariableStatement [_ ctx]
                        {:statement-type :set-session-parameter
@@ -333,20 +332,28 @@
                         :tz (let [region (.getText (.characterString ctx))]
                               (ZoneId/of (subs region 1 (dec (count region)))))})
 
+                     (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
+
                      (visitInsertStatement [_ _]
                        (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :insert
                         :query sql, :transformed-query sql-trimmed})
+
+                     (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
                      (visitUpdateStatementSearched [_ _]
                        (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :update
                         :query sql, :transformed-query sql-trimmed})
 
+                     (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
+
                      (visitDeleteStatementSearched [_ _]
                        (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :delete
                         :query sql, :transformed-query sql-trimmed})
+
+                     (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
 
                      (visitEraseStatementSearched [_ _]
                        (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
@@ -358,7 +365,7 @@
                        {:statement-type :dml, :dml-type :assert
                         :query sql, :transformed-query sql-trimmed})
 
-                     (visitQueryExpression [_ _]
+                     (visitQueryExpr [_ _]
                        {:statement-type :query, :query sql, :transformed-query sql-trimmed})))
 
           (catch Exception e
@@ -1306,7 +1313,11 @@
                         :port (:port server)
                         :cid cid})
 
-  (let [{:keys [err] :as stmt} (interpret-sql query)
+  (let [{:keys [err] :as stmt} (try
+                                 (interpret-sql query)
+                                 (catch Throwable t
+                                   (prn (ex-message t))
+                                   (throw t)))
         unsupported-arg-types (remove supported-param-oids arg-types)
         stmt (when-not err (assoc stmt :arg-types arg-types))
         err (or err

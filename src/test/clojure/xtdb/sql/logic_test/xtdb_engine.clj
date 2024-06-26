@@ -87,7 +87,8 @@
 (defrecord InsertOpsVisitor [node statement]
   SqlVisitor
   (visitDirectSqlStatement [this ctx] (.accept (.directlyExecutableStatement ctx) this))
-  (visitDirectlyExecutableStatement [this ctx] (.accept (.getChild ctx 0) this))
+
+  (visitInsertStmt [this ctx] (.accept (.insertStatement ctx) this))
 
   (visitInsertStatement [this ctx]
     (-> (.insertColumnsAndSource ctx)
@@ -122,7 +123,6 @@
 (defrecord SltStmtVisitor [node statement]
   SqlVisitor
   (visitDirectSqlStatement [this ctx] (.accept (.directlyExecutableStatement ctx) this))
-  (visitDirectlyExecutableStatement [this ctx] (.accept (.getChild ctx 0) this))
 
   (visitErrorNode [_ ctx]
     (if-let [record (or (parse-create-table statement)
@@ -131,6 +131,8 @@
       (throw (err/illegal-arg :xtdb.sql/parse-error
                               {::err/message (str ctx)
                                :statement statement}))))
+
+  (visitInsertStmt [this ctx] (.accept (.insertStatement ctx) this))
 
   (visitInsertStatement [_ ctx]
     (let [ops (.accept ctx (->InsertOpsVisitor node statement))]

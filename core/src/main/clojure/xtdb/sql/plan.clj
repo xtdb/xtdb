@@ -2083,9 +2083,11 @@
 (defrecord StmtVisitor [env scope]
   SqlVisitor
   (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
-  (visitDirectlyExecutableStatement [this ctx] (-> (.getChild ctx 0) (.accept this)))
 
+  (visitQueryExpr [this ctx] (-> (.queryExpression ctx) (.accept this)))
   (visitQueryExpression [_ ctx] (-> ctx (.accept (->QueryPlanVisitor env scope))))
+
+  (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
   (visitInsertStatement [_ ctx]
     (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
@@ -2094,6 +2096,8 @@
         (add-err! env (->InsertWithoutXtId)))
 
       (->InsertStmt (identifier-sym (.tableName ctx)) insert-plan)))
+
+  (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
   (visitUpdateStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[xt$iid xt$valid_from xt$valid_to])
@@ -2157,6 +2161,8 @@
                                     [:project (concat aliased-cols set-clauses col-projections) plan])]
                                  (vec (concat internal-cols set-clauses-cols all-non-set-cols))))))
 
+  (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
+
   (visitDeleteStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[xt$iid xt$valid_from xt$valid_to])
           table-name (identifier-sym (.tableName ctx))
@@ -2193,7 +2199,9 @@
                                       plan)
                                     
                                     [:project aliased-cols plan])]
-                                 internal-cols)))) 
+                                 internal-cols))))
+
+  (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
 
   (visitEraseStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols '[xt$iid]
