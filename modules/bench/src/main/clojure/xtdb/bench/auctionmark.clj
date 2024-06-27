@@ -657,10 +657,10 @@
             {:t :concurrently
              :stage :oltp
              :duration duration
-             :join-wait (Duration/ofSeconds 5)
+             :join-wait (Duration/ofMinutes 1)
              :thread-tasks [{:t :pool
                              :duration duration
-                             :join-wait (Duration/ofMinutes 5)
+                             :join-wait (Duration/ofMinutes 1)
                              :thread-count threads
                              :think Duration/ZERO
                              :pooled-task {:t :pick-weighted

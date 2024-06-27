@@ -234,8 +234,10 @@
                  (run! #(start-thread worker %) (range thread-count))
                  (Thread/sleep (.toMillis duration))
                  (.shutdown executor)
-                 (when-not (.awaitTermination executor (.toMillis (.plus duration join-wait)) TimeUnit/MILLISECONDS)
-                   (throw (ex-info "Pool threads did not stop within duration+join-wait" {:task task, :executor executor})))))
+                 (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                   (.shutdownNow executor)
+                   (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                     (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor}))))))
 
              :concurrently
              (let [{:keys [^Duration duration,
@@ -255,8 +257,10 @@
                  (dorun (map-indexed #(start-thread worker %1 %2) thread-task-fns))
                  (Thread/sleep (.toMillis duration))
                  (.shutdown executor)
-                 (when-not (.awaitTermination executor (.toMillis (.plus duration join-wait)) TimeUnit/MILLISECONDS)
-                   (throw (ex-info "Task threads did not stop within duration+join-wait" {:task task, :executor executor})))))
+                 (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                   (.shutdownNow executor)
+                   (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                     (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))))
 
              :pick-weighted
              (let [{:keys [choices]} task
