@@ -324,13 +324,6 @@
                      (visitCommitStatement [_ _] {:statement-type :commit})
                      (visitRollbackStatement [_ _] {:statement-type :rollback})
 
-                     (visitSetValidTimeDefaults [this ctx]
-                       {:statement-type :set-session-parameter, :parameter :app-time-defaults
-                        :value (.accept (.validTimeDefaults ctx) this)})
-
-                     (visitValidTimeDefaultAsOfNow [_ _] :as-of-now)
-                     (visitValidTimeDefaultIsoStandard [_ _] :all-valid-time)
-
                      (visitSetTimeZoneStatement [_ ctx]
                        {:statement-type :set-time-zone
                         :tz (let [region (.getText (.characterString ctx))]

@@ -53,7 +53,6 @@ directlyExecutableStatement
     | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
     | 'SET' identifier ( 'TO' | '=' ) literal #SetSessionVariableStatement
-    | 'SET' 'VALID_TIME_DEFAULTS' ( 'TO' | '=' )? validTimeDefaults #SetValidTimeDefaults
     ;
 
 settingDefaultTimePeriod : 'SETTING'
@@ -66,11 +65,6 @@ defaultValidTimePeriod : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecificati
 defaultSystemTimePeriod : 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification ;
 
 sessionCharacteristic : 'TRANSACTION' transactionMode (',' transactionMode)* ;
-
-validTimeDefaults
-  : 'AS_OF_NOW' #ValidTimeDefaultAsOfNow
-  | 'ISO_STANDARD' #ValidTimeDefaultIsoStandard
-  ;
 
 //// §5 Lexical Elements
 

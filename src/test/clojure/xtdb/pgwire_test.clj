@@ -1023,7 +1023,7 @@
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
       (is (= #{{:_id 42}, {:_id 43}} (set (q conn ["SELECT _id from foo"])))))))
 
-(deftest set-app-time-defaults-test
+(deftest set-valid-time-defaults-test
   (with-open [conn (jdbc-conn)]
     (let [sql #(q conn [%])]
       (sql "START TRANSACTION READ WRITE")
@@ -1040,21 +1040,18 @@
       (is (= [{:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
-      (sql "SET valid_time_defaults iso_standard")
       (is (= (set [{:version 0, :_valid_from "2020-01-01T00:00Z", :_valid_to "2020-01-02T00:00Z"}
                    {:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}])
-             (set (q conn ["SELECT version, _valid_from, _valid_to FROM foo"]))))
+             (set (q conn ["SETTING DEFAULT VALID_TIME ALL
+                            SELECT version, _valid_from, _valid_to FROM foo"]))))
 
-      (sql "SET valid_time_defaults TO as_of_now")
       (is (= [{:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
-      (sql "SET valid_time_defaults iso_standard")
-      (sql "UPDATE foo SET version = 2 WHERE _id = 'foo'")
+      (sql "UPDATE foo FOR ALL VALID_TIME SET version = 2 WHERE _id = 'foo'")
       (sql "COMMIT")
 
-      (sql "SET valid_time_defaults as_of_now")
       (is (= [{:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
@@ -1062,11 +1059,6 @@
               {:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
              (q conn ["SETTING DEFAULT VALID_TIME ALL
                        SELECT version, _valid_from, _valid_to FROM foo"])))
-
-      (sql "SET valid_time_defaults iso_standard")
-      (is (= [{:version 2, :_valid_from "2020-01-01T00:00Z", :_valid_to "2020-01-02T00:00Z"}
-              {:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
-             (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
              (q conn ["SETTING DEFAULT VALID_TIME AS OF NOW SELECT version, _valid_from, _valid_to FROM foo"]))))))

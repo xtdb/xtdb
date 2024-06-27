@@ -1,7 +1,5 @@
 hash-threshold 100
 
-variable SET VALID_TIME_DEFAULTS TO AS_OF_NOW
-
 statement ok
 INSERT INTO Prop_Owner (xt$id, customer_number, property_number, xt$valid_from)
 VALUES (1, 145, 7797, DATE '1998-01-10')
