@@ -54,25 +54,28 @@
    (= (.getCode e) 412)
    (string/includes? (.getMessage (.getCause e)) "At least one of the pre-conditions you specified did not hold")))
 
+(defn interrupted-exception? [^StorageException e] 
+  (instance? InterruptedException (.getCause e)))
+
 (defn put-blob
   ([{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name byte-buf]
    (let [prefixed-key (util/prefix-key prefix blob-name)
          blob-id (BlobId/of bucket-name (str prefixed-key))
-         blob-info (.build (BlobInfo/newBuilder blob-id))]
-
+         blob-info (.build (BlobInfo/newBuilder blob-id))] 
      (try
        (with-open [writer (.writer storage-service blob-info write-options)]
          (.write writer byte-buf))
        (catch StorageException e 
-         (if (pre-condition-error? e)
-           (log/warnf "Object %s already exists in bucket %s" prefixed-key bucket-name)
-           (throw (ex-info
-                   (format "Error when writing object %s to bucket %s" prefixed-key bucket-name)
-                   {:bucket-name bucket-name
-                    :blob-name blob-name
-                    :blob-id blob-id
-                    :blob-info blob-info}
-                   e))))))))
+         (cond
+           (pre-condition-error? e) (log/warnf "Object %s already exists in bucket %s" prefixed-key bucket-name)
+           (interrupted-exception? e) (throw (.getCause e))
+           :else (throw (ex-info
+                         (format "Error when writing object %s to bucket %s" prefixed-key bucket-name)
+                         {:bucket-name bucket-name
+                          :blob-name blob-name
+                          :blob-id blob-id
+                          :blob-info blob-info}
+                         e))))))))
 
 (defn delete-blob [{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name]
   (let [prefixed-key (util/prefix-key prefix blob-name)
