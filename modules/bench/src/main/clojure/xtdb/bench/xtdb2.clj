@@ -40,6 +40,7 @@
   (let [node-dir (util/->path node-dir)]
     (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                     :xtdb/metrics-server {}
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                    (into {} (filter val)))})))
 
