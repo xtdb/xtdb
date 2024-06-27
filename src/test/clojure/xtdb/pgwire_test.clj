@@ -1042,7 +1042,10 @@
       (sql "SET valid_time_defaults iso_standard")
       (is (= [{:version 2, :_valid_from "2020-01-01T00:00Z", :_valid_to "2020-01-02T00:00Z"}
               {:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
-             (q conn ["SELECT version, _valid_from, _valid_to FROM foo"]))))))
+             (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
+
+      (is (= [{:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+             (q conn ["SETTING DEFAULT VALID_TIME AS OF NOW SELECT version, _valid_from, _valid_to FROM foo"]))))))
 
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.

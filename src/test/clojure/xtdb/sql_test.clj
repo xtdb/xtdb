@@ -1128,7 +1128,7 @@
    (=plan-file
     "test-period-specs-with-subqueries-407-app-time"
     (plan-sql
-     "SELECT 1 FROM (select foo.bar from foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP) as tmp"
+     "SELECT 1 FROM (select foo.bar from foo FOR VALID_TIME AS OF NOW) as tmp"
      {:table-info {"foo" #{"bar"}}})))
 
   (t/is

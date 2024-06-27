@@ -522,8 +522,8 @@ tableTimePeriodSpecification
 periodSpecificationExpr
     : literal #PeriodSpecLiteral
     | parameterSpecification #PeriodSpecParam
-    | currentInstantFunction #PeriodSpecCurrentInstant
-    | endOfTimeFunction #PeriodSpecEndOfTime
+    | ('NOW' | 'CURRENT_TIMESTAMP') #PeriodSpecNow
+    | 'END_OF_TIME' #PeriodSpecEndOfTime
     ;
 
 tableOrQueryName : tableName ;

@@ -223,18 +223,23 @@
 
   (visitTableAllTime [_ _] :all-time)
 
-  (visitTableAsOf [_ ctx]
-    [:at (-> ctx (.periodSpecificationExpr) (.accept expr-visitor))])
+  (visitTableAsOf [this ctx]
+    [:at (-> ctx (.periodSpecificationExpr) (.accept this))])
 
-  (visitTableBetween [_ ctx]
+  (visitTableBetween [this ctx]
     [:between
-     (-> ctx (.periodSpecificationExpr 0) (.accept expr-visitor))
-     (-> ctx (.periodSpecificationExpr 1) (.accept expr-visitor))])
+     (-> ctx (.periodSpecificationExpr 0) (.accept this))
+     (-> ctx (.periodSpecificationExpr 1) (.accept this))])
 
-  (visitTableFromTo [_ ctx]
+  (visitTableFromTo [this ctx]
     [:in
-     (-> ctx (.periodSpecificationExpr 0) (.accept expr-visitor))
-     (-> ctx (.periodSpecificationExpr 1) (.accept expr-visitor))]))
+     (-> ctx (.periodSpecificationExpr 0) (.accept this))
+     (-> ctx (.periodSpecificationExpr 1) (.accept this))])
+
+  (visitPeriodSpecLiteral [_ ctx] (-> (.literal ctx) (.accept expr-visitor)))
+  (visitPeriodSpecParam [_ ctx] (-> (.parameterSpecification ctx) (.accept expr-visitor)))
+  (visitPeriodSpecNow [_ _] :now)
+  (visitPeriodSpecEndOfTime [_ _] nil))
 
 (defrecord MultipleTimePeriodSpecifications []
   PlanError
@@ -999,9 +1004,6 @@
                             (dec param-idx))))
         (vary-meta assoc :param? true)))
 
-  (visitPeriodSpecLiteral [this ctx] (-> (.literal ctx) (.accept this)))
-  (visitPeriodSpecParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
-
   (visitFieldAccess [this ctx]
     (let [ve (-> (.exprPrimary ctx) (.accept this))
           field-name (identifier-sym (.fieldName ctx))]
@@ -1322,8 +1324,6 @@
 
   (visitCurrentInstantFunction0 [this ctx] (-> (.currentInstantFunction ctx) (.accept this)))
   (visitEndOfTimeFunction0 [this ctx] (-> (.endOfTimeFunction ctx) (.accept this)))
-  (visitPeriodSpecCurrentInstant [this ctx] (-> (.currentInstantFunction ctx) (.accept this)))
-  (visitPeriodSpecEndOfTime [this ctx] (-> (.endOfTimeFunction ctx) (.accept this)))
 
   (visitDateTruncFunction [this ctx]
     (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))
