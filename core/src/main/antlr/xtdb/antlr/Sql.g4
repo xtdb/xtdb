@@ -320,7 +320,7 @@ exprPrimary
 
 currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
-    | 'CURRENT_TIMESTAMP' ('(' precision ')')? # CurrentTimestampFunction
+    | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision ')')? # CurrentTimestampFunction
     | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
     ;
 

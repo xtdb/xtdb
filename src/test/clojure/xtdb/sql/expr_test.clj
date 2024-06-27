@@ -709,9 +709,7 @@
       "date_trunc(hour, interval '3 02:47:33' day to second)" '(date_trunc "HOUR" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6)))))
 
 (t/deftest test-datetime-functions-plan
-  (t/are
-   [sql expected]
-   (= expected (plan-expr-with-foo sql))
+  (t/are [sql expected] (= expected (plan-expr-with-foo sql))
     "CURRENT_DATE" '(current-date)
     "CURRENT_DATE()" '(current-date)
     "CURRENT_TIME" '(current-time)
@@ -720,6 +718,9 @@
     "CURRENT_TIMESTAMP" '(current-timestamp)
     "CURRENT_TIMESTAMP()" '(current-timestamp)
     "CURRENT_TIMESTAMP(6)" '(current-timestamp 6)
+    "NOW" '(current-timestamp)
+    "NOW()" '(current-timestamp)
+    "NOW(6)" '(current-timestamp 6)
     "LOCALTIME" '(local-time)
     "LOCALTIME()" '(local-time)
     "LOCALTIME(6)" '(local-time 6)

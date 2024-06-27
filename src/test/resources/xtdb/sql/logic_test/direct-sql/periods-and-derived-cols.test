@@ -1,13 +1,13 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO foo(xt$id, bar) VALUES(1, 'sheep')
+INSERT INTO foo(_id, bar) VALUES(1, 'sheep')
 
 query T nosort
 SELECT f.bar
 FROM foo
-FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
-FOR VALID_TIME AS OF CURRENT_TIMESTAMP
+FOR SYSTEM_TIME AS OF NOW
+FOR VALID_TIME AS OF NOW
 AS f (bar)
 ----
 sheep
