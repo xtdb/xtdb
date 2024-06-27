@@ -1,0 +1,88 @@
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "xtdb-pvc-log"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "100Gi"
+  storageClassName: "standard-rwo"
+---
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "xtdb-pvc-local-caches"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "50Gi"
+  storageClassName: "standard-rwo"
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "xtdb-env-config"
+  namespace: "default"
+data:
+  CLOUD_PLATFORM_NAME: "Google Cloud"
+  XTDB_GCP_PROJECT_ID: "xtdb-scratch"
+  XTDB_GCP_BUCKET: "xtdb-am-bench-object-store"
+  XTDB_GCP_PUBSUB_TOPIC: "xtdb-am-bench-object-store-notif-topic"
+  XTDB_GCP_BUCKET_PREFIX: "run-1"
+  XTDB_GCP_LOCAL_LOG_PATH: "/var/lib/xtdb/log/local-log-1"
+  AUCTIONMARK_DURATION: "PT1H"
+  AUCTIONMARK_SCALE_FACTOR: "0.1"
+  AUCTIONMARK_LOAD_PHASE: "True"
+  AUCTIONMARK_LOAD_PHASE_ONLY: "False"
+---
+apiVersion: "batch/v1"
+kind: "Job"
+metadata:
+  name: "xtdb-single-node-auctionmark"
+  namespace: "default"
+  labels:
+    app: "xtdb-single-node-auctionmark"
+spec:
+  completions: 1
+  parallelism: 1
+  # No retries
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: "xtdb-single-node-auctionmark"
+    spec:
+      nodeSelector:
+        iam.gke.io/gke-metadata-server-enabled: "true"
+      serviceAccountName: "xtdb-k8s-service-account"
+      restartPolicy: "Never"
+      volumes:
+        - name: "xtdb-pvc-log-vol"
+          persistentVolumeClaim:
+            claimName: "xtdb-pvc-log"
+        - name: "xtdb-pvc-local-caches-vol"
+          persistentVolumeClaim:
+            claimName: "xtdb-pvc-local-caches"
+      containers:
+      - name: "xtdb-google-cloud-bench-1"
+        image: "europe-west1-docker.pkg.dev/xtdb-scratch/xtdb-google-cloud-bench-repo/xtdb-google-cloud-bench:latest"
+        volumeMounts:
+        - mountPath: "/var/lib/xtdb/log"
+          name: "xtdb-pvc-local-caches-vol"
+        - mountPath: "/var/lib/xtdb/buffers"
+          name: "xtdb-pvc-local-caches-vol"
+        resources:
+          requests:
+            memory: "4056Mi"
+          limits:
+            memory: "4056Mi"
+        envFrom:
+        - configMapRef:
+            name: "xtdb-env-config"
+        env:
+        - name: "XTDB_GCP_LOCAL_DISK_CACHE_PATH"
+          value: "/var/lib/xtdb/buffers/disk-cache-1"

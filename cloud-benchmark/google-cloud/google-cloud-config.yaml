@@ -1,0 +1,11 @@
+# CONFIG FOR RUNNING WITH GOOGLE CLOUD INFRA
+txLog: !Local
+  path: !Env XTDB_GCP_LOCAL_LOG_PATH
+
+storage: !Remote
+  objectStore: !GoogleCloud
+    projectId: !Env XTDB_GCP_PROJECT_ID
+    bucket: !Env XTDB_GCP_BUCKET
+    pubSubTopic: !Env XTDB_GCP_PUBSUB_TOPIC
+    prefix: !Env XTDB_GCP_BUCKET_PREFIX
+  localDiskCache: !Env XTDB_GCP_LOCAL_DISK_CACHE_PATH

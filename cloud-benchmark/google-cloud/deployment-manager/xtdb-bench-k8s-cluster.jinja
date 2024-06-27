@@ -1,0 +1,44 @@
+{% set ROLE = properties["custom_role_name"] %}
+{% set SERVICE_ACCOUNT_PREFIX = properties["service_account_prefix"] %}
+{% set TASK_SERVICE_ACCOUNT = SERVICE_ACCOUNT_PREFIX + "-task" %}
+{% set CLUSTER_NAME = properties["cluster_name"] %}
+{% set CLUSTER_LOCATION = properties["cluster_location"] %}
+{% set CLUSTER_MACHINE_TYPE = properties["cluster_machine_type"] %}
+{% set ENV_VARS = properties["env_vars"] %}
+
+resources:
+{# Service account for task #}
+- type: gcp-types/iam-v1:projects.serviceAccounts
+  name: xtdb-bench-service-account
+  metadata:
+    dependsOn: 
+      - {{ ROLE }}
+  properties:
+    displayName: XTDB Bench Task Service Account
+    accountId: {{ TASK_SERVICE_ACCOUNT }}
+
+- name: {{ env["deployment"] }}
+  type: gcp-types/container-v1beta1:projects.locations.clusters
+  metadata:
+    dependsOn:
+      - xtdb-bench-service-account
+  properties:
+    parent: projects/{{ env["project"] }}/locations/{{ CLUSTER_LOCATION }}
+    cluster:
+      name: {{ CLUSTER_NAME }}
+      description: XTDB Bench Cluster
+      locations:
+        - {{ CLUSTER_LOCATION }}
+      nodePools:
+      - name: {{ CLUSTER_NAME }}-node-pools
+        config:
+          machineType: {{ CLUSTER_MACHINE_TYPE }}
+          diskSizeGb: 50
+          oauthScopes:
+          - https://www.googleapis.com/auth/devstorage.read_only
+          serviceAccount: {{ TASK_SERVICE_ACCOUNT }}@{{ env["project"] }}.iam.gserviceaccount.com
+          imageType: cos_containerd
+        initialNodeCount: 1
+      workloadIdentityConfig:
+        workloadPool: {{ env["project"] }}.svc.id.goog
+
