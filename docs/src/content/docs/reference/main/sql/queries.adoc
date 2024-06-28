@@ -24,6 +24,17 @@ This enables queries of the form `SELECT 1 + 2` - e.g. to quickly evaluate a dat
 +
 e.g. for `SELECT a, SUM(b) FROM foo`, XT will infer `GROUP BY a`
 
+[railroad]
+----
+const asOf = rr.Sequence("AS", "OF", "<timestamp>")
+const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
+const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
+const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
+
+const setting = rr.Sequence("SETTING", rr.OneOrMore(rr.Sequence("DEFAULT", rr.Choice(0, "VALID_TIME", "SYSTEM_TIME"), rr.Optional("TO", "skip"), timePeriodOpts), ","))
+return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
+----
+
 === <query>
 [railroad]
 ----
@@ -31,7 +42,7 @@ const limitClause = rr.Optional(rr.Sequence("LIMIT", "<limit>"), "skip")
 const offsetClause = rr.Optional(rr.Sequence("OFFSET", "<offset>"), "skip")
 const orderByClause = rr.Optional(rr.Sequence("ORDER", "BY", rr.OneOrMore("<value>", ",")), "skip")
 const orderClauses = rr.Sequence(orderByClause, limitClause, offsetClause)
-return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<query body>"), orderClauses))
+return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<query term>"), orderClauses))
 ----
 
 === <with clause>
@@ -39,14 +50,6 @@ return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<q
 ----
 const withClause = rr.Sequence("<query name>", rr.Optional("AS", "skip"), "(", "<query>", ")")
 return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
-----
-
-=== <query body>
-[railroad]
-----
-const allOrDistinct = rr.Choice(0, rr.Skip(), "ALL", "DISTINCT")
-const binary = rr.Sequence("<query term>", rr.Choice(0, "UNION", "INTERSECT", "EXCEPT"), allOrDistinct, "<query term>")
-return rr.Diagram(rr.Choice(0, "<query term>", binary))
 ----
 
 === <query term>
@@ -64,7 +67,9 @@ const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
 const docs = rr.OneOrMore(doc, ",")
 const values = rr.Sequence("VALUES", docs)
 
-return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, rr.Sequence("(", "<query term>", ")")));
+const allOrDistinct = rr.Choice(0, rr.Skip(), "ALL", "DISTINCT")
+const binary = rr.Sequence("<query term>", rr.Choice(0, "UNION", "INTERSECT", "EXCEPT"), allOrDistinct, "<query term>")
+return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, binary, rr.Sequence("(", "<query term>", ")")));
 ----
 
 === <select clause>
