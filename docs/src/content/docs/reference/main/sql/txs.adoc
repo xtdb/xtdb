@@ -19,56 +19,61 @@ For examples on how to submit SQL transactions in each client library, see the i
 
 Inserts documents into a table.
 
-[source,sql]
+[railroad]
 ----
-INSERT INTO <table> (<column_name> [ , ... ]) <documents>
-
-documents :: VALUES (<value> [ , ... ]) [ , ... ]
-           | <select_query>
+const insertIntoTable = rr.Sequence("INSERT", "INTO", "<table name>")
+const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
+const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
+const docs = rr.OneOrMore(doc, ",")
+const values = rr.Sequence(colNames, "VALUES", docs)
+const selectQuery = rr.Sequence(rr.Optional(colNames, "skip"), "<select query>")
+return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, selectQuery)))
 ----
 
 * Documents must contain an `_id` column.
 * By default, the document will be inserted for valid-time between now and end-of-time.
   This can be overridden by including `_valid_from` and/or `_valid_to` columns in the document.
-* If the document already exists, 'insert' currently behaves like an upsert - it will overwrite the existing document for the valid-time range specified (or now -> end-of-time if not provided).
+* If the document already exists, 'insert' behaves like an upsert - it will overwrite the existing document for the valid-time range specified (or now -> end-of-time if not provided).
 
 
 === `UPDATE`
 
 Updates documents in a table, optionally for a period of valid-time.
 
-[source,sql]
+[railroad]
 ----
-UPDATE <table>
-  [ <for_valid_time> ]
-  SET <column> = <value> [ , ... ]
-  [ WHERE <predicate> ]
-
-for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
-                | FOR ALL VALID_TIME | FOR VALID_TIME ALL
+const updateTable = rr.Sequence("UPDATE", "<table name>")
+const forValidTime = rr.Choice(0,
+  rr.Sequence("FOR", "PORTION", "OF", "VALID_TIME", "FROM", "<timestamp>", "TO", "<timestamp>"),
+  rr.Sequence("FOR", "ALL", "VALID_TIME"),
+  rr.Sequence("FOR", "VALID_TIME", "ALL"))
+const setClause = rr.Sequence("SET", rr.OneOrMore(rr.Sequence("<column>", "=", "<value>"), ","))
+const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
+return rr.Diagram(rr.Stack(updateTable, rr.Optional(forValidTime, "skip"), rr.Sequence(setClause, predicate)))
 ----
 
-* If `for_valid_time` is not provided, the effective valid-time range of the update will be from now to the end of time.
+* If the valid-time range is not provided, the effective valid-time range of the update will be from now to the end of time.
   (SQL:2011 specifies that updates without this clause should be effective for all valid time; the now->end-of-time default is an XTDB deviation.)
 * The `_id` column cannot be updated - instead, users should delete this document and re-insert a new one.
-* The valid-time columns cannot be updated outside of the `for_valid_time` clause (i.e. not in the `SET` clause).
+* The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the `SET` clause).
 
 
 === `DELETE`
 
 Deletes documents from a table, optionally for a period of valid-time.
 
-[source,sql]
+[railroad]
 ----
-DELETE FROM <table>
-  [ <for_valid_time> ]
-  [ WHERE <predicate> ]
-
-for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
-                | FOR ALL VALID_TIME
+const deleteTable = rr.Sequence("DELETE", "FROM", "<table name>")
+const forValidTime = rr.Choice(0,
+  rr.Sequence("FOR", "PORTION", "OF", "VALID_TIME", "FROM", "<timestamp>", "TO", "<timestamp>"),
+  rr.Sequence("FOR", "ALL", "VALID_TIME"),
+  rr.Sequence("FOR", "VALID_TIME", "ALL"))
+const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
+return rr.Diagram(rr.Stack(deleteTable, rr.Optional(forValidTime, "skip"), predicate))
 ----
 
-* If `for_valid_time` is not provided, the effective valid-time range of the delete will be from now to the end of time.
+* If the valid-time clause is not provided, the effective valid-time range of the delete will be from now to the end of time.
   (SQL:2011 specifies that deletes without this clause should be effective for all valid time; the now->end-of-time default is an XTDB deviation.)
 
 === `ERASE`
@@ -78,9 +83,11 @@ Irrevocably erases documents from a table, for all valid-time, for all system-ti
 While XTDB is immutable, in some cases it is legally necessary to irretrievably delete data (e.g. for a GDPR request).
 This operation removes data such that even queries as of a previous system-time no longer return the erased data.
 
-[source,sql]
+[railroad]
 ----
-ERASE FROM <table> [ WHERE <predicate> ]
+const eraseTable = rr.Sequence("ERASE", "FROM", "<table name>")
+const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
+return rr.Diagram(rr.Stack(eraseTable, predicate))
 ----
 
 === `ASSERT`
@@ -89,9 +96,9 @@ Rolls back the transaction if the provided predicate is false.
 
 This is used to enforce constraints on the data in a concurrent environment, such as ensuring that a document with a given ID does not already exist.
 
-[source,sql]
+[railroad]
 ----
-ASSERT <predicate>
+return rr.Diagram("ASSERT", "<predicate>")
 ----
 
 * We check to see whether the email address already exists in the database - if not, we can insert the new user.
