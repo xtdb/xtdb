@@ -177,7 +177,6 @@
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
                                                        (vr/vec->reader))]
                                                   1)
-                           :default-all-valid-time? false
                            :basis basis
                            :default-tz default-tz})
                 res (.openCursor bq)]
@@ -359,7 +358,7 @@
                 (.logErase iid))))))))
 
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode ^IQuerySource q-src, wm-src
-                                                     query, {:keys [basis default-tz default-all-valid-time?] :as tx-opts}]
+                                                     query, {:keys [basis default-tz] :as tx-opts}]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)
         ^IntPredicate valid-query-pred (case mode
                                          :assert-exists (reify IntPredicate
@@ -367,8 +366,7 @@
                                          :assert-not-exists (reify IntPredicate
                                                               (test [_ i] (zero? i))))]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz
-                                     :default-all-valid-time? default-all-valid-time?})
+      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz})
                           (.openCursor))]
 
         (letfn [(test-row-count [row-count]
@@ -389,11 +387,10 @@
         (assert (not (.tryAdvance res nil))
                 "only expecting one batch in assert")))))
 
-(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?] :as tx-opts} query-opts]
+(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz] :as tx-opts} query-opts]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz
-                                     :default-all-valid-time? default-all-valid-time?})
+      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz})
                           (.openCursor))]
 
         (.forEachRemaining res
@@ -442,13 +439,12 @@
         args-rdr (.structKeyReader sql-leg "args")
         upsert-idxer (->upsert-rel-indexer live-idx-tx tx-opts)
         delete-idxer (->delete-rel-indexer live-idx-tx)
-        erase-idxer (->erase-rel-indexer live-idx-tx)
-        plan-query-opts (select-keys tx-opts [:default-all-valid-time?])]
+        erase-idxer (->erase-rel-indexer live-idx-tx)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)
               tables-with-cols (scan/tables-with-cols wm-src scan-emitter)
-              compiled-query (sql/compile-query query-str (assoc plan-query-opts :table-info tables-with-cols))
+              compiled-query (sql/compile-query query-str {:table-info tables-with-cols})
               param-count (:param-count (meta compiled-query))]
           ;; TODO handle error
           (zmatch (r/vector-zip compiled-query)
@@ -469,7 +465,7 @@
 
             [:erase query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
+                             (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
                                  (wrap-sql-args param-count)))
 
             [:assert-exists _query-opts inner-query]
@@ -608,8 +604,6 @@
                   tx-opts {:basis {:at-tx tx-key, :current-time system-time}
                            :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                            (.getObject 0))))
-                           :default-all-valid-time? (== 1 (-> ^BitVector (.getVector tx-root "default-all-valid-time?")
-                                                              (.get 0)))
                            :tx-key tx-key}]
 
               (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]

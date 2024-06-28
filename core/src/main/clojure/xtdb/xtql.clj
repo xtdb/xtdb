@@ -915,14 +915,12 @@
    (Binding. "xt$valid_from" (Exprs/lVar "xt$dml$valid_from"))
    (Binding. "xt$valid_to" (Exprs/lVar "xt$dml$valid_to"))])
 
-(defn- dml-colspecs [^TemporalFilter$TemporalExtents for-valid-time, {:keys [default-all-valid-time?]}]
+(defn- dml-colspecs [^TemporalFilter$TemporalExtents for-valid-time]
   [(Binding. "xt$iid" (Exprs/lVar "xt$dml$iid"))
 
    (let [vf-var (Exprs/lVar "xt$dml$valid_from")
 
-         default-vf-expr (if default-all-valid-time?
-                           vf-var
-                           (Expr$Call. "current-timestamp" []))]
+         default-vf-expr (Expr$Call. "current-timestamp" [])]
 
      (Binding. "xt$valid_from"
                (Expr$Call. "cast-tstz"
@@ -959,7 +957,7 @@
                                                                          (.build))]
                                                                     (.unifyClauses delete-query)))
 
-                                            [(XtqlQuery$Return. (dml-colspecs (.forValidTime delete-query) tx-opts))])
+                                            [(XtqlQuery$Return. (dml-colspecs (.forValidTime delete-query)))])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:delete {:table table-name}
@@ -991,6 +989,7 @@
                                   (disj "xt$id"))
 
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
+                                                                         (.forValidTime (.forValidTime update-query))
                                                                          (doto (.setBindings
                                                                                 (concat (.bindSpecs update-query)
                                                                                         [(Binding. "xt$id" (Exprs/lVar "xt$dml$id"))]
@@ -1000,7 +999,7 @@
                                                                          (.build))]
                                                                     (.unifyClauses update-query)))
 
-                                            [(XtqlQuery$Return. (concat (dml-colspecs (.forValidTime update-query) tx-opts)
+                                            [(XtqlQuery$Return. (concat (dml-colspecs (.forValidTime update-query))
                                                                         [(Binding. "xt$id" (Exprs/lVar "xt$dml$id"))]
                                                                         (for [^String col unspecified-columns]
                                                                           (Binding. col (Exprs/lVar (str "xt$update$" col))))

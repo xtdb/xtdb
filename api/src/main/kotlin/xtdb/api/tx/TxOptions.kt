@@ -12,7 +12,6 @@ import java.time.ZoneId
 data class TxOptions(
     val systemTime: Instant? = null,
     val defaultTz: ZoneId? = null,
-    val defaultAllValidTime: Boolean = false
 ) {
 
     /**
@@ -26,7 +25,6 @@ data class TxOptions(
     class Builder internal constructor(){
         private var systemTime: Instant? = null
         private var defaultTz: ZoneId? = null
-        private var defaultAllValidTime = false
 
         /**
          * Overrides the system time for the transaction.
@@ -44,15 +42,7 @@ data class TxOptions(
          */
         fun defaultTz(defaultTz: ZoneId?) = apply { this.defaultTz = defaultTz }
 
-        /**
-         * Specifies whether operations within the transaction should default to all valid-time.
-         *
-         * By default, operations in XT default to 'as of current-time' (contrary to SQL:2011, which defaults to all valid-time) -
-         * setting this flag to true restores the standards-compliant behaviour.
-         */
-        fun defaultAllValidTime(defaultAllValidTime: Boolean) = apply { this.defaultAllValidTime = defaultAllValidTime }
-
-        fun build() = TxOptions(systemTime, defaultTz, defaultAllValidTime)
+        fun build() = TxOptions(systemTime, defaultTz)
     }
 }
 

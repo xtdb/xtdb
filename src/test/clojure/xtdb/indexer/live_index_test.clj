@@ -5,20 +5,20 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.metadata :as meta]
             xtdb.node.impl
+            [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.serde :as serde])
+            [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
            java.time.Duration
            [java.util Random UUID]
            [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
+           (xtdb.api IndexerConfig)
+           xtdb.api.storage.Storage$InMemoryStorageFactory
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
-           (xtdb.api TransactionKey IndexerConfig)
-           xtdb.api.storage.Storage$InMemoryStorageFactory
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
 

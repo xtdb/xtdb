@@ -45,7 +45,7 @@
                                  (let [^IQuerySource q-src (util/component node ::q/query-source)]
                                    (.prepareRaQuery q-src query indexer query-opts))
                                  (q/prepare-ra query))
-             bq (.bind pq (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz :default-all-valid-time?])
+             bq (.bind pq (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz])
                               (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))

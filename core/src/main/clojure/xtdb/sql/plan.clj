@@ -2015,24 +2015,19 @@
     {:for-valid-time :all-time,
      :projection [vf-col vt-col]})
 
-  (visitDmlStatementValidTimePortion [{{:keys [default-all-valid-time?]} :env} ctx]
+  (visitDmlStatementValidTimePortion [_ ctx]
     (let [expr-visitor (->ExprPlanVisitor env scope)
           from-expr (-> (.expr ctx 0) (.accept expr-visitor))
           to-expr (-> (.expr ctx 1) (.accept expr-visitor))]
       {:for-valid-time [:between from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
-       :projection [{vf-col (cond
-                              from-expr (list 'greatest vf-col (list 'cast from-expr types/temporal-col-type))
-                              default-all-valid-time? vf-col
-                              :else (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type)))}
+       :projection [{vf-col (list 'greatest vf-col (list 'cast (or from-expr '(current-timestamp)) types/temporal-col-type))}
 
                     {vt-col (if to-expr
                               (list 'least vt-col (list 'cast to-expr types/temporal-col-type))
                               vt-col)}]})))
 
-(defn- default-vt-extents-projection [{:keys [default-all-valid-time?]}]
-  [(if default-all-valid-time?
-     vf-col
-     {vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))})
+(def ^:private default-vt-extents-projection
+  [{vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))}
    vt-col])
 
 (defrecord EraseTableRef [env table-name table-alias unique-table-alias cols ^Map !reqd-cols]
@@ -2158,7 +2153,7 @@
                             {col-sym (find-decl dml-scope [col-sym])})
 
           outer-projection (vec (concat '[xt$iid]
-                                        (or vt-projection (default-vt-extents-projection env))
+                                        (or vt-projection default-vt-extents-projection)
                                         set-clauses-cols
                                         (map ffirst col-projections)))]
 
@@ -2201,7 +2196,7 @@
                               {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
                                :subqs (not-empty (into {} !subqs))}))
 
-          projection (into '[xt$iid] (or vt-projection (default-vt-extents-projection env)))]
+          projection (into '[xt$iid] (or vt-projection default-vt-extents-projection))]
       (->DeleteStmt (symbol table-name)
                     (->QueryExpr [:project projection
                                   (as-> (plan-table-ref dml-scope) plan
@@ -2302,15 +2297,14 @@
 (defn plan-expr
   ([sql] (plan-expr sql {}))
 
-  ([sql {:keys [scope table-info default-all-valid-time?]}]
+  ([sql {:keys [scope table-info]}]
    (let [!errors (atom [])
          !warnings (atom [])
          env {:!errors !errors
               :!warnings !warnings
               :!id-count (atom 0)
               :!param-count (atom 0)
-              :table-info (xform-table-info table-info)
-              :default-all-valid-time? (boolean default-all-valid-time?)}
+              :table-info (xform-table-info table-info)}
          parser (->parser sql)
          plan (-> (.expr parser)
                   #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
@@ -2366,7 +2360,7 @@
 (defn plan-statement
   ([sql] (plan-statement sql {}))
 
-  ([sql {:keys [scope table-info default-all-valid-time?]}]
+  ([sql {:keys [scope table-info]}]
    (let [!errors (atom [])
          !warnings (atom [])
          !param-count (atom 0)
@@ -2374,8 +2368,7 @@
               :!warnings !warnings
               :!id-count (atom 0)
               :!param-count !param-count
-              :table-info (xform-table-info table-info)
-              :default-all-valid-time? (boolean default-all-valid-time?)}
+              :table-info (xform-table-info table-info)}
          stmt (-> (parse-statement sql)
                   (.accept (->StmtVisitor env scope)))]
      (if-let [errs (not-empty @!errors)]

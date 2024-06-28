@@ -421,6 +421,5 @@ Transaction options are an optional map of the following keys:
 ----
 {;; -- optional
  :system-time #inst "2024-01-01"
- :default-tz #xt.time/zone "America/Los_Angeles"
- :default-all-valid-time? false}
+ :default-tz #xt.time/zone "America/Los_Angeles"}
 ----

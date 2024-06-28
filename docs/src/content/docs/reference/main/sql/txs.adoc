@@ -48,9 +48,8 @@ for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
                 | FOR ALL VALID_TIME | FOR VALID_TIME ALL
 ----
 
-* If `for_valid_time` is not provided, the effective valid-time range of the update depends on the `defaultAllValidTime` transaction argument.
-  If it is true, the update will be effective for all valid time (including in the past); otherwise it will be effective from now to the end of time.
-  (SQL:2011 specifies that updates without this clause should be effective for all valid time; the flag is an XTDB addition.)
+* If `for_valid_time` is not provided, the effective valid-time range of the update will be from now to the end of time.
+  (SQL:2011 specifies that updates without this clause should be effective for all valid time; the now->end-of-time default is an XTDB deviation.)
 * The `_id` column cannot be updated - instead, users should delete this document and re-insert a new one.
 * The valid-time columns cannot be updated outside of the `for_valid_time` clause (i.e. not in the `SET` clause).
 
@@ -69,9 +68,8 @@ for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
                 | FOR ALL VALID_TIME
 ----
 
-* If `for_valid_time` is not provided, the effective valid-time range of the delete depends on the `defaultAllValidTime` transaction argument.
-  If it is true, the delete will be effective for all valid time (including in the past); otherwise it will be effective from now to the end of time.
-  (SQL:2011 specifies that deletes without this clause should be effective for all valid time; the flag is an XTDB addition.)
+* If `for_valid_time` is not provided, the effective valid-time range of the delete will be from now to the end of time.
+  (SQL:2011 specifies that deletes without this clause should be effective for all valid time; the now->end-of-time default is an XTDB deviation.)
 
 === `ERASE`
 

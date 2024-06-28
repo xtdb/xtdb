@@ -9,4 +9,6 @@
    {quux foo.1/quux})
   [:rename
    foo.1
-   [:scan {:table foo} [xt$valid_from xt$iid xt$valid_to baz quux]]]]]
+   [:scan
+    {:table foo, :for-valid-time :all-time}
+    [xt$valid_from xt$iid xt$valid_to baz quux]]]]]

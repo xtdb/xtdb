@@ -18,7 +18,6 @@ type TxKey = {
 type TxOpts = {
     systemTime?: Date
     defaultTz?: TimeZone
-    defaultAllValidTime?: boolean
 }
 
 type Basis = {
@@ -37,7 +36,6 @@ type QueryOpts = {
     afterTx?: TxKey
     txTimeout?: Duration
     defaultTz?: TimeZone
-    defaultAllValidTime?: boolean
     explain?: boolean
     keyFn?: KeyFn
 }

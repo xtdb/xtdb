@@ -49,7 +49,7 @@
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
          :scan-opts (s/keys :req-un [::table]
-                            :opt-un [::lp/for-valid-time ::lp/for-system-time ::lp/default-all-valid-time?])
+                            :opt-un [::lp/for-valid-time ::lp/for-system-time])
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
@@ -477,7 +477,7 @@
 
         {:fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, params default-all-valid-time?]}]
+         :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, params]}]
                      (if-let [derived-table-schema (info-schema/derived-tables table)]
                        (info-schema/->cursor allocator derived-table-schema table col-names col-preds params metadata-mgr watermark)
                        (let [iid-bb (selects->iid-byte-buffer selects params)
@@ -487,7 +487,7 @@
                              scan-opts (-> scan-opts
                                            (update :for-valid-time
                                                    (fn [fvt]
-                                                     (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
+                                                     (or fvt [:at [:now :now]]))))
                              ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
                              table-path (util/table-name->table-path table-name)
                              current-meta-files (->> (trie/list-meta-files buffer-pool table-path)

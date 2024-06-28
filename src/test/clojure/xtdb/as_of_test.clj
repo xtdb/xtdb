@@ -12,8 +12,8 @@
     (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx2"}]])
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (tu/query-ra '[:scan {:table docs} [last_updated]]
-                               {:node tu/*node* :default-all-valid-time? true}))))
+             (set (tu/query-ra '[:scan {:table docs, :for-valid-time :all-time} [last_updated]]
+                               {:node tu/*node*}))))
 
     (t/is (= #{{:last-updated "tx2"}}
              (set (xt/q tu/*node* '(from :docs [last-updated])))))

@@ -1060,12 +1060,12 @@
 (def supported-param-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node]} dml-buf {:keys [default-all-valid-time?]}]
+(defn- execute-tx [{:keys [node]} dml-buf {:keys [default-tz]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql transformed-query params])
                      dml-buf)]
     (try
-      (some-> (ex-message (:error (xt/execute-tx node tx-ops {:default-all-valid-time? default-all-valid-time?})))
+      (some-> (ex-message (:error (xt/execute-tx node tx-ops {:default-tz default-tz})))
               err-protocol-violation)
       (catch Throwable e
         (log/debug e "Error on execute-tx")
@@ -1087,9 +1087,7 @@
   (let [xtify-param (->xtify-param stmt)
         xt-params (vec (map-indexed xtify-param params))
 
-        {:keys [transaction], {:keys [^Clock clock] :as session} :session} @conn-state
-
-        default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))
+        {:keys [transaction], {:keys [^Clock clock]} :session} @conn-state
 
         stmt {:query query,
               :transformed-query transformed-query
@@ -1099,8 +1097,7 @@
       ;; we buffer the statement in the transaction (to be flushed with COMMIT)
       (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
 
-      (execute-tx conn [stmt] {:default-all-valid-time? default-all-valid-time?
-                              :default-tz (.getZone clock)}))
+      (execute-tx conn [stmt] {:default-tz (.getZone clock)}))
 
     (cmd-write-msg conn msg-command-complete
                    {:command (case dml-type
@@ -1193,11 +1190,11 @@
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{{:keys [failed err dml-buf]} :transaction, :keys [session]} @conn-state]
+  (let [{{:keys [failed err dml-buf]} :transaction, {:keys [^Clock clock]} :session} @conn-state]
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (execute-tx conn dml-buf {:default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))})]
+      (if-let [err (execute-tx conn dml-buf {:default-tz (.getZone clock)})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))
@@ -1327,12 +1324,10 @@
       (-> (if (= :query statement-type)
             (try
               (let [{:keys [^Clock clock, latest-submitted-tx] :as session} (:session @conn-state)
-                    default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))
                     query-opts {:after-tx latest-submitted-tx
                                 :tx-timeout (Duration/ofSeconds 1)
                                 :param-types (map #(get-in types/pg-types-by-oid [% :col-type]) arg-types)
-                                :default-tz (.getZone clock)
-                                :default-all-valid-time? default-all-valid-time?}
+                                :default-tz (.getZone clock)}
                     pq (.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt) query-opts)]
                 {:prepared-stmt (assoc stmt :prepared-stmt pq :fields (map types/field->pg-type (.columnFields pq)))
                  :prep-outcome :success})
@@ -1373,12 +1368,9 @@
                     {{:keys [^Clock clock] :as session} :session
                      {:keys [basis]} :transaction} @conn-state
 
-                    default-all-valid-time? (= :all-valid-time (get-in session [:parameters :app-time-defaults]))
-
                     query-opts {:basis (or basis {:current-time (.instant clock)})
                                 :default-tz (.getZone clock)
-                                :args xt-params
-                                :default-all-valid-time? default-all-valid-time?}]
+                                :args xt-params}]
 
                 (try
                   (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]

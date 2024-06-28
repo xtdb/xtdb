@@ -160,8 +160,7 @@
   (Schema. [(types/->field "tx-ops" #xt.arrow/type :list false tx-ops-field)
 
             (types/col-type->field "system-time" types/nullable-temporal-type)
-            (types/col-type->field "default-tz" :utf8)
-            (types/col-type->field "default-all-valid-time?" :bool)]))
+            (types/col-type->field "default-tz" :utf8)]))
 
 (defn- ->xtql+args-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
   (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
@@ -373,18 +372,16 @@
         TxOp$Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
     (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
-          default-tz-writer (vw/->writer (.getVector root "default-tz"))
-          app-time-behaviour-writer (vw/->writer (.getVector root "default-all-valid-time?"))]
+          default-tz-writer (vw/->writer (.getVector root "default-tz"))]
 
       (when system-time
         (.writeObject (vw/->writer (.getVector root "system-time")) system-time))
 
       (.writeObject default-tz-writer (str default-tz))
-      (.writeObject app-time-behaviour-writer (boolean default-all-valid-time?))
 
       (.startList ops-list-writer)
       (write-tx-ops! allocator
@@ -419,5 +416,4 @@
   (let [system-time (some-> opts .getSystemTime)]
     (.appendRecord log (serialize-tx-ops allocator tx-ops
                                          {:default-tz (or (some-> opts .getDefaultTz) default-tz)
-                                          :system-time system-time
-                                          :default-all-valid-time? (some-> opts .getDefaultAllValidTime)}))))
+                                          :system-time system-time}))))

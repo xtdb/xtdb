@@ -164,8 +164,6 @@ components:
           $ref: '#/components/schemas/Instant'
         defaultTz:
           $ref: '#/components/schemas/DefaultTz'
-        default-all-valid-time?:
-          type: boolean
 
     TxRequest:
       type: object

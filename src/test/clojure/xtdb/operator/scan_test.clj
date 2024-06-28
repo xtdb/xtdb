@@ -321,13 +321,13 @@
                 :xt/valid-from #xt.time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/system-from #xt.time/zoned-date-time "3000-01-01T00:00Z[UTC]",
                 :xt/system-to #xt.time/zoned-date-time "3001-01-01T00:00Z[UTC]"}}
-             (set (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
+             (set (tu/query-ra '[:scan {:table foo, :for-system-time :all-time, :for-valid-time :all-time}
                                  [{xt$system_from (< xt$system_from #xt.time/zoned-date-time "3002-01-01T00:00Z")}
                                   {xt$system_to (> xt$system_to #xt.time/zoned-date-time "2999-01-01T00:00Z")}
                                   xt$valid_from
                                   xt$valid_to
                                   last_updated]]
-                               {:node node :default-all-valid-time? true}))))))
+                               {:node node}))))))
 
 (t/deftest test-for-valid-time-in-params
   (let [tt1 (time/->zdt #inst "2020-01-01")

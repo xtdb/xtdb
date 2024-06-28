@@ -34,9 +34,8 @@
 SELECT p._id, p.text,
        p._valid_from, p._valid_to,
        p._system_from, p._system_to
-FROM %s FOR ALL SYSTEM_TIME AS p"
-                                         table)
-                       {:default-all-valid-time? true})
+FROM %s FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS p"
+                                         table))
                  (into {} (map (juxt (juxt :xt/valid-from :xt/valid-to
                                            :xt/system-from :xt/system-to)
                                      :text)))))]
@@ -66,8 +65,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
 (t/deftest test-delete-without-search-315
   (letfn [(q []
-            (xt/q tu/*node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo"
-                  {:default-all-valid-time? true}))]
+            (xt/q tu/*node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo FOR ALL VALID_TIME"))]
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES ('foo')"]])
 
     (t/is (= [{:xt/id "foo",
@@ -81,8 +79,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                :xt/valid-to (time/->zdt #inst "2020-01-02")}]
              (q)))
 
-    (xt/submit-tx tu/*node* [[:sql "DELETE FROM foo"]]
-                  {:default-all-valid-time? true})
+    (xt/submit-tx tu/*node* [[:sql "DELETE FROM foo FOR ALL VALID_TIME"]])
 
     (t/is (= [] (q)))))
 
@@ -95,8 +92,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
   (t/is (= #{["Susan" "Smith", (time/->zdt #inst "2020") (time/->zdt #inst "2021")]
              ["sue" "Smith", (time/->zdt #inst "2021") nil]}
-           (->> (xt/q tu/*node* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users u"
-                      {:default-all-valid-time? true})
+           (->> (xt/q tu/*node* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users FOR ALL VALID_TIME u")
                 (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))))
 
 (t/deftest test-can-submit-same-id-into-multiple-tables-338
@@ -118,7 +114,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
     (t/is (= [{:xt/id "thing", :foo "t2-foo-v2"}]
              (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                   {:basis {:at-tx tx2}, :default-all-valid-time? false})))))
+                   {:basis {:at-tx tx2}})))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
@@ -209,12 +205,18 @@ FROM foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP"
   (letfn [(q1 [opts]
             (xt/q tu/*node* "
 SELECT foo._id, foo.v, foo._valid_from, foo._valid_to
+FROM foo FOR ALL VALID_TIME
+ORDER BY foo._valid_from"
+                  opts))
+          (q1-now [opts]
+            (xt/q tu/*node* "
+SELECT foo._id, foo.v, foo._valid_from, foo._valid_to
 FROM foo
 ORDER BY foo._valid_from"
                   opts))
           (q2 [opts]
             (frequencies
-             (xt/q tu/*node* "SELECT foo._id, foo.v FROM foo" opts)))]
+             (xt/q tu/*node* "SELECT foo._id, foo.v FROM foo FOR ALL VALID_TIME" opts)))]
 
     (let [tx1 (xt/submit-tx tu/*node* [[:sql "
 UPDATE foo
@@ -236,10 +238,10 @@ WHERE foo._id = 1"]])]
                 {:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2024")}]
 
-               (q1 {:basis {:at-tx tx1}, :default-all-valid-time? true})))
+               (q1 {:basis {:at-tx tx1}})))
 
       (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:basis {:at-tx tx1}, :default-all-valid-time? true})))
+               (q2 {:basis {:at-tx tx1}})))
 
       (t/is (= [{:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2020")
@@ -250,16 +252,15 @@ WHERE foo._id = 1"]])]
                 {:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1 {:basis {:at-tx tx2}, :default-all-valid-time? true})))
+               (q1 {:basis {:at-tx tx2}})))
 
       (t/is (= [{:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1 {:basis {:at-tx tx2, :current-time (time/->instant #inst "2026")}
-                    :default-all-valid-time? false})))
+               (q1-now {:basis {:at-tx tx2, :current-time (time/->instant #inst "2026")}})))
 
       (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:basis {:at-tx tx2}, :default-all-valid-time? true}))))))
+               (q2 {:basis {:at-tx tx2}}))))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
   (t/is (= (serde/->tx-aborted 0 (time/->instant #inst "2020-01-01")
@@ -281,13 +282,11 @@ WHERE foo._id = 1"]])]
   (t/is (= [{:xt/id 1, :kebab-case-col "kebab-case-value"}]
            (xt/q tu/*node* "SELECT foo._id, foo.\"kebab-case-col\" FROM foo WHERE foo.\"kebab-case-col\" = 'kebab-case-value'")))
 
-  (xt/submit-tx tu/*node* [[:sql "UPDATE foo SET \"kebab-case-col\" = 'CamelCaseValue' WHERE foo.\"kebab-case-col\" = 'kebab-case-value'"]]
-                {:default-all-valid-time? true})
+  (xt/submit-tx tu/*node* [[:sql "UPDATE foo SET \"kebab-case-col\" = 'CamelCaseValue' WHERE foo.\"kebab-case-col\" = 'kebab-case-value'"]])
   (t/is (= [{:xt/id 1, :kebab-case-col "CamelCaseValue"}]
            (xt/q tu/*node* "SELECT foo._id, foo.\"kebab-case-col\" FROM foo")))
 
-  (xt/submit-tx tu/*node* [[:sql "DELETE FROM foo WHERE foo.\"kebab-case-col\" = 'CamelCaseValue'"]]
-                {:default-all-valid-time? true})
+  (xt/submit-tx tu/*node* [[:sql "DELETE FROM foo WHERE foo.\"kebab-case-col\" = 'CamelCaseValue'"]])
   (t/is (= []
            (xt/q tu/*node* "SELECT foo._id, foo.\"kebab-case-col\" FROM foo"))))
 
@@ -704,7 +703,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (let [query-src ^IQuerySource (tu/component :xtdb.query/query-source)
         wm-src (tu/component :xtdb/indexer)
         pq1 (.planQuery query-src "SELECT 1" wm-src {})
-        pq2 (.planQuery query-src "SELECT 1" wm-src {:default-all-valid-time? true})
+        pq2 (.planQuery query-src "SELECT 1" wm-src {:explain? true})
         pq3 (.planQuery query-src "SELECT 1" wm-src {})]
 
     ;;could add explicit test for all query options that are relevant to planning
@@ -804,68 +803,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (t/is (thrown-with-msg? xtdb.RuntimeException
                                    #"Relevant table schema has changed since preparing query, please prepare again"
                                    (.openCursor bq))))))))
-
-(deftest test-prepared-statements-default-all-valid-time
-  (tu/then-await-tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :version 1}]]) tu/*node*)
-  (tu/then-await-tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :version 2}]]) tu/*node*)
-
-  (t/testing "perpare and bind both default-valid-time to as of now"
-    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? false})]
-
-      (with-open [bq (.bind pq {:default-all-valid-time? false})
-                  cursor (.openCursor bq)]
-
-        (t/is (= [[{:xt/id 1, :version 2}]]
-                 (tu/<-cursor cursor))))))
-
-  (t/testing "perpare and bind both default-valid-time to all time"
-    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? true})]
-
-      (with-open [bq (.bind pq {:default-all-valid-time? true})
-                  cursor (.openCursor bq)]
-
-        (t/is (= [[{:xt/id 1, :version 2}
-                   {:xt/id 1, :version 1}]]
-                 (tu/<-cursor cursor))))))
-
-  (t/testing "prepared for as of now, but bound for all time"
-    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? false})]
-
-      (with-open [bq (.bind pq {:default-all-valid-time? true})
-                  cursor (.openCursor bq)]
-
-        (t/is (= [[{:xt/id 1, :version 2} {:xt/id 1, :version 1}]]
-                 (tu/<-cursor cursor))))))
-
-  (t/testing "prepared for as of now, but bound for as of now, rebound all time"
-    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? false})]
-
-      (with-open [bq (.bind pq {:default-all-valid-time? false})
-                  cursor (.openCursor bq)]
-
-        (t/is (= [[{:xt/id 1, :version 2}]]
-                 (tu/<-cursor cursor))))
-
-      (with-open [bq (.bind pq {:default-all-valid-time? true})
-                  cursor (.openCursor bq)]
-
-        (t/is (= [[{:xt/id 1, :version 2} {:xt/id 1, :version 1}]]
-                 (tu/<-cursor cursor))))))
-
-  (t/testing "prepared for all time, but bound for as of now"
-    ;; TODO fails because we plan `true` into the into the logical plan as part of SQL planning
-    ;; `{:table foo, :for-valid-time :all-time}` and at this time there is no part of bind/openCursor
-    ;; which can replan the SQL. We could choose to throw an error here as per schema change, but really
-    ;; we should just fix the underlying issue either make this a bind time var, or perhaps move SQL
-    ;; planning under query/prepareRaQuery
-    ;; this doesn't apply the outher way round as per
-    #_(let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT * from foo" {:default-all-valid-time? true})]
-
-      (with-open [bq (.bind pq {:default-all-valid-time? false})
-                  cursor (.openCursor bq)]
-
-        (t/is (= [[{:xt/id 1, :version 2}]]
-                 (tu/<-cursor cursor)))))))
 
 (deftest test-prepared-statements-default-tz
 

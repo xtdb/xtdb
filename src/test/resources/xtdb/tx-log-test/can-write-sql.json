@@ -53,13 +53,6 @@
         "name" : "utf8"
       },
       "children" : [ ]
-    },{
-      "name" : "default-all-valid-time?",
-      "nullable" : false,
-      "type" : {
-        "name" : "bool"
-      },
-      "children" : [ ]
     }]
   },
   "batches" : [{
@@ -104,11 +97,6 @@
       "VALIDITY" : [1],
       "OFFSET" : [0,0],
       "DATA" : [""]
-    },{
-      "name" : "default-all-valid-time?",
-      "count" : 1,
-      "VALIDITY" : [1],
-      "DATA" : [0]
     }]
   }]
 }

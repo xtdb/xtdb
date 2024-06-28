@@ -6,25 +6,25 @@
 (use-fixtures :each tu/with-node)
 
 (defn query-at-tx [query tx]
-  (xt/q tu/*node* query {:basis {:at-tx tx}, :default-all-valid-time? true}))
+  (xt/q tu/*node* query {:basis {:at-tx tx}}))
 
 (deftest all-system-time
   (let [_tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
         tx2 (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
 
     (is (= {{:last-updated "tx1"} 1, {:last-updated "tx2"}, 1}
-           (frequencies (query-at-tx "SELECT foo.last_updated FROM foo" tx2))))
+           (frequencies (query-at-tx "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME" tx2))))
 
     (is (= {{:last-updated "tx1"} 2, {:last-updated "tx2"} 1}
            (frequencies
             (query-at-tx
-             "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME"
+             "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME FOR ALL VALID_TIME"
              tx2))))
 
     (is (= {{:last-updated "tx1"} 2, {:last-updated "tx2"} 1}
            (frequencies
             (query-at-tx
-             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME ALL"
+             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME ALL FOR VALID_TIME ALL"
              tx2))))))
 
 (deftest system-time-as-of
@@ -33,17 +33,17 @@
 
     (is (= []
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00+00:00'"
+            "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00+00:00'"
             tx)))
 
     (is (= [{:last-updated "tx1"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3000-01-01 00:00:00+00:00'"
+            "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME FOR SYSTEM_TIME AS OF TIMESTAMP '3000-01-01 00:00:00+00:00'"
             tx)))
 
     (is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
            (set (query-at-tx
-                 "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3002-01-01 00:00:00+00:00'"
+                 "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME FOR SYSTEM_TIME AS OF TIMESTAMP '3002-01-01 00:00:00+00:00'"
                  tx2))))))
 
 (deftest system-time-from-a-to-b
@@ -57,18 +57,21 @@
 
     (is (= [{:last-updated "tx1"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3001-01-01 00:00:00+00:00'"
+            "SETTING DEFAULT VALID_TIME ALL
+             SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3001-01-01 00:00:00+00:00'"
             tx)))
 
     (is (= [{:last-updated "tx1"} {:last-updated "tx1"} {:last-updated "tx2"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'
+            "SETTING DEFAULT VALID_TIME ALL
+             SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'
              ORDER BY last_updated"
             tx2)))
 
     (is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
            (set (query-at-tx
-                 "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'"
+                 "SETTING DEFAULT VALID_TIME ALL
+                  SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'"
                  tx2))))))
 
 (deftest system-time-between-a-to-b
@@ -81,24 +84,28 @@
 
     (is (= [{:last-updated "tx1"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'"
+            "SETTING DEFAULT VALID_TIME ALL
+             SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'"
             tx))
         "second point in time is inclusive for between")
 
     (is (= [{:last-updated "tx1"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3001-01-01 00:00:00+00:00'"
+            "SETTING DEFAULT VALID_TIME ALL
+             SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3001-01-01 00:00:00+00:00'"
             tx)))
 
     (is (= [{:last-updated "tx1"} {:last-updated "tx1"} {:last-updated "tx2"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'
+            "SETTING DEFAULT VALID_TIME ALL
+             SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'
              ORDER BY last_updated"
             tx2)))
 
     (is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
            (set (query-at-tx
-                 "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
+                 "SETTING DEFAULT VALID_TIME ALL
+                  SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
                  tx2))))))
 
 (deftest app-time-period-predicates
@@ -114,27 +121,27 @@
 
       (is (= [{:last-updated "2000"} {:last-updated "3000"} {:last-updated "4000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo ORDER BY last_updated"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME ORDER BY last_updated"
               tx)))
 
       (is (= [{:last-updated "2000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last-updated "3000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '3000-01-01 00:00:00', TIMESTAMP '3001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '3000-01-01 00:00:00', TIMESTAMP '3001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last-updated "3000"} {:last-updated "4000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4000-01-01 00:00:00', TIMESTAMP '4001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4000-01-01 00:00:00', TIMESTAMP '4001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last-updated "3000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
               tx))))))
 
 (deftest app-time-multiple-tables
@@ -146,13 +153,13 @@
 
     (is (= [{:last-updated "2001"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo
+            "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME
              WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2002-01-01 00:00:00')"
             tx)))
 
     (is (= [{:l-updated "2003"}]
            (query-at-tx
-            "SELECT bar.l_updated FROM bar
+            "SELECT bar.l_updated FROM bar FOR ALL VALID_TIME
              WHERE bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
             tx)))
 
@@ -166,10 +173,10 @@
 
     (is (= [{:last-updated "2001", :l-updated "2003"}]
            (query-at-tx
-            "SELECT foo.last_updated, bar.l_updated FROM foo, bar
+            "SETTING DEFAULT VALID_TIME ALL
+             SELECT foo.last_updated, bar.l_updated FROM foo, bar
              WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
-             AND
-             bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
+               AND bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
             tx)))
 
     (is (= []
@@ -178,9 +185,9 @@
              WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME" tx)))))
 
 (deftest app-time-joins
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2016", :valid-to  #inst "2019"}
+  (let [tx (xt/submit-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2016", :valid-to #inst "2019"}
                                      {:xt/id :bill, :name "Bill"}]
-                                    [:put-docs {:into :bar, :valid-from #inst "2018", :valid-to  #inst "2020"}
+                                    [:put-docs {:into :bar, :valid-from #inst "2018", :valid-to #inst "2020"}
                                      {:xt/id :jeff, :also_name "Jeff"}]])]
 
     (is (= []
@@ -192,7 +199,8 @@
 
     (is (= [{:name "Bill" :also-name "Jeff"}]
            (query-at-tx
-            "SELECT foo.name, bar.also_name
+            "SETTING DEFAULT VALID_TIME ALL
+             SELECT foo.name, bar.also_name
              FROM foo, bar
              WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME"
             tx)))))

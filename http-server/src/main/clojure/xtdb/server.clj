@@ -77,7 +77,6 @@
 
 (s/def ::key-fn (s/nilable #(instance? IKeyFn %)))
 
-(s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
 (s/def ::explain? boolean?)
 
@@ -232,7 +231,7 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-all-valid-time? ::default-tz ::key-fn ::explain?]))
+          :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
 
 (defn json-query-decoder []
   (reify

@@ -12,7 +12,7 @@
   [:rename
    foo.1
    [:scan
-    {:table foo}
+    {:table foo, :for-valid-time :all-time}
     [xt$valid_from
      xt$system_to
      xt$iid

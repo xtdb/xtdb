@@ -1000,14 +1000,12 @@
                               {:table-info {"users" #{"id" "first_name" "last_name"}}})))
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"
-                    (plan-sql "UPDATE foo SET bar = foo.baz"
-                              {:table-info {"foo" #{"bar" "baz" "quux"}}
-                               :default-all-valid-time? true})))
+                    (plan-sql "UPDATE foo FOR ALL VALID_TIME SET bar = foo.baz"
+                              {:table-info {"foo" #{"bar" "baz" "quux"}}})))
 
   (t/is (=plan-file "test-sql-update-plan-with-period-references"
-                    (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.VALID_TIME)"
-                              {:table-info {"foo" #{"bar" "baz"}}
-                               :default-all-valid-time? true}))))
+                    (plan-sql "UPDATE foo FOR ALL VALID_TIME SET bar = (foo.SYSTEM_TIME OVERLAPS foo.VALID_TIME)"
+                              {:table-info {"foo" #{"bar" "baz"}}}))))
 
 (deftest dml-target-table-aliases
   (let [opts {:table-info {"t1" #{"col1"}}}]
@@ -1143,8 +1141,7 @@
                 FROM Prop_Owner
                 FOR ALL SYSTEM_TIME
                 WHERE Prop_Owner.id = 1) AS tmp"
-              {:table-info {"prop_owner" #{"id"}}
-               :default-all-valid-time? false}))))
+              {:table-info {"prop_owner" #{"id"}}}))))
 
 (deftest parenthesized-joined-tables-are-unboxed-502
   (t/is (= (plan-sql "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )"

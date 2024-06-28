@@ -43,7 +43,7 @@
   (print-dup clj-form w))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->QueryOptions [{:keys [args after-tx basis tx-timeout default-tz default-all-valid-time? explain? key-fn], :or {key-fn :kebab-case-keyword}}]
+(defn ->QueryOptions [{:keys [args after-tx basis tx-timeout default-tz explain? key-fn], :or {key-fn :kebab-case-keyword}}]
   (-> (QueryOptions/queryOpts)
       (cond-> (instance? Map args) (.args ^Map args)
               (sequential? args) (.args ^List args)
@@ -51,7 +51,6 @@
               basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
               default-tz (.defaultTz default-tz)
               tx-timeout (.txTimeout tx-timeout)
-              (some? default-all-valid-time?) (.defaultAllValidTime default-all-valid-time?)
               (some? explain?) (.explain explain?))
 
       (.keyFn (serde/read-key-fn key-fn))
@@ -104,7 +103,7 @@
   ([node query] (q node query {}))
 
   ([node query opts]
-   (let [^QueryOptions query-opts (->QueryOptions (-> (into {:default-all-valid-time? false} opts)
+   (let [^QueryOptions query-opts (->QueryOptions (-> opts
                                                       (time/after-latest-submitted-tx node)))]
      (with-open [^Stream res (cond
                                (string? query) (xtp/open-sql-query node query query-opts)
@@ -116,10 +115,9 @@
   (cond
     (instance? TxOptions tx-opts) tx-opts
     (nil? tx-opts) (TxOptions.)
-    (map? tx-opts) (let [{:keys [system-time default-tz default-all-valid-time?]} tx-opts]
+    (map? tx-opts) (let [{:keys [system-time default-tz]} tx-opts]
                      (TxOptions. (some-> system-time expect-instant)
-                                 default-tz
-                                 (boolean default-all-valid-time?)))))
+                                 default-tz))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx

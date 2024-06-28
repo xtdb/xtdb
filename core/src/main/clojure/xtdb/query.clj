@@ -107,13 +107,12 @@
   (vw/open-params allocator (mapify-params args)))
 
 (defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^IWatermarkSource wm-src]}
-                 conformed-query scan-cols default-tz default-all-valid-time? param-fields]
+                 conformed-query scan-cols default-tz param-fields]
   (.computeIfAbsent cache
                     {:scan-fields (when (and (seq scan-cols) scan-emitter)
                                     (with-open [wm (.openWatermark wm-src)]
                                       (.scanFields scan-emitter wm scan-cols)))
                      :default-tz default-tz
-                     :default-all-valid-time? default-all-valid-time?
                      :last-known-chunk (when metadata-mgr
                                          (.lastEntry (.chunksMetadata metadata-mgr)))
                      :param-fields param-fields}
@@ -134,7 +133,7 @@
 
   (^xtdb.query.PreparedQuery [query, {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
                                              ^RefCounter ref-ctr ^IWatermarkSource wm-src] :as deps}
-                              {:keys [param-types default-tz default-all-valid-time? table-info]}]
+                              {:keys [param-types default-tz table-info]}]
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
        (throw (err/illegal-arg :malformed-query
@@ -164,18 +163,17 @@
 
        (reify PreparedQuery
          (columnFields [_]
-           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz default-all-valid-time? param-fields)]
+           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields)]
              ;; could store column-fields in the cache/map too
              (->column-fields ordered-outer-projection fields)))
-         (bind [_ {:keys [args params basis default-tz default-all-valid-time?]
-                   :or {default-tz default-tz
-                        default-all-valid-time? default-all-valid-time?}}]
+         (bind [_ {:keys [args params basis default-tz]
+                   :or {default-tz default-tz}}]
 
            ;; TODO throw if basis is in the future?
            (util/with-close-on-catch [args (open-args allocator args)]
              ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
              (let [params (or params args)
-                   {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz default-all-valid-time? (expr/->param-fields params))
+                   {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (expr/->param-fields params))
                    {:keys [current-time]} basis
                    current-time (or current-time (.instant expr/*clock*))
                    clock (Clock/fixed current-time default-tz)]
@@ -212,7 +210,7 @@
                                         :basis (-> basis
                                                    (update :at-tx (fnil identity (some-> wm .txBasis)))
                                                    (assoc :current-time current-time))
-                                        :params params, :default-all-valid-time? default-all-valid-time?})
+                                        :params params})
                              (wrap-cursor wm allocator clock ref-ctr fields)))
 
                        (catch Throwable t
@@ -248,8 +246,7 @@
               plan-query-opts
               (-> query-opts
                   (select-keys
-                   [:default-all-valid-time? :decorrelate? :explain?
-                    :instrument-rules? :project-anonymous-columns? :validate-plan?])
+                   [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan?])
                   (update :decorrelate? #(if (nil? %) true false))
                   (assoc :table-info table-info))
               ;;TODO defaults to true in rewrite plan so needs defaulting pre-cache,

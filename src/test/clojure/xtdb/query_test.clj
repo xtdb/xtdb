@@ -116,10 +116,9 @@
           tx2 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
           tt2 (.getSystemTime tx2)]
       (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time}
+                (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
                                    (into '[last_updated] temporal-constraints)]
-                                  {:node node, :params {'?system-time1 tt1, '?system-time2 tt2}
-                                   :default-all-valid-time? true})
+                                  {:node node, :params {'?system-time1 tt1, '?system-time2 tt2}})
                      (into #{} (map :last-updated))))]
         (t/is (= #{"tx1" "tx2"}
                  (q)))

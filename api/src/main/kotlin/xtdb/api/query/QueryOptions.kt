@@ -25,7 +25,6 @@ private val BASIS_KEY: Keyword = Keyword.intern("basis")
 private val AFTER_TX_KEY: Keyword = Keyword.intern("after-tx")
 private val TX_TIMEOUT_KEY: Keyword = Keyword.intern("tx-timeout")
 private val DEFAULT_TZ_KEY: Keyword = Keyword.intern("default-tz")
-private val DEFAULT_ALL_VALID_TIME_KEY: Keyword = Keyword.intern("default-all-valid-time?")
 private val EXPLAIN_KEY: Keyword? = Keyword.intern("explain?")
 private val KEY_FN_KEY: Keyword = Keyword.intern("key-fn")
 
@@ -36,7 +35,6 @@ data class QueryOptions(
     @JvmField val afterTx: TransactionKey? = null,
     @JvmField val txTimeout: Duration? = null,
     @JvmField val defaultTz: ZoneId? = null,
-    @JvmField val defaultAllValidTime: Boolean = false,
     @JvmField val explain: Boolean = false,
     @JvmField val keyFn: IKeyFn<*>? = null
 ) : ILookup, Seqable {
@@ -83,7 +81,6 @@ data class QueryOptions(
             key === AFTER_TX_KEY -> afterTx
             key === TX_TIMEOUT_KEY -> txTimeout
             key === DEFAULT_TZ_KEY -> defaultTz
-            key === DEFAULT_ALL_VALID_TIME_KEY -> defaultAllValidTime
             key === EXPLAIN_KEY -> explain
             key === KEY_FN_KEY -> keyFn
             else -> notFound
@@ -111,7 +108,6 @@ data class QueryOptions(
 
         keyFn?.let { seqList.add(MapEntry.create(KEY_FN_KEY, keyFn)) }
 
-        seqList.add(MapEntry.create(DEFAULT_ALL_VALID_TIME_KEY, defaultAllValidTime))
         seqList.add(MapEntry.create(EXPLAIN_KEY, explain))
 
         return PersistentList.create(seqList).seq()
@@ -123,7 +119,6 @@ data class QueryOptions(
         private var afterTx: TransactionKey? = null
         private var txTimeout: Duration? = null
         private var defaultTz: ZoneId? = null
-        private var defaultAllValidTime: Boolean = false
         private var explain: Boolean = false
         private var keyFn: IKeyFn<Any>? = null
 
@@ -164,14 +159,6 @@ data class QueryOptions(
         fun txTimeout(txTimeout: Duration?) = apply { this.txTimeout = txTimeout }
 
         /**
-         * Specifies whether operations within the transaction should default to all valid-time.
-         *
-         * By default, operations in XT default to 'as of current-time' (contrary to SQL:2011, which defaults to all valid-time) -
-         * setting this flag to true restores the standards-compliant behaviour.
-         */
-        fun defaultAllValidTime(defaultAllValidTime: Boolean) = apply { this.defaultAllValidTime = defaultAllValidTime }
-
-        /**
          * The default time-zone that applies to any functions within the query without an explicitly specified time-zone.
          *
          * If not provided, defaults to UTC.
@@ -196,7 +183,7 @@ data class QueryOptions(
         /**
          * build the [QueryOptions] object.
          */
-        fun build() = QueryOptions(args, basis, afterTx, txTimeout, defaultTz, defaultAllValidTime, explain, keyFn)
+        fun build() = QueryOptions(args, basis, afterTx, txTimeout, defaultTz, explain, keyFn)
     }
 }
 

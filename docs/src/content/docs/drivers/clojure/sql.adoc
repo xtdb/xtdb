@@ -7,8 +7,7 @@ SQL queries are submitted through `xtdb.api/q`:
 * `(xt/q <node> <query> <opts>?)` returns the query results as a vector of maps.
 ** `opts`: map of query options
 *** `:args`: vector of query arguments
-*** `:basis`, `:tx-timeout`, `:default-all-valid-time?`: see link:../xtql/queries#basis[XTQL]
-    By default, `:default-all-valid-time?` is false, unlike the SQL:2011 specification - to maintain SQL spec compatibility, specify `:default-all-valid-time? true`.
+*** `:basis`, `:tx-timeout` : see link:../xtql/queries#basis[XTQL]
 * `(xt/q& <node> <query> <opts>?)`: returns a `CompletableFuture` of the query results.
 
 For example:
@@ -16,7 +15,7 @@ For example:
 [source,clojure]
 ----
 (xt/q node "SELECT u.first_name, u.last_name FROM users u WHERE _id = ?"
-      {:args ["James"], :default-all-valid-time? true})
+      {:args ["James"]})
 ----
 
 [#txs]
@@ -27,7 +26,8 @@ SQL transactions are submitted through `xtdb.api/execute-tx` and `xtdb.api/submi
 * `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns the transaction key of the submitted transaction.
 ** `tx-ops`: vector of link:#tx-ops[transaction operations].
 ** `opts` (map):
-*** `:default-all-valid-time?` (boolean, default false): whether to default to all valid time if not explicitly specified in the query.
+*** `:default-tz` (`java.time.ZoneRegion`): time zone to be used by default in functions where no explicit override is provided.
+    Defaults to the current TZ of the server JVM.
 * `(xt/execute-tx <node> <tx-ops> <opts>?)` : additionally awaits for the transaction to be processed, and returns `{:committed? true|false, :error err}` alongside the transaction key.
 
 SQL transaction operations are of the form `[:sql "<sql query>"]`.

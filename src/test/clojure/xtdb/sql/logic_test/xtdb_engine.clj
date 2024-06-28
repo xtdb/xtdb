@@ -134,7 +134,7 @@
 
   (visitInsertStatement [_ ctx]
     (let [ops (.accept ctx (->InsertOpsVisitor node statement))]
-      (xt/execute-tx node ops {:default-all-valid-time? true})
+      (xt/execute-tx node ops)
       node)))
 
 (extend-protocol slt/DbEngine

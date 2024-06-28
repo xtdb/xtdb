@@ -75,7 +75,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  4757)
+  4621)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]
@@ -166,8 +166,7 @@
 
 (t/deftest temporal-watermark-is-immutable-2354
   (with-open [node (xtn/start-node {})]
-    (let [tx (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :version 0}]]
-                           {:default-all-valid-time? false})
+    (let [tx (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
           tt (.getSystemTime tx)]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
@@ -178,8 +177,7 @@
                                xt$system_from, xt$system_to]]
                             {:node node})))
 
-      (let [tx1 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :version 1}]]
-                              {:default-all-valid-time? false})
+      (let [tx1 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :version 1}]])
             tt2 (.getSystemTime tx1)]
         (t/is (= #{{:xt/id :foo, :version 0,
                     :xt/valid-from (time/->zdt tt2)
@@ -192,11 +190,13 @@
                    {:xt/id :foo, :version 1,
                     :xt/valid-from (time/->zdt tt2)
                     :xt/system-from (time/->zdt tt2)}}
-                 (set (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
+                 (set (tu/query-ra '[:scan {:table xt_docs,
+                                            :for-system-time :all-time,
+                                            :for-valid-time :all-time}
                                      [xt$id version
                                       xt$valid_from, xt$valid_to
                                       xt$system_from, xt$system_to]]
-                                   {:node node :default-all-valid-time? true}))))
+                                   {:node node}))))
 
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (time/->zdt tt)

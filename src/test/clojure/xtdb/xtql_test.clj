@@ -1901,18 +1901,6 @@
                           :for-system-time :all-time})))
         "period column matching literal"))
 
-(t/deftest test-default-valid-time
-  (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2000", :valid-to #inst "4000"}
-                            {:xt/id 1 :foo "2000-4000"}]
-                           [:put-docs {:into :docs, :valid-from #inst "3000"}
-                            {:xt/id 1 :foo "3000-"}]])
-
-  (t/is (= #{{:xt/id 1, :foo "2000-4000"} {:xt/id 1, :foo "3000-"}}
-           (set (xt/q tu/*node*
-                      '(from :docs [xt/id foo])
-                      {:default-all-valid-time? true})))))
-
-
 (t/deftest test-sql-insert
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (0)"]])
   (t/is (= [{:xt/id 0}]

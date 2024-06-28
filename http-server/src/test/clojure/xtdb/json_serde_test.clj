@@ -75,8 +75,7 @@
 
   (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (_id) VALUES (1)"}],
                       (TxOptions. #xt.time/instant "2020-01-01T12:34:56.789Z"
-                                  #xt.time/zone "America/Los_Angeles"
-                                  false))]
+                                  #xt.time/zone "America/Los_Angeles"))]
 
     (t/is (= v (roundtrip-tx v))
           "transaction options"))
@@ -103,7 +102,6 @@
                              (.afterTx tx-key)
                              (.txTimeout #xt.time/duration "PT3H")
                              (.defaultTz #xt.time/zone "America/Los_Angeles")
-                             (.defaultAllValidTime true)
                              (.explain true)
                              (.keyFn #xt/key-fn :kebab-case-keyword)
                              (.build)))]

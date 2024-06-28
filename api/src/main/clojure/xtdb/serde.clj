@@ -220,11 +220,11 @@
 (defmethod print-method TxAborted [tx-result ^Writer w]
   (print-dup tx-result w))
 
-(defn tx-opts-read-fn [{:keys [system-time default-tz default-all-valid-time?]}]
-  (TxOptions. system-time default-tz default-all-valid-time?))
+(defn tx-opts-read-fn [{:keys [system-time default-tz]}]
+  (TxOptions. system-time default-tz))
 
 (defn tx-opts-write-fn [^TxOptions tx-opts]
-  {:system-time (.getSystemTime tx-opts), :default-tz (.getDefaultTz tx-opts), :default-all-valid-time? (.getDefaultAllValidTime tx-opts)})
+  {:system-time (.getSystemTime tx-opts), :default-tz (.getDefaultTz tx-opts)})
 
 (defmethod print-dup TxOptions [tx-opts ^Writer w]
   (.write w "#xt/tx-opts ")

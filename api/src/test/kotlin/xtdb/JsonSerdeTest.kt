@@ -161,7 +161,6 @@ class JsonSerdeTest {
                 .afterTx(txKey)
                 .txTimeout(Duration.parse("PT3H"))
                 .defaultTz(ZoneId.of("America/Los_Angeles"))
-                .defaultAllValidTime(true)
                 .explain(true)
                 .keyFn(IKeyFn.KeyFn.KEBAB_CASE_KEYWORD)
                 .build()
@@ -174,7 +173,6 @@ class JsonSerdeTest {
                               "afterTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
                               "txTimeout":"PT3H",
                               "defaultTz":"America/Los_Angeles",
-                              "defaultAllValidTime":true,
                               "explain":true,
                               "keyFn":"KEBAB_CASE_KEYWORD"}
               }
