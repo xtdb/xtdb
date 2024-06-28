@@ -238,7 +238,7 @@ export default defineConfig({
 
             customCss: [
                 './src/styles/tailwind.css',
-                './node_modules/railroad-diagrams/railroad-diagrams.css',
+                './src/styles/railroad-diagrams.css',
             ],
             head: [
                 {
