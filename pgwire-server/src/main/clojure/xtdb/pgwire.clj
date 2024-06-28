@@ -30,7 +30,7 @@
            xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
-           [xtdb.vector RelationReader]))
+           [xtdb.vector RelationReader IVectorReader]))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -990,11 +990,15 @@
   [{:keys [conn-state]} & cmds]
   (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
+(def json-bytes (comp types/utf8 json/json-str json-clj))
+
+(defn write-json [^IVectorReader rdr idx]
+  (when-not (.isNull rdr idx)
+    (json-bytes (.getObject rdr idx))))
+
 (defn cmd-send-query-result [{:keys [!closing?, conn-state] :as conn}
                              {:keys [query, ^IResultCursor result-cursor fields result-format]}]
-  (let [json-bytes (comp types/utf8 json/json-str json-clj)
-
-        ;; this query has been cancelled!
+  (let [;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
         n-rows-out (volatile! 0)]
@@ -1026,7 +1030,8 @@
                               (write-binary (.readerForName ^RelationReader rel field-name) idx)
                               (if write-text
                                 (write-text (.readerForName ^RelationReader rel field-name) idx)
-                                (json-bytes (.getObject (.readerForName ^RelationReader rel field-name) idx))))) fields)]
+                                (write-json (.readerForName ^RelationReader rel field-name) idx))))
+                          fields)]
                  (cmd-write-msg conn msg-data-row {:vals row})
                  (vswap! n-rows-out inc)))
 
