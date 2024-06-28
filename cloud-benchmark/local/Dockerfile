@@ -4,22 +4,21 @@ LABEL org.opencontainers.image.source=https://github.com/xtdb/xtdb
 LABEL org.opencontainers.image.description="XTDB Local Auctionmark"
 LABEL org.opencontainers.image.licenses="MPL-2.0"
 
-## UNCOMMENT BELOW If you want to setup Yourkit for Remote Profiling
-# # Install unzip
-# RUN apt-get update -y && \
-#      apt-get upgrade -y && \
-#      apt-get dist-upgrade -y && \
-#      apt-get -y autoremove && \
-#      apt-get clean
-# RUN apt-get install unzip
-#
-# # Fetch YourKit Java Profiler
-# RUN wget https://www.yourkit.com/download/docker/YourKit-JavaProfiler-2024.3-docker.zip -P /tmp/ && \
-#   unzip /tmp/YourKit-JavaProfiler-2024.3-docker.zip -d /usr/local && \
-#   rm /tmp/YourKit-JavaProfiler-2024.3-docker.zip
-#
+# Install unzip
+RUN apt-get update -y && \
+     apt-get upgrade -y && \
+     apt-get dist-upgrade -y && \
+     apt-get -y autoremove && \
+     apt-get clean
+RUN apt-get install unzip
+
+# Fetch YourKit Java Profiler
+RUN wget https://www.yourkit.com/download/docker/YourKit-JavaProfiler-2024.3-docker.zip -P /tmp/ && \
+  unzip /tmp/YourKit-JavaProfiler-2024.3-docker.zip -d /usr/local && \
+  rm /tmp/YourKit-JavaProfiler-2024.3-docker.zip
+
 # Expose Port for Yourkit Agent
-# # EXPOSE 10001
+EXPOSE 10001
 
 WORKDIR /usr/local/lib/xtdb
 
@@ -31,8 +30,8 @@ ENTRYPOINT ["java", \
     "-Xmx1500m", "-Xms1500m", \
     "-XX:MaxDirectMemorySize=2000m", \
     "-XX:MaxMetaspaceSize=500m", \
-    ## UNCOMMENT BELOW If you want to run a Yourkit agent for Remote Profiling
-    # "-agentpath:/usr/local/YourKit-JavaProfiler-2024.3/bin/linux-x86-64/libyjpagent.so=port=10001,listen=all", \
+    # UNCOMMENT BELOW If you want to run a Yourkit agent for Remote Profiling
+    "-agentpath:/usr/local/YourKit-JavaProfiler-2024.3/bin/linux-x86-64/libyjpagent.so=port=10001,listen=all", \
     "-cp","xtdb-local-auctionmark.jar", \
     "clojure.main", "-m", "xtdb.run-auctionmark.main"]
 
