@@ -226,9 +226,13 @@
                :json (str d1)
                :clj-pred #(= (bigdec %) (bigdec n))}))]
 
-    [{:sql "null"
-      :json-type JsonNodeType/NULL
-      :clj nil}
+    ;;JSON NULL is a bit strange to test in that it as an element in an array
+    ;;is perhaps one of the only ways its likely to appear in XTDB data.
+    ;;as we return a SQL null at the top level and in maps omit the entry entirely
+    ;;as ABSENT = NULL
+    [{:sql "ARRAY[NULL]"
+      :json-type JsonNodeType/ARRAY
+      :clj [nil]}
 
      {:sql "true"
       :json-type JsonNodeType/BOOLEAN
@@ -1343,3 +1347,36 @@
                PSQLException
                #"ERROR: Relevant table schema has changed since preparing query, please prepare again"
                (with-open [_rs (.executeQuery stmt)])))))))
+
+(deftest test-nulls-in-monomorphic-types
+  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+    (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a) VALUES (1, NULL), (2, 22.2)"))
+    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY xt$id")]
+
+      (with-open [rs (.executeQuery stmt)]
+
+        (t/is (= [{"a" "float8"}]
+                 (result-metadata stmt)
+                 (result-metadata rs)))
+
+        (t/is (= [{"a" nil} {"a" 22.2}]
+                 (rs->maps rs)))))))
+
+(deftest test-nulls-in-polymorphic-types
+  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+    (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a) VALUES (1, 'one'), (2, 1), (3, NULL)"))
+    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY xt$id")]
+
+      (with-open [rs (.executeQuery stmt)]
+
+        (t/is (= [{"a" "json"}]
+                 (result-metadata stmt)
+                 (result-metadata rs)))
+
+        (let [[x y z :as res] (mapv #(get % "a") (rs->maps rs))]
+
+          (t/is (= 3 (count res)))
+
+          (t/is (= "\"one\"" (.getValue x)))
+          (t/is (= "1" (.getValue y)))
+          (t/is (nil? z)))))))
