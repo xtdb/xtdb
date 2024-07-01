@@ -50,7 +50,7 @@ allprojects {
     // labs sub-projects set this explicitly - this runs afterwards
     group = if (proj.hasProperty("labs")) "com.xtdb.labs" else "com.xtdb"
 
-    version = System.getenv("XTDB_VERSION") ?: "dev-SNAPSHOT"
+    version = System.getenv("XTDB_VERSION") ?: "2.0.0-SNAPSHOT"
 
     repositories {
         mavenCentral()
