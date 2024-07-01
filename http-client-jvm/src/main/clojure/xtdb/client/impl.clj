@@ -7,11 +7,12 @@
             [xtdb.serde :as serde]
             [xtdb.time :as time])
   (:import [java.io EOFException InputStream]
+           java.net.http.HttpClient
            java.lang.AutoCloseable
            java.util.Spliterator
            [java.util.stream StreamSupport]
            (xtdb.api IXtdb)
-           (xtdb.api.query Basis QueryOptions XtqlQuery)))
+           (xtdb.api.query Basis)))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}
@@ -24,13 +25,14 @@
   ([client request-method endpoint]
    (request client request-method endpoint {}))
 
-  ([client request-method endpoint opts]
+  ([{:keys [base-url http-client]} request-method endpoint opts]
    (try
      (hato/request (merge {:accept :transit+json
                            :as :transit+json
                            :request-method request-method
                            :version :http-1.1
-                           :url (str (:base-url client)
+                           :http-client http-client
+                           :url (str base-url
                                      (-> (r/match-by-name router endpoint)
                                          (r/match->path)))
                            :transit-opts transit-opts}
@@ -81,7 +83,7 @@
                                     (time/after-latest-submitted-tx client))
                    :as ::transit+json->result-or-error})))
 
-(defrecord XtdbClient [base-url, !latest-submitted-tx]
+(defrecord XtdbClient [base-url, ^HttpClient http-client, !latest-submitted-tx]
   IXtdb
   (openQuery [client query query-opts]
    (xtp/open-sql-query client query query-opts))
@@ -124,7 +126,8 @@
     (:body (request client :get :status)))
 
   AutoCloseable
-  (close [_]))
+  (close [_]
+    (.close http-client)))
 
 (defn start-client ^java.lang.AutoCloseable [url]
-  (->XtdbClient url (atom nil)))
+  (->XtdbClient url (hato/build-http-client {}) (atom nil)))
