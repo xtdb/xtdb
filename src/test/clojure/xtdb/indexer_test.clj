@@ -311,25 +311,26 @@
                (set (xt/q node '(from :xt_docs [{:xt/id id} uuid]))))))))
 
 (t/deftest writes-log-file
-  (let [node-dir (util/->path "target/writes-log-file")]
-    (util/delete-dir node-dir)
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/writes-log-file")]
+      (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]
-                          [:put-docs :xt_docs {:xt/id "bar"}]])
+      (with-open [node (tu/->local-node {:node-dir node-dir})]
+        (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]
+                            [:put-docs :xt_docs {:xt/id "bar"}]])
 
-      ;; aborted tx shows up in log
-      (xt/submit-tx node [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
+        ;; aborted tx shows up in log
+        (xt/submit-tx node [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
-      (-> (xt/submit-tx node [[:delete-docs {:from :xt_docs, :valid-from #inst "2020-04-01"} "foo"]
-                              [:put-docs {:into :xt_docs, :valid-from #inst "2020-04-01", :valid-to #inst "2020-05-01"}
-                               {:xt/id "bar", :month "april"}]])
-          (tu/then-await-tx node))
+        (-> (xt/submit-tx node [[:delete-docs {:from :xt_docs, :valid-from #inst "2020-04-01"} "foo"]
+                                [:put-docs {:into :xt_docs, :valid-from #inst "2020-04-01", :valid-to #inst "2020-05-01"}
+                                 {:xt/id "bar", :month "april"}]])
+            (tu/then-await-tx node))
 
-      (tu/finish-chunk! node)
+        (tu/finish-chunk! node)
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
-                     (.resolve node-dir "objects")))))
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
+                       (.resolve node-dir "objects"))))))
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
@@ -552,24 +553,25 @@
                                     (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
-  (let [node-dir (util/->path "target/can-index-sql-insert")]
-    (util/delete-dir node-dir)
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/can-index-sql-insert")]
+      (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir
-                                       :instant-src (tu/->mock-clock)})]
-      (let [mm (tu/component node ::meta/metadata-manager)]
-        (t/is (nil? (meta/latest-chunk-metadata mm)))
+      (with-open [node (tu/->local-node {:node-dir node-dir
+                                         :instant-src (tu/->mock-clock)})]
+        (let [mm (tu/component node ::meta/metadata-manager)]
+          (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-        (let [last-tx-key (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))]
-          (t/is (= last-tx-key
-                   (xt/submit-tx node [[:sql "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
-                                        [0, 2, "hello", 12]
-                                        [1, 1, "world", 3.3]]])))
+          (let [last-tx-key (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))]
+            (t/is (= last-tx-key
+                     (xt/submit-tx node [[:sql "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
+                                          [0, 2, "hello", 12]
+                                          [1, 1, "world", 3.3]]])))
 
-          (t/is (= last-tx-key
-                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))
+            (t/is (= last-tx-key
+                     (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))
 
-        (tu/finish-chunk! node)
+          (tu/finish-chunk! node)
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
-                       (.resolve node-dir "objects"))))))
+          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
+                         (.resolve node-dir "objects")))))))
