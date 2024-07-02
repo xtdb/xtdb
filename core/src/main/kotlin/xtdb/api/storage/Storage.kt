@@ -109,10 +109,13 @@ object Storage {
         val localDiskCache: Path,
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long = 536870912,
+        // 10GB default
+        var maxLocalDiskCacheBytes: Long = 10737418240, 
     ) : Factory {
 
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
+        fun maxLocalDiskCacheBytes(maxLocalDiskCacheBytes: Long) = apply { this.maxLocalDiskCacheBytes = maxLocalDiskCacheBytes }
 
         override fun openStorage(allocator: BufferAllocator) =
             requiringResolve("xtdb.buffer-pool/open-remote-storage").invoke(allocator, this) as IBufferPool
