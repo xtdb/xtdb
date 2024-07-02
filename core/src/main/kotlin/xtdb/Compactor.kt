@@ -128,6 +128,9 @@ fun writeRelation(
     val rowCopier = trieDataWriter.rowCopier(relation)
     val iidReader = relation.readerForName("xt\$iid")
 
+    val startPtr = ArrowBufPointer()
+    val endPtr = ArrowBufPointer()
+
     fun writeSubtree(depth: Int, sel: Selection): Int =
         if (Thread.interrupted()) throw InterruptedException()
         else if (sel.size <= pageLimit) {
@@ -157,15 +160,15 @@ fun writeRelation(
                         else -> depth - 3
                     }
 
-                    if (iidDepth < 64) {
+                    if (iidDepth >= 64 || iidReader.getPointer(sel.first(), startPtr) == iidReader.getPointer(sel.last(), endPtr)) {
+                        writeRecencyBranch(sel.recencyPartitions(recencies, pageLimit))
+                    } else {
                         trieWriter.writeIidBranch(
                             sel.iidPartitions(iidReader, iidDepth)
                                 .map { innerSel ->
                                     if (innerSel == null) -1 else writeSubtree(depth + 1, innerSel)
                                 }
                                 .toIntArray())
-                    } else {
-                        writeRecencyBranch(sel.recencyPartitions(recencies, pageLimit))
                     }
                 }
             }
