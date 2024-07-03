@@ -9,11 +9,13 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.compactor :as c])
+            [xtdb.compactor :as c]
+            [xtdb.time :as time])
   (:import [java.nio.file Path]
            java.time.Duration
            [org.apache.arrow.memory RootAllocator]
-           [org.apache.arrow.vector.ipc ArrowFileReader]))
+           [org.apache.arrow.vector.ipc ArrowFileReader]
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$RecencyBranch ArrowHashTrie$Node)))
 
 (def dev-node-dir
   (io/file "dev/dev-node"))
@@ -121,3 +123,39 @@
   (->> (util/->path "/tmp/tpch/tables/customer/t1-content/c_name/r00-tx00.arrow")
        (read-arrow-file)
        (into [] cat)))
+
+(defn read-meta-file
+  "Reads the meta file and returns the rendered trie.
+
+     numbers: leaf page idxs
+     vectors: iid branches
+     maps: recency branches"
+  [^Path path]
+  (with-open [al (RootAllocator.)
+              ch (util/->file-channel path)
+              rdr (ArrowFileReader. ch al)]
+    (.initialize rdr)
+    (.loadNextBatch rdr)
+
+    (letfn [(render-trie [^ArrowHashTrie$Node node]
+              (cond
+                (instance? ArrowHashTrie$Leaf node) (.getDataPageIndex ^ArrowHashTrie$Leaf node)
+
+                (instance? ArrowHashTrie$RecencyBranch node)
+                (let [^ArrowHashTrie$RecencyBranch node node
+                      recencies (.getRecencies node)]
+                  (into (sorted-map) (zipmap (mapv time/micros->instant recencies)
+                                             (mapv (comp render-trie #(.recencyNode node ^long %))
+                                                   (range (alength recencies))))))
+
+                (instance? ArrowHashTrie$IidBranch node) (mapv render-trie (.getIidChildren ^ArrowHashTrie$IidBranch node))
+                :else node))]
+
+      (render-trie (-> (.getVectorSchemaRoot rdr)
+                       (.getVector "nodes")
+                       (ArrowHashTrie.)
+                       (.getRootNode))))))
+
+(comment
+  (->> (util/->path "target/compactor/lose-data-on-compaction/objects/v02/tables/docs/meta/log-l01-nr121-rs16.arrow")
+       (read-meta-file)))
