@@ -16,7 +16,6 @@ import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneOffset.UTC
 import java.util.*
-import java.util.stream.IntStream
 import kotlin.math.ceil
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
@@ -99,7 +98,7 @@ internal fun IntArray.recencyPartitions(
     val partSize = ceil(size.toDouble() / partCount).toInt()
 
     val sortedByRecency =
-        IntStream.range(0, size).boxed()
+        Arrays.stream(this).boxed()
             .sorted { l, r -> recencies.getLong(r).compareTo(recencies.getLong(l)) }
             .mapToInt { it }
             .toArray()
@@ -148,7 +147,8 @@ fun writeRelation(
                 )
 
             // Year, IID[0], Quarter, IID[1], Month, IID[2..]
-            // then, when we've run out of IID, we know that it's all versions of the same IID, so we page by recency
+            // then, when we've run out of IID, or when the first and last IIDs are the same,
+            // we know that it's all versions of the same IID, so we page by recency
             when (depth) {
                 0 -> writeRecencyBranch(sel.recencyPartitions(recencies, YEAR))
                 2 -> writeRecencyBranch(sel.recencyPartitions(recencies, QUARTER))

@@ -4,6 +4,7 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
+            [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -363,7 +364,33 @@
         (dotimes [n 100]
           (xt/submit-tx node [[:put-docs :foo {:xt/id "foo", :v n}]]))
         (tu/then-await-tx node)
-        (c/compact-all! node (Duration/ofSeconds 5))))
+        (c/compact-all! node (Duration/ofSeconds 5))
+
+        (t/is (= [{:foo-count 100}] (xt/q node "SELECT COUNT(*) foo_count FROM foo FOR ALL VALID_TIME")))))
 
     (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-more-than-a-page-of-versions")))
                    (.resolve node-dir "objects/v02/tables/foo") #"log-l01-(.+)\.arrow")))
+
+(t/deftest losing-data-when-compacting-3459
+  (binding [c/*page-size* 8
+            c/*l1-file-size-rows* 32]
+    (let [node-dir (util/->path "target/compactor/lose-data-on-compaction")]
+      (util/delete-dir node-dir)
+
+      (util/with-open [node (tu/->local-node {:node-dir node-dir
+                                              :rows-per-chunk 32
+                                              :page-limit 8
+                                              :log-limit 4})]
+
+        (dotimes [v 12]
+          (xt/execute-tx node [[:put-docs :docs {:xt/id 0, :v v} {:xt/id 1, :v v}]]))
+
+        (c/compact-all! node)
+
+        (t/is (= #{{:xt/id 0, :count 12} {:xt/id 1, :count 12}}
+                 (set (xt/q node "SELECT _id, count(*) count
+                             FROM docs FOR ALL VALID_TIME
+                             GROUP BY _id"))))
+
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/lose-data-on-compaction")))
+                       (.resolve node-dir "objects/v02/tables/docs") #"log-(.+)\.arrow")))))
