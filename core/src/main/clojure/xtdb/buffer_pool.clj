@@ -4,24 +4,24 @@
             [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
+           (com.github.benmanes.caffeine.cache Caffeine Cache Weigher RemovalListener)
            [java.io ByteArrayOutputStream Closeable]
            (java.nio ByteBuffer)
            (java.nio.channels Channels ClosedByInterruptException)
            [java.nio.file FileVisitOption Files LinkOption Path]
            [java.nio.file.attribute FileAttribute]
-           [java.util Map NavigableMap TreeMap]
-           [java.util.concurrent CompletableFuture]
-           (java.util.concurrent.atomic AtomicLong)
-           java.util.NavigableMap
+           [java.util NavigableMap TreeMap]
+           (java.util NavigableMap)
+           [java.util.concurrent CompletableFuture ForkJoinPool TimeUnit]
+           [java.util.function BiFunction]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            (xtdb IArrowWriter IBufferPool)
-           (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
            xtdb.api.Xtdb$Config
-           (xtdb.multipart IMultipartUpload SupportsMultipart)
-           xtdb.util.ArrowBufLRU))
+           (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
+           (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -36,25 +36,25 @@
   (let [version 2]
     (util/->path (str "v" (util/->lex-hex-string version)))))
 
-(defn- free-memory [^Map memory-store]
-  (locking memory-store
-    (run! util/close (.values memory-store))
-    (.clear memory-store)))
+(defn- free-memory [^Cache memory-store]
+  ;; closing should happen via the remove method
+  (.invalidateAll memory-store)
+  ;; HACK - invalidate is all async; investigate whether we can hook into caffeine
+  (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
 
 (defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
 
-(defn- cache-get ^ArrowBuf [^Map memory-store k]
-  (locking memory-store
-    (some-> (.get memory-store k) retain)))
+(defn- cache-get ^ArrowBuf [^Cache memory-store k]
+  (.. memory-store asMap (computeIfPresent k (reify BiFunction
+                                               (apply [_ _k v]
+                                                 (retain v))))))
 
 (defn- cache-compute
-  "Returns a pair [hit-or-miss, buf] computing the cached ArrowBuf from (f) if needed.
-  `hit-or-miss` is true if the buffer was found, false if the object was added as part of this call."
-  [^Map memory-store k f]
-  (locking memory-store
-    (let [hit (.containsKey memory-store k)
-          arrow-buf (if hit (.get memory-store k) (let [buf (f)] (.put memory-store k buf) buf))]
-      [hit (retain arrow-buf)])))
+  "Computing the cached ArrowBuf from (f) if needed."
+  [^Cache memory-store k f]
+  (.. memory-store asMap (compute k (reify BiFunction
+                                      (apply [_ _k v]
+                                        (retain (or v (f))))))))
 
 (defn- close-arrow-writer [^ArrowFileWriter aw]
   ;; arrow wraps InterruptExceptions
@@ -67,7 +67,8 @@
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
   (getBuffer [_ k]
-    (let [cached-buffer (cache-get memory-store k)]
+    (let [cached-buffer (locking memory-store
+                          (some-> (.get memory-store k) retain))]
       (cond
         (nil? k)
         (CompletableFuture/completedFuture nil)
@@ -127,7 +128,9 @@
 
   Closeable
   (close [_]
-    (free-memory memory-store)
+    (locking memory-store
+      (run! util/close (.values memory-store))
+      (.clear memory-store))
     (util/close allocator)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -140,7 +143,8 @@
                         "upload" ".arrow"
                         (make-array FileAttribute 0)))
 
-(defrecord LocalBufferPool [allocator, ^ArrowBufLRU memory-store, ^Path disk-store]
+
+(defrecord LocalBufferPool [allocator, ^Cache memory-store, ^Path disk-store, ^long max-size]
   IBufferPool
   (getBuffer [_ k]
     (let [cached-buffer (cache-get memory-store k)]
@@ -153,19 +157,19 @@
 
         :else
         (let [buffer-cache-path (.resolve disk-store k)]
-          (-> (if (util/path-exists buffer-cache-path)
-                ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
-                (CompletableFuture/completedFuture buffer-cache-path)
-                (CompletableFuture/failedFuture (os/obj-missing-exception k)))
-              (util/then-apply
-                (fn [path]
-                  (try
-                    (let [nio-buffer (util/->mmap-path path)
-                          create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                          [_ buf] (cache-compute memory-store k create-arrow-buf)]
-                      buf)
-                    (catch ClosedByInterruptException _
-                      (throw (InterruptedException.)))))))))))
+          (locking disk-store
+            (-> (if (util/path-exists buffer-cache-path)
+                  ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
+                  (CompletableFuture/completedFuture buffer-cache-path)
+                  (CompletableFuture/failedFuture (os/obj-missing-exception k)))
+                (util/then-apply
+                  (fn [path]
+                    (try
+                      (let [nio-buffer (util/->mmap-path path)
+                            create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)]
+                        (cache-compute memory-store k create-arrow-buf))
+                      (catch ClosedByInterruptException _
+                        (throw (InterruptedException.))))))))))))
 
   (putObject [_ k buffer]
     (CompletableFuture/completedFuture
@@ -223,20 +227,32 @@
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
-    (doto (.remove memory-store k)
-      util/close))
+    (.invalidate memory-store k)
+    (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
 
   Closeable
   (close [_]
     (free-memory memory-store)
     (util/close allocator)))
 
+(defn ->memory-buffer-cache ^Cache [^long max-cache-bytes]
+  (-> (Caffeine/newBuilder)
+      (.maximumWeight max-cache-bytes)
+      (.weigher (reify Weigher
+                  (weigh [_ _k v]
+                    (.capacity ^ArrowBuf v))))
+      (.removalListener (reify RemovalListener
+                          (onRemoval [_ _k v _]
+                            (util/close v))))
+      (.build)))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory]
   (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
-                     (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
+                     (->memory-buffer-cache (.getMaxCacheBytes factory))
                      (-> (.getPath factory)
-                         (.resolve storage-root))))
+                         (.resolve storage-root))
+                     (.getMaxCacheBytes factory)))
 
 (defn dir->buffer-pool
   "Creates a local storage buffer pool from the given directory."
@@ -314,7 +330,7 @@
         nil))))
 
 (defrecord RemoteBufferPool [allocator
-                             ^ArrowBufLRU memory-store
+                             ^Cache memory-store
                              ^Path local-disk-cache
                              ^ObjectStore object-store]
   IBufferPool
@@ -337,10 +353,8 @@
               (util/then-apply
                 (fn [path]
                   (let [nio-buffer (util/->mmap-path path)
-                        create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                        [_ buf] (cache-compute memory-store k create-arrow-buf)]
-
-                    buf))))))))
+                        create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)]
+                    (cache-compute memory-store k create-arrow-buf)))))))))
 
   (listAllObjects [_] (.listAllObjects object-store))
 
@@ -401,8 +415,8 @@
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
-    (doto (.remove memory-store k)
-      (util/close)))
+    (.invalidate memory-store k)
+    (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
 
   Closeable
   (close [_]
@@ -415,7 +429,7 @@
 (defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
-                        (ArrowBufLRU. 16 (.getMaxCacheEntries factory) (.getMaxCacheBytes factory))
+                        (->memory-buffer-cache (.getMaxCacheBytes factory))
                         (.getLocalDiskCache factory)
                         object-store)))
 
