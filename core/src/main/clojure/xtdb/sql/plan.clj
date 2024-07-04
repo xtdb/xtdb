@@ -2019,7 +2019,7 @@
     (let [expr-visitor (->ExprPlanVisitor env scope)
           from-expr (-> (.expr ctx 0) (.accept expr-visitor))
           to-expr (-> (.expr ctx 1) (.accept expr-visitor))]
-      {:for-valid-time [:between from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
+      {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
        :projection [{vf-col (list 'greatest vf-col (list 'cast (or from-expr '(current-timestamp)) types/temporal-col-type))}
 
                     {vt-col (if to-expr

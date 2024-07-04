@@ -1787,3 +1787,49 @@
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"line 1:42 mismatched input 'bar' expecting"
                           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME BETWEEN bar AND baz"))))
+
+(deftest test-portion-of-valid-time-boundary
+  (xt/submit-tx tu/*node* [[:sql "
+INSERT INTO system_active_power (_id, value, _valid_from, _valid_to)
+VALUES
+(1, 500,  TIMESTAMP '2024-01-01T00:00:00', TIMESTAMP '2024-01-01T00:05:00'),
+(1, 510,  TIMESTAMP '2024-01-01T00:05:00', TIMESTAMP '2024-01-01T00:10:00'),
+(1, 530,  TIMESTAMP '2024-01-01T00:10:00', TIMESTAMP '2024-01-01T00:15:00'),
+(1, 9999, TIMESTAMP '2024-01-01T00:15:00', TIMESTAMP '2024-01-01T00:20:00'),
+(1, 560,  TIMESTAMP '2024-01-01T00:20:00', TIMESTAMP '2024-01-01T00:25:00'),
+(1, 580,  TIMESTAMP '2024-01-01T00:25:00', TIMESTAMP '2024-01-01T00:30:00')"]])
+
+  (letfn [(zdt [mins]
+            (.plusMinutes #xt.time/zoned-date-time "2024-01-01T00:00Z[UTC]" mins))
+          (q []
+            (set (xt/q tu/*node* "SELECT value, _valid_from, _valid_to
+                                  FROM system_active_power FOR ALL VALID_TIME WHERE _id = 1")))
+          (del! [from to]
+            (xt/execute-tx tu/*node* [[:sql "DELETE FROM system_active_power
+                                                          FOR PORTION OF VALID_TIME FROM ? TO ?
+                                                          WHERE _id = 1"
+                                       [from to]]]))]
+
+    (t/is (true? (:committed? (del! (zdt 15) (zdt 20)))))
+
+    (t/is (= #{{:value 500, :xt/valid-from (zdt 0), :xt/valid-to (zdt 5)}
+               {:value 510, :xt/valid-from (zdt 5), :xt/valid-to (zdt 10)}
+               {:value 530, :xt/valid-from (zdt 10), :xt/valid-to (zdt 15)}
+               {:value 560, :xt/valid-from (zdt 20), :xt/valid-to (zdt 25)}
+               {:value 580, :xt/valid-from (zdt 25), :xt/valid-to (zdt 30)}}
+             (q)))
+
+    (t/is (true? (:committed? (del! (zdt 2) (zdt 10)))))
+
+    (t/is (= #{{:value 500, :xt/valid-from (zdt 0), :xt/valid-to (zdt 2)}
+               {:value 530, :xt/valid-from (zdt 10), :xt/valid-to (zdt 15)}
+               {:value 560, :xt/valid-from (zdt 20), :xt/valid-to (zdt 25)}
+               {:value 580, :xt/valid-from (zdt 25), :xt/valid-to (zdt 30)}}
+             (q)))
+
+    (t/is (true? (:committed? (del! (zdt 20) (zdt 27)))))
+
+    (t/is (= #{{:value 500, :xt/valid-from (zdt 0), :xt/valid-to (zdt 2)}
+               {:value 530, :xt/valid-from (zdt 10), :xt/valid-to (zdt 15)}
+               {:value 580, :xt/valid-from (zdt 27), :xt/valid-to (zdt 30)}}
+             (q)))))

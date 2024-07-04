@@ -17,5 +17,5 @@
    [:rename
     u.1
     [:scan
-     {:table users, :for-valid-time [:between ?_0 ?_1]}
+     {:table users, :for-valid-time [:in ?_0 ?_1]}
      [xt$valid_from xt$iid xt$valid_to {id (= id ?_3)}]]]]]]
