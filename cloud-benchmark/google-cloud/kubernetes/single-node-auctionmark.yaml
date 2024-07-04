@@ -72,7 +72,7 @@ spec:
         image: "europe-west1-docker.pkg.dev/xtdb-scratch/xtdb-google-cloud-bench-repo/xtdb-google-cloud-bench:latest"
         volumeMounts:
         - mountPath: "/var/lib/xtdb/log"
-          name: "xtdb-pvc-local-caches-vol"
+          name: "xtdb-pvc-log-vol"
         - mountPath: "/var/lib/xtdb/buffers"
           name: "xtdb-pvc-local-caches-vol"
         resources:
