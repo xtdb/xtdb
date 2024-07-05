@@ -28,7 +28,7 @@
       "children" : [ ]
     },{
       "name" : "xt$valid_to",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "timestamp",
         "unit" : "MICROSECOND",
@@ -101,8 +101,8 @@
     },{
       "name" : "xt$valid_to",
       "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : [1588291200000000,9223372036854775807,9223372036854775807,9223372036854775807]
+      "VALIDITY" : [1,0,0,0],
+      "DATA" : [1588291200000000,0,0,0]
     },{
       "name" : "op",
       "count" : 4,

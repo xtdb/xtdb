@@ -94,8 +94,8 @@
         (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
           (.copyRow row-copier (.getIndex ev-ptr))
 
-          (.writeLong recency-wtr
-                      (.getRecency ^IPolygonReader (calculate-polygon ev-ptr)))
+          (let [recency (.getRecency ^IPolygonReader (calculate-polygon ev-ptr))]
+            (.writeLong recency-wtr recency))
 
           (.nextIndex ev-ptr)
           (when (.isValid ev-ptr is-valid-ptr path)

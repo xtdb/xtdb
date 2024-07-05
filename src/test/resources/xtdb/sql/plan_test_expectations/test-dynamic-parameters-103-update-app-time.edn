@@ -5,7 +5,11 @@
    {xt$valid_from
     (greatest xt$valid_from (cast ?_0 [:timestamp-tz :micro "UTC"]))}
    {xt$valid_to
-    (least xt$valid_to (cast ?_1 [:timestamp-tz :micro "UTC"]))}
+    (nullif
+     (least
+      (coalesce xt$valid_to xtdb/end-of-time)
+      (cast ?_1 [:timestamp-tz :micro "UTC"]))
+     xtdb/end-of-time)}
    first_name
    id]
   [:project

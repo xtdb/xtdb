@@ -238,8 +238,7 @@
 
   (visitPeriodSpecLiteral [_ ctx] (-> (.literal ctx) (.accept expr-visitor)))
   (visitPeriodSpecParam [_ ctx] (-> (.parameterSpecification ctx) (.accept expr-visitor)))
-  (visitPeriodSpecNow [_ _] :now)
-  (visitPeriodSpecEndOfTime [_ _] nil))
+  (visitPeriodSpecNow [_ _] :now))
 
 (defrecord MultipleTimePeriodSpecifications []
   PlanError
@@ -1323,10 +1322,7 @@
   (visitCurrentTimestampFunction [_ ctx] (fn-with-precision 'current-timestamp (.precision ctx)))
   (visitLocalTimeFunction [_ ctx] (fn-with-precision 'local-time (.precision ctx)))
   (visitLocalTimestampFunction [_ ctx] (fn-with-precision 'local-timestamp (.precision ctx)))
-  (visitEndOfTimeFunction [_ _] 'xtdb/end-of-time)
-
   (visitCurrentInstantFunction0 [this ctx] (-> (.currentInstantFunction ctx) (.accept this)))
-  (visitEndOfTimeFunction0 [this ctx] (-> (.endOfTimeFunction ctx) (.accept this)))
 
   (visitDateTruncFunction [this ctx]
     (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))
@@ -2025,9 +2021,13 @@
       {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
        :projection [{vf-col (list 'greatest vf-col (list 'cast (or from-expr '(current-timestamp)) types/temporal-col-type))}
 
-                    {vt-col (if to-expr
-                              (list 'least vt-col (list 'cast to-expr types/temporal-col-type))
-                              vt-col)}]})))
+                    {vt-col (list 'nullif
+                                  (if to-expr
+                                    (list 'least
+                                          (list 'coalesce vt-col 'xtdb/end-of-time)
+                                          (list 'cast to-expr types/temporal-col-type))
+                                    (list 'coalesce vt-col 'xtdb/end-of-time))
+                                  'xtdb/end-of-time)}]})))
 
 (def ^:private default-vt-extents-projection
   [{vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))}
@@ -2041,7 +2041,7 @@
   
   (available-tables [_] [table-alias])
 
-  (find-decls [_ [col-name table-name :as chain]]
+  (find-decls [_ [col-name table-name]]
     (when (and (or (nil? table-name) (= table-name table-alias))
                (or (contains? cols col-name) (types/temporal-column? col-name)))
       [(.computeIfAbsent !reqd-cols (->col-sym col-name)

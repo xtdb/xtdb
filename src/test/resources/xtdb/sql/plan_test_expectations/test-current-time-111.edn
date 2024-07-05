@@ -8,7 +8,5 @@
   {xt$column_7 (local-time)}
   {xt$column_8 (local-time 6)}
   {xt$column_9 (local-timestamp)}
-  {xt$column_10 (local-timestamp 9)}
-  {xt$column_11 xtdb/end-of-time}
-  {xt$column_12 xtdb/end-of-time}]
+  {xt$column_10 (local-timestamp 9)}]
  [:rename u.1 [:scan {:table u} [a]]]]

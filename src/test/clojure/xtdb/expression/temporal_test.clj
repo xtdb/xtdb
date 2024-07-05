@@ -82,7 +82,7 @@
                               [:date :day]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (nil? (test-cast time/end-of-time [:date :day]))))
+          (t/is (nil? (test-cast nil [:date :day]))))
 
         (t/testing "time"
           (t/is (= #xt.time/time "12:34:56"
@@ -99,7 +99,7 @@
                               [:time-local :second]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (nil? (test-cast time/end-of-time [:time-local :second]))))
+          (t/is (nil? (test-cast nil [:time-local :second]))))
 
         (t/testing "ts"
           (t/is (= #xt.time/date-time "2022-08-01T12:34:56"
@@ -116,8 +116,8 @@
                               [:timestamp-local :second]
                               {:default-tz (ZoneId/of "America/Los_Angeles")})))
 
-          (t/is (nil? (test-cast time/end-of-time [:timestamp-local :second])))
-          (t/is (nil? (test-cast time/end-of-time [:timestamp-local :second] {:default-tz (ZoneId/of "America/Los_Angeles")}))))
+          (t/is (nil? (test-cast nil [:timestamp-local :second])))
+          (t/is (nil? (test-cast nil [:timestamp-local :second] {:default-tz (ZoneId/of "America/Los_Angeles")}))))
 
         (t/testing "tstz"
           (t/is (= #xt.time/zoned-date-time "2022-08-01T13:34:56+01:00[Europe/London]"
@@ -128,8 +128,8 @@
                    (test-cast #xt.time/zoned-date-time "2022-08-01T12:34:56Z"
                               [:timestamp-tz :nano "Europe/London"])))
 
-          (t/is (nil? (test-cast time/end-of-time [:timestamp-tz :second "Europe/London"] {:default-tz (ZoneId/of "America/Los_Angeles")})))
-          (t/is (nil? (test-cast time/end-of-time [:timestamp-tz :nano "Europe/London"])))))
+          (t/is (nil? (test-cast nil [:timestamp-tz :second "Europe/London"] {:default-tz (ZoneId/of "America/Los_Angeles")})))
+          (t/is (nil? (test-cast nil [:timestamp-tz :nano "Europe/London"])))))
 
       (t/testing "ts ->"
         (t/testing "date"
@@ -754,7 +754,7 @@
       (t/is (= #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
                (test-arithmetic '+ #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (nil? (test-arithmetic '+ time/end-of-time #xt.time/duration "PT1H15M43.342S"))))
+      (t/is (nil? (test-arithmetic '+ nil #xt.time/duration "PT1H15M43.342S"))))
 
     (t/testing "(+ datetime interval)"
       (t/is (= #xt.time/date "2023-08-01"
@@ -773,7 +773,7 @@
                (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] #xt.time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"))
             "clock change")
 
-      (t/is (nil? (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] time/end-of-time))))
+      (t/is (nil? (test-arithmetic '+ #xt/interval-mdn ["P2D" "PT1H"] nil))))
 
     (t/testing "(- datetime duration)"
       (t/is (= #xt.time/date-time "2022-07-31T22:44:16.658"
@@ -788,7 +788,7 @@
       (t/is (= #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
                (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt.time/duration "PT1H15M43.342S")))
 
-      (t/is (nil? (test-arithmetic '- time/end-of-time #xt.time/duration "PT1H15M43.342S"))
+      (t/is (nil? (test-arithmetic '- nil #xt.time/duration "PT1H15M43.342S"))
             "end of time"))
 
     (t/testing "(- datetime interval)"
@@ -808,7 +808,7 @@
                (test-arithmetic '- #xt.time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-mdn ["P2D" "PT1H"] ))
             "clock change")
 
-      (t/is (nil? (test-arithmetic '- time/end-of-time #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
+      (t/is (nil? (test-arithmetic '- nil #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
 
     (t/testing "(- date date)"
       (t/is (= 1 (test-arithmetic '- #xt.time/date "2022-08-01" #xt.time/date "2022-07-31")))
@@ -835,12 +835,9 @@
       (t/is (= #xt.time/duration "PT-9H-15M-43.342S"
                (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #xt.time/date-time "2022-08-01T02:31:26.684")))
 
-      (t/is (= (Duration/ofNanos Long/MAX_VALUE)
-               (test-arithmetic '- time/end-of-time  #xt.time/date-time "2022-08-01T02:31:26.684")))
-      (t/is (= (Duration/ofNanos Long/MAX_VALUE)
-               (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" time/end-of-time)))
-      (t/is (= (Duration/ofNanos Long/MAX_VALUE)
-               (test-arithmetic '- time/end-of-time time/end-of-time))))))
+      (t/is (nil? (test-arithmetic '- nil  #xt.time/date-time "2022-08-01T02:31:26.684")))
+      (t/is (nil? (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" nil)))
+      (t/is (nil? (test-arithmetic '- nil nil))))))
 
 (tct/defspec test-lt
   (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])

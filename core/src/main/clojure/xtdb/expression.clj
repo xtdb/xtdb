@@ -1240,9 +1240,7 @@
                                                   (->> (for [l-val-type (-> (get l-field-types field) types/flatten-union-types)
                                                              r-val-type (-> (get r-field-types field) types/flatten-union-types)]
                                                          (MapEntry/create [l-val-type r-val-type]
-                                                                          (if (or (= :null l-val-type) (= :null r-val-type))
-                                                                            {:return-type :null, :->call-code (constantly nil)}
-                                                                            (codegen-call {:f :=, :arg-types [l-val-type r-val-type]}))))
+                                                                          (codegen-call {:f :null-eq, :arg-types [l-val-type r-val-type]})))
                                                        (into {}))))
                                (into {}))
               l-sym (gensym 'l-struct)

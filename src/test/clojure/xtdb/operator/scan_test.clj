@@ -323,7 +323,7 @@
                 :xt/system-to #xt.time/zoned-date-time "3001-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan {:table foo, :for-system-time :all-time, :for-valid-time :all-time}
                                  [{xt$system_from (< xt$system_from #xt.time/zoned-date-time "3002-01-01T00:00Z")}
-                                  {xt$system_to (> xt$system_to #xt.time/zoned-date-time "2999-01-01T00:00Z")}
+                                  {xt$system_to (> (coalesce xt$system_to xtdb/end-of-time) #xt.time/zoned-date-time "2999-01-01T00:00Z")}
                                   xt$valid_from
                                   xt$valid_to
                                   last_updated]]
@@ -372,67 +372,6 @@
       (t/is (= '{xt$id [:union #{:keyword :utf8}]}
                (->col-type 'xt$id))))))
 
-#_ ; TODO adapt for scan/->temporal-bounds
-(t/deftest can-create-temporal-min-max-range
-  (let [μs-2018 (time/instant->micros (time/->instant #inst "2018"))
-        μs-2019 (time/instant->micros (time/->instant #inst "2019"))]
-    (letfn [(transpose [[mins maxs]]
-              (->> (map vector mins maxs)
-                   (zipmap [:sys-end :xt/id :sys-start :row-id :app-time-start :app-time-end])
-                   (into {} (remove (comp #{[Long/MIN_VALUE Long/MAX_VALUE]} val)))))]
-      (t/is (= {:app-time-start [Long/MIN_VALUE μs-2019]
-                :app-time-end [(inc μs-2019) Long/MAX_VALUE]}
-               (transpose (scan/->temporal-min-max-range
-                           nil nil nil
-                           {'xt/valid-from '(<= xt/valid-from #inst "2019")
-                            'xt/valid-to '(> xt/valid-to #inst "2019")}))))
-
-      (t/is (= {:app-time-start [μs-2019 μs-2019]}
-               (transpose (scan/->temporal-min-max-range
-                           nil nil nil
-                           {'xt/valid-from '(= xt/valid-from #inst "2019")}))))
-
-      (t/testing "symbol column name"
-        (t/is (= {:app-time-start [μs-2019 μs-2019]}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(= xt/valid-from #inst "2019")})))))
-
-      (t/testing "conjunction"
-        (t/is (= {:app-time-start [Long/MIN_VALUE μs-2019]}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(and (<= xt/valid-from #inst "2019")
-                                                   (<= xt/valid-from #inst "2020"))})))))
-
-      (t/testing "disjunction not supported"
-        (t/is (= {}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(or (= xt/valid-from #inst "2019")
-                                                  (= xt/valid-from #inst "2020"))})))))
-
-      (t/testing "ignores non-ts literals"
-        (t/is (= {:app-time-start [μs-2019 μs-2019]}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(and (= xt/valid-from #inst "2019")
-                                                   (= xt/valid-from nil))})))))
-
-      (t/testing "parameters"
-        (t/is (= {:app-time-start [μs-2018 Long/MAX_VALUE]
-                  :app-time-end [Long/MIN_VALUE (dec μs-2018)]
-                  :sys-start [Long/MIN_VALUE μs-2019]
-                  :sys-end [(inc μs-2019) Long/MAX_VALUE]}
-                 (with-open [params (tu/open-params {'?system-time (time/->instant #inst "2019")
-                                                     '?app-time (time/->instant #inst "2018")})]
-                   (transpose (scan/->temporal-min-max-range
-                               params nil nil
-                               {'xt/system-from '(>= ?system-time xt/system-from)
-                                'xt/system-to '(< ?system-time xt/system-to)
-                                'xt/valid-from '(<= ?app-time xt/valid-from)
-                                'xt/valid-to '(> ?app-time xt/valid-to)})))))))))
-
 (t/deftest test-content-pred
   (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
@@ -447,8 +386,7 @@
   (with-open [node (xtn/start-node {})]
     (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :col1 "foo1"}]
                         [:put-docs :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]])
-
-
+    
     ;; column not existent in all docs
     (t/is (= [{:col2 "bar2", :xt/id :bar}]
              (tu/query-ra '[:scan {:table xt_docs} [xt$id {col2 (= col2 "bar2")}]]
@@ -664,7 +602,7 @@
 
   (t/is (= {'xt$iid [:fixed-size-binary 16]
             'xt$valid_from [:timestamp-tz :micro "UTC"]
-            'xt$valid_to [:timestamp-tz :micro "UTC"]}
+            'xt$valid_to [:union #{:null [:timestamp-tz :micro "UTC"]}]}
 
            (:col-types (tu/query-ra '[:scan {:table comments}
                                       [xt$iid xt$valid_from xt$valid_to]]

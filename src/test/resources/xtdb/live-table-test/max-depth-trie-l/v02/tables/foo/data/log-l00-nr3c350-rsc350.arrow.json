@@ -28,7 +28,7 @@
       "children" : [ ]
     },{
       "name" : "xt$valid_to",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "timestamp",
         "unit" : "MICROSECOND",

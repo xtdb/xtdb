@@ -389,7 +389,9 @@
                        (.writeObject iid-wtr iid-bytes)
                        (.writeLong system-from-wtr (or (:xt/system-from doc) 0))
                        (.writeLong valid-from-wtr (or (:xt/valid-from doc) 0))
-                       (.writeLong valid-to-wtr (or (:xt/valid-to doc) Long/MAX_VALUE))
+                       (if-let [vt (:xt/valid-to doc)]
+                         (.writeLong valid-to-wtr vt)
+                         (.writeNull valid-to-wtr))
                        (.writeObject put-wtr (normalize-doc doc))
                        (.endRow data-wtr)
                        (reset! !last-iid iid-bytes))

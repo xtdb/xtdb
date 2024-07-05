@@ -349,10 +349,10 @@ abstract class ExtensionVectorWriter(
     ScalarVectorWriter(vector) {
     override var field: Field = vector.field
 
-    internal val inner = writerFor(vector.underlyingVector, {
+    internal val inner = writerFor(vector.underlyingVector) {
         field = Field(field.name, field.fieldType, it.children)
         notify(field)
-    })
+    }
 
     override fun clear() = inner.clear()
     override fun writerPosition() = inner.writerPosition()

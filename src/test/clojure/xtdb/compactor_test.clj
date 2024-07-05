@@ -205,8 +205,8 @@
                        (vr/rel->rows)
                        (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))
 
-          (t/is (= [nil (time/->zdt #inst "2023") (time/->zdt #inst "2021")
-                    nil (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
+          (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")
+                    (time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
                    (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals)))))
 
       (t/testing "merge segments with path predicate"
@@ -232,7 +232,7 @@
                        (vr/rel->rows)
                        (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))
 
-          (t/is (= [nil (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
+          (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
                    (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals))))))))
 
 (t/deftest test-l1-compaction

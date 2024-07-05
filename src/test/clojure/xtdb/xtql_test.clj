@@ -1818,7 +1818,6 @@
   (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015", :valid-to #inst "2050"}
                             {:xt/id 1}]])
 
-
   (t/is (= [{:xt/id 1,
              :valid-time {:xt/from #xt.time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                           :xt/to #xt.time/zoned-date-time "2050-01-01T00:00Z[UTC]"},

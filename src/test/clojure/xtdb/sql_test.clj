@@ -610,8 +610,7 @@
                     CURRENT_DATE,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(4),
                     LOCALTIME, LOCALTIME(6),
-                    LOCALTIMESTAMP, LOCALTIMESTAMP(9),
-                    END_OF_TIME, END_OF_TIME()
+                    LOCALTIMESTAMP, LOCALTIMESTAMP(9)
                     FROM u"
                     {:table-info {"u" #{"a"}}}))))
 
@@ -1265,21 +1264,7 @@
               :x 1,
               :y "c",
               :xt/id 3}}
-           (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs"))))
-
-  (t/is (= #{{:x 2,
-              :y "b",
-              :xt/id 2,
-              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
-             {:x 3,
-              :y "a",
-              :xt/id 1,
-              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
-             {:x 1,
-              :y "c",
-              :xt/id 3,
-              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
-             (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs WHERE docs._system_to = docs._valid_to")))))
+           (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs")))))
 
 (t/deftest able-to-select-star-from-two-tables-bug-3389
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :x 1}]

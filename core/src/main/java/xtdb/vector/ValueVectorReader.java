@@ -501,10 +501,8 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
-                long val = getLong(idx);
-                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
-                return v.getObject(idx);
+            LocalDateTime getObject0(int idx, IKeyFn<?> keyFn) {
+                return (LocalDateTime) v.getObject(idx);
             }
         };
     }
@@ -518,9 +516,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
-                long val = getLong(idx);
-                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
-                return Instant.ofEpochSecond(val).atZone(zoneId(v));
+                return Instant.ofEpochSecond(getLong(idx)).atZone(zoneId(v));
             }
         };
     }
@@ -534,9 +530,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
-                long val = getLong(idx);
-                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
-                return Instant.ofEpochMilli(val).atZone(zoneId(v));
+                return Instant.ofEpochMilli(getLong(idx)).atZone(zoneId(v));
             }
         };
     }
@@ -550,9 +544,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
-                long val = getLong(idx);
-                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
-                return Instant.EPOCH.plus(val, MICROS).atZone(zoneId(v));
+                return Instant.EPOCH.plus(getLong(idx), MICROS).atZone(zoneId(v));
             }
         };
     }
@@ -566,9 +558,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
-                long val = v.get(idx);
-                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
-                return Instant.ofEpochSecond(0, val).atZone(zoneId(v));
+                return Instant.ofEpochSecond(0, v.get(idx)).atZone(zoneId(v));
             }
         };
     }
@@ -581,10 +571,8 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
-                int val = v.get(idx);
-                if (val == Integer.MIN_VALUE || val == Integer.MAX_VALUE) return null;
-                return LocalTime.ofSecondOfDay(val);
+            LocalTime getObject0(int idx, IKeyFn<?> keyFn) {
+                return LocalTime.ofSecondOfDay(v.get(idx));
             }
         };
     }
@@ -597,7 +585,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            LocalTime getObject0(int idx, IKeyFn<?> keyFn) {
                 int val = v.get(idx);
                 if (val == Integer.MIN_VALUE || val == Integer.MAX_VALUE) return null;
                 return LocalTime.ofNanoOfDay(val * 1_000_000L);
@@ -614,9 +602,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
-                long val = v.get(idx);
-                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
-                return LocalTime.ofNanoOfDay(val * 1_000L);
+                return LocalTime.ofNanoOfDay(v.get(idx) * 1_000L);
             }
         };
     }
@@ -630,9 +616,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
-                long val = v.get(idx);
-                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
-                return LocalTime.ofNanoOfDay(val);
+                return LocalTime.ofNanoOfDay(v.get(idx));
             }
         };
     }

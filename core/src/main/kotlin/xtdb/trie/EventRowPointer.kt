@@ -4,6 +4,8 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.vector.IVectorReader
 import xtdb.vector.RelationReader
 
+import java.lang.Long.MAX_VALUE as MAX_LONG
+
 class EventRowPointer(val relReader: RelationReader, path: ByteArray) {
     private val iidReader: IVectorReader = relReader.readerForName("xt\$iid")
 
@@ -33,7 +35,7 @@ class EventRowPointer(val relReader: RelationReader, path: ByteArray) {
 
     val systemFrom get() = sysFromReader.getLong(index)
     val validFrom get() = validFromReader.getLong(index)
-    val validTo get() = validToReader.getLong(index)
+    val validTo get() = if (validToReader.isNull(index)) MAX_LONG else validToReader.getLong(index)
     val op get() = opReader.getLeg(index)
 
     fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean =

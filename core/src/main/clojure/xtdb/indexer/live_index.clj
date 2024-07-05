@@ -127,7 +127,10 @@
 
           (.writeLong system-from-wtr system-from-µs)
           (.writeLong valid-from-wtr valid-from)
-          (.writeLong valid-to-wtr valid-to)
+
+          (if (= Long/MAX_VALUE valid-to)
+            (.writeNull valid-to-wtr)
+            (.writeLong valid-to-wtr valid-to))
 
           (write-doc!)
 
@@ -141,7 +144,10 @@
 
           (.writeLong system-from-wtr system-from-µs)
           (.writeLong valid-from-wtr valid-from)
-          (.writeLong valid-to-wtr valid-to)
+
+          (if (= Long/MAX_VALUE valid-to)
+            (.writeNull valid-to-wtr)
+            (.writeLong valid-to-wtr valid-to))
 
           (.writeNull delete-wtr)
 
@@ -155,7 +161,7 @@
 
           (.writeLong system-from-wtr system-from-µs)
           (.writeLong valid-from-wtr Long/MIN_VALUE)
-          (.writeLong valid-to-wtr Long/MAX_VALUE)
+          (.writeNull valid-to-wtr)
 
           (.writeNull erase-wtr)
 

@@ -726,9 +726,7 @@
     "LOCALTIME(6)" '(local-time 6)
     "LOCALTIMESTAMP" '(local-timestamp)
     "LOCALTIMESTAMP()" '(local-timestamp)
-    "LOCALTIMESTAMP(6)" '(local-timestamp 6)
-    "END_OF_TIME" 'xtdb/end-of-time
-    "END_OF_TIME()" 'xtdb/end-of-time))
+    "LOCALTIMESTAMP(6)" '(local-timestamp 6)))
 
 (t/deftest test-date-trunc-query
   (t/is (= [{:timestamp #xt.time/zoned-date-time "2021-10-21T12:34:00Z"}]

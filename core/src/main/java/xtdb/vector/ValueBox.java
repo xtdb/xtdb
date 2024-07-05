@@ -7,7 +7,6 @@ import java.nio.ByteBuffer;
 
 public class ValueBox implements IValueWriter, IValueReader {
     private static final Keyword NULL_LEG = Keyword.intern("null");
-    private static final Keyword ABSENT_LEG = Keyword.intern("absent");
 
     private Keyword leg;
 
@@ -71,6 +70,7 @@ public class ValueBox implements IValueWriter, IValueReader {
 
     @Override
     public void writeNull() {
+        leg = NULL_LEG;
         obj = null;
     }
 
