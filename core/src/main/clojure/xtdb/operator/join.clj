@@ -622,26 +622,28 @@
   (set (keys (:fields relation))))
 
 (defn expr->columns [expr]
-  (if (symbol? expr)
-    (if (not (clojure.string/starts-with? (str expr) "?"))
-      #{expr}
-      #{})
-    (set
-      (walk/postwalk
-        (fn [token]
-          (if (seq? token)
-            (mapcat
-              (fn [child]
-                (cond
-                  (seq? child)
-                  child
+  (-> (if (symbol? expr)
+        (if (not (clojure.string/starts-with? (str expr) "?"))
+          #{expr}
+          #{})
+        (set
+         (walk/postwalk
+          (fn [token]
+            (if (seq? token)
+              (mapcat
+               (fn [child]
+                 (cond
+                   (seq? child)
+                   child
 
-                  (and (symbol? child)
-                       (not (clojure.string/starts-with? (str child) "?")))
-                  [child]))
-              (rest token))
-            token))
-        expr))))
+                   (and (symbol? child)
+                        (not (clojure.string/starts-with? (str child) "?")))
+                   [child]))
+               (rest token))
+              token))
+          expr)))
+
+      (disj 'xtdb/end-of-time)))
 
 (defn adjust-to-equi-condition
   "Swaps the sides of equi conditions to match location of cols in plan
