@@ -47,24 +47,6 @@
   (locking memory-store
     (some-> (.get memory-store k) retain)))
 
-(def ^AtomicLong cache-miss-byte-counter (AtomicLong.))
-(def ^AtomicLong cache-hit-byte-counter (AtomicLong.))
-(def io-wait-nanos-counter (atom 0N))
-
-(defn clear-cache-counters []
-  (.set cache-miss-byte-counter 0)
-  (.set cache-hit-byte-counter 0)
-  (reset! io-wait-nanos-counter 0N))
-
-(defn- record-cache-miss [^ArrowBuf arrow-buf]
-  (.addAndGet cache-miss-byte-counter (.capacity arrow-buf)))
-
-(defn- record-cache-hit [^ArrowBuf arrow-buf]
-  (.addAndGet cache-hit-byte-counter (.capacity arrow-buf)))
-
-(defn- record-io-wait [^long start-ns]
-  (swap! io-wait-nanos-counter +' (- (System/nanoTime) start-ns)))
-
 (defn- cache-compute
   "Returns a pair [hit-or-miss, buf] computing the cached ArrowBuf from (f) if needed.
   `hit-or-miss` is true if the buffer was found, false if the object was added as part of this call."
@@ -72,7 +54,6 @@
   (locking memory-store
     (let [hit (.containsKey memory-store k)
           arrow-buf (if hit (.get memory-store k) (let [buf (f)] (.put memory-store k buf) buf))]
-      (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
       [hit (retain arrow-buf)])))
 
 (defn- close-arrow-writer [^ArrowFileWriter aw]
@@ -92,8 +73,7 @@
         (CompletableFuture/completedFuture nil)
 
         cached-buffer
-        (do (record-cache-hit cached-buffer)
-            (CompletableFuture/completedFuture cached-buffer))
+        (CompletableFuture/completedFuture cached-buffer)
 
         :else
         (CompletableFuture/failedFuture (os/obj-missing-exception k)))))
@@ -169,8 +149,7 @@
         (CompletableFuture/completedFuture nil)
 
         cached-buffer
-        (do (record-cache-hit cached-buffer)
-            (CompletableFuture/completedFuture cached-buffer))
+        (CompletableFuture/completedFuture cached-buffer)
 
         :else
         (let [buffer-cache-path (.resolve disk-store k)]
@@ -346,18 +325,15 @@
         (CompletableFuture/completedFuture nil)
 
         cached-buffer
-        (do (record-cache-hit cached-buffer)
-            (CompletableFuture/completedFuture cached-buffer))
+        (CompletableFuture/completedFuture cached-buffer)
 
         :else
-        (let [buffer-cache-path (.resolve local-disk-cache k)
-              start-ns (System/nanoTime)]
+        (let [buffer-cache-path (.resolve local-disk-cache k)]
           (-> (if (util/path-exists buffer-cache-path)
                 ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
                 (CompletableFuture/completedFuture buffer-cache-path)
                 (do (util/create-parents buffer-cache-path)
-                    (-> (.getObject object-store k buffer-cache-path)
-                        (util/then-apply (fn [path] (record-io-wait start-ns) path)))))
+                    (.getObject object-store k buffer-cache-path)))
               (util/then-apply
                 (fn [path]
                   (let [nio-buffer (util/->mmap-path path)
@@ -377,7 +353,7 @@
 
         (try
           (.start aw)
-          (catch ClosedByInterruptException e
+          (catch ClosedByInterruptException _e
             (throw (InterruptedException.))))
 
         (reify IArrowWriter
@@ -403,7 +379,7 @@
     (if (or (not (instance? SupportsMultipart object-store))
             (<= (.remaining buffer) (int min-multipart-part-size)))
       (.putObject object-store k buffer)
-    
+
       (let [buffers (->> (range (.position buffer) (.limit buffer) min-multipart-part-size)
                          (map (fn [n] (.slice buffer
                                               (int n)
@@ -412,15 +388,15 @@
         (-> (CompletableFuture/runAsync
              (fn []
                (upload-multipart-buffers object-store k buffers)))
-    
+
             (.thenRun (fn []
                         (let [tmp-path (create-tmp-path local-disk-cache)]
                           (util/with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
                             (.write file-ch buffer))
-    
+
                           (let [file-path (.resolve local-disk-cache k)]
                             (util/create-parents file-path)
-                                  ;; see #2847
+                            ;; see #2847
                             (util/atomic-move tmp-path file-path)))))))))
 
   EvictBufferTest

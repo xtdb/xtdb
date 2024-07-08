@@ -47,40 +47,12 @@
       (t/is (= [{:xt/id :foo}]
                (xt/q node '(from :foo [xt/id]))))
 
-                                      (tu/finish-chunk! node)
+      (tu/finish-chunk! node)
 
-                                      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
-                                        (t/is (instance? RemoteBufferPool buffer-pool))
+      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
+        (t/is (instance? RemoteBufferPool buffer-pool))
 
-                                        (t/is (seq (.listAllObjects object-store)))))))
-
-(t/deftest cache-counter-test
-  (util/with-open [bp (bp/open-remote-storage tu/*allocator*
-                                              (Storage/remoteStorage (bp/->object-store-factory :in-memory {})
-                                                                     (create-tmp-dir)))]
-    (bp/clear-cache-counters)
-    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-    (t/is (= 0 (.get bp/cache-miss-byte-counter)))
-    (t/is (= 0N @bp/io-wait-nanos-counter))
-
-    @(.putObject bp (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
-
-    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
-
-    (t/is (pos? (.get bp/cache-miss-byte-counter)))
-    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-    (t/is (pos? @bp/io-wait-nanos-counter))
-
-    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
-
-    (t/is (pos? (.get bp/cache-hit-byte-counter)))
-    (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
-
-    (bp/clear-cache-counters)
-
-    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
-    (t/is (= 0 (.get bp/cache-miss-byte-counter)))
-    (t/is (= 0N @bp/io-wait-nanos-counter))))
+        (t/is (seq (.listAllObjects object-store)))))))
 
 (t/deftest arrow-buf-lru-test
   (t/testing "max size restriction"
