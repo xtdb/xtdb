@@ -1617,7 +1617,7 @@
 
 (defn temporal-contains-point? [p1 ^long ts]
   (and (<= (from p1) ts)
-       (>= (to p1) ts)))
+       (> (to p1) ts)))
 
 (defmethod expr/codegen-call [:contains? :struct :timestamp-tz] [_]
   {:return-type :bool

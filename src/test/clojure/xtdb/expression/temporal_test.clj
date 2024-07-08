@@ -1408,19 +1408,20 @@
             :y {:xt$from #inst "2021", :xt$to #inst "2023"}}))))
 
   (t/testing "period to timestamp"
-    (t/is
-      (= true
-         (et/project1
-           '(contains? x y)
-           {:x {:xt$from #inst "2020", :xt$to #inst "2025"}
-            :y #inst "2021"})))
+    (t/is (true? (et/project1
+                  '(contains? x y)
+                  {:x {:xt$from #inst "2020", :xt$to #inst "2025"}
+                   :y #inst "2021"})))
 
-    (t/is
-      (= false
-         (et/project1
-           '(contains? x y)
-           {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
-            :y #inst "2023"})))))
+    (t/is (false? (et/project1
+                   '(contains? x y)
+                   {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+                    :y #inst "2023"})))
+
+    (t/is (false? (et/project1
+                   '(contains? x y)
+                   {:x {:xt$from #inst "2020", :xt$to #inst "2022"}
+                    :y #inst "2022"})))))
 
 (deftest test-equals?-predicate
   (t/is
