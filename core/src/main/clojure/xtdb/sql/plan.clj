@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
@@ -1259,44 +1260,59 @@
   (visitPeriodOverlapsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (list 'and (list '< (:from p1) (:to p2)) (list '> (:to p1) (:from p2)))))
+      (xt/template
+       (and (< ~(:from p1) (coalesce ~(:to p2) xtdb/end-of-time))
+            (> (coalesce ~(:to p1) xtdb/end-of-time) ~(:from p2))))))
 
   (visitPeriodEqualsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (list 'and (list '= (:from p1) (:from p2)) (list '= (:to p1) (:to p2)))))
+      (xt/template
+       (and (= ~(:from p1) ~(:from p2))
+            (= (coalesce ~(:to p1) xtdb/end-of-time)
+               (coalesce ~(:to p2) xtdb/end-of-time))))))
 
   (visitPeriodContainsPeriodPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (list 'and (list '<= (:from p1) (:from p2)) (list '>= (:to p1) (:to p2)))))
+      (xt/template
+       (and (<= ~(:from p1) ~(:from p2))
+            (>= (coalesce ~(:to p1) xtdb/end-of-time)
+                (coalesce ~(:to p2) xtdb/end-of-time))))))
 
   (visitPeriodContainsPointPredicate [this ctx]
     (let [period (-> (.periodPredicand ctx) (.accept this))
           pit (-> (.pointInTimePredicand ctx) (.accept this))]
       ;; TODO this currently duplicates the expr, but emitting a `let`
       ;; probably won't get optimised into scan preds
-      (list 'and (list '<= (:from period) pit) (list '> (:to period) pit))))
+      (xt/template
+       (and (<= ~(:from period) ~pit)
+            (> (coalesce ~(:to period) xtdb/end-of-time)
+               (coalesce ~pit xtdb/end-of-time))))))
 
   (visitPeriodPrecedesPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (list '<= (:to p1) (:from p2))))
+      (xt/template
+       (<= (coalesce ~(:to p1) xtdb/end-of-time) ~(:from p2)))))
 
   (visitPeriodSucceedsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (list '>= (:from p1) (:to p2))))
+      (xt/template
+       (>= ~(:from p1) (coalesce ~(:to p2) xtdb/end-of-time)))))
 
   (visitPeriodImmediatelyPrecedesPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (list '= (:to p1) (:from p2))))
+      (xt/template
+       (= (coalesce ~(:to p1) xtdb/end-of-time) ~(:from p2)))))
 
   (visitPeriodImmediatelySucceedsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (list '= (:from p1) (:to p2))))
+      (xt/template
+       (= ~(:from p1) (coalesce ~(:to p2) xtdb/end-of-time)))))
 
   (visitPeriodColumnReference [_ ctx]
     (let [tn (identifier-sym (.tableName ctx))
