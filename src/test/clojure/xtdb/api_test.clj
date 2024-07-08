@@ -218,7 +218,7 @@
                           [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
                             ["dave", "Dave", #inst "2018"]
                             ["claire", "Claire", #inst "2019"]]])))
-  
+
 
   (t/is (= (serde/->tx-committed 1 (time/->instant #inst "2020-01-02"))
            (xt/execute-tx *node*
@@ -727,3 +727,20 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                                                                 :binding [{:xt/id 1}]
                                                                 :set {:xt/valid-from #inst "2000"
                                                                       :xt/valid-to #inst "2001"}}]])))))
+
+(deftest test-plan-q
+  (doseq [batch (->> (range 2000)
+                     (map #(hash-map :xt/id % :num %))
+                     (partition-all 1000)) ]
+    (xt/execute-tx tu/*node* [(into [:put-docs :docs] batch)]))
+
+  (t/is (= 10 (->> (xt/plan-q tu/*node* "SELECT docs.num FROM docs LIMIT 10")
+                   (reduce (fn [acc _] (inc acc)) 0))))
+
+  (t/is (= 10 (->> (xt/plan-q tu/*node* "SELECT docs.num FROM docs")
+                   (reduce (fn [acc _] (let [acc (inc acc)] (if (== 10 acc) (reduced acc) acc))) 0))))
+
+  (t/is (= 10 (->> (xt/plan-q tu/*node* "(SELECT docs.num FROM docs)
+                                         UNION ALL
+                                         (SELECT 1 / 0)")
+                   (reduce (fn [acc _] (let [acc (inc acc)] (if (== 10 acc) (reduced acc) acc))) 0)))))

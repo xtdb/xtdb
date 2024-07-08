@@ -13,14 +13,14 @@
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
-            [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops])
-  (:import (java.io Writer)
-           (java.util List Map)
+            [xtdb.time :as time])
+  (:import (clojure.lang IReduceInit)
+           (java.io Writer)
+           (java.util List Map Iterator)
            [java.util.stream Stream]
            (xtdb.api IXtdb TransactionKey)
            (xtdb.api.query Basis QueryOptions)
-           (xtdb.api.tx TxOp TxOptions)
+           (xtdb.api.tx TxOptions)
            xtdb.types.ClojureForm))
 
 (defn- expect-instant [instant]
@@ -56,6 +56,39 @@
       (.keyFn (serde/read-key-fn key-fn))
 
       (.build)))
+
+(defn plan-q
+  "General query execution function for controlling the realized result set.
+
+  Returns a reducible that, when reduced (with an initial value), runs the query and yields the result.
+  `plan-q` returns an IReduceInit object so you must provide an initial value when calling reduce on it.
+
+  The main use case for `plan-q` is to stream large results sets without having the entire result set in memory.
+  A common way to do this is to call run! together with a side-effecting function process-row!
+  (which could for example write the row to a file):
+
+  (run! process-row! (xt/plan-q node ...))
+
+  The arguments are the same as for `q`."
+
+  (^clojure.lang.IReduceInit [node query] (plan-q node query {}))
+  (^clojure.lang.IReduceInit [node query opts]
+   (let [^QueryOptions query-opts (->QueryOptions (-> opts
+                                                      (time/after-latest-submitted-tx node)))]
+     (reify IReduceInit
+       (reduce [_ f start]
+         (with-open [^Stream res (cond
+                                   (string? query) (xtp/open-sql-query node query query-opts)
+                                   (seq? query) (xtp/open-xtql-query node query query-opts)
+                                   :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+           (let [^Iterator itr (.iterator res)]
+             (loop [acc start]
+               (if-not (.hasNext itr)
+                 acc
+                 (let [acc (f acc (.next itr))]
+                   (if (reduced? acc)
+                     (deref acc)
+                     (recur acc))))))))))))
 
 (defn q
   "query an XTDB node.
@@ -103,13 +136,7 @@
   ([node query] (q node query {}))
 
   ([node query opts]
-   (let [^QueryOptions query-opts (->QueryOptions (-> opts
-                                                      (time/after-latest-submitted-tx node)))]
-     (with-open [^Stream res (cond
-                               (string? query) (xtp/open-sql-query node query query-opts)
-                               (seq? query) (xtp/open-xtql-query node query query-opts)
-                               :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-       (vec (.toList res))))))
+   (into [] (plan-q node query opts))))
 
 (defn- ->TxOptions [tx-opts]
   (cond
