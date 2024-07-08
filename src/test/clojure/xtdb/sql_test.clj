@@ -1833,3 +1833,6 @@ VALUES
                {:value 530, :xt/valid-from (zdt 10), :xt/valid-to (zdt 15)}
                {:value 580, :xt/valid-from (zdt 27), :xt/valid-to (zdt 30)}}
              (q)))))
+
+(t/deftest test-contains-period-datetime
+  (t/is (= [{:contains false}] (xt/q tu/*node* "SELECT PERIOD(TIMESTAMP '2024-01-01T00:00:00', TIMESTAMP '2024-01-02T00:00:00') CONTAINS TIMESTAMP '2024-01-02T00:00:00' AS `contains`"))))

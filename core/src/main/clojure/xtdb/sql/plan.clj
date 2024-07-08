@@ -1270,7 +1270,7 @@
   (visitPeriodContainsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx) (.accept this))
           p2 (-> (.periodOrPointInTimePredicand ctx) (.accept this))]
-      (list 'and (list '<= (:from p1) (:from p2)) (list '>= (:to p1) (:to p2)))))
+      (list 'and (list '<= (:from p1) (:from p2)) (list '> (:to p1) (:to p2)))))
 
   (visitPeriodPrecedesPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
