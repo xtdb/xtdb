@@ -4,7 +4,7 @@
             [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
-           (com.github.benmanes.caffeine.cache Caffeine Cache Weigher RemovalListener)
+           (com.github.benmanes.caffeine.cache Cache Caffeine RemovalListener Weigher)
            [java.io ByteArrayOutputStream Closeable]
            (java.nio ByteBuffer)
            (java.nio.channels Channels ClosedByInterruptException)
@@ -19,8 +19,8 @@
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            (xtdb IArrowWriter IBufferPool)
-           xtdb.api.Xtdb$Config
            (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
+           xtdb.api.Xtdb$Config
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (set! *unchecked-math* :warn-on-boxed)
