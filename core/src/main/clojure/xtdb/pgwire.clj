@@ -229,22 +229,23 @@
   "Some pre-baked responses to common queries issued as setup by Postgres drivers, e.g SQLAlchemy"
   [{:q ";"
     :cols []
-    :rows []}
+    :rows (fn [_conn] [])}
 
    {:q "select pg_catalog.version()"
     :cols [{:column-name "version" :column-oid oid-varchar}]
-    :rows [["PostgreSQL 14.2"]]}
+    :rows (fn [_conn] [["PostgreSQL 14.2"]])}
    {:q "show standard_conforming_strings"
     :cols [{:column-name "standard_conforming_strings" :column-oid oid-varchar}]
-    :rows [["on"]]}
+    :rows (fn [_conn] [["on"]])}
 
    {:q "show transaction isolation level"
     :cols [{:column-name "transaction_isolation" :column-oid oid-varchar}]
-    :rows [["read committed"]]}
+    :rows (fn [_conn] [["read committed"]])}
 
    {:q "show timezone"
     :cols [{:column-name "TimeZone" :column-oid oid-varchar}]
-    :rows [["GMT"]]}
+    :rows (fn [{:keys [conn-state]}]
+            [[(str (.getZone ^Clock (get-in @conn-state [:session :clock])))]])}
 
    ;; jdbc meta getKeywords (hibernate)
    ;; I think this should work, but it causes some kind of low level issue, likely
@@ -252,7 +253,7 @@
    ;; java.lang.IllegalStateException: Received resultset tuples, but no field structure for them
    {:q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()"
     :cols [{:column-name "col1" :column-oid oid-varchar}]
-    :rows [["xtdb"]]}])
+    :rows (fn [_conn] [["xtdb"]])}])
 
 (defn- trim-sql [s]
   (-> s (str/triml) (str/replace #";\s*$" "")))
@@ -787,7 +788,7 @@
                   :table-oid io-uint32
                   :column-attribute-number io-uint16
                   :column-oid io-uint32
-                  :data-type-size io-uint16
+                  :typlen  io-uint16
                   :type-modifier io-uint32
                   :format-code io-format-code)
                 (io-list io-uint16)))
@@ -847,10 +848,11 @@
   (cmd-write-msg conn msg-error-response {:error-fields err}))
 
 (defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
-  (doseq [row rows]
-    (cmd-write-msg conn msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (types/utf8 v))) row)}))
+  (let [rows (rows conn)]
+    (doseq [row rows]
+      (cmd-write-msg conn msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (types/utf8 v))) row)}))
 
-  (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))}))
+       (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))})))
 
 (defn- close-portal
   [{:keys [conn-state, cid]} portal-name]
@@ -992,16 +994,16 @@
 
 (def json-bytes (comp types/utf8 json/json-str json-clj))
 
-(defn write-json [^IVectorReader rdr idx]
-  (when-not (.isNull rdr idx)
-    (json-bytes (.getObject rdr idx))))
+(defn write-json [_env ^IVectorReader rdr idx]
+  (json-bytes (.getObject rdr idx)))
 
 (defn cmd-send-query-result [{:keys [!closing?, conn-state] :as conn}
                              {:keys [query, ^IResultCursor result-cursor fields result-format]}]
   (let [;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-        n-rows-out (volatile! 0)]
+        n-rows-out (volatile! 0)
+        session (:session @conn-state)]
 
     (.forEachRemaining
      result-cursor
@@ -1026,11 +1028,13 @@
              (dotimes [idx (.rowCount ^RelationReader rel)]
                (let [row (map-indexed
                           (fn [field-idx {:keys [field-name write-binary write-text]}]
-                            (if (or (= result-format [:binary]) (= (nth result-format field-idx nil) :binary))
-                              (write-binary (.readerForName ^RelationReader rel field-name) idx)
-                              (if write-text
-                                (write-text (.readerForName ^RelationReader rel field-name) idx)
-                                (write-json (.readerForName ^RelationReader rel field-name) idx))))
+                            (let [rdr (.readerForName ^RelationReader rel field-name)]
+                              (when-not (.isNull rdr idx)
+                                (if (or (= result-format [:binary]) (= (nth result-format field-idx nil) :binary))
+                                  (write-binary session rdr idx)
+                                  (if write-text
+                                    (write-text session rdr idx)
+                                    (write-json session rdr idx))))))
                           fields)]
                  (cmd-write-msg conn msg-data-row {:vals row})
                  (vswap! n-rows-out inc)))
@@ -1076,7 +1080,7 @@
         (log/debug e "Error on execute-tx")
         (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
 
-(defn- ->xtify-param [{:keys [arg-types param-format]}]
+(defn- ->xtify-param [session {:keys [arg-types param-format]}]
   (fn xtify-param [param-idx param]
     (let [param-oid (nth arg-types param-idx nil)
           param-format (nth param-format param-idx nil)
@@ -1085,14 +1089,14 @@
           _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
           {:keys [read-binary, read-text]} mapping]
       (if (= :binary param-format)
-        (read-binary param)
-        (read-text param)))))
+        (read-binary session param)
+        (read-text session param)))))
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params] :as stmt}]
-  (let [xtify-param (->xtify-param stmt)
+  (let [{:keys [session transaction]} @conn-state
+        ^Clock clock (:clock session)
+        xtify-param (->xtify-param session stmt)
         xt-params (vec (map-indexed xtify-param params))
-
-        {:keys [transaction], {:keys [^Clock clock]} :session} @conn-state
 
         stmt {:query query,
               :transformed-query transformed-query
@@ -1150,7 +1154,7 @@
                   :table-oid 0
                   :column-attribute-number 0
                   :column-oid oid-json
-                  :data-type-size -1
+                  :typlen -1
                   :type-modifier -1
                   :format-code :text}
         apply-defaults
@@ -1166,7 +1170,10 @@
   (let [{:keys [cols]} canned-response]
     (cmd-send-row-description conn cols)))
 
-(defn cmd-describe-portal [conn {:keys [fields]}]
+(defn cmd-describe-portal [conn {:keys [fields] :as x}]
+  ;;TODO here we should grab the format-codes off the portal and return them
+  ;;better instead to perhaps assoc the format code onto the fields at bind time
+  ;;lets us deal with the optionality (if 1 element it describes all cols) at a single point in time
   (cmd-send-row-description conn fields))
 
 (defn cmd-describe-prepared-stmt [conn {:keys [arg-types fields]}]
@@ -1310,7 +1317,8 @@
   (log/trace "Parsing" {:stmt-name stmt-name,
                         :query query
                         :port (:port server)
-                        :cid cid})
+                        :cid cid
+                        :arg-types arg-types})
 
   (let [{:keys [err statement-type] :as stmt} (try
                                                 (interpret-sql query)
@@ -1367,11 +1375,12 @@
             {:keys [portal bind-outcome]}
             ;;if statement is a query, bind it, else use the statment as a portal
             (if (= :query statement-type)
-              (let [xtify-param (->xtify-param stmt-with-bind-msg)
-                    xt-params (vec (map-indexed xtify-param params))
+              (let [{:keys [session transaction]} @conn-state
+                    ^Clock clock (:clock session)
+                    basis (:basis transaction)
 
-                    {{:keys [^Clock clock] :as session} :session
-                     {:keys [basis]} :transaction} @conn-state
+                    xtify-param (->xtify-param session stmt-with-bind-msg)
+                    xt-params (vec (map-indexed xtify-param params))
 
                     query-opts {:basis (or basis {:current-time (.instant clock)})
                                 :default-tz (.getZone clock)
@@ -1464,37 +1473,40 @@
   (cmd-send-ready conn))
 
 (defn- handle-msg [{:keys [msg-char8, msg-in]} {:keys [cid, conn-state] :as conn}]
-  (let [msg-var (client-msgs msg-char8)]
+  (try
+    (let [msg-var (client-msgs msg-char8)]
 
-    (log/trace "Read client msg"
-               {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
+      (log/trace "Read client msg"
+                 {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
 
-    (when (:skip-until-sync @conn-state)
-      (if (= msg-var #'msg-sync)
-        (cmd-enqueue-cmd conn [#'cmd-sync])
-        (log/trace "Skipping msg until next sync due to error in extended protocol"
-                   {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
+      (when (:skip-until-sync @conn-state)
+        (if (= msg-var #'msg-sync)
+          (cmd-enqueue-cmd conn [#'cmd-sync])
+          (log/trace "Skipping msg until next sync due to error in extended protocol"
+                     {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
 
-    (when-not msg-var
-      (cmd-send-error conn (err-protocol-violation "unknown client message")))
+      (when-not msg-var
+        (cmd-send-error conn (err-protocol-violation "unknown client message")))
 
-    (when (and msg-var (not (:skip-until-sync @conn-state)))
-      (let [msg-data ((:read @msg-var) msg-in)]
-        (condp = msg-var
-          #'msg-simple-query (cmd-simple-query conn msg-data)
-          #'msg-terminate (cmd-terminate conn)
-          #'msg-close (cmd-close conn msg-data)
-          #'msg-parse (cmd-parse conn msg-data)
-          #'msg-bind (cmd-bind conn msg-data)
-          #'msg-sync (cmd-sync conn)
-          #'msg-execute (cmd-execute conn msg-data)
-          #'msg-describe (cmd-describe conn msg-data)
-          #'msg-flush (cmd-flush conn)
+      (when (and msg-var (not (:skip-until-sync @conn-state)))
+        (let [msg-data ((:read @msg-var) msg-in)]
+          (condp = msg-var
+            #'msg-simple-query (cmd-simple-query conn msg-data)
+            #'msg-terminate (cmd-terminate conn)
+            #'msg-close (cmd-close conn msg-data)
+            #'msg-parse (cmd-parse conn msg-data)
+            #'msg-bind (cmd-bind conn msg-data)
+            #'msg-sync (cmd-sync conn)
+            #'msg-execute (cmd-execute conn msg-data)
+            #'msg-describe (cmd-describe conn msg-data)
+            #'msg-flush (cmd-flush conn)
 
-          ;; ignored by xt
-          #'msg-password nil
+            ;; ignored by xt
+            #'msg-password nil
 
-          (cmd-send-error conn (err-protocol-violation "unknown client message")))))))
+            (cmd-send-error conn (err-protocol-violation "unknown client message"))))))
+    (catch InterruptedException e (throw e))
+    (catch Throwable e (log/error e "Uncaught exception in handle-msg"))))
 
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
@@ -1676,9 +1688,11 @@
                                 :!closing? (atom false)
                                 :server-state (atom {:clock (Clock/systemDefaultZone)
                                                      :drain-wait drain-wait
-                                                     :parameters {"server_version" "14"
+                                                     :parameters {"server_version" "16"
                                                                   "server_encoding" "UTF8"
-                                                                  "client_encoding" "UTF8"}})})
+                                                                  "client_encoding" "UTF8"
+                                                                  "DateStyle" "ISO"
+                                                                  "integer_datetimes" "on"}})})
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
                              (.uncaughtExceptionHandler util/uncaught-exception-handler)

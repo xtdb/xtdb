@@ -4,6 +4,7 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.math BigDecimal)
            java.net.URI
@@ -342,3 +343,14 @@
 
              (types/merge-fields (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])
                                  (types/col-type->field '[:struct {foo :utf8 bar :i64}]))))))
+
+(t/deftest test-pg-datetime-binary-roundtrip
+  (doseq [{:keys [type val]} [{:val #xt.time/date "2018-07-25" :type :date}
+                              {:val #xt.time/date-time "1441-07-25T18:00:11.888842" :type :timestamp}
+                              {:val #xt.time/offset-date-time "1441-07-25T18:00:11.211142Z" :type :timestamptz}]]
+    (let [{:keys [write-binary read-binary]} (get types/pg-types type)]
+
+      (with-open [rdr (vr/vec->reader (vw/open-vec tu/*allocator* "val" [val]))
+                  l-rdr (.legReader rdr (.getLeg rdr 0))]
+
+        (t/is (= val (read-binary {} (write-binary {} l-rdr 0))))))))
