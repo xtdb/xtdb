@@ -3,11 +3,15 @@
             [clojure.string :as str]
             xtdb.api
             [xtdb.rewrite :refer [zmatch]]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            [java.io Writer]
+           [java.lang Math]
            [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer]
+           [java.time LocalDate LocalDateTime ZonedDateTime ZoneId ZoneOffset OffsetDateTime]
+           [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
            [java.util UUID]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
@@ -717,55 +721,76 @@
   ^bytes [s]
   (.getBytes (str s) StandardCharsets/UTF_8))
 
+(def iso-local-date-time-formatter-with-space
+  (-> (DateTimeFormatterBuilder.)
+    (.parseCaseInsensitive)
+    (.append DateTimeFormatter/ISO_LOCAL_DATE)
+    (.appendLiteral " ")
+    (.append DateTimeFormatter/ISO_LOCAL_TIME)
+    (.toFormatter)))
+
+(def iso-offset-date-time-formatter-with-space
+  (-> (DateTimeFormatterBuilder.)
+      (.parseCaseInsensitive)
+      (.append iso-local-date-time-formatter-with-space)
+      (.parseLenient)
+      (.appendOffset "+HH:MM:ss", "+00:00")
+      (.parseStrict)
+      (.toFormatter)))
+
+(def ^LocalDate pg-epoch #xt.time/date "2000-01-01")
+;;10957
+(def ^{:tag 'int} unix-pg-epoch-diff-in-days (int (.toEpochDay pg-epoch)))
+;; 946684800000000
+(def ^{:tag 'long} unix-pg-epoch-diff-in-micros (* (.toEpochMilli (.toInstant (.atStartOfDay pg-epoch) ZoneOffset/UTC)) 1000))
+
 (def pg-types
   {:unknown {:typname "unknown"
              :col-type :null
              :oid 0
              ;;unknown is only an input (param) type therefore needs no write fn
              ;;untyped nulls are returned as text in result sets
-             :read-text (fn [_ba] nil)}
-   :int8 {:typname "int8"
-          :col-type :i64
-          :oid 20
-          :typlen 8
-          :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getLong))
-          :read-text (fn [ba] (-> ba read-utf8 Long/parseLong))
-          :write-binary (fn [^IVectorReader rdr idx]
-                          (when-not (.isNull rdr idx)
-                            (let [bb (doto (ByteBuffer/allocate 8)
+             :read-text (fn [_env _ba] nil)}
+
+   :int8 (let [typlen 8]
+           {:typname "int8"
+            :col-type :i64
+            :oid 20
+            :typlen typlen
+            :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getLong))
+            :read-text (fn [_env ba] (-> ba read-utf8 Long/parseLong))
+            :write-binary (fn [_env ^IVectorReader rdr idx]
+                            (let [bb (doto (ByteBuffer/allocate typlen)
                                        (.putLong (.getLong rdr idx)))]
-                              (.array bb))))
-          :write-text (fn [^IVectorReader rdr idx]
-                        (when-not (.isNull rdr idx)
-                          (utf8 (.getLong rdr idx))))}
-   :int4 {:typname "int4"
-          :col-type :i32
-          :oid 23
-          :typlen 4
-          :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getInt))
-          :read-text (fn [ba] (-> ba read-utf8 Integer/parseInt))
-          :write-binary (fn [^IVectorReader rdr idx]
-                          (when-not (.isNull rdr idx)
-                            (let [bb (doto (ByteBuffer/allocate 4)
+                              (.array bb)))
+            :write-text (fn [_env ^IVectorReader rdr idx]
+                          (utf8 (.getLong rdr idx)))})
+   :int4 (let [typlen 4]
+           {:typname "int4"
+            :col-type :i32
+            :oid 23
+            :typlen typlen
+            :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getInt))
+            :read-text (fn [_env ba] (-> ba read-utf8 Integer/parseInt))
+            :write-binary (fn [_env ^IVectorReader rdr idx]
+                            (let [bb (doto (ByteBuffer/allocate typlen)
                                        (.putInt (.getInt rdr idx)))]
-                              (.array bb))))
-          :write-text (fn [^IVectorReader rdr idx]
-                        (when-not (.isNull rdr idx)
-                          (utf8 (.getInt rdr idx))))}
-   :int2 {:typname "int2"
-          :col-type :i16
-          :oid 21
-          :typlen 2
-          :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getShort))
-          :read-text (fn [ba] (-> ba read-utf8 Short/parseShort))
-          :write-binary (fn [^IVectorReader rdr idx]
-                          (when-not (.isNull rdr idx)
-                            (let [bb (doto (ByteBuffer/allocate 2)
+                              (.array bb)))
+            :write-text (fn [_env ^IVectorReader rdr idx]
+                          (utf8 (.getInt rdr idx)))})
+   :int2 (let [typlen 2]
+           {:typname "int2"
+            :col-type :i16
+            :oid 21
+            :typlen typlen
+            :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getShort))
+            :read-text (fn [_env ba] (-> ba read-utf8 Short/parseShort))
+            :write-binary (fn [_env ^IVectorReader rdr idx]
+                            (let [bb (doto (ByteBuffer/allocate typlen)
                                        (.putShort (.getShort rdr idx)))]
-                              (.array bb))))
-          :write-text (fn [^IVectorReader rdr idx]
-                        (when-not (.isNull rdr idx)
-                          (utf8 (.getShort rdr idx))))}
+                              (.array bb)))
+            :write-text (fn [_env ^IVectorReader rdr idx]
+                          (utf8 (.getShort rdr idx)))})
    ;;
    ;;Java boolean maps to both bit and bool, opting to support latter only for now
    #_#_:bit {:typname "bit"
@@ -782,96 +807,184 @@
                        (when-not (.isNull rdr idx)
                          (utf8 (.getByte rdr idx))))}
 
-   :float4 {:typname "float4"
-            :col-type :f32
-            :oid 700
-            :typlen 4
-            :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getFloat))
-            :read-text (fn [ba] (-> ba read-utf8 Float/parseFloat))
-            :write-binary (fn [^IVectorReader rdr idx]
-                            (when-not (.isNull rdr idx)
+   :float4 (let [typlen 4]
+             {:typname "float4"
+              :col-type :f32
+              :oid 700
+              :typlen typlen
+              :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getFloat))
+              :read-text (fn [_env ba] (-> ba read-utf8 Float/parseFloat))
+              :write-binary (fn [_env ^IVectorReader rdr idx]
                               (let [bb (doto (ByteBuffer/allocate 4)
                                          (.putFloat (.getFloat rdr idx)))]
-                                (.array bb))))
-            :write-text (fn [^IVectorReader rdr idx]
-                          (when-not (.isNull rdr idx)
-                            (utf8 (.getFloat rdr idx))))}
-   :float8 {:typname "float8"
-            :col-type :f64
-            :oid 701
-            :typlen 8
-            :read-binary (fn [ba] (-> ba ByteBuffer/wrap .getDouble))
-            :read-text (fn [ba] (-> ba read-utf8 Double/parseDouble))
-            :write-binary (fn [^IVectorReader rdr idx]
-                            (when-not (.isNull rdr idx)
-                              (let [bb (doto (ByteBuffer/allocate 8)
+                                (.array bb)))
+              :write-text (fn [_env ^IVectorReader rdr idx]
+                            (utf8 (.getFloat rdr idx)))})
+   :float8 (let [typlen 8]
+             {:typname "float8"
+              :col-type :f64
+              :oid 701
+              :typlen typlen
+              :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getDouble))
+              :read-text (fn [_env ba] (-> ba read-utf8 Double/parseDouble))
+              :write-binary (fn [_env ^IVectorReader rdr idx]
+                              (let [bb (doto (ByteBuffer/allocate typlen)
                                          (.putDouble (.getDouble rdr idx)))]
-                                (.array bb))))
-            :write-text (fn [^IVectorReader rdr idx]
-                          (when-not (.isNull rdr idx)
-                            (utf8 (.getDouble rdr idx))))}
-   :uuid {:typname "uuid"
-          :col-type :uuid
-          :oid 2950
-          :typlen 16
-          :read-binary (fn [ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
-          :read-text (fn [ba] (UUID/fromString (read-utf8 ba)))
-          :write-binary (fn [^IVectorReader rdr idx]
-                          (let [ba ^bytes (byte-array 16)]
-                            (.get (.getBytes rdr idx) ba)
-                            ba))
-          :write-text (fn [^IVectorReader rdr idx]
-                        (utf8 (util/byte-buffer->uuid (.getBytes rdr idx))))}
+                                (.array bb)))
+              :write-text (fn [_env ^IVectorReader rdr idx]
+                            (utf8 (.getDouble rdr idx)))})
+   :uuid (let [typlen 16]
+           {:typname "uuid"
+            :col-type :uuid
+            :oid 2950
+            :typlen typlen
+            :read-binary (fn [_env ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
+            :read-text (fn [_env ba] (UUID/fromString (read-utf8 ba)))
+            :write-binary (fn [_env ^IVectorReader rdr idx]
+                            (let [ba ^bytes (byte-array typlen)]
+                              (.get (.getBytes rdr idx) ba)
+                              ba))
+            :write-text (fn [_env ^IVectorReader rdr idx]
+                          (utf8 (util/byte-buffer->uuid (.getBytes rdr idx))))})
+
+   :timestamp (let [typlen 8]
+                {:typname "timestamp"
+                 :col-type [:timestamp-local :micro]
+                 :oid 1114
+                 :typlen typlen
+                 :read-binary (fn [_env ba] ;;not sent via pgjdbc, reverse engineered
+                                (let [micros (+ (-> ba ByteBuffer/wrap .getLong) unix-pg-epoch-diff-in-micros)]
+                                  (LocalDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
+                 :read-text (fn [_env ba]
+                             (LocalDateTime/parse (read-utf8 ba) iso-local-date-time-formatter-with-space))
+                 :write-binary (fn [_env ^IVectorReader rdr idx]
+                                 (let [micros (- (.getLong rdr idx) unix-pg-epoch-diff-in-micros)
+                                       bb (doto (ByteBuffer/allocate typlen)
+                                            (.putLong micros))]
+                                   (.array bb)))
+                 :write-text (fn [_env ^IVectorReader rdr idx]
+                               (-> ^LocalDateTime (.getObject rdr idx)
+                                   (.format iso-local-date-time-formatter-with-space)
+                                   (utf8)))})
+
+   :timestamptz (let [typlen 8]
+                  {:typname "timestamptz"
+                   :col-type [:timestamp-tz :micro "UTC"]
+                   ;;not possible to know the zone ahead of time
+                   ;;this UTC most likely to be correct, but will have to replan if thats not the case
+                   ;;could try to emit expression for zone agnostic tstz
+                   :oid 1184
+                   :typlen typlen
+                   :read-binary (fn [_env ba] ;; not sent via pgjdbc, reverse engineered
+                                  ;;unsure how useful binary tstz inputs are and if therefore if any drivers actually send them, as AFAIK
+                                  ;;the wire format for tstz contains no offset, unlike the text format. Therefore we have to
+                                  ;;infer one, so opting for UTC
+                                  (let [micros (+ (-> ba ByteBuffer/wrap .getLong) unix-pg-epoch-diff-in-micros)]
+                                    (OffsetDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
+                   :read-text (fn [_env ba]
+                                (OffsetDateTime/parse (read-utf8 ba) iso-offset-date-time-formatter-with-space))
+                   :write-binary (fn [_env ^IVectorReader rdr idx]
+                                   ;;despite the wording in the docs, based off pgjdbc behaviour
+                                   ;;and other sources, this appears to be in UTC rather than the session tz
+                                   (when-let [^ZonedDateTime zdt (.getObject rdr idx)]
+                                     ;; getObject on end-of-time returns nil but isNull is false
+                                     (let [unix-micros (-> zdt
+                                                           (.toInstant)
+                                                           (time/instant->micros))
+                                           micros (- unix-micros unix-pg-epoch-diff-in-micros)
+                                           bb (doto (ByteBuffer/allocate typlen)
+                                                (.putLong micros))]
+                                       (.array bb))))
+                   :write-text (fn [_env ^IVectorReader rdr idx]
+                                 ;; pgjdbc allows you to return offsets in string format,
+                                 ;; seems non-standard, but the standard isn't clear.
+                                 (when-let [^ZonedDateTime zdt (.getObject rdr idx)]
+                                   ;; getObject on EOT returns nil but isNull is false
+                                   (-> ^ZonedDateTime zdt
+                                       (.format iso-offset-date-time-formatter-with-space)
+                                       (utf8))))})
+   :date (let [typlen 4]
+           {:typname "date"
+            :col-type [:date :day]
+            :oid 1082
+            :typlen typlen
+            :read-binary (fn [_env ba] ;;not sent via pgjdbc, reverse engineered
+                           (let [days (+
+                                       (-> ba ByteBuffer/wrap .getInt)
+                                       unix-pg-epoch-diff-in-days)]
+                             (LocalDate/ofEpochDay days)))
+            :read-text (fn [_env ba] (LocalDate/parse (read-utf8 ba)))
+            :write-binary (fn [_env ^IVectorReader rdr idx]
+                            (let [days (- (.getInt rdr idx) unix-pg-epoch-diff-in-days)
+                                  bb (doto (ByteBuffer/allocate typlen)
+                                       (.putInt days))]
+                              (.array bb)))
+            :write-text (fn [_env ^IVectorReader rdr idx]
+                          (-> ^LocalDate (.getObject rdr idx)
+                              (.format DateTimeFormatter/ISO_LOCAL_DATE)
+                              (utf8)))})
 
    :varchar {:typname "varchar"
              :col-type :utf8
              :oid 1043
-             :read-text read-utf8
-             :write-text (fn [^IVectorReader rdr idx]
-                           (when-not (.isNull rdr idx)
-                             (let [bb (.getBytes rdr idx)
-                                   ba ^bytes (byte-array (.remaining bb))]
-                               (.get bb ba)
-                               ba)))}
+             :read-text (fn [_env ba] (read-utf8 ba))
+             :write-text (fn [_env ^IVectorReader rdr idx]
+                           (let [bb (.getBytes rdr idx)
+                                 ba ^bytes (byte-array (.remaining bb))]
+                             (.get bb ba)
+                             ba))}
    ;;same as varchar which makes this technically lossy in roundtrip
    ;;text is arguably more correct for us than varchar
    :text {:typname "text"
           :col-type :utf8
           :oid 25
-          :read-text read-utf8
-          :write-text (fn [^IVectorReader rdr idx]
-                        (when-not (.isNull rdr idx)
-                          (let [bb (.getBytes rdr idx)
-                                ba ^bytes (byte-array (.remaining bb))]
-                            (.get bb ba)
-                            ba)))}
+          :read-text (fn [_env ba] (read-utf8 ba))
+          :write-text (fn [_env ^IVectorReader rdr idx]
+                        (let [bb (.getBytes rdr idx)
+                              ba ^bytes (byte-array (.remaining bb))]
+                          (.get bb ba)
+                          ba))}
    :boolean {:typname "boolean"
              :col-type :bool
+             :typlen 1
              :oid 16
-             :read-text (fn [ba] (Boolean/parseBoolean (read-utf8 ba)))
-             :write-text (fn [^IVectorReader rdr idx]
-                           (when-not (.isNull rdr idx)
-                             (utf8 (if (.getBoolean rdr idx) "t" "f"))))}
+             :read-text (fn [_env ba] (Boolean/parseBoolean (read-utf8 ba)))
+             :write-text (fn [_env ^IVectorReader rdr idx]
+                           (utf8 (if (.getBoolean rdr idx) "t" "f")))}
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
           :oid 114}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
+(defn timestamp-tz-micro? [col-type]
+  (letfn [(pred [ct] (and (vector? ct)
+                          (= :timestamp-tz (first ct))
+                          (= :micro (second ct))))]
+    (if (set? col-type)
+      (every?
+       pred
+       col-type)
+      (pred col-type))))
+
 (defn col-type->pg-type [col-type]
-  (get
-   {:utf8 :text
-    :i64 :int8
-    :i32 :int4
-    :i16 :int2
-    #_#_:i8 :bit
-    :f64 :float8
-    :f32 :float4
-    :uuid :uuid
-    :bool :boolean
-    :null :text}
-   col-type
-   :json))
+  (if (timestamp-tz-micro? col-type)
+    :timestamptz
+    (get
+     {:utf8 :text
+      :i64 :int8
+      :i32 :int4
+      :i16 :int2
+      #_#_:i8 :bit
+      :f64 :float8
+      :f32 :float4
+      :uuid :uuid
+      :bool :boolean
+      :null :text
+      [:date :day] :date
+      [:timestamp-local :micro] :timestamp}
+     col-type
+     :json)))
 
 (defn field->pg-type [field]
   (let [field-name (str (key (first field)))]

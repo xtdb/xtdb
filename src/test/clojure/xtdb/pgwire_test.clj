@@ -1,5 +1,6 @@
 (ns xtdb.pgwire-test
   (:require [clojure.data.json :as json]
+            [clojure.data.csv :as csv]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
@@ -15,12 +16,11 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection Types JDBCType)
-           (java.time Clock Instant ZoneId ZoneOffset)
+           (java.sql Connection Types)
+           (java.time Clock Instant ZoneId ZoneOffset LocalDate OffsetDateTime LocalDateTime)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
-           (org.postgresql.util PGobject PSQLException)
-           (xtdb JsonSerde)))
+           (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -459,7 +459,7 @@
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
   (with-redefs [pgwire/canned-responses [{:q "hello!"
                                           :cols [{:column-name "greet", :column-oid @#'pgwire/oid-json}]
-                                          :rows [["\"hey!\""]]}]]
+                                          :rows (fn [_] [["\"hey!\""]])}]]
     (with-open [conn (jdbc-conn)]
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))
 
@@ -569,7 +569,7 @@
   [f]
   (require-server)
   ;; there are other ways to do this, but its a straightforward factoring that removes some boilerplate for now.
-  (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*)]
+  (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*) "--csv"]
         pb (ProcessBuilder. argv)
         p (.start pb)
         in (.getInputStream p)
@@ -592,7 +592,7 @@
                        (.read stream barr)
                        (let [read-str (String. barr)]
                          (when-not (str/starts-with? read-str "Null display is")
-                           read-str))))
+                           (csv/read-csv read-str)))))
 
                    (when (< wait-until (System/currentTimeMillis))
                      :timeout)
@@ -626,43 +626,54 @@
      (fn [send read]
        (testing "ping"
          (send "select 'ping';\n")
-         (let [s (read)]
-           (is (str/includes? s "ping"))
-           (is (str/includes? s "(1 row)"))))
+         (is (= [["_column_1"] ["ping"]] (read))))
 
        (testing "numeric printing"
          (send "select a.a from (values (42)) a (a);\n")
-         (is (str/includes? (read) "42")))
+         (is (= [["a"] ["42"]] (read))))
 
        (testing "expecting column name"
          (send "select a.flibble from (values (42)) a (flibble);\n")
-         (is (str/includes? (read) "flibble")))
+         (is (= [["flibble"] ["42"]] (read))))
 
        (testing "mixed type col"
          (send "select a.a from (values (42), ('hello!'), (array [1,2,3])) a (a);\n")
-         (let [s (read)]
-           (is (str/includes? s "42"))
-           (is (str/includes? s "\"hello!\""))
-           (is (str/includes? s "[1,2,3]"))
-           (is (str/includes? s "(3 rows)"))))
+         (is (= [["a"] ["42"] ["\"hello!\""] ["[1,2,3]"]] (read))))
 
        (testing "error during plan"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "slect baz.a from baz;\n")
-           (is (str/includes? (read :err) "mismatched input 'slect' expecting")))
+           (is (= [["ERROR:  Errors parsing SQL statement:"]
+                   ["  - line 1:0 mismatched input 'slect' expecting {'ASSERT'"
+                    " 'START'"
+                    " 'BEGIN'"
+                    " 'SET'"
+                    " 'COMMIT'"
+                    " 'ROLLBACK'"
+                    " 'SETTING'"
+                    " '('"
+                    " 'WITH'"
+                    " 'FROM'"
+                    " 'VALUES'"
+                    " 'SELECT'"
+                    " 'DELETE'"
+                    " 'ERASE'"
+                    " 'INSERT'"
+                    " 'UPDATE'}"]]
+                   (read :err))))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
-           (is (str/includes? (read) "ping"))))
+           (is (= [["_column_1"] ["ping"]] (read)))))
 
        (testing "error during query execution"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "select (1 / 0) from (values (42)) a (a);\n")
-           (is (str/includes? (read :err) "data exception — division by zero")))
+           (is (= [["ERROR:  data exception — division by zero"]] (read :err))))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
-           (is (str/includes? (read) "ping"))))))))
+           (is (= [["_column_1"] ["ping"]] (read)))))))))
 
 
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
@@ -814,45 +825,41 @@
      (fn [send read]
        (testing "set transaction"
          (send "SET TRANSACTION READ WRITE;\n")
-         (is (str/includes? (read) "SET TRANSACTION")))
+         (is (= [["SET TRANSACTION"]] (read))))
 
        (testing "begin"
          (send "BEGIN;\n")
-         (is (str/includes? (read) "BEGIN")))
+         (is (= [["BEGIN"]] (read))))
 
        (testing "insert"
          (send "INSERT INTO foo (_id, a) values (42, 42);\n")
-         (is (str/includes? (read) "INSERT 0 0")))
+         (is (= [["INSERT 0 0"]] (read))))
 
        (testing "insert 2"
          (send "INSERT INTO foo (_id, a) values (366, 366);\n")
-         (is (str/includes? (read) "INSERT 0 0")))
+         (is (= [["INSERT 0 0"]] (read))))
 
        (testing "commit"
          (send "COMMIT;\n")
-         (is (str/includes? (read) "COMMIT")))
+         (is (= [["COMMIT"]] (read))))
 
        (testing "read your own writes"
          (send "SELECT a FROM foo;\n")
-         (let [s (read)]
-           (is (str/includes? s "42"))
-           (is (str/includes? s "366"))))
+         (is (= [["a"] ["366"] ["42"]] (read))))
 
        (testing "delete"
          (send "BEGIN READ WRITE;\n")
+
          (read)
          (send "DELETE FROM foo;\n")
-         (let [s (read)]
-           (is (str/includes? s "DELETE 0"))
-           (testing "no description sent"
-             (is (not (str/includes? s "_iid"))))))))))
+         (is (= [["DELETE 0"]] (read))))))))
 
 (when (psql-available?)
   (deftest psql-dml-at-prompt-test
     (psql-session
      (fn [send read]
        (send "INSERT INTO foo(_id, a) VALUES (42, 42);\n")
-       (is (str/includes? (read) "INSERT 0 0"))))))
+       (is (= [["INSERT 0 0"]] (read)))))))
 
 (deftest dml-param-test
   (with-open [conn (jdbc-conn)]
@@ -876,91 +883,76 @@
           #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
           (q conn ["BEGIN"])))))
 
-(defn- current-ts [conn]
-  (:a (first (q conn ["select current_timestamp a"]))))
-
-(deftest half-baked-clock-test
-  ;; goal is to test time basis params are sent with queries
-  ;; no support yet for SET/SHOW TIME ZONE so testing with internals to
-  ;; provoke some clock specialised behaviour and make sure something not totally wrong happens
+(deftest test-current-time
   (require-server)
-  (let [custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") (ZoneOffset/ofHoursMinutes 3 12))]
+  ;; no support for setting current-time so need to interact with clock directly
+  (let [custom-clock (Clock/fixed (Instant/parse "2000-08-16T11:08:03Z") (ZoneId/of "GMT"))]
 
     (swap! (:server-state *server*) assoc :clock custom-clock)
 
-    (testing "server zone is inherited by conn session"
-      (with-open [conn (jdbc-conn)]
-        (is (= {:clock custom-clock} (session-variables (get-last-conn) [:clock])))
-        (is (= "2022-08-16T14:20:03+03:12" (current-ts conn)))))
-
-    (swap! (:server-state *server*) assoc :clock (Clock/systemDefaultZone))
-
-    ;; I am not 100% this is the behaviour we actually want as it stands
-    ;; going off repeatable-read steer from ADR-40
-    (testing "current ts instant is pinned during a tx, regardless of what happens to the session clock"
-      (with-open [conn (jdbc-conn)]
-        (let [{:keys [conn-state]} (get-last-conn)]
-          (swap! conn-state assoc-in [:session :clock] (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
-
-        (jdbc/with-transaction [tx conn]
-          (is (= "1970-01-01T00:00Z" (current-ts tx)))
-          (Thread/sleep 10)
-          (is (= "1970-01-01T00:00Z" (current-ts tx)))
-          (testing "inside a transaction, changing the zone is permitted, but the instant is fixed, regardless of the session clock"
-            (let [{:keys [conn-state]} (get-last-conn)]
-              (swap! conn-state assoc-in [:session :clock] custom-clock))
-            (is (= "1970-01-01T03:12+03:12" (current-ts tx)))))
-
-        (is (= "2022-08-16T14:20:03+03:12" (current-ts conn)))))))
-
-(deftest set-time-zone-test
-  (require-server {:num-threads 2})
-  (let [server-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") (ZoneOffset/ofHoursMinutes 3 12))]
-    (swap! (:server-state *server*) assoc :clock server-clock)
     (with-open [conn (jdbc-conn)]
-      ;; for sanity
-      (testing "expect server clock"
-        (is (= "2022-08-16T14:20:03+03:12" (current-ts conn))))
 
-      (testing "utc"
-        (q conn ["SET TIME ZONE '+00:00'"])
-        (is (= "2022-08-16T11:08:03Z" (current-ts conn))))
+      (let [current-time #(get (first (rs->maps (.executeQuery (.createStatement %) "SELECT CURRENT_TIMESTAMP ct"))) "ct")]
 
-      (testing "tz is session scoped"
+        (t/is (= #inst "2000-08-16T11:08:03.000000000-00:00" (current-time conn)))
+
+        (testing "current ts instant is pinned during a tx, regardless of what happens to the session clock"
+
+          (let [{:keys [conn-state]} (get-last-conn)]
+            (swap! conn-state assoc-in [:session :clock] (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
+
+          (jdbc/with-transaction [tx conn]
+            (let [epoch #inst "1970-01-01T00:00:00.000000000-00:00"]
+              (t/is (= epoch (current-time tx)))
+              (Thread/sleep 10)
+              (t/is (= epoch (current-time tx)))
+
+              (testing "inside a transaction the instant is fixed, regardless of the session clock"
+                (let [{:keys [conn-state]} (get-last-conn)]
+                  (swap! conn-state assoc-in [:session :clock] custom-clock))
+                (t/is (= epoch (current-time tx)))))))))))
+
+(deftest test-timezone
+  (require-server {:num-threads 2})
+  (with-open [conn (jdbc-conn)]
+
+    (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "TimeZone")
+          exec #(.execute (.createStatement %1) %2)
+          default-tz (str (.getZone (Clock/systemDefaultZone)))]
+
+      (t/testing "expect server timezone"
+        (t/is (= default-tz (q-tz conn))))
+
+      (t/testing "utc"
+        (exec conn "SET TIME ZONE '+00:00'")
+        (t/is (= "Z" (q-tz conn))))
+
+      (t/testing "random tz"
+        (exec conn "SET TIME ZONE '+07:44'")
+        (t/is (= "+07:44" (q-tz conn))))
+
+      (t/testing "tz is session scoped"
         (with-open [conn2 (jdbc-conn)]
-          (is (= "2022-08-16T14:20:03+03:12" (current-ts conn2)))
-          (is (= "2022-08-16T11:08:03Z" (current-ts conn)))
-          (q conn2 ["SET TIME ZONE '+00:01'"])
-          (is (= "2022-08-16T11:09:03+00:01" (current-ts conn2)))
-          (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))
 
-      (testing "postive sign"
-        (q conn ["SET TIME ZONE '+01:34'"])
-        (is (= "2022-08-16T12:42:03+01:34" (current-ts conn))))
+          (t/is (= default-tz (q-tz conn2)))
+          (t/is (= "+07:44" (q-tz conn)))
 
-      (testing "negative sign"
-        (q conn ["SET TIME ZONE '-01:04'"])
-        (is (= "2022-08-16T10:04:03-01:04" (current-ts conn))))
+          (exec conn2 "SET TIME ZONE '-00:01'")
+
+          (t/is (= "-00:01" (q-tz conn2)))
+          (t/is (= "+07:44" (q-tz conn)))))
 
       (jdbc/with-transaction [tx conn]
-        (testing "in a transaction, inherits session tz"
-          (is (= "2022-08-16T10:04:03-01:04" (current-ts tx))))
 
-        (testing "tz can be modified in a transaction"
-          (q conn ["SET TIME ZONE '+00:00'"])
-          (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))
+        (t/testing "in a transaction, inherits session tz"
+          (t/is (= "+07:44" (q-tz tx))))
+
+        (t/testing "tz can be modified in a transaction"
+          (exec tx "SET TIME ZONE 'Asia/Tokyo'")
+          (t/is (= "Asia/Tokyo" (q-tz tx)))))
 
       (testing "SET is a session operator, so the tz still applied to the session"
-        (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))))
-
-(deftest zoned-dt-printing-test
-  (require-server)
-  (let [custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z")
-                                  ;; lets hope we do not print zone prefix!
-                                  (ZoneId/ofOffset "GMT" (ZoneOffset/ofHoursMinutes 3 12)))]
-    (swap! (:server-state *server*) assoc :clock custom-clock)
-    (with-open [conn (jdbc-conn)]
-      (is (= "2022-08-16T14:20:03+03:12" (current-ts conn))))))
+        (t/is (= "Asia/Tokyo" (q-tz conn)))))))
 
 (deftest pg-begin-unsupported-syntax-error-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
@@ -1034,37 +1026,55 @@
       (sql "INSERT INTO foo (_id, version) VALUES ('foo', 0)")
       (sql "COMMIT")
 
-      (is (= [{:version 0, :_valid_from "2020-01-01T00:00Z", :_valid_to nil}]
+      (is (= [{:version 0,
+               :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
+               :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
       (sql "UPDATE foo SET version = 1 WHERE _id = 'foo'")
       (sql "COMMIT")
 
-      (is (= [{:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+      (is (= [{:version 1,
+              :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+              :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
-      (is (= (set [{:version 0, :_valid_from "2020-01-01T00:00Z", :_valid_to "2020-01-02T00:00Z"}
-                   {:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}])
-             (set (q conn ["SETTING DEFAULT VALID_TIME ALL
-                            SELECT version, _valid_from, _valid_to FROM foo"]))))
+      (is (= [{:version 0,
+               :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
+               :_valid_to #inst "2020-01-02T00:00:00.000000000-00:00"}
+              {:version 1,
+               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+               :_valid_to nil}]
+             (q conn ["SETTING DEFAULT VALID_TIME ALL
+                            SELECT version, _valid_from, _valid_to FROM foo ORDER BY version"])))
 
-      (is (= [{:version 1, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+      (is (= [{:version 1,
+               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+               :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
       (sql "UPDATE foo FOR ALL VALID_TIME SET version = 2 WHERE _id = 'foo'")
       (sql "COMMIT")
 
-      (is (= [{:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+      (is (= [{:version 2,
+               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+               :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
-      (is (= [{:version 2, :_valid_from "2020-01-01T00:00Z", :_valid_to "2020-01-02T00:00Z"}
-              {:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+      (is (= [{:version 2,
+               :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
+               :_valid_to #inst "2020-01-02T00:00:00.000000000-00:00"}
+              {:version 2,
+               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+               :_valid_to nil}]
              (q conn ["SETTING DEFAULT VALID_TIME ALL
                        SELECT version, _valid_from, _valid_to FROM foo"])))
 
-      (is (= [{:version 2, :_valid_from "2020-01-02T00:00Z", :_valid_to nil}]
+      (is (= [{:version 2,
+               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+               :_valid_to nil}]
              (q conn ["SETTING DEFAULT VALID_TIME AS OF NOW SELECT version, _valid_from, _valid_to FROM foo"]))))))
 
 ;; this demonstrates that session / set variables do not change the next statement
@@ -1120,7 +1130,23 @@
        (send "SLECT 1 FROM foo;\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (re-find #"mismatched input 'SLECT' expecting" s)))
+         (is (= [["ERROR:  Errors parsing SQL statement:"]
+                 ["  - line 1:0 mismatched input 'SLECT' expecting {'ASSERT'"
+                  " 'START'"
+                  " 'BEGIN'"
+                  " 'SET'"
+                  " 'COMMIT'"
+                  " 'ROLLBACK'"
+                  " 'SETTING'"
+                  " '('"
+                  " 'WITH'"
+                  " 'FROM'"
+                  " 'VALUES'"
+                  " 'SELECT'"
+                  " 'DELETE'"
+                  " 'ERASE'"
+                  " 'INSERT'"
+                  " 'UPDATE'}"]] s)))
 
        (send "BEGIN READ WRITE;\n")
        (read)
@@ -1128,12 +1154,14 @@
        (send "INSERT INTO foo (x) values (42);\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (re-find #"(?m)INSERT does not contain mandatory _id column" s)))
+         (is (= [["ERROR:  Errors planning SQL statement:"]
+                 ["  - INSERT does not contain mandatory _id column"]] s)))
 
        (send "COMMIT;\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (re-find #"(?m)INSERT does not contain mandatory _id column" s)))))))
+         (= [["ERROR:  Errors planning SQL statement:"]
+             ["  - INSERT does not contain mandatory _id column"]] s))))))
 
 (deftest runtime-error-query-test
   (tu/with-log-level 'xtdb.pgwire :off
@@ -1164,11 +1192,11 @@
 
 (deftest test-postgres-types
   (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" false)]
-    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8 , var_char, bool, timestamptz) VALUES (?, ?, ?, ?, ?, ?, ?, TIMESTAMP '3000-03-15 20:40:31+03:44')"
+    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8 , var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?)"
                  #uuid "9e8b41a0-723f-4e6b-babb-c4e6afd17ef2" Long/MIN_VALUE Integer/MAX_VALUE Short/MIN_VALUE Double/MAX_VALUE "aa" true]))
   ;; no float4 for text format due to a bug in pgjdbc where it sends it as a float8 causing a union type.
   (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" true)]
-    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8, float4, var_char, bool, timestamptz) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TIMESTAMP '3000-03-15 20:40:31Z')"
+    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8, float4, var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                  #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6" Long/MAX_VALUE Integer/MIN_VALUE Short/MAX_VALUE Double/MIN_VALUE Float/MAX_VALUE "bb" false])
     ;;binary format is only requested for server side preparedStatements in pgjdbc
     ;;threshold one should mean we test the text and binary format for each type
@@ -1176,7 +1204,6 @@
           res [{:float8 Double/MIN_VALUE,
                 :float4 Float/MAX_VALUE,
                 :int2 Short/MAX_VALUE,
-                :timestamptz "3000-03-15T20:40:31Z",
                 :var_char "bb",
                 :int4 Integer/MIN_VALUE,
                 :int8 Long/MAX_VALUE,
@@ -1185,7 +1212,6 @@
                {:float8 Double/MAX_VALUE,
                 :float4 nil,
                 :int2 Short/MIN_VALUE,
-                :timestamptz "3000-03-15T20:40:31+03:44",
                 :var_char "aa",
                 :int4 Integer/MAX_VALUE,
                 :int8 Long/MIN_VALUE,
@@ -1195,14 +1221,12 @@
 
       (is (=
            res
-           (->> (sql "SELECT * FROM foo")
-                (map #(update % :timestamptz <-pgobject))))
+           (sql "SELECT * FROM foo"))
           "text")
 
       (is (=
            res
-           (->> (sql "SELECT * FROM foo")
-                (map #(update % :timestamptz <-pgobject))))
+           (sql "SELECT * FROM foo"))
           "binary"))))
 
 (deftest test-odbc-queries
@@ -1380,3 +1404,115 @@
           (t/is (= "\"one\"" (.getValue x)))
           (t/is (= "1" (.getValue y)))
           (t/is (nil? z)))))))
+
+(deftest test-datetime-types
+  (let [datetime-types [{:type LocalDate :val #xt.time/date "2018-07-25" :pg-type "date"}
+                        {:type LocalDate :val #xt.time/date "1239-01-24" :pg-type "date"}
+                        {:type LocalDateTime :val #xt.time/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
+                        {:type LocalDateTime :val #xt.time/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]]
+       (doseq [{:keys [type val pg-type]} datetime-types
+               binary? [true false]]
+
+         (t/testing (format "binary?: %s, type: %s, pg-type: %s, val: %s" binary? type pg-type val)
+
+           (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+                       stmt (.prepareStatement conn "SELECT ? AS val")]
+
+             (.execute (.createStatement conn) "SET TIME ZONE '+05:00'")
+
+             (.setObject stmt 1 val)
+
+             (with-open [rs (.executeQuery stmt)]
+
+               (t/is (= [{"val" pg-type}]
+                        (result-metadata stmt)
+                        (result-metadata rs)))
+
+               (.next rs)
+               (t/is (= val (.getObject rs 1 type)))))))))
+
+(deftest test-timestamptz
+  (let [type OffsetDateTime
+        pg-type "timestamptz"
+        val #xt.time/offset-date-time "2024-07-03T19:01:34-07:00"
+        val2 #xt.time/offset-date-time "2024-07-03T19:01:34.695959+03:00"]
+    (doseq [binary? [true false]]
+
+      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+                  stmt (.prepareStatement conn "SELECT val FROM (VALUES ?, ?, TIMESTAMP '2099-04-15T20:40:31[Asia/Tokyo]') AS foo(val)")]
+
+        (.execute (.createStatement conn) "SET TIME ZONE '+04:00'")
+
+        (.setObject stmt 1 val)
+        (.setObject stmt 2 val2)
+
+        (with-open [rs (.executeQuery stmt)]
+
+          (t/is (= [{"val" pg-type}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+          (.next rs)
+          (t/is (.isEqual val (.getObject rs 1 type)))
+          (.next rs)
+          (t/is (.isEqual val2 (.getObject rs 1 type)))
+          (.next rs)
+          (t/is (.isEqual
+                 #xt.time/offset-date-time "2099-04-15T11:40:31Z"
+                 (.getObject rs 1 type))
+                "ZonedDateTimes can be read even if not written"))))))
+
+(when (psql-available?)
+  (deftest test-datetime-formatting
+    (require-server)
+    ;; no way to set current-time yet, so setting it via custom clock
+    (let [custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03.123456789Z") (ZoneOffset/ofHoursMinutes 4 44))]
+
+      (swap! (:server-state *server*) assoc :clock custom-clock)
+
+      (psql-session
+       (fn [send read]
+
+           (t/testing "timestamps are correctly output in text format"
+             ;;note nanosecond timestamp is returned as json
+             (send "SET TIME ZONE '+03:21';\n")
+             (read)
+             (send "SHOW timezone;\n")
+             (t/is (= [["TimeZone"] ["+03:21"]] (read)))
+
+             (send "SELECT
+                    TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,
+                    CURRENT_DATE cd,
+                    CURRENT_TIMESTAMP cts, CURRENT_TIMESTAMP(4) cts4,
+                    LOCALTIMESTAMP lts, LOCALTIMESTAMP(9) lts9;\n")
+
+             (t/is (=
+                    [["zdt" "cd" "cts" "cts4" "lts" "lts9"]
+                     ["3000-04-15 20:40:31+01:00"
+                      "2022-08-16"
+                      "2022-08-16 14:29:03.123456+03:21"
+                      "2022-08-16 14:29:03.1234+03:21"
+                      "2022-08-16 14:29:03.123456"
+                      "\"2022-08-16T14:29:03.123456789\""]]
+                    (read)))
+
+             (send "SET TIME ZONE 'GMT';\n")
+             (read)
+             (send "SHOW timezone;\n")
+             (t/is (= [["TimeZone"] ["GMT"]] (read))))
+
+             (send "SELECT
+                    TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,
+                    CURRENT_DATE cd,
+                    CURRENT_TIMESTAMP cts, CURRENT_TIMESTAMP(4) cts4,
+                    LOCALTIMESTAMP lts, LOCALTIMESTAMP(9) lts9;\n")
+
+             (t/is (=
+                    [["zdt" "cd" "cts" "cts4" "lts" "lts9"]
+                     ["3000-04-15 20:40:31+01:00"
+                      "2022-08-16"
+                      "2022-08-16 11:08:03.123456+00:00"
+                      "2022-08-16 11:08:03.1234+00:00"
+                      "2022-08-16 11:08:03.123456"
+                      "\"2022-08-16T11:08:03.123456789\""]]
+                    (read))))))))
