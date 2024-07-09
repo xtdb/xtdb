@@ -1267,10 +1267,17 @@
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
       (list 'and (list '= (:from p1) (:from p2)) (list '= (:to p1) (:to p2)))))
 
-  (visitPeriodContainsPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx) (.accept this))
-          p2 (-> (.periodOrPointInTimePredicand ctx) (.accept this))]
-      (list 'and (list '<= (:from p1) (:from p2)) (list '> (:to p1) (:to p2)))))
+  (visitPeriodContainsPeriodPredicate [this ctx]
+    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
+          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+      (list 'and (list '<= (:from p1) (:from p2)) (list '>= (:to p1) (:to p2)))))
+
+  (visitPeriodContainsPointPredicate [this ctx]
+    (let [period (-> (.periodPredicand ctx) (.accept this))
+          pit (-> (.pointInTimePredicand ctx) (.accept this))]
+      ;; TODO this currently duplicates the expr, but emitting a `let`
+      ;; probably won't get optimised into scan preds
+      (list 'and (list '<= (:from period) pit) (list '> (:to period) pit))))
 
   (visitPeriodPrecedesPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
@@ -1306,11 +1313,7 @@
           ev (some-> (.periodEndValue ctx) (.expr) (.accept this))]
       {:from sv :to ev}))
 
-  (visitPeriodOrPointInTimePredicand [this ctx] (.accept (.getChild ctx 0) this))
-
-  (visitPointInTimePredicand [this ctx]
-    (let [pit (-> (.expr ctx) (.accept this))]
-      {:from pit :to pit}))
+  (visitPointInTimePredicand [this ctx] (.accept (.expr ctx) this))
 
   (visitHasTablePrivilegePredicate [_ _] true)
   (visitHasSchemaPrivilegePredicate [_ _] true)

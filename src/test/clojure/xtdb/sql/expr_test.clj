@@ -878,7 +878,6 @@
     (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT-2H-0.001S"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.499+02:00[Europe/Berlin]', TIMESTAMP '2023-07-01T12:00:30.500') as itvl")))))
 
-
 (t/deftest test-period-predicates
   (t/are [expected sql] (= expected (plan-expr-with-foo sql))
     '(and (<= f/xt$valid_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
@@ -886,7 +885,7 @@
     "foo.VALID_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (<= f/xt$valid_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
-          (>= f/xt$valid_to #xt.time/zoned-date-time "2000-01-01T00:00Z"))
+          (> f/xt$valid_to #xt.time/zoned-date-time "2000-01-01T00:00Z"))
     "foo.VALID_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
 
     ;; also testing all period-predicate permutations
@@ -921,20 +920,19 @@
 (t/deftest test-period-predicates-point-in-time
   (t/are [expected sql] (= expected (plan-expr-with-foo sql))
 
-    '(and (<= f/xt$valid_from f/a) (>= f/xt$valid_to f/a))
+    '(and (<= f/xt$valid_from f/a) (> f/xt$valid_to f/a))
     "foo.valid_time CONTAINS foo.a"
 
     '(and
       (<= f/xt$valid_from #xt.time/zoned-date-time "2010-01-01T11:10:11Z")
-      (>= f/xt$valid_to #xt.time/zoned-date-time "2010-01-01T11:10:11Z"))
+      (> f/xt$valid_to #xt.time/zoned-date-time "2010-01-01T11:10:11Z"))
     "foo.valid_time CONTAINS TIMESTAMP '2010-01-01T11:10:11Z'"
 
     '(and (<= f/xt$valid_from f/a) (>= f/xt$valid_to f/a))
     "foo.valid_time CONTAINS PERIOD(foo.a, foo.a)"
 
-    '(and (<= f/xt$valid_from f/xt$system_from) (>= f/xt$valid_to f/xt$system_from))
+    '(and (<= f/xt$valid_from f/xt$system_from) (> f/xt$valid_to f/xt$system_from))
     "foo.valid_time CONTAINS foo.xt$system_from"))
-
 
 (t/deftest test-coalesce
   (t/testing "planning"

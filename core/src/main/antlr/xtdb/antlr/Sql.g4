@@ -237,7 +237,8 @@ exprPrimary
     // period predicates
     | periodPredicand 'OVERLAPS' periodPredicand # PeriodOverlapsPredicate
     | periodPredicand 'EQUALS' periodPredicand # PeriodEqualsPredicate
-    | periodPredicand 'CONTAINS' periodOrPointInTimePredicand # PeriodContainsPredicate
+    | periodPredicand 'CONTAINS' periodPredicand # PeriodContainsPeriodPredicate
+    | periodPredicand 'CONTAINS' pointInTimePredicand # PeriodContainsPointPredicate
     | periodPredicand 'PRECEDES' periodPredicand # PeriodPrecedesPredicate
     | periodPredicand 'SUCCEEDS' periodPredicand # PeriodSucceedsPredicate
     | periodPredicand 'IMMEDIATELY' 'PRECEDES' periodPredicand # PeriodImmediatelyPrecedesPredicate
@@ -687,7 +688,6 @@ periodColumnName : 'VALID_TIME' | 'SYSTEM_TIME' ;
 periodStartValue : expr ;
 periodEndValue : expr ;
 
-periodOrPointInTimePredicand : periodPredicand | pointInTimePredicand ;
 pointInTimePredicand : expr ;
 /// §8.21 <search condition>
 
