@@ -1,15 +1,15 @@
-= S3 Module
+= AWS Module
 
 Within our XTDB node, we can make use of **AWS S3** as one of the XTDB Object Stores used by the remote storage module.
 
 == Project Dependency
 
-In order to use S3 as an object store, you will need to include a dependency on the xtdb.s3 module:
+In order to use S3 as an object store, you will need to include a dependency on the xtdb.aws module:
 
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-s3 {:mvn/version "2.0.0-SNAPSHOT"}
+com.xtdb/xtdb-aws {:mvn/version "2.0.0-SNAPSHOT"}
 ----
 
 .pom.xml
@@ -17,7 +17,7 @@ com.xtdb/xtdb-s3 {:mvn/version "2.0.0-SNAPSHOT"}
 ----
 <dependency>
     <groupId>com.xtdb</groupId>
-    <artifactId>xtdb-s3</artifactId>
+    <artifactId>xtdb-aws</artifactId>
     <version>2.0.0-SNAPSHOT</version>
 </dependency>
 ----
@@ -100,7 +100,7 @@ These are the following parameters that can be passed within the config for our 
 
 | `configurator`
 | `S3Configurator`
-| The https://github.com/xtdb/xtdb/blob/main/modules/s3/src/main/java/xtdb/s3/S3Configurator.java[`xtdb.s3.S3Configurator`] with extra s3 configuration options to be used by the object store
+| The https://github.com/xtdb/xtdb/blob/main/modules/s3/src/main/java/xtdb/aws/s3/S3Configurator.java[`xtdb.aws.s3.S3Configurator`] with extra s3 configuration options to be used by the object store
 | Yes
 |=== 
 
@@ -108,10 +108,10 @@ These are the following parameters that can be passed within the config for our 
 
 WARNING: This is unfortunately currently only accessible from Clojure - we plan to expose it outside of Clojure soon.
 
-While the above is sufficient to get `xtdb-s3` working out of the box, there are a plethora of configuration options in S3 - how to get credentials, object properties, serialisation of the documents, etc.
-We expose these via the https://github.com/xtdb/xtdb/blob/main/modules/s3/src/main/java/xtdb/s3/S3Configurator.java[`xtdb.s3.S3Configurator`] interface - you can supply an instance using the following in your node configuration.
+While the above is sufficient to get `xtdb-aws` working out of the box, there are a plethora of configuration options in S3 - how to get credentials, object properties, serialisation of the documents, etc.
+We expose these via the https://github.com/xtdb/xtdb/blob/main/modules/s3/src/main/java/xtdb/aws/s3/S3Configurator.java[`xtdb.aws.s3.S3Configurator`] interface - you can supply an instance using the following in your node configuration.
 
-Through this interface, you can supply an `S3AsyncClient` for xtdb-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
+Through this interface, you can supply an `S3AsyncClient` for xtdb-aws to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
 By default, we get credentials through the usual AWS credentials provider.
 
 [source,clojure]

@@ -63,7 +63,7 @@ dependencies {
     testImplementation(project(":xtdb-http-server"))
     testImplementation(project(":xtdb-pgwire-server"))
     testImplementation(project(":modules:xtdb-kafka"))
-    testImplementation(project(":modules:xtdb-s3"))
+    testImplementation(project(":modules:xtdb-aws"))
     testImplementation(project(":modules:xtdb-google-cloud"))
     testImplementation(project(":modules:xtdb-azure"))
     testImplementation(project(":modules:xtdb-flight-sql"))

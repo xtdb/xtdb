@@ -225,7 +225,7 @@ dependencies {
     projectDep(":xtdb-pgwire-server")
 
     projectDep(":modules:xtdb-kafka")
-    projectDep(":modules:xtdb-s3")
+    projectDep(":modules:xtdb-aws")
     projectDep(":modules:xtdb-azure")
     projectDep(":modules:xtdb-google-cloud")
 
@@ -244,6 +244,7 @@ dependencies {
     devImplementation("integrant", "repl", "0.3.2")
     devImplementation("com.azure", "azure-identity", "1.9.0")
     devImplementation("com.taoensso", "tufte", "2.6.3")
+    devImplementation("clojure.java-time:clojure.java-time:1.4.2")
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("org.postgresql", "postgresql", "42.5.0")

@@ -11,7 +11,7 @@ import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
 import xtdb.api.storage.AzureBlobStorage.azureBlobStorage
 import xtdb.api.storage.GoogleCloudStorage
-import xtdb.api.storage.S3.s3
+import xtdb.aws.S3.s3
 import xtdb.api.storage.Storage.InMemoryStorageFactory
 import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.RemoteStorageFactory

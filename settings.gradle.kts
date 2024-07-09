@@ -23,9 +23,9 @@ project(":lang:test-harness").name = "test-harness"
 include("docker:standalone","docker:aws")
 include("cloud-benchmark", "cloud-benchmark:aws", "cloud-benchmark:google-cloud", "cloud-benchmark:local")
 
-include("modules:kafka", "modules:s3", "modules:azure", "modules:google-cloud")
+include("modules:kafka", "modules:aws", "modules:azure", "modules:google-cloud")
 project(":modules:kafka").name = "xtdb-kafka"
-project(":modules:s3").name = "xtdb-s3"
+project(":modules:aws").name = "xtdb-aws"
 project(":modules:azure").name = "xtdb-azure"
 project(":modules:google-cloud").name = "xtdb-google-cloud"
 

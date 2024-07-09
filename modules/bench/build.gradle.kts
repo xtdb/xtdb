@@ -13,7 +13,7 @@ dependencies {
     api(project(":xtdb-core"))
     api(project(":modules:datasets"))
     api(project(":modules:xtdb-kafka"))
-    api(project(":modules:xtdb-s3"))
+    api(project(":modules:xtdb-aws"))
 
     api("org.clojure", "data.csv", "1.0.1")
     api("ch.qos.logback", "logback-classic", "1.4.5")

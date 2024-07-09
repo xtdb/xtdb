@@ -1,6 +1,6 @@
 @file:UseSerializers(PathWithEnvVarSerde::class, StringWithEnvVarSerde::class)
 
-package xtdb.api.storage
+package xtdb.aws
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -9,8 +9,10 @@ import kotlinx.serialization.UseSerializers
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.module.XtdbModule
-import xtdb.api.storage.s3.DefaultS3Configurator
-import xtdb.api.storage.s3.S3Configurator
+import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStoreFactory
+import xtdb.aws.s3.DefaultS3Configurator
+import xtdb.aws.s3.S3Configurator
 import xtdb.util.requiringResolve
 import java.nio.file.Path
 
@@ -80,11 +82,11 @@ object S3 {
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
         /**
-         * @param s3Configurator An optional [xtdb.api.storage.s3.S3Configurator] instance with extra s3 configuration options to be used by the object store.
+         * @param s3Configurator An optional [xtdb.aws.s3.S3Configurator] instance with extra S3 configuration options to be used by the object store.
          */
         fun s3Configurator(s3Configurator: S3Configurator) = apply { this.s3Configurator = s3Configurator }
 
-        override fun openObjectStore() = requiringResolve("xtdb.s3/open-object-store")(this) as ObjectStore
+        override fun openObjectStore() = requiringResolve("xtdb.aws.s3/open-object-store")(this) as ObjectStore
     }
 
     /**

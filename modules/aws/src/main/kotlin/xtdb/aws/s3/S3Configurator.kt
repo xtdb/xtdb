@@ -1,4 +1,4 @@
-package xtdb.api.storage.s3
+package xtdb.aws.s3
 
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.s3.model.GetObjectRequest

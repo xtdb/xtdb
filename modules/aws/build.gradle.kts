@@ -13,8 +13,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("XTDB S3")
-            description.set("XTDB S3")
+            name.set("XTDB AWS")
+            description.set("XTDB AWS")
         }
     }
 }

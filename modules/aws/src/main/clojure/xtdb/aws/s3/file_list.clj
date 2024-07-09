@@ -1,4 +1,4 @@
-(ns xtdb.s3.file-list
+(ns xtdb.aws.s3.file-list
   (:require [clojure.data.json :as json]
             [clojure.string :as string]
             [clojure.tools.logging :as log] 

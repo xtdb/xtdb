@@ -8,7 +8,7 @@ plugins {
 
 dependencies {
     implementation(project(":cloud-benchmark"))
-    implementation(project(":modules:xtdb-s3"))
+    implementation(project(":modules:xtdb-aws"))
     implementation("ch.qos.logback", "logback-classic", "1.4.5")
 }
 

@@ -1,11 +1,11 @@
-(ns xtdb.s3-test
+(ns xtdb.aws.s3-test
   (:require [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
             [xtdb.object-store-test :as os-test]
-            [xtdb.s3 :as s3]
+            [xtdb.aws.s3 :as s3]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.io Closeable]
@@ -14,7 +14,8 @@
            [java.time Duration]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
-           [xtdb.api.storage ObjectStore S3 S3$Factory]
+           [xtdb.api.storage ObjectStore]
+           [xtdb.aws S3 S3$Factory]
            [xtdb.buffer_pool RemoteBufferPool]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
@@ -22,11 +23,11 @@
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)
 
 (def bucket
-  (or (System/getProperty "xtdb.s3-test.bucket")
+  (or (System/getProperty "xtdb.aws.s3-test.bucket")
       "xtdb-object-store-iam-test"))
 
 (def sns-topic-arn
-  (or (System/getProperty "xtdb.s3-test.sns-topic-arn")
+  (or (System/getProperty "xtdb.aws.s3-test.sns-topic-arn")
       "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-iam-test-bucket-events"))
 
 (defn object-store ^Closeable [prefix]

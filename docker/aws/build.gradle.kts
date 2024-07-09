@@ -10,7 +10,7 @@ dependencies {
     implementation(project(":xtdb-core"))
     implementation(project(":xtdb-http-server"))
     implementation(project(":modules:xtdb-kafka"))
-    implementation(project(":modules:xtdb-s3"))
+    implementation(project(":modules:xtdb-aws"))
     implementation("ch.qos.logback", "logback-classic", "1.4.5")
 }
 

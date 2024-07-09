@@ -338,7 +338,7 @@
             (nrepl/message {:op "eval" :code "'connected"})
             doall))))
 
-  ;; a valid :xtdb.s3/object-store configuration for the stack with the given :prefix
+  ;; a valid :xtdb.aws.s3/object-store configuration for the stack with the given :prefix
   (s3-module-config wot-s3 "foo")
 
   ;; if you want to checkout a different commit, branch or tag (available on GitHub), by default the latest main is checked out

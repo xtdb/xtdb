@@ -3,7 +3,7 @@ title: S3
 ---
 :icon: /images/icons
 :clojure: /drivers/clojure/configuration#s3
-:kotlin: /drivers/kotlin/kdoc/modules/xtdb-s3/xtdb.api.storage/-s3/index.html
+:kotlin: /drivers/kotlin/kdoc/modules/xtdb-aws/xtdb.aws/-s3/index.html
 
 S3 can be used as a shared object-store for XTDB's remote storage module.
 
@@ -16,14 +16,14 @@ If not using the link:#_cloudformation_stack[CloudFormation stack], ensure that 
 
 == Setup
 
-First, ensure the `com.xtdb/xtdb-s3` Maven dependency is added to your XTDB node.
+First, ensure the `com.xtdb/xtdb-aws` Maven dependency is added to your XTDB node.
 
 === Infrastructure
 
 [NOTE]
 .CloudFormation stack
 ====
-We provide a https://github.com/xtdb/xtdb/blob/main/modules/s3/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help set up everything that you need.
+We provide a https://github.com/xtdb/xtdb/blob/main/modules/aws/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help set up everything that you need.
 
 The stack accepts the (globally unique) name of an S3 bucket as an input - this will be created, and referenced in associated resources - and outputs the SNS topic ARN, to be used in your XTDB configuration.
 ====

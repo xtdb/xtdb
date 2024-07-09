@@ -1,8 +1,8 @@
-(ns xtdb.s3
+(ns xtdb.aws.s3
   (:require [xtdb.buffer-pool :as bp]
             [xtdb.file-list :as file-list]
             [xtdb.object-store :as os]
-            [xtdb.s3.file-list :as s3-file-watch]
+            [xtdb.aws.s3.file-list :as s3-file-watch]
             [xtdb.util :as util])
   (:import [java.io Closeable]
            [java.lang AutoCloseable]
@@ -17,8 +17,8 @@
            [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedPart CompletedMultipartUpload CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest UploadPartRequest UploadPartResponse]
            xtdb.api.storage.ObjectStore
            [xtdb.multipart SupportsMultipart IMultipartUpload]
-           [xtdb.api.storage.s3 S3Configurator]
-           [xtdb.api.storage S3 S3$Factory]))
+           [xtdb.aws.s3 S3Configurator]
+           [xtdb.aws S3 S3$Factory]))
 
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket ^Path prefix]} ^Path k]
