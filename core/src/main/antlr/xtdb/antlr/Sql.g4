@@ -685,10 +685,10 @@ periodPredicand
     ;
 
 periodColumnName : 'VALID_TIME' | 'SYSTEM_TIME' ;
-periodStartValue : expr ;
-periodEndValue : expr ;
+periodStartValue : numericExpr ;
+periodEndValue : numericExpr ;
 
-pointInTimePredicand : expr ;
+pointInTimePredicand : numericExpr ;
 /// §8.21 <search condition>
 
 searchCondition : expr ;

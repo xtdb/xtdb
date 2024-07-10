@@ -1309,11 +1309,11 @@
                        :to (find-decl scope ['xt$system_to tn])})))
 
   (visitPeriodValueConstructor [this ctx]
-    (let [sv (some-> (.periodStartValue ctx) (.expr) (.accept this))
-          ev (some-> (.periodEndValue ctx) (.expr) (.accept this))]
+    (let [sv (some-> (.periodStartValue ctx) (.numericExpr) (.accept this))
+          ev (some-> (.periodEndValue ctx) (.numericExpr) (.accept this))]
       {:from sv :to ev}))
 
-  (visitPointInTimePredicand [this ctx] (.accept (.expr ctx) this))
+  (visitPointInTimePredicand [this ctx] (.accept (.numericExpr ctx) this))
 
   (visitHasTablePrivilegePredicate [_ _] true)
   (visitHasSchemaPrivilegePredicate [_ _] true)

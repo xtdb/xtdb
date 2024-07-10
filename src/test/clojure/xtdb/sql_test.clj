@@ -1836,3 +1836,19 @@ VALUES
 
 (t/deftest test-contains-period-datetime
   (t/is (= [{:contains false}] (xt/q tu/*node* "SELECT PERIOD(TIMESTAMP '2024-01-01T00:00:00', TIMESTAMP '2024-01-02T00:00:00') CONTAINS TIMESTAMP '2024-01-02T00:00:00' AS `contains`"))))
+
+(t/deftest contains-precedence-bug-3473
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs1 (_id) VALUES (1)"]
+                           [:sql "INSERT INTO docs2 (_id) VALUES (1)"]])
+
+  (t/is (= [{:one 1}] (xt/q tu/*node* "
+SELECT 1 AS one
+FROM docs1 FOR VALID_TIME ALL AS d1
+JOIN docs2 FOR VALID_TIME ALL AS d2
+    ON d1.VALID_TIME CONTAINS d2._valid_from AND d1._id = d2._id")))
+
+  (t/is (= [{:one 1}] (xt/q tu/*node* "
+SELECT 1 AS one
+FROM docs1 FOR VALID_TIME ALL AS d1
+JOIN docs2 FOR VALID_TIME ALL AS d2
+    ON d1._id = d2._id AND d1.VALID_TIME CONTAINS d2._valid_from"))))
