@@ -50,11 +50,11 @@
       (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
       (with-after-tx-default)))
 
-(defn- then-execute-prepared-query [^PreparedQuery prepared-query, metrics registry query-opts]
+(defn- then-execute-prepared-query [^PreparedQuery prepared-query, query-timer query-opts]
   (let [bound-query (.bind prepared-query query-opts)]
     ;;TODO metrics only currently wrapping openQueryAsync results
     (-> (q/open-cursor-as-stream bound-query query-opts)
-        (metrics/wrap-query (:query-timer metrics) registry))))
+        (metrics/wrap-query query-timer))))
 
 (defn- ->TxOps [tx-ops]
   (->> tx-ops
@@ -68,8 +68,8 @@
                  ^IQuerySource q-src, wm-src, scan-emitter
                  default-tz
                  !latest-submitted-tx
-                 system, close-fn, registry
-                 metrics]
+                 system, close-fn,
+                 query-timer]
   IXtdb
   (getPgPort [this]
     (or (some-> (util/component this :xtdb/modules)
@@ -112,12 +112,12 @@
   (open-sql-query [this query query-opts]
     (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
       (-> (.prepareQuery this ^String query query-opts)
-          (then-execute-prepared-query metrics registry query-opts))))
+          (then-execute-prepared-query query-timer query-opts))))
 
   (open-xtql-query [this query query-opts]
     (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
       (-> (.prepareQuery this (xtql.edn/parse-query query) query-opts)
-          (then-execute-prepared-query metrics registry query-opts))) )
+          (then-execute-prepared-query query-timer query-opts))) )
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)
@@ -157,7 +157,7 @@
           :default-tz (ig/ref :xtdb/default-tz)
           :q-src (ig/ref :xtdb.query/query-source)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
-          :registry (ig/ref :xtdb/meter-registry)}
+          :metrics-registry (ig/ref :xtdb.metrics/registry)}
          opts))
 
 (defn gauge-lag-secs-fn [node]
@@ -170,11 +170,11 @@
           (/ (- ^long (inst-ms submitted-tx-time) ^long (inst-ms completed-tx-time)) (long 1e3)))
         0.0))))
 
-(defmethod ig/init-key :xtdb/node [_ {:keys [registry] :as deps}]
+(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
   (let [node (map->Node (-> deps
                             (assoc :!latest-submitted-tx (atom nil))
-                            (assoc :metrics {:query-timer (metrics/add-timer registry "query.timer"
-                                                                             {:description "indicates the timings for queries"})})))]
+                            (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
+                                                                   {:description "indicates the timings for queries"}))))]
     ;; TODO seems to create heap memory pressure, disabled for now
     #_(metrics/add-gauge registry "node.tx.lag.seconds"
                          (gauge-lag-secs-fn node))
@@ -198,25 +198,23 @@
   (util/close modules))
 
 (defn node-system [^Xtdb$Config opts]
-  (let [metrics-cfg (.getMetrics opts)]
-    (-> {:xtdb/node {}
-         :xtdb/allocator {}
-         :xtdb/indexer {}
-         :xtdb.log/watcher {}
-         :xtdb.metadata/metadata-manager {}
-         :xtdb.operator.scan/scan-emitter {}
-         :xtdb.query/query-source {}
-         :xtdb/compactor {}
-         :xtdb/meter-registry {}
+  (-> {:xtdb/node {}
+       :xtdb/allocator {}
+       :xtdb/indexer {}
+       :xtdb.log/watcher {}
+       :xtdb.metadata/metadata-manager {}
+       :xtdb.operator.scan/scan-emitter {}
+       :xtdb.query/query-source {}
+       :xtdb/compactor {}
 
-         :xtdb/buffer-pool (.getStorage opts)
-         :xtdb.indexer/live-index (.indexer opts)
-         :xtdb/log (.getTxLog opts)
-         :xtdb/modules (.getModules opts)
-         :xtdb/default-tz (.getDefaultTz opts)
-         :xtdb.stagnant-log-flusher/flusher (.indexer opts)}
-        (cond-> metrics-cfg (assoc :xtdb/metrics-server metrics-cfg))
-        (doto ig/load-namespaces))))
+       :xtdb.metrics/registry (.getMetrics opts)
+       :xtdb/buffer-pool (.getStorage opts)
+       :xtdb.indexer/live-index (.indexer opts)
+       :xtdb/log (.getTxLog opts)
+       :xtdb/modules (.getModules opts)
+       :xtdb/default-tz (.getDefaultTz opts)
+       :xtdb.stagnant-log-flusher/flusher (.indexer opts)}
+      (doto ig/load-namespaces)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-node ^xtdb.api.IXtdb [opts]

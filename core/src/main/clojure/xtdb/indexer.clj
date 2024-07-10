@@ -572,7 +572,7 @@
                   ^:volatile-mutable indexer-error
 
                   ^PriorityBlockingQueue awaiters
-                  metrics]
+                  ^Timer tx-timer]
   IIndexer
   (indexTx [this tx-key tx-root]
     (let [system-time (some-> tx-key (.getSystemTime))]
@@ -616,7 +616,7 @@
                               !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src scan-emitter tx-opts))]
                           (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
                             (when-let [more-tx-ops
-                                       (.recordCallable ^Timer (:tx-timer metrics)
+                                       (.recordCallable tx-timer
                                                         #(case (.getLeg tx-ops-rdr tx-op-idx)
                                                            :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
                                                            :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
@@ -691,18 +691,18 @@
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :live-index (ig/ref :xtdb.indexer/live-index)
           :q-src (ig/ref ::q/query-source)
-          :registry (ig/ref :xtdb/meter-registry)}
+          :metrics-registry (ig/ref :xtdb.metrics/registry)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator scan-emitter, q-src, live-index registry]}]
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator scan-emitter, q-src, live-index metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
     (->Indexer allocator scan-emitter q-src live-index
 
                nil ;; indexer-error
 
                (PriorityBlockingQueue.)
-               {:tx-timer (metrics/add-timer registry "tx.op.timer"
-                                             {:description "indicates the timing and number of transactions"})})))
+               (metrics/add-timer metrics-registry "tx.op.timer"
+                                  {:description "indicates the timing and number of transactions"}))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))

@@ -51,6 +51,9 @@
 (defmethod apply-config! :pgwire-server [config _ opts]
   (apply-config! config :xtdb.pgwire/server opts))
 
+(defmethod apply-config! :metrics [config _ opts]
+  (apply-config! config :xtdb.metrics/registry opts))
+
 (defmethod apply-config! ::default [_ _ _])
 
 (defn start-node
@@ -80,4 +83,3 @@
                                                               (apply-config! k v)))
                                                           config
                                                           opts)))))))
-

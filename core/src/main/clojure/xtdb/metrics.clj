@@ -1,34 +1,16 @@
 (ns xtdb.metrics
-  (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.error :as err]
+  (:require [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import (com.sun.net.httpserver HttpHandler HttpServer)
-           (io.micrometer.core.instrument Counter Gauge MeterRegistry Timer Timer$Sample)
+  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Timer Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
            (io.micrometer.core.instrument.simple SimpleMeterRegistry)
-           (io.micrometer.prometheus PrometheusConfig PrometheusMeterRegistry)
-           (java.net InetSocketAddress)
            (java.util.function Supplier)
            (java.util.stream Stream)
-           (xtdb.api MetricsConfig Xtdb$Config)))
-
-(defn meter-reg ^MeterRegistry
-  ([] (meter-reg (SimpleMeterRegistry.)))
-  ([meter-reg]
-   (doseq [^MeterBinder metric [(ClassLoaderMetrics.) (JvmMemoryMetrics.) (JvmHeapPressureMetrics.)
-                                (JvmGcMetrics.) (ProcessorMetrics.) (JvmThreadMetrics.)]]
-     (.bindTo metric meter-reg))
-   meter-reg))
-
-(defmethod ig/init-key :xtdb/meter-registry [_ {}]
-  (meter-reg (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)))
-
-(defmethod ig/halt-key! :xtdb/meter-registry [_ ^MeterRegistry registry]
-  (.close registry))
+           (xtdb.api Xtdb$Config)
+           (xtdb.api.metrics Metrics Metrics$Factory PrometheusMetrics$Factory)))
 
 (defn add-counter [reg name {:keys [description]}]
   (cond-> (Counter/builder name)
@@ -43,11 +25,10 @@
     description (.description description)
     :always (.register reg)))
 
-(defmacro wrap-query [q timer registry]
-  (let [registry (vary-meta registry assoc :tag `MeterRegistry)]
-    `(let [^Timer$Sample sample# (Timer/start ~registry)
-           ^Stream stream# ~q]
-       (.onClose stream# (fn [] (.stop sample# ~timer))))))
+(defmacro wrap-query [q timer]
+  `(let [^Timer$Sample sample# (Timer/start)
+         ^Stream stream# ~q]
+     (.onClose stream# (fn [] (.stop sample# ~timer)))))
 
 (defn add-gauge
   ([reg meter-name f] (add-gauge reg meter-name f {}))
@@ -59,30 +40,33 @@
        (cond-> (:unit opts) (.baseUnit (str (:unit opts))))
        (.register reg))))
 
-(defmethod xtn/apply-config! :xtdb/metrics-server [^Xtdb$Config config, _ {:keys [port], :or {port 8080}}]
-  (.setMetrics config (MetricsConfig. port)))
+(defmethod xtn/apply-config! :xtdb.metrics/prometheus [^Xtdb$Config config _ {:keys [port], :or {port 8080}}]
+  (.setMetrics config (PrometheusMetrics$Factory. port)))
 
-(defmethod ig/prep-key :xtdb/metrics-server [_ ^MetricsConfig opts]
-  {:registry (ig/ref :xtdb/meter-registry)
-   :port (.getPort opts)})
+(defmethod xtn/apply-config! :xtdb.metrics/registry [^Xtdb$Config config, _ [tag opts]]
+  (xtn/apply-config! config
+                     (case tag
+                       :prometheus :xtdb.metrics/prometheus)
+                     opts))
 
-(defmethod ig/init-key :xtdb/metrics-server [_ {:keys [^PrometheusMeterRegistry registry port]}]
-  (try
-    (let [port (if (util/port-free? port) port (util/free-port))
-          http-server (HttpServer/create (InetSocketAddress. port) 0)]
-      (.createContext http-server "/metrics"
-                      (reify HttpHandler
-                        (handle [_this exchange]
-                          (let [response (.getBytes (.scrape registry))]
-                            (.sendResponseHeaders exchange 200 (count response))
-                            (with-open [os (.getResponseBody exchange)]
-                              (.write os response))))))
-      (.start http-server)
-      (log/info "Metrics server started on port: " port)
-      http-server)
-    (catch java.io.IOException e
-      (throw (err/runtime-err :metrics-server-error {} e)))))
+(defmethod ig/init-key :xtdb.metrics/registry [_ ^Metrics$Factory factory]
+  (let [^Metrics metrics (if factory
+                           (.openMetrics factory)
+                           (reify Metrics
+                             (getRegistry [_]
+                               (SimpleMeterRegistry.))
 
-(defmethod ig/halt-key! :xtdb/metrics-server [_ ^HttpServer server]
-  (.stop server 0)
-  (log/info "Metrics server stopped."))
+                             (close [_])))
+        reg (.getRegistry metrics)]
+
+    (doseq [^MeterBinder metric [(ClassLoaderMetrics.) (JvmMemoryMetrics.) (JvmHeapPressureMetrics.)
+                                 (JvmGcMetrics.) (ProcessorMetrics.) (JvmThreadMetrics.)]]
+      (.bindTo metric reg))
+
+    metrics))
+
+(defmethod ig/resolve-key :xtdb.metrics/registry [_ ^Metrics metrics]
+  (.getRegistry metrics))
+
+(defmethod ig/halt-key! :xtdb.metrics/registry [_ metrics]
+  (util/close metrics))

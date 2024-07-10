@@ -1,1 +1,2 @@
 xtdb.api.PgwireServer$Registration
+xtdb.api.metrics.PrometheusMetrics$Registration
