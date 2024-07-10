@@ -862,9 +862,6 @@
        :leading-precision 2
        :fractional-precision (or fp 6)})))
 
-(defn- trim-quotes-from-string [string]
-  (subs string 1 (dec (count string))))
-
 (defrecord CastArgsVisitor [env]
   SqlVisitor
   (visitIntegerType [_ ctx]
@@ -948,7 +945,10 @@
   (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
 
   (visitSqlStandardString [_ ctx]
-    (trim-quotes-from-string (.getText ctx)))
+    (let [text (.getText ctx)]
+      (-> text
+          (subs 1 (dec (count text)))
+          (str/replace #"''" "'"))))
 
   (visitCEscapesString [_ ctx]
     (let [str (.getText ctx)]
