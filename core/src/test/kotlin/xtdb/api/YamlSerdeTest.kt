@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test
 import xtdb.api.log.Kafka
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
+import xtdb.api.metrics.PrometheusMetrics
 import xtdb.api.storage.AzureBlobStorage.azureBlobStorage
 import xtdb.api.storage.GoogleCloudStorage
 import xtdb.aws.S3.s3
@@ -29,9 +30,21 @@ class YamlSerdeTest {
         storage: !Local
             path: local-storage
             maxCacheEntries: 1025
+        metrics: !Prometheus
+            port: 3000
         """.trimIndent()
 
         println(nodeConfig(input).toString())
+    }
+
+    @Test
+    fun testMetricsConfigDecoding() {
+        val input = """
+        metrics: !Prometheus
+            port: 3000
+        """.trimIndent()
+
+        assertEquals(PrometheusMetrics.Factory(port = 3000), nodeConfig(input).metrics)
     }
 
     @Test

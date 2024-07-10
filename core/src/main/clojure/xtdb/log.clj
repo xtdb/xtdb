@@ -394,15 +394,14 @@
 
       (util/root->arrow-ipc-byte-buffer root :stream))))
 
-(defmethod xtn/apply-config! :xtdb/log [config _ foo]
-  (let [[tag opts] foo]
-    (xtn/apply-config! config
-                       (case tag
-                         :in-memory :xtdb.log/memory-log
-                         :local :xtdb.log/local-directory-log
-                         :kafka :xtdb.kafka/log
-                         :azure-event-hub :xtdb.azure/event-hub-log)
-                       opts)))
+(defmethod xtn/apply-config! :xtdb/log [config _ [tag opts]]
+  (xtn/apply-config! config
+                     (case tag
+                       :in-memory :xtdb.log/memory-log
+                       :local :xtdb.log/local-directory-log
+                       :kafka :xtdb.kafka/log
+                       :azure-event-hub :xtdb.azure/event-hub-log)
+                     opts))
 
 (defmethod ig/init-key :xtdb/log [_ ^Log$Factory factory]
   (.openLog factory))
