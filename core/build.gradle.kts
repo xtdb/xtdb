@@ -58,10 +58,10 @@ dependencies {
     antlr("org.antlr:antlr4:4.13.1")
     implementation("org.antlr:antlr4-runtime:4.13.1")
 
+    testImplementation("com.github.seancorfield", "next.jdbc", "1.3.939")
     testImplementation("io.mockk","mockk", "1.13.9")
     testImplementation("org.clojure","test.check", "1.1.1")
     testImplementation(project(":xtdb-http-server"))
-    testImplementation(project(":xtdb-pgwire-server"))
     testImplementation(project(":modules:xtdb-kafka"))
     testImplementation(project(":modules:xtdb-aws"))
     testImplementation(project(":modules:xtdb-google-cloud"))

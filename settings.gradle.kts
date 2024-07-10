@@ -12,10 +12,9 @@ include("api", "core")
 project(":api").name = "xtdb-api"
 project(":core").name = "xtdb-core"
 
-include("http-server", "http-client-jvm", "pgwire-server")
+include("http-server", "http-client-jvm")
 project(":http-server").name = "xtdb-http-server"
 project(":http-client-jvm").name = "xtdb-http-client-jvm"
-project(":pgwire-server").name = "xtdb-pgwire-server"
 
 include("lang:test-harness")
 project(":lang:test-harness").name = "test-harness"

@@ -222,7 +222,6 @@ dependencies {
 
     projectDep(":xtdb-http-server")
     projectDep(":xtdb-http-client-jvm")
-    projectDep(":xtdb-pgwire-server")
 
     projectDep(":modules:xtdb-kafka")
     projectDep(":modules:xtdb-aws")

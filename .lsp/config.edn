@@ -9,10 +9,9 @@
                 "core/src/main/clojure" "core/src/main/java"
                 "http-server/src/main/clojure"
                 "http-client-jvm/src/main/clojure"
-                "pgwire-server/src/main/clojure"
 
                 "modules/kafka/src/main/clojure"
-                "modules/s3/src/main/clojure" "modules/s3/src/main/java"
+                "modules/aws/src/main/clojure" "modules/aws/src/main/java"
                 "modules/bench/src/main/clojure"
 
                 "src/test/clojure" "src/dev/clojure"]
