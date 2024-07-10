@@ -97,6 +97,7 @@ Main article: link:/config/storage#local-disk[local-disk storage]
 
             ;; :max-cache-bytes 1024
             ;; :max-cache-entries 536870912
+            ;; :max-local-disk-cache-bytes 10737418240
            }]}
 ----
 

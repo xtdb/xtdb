@@ -94,6 +94,7 @@ object Storage {
      *    ) {
      *       maxCacheEntries = 1024,
      *       maxCacheBytes = 536870912
+     *       maxLocalDiskCacheBytes = 10737418240
      *    },
      *    ...
      * }

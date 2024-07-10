@@ -81,6 +81,9 @@ storage: !Remote
 
   # The maximum number of bytes to store in the in-memory cache.
   # maxCacheBytes: 536870912
+
+  # The upper limit of bytes to store within the localDiskCache directory
+  # maxLocalDiskCacheBytes: 10737418240
 ----
 
 Each Object Store implementation is configured separately - see the individual documentation for more information:
