@@ -151,21 +151,30 @@
   (rels->multi-vector-rel-factory leaf-rdrs allocator content-col-names))
 
 (defn- ->bitemporal-consumer ^xtdb.bitemporal.IRowConsumer [^IRelationWriter out-rel, col-names]
-  (letfn [(writer-for [col-name]
+  (letfn [(writer-for [col-name nullable?]
             (when (contains? col-names col-name)
-              (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))))]
+              (.colWriter out-rel col-name (FieldType. nullable? (types/->arrow-type types/temporal-col-type) nil))))]
 
-    (let [^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
-          ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to")
-          ^IVectorWriter sys-from-wtr (writer-for "xt$system_from")
-          ^IVectorWriter sys-to-wtr (writer-for "xt$system_to")]
+    (let [^IVectorWriter valid-from-wtr (writer-for "xt$valid_from" false)
+          ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to" true)
+          ^IVectorWriter sys-from-wtr (writer-for "xt$system_from" false)
+          ^IVectorWriter sys-to-wtr (writer-for "xt$system_to" true)]
 
       (reify IRowConsumer
         (accept [_ _idx valid-from valid-to sys-from sys-to]
           (some-> valid-from-wtr (.writeLong valid-from))
-          (some-> valid-to-wtr (.writeLong valid-to))
+
+          (when valid-to-wtr
+            (if (= Long/MAX_VALUE valid-to)
+              (.writeNull valid-to-wtr)
+              (.writeLong valid-to-wtr valid-to)))
+
           (some-> sys-from-wtr (.writeLong sys-from))
-          (some-> sys-to-wtr (.writeLong sys-to)))))))
+
+          (when sys-to-wtr
+            (if (= Long/MAX_VALUE sys-to)
+              (.writeNull sys-to-wtr)
+              (.writeLong sys-to-wtr sys-to))))))))
 
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify IRelationSelector
@@ -420,16 +429,13 @@
                 (let [table (str table)
                       col-name (str col-name)]
                   ;; TODO move to fields here
-                  (-> (cond
-                        (= "xt$iid" col-name) (types/col-type->field col-name [:fixed-size-binary 16])
-                        (types/temporal-column? col-name) (types/col-type->field col-name [:timestamp-tz :micro "UTC"])
-
-                        :else (if-let [info-field (get-in info-schema/derived-tables [(symbol table) col-name])]
-                                info-field
-                                (types/merge-fields (.columnField metadata-mgr table col-name)
-                                                    (some-> (.liveIndex wm)
-                                                            (.liveTable table)
-                                                            (.columnField col-name)))))
+                  (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
+                          (if-let [info-field (get-in info-schema/derived-tables [(symbol table) col-name])]
+                            info-field
+                            (types/merge-fields (.columnField metadata-mgr table col-name)
+                                                (some-> (.liveIndex wm)
+                                                        (.liveTable table)
+                                                        (.columnField col-name)))))
                       (types/field-with-name col-name))))]
         (->> scan-cols
              (into {} (map (juxt identity ->field))))))

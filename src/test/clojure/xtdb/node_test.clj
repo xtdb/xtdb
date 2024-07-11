@@ -121,7 +121,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
             (->> (for [[tk tn] {:xt "docs"
                                 :t1 "explicit_table1"
                                 :t2 "explicit_table2"}]
-                   [tk (->> (xt/q tu/*node* (format "SELECT t._id, t.v FROM %s t WHERE t._valid_to = END_OF_TIME" tn))
+                   [tk (->> (xt/q tu/*node* (format "SELECT t._id, t.v FROM %s t WHERE t._valid_to IS NULL" tn))
                             (into #{} (map :v)))])
                  (into {})))]
 

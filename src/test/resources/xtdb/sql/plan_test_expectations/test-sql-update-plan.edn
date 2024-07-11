@@ -8,8 +8,10 @@
      (cast #xt.time/date "2021-07-01" [:timestamp-tz :micro "UTC"]))}
    {xt$valid_to
     (least
-     xt$valid_to
-     (cast xtdb/end-of-time [:timestamp-tz :micro "UTC"]))}
+     (coalesce xt$valid_to xtdb/end-of-time)
+     (coalesce
+      (cast xtdb/end-of-time [:timestamp-tz :micro "UTC"])
+      xtdb/end-of-time))}
    first_name
    id
    last_name]

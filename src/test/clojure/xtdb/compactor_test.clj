@@ -179,34 +179,40 @@
           (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                      :xt/system-from (time/->zdt #inst "2023")
                      :xt/valid-from (time/->zdt #inst "2023")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 2, :xt/id "bar"}}
                     {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                      :xt/system-from (time/->zdt #inst "2021")
                      :xt/valid-from (time/->zdt #inst "2021")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 1, :xt/id "bar"}}
                     {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                      :xt/system-from (time/->zdt #inst "2020")
                      :xt/valid-from (time/->zdt #inst "2020")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 0, :xt/id "bar"}}
                     {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
                      :xt/system-from (time/->zdt #inst "2023")
                      :xt/valid-from (time/->zdt #inst "2023")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 2, :xt/id "foo"}}
                     {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
                      :xt/system-from (time/->zdt #inst "2022")
                      :xt/valid-from (time/->zdt #inst "2022")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 1, :xt/id "foo"}}
                     {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
                      :xt/system-from (time/->zdt #inst "2020")
                      :xt/valid-from (time/->zdt #inst "2020")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 0, :xt/id "foo"}}]
 
                    (-> (vw/rel-wtr->rdr data-rel-wtr)
                        (vr/rel->rows)
                        (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))
 
-          (t/is (= [nil (time/->zdt #inst "2023") (time/->zdt #inst "2021")
-                    nil (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
+          (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")
+                    (time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
                    (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals)))))
 
       (t/testing "merge segments with path predicate"
@@ -218,21 +224,24 @@
           (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                      :xt/system-from (time/->zdt #inst "2023")
                      :xt/valid-from (time/->zdt #inst "2023")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 2, :xt/id "bar"}}
                     {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                      :xt/system-from (time/->zdt #inst "2021")
                      :xt/valid-from (time/->zdt #inst "2021")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 1, :xt/id "bar"}}
                     {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                      :xt/system-from (time/->zdt #inst "2020")
                      :xt/valid-from (time/->zdt #inst "2020")
+                     :xt/valid-to (time/->zdt time/end-of-time)
                      :op {:v 0, :xt/id "bar"}}]
 
                    (-> (vw/rel-wtr->rdr data-rel-wtr)
                        (vr/rel->rows)
                        (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))
 
-          (t/is (= [nil (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
+          (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
                    (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals))))))))
 
 (t/deftest test-l1-compaction

@@ -12,5 +12,11 @@
     [:scan
      {:table foo}
      [name
-      {xt$valid_to (> xt$valid_to ?xt$sq_xt$valid_from_3)}
-      {xt$valid_from (< xt$valid_from ?xt$sq_xt$valid_to_4)}]]]]]]
+      {xt$valid_to
+       (>
+        (coalesce xt$valid_to xtdb/end-of-time)
+        ?xt$sq_xt$valid_from_3)}
+      {xt$valid_from
+       (<
+        xt$valid_from
+        (coalesce ?xt$sq_xt$valid_to_4 xtdb/end-of-time))}]]]]]]

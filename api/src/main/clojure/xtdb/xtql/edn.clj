@@ -67,10 +67,12 @@
     (false? expr) Expr$Bool/FALSE
     (int? expr) (Exprs/val (long expr))
     (double? expr) (Exprs/val (double expr))
-    (symbol? expr) (let [str-expr (str expr)]
-                     (if (str/starts-with? str-expr "$")
-                       (Exprs/param str-expr)
-                       (Exprs/lVar str-expr)))
+    (symbol? expr) (if (= 'xtdb/end-of-time expr)
+                     (Exprs/val 'xtdb/end-of-time)
+                     (let [str-expr (str expr)]
+                       (if (str/starts-with? str-expr "$")
+                         (Exprs/param str-expr)
+                         (Exprs/lVar str-expr))))
     (keyword? expr) (Exprs/val expr)
     (vector? expr) (Exprs/list ^List (mapv parse-expr expr))
     (set? expr) (Exprs/set ^List (mapv parse-expr expr))

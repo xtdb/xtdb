@@ -1279,7 +1279,7 @@
               :y "c",
               :xt/id 3,
               :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
-             (set (xt/q tu/*node* "SELECT docs.*, docs._valid_from FROM docs WHERE docs._system_to = docs._valid_to")))))
+           (set (xt/q tu/*node* "SELECT *, _valid_from FROM docs WHERE _system_to = _valid_to OR (_system_to IS NULL AND _valid_to IS NULL)")))))
 
 (t/deftest able-to-select-star-from-two-tables-bug-3389
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :x 1}]

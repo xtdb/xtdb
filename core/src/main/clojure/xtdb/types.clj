@@ -233,8 +233,8 @@
 
 (def temporal-col-types
   {"xt$iid" [:fixed-size-binary 16],
-   "xt$system_from" temporal-col-type, "xt$system_to" temporal-col-type
-   "xt$valid_from" temporal-col-type, "xt$valid_to" temporal-col-type})
+   "xt$system_from" temporal-col-type, "xt$system_to" nullable-temporal-type
+   "xt$valid_from" temporal-col-type, "xt$valid_to" nullable-temporal-type})
 
 (defn temporal-column? [col-name]
   (contains? temporal-col-types (str col-name)))

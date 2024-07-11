@@ -656,7 +656,7 @@ WHERE P1.property_number = 7797
 query ITT nosort
 SELECT P2.property_number,
        GREATEST(P1.xt$valid_from, P2.xt$valid_from) AS VT_Begin,
-       LEAST(P1.xt$valid_to, P2.xt$valid_to) AS VT_End
+       NULLIF(LEAST(COALESCE(P1.xt$valid_to, END_OF_TIME), COALESCE(P2.xt$valid_to, END_OF_TIME)), END_OF_TIME) AS VT_End
 FROM Prop_Owner
 FOR ALL VALID_TIME AS P1,
         Prop_Owner
@@ -682,7 +682,7 @@ SELECT P2.property_number
 query ITT nosort
 SELECT P2.property_number,
        GREATEST(P1.xt$system_from, P2.xt$system_from) AS Recorded_Start,
-       LEAST(P1.xt$system_to, P2.xt$system_to) AS Recorded_Stop
+       NULLIF(LEAST(COALESCE(P1.xt$system_to, END_OF_TIME), COALESCE(P2.xt$system_to, END_OF_TIME)), END_OF_TIME) AS Recorded_Stop
 FROM Prop_Owner FOR ALL SYSTEM_TIME AS P1,
      Prop_Owner FOR ALL SYSTEM_TIME AS P2
 WHERE P1.property_number = 7797
@@ -695,9 +695,9 @@ WHERE P1.property_number = 7797
 query ITTTT nosort
 SELECT P2.property_number,
        GREATEST(P1.xt$valid_from, P2.xt$valid_from) AS VT_Begin,
-       LEAST(P1.xt$valid_to, P2.xt$valid_to) AS VT_End,
+       NULLIF(LEAST(COALESCE(P1.xt$valid_to, END_OF_TIME), COALESCE(P2.xt$valid_to, END_OF_TIME)), END_OF_TIME) AS VT_End,
        GREATEST(P1.xt$system_from, P2.xt$system_from) AS Recorded_Start,
-       LEAST(P1.xt$system_to, P2.xt$system_to) AS Recorded_Stop
+       NULLIF(LEAST(COALESCE(P1.xt$system_to, END_OF_TIME), COALESCE(P2.xt$system_to, END_OF_TIME)), END_OF_TIME) AS Recorded_Stop
 FROM Prop_Owner FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS P1,
      Prop_Owner FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS P2
 WHERE P1.property_number = 7797
@@ -715,7 +715,7 @@ NULL
 query ITT nosort
 SELECT P2.property_number,
        GREATEST(P1.xt$system_from, P2.xt$system_from) AS Recorded_Start,
-       LEAST(P1.xt$system_to, P2.xt$system_to) AS Recorded_Stop
+       NULLIF(LEAST(COALESCE(P1.xt$system_to, END_OF_TIME), COALESCE(P2.xt$system_to, END_OF_TIME)), END_OF_TIME) AS Recorded_Stop
 FROM Prop_Owner
 FOR ALL SYSTEM_TIME
 FOR ALL VALID_TIME AS P1,
@@ -748,7 +748,7 @@ WHERE P1.property_number = 7797
 query ITTT nosort
 SELECT P2.property_number,
        GREATEST(P1.xt$valid_from, P2.xt$valid_from) AS VT_Begin,
-       LEAST(P1.xt$valid_to, P2.xt$valid_to) AS VT_End,
+       NULLIF(LEAST(COALESCE(P1.xt$valid_to, END_OF_TIME), COALESCE(P2.xt$valid_to, END_OF_TIME)), END_OF_TIME) AS VT_End,
        P2.xt$system_from AS Recorded_Start
 FROM Prop_Owner FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS P1,
      Prop_Owner FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS P2

@@ -321,11 +321,11 @@
                 :xt/valid-from #xt.time/zoned-date-time "3001-01-01T00:00Z[UTC]",
                 :xt/system-from #xt.time/zoned-date-time "3000-01-01T00:00Z[UTC]",
                 :xt/system-to #xt.time/zoned-date-time "3001-01-01T00:00Z[UTC]"}}
-             (set (tu/query-ra '[:scan {:table foo, :for-system-time :all-time, :for-valid-time :all-time}
-                                 [{xt$system_from (< xt$system_from #xt.time/zoned-date-time "3002-01-01T00:00Z")}
-                                  {xt$system_to (> xt$system_to #xt.time/zoned-date-time "2999-01-01T00:00Z")}
-                                  xt$valid_from
-                                  xt$valid_to
+             (set (tu/query-ra '[:scan {:table foo,
+                                        :for-system-time [:between #xt.time/zoned-date-time "2999-01-01T00:00Z" #xt.time/zoned-date-time "3002-01-01T00:00Z"]
+                                        :for-valid-time :all-time}
+                                 [xt$system_from xt$system_to
+                                  xt$valid_from xt$valid_to
                                   last_updated]]
                                {:node node}))))))
 
@@ -663,8 +663,8 @@
   (xt/submit-tx tu/*node* [[:put-docs :comments {:xt/id 1}]])
 
   (t/is (= {'xt$iid [:fixed-size-binary 16]
-            'xt$valid_from [:timestamp-tz :micro "UTC"]
-            'xt$valid_to [:timestamp-tz :micro "UTC"]}
+            'xt$valid_from types/temporal-col-type
+            'xt$valid_to types/nullable-temporal-type}
 
            (:col-types (tu/query-ra '[:scan {:table comments}
                                       [xt$iid xt$valid_from xt$valid_to]]
