@@ -6,6 +6,8 @@ import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
 import xtdb.api.log.Log
 import xtdb.api.log.Logs.inMemoryLog
+import xtdb.api.metrics.Metrics
+import xtdb.api.metrics.PrometheusMetrics
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.inMemoryStorage
@@ -22,7 +24,7 @@ object Xtdb {
     data class Config(
         var txLog: Log.Factory = inMemoryLog(),
         var storage: Storage.Factory = inMemoryStorage(),
-        var metrics: MetricsConfig? = null,
+        var metrics: Metrics.Factory? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
         @JvmField val indexer: IndexerConfig = IndexerConfig()
     ) {
@@ -43,7 +45,7 @@ object Xtdb {
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
         @JvmSynthetic
-        fun metrics(configure: MetricsConfig.() -> Unit = {}) = apply { this.metrics = MetricsConfig().also(configure) }
+        fun metrics(metrics: Metrics.Factory) = apply { this.metrics = metrics }
     }
 
     @JvmStatic
