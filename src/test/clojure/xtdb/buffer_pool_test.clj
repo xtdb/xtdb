@@ -19,8 +19,7 @@
            (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
            xtdb.buffer_pool.RemoteBufferPool
            xtdb.IBufferPool
-           (xtdb.multipart IMultipartUpload SupportsMultipart)
-           (xtdb.util ArrowBufLRU)))
+           (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (defonce tmp-dirs (atom []))
 
@@ -53,33 +52,6 @@
         (t/is (instance? RemoteBufferPool buffer-pool))
 
         (t/is (seq (.listAllObjects object-store)))))))
-
-(t/deftest arrow-buf-lru-test
-  (t/testing "max size restriction"
-    (util/with-open [lru (ArrowBufLRU. 1 2 128)]
-      (let [buf1 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
-            buf2 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
-            buf3 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))]
-        (.put lru "buf1" buf1)
-        (.put lru "buf2" buf2)
-        (t/is (= buf1 (.get lru "buf1")))
-        (t/is (= buf2 (.get lru "buf2")))
-        (.put lru "buf3" buf3)
-        (t/is (nil? (.get lru "buf1")))
-        (t/is (= buf3 (.get lru "buf3"))))))
-
-  (t/testing "max byte size restriction"
-    (util/with-open [lru (ArrowBufLRU. 1 5 32)]
-      (let [buf1 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
-            buf2 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
-            buf3 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))]
-        (.put lru "buf1" buf1)
-        (.put lru "buf2" buf2)
-        (t/is (= buf1 (.get lru "buf1")))
-        (t/is (= buf2 (.get lru "buf2")))
-        (.put lru "buf3" buf3)
-        (t/is (nil? (.get lru "buf1")))
-        (t/is (= buf3 (.get lru "buf3")))))))
 
 (defn copy-byte-buffer ^ByteBuffer [^ByteBuffer buf]
   (-> (ByteBuffer/allocate (.remaining buf))
