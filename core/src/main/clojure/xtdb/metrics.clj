@@ -46,7 +46,8 @@
 (defmethod xtn/apply-config! :xtdb.metrics/registry [^Xtdb$Config config, _ [tag opts]]
   (xtn/apply-config! config
                      (case tag
-                       :prometheus :xtdb.metrics/prometheus)
+                       :prometheus :xtdb.metrics/prometheus
+                       :cloudwatch :xtdb.aws.cloudwatch/metrics)
                      opts))
 
 (defmethod ig/init-key :xtdb.metrics/registry [_ ^Metrics$Factory factory]

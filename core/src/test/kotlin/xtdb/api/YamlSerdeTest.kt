@@ -12,10 +12,11 @@ import xtdb.api.log.Logs.LocalLogFactory
 import xtdb.api.metrics.PrometheusMetrics
 import xtdb.api.storage.AzureBlobStorage.azureBlobStorage
 import xtdb.api.storage.GoogleCloudStorage
-import xtdb.aws.S3.s3
 import xtdb.api.storage.Storage.InMemoryStorageFactory
 import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.RemoteStorageFactory
+import xtdb.aws.CloudWatchMetrics
+import xtdb.aws.S3.s3
 import java.nio.file.Paths
 
 class YamlSerdeTest {
@@ -45,6 +46,13 @@ class YamlSerdeTest {
         """.trimIndent()
 
         assertEquals(PrometheusMetrics.Factory(port = 3000), nodeConfig(input).metrics)
+
+        val awsInput = """
+        metrics: !CloudWatch
+            namespace: "aws.namespace" 
+        """.trimIndent()
+
+        assertEquals(CloudWatchMetrics.Factory("aws.namespace").namespace, (nodeConfig(awsInput).metrics as CloudWatchMetrics.Factory).namespace)
     }
 
     @Test
