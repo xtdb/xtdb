@@ -71,6 +71,8 @@ allprojects {
 
         tasks.test {
             jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+            // To stub an AWS region
+            environment("AWS_REGION", "eu-west-1")
             useJUnitPlatform {
                 excludeTags("integration", "kafka", "jdbc", "timescale", "s3", "slt", "docker", "azure", "google-cloud")
             }
