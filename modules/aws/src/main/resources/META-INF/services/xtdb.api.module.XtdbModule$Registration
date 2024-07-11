@@ -1,1 +1,2 @@
 xtdb.aws.S3$Registration
+xtdb.aws.CloudWatchMetrics$Registration
