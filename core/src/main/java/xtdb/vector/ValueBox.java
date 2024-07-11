@@ -71,6 +71,7 @@ public class ValueBox implements IValueWriter, IValueReader {
 
     @Override
     public void writeNull() {
+        leg = NULL_LEG;
         obj = null;
     }
 
