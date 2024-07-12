@@ -396,14 +396,12 @@
 (defrecord ItemSample [i_id, i_u_id, i_status, i_end_date, i_num_bids])
 
 (defn item-status-groups [node]
-  (let [items (xt/q node '(from :item [{:xt/id i} i_id i_u_id i_status i_end_date i_num_bids])
-                    {:key-fn :snake-case-keyword})
-        all (ArrayList.)
+  (let [all (ArrayList.)
         open (ArrayList.)
         waiting-for-purchase (ArrayList.)
         closed (ArrayList.)]
-    (doseq [{:keys [i_id i_u_id i_status ^Instant i_end_date i_num_bids]} items
-            :let [^ArrayList alist
+    (run! (fn [{:keys [i_id i_u_id i_status ^Instant i_end_date i_num_bids]}]
+            (let [^ArrayList alist
                   (case i_status
                     :open open
                     :closed closed
@@ -411,11 +409,11 @@
                     ;; TODO debug why this happens
                     nil)
 
-                  item-sample (->ItemSample i_id i_u_id i_status i_end_date i_num_bids)]]
-
-      (.add all item-sample)
-      (when alist
-        (.add alist item-sample)))
+                  item-sample (->ItemSample i_id i_u_id i_status i_end_date i_num_bids)]
+              (.add all item-sample)
+              (when alist (.add alist item-sample))))
+          (xt/plan-q node '(from :item [{:xt/id i} i_id i_u_id i_status i_end_date i_num_bids])
+                     {:key-fn :snake-case-keyword}))
     {:all (vec all)
      :open (vec open)
      :waiting-for-purchase (vec waiting-for-purchase)
