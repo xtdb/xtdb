@@ -20,6 +20,9 @@ RUN wget https://www.yourkit.com/download/docker/YourKit-JavaProfiler-2024.3-doc
 # Expose Port for Yourkit Agent
 EXPOSE 10001
 
+# Expose metrics port
+EXPOSE 8080
+
 WORKDIR /usr/local/lib/xtdb
 
 ENTRYPOINT ["java", \
@@ -27,9 +30,11 @@ ENTRYPOINT ["java", \
     "-Dlogback.configurationFile=logback.xml", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
-    "-Xmx1500m", "-Xms1500m", \
-    "-XX:MaxDirectMemorySize=2000m", \
+    "-Xmx1750m", "-Xms1750m", \
+    "-XX:MaxDirectMemorySize=1750m", \
     "-XX:MaxMetaspaceSize=500m", \
+    "-XX:+HeapDumpOnOutOfMemoryError", \
+    "-XX:HeapDumpPath=/external/dir", \
     # UNCOMMENT BELOW If you want to run a Yourkit agent for Remote Profiling
     "-agentpath:/usr/local/YourKit-JavaProfiler-2024.3/bin/linux-x86-64/libyjpagent.so=port=10001,listen=all", \
     "-cp","xtdb-local-auctionmark.jar", \

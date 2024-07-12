@@ -5,4 +5,5 @@ txLog: !Local
 storage: !Local
   path: /var/lib/xtdb/local-buffers
 
-metrics:
+metrics: !Local
+  port: 8080
