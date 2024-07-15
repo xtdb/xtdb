@@ -31,7 +31,8 @@
   (util/with-tmp-dirs #{node-tmp-dir}
     (bxt/run-benchmark
      {:node-opts {:node-dir (or node-dir node-tmp-dir)
-                  :instant-src (InstantSource/system)}
+                  :instant-src (InstantSource/system)
+                  :metrics? true}
       :benchmark-type type
       :benchmark-opts opts})))
 
