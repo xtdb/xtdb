@@ -41,14 +41,15 @@
   (^xtdb.query.PreparedQuery prepareQuery [^java.lang.String query, query-opts])
   (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts]))
 
-(defn- mapify-query-opts-with-defaults [query-opts default-tz latest-submitted-tx default-key-fn]
+(defn- mapify-query-opts-with-defaults [{:keys [basis] :as query-opts} default-tz latest-submitted-tx default-key-fn]
   ;;not all callers care about all defaulted query opts returned here
-  (-> (into {:default-tz default-tz,
-             :after-tx latest-submitted-tx
-             :key-fn default-key-fn}
-            query-opts)
-      (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
-      (with-after-tx-default)))
+  (let [{:keys [at-tx] :as basis} (cond->> basis (instance? Basis basis) (into {}))]
+    (-> (into {:default-tz default-tz,
+               :after-tx (or at-tx latest-submitted-tx)
+               :key-fn default-key-fn}
+              query-opts)
+        (assoc :basis basis)
+        (with-after-tx-default))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, query-timer query-opts]
   (let [bound-query (.bind prepared-query query-opts)]
