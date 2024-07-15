@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import com.carrotsearch.hppc.LongArrayList.from as longs
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
+import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
 internal class PolygonTest {
     private lateinit var polygon: Polygon
@@ -126,6 +127,20 @@ internal class PolygonTest {
         applyEvent(0, 2005, 2009)
 
         assertEquals(longs(2005, 2009), polygon.validTimes)
+        assertEquals(longs(MAX_LONG), polygon.sysTimeCeilings)
+    }
+
+    @Test
+    fun testTimeSeries() {
+        ceiling.applyLog(10, 10, 12)
+        ceiling.applyLog(8, 8, 10)
+        ceiling.applyLog(6, 6, 8)
+
+        assertEquals(longs(MAX_LONG, 12, 10, 8, 6, MIN_LONG), ceiling.validTimes)
+        assertEquals(longs(MAX_LONG, 10, 8, 6, MAX_LONG), ceiling.sysTimeCeilings)
+
+        applyEvent(4, 4, 6)
+        assertEquals(longs(4, 6), polygon.validTimes)
         assertEquals(longs(MAX_LONG), polygon.sysTimeCeilings)
     }
 }
