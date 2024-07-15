@@ -228,7 +228,11 @@
                    (fn [root-worker _i]
                      (let [bindings (get-thread-bindings)
                            worker (assoc root-worker :random (Random. (.nextLong (rng root-worker))))]
-                       (.submit executor ^Runnable (fn [] (push-thread-bindings bindings) (thread-loop worker)))))]
+                       (.submit executor ^Runnable (fn []
+                                                     (push-thread-bindings bindings)
+                                                     (-> worker
+                                                         (assoc :thread-name (.getName (Thread/currentThread)))
+                                                         thread-loop)))))]
 
                (fn run-pool [worker]
                  (run! #(start-thread worker %) (range thread-count))
@@ -252,7 +256,10 @@
                    (fn [root-worker _i f]
                      (let [bindings (get-thread-bindings)
                            worker (assoc root-worker :random (Random. (.nextLong (rng root-worker))))]
-                       (.submit executor ^Runnable (fn [] (push-thread-bindings bindings) (f worker)))))]
+                       (.submit executor ^Runnable (fn [] (push-thread-bindings bindings)
+                                                     (-> worker
+                                                         (assoc :thread-name (.getName (Thread/currentThread)))
+                                                         f)))))]
                (fn run-concurrently [worker]
                  (dorun (map-indexed #(start-thread worker %1 %2) thread-task-fns))
                  (Thread/sleep (.toMillis duration))

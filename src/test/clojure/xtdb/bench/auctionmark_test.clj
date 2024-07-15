@@ -193,18 +193,18 @@
         (bxt2/generate worker :gav am/generate-global-attribute-value 100)
         (bxt2/generate worker :item am/generate-item 1)
 
-        (t/is (:committed? (am/proc-new-comment worker)))
+        (am/proc-new-comment worker)
 
         (t/is (= [{:ic_id ic_id}]
                  (xt/q *node* '(from :item-comment [ic_id])
-                       {:key-fn :snake-case-keyword})))
+                       {:basis {:at-tx (am/get-tx-key worker)} :key-fn :snake-case-keyword})))
 
         (t/is (false? (-> (xt/q *node* '(from :item-comment [{:xt/id "ic_0"} ic_response])
                                 {:key-fn :snake-case-keyword})
                           first
                           (contains? :ic_response))))
 
-        (t/is (:committed? (am/proc-new-comment-response worker)))
+        (am/proc-new-comment-response worker)
 
         (t/is (true? (-> (xt/q *node* (list 'from :item-comment [{:xt/id ic_id} 'ic_response])
                                {:key-fn :snake-case-keyword})
@@ -301,14 +301,16 @@
         (am/proc-new-feedback worker)
 
         ;; user 0 is a seller
-        (let [[user-results item-results feedback-results] (am/get-user-info *node* (am/user-id 0) true true true)]
+        (let [[user-results item-results feedback-results] (am/get-user-info *node* (am/user-id 0) true true true
+                                                                             (am/get-tx-key worker))]
 
           (t/is (= 1 (count user-results)))
           #_(t/is (= 1 (count item-results)))
           #_(t/is (= 1 (count feedback-results))))
 
         ;; user 1 is a buyer
-        (let [[user-results item-results _] (am/get-user-info *node* (am/user-id 1) false true true)]
+        (let [[user-results item-results _] (am/get-user-info *node* (am/user-id 1) false true true
+                                                              (am/get-tx-key worker))]
 
           (t/is (= 1 (count user-results)))
           #_(t/is (= 1 (count item-results))))))))
