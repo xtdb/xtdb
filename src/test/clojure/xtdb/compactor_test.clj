@@ -50,12 +50,6 @@
                    [1 2 20]]))
             "have a full L1, start a new L1 til that's full")
 
-      (t/is (= [{:trie-keys ["log-l00-nr03-rsa" "log-l00-nr04-rsa"],
-                 :out-trie-key "log-l01-nr04-rs14"}]
-               (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
-                   [1 2 20]]))
-            "have a full L1, start a new L1 til that's full")
-
       (t/is (= [{:trie-keys ["log-l01-nr03-rsa" "log-l00-nr04-rsa"],
                  :out-trie-key "log-l01-nr04-rs14"}]
                (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
