@@ -42,7 +42,7 @@
   (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.api.TransactionKey txKey
                                                   ^boolean newLiveTable])
   (^xtdb.watermark.ILiveTableWatermark openWatermark [^boolean retain])
-  (^java.util.concurrent.CompletableFuture #_<List<Map$Entry>> finishChunk [^long nextRow])
+  (^java.util.concurrent.CompletableFuture #_<List<Map$Entry>> finishChunk [^long firstRow ^long nextRow])
   (^void close []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -177,7 +177,7 @@
         AutoCloseable
         (close [_]))))
 
-  (finishChunk [_ next-chunk-idx]
+  (finishChunk [_ first-row next-row]
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)
           row-count (.rowCount live-rel-rdr)]
       (when (pos? row-count)
@@ -185,7 +185,7 @@
                     (fn []
                       (trie/write-live-trie! allocator buffer-pool
                                              (util/table-name->table-path table-name)
-                                             (trie/->log-l0-l1-trie-key 0 next-chunk-idx row-count)
+                                             (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)
                                              live-trie live-rel-rdr)))
               table-metadata (MapEntry/create table-name
                                               {:fields (live-rel->fields live-rel)
@@ -332,7 +332,7 @@
           next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))
 
           futs (->> (for [^ILiveTable table (.values tables)]
-                      (.finishChunk table next-chunk-idx))
+                      (.finishChunk table chunk-idx next-chunk-idx))
 
                     (remove nil?)
                     (into-array CompletableFuture))]

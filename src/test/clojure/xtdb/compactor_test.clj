@@ -18,76 +18,81 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-compaction-jobs
-  (letfn [(f [tries]
+  (letfn [(f [tries & {:keys [l1-file-size-rows]}]
             (->> (c/compaction-jobs (map ->trie-file-name tries)
-                                    {:l1-file-size-rows 16})
+                                    {:l1-file-size-rows (or l1-file-size-rows 16)})
 
                  (mapv (fn [{:keys [path] :as job}]
                          (cond-> job
                            path (update :path vec))))))]
 
+    (->trie-file-name [0 10 20 10])
+
     (t/testing "l0 -> l1"
       (t/is (= [] (f [])))
 
-      (t/is (= [{:trie-keys ["log-l00-nr01-rsa" "log-l00-nr02-rsa"]
-                 :out-trie-key "log-l01-nr02-rs14"}]
-               (f [[0 1 10] [0 2 10] [0 3 10]]))
+      (t/is (= [{:trie-keys ["log-l00-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"]
+                 :out-trie-key "log-l01-fr00-nr114-rs14",} ]
+               (f [[0 0 10 10] [0 10 20 10] [0 20 30 10]]))
             "no L1s yet, merge L0s up to limit and stop")
 
-      (t/is (= [{:trie-keys ["log-l01-nr01-rsa" "log-l00-nr02-rsa"]
-                 :out-trie-key "log-l01-nr02-rs14"}]
-               (f [[0 1 10] [0 2 10] [0 3 10]
-                   [1 1 10]]))
+      (t/is (= [{:trie-keys ["log-l01-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"],
+                 :out-trie-key "log-l01-fr00-nr114-rs14"            }]
+               (f [[0 0 10 10] [0 10 20 10] [0 20 30 10]
+                   [1 0 10 10]]))
             "have a partial L1, merge into that until it's full")
 
-      (t/is (= [] (f [[0 1 10] [0 2 10]
-                      [1 2 10]]))
+      (t/is (= [] (f [[0 0 10 10] [0 10 20 10]
+                      [1 0 20 20]]))
             "all merged, nothing to do")
 
-      (t/is (= [{:trie-keys ["log-l00-nr03-rsa" "log-l00-nr04-rsa"],
-                 :out-trie-key "log-l01-nr04-rs14"}]
-               (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
-                   [1 2 20]]))
+      (t/is (= [{:out-trie-key "log-l01-fr114-nr128-rs14",
+                 :trie-keys ["log-l00-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"]}
+                ]
+               (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
+                   [1 0 20 20]]))
             "have a full L1, start a new L1 til that's full")
 
-      (t/is (= [{:trie-keys ["log-l01-nr03-rsa" "log-l00-nr04-rsa"],
-                 :out-trie-key "log-l01-nr04-rs14"}]
-               (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
-                   [1 2 20] [1 3 10]]))
+      (t/is (= [{:trie-keys ["log-l01-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"],
+                 :out-trie-key "log-l01-fr114-nr128-rs14"} ]
+               (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
+                   [1 0 20 20] [1 20 30 10]]))
             "have a full and a partial L1, merge into that til it's full")
 
-      (t/is (= [] (f [[0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10]
-                      [1 2 20] [1 4 20] [1 5 10]]))
+      (t/is (= [] (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
+                      [1 0 20 20] [1 20 40 20] [1 40 50 10]]))
             "all merged, nothing to do"))
 
     (t/testing "l1 -> l2"
-      (t/is (= (let [l1-trie-keys ["log-l01-nr02-rs14" "log-l01-nr04-rs14" "log-l01-nr06-rs14" "log-l01-nr08-rs14"]]
+      (t/is (= (let [l1-trie-keys ["log-l01-fr00-nr114-rs14" "log-l01-fr114-nr128-rs14"
+                                   "log-l01-fr128-nr13c-rs14" "log-l01-fr13c-nr150-rs14"]]
                  [{:trie-keys l1-trie-keys,
                    :path [0],
-                   :out-trie-key "log-l02-p0-nr08"}
+                   :out-trie-key "log-l02-p0-nr150"}
                   {:trie-keys l1-trie-keys,
                    :path [1],
-                   :out-trie-key "log-l02-p1-nr08"}
+                   :out-trie-key "log-l02-p1-nr150"}
                   {:trie-keys l1-trie-keys,
                    :path [2],
-                   :out-trie-key "log-l02-p2-nr08"}
+                   :out-trie-key "log-l02-p2-nr150"}
                   {:trie-keys l1-trie-keys,
                    :path [3],
-                   :out-trie-key "log-l02-p3-nr08"}])
-               (f [[1 2 20] [1 4 20] [1 6 20] [1 8 20]]))
+                   :out-trie-key "log-l02-p3-nr150"}])
+               (f [[1 0 10 10] [1 0 20 20] [1 20 30 10] [1 20 40 20] [1 40 50 10] [1 40 60 20] [1 60 70 10] [1 60 80 20]]))
 
-            "empty L2")
+            "empty L2 and superseded L1 files get ignored")
 
-      (t/is (= [{:trie-keys ["log-l01-nr02-rs14" "log-l01-nr04-rs14" "log-l01-nr06-rs14" "log-l01-nr08-rs14"],
+      (t/is (= [{:trie-keys ["log-l01-fr00-nr114-rs14" "log-l01-fr114-nr128-rs14"
+                             "log-l01-fr128-nr13c-rs14" "log-l01-fr13c-nr150-rs14"],
                  :path [1],
-                 :out-trie-key "log-l02-p1-nr08"}]
-               (f [[2 [0] 8] [2 [2] 8] [2 [3] 8]
-                   [1 2 20] [1 4 20] [1 6 20] [1 8 20]
-                   [0 1 10] [0 2 10] [0 3 10] [0 4 10] [0 5 10] [0 6 10] [0 7 10] [0 8 10]]))
+                 :out-trie-key "log-l02-p1-nr150"}]
+               (f [[2 [0] 80] [2 [2] 80] [2 [3] 80]
+                   [1 0 20 20] [1 20 40 20] [1 40 60 20] [1 60 80 20]
+                   [0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10] [0 50 60 10] [0 60 70 10] [0 70 80 10]]))
             "still needs L2 [1]"))
 
     (t/testing "L2+"
-      (t/is (= [;; L2 [0] is full, compact L3 [0 2] and [0 3]
+      (t/is (= [ ;; L2 [0] is full, compact L3 [0 2] and [0 3]
                 {:trie-keys ["log-l02-p0-nr08" "log-l02-p0-nr110" "log-l02-p0-nr118" "log-l02-p0-nr120"],
                  :path [0 0],
                  :out-trie-key "log-l03-p00-nr120"}
@@ -96,33 +101,42 @@
                  :out-trie-key "log-l03-p01-nr120"}
 
                 ;; L2 [0] has loads, merge from 0x24 onwards (but only 4)
-                {:trie-keys ["log-l01-nr124-rs14" "log-l01-nr128-rs14" "log-l01-nr12c-rs14" "log-l01-nr130-rs14"],
+                {:trie-keys ["log-l01-fr120-nr122-rs2" "log-l01-fr122-nr124-rs2" "log-l01-fr124-nr126-rs2" "log-l01-fr126-nr128-rs2"],
                  :path [0],
-                 :out-trie-key "log-l02-p0-nr130"}
+                 :out-trie-key "log-l02-p0-nr128"}
 
                 ;; L2 [1] has nothing, choose the first four
-                {:trie-keys ["log-l01-nr08-rs14" "log-l01-nr0c-rs14" "log-l01-nr110-rs14" "log-l01-nr114-rs14"],
+                {:trie-keys ["log-l01-fr00-nr02-rs2" "log-l01-fr02-nr04-rs2" "log-l01-fr04-nr06-rs2" "log-l01-fr06-nr08-rs2"],
                  :path [1],
-                 :out-trie-key "log-l02-p1-nr114"}
+                 :out-trie-key "log-l02-p1-nr08"}
 
                 ;; fill in the gaps in [2] and [3]
-                {:trie-keys ["log-l01-nr11c-rs14" "log-l01-nr120-rs14" "log-l01-nr124-rs14" "log-l01-nr128-rs14"],
+                {:trie-keys ["log-l01-fr118-nr11a-rs2" "log-l01-fr11a-nr11c-rs2" "log-l01-fr11c-nr11e-rs2" "log-l01-fr11e-nr120-rs2"],
                  :path [2],
-                 :out-trie-key "log-l02-p2-nr128"}
-                {:trie-keys ["log-l01-nr114-rs14" "log-l01-nr118-rs14" "log-l01-nr11c-rs14" "log-l01-nr120-rs14"],
+                 :out-trie-key "log-l02-p2-nr120"}
+                {:trie-keys ["log-l01-fr110-nr112-rs2" "log-l01-fr112-nr114-rs2" "log-l01-fr114-nr116-rs2" "log-l01-fr116-nr118-rs2"],
                  :path [3],
-                 :out-trie-key "log-l02-p3-nr120"}]
+                 :out-trie-key "log-l02-p3-nr118"}]
 
                (f [[3 [0 2] 32]
                    [3 [0 3] 32]
-                   [2 [0] 8] [2 [2] 8] [2 [3] 8]
-                   [2 [0] 16] [2 [2] 16] [2 [3] 16]
-                   [2 [0] 24] [2 [2] 24]
-                   [2 [0] 32]
-                   [1 8 20] [1 12 20] [1 16 20] [1 20 20] [1 24 20]
-                   [1 28 20] [1 32 20] [1 36 20] [1 40 20]
-                   [1 44 20] [1 48 20] [1 50 20] [1 52 20]]))
+                   [2 [0] 8] [2 [2] 8] [2 [3] 8] ; missing [1]
+                   [2 [0] 16] [2 [2] 16] [2 [3] 16] ; missing [1]
+                   [2 [0] 24] [2 [2] 24] ; missing [1] + [3]
+                   [2 [0] 32] ; missing [1], [2], and [3]
+                   [1 0 2 2] [1 2 4 2] [1 4 6 2] [1 6 8 2]
+                   [1 8 10 2] [1 10 12 2] [1 12 14 2] [1 14 16 2]
+                   [1 16 18 2] [1 18 20 2] [1 20 22 2] [1 22 24 2]
+                   [1 24 26 2] [1 26 28 2] [1 28 30 2] [1 30 32 2]
+                   [1 32 34 2] [1 34 36 2] [1 36 38 2] [1 38 40 2]
+                   ;; superseded ones
+                   [1 0 1 1]
+                   [1 4 5 1]
+                   [1 18 19 1]
+                   [1 26 27 1]]
+                  {:l1-file-size-rows 2}))
             "up to L3")
+
 
       (t/is (= [{:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
                  :path [0 3 0],
@@ -138,7 +152,8 @@
                  :out-trie-key "log-l04-p033-nr180"}]
 
                (f [[3 [0 2] 32]
-                   [3 [0 3] 32] [3 [0 3] 64] [3 [0 3] 96] [3 [0 3] 128]]))
+                   [3 [0 3] 32] [3 [0 3] 64] [3 [0 3] 96] [3 [0 3] 128]]
+                  {:l1-file-size-rows 32}))
             "L3 -> L4"))))
 
 (t/deftest test-merges-segments

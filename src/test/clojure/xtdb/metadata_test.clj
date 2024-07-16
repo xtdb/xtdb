@@ -127,7 +127,7 @@
 
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           literal-selector (expr.meta/->metadata-selector '(and (< xt$id 11) (> xt$id 9)) '{xt$id :i64} {})
-          meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 21 20))]
+          meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
       (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
         (let [page-idx-pred (.build literal-selector table-metadata)]
 
@@ -143,7 +143,7 @@
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
-        meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 2 1))]
+        meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
 
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
       (let [page-idx-pred (.build true-selector table-metadata)]
@@ -162,7 +162,7 @@
       (tu/finish-chunk! node)
 
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-            meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs/") (trie/->log-l0-l1-trie-key 0 2 1))]
+            meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs/") (trie/->log-l0-l1-trie-key 0 0 2 1))]
 
         (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
