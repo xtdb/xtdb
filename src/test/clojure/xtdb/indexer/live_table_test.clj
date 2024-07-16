@@ -50,8 +50,8 @@
                          0 0
                          (fn []
                            (.getPositionAndIncrement wp)
-                       (.startStruct doc-wtr)
-                       (.endStruct doc-wtr)))))
+                           (.startStruct doc-wtr)
+                           (.endStruct doc-wtr)))))
 
             (.commit live-table-tx)
 
@@ -65,7 +65,7 @@
               (t/is (= (reverse (range n))
                        (vec (.getData leaf)))))
 
-            @(.finishChunk live-table n)
+            @(.finishChunk live-table 0 n)
 
             (tu/with-allocator
               #(tj/check-json
@@ -105,7 +105,7 @@
               (t/is (= (reverse (range n))
                        (vec (.getData leaf)))))
 
-            @(.finishChunk live-table n)
+            @(.finishChunk live-table 0 n)
 
             (tu/with-allocator
               #(tj/check-json
@@ -148,7 +148,7 @@
         (with-open [live-table-wm (.openWatermark live-table true)]
           (let [live-table-before (live-table-wm->data live-table-wm)]
 
-            @(.finishChunk live-table (.getChunkRowCount rc))
+            @(.finishChunk live-table 0 (.getChunkRowCount rc))
             (.close live-table)
 
             (let [live-table-after (live-table-wm->data live-table-wm)]

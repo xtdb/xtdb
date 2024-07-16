@@ -48,11 +48,12 @@
 
 (def valid-iid? (some-fn uuid? string? keyword? integer?))
 
-(defn ->log-l0-l1-trie-key [^long level, ^long next-row, ^long row-count]
+(defn ->log-l0-l1-trie-key [^long level, ^long first-row ,^long next-row, ^long row-count]
   (assert (<= 0 level 1))
 
-  (format "log-l%s-nr%s-rs%s"
+  (format "log-l%s-fr%s-nr%s-rs%s"
           (util/->lex-hex-string level)
+          (util/->lex-hex-string first-row)
           (util/->lex-hex-string next-row)
           (Long/toString row-count 16)))
 
@@ -241,16 +242,17 @@
       (.end trie-wtr))))
 
 (def ^:private trie-file-path-regex
-  ;; e.g. `log-l01-nr12e-rs20.arrow` or `log-l04-p0010-nr12e.arrow`
-  #"(log-l(\p{XDigit}+)(?:-p(\p{XDigit}+))?-nr(\p{XDigit}+)(?:-rs(\p{XDigit}+))?)\.arrow$")
+  ;; e.g. `log-l01-fr0-nr12e-rs20.arrow` or `log-l04-p0010-nr12e.arrow`
+  #"(log-l(\p{XDigit}+)(?:-p(\p{XDigit}+))?(?:-fr(\p{XDigit}+))?-nr(\p{XDigit}+)(?:-rs(\p{XDigit}+))?)\.arrow$")
 
 (defn parse-trie-file-path [^Path file-path]
   (let [trie-key (str (.getFileName file-path))]
-    (when-let [[_ trie-key level-str part-str next-row-str rows-str] (re-find trie-file-path-regex trie-key)]
+    (when-let [[_ trie-key level-str part-str first-row next-row-str rows-str] (re-find trie-file-path-regex trie-key)]
       (cond-> {:file-path file-path
                :trie-key trie-key
                :level (util/<-lex-hex-string level-str)
                :next-row (util/<-lex-hex-string next-row-str)}
+        first-row (assoc :first-row (util/<-lex-hex-string first-row))
         part-str (assoc :part (byte-array (map #(Character/digit ^char % 4) part-str)))
         rows-str (assoc :rows (Long/parseLong rows-str 16))))))
 
@@ -309,6 +311,9 @@
     (let [!current-trie-keys (ArrayList.)
 
           {l0-trie-keys 0, l1-trie-keys 1, :as level-grouped-file-names} (file-names->level-groups file-names)
+
+          ;; filtering superseded L1 files
+          l1-trie-keys (into [] (comp (partition-by :first-row) (map last)) l1-trie-keys)
 
           max-level (long (last (sort (keys level-grouped-file-names))))
 

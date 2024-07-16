@@ -160,25 +160,26 @@
                                                             (<= next-row l1-compacted-row)))))]
 
       ;; if there are current L0 files, merge them into the latest l1 file until it's full
-      (let [{:keys [trie-keys ^long next-row ^long rows]}
-            (reduce (fn [{:keys [^long rows trie-keys]}
-                         {^long l0-rows :rows, l0-trie-key :trie-key, :keys [^long next-row]}]
+      (let [{:keys [trie-keys ^long first-row ^long next-row ^long rows]}
+            (reduce (fn [{:keys [^long rows first-row trie-keys]}
+                         {^long l0-rows :rows, l0-first-row :first-row l0-trie-key :trie-key, :keys [^long next-row]}]
                       (let [new-rows (+ rows l0-rows)]
-                        (cond-> {:rows new-rows
+                        (cond-> {:first-row (or first-row l0-first-row)
+                                 :rows new-rows
                                  :trie-keys (conj trie-keys l0-trie-key)
                                  :next-row next-row}
                           (>= new-rows l1-file-size-rows) reduced)))
 
-                    (or (when-let [{:keys [^long rows trie-key]} last-l1-file]
+                    (or (when-let [{:keys [^long rows first-row trie-key]} last-l1-file]
                           (when (< rows l1-file-size-rows)
-                            {:rows rows, :trie-keys [trie-key]}))
+                            {:first-row first-row :rows rows, :trie-keys [trie-key]}))
 
                         {:rows 0, :trie-keys []})
 
                     current-l0-trie-keys)]
 
         {:trie-keys trie-keys
-         :out-trie-key (trie/->log-l0-l1-trie-key 1 next-row rows)}))))
+         :out-trie-key (trie/->log-l0-l1-trie-key 1 first-row next-row rows)}))))
 
 (defn compaction-jobs [meta-file-names {:keys [^long l1-file-size-rows] :as opts}]
   (when (seq meta-file-names)
