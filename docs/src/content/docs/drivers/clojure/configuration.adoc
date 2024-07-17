@@ -119,6 +119,8 @@ Main article: link:/config/storage#remote[remote storage]
                     ;; -- optional
                     ;; :max-cache-entries 1024
                     ;; :max-cache-bytes 536870912
+                    ;; :max-disk-cache-percentage 75
+                    ;; :max-disk-cache-bytes 107374182400
                     }]}
 ----
 

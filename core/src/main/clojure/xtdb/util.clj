@@ -268,6 +268,9 @@
 (defn delete-file [^Path file]
   (Files/deleteIfExists file))
 
+(defn size-on-disk [^Path file]
+  (Files/size file))
+
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
 
@@ -448,26 +451,30 @@
   (doto (.getDeclaredMethod AllocationManager "associate" (into-array Class [BufferAllocator]))
     (.setAccessible true)))
 
-(defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
-  (let [nio-buffer (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
-                     nio-buffer
-                     (-> (ByteBuffer/allocateDirect (.remaining nio-buffer))
-                         (.put (.duplicate nio-buffer))
-                         (.clear)))
-        address (MemoryUtil/getByteBufferAddress nio-buffer)
-        size (.remaining nio-buffer)
-        allocation-manager (proxy [AllocationManager] [allocator]
-                             (getSize [] size)
-                             (memoryAddress [] address)
-                             (release0 []
-                               (try-free-direct-buffer nio-buffer)))
-        listener (.getListener allocator)
-        _ (with-open [reservation (.newReservation allocator)]
-            (.onPreAllocation listener size)
-            (.reserve reservation size)
-            (.onAllocation listener size))
-        buffer-ledger (.invoke allocation-manager-associate-method allocation-manager (object-array [allocator]))]
-    (ArrowBuf. buffer-ledger nil size address)))
+(defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf 
+  ([^BufferAllocator allocator ^ByteBuffer nio-buffer]
+   (->arrow-buf-view allocator nio-buffer nil))
+  ([^BufferAllocator allocator ^ByteBuffer nio-buffer release-fn]
+   (let [nio-buffer (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
+                      nio-buffer
+                      (-> (ByteBuffer/allocateDirect (.remaining nio-buffer))
+                          (.put (.duplicate nio-buffer))
+                          (.clear)))
+         address (MemoryUtil/getByteBufferAddress nio-buffer)
+         size (.remaining nio-buffer)
+         allocation-manager (proxy [AllocationManager] [allocator]
+                              (getSize [] size)
+                              (memoryAddress [] address)
+                              (release0 []
+                                (try-free-direct-buffer nio-buffer)
+                                (when release-fn (release-fn))))
+         listener (.getListener allocator)
+         _ (with-open [reservation (.newReservation allocator)]
+             (.onPreAllocation listener size)
+             (.reserve reservation size)
+             (.onAllocation listener size))
+         buffer-ledger (.invoke allocation-manager-associate-method allocation-manager (object-array [allocator]))]
+     (ArrowBuf. buffer-ledger nil size address))))
 
 (defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ArrowBuf buffer]
   (let [prefix-size (if (= (.getInt buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)

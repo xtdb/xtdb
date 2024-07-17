@@ -9,7 +9,9 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (java.nio ByteBuffer)
+  (:import (com.github.benmanes.caffeine.cache AsyncCache)
+           (java.io File)
+           (java.nio ByteBuffer)
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
            (java.util.concurrent CompletableFuture)
@@ -19,7 +21,8 @@
            (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
            xtdb.buffer_pool.RemoteBufferPool
            xtdb.IBufferPool
-           (xtdb.multipart IMultipartUpload SupportsMultipart)))
+           (xtdb.multipart IMultipartUpload SupportsMultipart)
+           (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 (defonce tmp-dirs (atom []))
 
@@ -50,7 +53,6 @@
 
       (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
         (t/is (instance? RemoteBufferPool buffer-pool))
-
         (t/is (seq (.listAllObjects object-store)))))))
 
 (defn copy-byte-buffer ^ByteBuffer [^ByteBuffer buf]
@@ -78,7 +80,7 @@
   (ByteBuffer/wrap (arrow-buf-bytes arrow-buf)))
 
 (defn test-get-object [^IBufferPool bp, ^Path k, ^ByteBuffer expected]
-  (let [{:keys [^Path disk-store, object-store]} bp]
+  (let [{:keys [^Path disk-store, object-store, ^Path local-disk-cache, ^AsyncCache local-disk-cache-evictor]} bp]
 
     (t/testing "immediate get from buffers map produces correct buffer"
       (util/with-open [buf @(.getBuffer bp k)]
@@ -97,8 +99,10 @@
     (when object-store
       (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
         (bp/evict-cached-buffer! bp k)
-        (when disk-store
-          (util/delete-file (.resolve disk-store k)))
+        ;; Evicted from map and deleted from disk (ie, replicating effects of 'eviction' here)
+        (.remove (.asMap local-disk-cache-evictor) (.resolve local-disk-cache k))
+        (util/delete-file (.resolve local-disk-cache k)) 
+        ;; Will fetch from object store again
         (util/with-open [buf @(.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
 
@@ -198,3 +202,38 @@
         (util/with-open [buf @(.getBuffer bp (util/->path "aw"))]
           (let [{:keys [root]} (util/read-arrow-buf buf)]
             (util/close root)))))))
+
+(defn file-info [^Path dir]
+  (let [files (filter #(.isFile ^File %) (file-seq (.toFile dir)))]
+    {:file-count (count files) :file-names (set (map #(.getName ^File %) files))}))
+
+(defn insert-utf8-to-local-cache [^IBufferPool bp k len]
+  ;; PutObject on ObjectStore
+  @(.putObject bp k (utf8-buf (apply str (repeat len "a"))))
+  ;; Add to local disk cache
+  (with-open [^ArrowBuf _buf @(.getBuffer bp k)]))
+
+(t/deftest local-disk-cache-max-size
+  (util/with-tmp-dirs #{local-disk-cache}
+    (with-open [bp (bp/open-remote-storage
+                    tu/*allocator*
+                    (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
+                        (.maxDiskCacheBytes 10)
+                        (.maxCacheBytes 12)))]
+      (t/testing "staying below max size - all elements available"
+        (insert-utf8-to-local-cache bp (util/->path "a") 4)
+        (insert-utf8-to-local-cache bp (util/->path "b") 4)
+        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache)))) 
+      
+      (t/testing "going above max size - all entries pinned (ie, in memory cache) - should return all elements"
+        (insert-utf8-to-local-cache bp (util/->path "c") 4)
+        (t/is (= {:file-count 3 :file-names #{"a" "b" "c"}} (file-info local-disk-cache)))) 
+      
+      (t/testing "entries unpinned (cleared from memory cache by new entries) - should evict entries since above size limit"
+        (insert-utf8-to-local-cache bp (util/->path "d") 4) 
+        (Thread/sleep 100) 
+        (t/is (= 3 (:file-count (file-info local-disk-cache)))) 
+
+        (insert-utf8-to-local-cache bp (util/->path "e") 4)
+        (Thread/sleep 100)
+        (t/is (= 3 (:file-count (file-info local-disk-cache))))))))
