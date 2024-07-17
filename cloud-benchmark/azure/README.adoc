@@ -1,0 +1,157 @@
+= Azure Auctionmark Benchmark
+
+Contained within this folder are a number of things for setting up & running a cluster of containerized auctionmark running worker tasks on Azure Platform.
+
+Within this README is the following:
+
+* Instructions for setting up the docker image.
+* How to setup the infra necessary on Azure.
+* How to push the docker image to Azure.
+* How to deploy the benchmark containers.
+
+== Requirements
+
+For local development, you will need the following:
+
+* To run the various scripts and commands within this folder, you will need the `az` command line tool, and to be authenticated with it.
+* `docker` available on your machine.
+* `terraform` available on your machine.
+
+=== Authenticating with Azure
+
+Firstly, you want to login to Azure using the command line - this can be done by running:
+```bash
+az login --scope https://management.azure.com//.default
+```
+
+After this, you want to ensure that you are using the correct subscription - in our case, that will be "XTDB long-run reliability":
+```bash
+az account set --subscription "XTDB long-run reliability"
+```
+
+== Creating the Docker Image
+
+Included within this directory is a subdirectory of scripts. To build an image for azure, you can run the following script:
+```bash
+./scripts/build-azure-bench.sh
+```
+
+This will:
+
+* Creates a Shadow JAR of the `cloud-benchmark:azure` project.
+** This contains the compiled `cloud-benchmark` project, which has a main file that runs auctionmark & configures it with provided node config, and also any of the dependencies we require to run the Azure module.
+* Creates a docker image, copying in the Shadow JAR and the `azure-config.yaml` file with the node config.
+** If you want to set any JVM opts - do it by editing the Dockerfile's `ENTRYPOINT`.
+
+It will build the local image as `xtdb-azure-bench:latest`.
+
+== Setting up the Azure Infra
+
+All of the config for setting up the infrastructure on Azure is handled by Terraform - and the files are within the `terraform` directory. 
+
+* The `main.tf` file contains the main configuration for the Azure resources.
+* Most of the general config that you will need to change when running auctionmark (ie, environment variables for auctionmark, node count, etc), can be edited within the `terraform.tfvars` file. 
+
+Prior to deploying any of the infra using terraform, you will need to initialize the terraform directory. From the `terraform` directory:
+```bash
+terraform init
+```
+
+To ensure that the terraform config is properly formatted, you can run:
+```bash
+terraform fmt
+```
+
+To then validate the terraform config, you can run:
+```bash
+terraform validate
+```
+
+To see what will will/change when running terraform, you can run:
+```bash
+terraform plan
+```
+
+To actually deploy the infra, you can run:
+```bash
+terraform apply
+```
+
+NOTE: By default - we will create all of the required Azure infrastructure, but will not create container app. See below to scale up/run the application itself.
+
+== Pushing the Docker Image to Azure
+
+To push the docker image to Azure, you will need to use the Azure Container Registry.
+
+To login to the Azure Container Registry, you can run:
+```bash
+az acr login --name cloudbenchmarkregistry
+```
+
+You can then tag the image you built earlier:
+```bash
+docker tag xtdb-azure-bench cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench
+```
+
+Finally, to push the image to the Azure Container Registry, you can run:
+```bash
+docker push cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench
+```
+
+== Deploying the Container App
+
+Deploying/running the container app is as simple as updating the `terraform.tfvars` file and applying the terraform config. Within the file, you can update a number of Auctionmark/XTDB options/parameters prior to running the container app.
+
+You can either update the file and run `terraform apply` again, or you can set the parameters using the terraform CLI.
+
+Ie, to run with a single node:
+```bash
+terraform apply -var run_single_node=true
+```
+
+NOTE: The `run_single_node` variable is a boolean, and will default to `false`. If you wish to destroy a running container app, ensure this is false and simply re-run `terraform apply`.
+
+=== Monitoring Logs
+
+To watch the container logs on a single node run, you can run:
+
+```bash
+az containerapp logs show --resource-group cloud-benchmark-resources --name cloud-benchmark-single-node  --tail 100 --format text --follow
+```
+
+This will print the last 100 lines of the logs, and then follow the logs as they are printed.
+
+
+== Clearing up resources
+
+Between runs it can be useful to entirely clear all of the persisted data from the Container App. This can be done in a few steps:
+
+=== Clearing up the Object Store
+
+To clear up _most_ of the storage used by the XTDB node, you can run the following script:
+
+```
+./scripts/clear-azure-storage.sh
+```
+
+This will delete:
+
+* The Contents of the Azure Blob Storage container.
+
+=== Clearing eventhub
+
+We cannot clear the actual contents of Azure Event Hub very easily, but if we want to reset from a relatively clean state we should be able to "bump" the topic version within `main.tf` and reapply the terraform config. This will create a new Event Hub with a new name, and the old one will be deleted.
+
+To assist with this, I've added a variable to the `terraform.tfvars` file called `eventhub_topic_suffix`. This defaults to "v1", but you can update this whenever you need to reset the Event Hub.
+
+=== Clearing up the File Share
+
+To clear up the file share contents (ie, which we mount to the app container and persist our local disk cache) is somewhat more complex within the CLI. I would recommend using the Azure Portal to do this:
+
+* Go to the Azure "Storage Browser" page.
+* Navigate to the storage account we use for azure auctionmark, `xtdbazurebenchmark`
+* Navigate to the "File Shares" section.
+* Go to `cloudbenchmarkshare`.
+* Delete the contents of the share.
+
+
