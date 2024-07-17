@@ -237,13 +237,15 @@
           (t/is (= blocks (<-cursor cursor))))))))
 
 (defn ->local-node ^xtdb.api.IXtdb [{:keys [^Path node-dir ^String buffers-dir
-                                            rows-per-chunk log-limit page-limit instant-src]
-                                     :or {buffers-dir "objects"}}]
+                                            rows-per-chunk log-limit page-limit instant-src
+                                            compactor?]
+                                     :or {compactor? true buffers-dir "objects"}}]
   (let [instant-src (or instant-src (->mock-clock))]
-    (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
-                     :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
-                                   (into {} (filter val)))})))
+    (xtn/start-node (cond-> {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
+                             :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                             :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
+                                           (into {} (filter val)))}
+                      (not compactor?) (assoc :xtdb.compactor/no-op {})))))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

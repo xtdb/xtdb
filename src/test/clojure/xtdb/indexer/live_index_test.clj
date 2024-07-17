@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
             [xtdb.metadata :as meta]
             xtdb.node.impl
@@ -118,25 +119,26 @@
    [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]]])
 
 (t/deftest can-build-live-index
-  (let [node-dir (util/->path "target/can-build-live-index")]
-    (util/delete-dir node-dir)
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/can-build-live-index")]
+      (util/delete-dir node-dir)
 
-    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+        (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
 
-        (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
-          (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
+          (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
+            (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
 
-        (tu/finish-chunk! node)
+          (tu/finish-chunk! node)
 
-        (t/is (= (mapv util/->path ["tables/foo/data/log-l00-fr00-nr110-rs5.arrow"])
-                 (.listObjects bp (util/->path "tables/foo/data"))))
+          (t/is (= (mapv util/->path ["tables/foo/data/log-l00-fr00-nr110-rs5.arrow"])
+                   (.listObjects bp (util/->path "tables/foo/data"))))
 
-        (t/is (= (mapv util/->path ["tables/foo/meta/log-l00-fr00-nr110-rs5.arrow"])
-                 (.listObjects bp (util/->path "tables/foo/meta")))))
+          (t/is (= (mapv util/->path ["tables/foo/meta/log-l00-fr00-nr110-rs5.arrow"])
+                   (.listObjects bp (util/->path "tables/foo/meta")))))
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
-                     (.resolve node-dir "objects")))))
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
+                       (.resolve node-dir "objects"))))))
 
 (t/deftest test-new-table-discarded-on-abort-2721
   (let [{^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*]

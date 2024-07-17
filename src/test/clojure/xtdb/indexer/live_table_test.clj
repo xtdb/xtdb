@@ -37,7 +37,7 @@
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 1000]
       (tu/with-tmp-dirs #{path}
-        (util/with-open [node (tu/->local-node {:node-dir path})
+        (util/with-open [node (tu/->local-node {:node-dir path :compactor? false})
                          ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
@@ -75,7 +75,7 @@
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 50000]
       (tu/with-tmp-dirs #{path}
-        (util/with-open [node (tu/->local-node {:node-dir path})
+        (util/with-open [node (tu/->local-node {:node-dir path :compactor? false})
                          ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
@@ -128,7 +128,7 @@
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         rc (RowCounter. 0)]
-    (with-open [node (xtn/start-node {})
+    (with-open [node (xtn/start-node {:xtdb.compactor/no-op {}})
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp rc "foo")]
