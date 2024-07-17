@@ -31,10 +31,10 @@ dependencies {
     api("org.clojure", "tools.cli", "1.0.206")
     api("com.cognitect", "transit-clj", "1.0.329")
 
-    api("org.apache.arrow", "arrow-algorithm", "16.1.0")
-    api("org.apache.arrow", "arrow-compression", "16.1.0")
-    api("org.apache.arrow", "arrow-vector", "16.1.0")
-    api("org.apache.arrow", "arrow-memory-netty", "16.1.0")
+    api(libs.arrow.algorithm)
+    api(libs.arrow.compression)
+    api(libs.arrow.vector)
+    api(libs.arrow.memory.netty)
     api("io.netty", "netty-common", "4.1.82.Final")
 
     api("org.roaringbitmap", "RoaringBitmap", "1.0.1")

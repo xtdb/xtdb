@@ -32,3 +32,15 @@ include("modules:c1-import", "modules:flight-sql")
 project(":modules:flight-sql").name = "xtdb-flight-sql"
 
 include("modules:bench", "modules:datasets")
+
+dependencyResolutionManagement {
+    versionCatalogs {
+        create("libs") {
+            version("arrow", "16.1.0")
+            library("arrow-algorithm", "org.apache.arrow", "arrow-algorithm").versionRef("arrow")
+            library("arrow-compression", "org.apache.arrow", "arrow-compression").versionRef("arrow")
+            library("arrow-vector", "org.apache.arrow", "arrow-vector").versionRef("arrow")
+            library("arrow-memory-netty", "org.apache.arrow", "arrow-memory-netty").versionRef("arrow")
+        }
+    }
+}

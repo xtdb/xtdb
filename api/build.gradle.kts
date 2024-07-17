@@ -27,10 +27,11 @@ dependencies {
     api("com.cognitect", "transit-clj", "1.0.333")
     api("com.cognitect", "transit-java", "1.0.371")
 
-    api("org.apache.arrow", "arrow-algorithm", "15.0.2")
-    api("org.apache.arrow", "arrow-compression", "15.0.2")
-    api("org.apache.arrow", "arrow-vector", "15.0.2")
-    api("org.apache.arrow", "arrow-memory-netty", "15.0.2")
+    api(libs.arrow.algorithm)
+    api(libs.arrow.compression)
+    api(libs.arrow.vector)
+    api(libs.arrow.memory.netty)
+
     api(kotlin("stdlib-jdk8"))
     api("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.0")
 
