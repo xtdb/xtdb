@@ -33,7 +33,7 @@
 
 (def ^java.nio.file.Path storage-root
   ;; bump this if the storage format changes in a backwards-incompatible way
-  (let [version 2]
+  (let [version 3]
     (util/->path (str "v" (util/->lex-hex-string version)))))
 
 (defn- free-memory [^Cache memory-store]

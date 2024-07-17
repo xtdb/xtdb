@@ -167,7 +167,7 @@
         (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-                         (.resolve node-dir "objects/v02/tables/"))
+                         (.resolve node-dir "objects/v03/tables/"))
 
           (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "colours" "$data$"}
                    (.columnNames table-metadata))))))))
