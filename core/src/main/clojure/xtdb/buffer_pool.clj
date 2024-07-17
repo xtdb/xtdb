@@ -519,8 +519,8 @@
 (defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (let [^Path local-disk-cache (.getLocalDiskCache factory)
-          local-disk-size-limit (or (.getMaxLocalDiskCacheBytes factory)
-                                    (calculate-limit-from-percentage-of-disk local-disk-cache (.getMaxLocalDiskCachePercentageOfTotalDisk factory)))
+          local-disk-size-limit (or (.getMaxDiskCacheBytes factory)
+                                    (calculate-limit-from-percentage-of-disk local-disk-cache (.getMaxDiskCachePercentage factory)))
           ^AsyncCache local-disk-cache-evictor (->local-disk-cache-evictor local-disk-size-limit local-disk-cache)
           !evictor-max-weight (atom local-disk-size-limit)]
 
@@ -557,14 +557,14 @@
 (defmethod ->object-store-factory :google-cloud [_ opts] (->object-store-factory :xtdb.google-cloud/object-store opts))
 (defmethod ->object-store-factory :azure [_ opts] (->object-store-factory :xtdb.azure/object-store opts))
 
-(defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store local-disk-cache max-cache-bytes max-cache-entries max-local-disk-cache-bytes max-local-disk-cache-percentage-of-total-disk]}]
+(defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store local-disk-cache max-cache-bytes max-cache-entries max-disk-cache-bytes max-disk-cache-percentage]}]
   (.storage config (cond-> (Storage/remoteStorage (let [[tag opts] object-store]
                                                     (->object-store-factory tag opts))
                                                   (util/->path local-disk-cache))
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries)
-                     max-local-disk-cache-bytes (.maxLocalDiskCacheBytes max-local-disk-cache-bytes)
-                     max-local-disk-cache-percentage-of-total-disk (.maxLocalDiskCachePercentageOfTotalDisk max-local-disk-cache-percentage-of-total-disk))))
+                     max-disk-cache-bytes (.maxDiskCacheBytes max-disk-cache-bytes)
+                     max-disk-cache-percentage (.maxDiskCachePercentage max-disk-cache-percentage))))
 
 (defn get-footer ^ArrowFooter [^IBufferPool bp ^Path path]
   (util/with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]

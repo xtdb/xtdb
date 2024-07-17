@@ -218,7 +218,7 @@
     (with-open [bp (bp/open-remote-storage
                     tu/*allocator*
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
-                        (.maxLocalDiskCacheBytes 10)
+                        (.maxDiskCacheBytes 10)
                         (.maxCacheBytes 12)))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)

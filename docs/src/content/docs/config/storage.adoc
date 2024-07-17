@@ -82,10 +82,12 @@ storage: !Remote
   # The maximum number of bytes to store in the in-memory cache.
   # maxCacheBytes: 536870912
 
-  # The upper limit of bytes to store within the localDiskCache directory
-  # maxLocalDiskCacheBytes: 10737418240
-----
+  # The max percentage of space to use on the filesystem for the localDiskCache directory (overriden by maxDiskCacheBytes, if set).
+  # maxDiskCachePercentage: 75
 
+  # The upper limit of bytes that can be stored within the localDiskCache directory (unset by default).
+  # maxDiskCacheBytes: 107374182400
+----
 Each Object Store implementation is configured separately - see the individual documentation for more information:
 
 * link:storage/s3[S3]
