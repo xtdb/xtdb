@@ -18,6 +18,7 @@ import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.aws.CloudWatchMetrics
 import xtdb.aws.S3.s3
+import xtdb.azure.AzureMonitorMetrics
 import java.nio.file.Paths
 import java.time.Duration
 
@@ -55,6 +56,13 @@ class YamlSerdeTest {
         """.trimIndent()
 
         assertEquals(CloudWatchMetrics.Factory("aws.namespace").namespace, (nodeConfig(awsInput).metrics as CloudWatchMetrics.Factory).namespace)
+
+        val azureInput = """
+        metrics: !AzureMonitor
+            instrumentationKey: "azure.namespace" 
+        """.trimIndent()
+
+        assertEquals(AzureMonitorMetrics.Factory("azure.namespace").instrumentationKey, (nodeConfig(azureInput).metrics as AzureMonitorMetrics.Factory).instrumentationKey)
     }
 
     @Test

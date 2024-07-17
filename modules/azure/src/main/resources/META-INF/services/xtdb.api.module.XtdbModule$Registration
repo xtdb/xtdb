@@ -1,2 +1,3 @@
 xtdb.api.storage.AzureBlobStorage$Registration
 xtdb.api.log.AzureEventHub$Registration
+xtdb.azure.AzureMonitorMetrics$Registration
