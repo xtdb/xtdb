@@ -282,6 +282,10 @@ public class UnionWriter extends AbstractFieldWriter implements FieldWriter {
       return getVarBinaryWriter();
     case VARCHAR:
       return getVarCharWriter();
+    case VIEWVARBINARY:
+      return getViewVarBinaryWriter();
+    case VIEWVARCHAR:
+      return getViewVarCharWriter();
     case LARGEVARCHAR:
       return getLargeVarCharWriter();
     case LARGEVARBINARY:
@@ -1363,6 +1367,98 @@ public class UnionWriter extends AbstractFieldWriter implements FieldWriter {
     getVarCharWriter().writeVarChar(value);
   }
 
+  private ViewVarBinaryWriter viewVarBinaryWriter;
+
+  private ViewVarBinaryWriter getViewVarBinaryWriter() {
+    if (viewVarBinaryWriter == null) {
+      viewVarBinaryWriter = new ViewVarBinaryWriterImpl(data.getViewVarBinaryVector());
+      viewVarBinaryWriter.setPosition(idx());
+      writers.add(viewVarBinaryWriter);
+    }
+    return viewVarBinaryWriter;
+  }
+
+  public ViewVarBinaryWriter asViewVarBinary() {
+    data.setType(idx(), MinorType.VIEWVARBINARY);
+    return getViewVarBinaryWriter();
+  }
+
+  @Override
+  public void write(ViewVarBinaryHolder holder) {
+    data.setType(idx(), MinorType.VIEWVARBINARY);
+    getViewVarBinaryWriter().setPosition(idx());
+    getViewVarBinaryWriter().writeViewVarBinary(holder.start, holder.end, holder.buffer);
+  }
+
+  public void writeViewVarBinary(int start, int end, ArrowBuf buffer) {
+    data.setType(idx(), MinorType.VIEWVARBINARY);
+    getViewVarBinaryWriter().setPosition(idx());
+    getViewVarBinaryWriter().writeViewVarBinary(start, end, buffer);
+  }
+  @Override
+  public void writeViewVarBinary(byte[] value) {
+    getViewVarBinaryWriter().setPosition(idx());
+    getViewVarBinaryWriter().writeViewVarBinary(value);
+  }
+
+  @Override
+  public void writeViewVarBinary(byte[] value, int offset, int length) {
+    getViewVarBinaryWriter().setPosition(idx());
+    getViewVarBinaryWriter().writeViewVarBinary(value, offset, length);
+  }
+
+  @Override
+  public void writeViewVarBinary(ByteBuffer value) {
+    getViewVarBinaryWriter().setPosition(idx());
+    getViewVarBinaryWriter().writeViewVarBinary(value);
+  }
+
+  @Override
+  public void writeViewVarBinary(ByteBuffer value, int offset, int length) {
+    getViewVarBinaryWriter().setPosition(idx());
+    getViewVarBinaryWriter().writeViewVarBinary(value, offset, length);
+  }
+
+  private ViewVarCharWriter viewVarCharWriter;
+
+  private ViewVarCharWriter getViewVarCharWriter() {
+    if (viewVarCharWriter == null) {
+      viewVarCharWriter = new ViewVarCharWriterImpl(data.getViewVarCharVector());
+      viewVarCharWriter.setPosition(idx());
+      writers.add(viewVarCharWriter);
+    }
+    return viewVarCharWriter;
+  }
+
+  public ViewVarCharWriter asViewVarChar() {
+    data.setType(idx(), MinorType.VIEWVARCHAR);
+    return getViewVarCharWriter();
+  }
+
+  @Override
+  public void write(ViewVarCharHolder holder) {
+    data.setType(idx(), MinorType.VIEWVARCHAR);
+    getViewVarCharWriter().setPosition(idx());
+    getViewVarCharWriter().writeViewVarChar(holder.start, holder.end, holder.buffer);
+  }
+
+  public void writeViewVarChar(int start, int end, ArrowBuf buffer) {
+    data.setType(idx(), MinorType.VIEWVARCHAR);
+    getViewVarCharWriter().setPosition(idx());
+    getViewVarCharWriter().writeViewVarChar(start, end, buffer);
+  }
+  @Override
+  public void writeViewVarChar(Text value) {
+    getViewVarCharWriter().setPosition(idx());
+    getViewVarCharWriter().writeViewVarChar(value);
+  }
+
+  @Override
+  public void writeViewVarChar(String value) {
+    getViewVarCharWriter().setPosition(idx());
+    getViewVarCharWriter().writeViewVarChar(value);
+  }
+
   private LargeVarCharWriter largeVarCharWriter;
 
   private LargeVarCharWriter getLargeVarCharWriter() {
@@ -2032,6 +2128,32 @@ public class UnionWriter extends AbstractFieldWriter implements FieldWriter {
     data.setType(idx(), MinorType.LIST);
     getListWriter().setPosition(idx());
     return getListWriter().varChar();
+  }
+  @Override
+  public ViewVarBinaryWriter viewVarBinary(String name) {
+    data.setType(idx(), MinorType.STRUCT);
+    getStructWriter().setPosition(idx());
+    return getStructWriter().viewVarBinary(name);
+  }
+
+  @Override
+  public ViewVarBinaryWriter viewVarBinary() {
+    data.setType(idx(), MinorType.LIST);
+    getListWriter().setPosition(idx());
+    return getListWriter().viewVarBinary();
+  }
+  @Override
+  public ViewVarCharWriter viewVarChar(String name) {
+    data.setType(idx(), MinorType.STRUCT);
+    getStructWriter().setPosition(idx());
+    return getStructWriter().viewVarChar(name);
+  }
+
+  @Override
+  public ViewVarCharWriter viewVarChar() {
+    data.setType(idx(), MinorType.LIST);
+    getListWriter().setPosition(idx());
+    return getListWriter().viewVarChar();
   }
   @Override
   public LargeVarCharWriter largeVarChar(String name) {

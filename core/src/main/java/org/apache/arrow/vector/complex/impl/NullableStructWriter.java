@@ -82,6 +82,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
     this.initialCapacity = 0;
     for (Field child : container.getField().getChildren()) {
       MinorType minorType = Types.getMinorTypeForArrowType(child.getType());
+      addVectorAsNullable = child.isNullable();
       switch (minorType) {
       case STRUCT:
         struct(child.getName());
@@ -249,6 +250,14 @@ public class NullableStructWriter extends AbstractFieldWriter {
       }
       case VARCHAR: {
         varChar(child.getName());
+        break;
+      }
+      case VIEWVARBINARY: {
+        viewVarBinary(child.getName());
+        break;
+      }
+      case VIEWVARCHAR: {
+        viewVarChar(child.getName());
         break;
       }
       case LARGEVARCHAR: {
@@ -1547,6 +1556,68 @@ public class NullableStructWriter extends AbstractFieldWriter {
       if (writer instanceof PromotableWriter) {
         // ensure writers are initialized
         ((PromotableWriter)writer).getWriter(MinorType.VARCHAR);
+      }
+    }
+    return writer;
+  }
+
+
+  @Override
+  public ViewVarBinaryWriter viewVarBinary(String name) {
+    FieldWriter writer = fields.get(handleCase(name));
+    if(writer == null) {
+      ValueVector vector;
+      ValueVector currentVector = container.getChild(name);
+      ViewVarBinaryVector v = container.addOrGet(name,
+          new FieldType(addVectorAsNullable,
+            MinorType.VIEWVARBINARY.getType()
+          ,null, null),
+          ViewVarBinaryVector.class);
+      writer = new PromotableWriter(v, container, getNullableStructWriterFactory());
+      vector = v;
+      if (currentVector == null || currentVector != vector) {
+        if(this.initialCapacity > 0) {
+          vector.setInitialCapacity(this.initialCapacity);
+        }
+        vector.allocateNewSafe();
+      } 
+      writer.setPosition(idx());
+      fields.put(handleCase(name), writer);
+    } else {
+      if (writer instanceof PromotableWriter) {
+        // ensure writers are initialized
+        ((PromotableWriter)writer).getWriter(MinorType.VIEWVARBINARY);
+      }
+    }
+    return writer;
+  }
+
+
+  @Override
+  public ViewVarCharWriter viewVarChar(String name) {
+    FieldWriter writer = fields.get(handleCase(name));
+    if(writer == null) {
+      ValueVector vector;
+      ValueVector currentVector = container.getChild(name);
+      ViewVarCharVector v = container.addOrGet(name,
+          new FieldType(addVectorAsNullable,
+            MinorType.VIEWVARCHAR.getType()
+          ,null, null),
+          ViewVarCharVector.class);
+      writer = new PromotableWriter(v, container, getNullableStructWriterFactory());
+      vector = v;
+      if (currentVector == null || currentVector != vector) {
+        if(this.initialCapacity > 0) {
+          vector.setInitialCapacity(this.initialCapacity);
+        }
+        vector.allocateNewSafe();
+      } 
+      writer.setPosition(idx());
+      fields.put(handleCase(name), writer);
+    } else {
+      if (writer instanceof PromotableWriter) {
+        // ensure writers are initialized
+        ((PromotableWriter)writer).getWriter(MinorType.VIEWVARCHAR);
       }
     }
     return writer;

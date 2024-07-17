@@ -996,6 +996,46 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     return varCharVector;
   }
 
+  private ViewVarBinaryVector viewVarBinaryVector;
+
+  public ViewVarBinaryVector getViewVarBinaryVector() {
+    return getViewVarBinaryVector(null);
+  }
+
+  public ViewVarBinaryVector getViewVarBinaryVector(String name) {
+    if (viewVarBinaryVector == null) {
+      int vectorCount = internalStruct.size();
+      viewVarBinaryVector = addOrGet(name, MinorType.VIEWVARBINARY, ViewVarBinaryVector.class);
+      if (internalStruct.size() > vectorCount) {
+        viewVarBinaryVector.allocateNew();
+        if (callBack != null) {
+          callBack.doWork();
+        }
+      }
+    }
+    return viewVarBinaryVector;
+  }
+
+  private ViewVarCharVector viewVarCharVector;
+
+  public ViewVarCharVector getViewVarCharVector() {
+    return getViewVarCharVector(null);
+  }
+
+  public ViewVarCharVector getViewVarCharVector(String name) {
+    if (viewVarCharVector == null) {
+      int vectorCount = internalStruct.size();
+      viewVarCharVector = addOrGet(name, MinorType.VIEWVARCHAR, ViewVarCharVector.class);
+      if (internalStruct.size() > vectorCount) {
+        viewVarCharVector.allocateNew();
+        if (callBack != null) {
+          callBack.doWork();
+        }
+      }
+    }
+    return viewVarCharVector;
+  }
+
   private LargeVarCharVector largeVarCharVector;
 
   public LargeVarCharVector getLargeVarCharVector() {
@@ -1490,6 +1530,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
         return getVarBinaryVector(name);
         case VARCHAR:
         return getVarCharVector(name);
+        case VIEWVARBINARY:
+        return getViewVarBinaryVector(name);
+        case VIEWVARCHAR:
+        return getViewVarCharVector(name);
         case LARGEVARCHAR:
         return getLargeVarCharVector(name);
         case LARGEVARBINARY:
@@ -1742,6 +1786,16 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
         reader.read(varCharHolder);
         setSafe(index, varCharHolder);
         break;
+      case VIEWVARBINARY:
+        NullableViewVarBinaryHolder viewVarBinaryHolder = new NullableViewVarBinaryHolder();
+        reader.read(viewVarBinaryHolder);
+        setSafe(index, viewVarBinaryHolder);
+        break;
+      case VIEWVARCHAR:
+        NullableViewVarCharHolder viewVarCharHolder = new NullableViewVarCharHolder();
+        reader.read(viewVarCharHolder);
+        setSafe(index, viewVarCharHolder);
+        break;
       case LARGEVARCHAR:
         NullableLargeVarCharHolder largeVarCharHolder = new NullableLargeVarCharHolder();
         reader.read(largeVarCharHolder);
@@ -1905,6 +1959,14 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     public void setSafe(int index, NullableVarCharHolder holder) {
       setType(index, MinorType.VARCHAR);
       getVarCharVector(null).setSafe(index, holder);
+    }
+    public void setSafe(int index, NullableViewVarBinaryHolder holder) {
+      setType(index, MinorType.VIEWVARBINARY);
+      getViewVarBinaryVector(null).setSafe(index, holder);
+    }
+    public void setSafe(int index, NullableViewVarCharHolder holder) {
+      setType(index, MinorType.VIEWVARCHAR);
+      getViewVarCharVector(null).setSafe(index, holder);
     }
     public void setSafe(int index, NullableLargeVarCharHolder holder) {
       setType(index, MinorType.LARGEVARCHAR);

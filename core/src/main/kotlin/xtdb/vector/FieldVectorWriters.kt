@@ -489,6 +489,9 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
     override fun visit(vec: BaseLargeVariableWidthVector, notify: FieldChangeListener?): IVectorWriter =
         throw UnsupportedOperationException()
 
+    override fun visit(vec: BaseVariableWidthViewVector, notify: FieldChangeListener?): IVectorWriter =
+        throw UnsupportedOperationException()
+
     override fun visit(vec: ListVector, notify: FieldChangeListener?) = ListVectorWriter(vec, notify)
     override fun visit(vec: FixedSizeListVector, notify: FieldChangeListener?): IVectorWriter =
         throw UnsupportedOperationException()

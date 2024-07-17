@@ -36,7 +36,7 @@ include("modules:bench", "modules:datasets")
 dependencyResolutionManagement {
     versionCatalogs {
         create("libs") {
-            version("arrow", "16.1.0")
+            version("arrow", "17.0.0")
             library("arrow-algorithm", "org.apache.arrow", "arrow-algorithm").versionRef("arrow")
             library("arrow-compression", "org.apache.arrow", "arrow-compression").versionRef("arrow")
             library("arrow-vector", "org.apache.arrow", "arrow-vector").versionRef("arrow")

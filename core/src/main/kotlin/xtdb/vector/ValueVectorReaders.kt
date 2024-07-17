@@ -50,9 +50,8 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
         else -> ValueVectorReader(v)
     }
 
-    override fun visit(v: BaseLargeVariableWidthVector, value: Any?): IVectorReader {
-        TODO("Not yet implemented")
-    }
+    override fun visit(v: BaseLargeVariableWidthVector, value: Any?) = TODO("Not yet implemented")
+    override fun visit(v: BaseVariableWidthViewVector, value: Any?) = TODO("Not yet implemented")
 
     override fun visit(v: ListVector, value: Any?): IVectorReader = when (v) {
         is MapVector -> mapVector(v)

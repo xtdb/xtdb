@@ -71,6 +71,7 @@ import org.apache.arrow.vector.complex.impl.ComplexCopier;
 import org.apache.arrow.vector.util.CallBack;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.BaseValueVector;
+import org.apache.arrow.vector.ValueIterableVector;
 import org.apache.arrow.vector.util.OversizedAllocationException;
 import org.apache.arrow.util.Preconditions;
 
@@ -93,7 +94,7 @@ import static org.apache.arrow.vector.types.UnionMode.Dense;
  * each time the vector is accessed.
  * Source code generated using FreeMarker template DenseUnionVector.java
  */
-public class DenseUnionVector extends AbstractContainerVector implements FieldVector {
+public class DenseUnionVector extends AbstractContainerVector implements FieldVector, ValueIterableVector<Object> {
   int valueCount;
 
   NonNullableStructVector internalStruct;
@@ -770,6 +771,38 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       }
     }
     return (VarCharVector) vector;
+  }
+
+  public ViewVarBinaryVector getViewVarBinaryVector(byte typeId) {
+    ValueVector vector = typeId < 0 ? null : childVectors[typeId];
+    if (vector == null) {
+      int vectorCount = internalStruct.size();
+      vector = addOrGet(typeId, MinorType.VIEWVARBINARY, ViewVarBinaryVector.class);
+      childVectors[typeId] = vector;
+      if (internalStruct.size() > vectorCount) {
+        vector.allocateNew();
+        if (callBack != null) {
+          callBack.doWork();
+        }
+      }
+    }
+    return (ViewVarBinaryVector) vector;
+  }
+
+  public ViewVarCharVector getViewVarCharVector(byte typeId) {
+    ValueVector vector = typeId < 0 ? null : childVectors[typeId];
+    if (vector == null) {
+      int vectorCount = internalStruct.size();
+      vector = addOrGet(typeId, MinorType.VIEWVARCHAR, ViewVarCharVector.class);
+      childVectors[typeId] = vector;
+      if (internalStruct.size() > vectorCount) {
+        vector.allocateNew();
+        if (callBack != null) {
+          callBack.doWork();
+        }
+      }
+    }
+    return (ViewVarCharVector) vector;
   }
 
   public LargeVarCharVector getLargeVarCharVector(byte typeId) {
@@ -1499,6 +1532,16 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       reader.read(varCharHolder);
       setSafe(index, varCharHolder);
       break;
+      case VIEWVARBINARY:
+      NullableViewVarBinaryHolder viewVarBinaryHolder = new NullableViewVarBinaryHolder();
+      reader.read(viewVarBinaryHolder);
+      setSafe(index, viewVarBinaryHolder);
+      break;
+      case VIEWVARCHAR:
+      NullableViewVarCharHolder viewVarCharHolder = new NullableViewVarCharHolder();
+      reader.read(viewVarCharHolder);
+      setSafe(index, viewVarCharHolder);
+      break;
       case LARGEVARCHAR:
       NullableLargeVarCharHolder largeVarCharHolder = new NullableLargeVarCharHolder();
       reader.read(largeVarCharHolder);
@@ -1827,6 +1870,28 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     }
     byte typeId = getTypeId(index);
     VarCharVector vector = getVarCharVector(typeId);
+    int offset = vector.getValueCount();
+    vector.setValueCount(offset + 1);
+    vector.setSafe(offset, holder);
+    offsetBuffer.setInt((long) index * OFFSET_WIDTH, offset);
+  }
+  public void setSafe(int index, NullableViewVarBinaryHolder holder) {
+    while (index >= getOffsetBufferValueCapacity()) {
+      reallocOffsetBuffer();
+    }
+    byte typeId = getTypeId(index);
+    ViewVarBinaryVector vector = getViewVarBinaryVector(typeId);
+    int offset = vector.getValueCount();
+    vector.setValueCount(offset + 1);
+    vector.setSafe(offset, holder);
+    offsetBuffer.setInt((long) index * OFFSET_WIDTH, offset);
+  }
+  public void setSafe(int index, NullableViewVarCharHolder holder) {
+    while (index >= getOffsetBufferValueCapacity()) {
+      reallocOffsetBuffer();
+    }
+    byte typeId = getTypeId(index);
+    ViewVarCharVector vector = getViewVarCharVector(typeId);
     int offset = vector.getValueCount();
     vector.setValueCount(offset + 1);
     vector.setSafe(offset, holder);
