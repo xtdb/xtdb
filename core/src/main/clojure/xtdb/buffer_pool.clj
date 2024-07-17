@@ -334,11 +334,6 @@
   (.. local-disk-cache-evictor asMap (compute k (reify BiFunction
                                                   (apply [_ _k fut] (update-fn fut)))))) 
 
-(defn set-cache-max-weight [^AsyncCache cache ^long new-size] 
-  (let [sync-cache (.synchronous cache)
-        ^Policy$Eviction eviction-policy (.get (.eviction (.policy sync-cache)))]
-    (.setMaximum eviction-policy (max 0 new-size))))
-
 (defrecord RemoteBufferPool [allocator
                              ^Cache memory-store
                              ^Path local-disk-cache
@@ -382,7 +377,7 @@
                                                                                         (some-> fut
                                                                                                 (util/then-apply (fn [{:keys [pinned? file-size]}]
                                                                                                                    (when pinned?
-                                                                                                                     (set-cache-max-weight local-disk-cache-evictor (swap! !evictor-max-weight + file-size)))
+                                                                                                                     (swap! !evictor-max-weight + file-size))
                                                                                                                    {:pinned? false :file-size file-size}))))))
                                               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer buffer-release-fn)
                                               buf (cache-compute memory-store k create-arrow-buf)]
@@ -391,7 +386,7 @@
             (fn [{:keys [file-size ctx]}] 
               (let [{:keys [previously-pinned? buf]} ctx] 
                 (when-not previously-pinned? 
-                  (set-cache-max-weight local-disk-cache-evictor (swap! !evictor-max-weight - file-size)))
+                  (swap! !evictor-max-weight - file-size))
                 buf))))))))
 
   (listAllObjects [_] (.listAllObjects object-store))
@@ -513,14 +508,24 @@
 (defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (let [^Path local-disk-cache (.getLocalDiskCache factory)
-          evictor-max-weight (.getMaxLocalDiskCacheBytes factory)
-          ^AsyncCache local-disk-cache-evictor (->local-disk-cache-evictor evictor-max-weight local-disk-cache)]
+          local-disk-size-limit (.getMaxLocalDiskCacheBytes factory)
+          ^AsyncCache local-disk-cache-evictor (->local-disk-cache-evictor local-disk-size-limit local-disk-cache)
+          !evictor-max-weight (atom local-disk-size-limit)]
+
+      ;; Add watcher to max-weight atom - when it changes, update the cache max weight
+      (add-watch !evictor-max-weight :update-cache-max-weight
+                 (fn [_ _ _ new-size]
+                   (let [sync-cache (.synchronous local-disk-cache-evictor)
+                         ^Policy$Eviction eviction-policy (.get (.eviction (.policy sync-cache)))]
+                     (.setMaximum eviction-policy (max 0 new-size)))))
+
+      
       (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                           (->memory-buffer-cache (.getMaxCacheBytes factory))
                           local-disk-cache
                           local-disk-cache-evictor
                           object-store
-                          (atom evictor-max-weight)))))
+                          !evictor-max-weight))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}
