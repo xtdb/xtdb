@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
@@ -48,50 +49,61 @@ class RelationTest {
     fun testRoundTrip() {
         val buf = ByteArrayOutputStream()
 
-        IntVector(allocator, "a", false).use { a ->
-            val rel = Relation(listOf(a))
+        IntVector(allocator, "i32", false).use { i32 ->
+            Utf8Vector(allocator, "utf8", true).use { utf8 ->
+                val rel = Relation(listOf(i32, utf8))
 
-            rel.startUnload(Channels.newChannel(buf))
-                .use { unloader ->
-                    a.writeInt(1)
-                    rel.endRow()
-                    a.writeInt(2)
-                    rel.endRow()
+                rel.startUnload(Channels.newChannel(buf))
+                    .use { unloader ->
+                        i32.writeInt(1)
+                        utf8.writeObject("Hello")
+                        rel.endRow()
+                        i32.writeInt(2)
+                        utf8.writeNull()
+                        rel.endRow()
 
-                    unloader.writeBatch()
-                    rel.reset()
+                        unloader.writeBatch()
+                        rel.reset()
 
-                    a.writeInt(3)
-                    rel.endRow()
+                        i32.writeInt(3)
+                        utf8.writeObject("world!")
+                        rel.endRow()
 
-                    unloader.writeBatch()
+                        unloader.writeBatch()
 
-                    unloader.endFile()
-                }
+                        unloader.endFile()
+                    }
+            }
         }
 
         Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
             val rel = loader.relation
-            val a = rel["a"]!!
+            val i32 = rel["i32"]!!
+            val utf8 = rel["utf8"]!!
 
             assertEquals(2, loader.batches.size)
 
             loader.batches[0].load()
 
             assertEquals(2, rel.rowCount)
-            assertEquals(1, a.getInt(0))
-            assertEquals(2, a.getInt(1))
+            assertEquals(1, i32.getInt(0))
+            assertEquals("Hello", utf8.getObject(0))
+            assertEquals(2, i32.getInt(1))
+            assertTrue(utf8.isNull(1))
 
             loader.batches[1].load()
 
             assertEquals(1, rel.rowCount)
-            assertEquals(3, a.getInt(0))
+            assertEquals(3, i32.getInt(0))
+            assertEquals("world!", utf8.getObject(0))
 
             loader.batches[0].load()
 
             assertEquals(2, rel.rowCount)
-            assertEquals(1, a.getInt(0))
-            assertEquals(2, a.getInt(1))
+            assertEquals(1, i32.getInt(0))
+            assertEquals("Hello", utf8.getObject(0))
+            assertEquals(2, i32.getInt(1))
+            assertTrue(utf8.isNull(1))
         }
     }
 

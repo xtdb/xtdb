@@ -9,7 +9,8 @@ import org.apache.arrow.vector.types.pojo.Field
 sealed class Vector : AutoCloseable {
     abstract val name: String
     abstract var nullable: Boolean
-    abstract val valueCount: Int
+
+    var valueCount: Int = 0; protected set
 
     abstract val arrowField: Field
 
@@ -23,11 +24,14 @@ sealed class Vector : AutoCloseable {
     open fun setInt(idx: Int, value: Int): Unit = unsupported("setInt")
     open fun writeInt(value: Int): Unit = unsupported("writeInt")
 
+    open fun getBytes(idx: Int): ByteArray = unsupported("getBytes")
+    open fun writeBytes(bytes: ByteArray): Unit = unsupported("writeBytes")
+
     protected open fun getObject0(idx: Int): Any = unsupported("getObject")
 
     fun getObject(idx: Int) = if (isNull(idx)) null else getObject0(idx)
 
-    abstract fun writeObject0(value: Any)
+    protected abstract fun writeObject0(value: Any)
 
     fun writeObject(value: Any?) {
         if (value == null) writeNull() else writeObject0(value)
@@ -39,8 +43,11 @@ sealed class Vector : AutoCloseable {
     abstract fun reset()
 
     companion object {
-        fun fromField(field: Field, al: BufferAllocator): Vector =
-            field.type.accept(object : ArrowType.ArrowTypeVisitor<Vector> {
+        fun fromField(field: Field, al: BufferAllocator): Vector {
+            val name : String = field.name
+            val isNullable = field.fieldType.isNullable
+
+            return field.type.accept(object : ArrowType.ArrowTypeVisitor<Vector> {
                 override fun visit(type: ArrowType.Null) = TODO("Not yet implemented")
 
                 override fun visit(type: ArrowType.Struct): Vector = TODO("Not yet implemented")
@@ -57,14 +64,14 @@ sealed class Vector : AutoCloseable {
                 override fun visit(type: ArrowType.Bool) = TODO("Not yet implemented")
 
                 override fun visit(type: ArrowType.Int) = when (type.bitWidth) {
-                    32 -> IntVector(al, field.name, field.fieldType.isNullable)
+                    32 -> IntVector(al, name, field.fieldType.isNullable)
                     else -> error("invalid bit-width: ${type.bitWidth}")
                 }
 
                 override fun visit(type: ArrowType.FloatingPoint) = TODO("Not yet implemented")
                 override fun visit(type: ArrowType.Decimal) = TODO("Not yet implemented")
 
-                override fun visit(type: ArrowType.Utf8) = TODO("Not yet implemented")
+                override fun visit(type: ArrowType.Utf8) = Utf8Vector(al, name, isNullable)
                 override fun visit(type: ArrowType.Utf8View) = TODO("Not yet implemented")
                 override fun visit(type: ArrowType.LargeUtf8) = TODO("Not yet implemented")
 
@@ -81,5 +88,6 @@ sealed class Vector : AutoCloseable {
 
                 override fun visit(type: ArrowType.ExtensionType) = TODO("Not yet implemented")
             })
+        }
     }
 }

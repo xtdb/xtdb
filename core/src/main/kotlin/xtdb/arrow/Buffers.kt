@@ -52,6 +52,16 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.writeInt(value)
     }
 
+    fun getBytes(start: Int, out: ByteArray): ByteArray {
+        buf.getBytes(start.toLong(), out)
+        return out
+    }
+
+    fun writeBytes(bytes: ByteArray) {
+        ensureWritable(bytes.size.toLong())
+        buf.writeBytes(bytes)
+    }
+
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) = buffers.add(buf.readerIndex(0))
 
     internal fun loadBuffer(arrowBuf: ArrowBuf) {
@@ -68,5 +78,6 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     override fun close() {
         buf.close()
     }
+
 
 }

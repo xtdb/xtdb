@@ -7,36 +7,59 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 
-sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
+abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
 
     override val arrowField: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
     abstract val arrowType: ArrowType
 
     private val validityBuffer = ExtensibleBuffer(allocator)
+    private val offsetBuffer = ExtensibleBuffer(allocator)
     private val dataBuffer = ExtensibleBuffer(allocator)
 
+    private var lastOffset: Int = 0
+
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
-    override fun writeNull() = validityBuffer.writeBit(valueCount++, 0)
-    private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
-    protected fun getInt0(idx: Int) =
-        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
-        else dataBuffer.getInt(idx)
+    private fun writeOffset(newOffset: Int) {
+        if (valueCount == 0) offsetBuffer.writeInt(0)
+        offsetBuffer.writeInt(newOffset)
+        lastOffset = newOffset
+    }
 
-    protected fun writeInt0(value: Int) {
-        dataBuffer.writeInt(value)
-        writeNotNull()
+    override fun writeNull() {
+        writeOffset(lastOffset)
+        validityBuffer.writeBit(valueCount++, 0)
+    }
+
+    private fun writeNotNull(len: Int) {
+        writeOffset(lastOffset + len)
+        validityBuffer.writeBit(valueCount++, 1)
+    }
+
+    override fun getBytes(idx: Int): ByteArray {
+        val start = offsetBuffer.getInt(idx)
+        val end = offsetBuffer.getInt(idx + 1)
+        val res = ByteArray(end - start)
+        return dataBuffer.getBytes(start, res)
+    }
+
+    override fun writeBytes(bytes: ByteArray) {
+        writeNotNull(bytes.size)
+        dataBuffer.writeBytes(bytes)
     }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)
+        offsetBuffer.unloadBuffer(buffers)
         dataBuffer.unloadBuffer(buffers)
     }
 
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
+
         validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
+        offsetBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing offset buffer"))
         dataBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing data buffer"))
 
         valueCount = node.length
@@ -44,12 +67,15 @@ sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
 
     override fun reset() {
         validityBuffer.reset()
+        offsetBuffer.reset()
         dataBuffer.reset()
         valueCount = 0
+        lastOffset = 0
     }
 
     override fun close() {
         validityBuffer.close()
+        offsetBuffer.close()
         dataBuffer.close()
     }
 }
