@@ -356,7 +356,7 @@
            (update-evictor-key local-disk-cache-evictor k
                                (fn [^CompletableFuture fut]
                                  (-> (if (util/path-exists buffer-cache-path)
-                                       (-> fut
+                                       (-> (or fut (CompletableFuture/completedFuture {:pinned? false}))
                                            (util/then-apply 
                                             (fn [{:keys [pinned?]}]
                                               (log/tracef "Key %s found in local-disk-cache - returning buffer" k)
@@ -495,14 +495,14 @@
                             (let [^BasicFileAttributes attrs (Files/readAttributes (.toPath file) BasicFileAttributes (make-array LinkOption 0))
                                   last-accessed-ms (.toMillis (.lastAccessTime attrs))
                                   last-modified-ms (.toMillis (.lastModifiedTime attrs))]
-                              {:file-name file
+                              {:file-path (util/->path file)
                                :last-access-time (max last-accessed-ms last-modified-ms)}))
                           files)
           ordered-files (sort-by #(:last-access-time %) file-infos)]
-      (doseq [{:keys [file-name]} ordered-files]
-        (let [file-path (util/->path file-name)]
-          (.put synced-cache file-path {:pinned? false
-                                        :file-size (util/size-on-disk file-path)}))))
+      (doseq [{:keys [file-path]} ordered-files]
+        (let [k (.relativize local-disk-cache file-path)]
+          (.put synced-cache k {:pinned? false
+                                :file-size (util/size-on-disk file-path)}))))
     cache))
 
 (defn calculate-limit-from-percentage-of-disk [^Path local-disk-cache percentage]
