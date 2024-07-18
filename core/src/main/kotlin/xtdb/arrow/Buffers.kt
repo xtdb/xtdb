@@ -54,6 +54,11 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) = buffers.add(buf.readerIndex(0))
 
+    internal fun loadBuffer(arrowBuf: ArrowBuf) {
+        buf.close()
+        buf = arrowBuf.also { it.referenceManager.retain() }
+    }
+
     fun reset() {
         buf.setZero(0, buf.capacity())
         buf.readerIndex(0)
@@ -63,4 +68,5 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     override fun close() {
         buf.close()
     }
+
 }

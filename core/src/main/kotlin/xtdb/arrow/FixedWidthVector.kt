@@ -29,6 +29,14 @@ sealed class FixedWidthVector(field: Field, allocator: BufferAllocator) : Vector
         dataBuffer.unloadBuffer(buffers)
     }
 
+    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
+        validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
+        dataBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing data buffer"))
+
+        valueCount = node.length
+    }
+
     override fun reset() {
         validityBuffer.reset()
         dataBuffer.reset()

@@ -28,6 +28,7 @@ sealed class Vector(val field: Field) : AutoCloseable {
     }
 
     internal abstract fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
+    internal abstract fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
 
     abstract fun reset()
 }
