@@ -1,8 +1,12 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.types.Types.MinorType
+import org.apache.arrow.vector.types.pojo.ArrowType
 
-class IntVector(field: Field, allocator: BufferAllocator) : FixedWidthVector(field, allocator) {
+class IntVector(allocator: BufferAllocator, override val name: String, override var nullable: Boolean) : FixedWidthVector(allocator) {
+
+    override val arrowType: ArrowType = MinorType.INT.type
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)

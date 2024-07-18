@@ -22,7 +22,7 @@ class FixedWidthVectorTest {
 
     @Test
     fun testIntVector() {
-        IntVector(Field.nonNullableI32("foo"), allocator).use { vector ->
+        IntVector(allocator,"foo", false).use { vector ->
             vector.writeInt(42)
             vector.writeInt(43)
             vector.writeInt(44)

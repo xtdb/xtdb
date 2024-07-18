@@ -48,7 +48,7 @@ class RelationTest {
     fun testRoundTrip() {
         val buf = ByteArrayOutputStream()
 
-        IntVector(Field.nonNullableI32("a"), allocator).use { a ->
+        IntVector(allocator, "a", false).use { a ->
             val rel = Relation(listOf(a))
 
             rel.startUnload(Channels.newChannel(buf))

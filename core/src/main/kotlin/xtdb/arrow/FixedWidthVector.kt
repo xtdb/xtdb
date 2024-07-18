@@ -3,8 +3,15 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 
-sealed class FixedWidthVector(field: Field, allocator: BufferAllocator) : Vector(field) {
+sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
+
+    override val arrowField: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
+    abstract val arrowType: ArrowType
+
     override var valueCount: Int = 0
 
     private val validityBuffer = ExtensibleBuffer(allocator)

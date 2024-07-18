@@ -24,7 +24,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
     inner class Unloader internal constructor(private val ch: WriteChannel) : AutoCloseable {
 
         private val vectors = this@Relation.vectors.values
-        private val schema = Schema(vectors.map { it.field.arrowField })
+        private val schema = Schema(vectors.map { it.arrowField })
         private val recordBlocks = mutableListOf<ArrowBlock>()
 
         init {
@@ -136,7 +136,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
             require(readCh.size() > MAGIC.size * 2 + 4) { "File is too small to be an Arrow file" }
 
             val footer = readCh.readFooter()
-            val rel = Relation(footer.schema.fields.map { Field.from(it).newVector(al) })
+            val rel = Relation(footer.schema.fields.map { Vector.fromField(it, al) })
 
             return rel.Loader(al, readCh, footer)
         }
