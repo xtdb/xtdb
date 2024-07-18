@@ -1,5 +1,8 @@
 package xtdb.arrow
 
+import org.apache.arrow.memory.ArrowBuf
+import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+
 sealed class Vector(val field: Field) : AutoCloseable {
     val name get() = field.name
     abstract val valueCount: Int
@@ -23,4 +26,8 @@ sealed class Vector(val field: Field) : AutoCloseable {
     fun writeObject(value: Any?) {
         if (value == null) writeNull() else writeObject0(value)
     }
+
+    internal abstract fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
+
+    abstract fun reset()
 }

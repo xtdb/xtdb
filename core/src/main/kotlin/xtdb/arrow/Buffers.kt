@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.BitVectorHelper
+import kotlin.math.max
 
 internal val NULL_CHECKS =
     System.getenv("XTDB_VECTOR_NULL_CHECKS")?.toBoolean()
@@ -13,34 +14,53 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty)
 
-    private fun handleCapacity(capacity: Int) {
+    private fun realloc() {
         val currentCapacity = buf.capacity()
-
-        val newBuf = allocator.buffer(capacity.toLong()).apply {
+        val newBuf = allocator.buffer(max(128, currentCapacity * 2)).apply {
             setBytes(0, buf, 0, currentCapacity)
-            setZero(currentCapacity, capacity() - currentCapacity)
+            writerIndex(buf.writerIndex())
         }
 
         buf.close()
         buf = newBuf
     }
 
-    private fun handleCapacity(elCount: Int, elWidth: Int) = handleCapacity(elCount * elWidth)
-
-    fun getBit(idx: Int) = BitVectorHelper.get(buf, idx) == 1
-    fun setBit(idx: Int, bit: Int) = BitVectorHelper.setValidityBit(buf, idx, bit)
-
-    private fun setBitSafe(idx: Int, bit: Int) {
-        handleCapacity(BitVectorHelper.getValidityBufferSize(idx + 1));
-        setBit(idx, bit)
+    private fun ensureWritable(elWidth: Long): ArrowBuf {
+        if (buf.writableBytes() < elWidth) realloc()
+        return buf
     }
 
-    fun setBitSafe(idx: Int) = setBitSafe(idx, 1)
-    fun unsetBitSafe(idx: Int) = setBitSafe(idx, 0)
+    private fun ensureCapacity(capacity: Long): ArrowBuf {
+        if (buf.capacity() < capacity) realloc()
+        return buf
+    }
+
+    fun getBit(idx: Int) = BitVectorHelper.get(buf, idx) == 1
+    fun setBit(bitIdx: Int, bit: Int) = BitVectorHelper.setValidityBit(buf, bitIdx, bit)
+
+    fun writeBit(bitIdx: Int, bit: Int) {
+        val validityBufferSize = BitVectorHelper.getValidityBufferSize(bitIdx + 1)
+        ensureCapacity(validityBufferSize.toLong())
+        setBit(bitIdx, bit)
+        buf.writerIndex(validityBufferSize.toLong())
+    }
 
     fun getInt(idx: Int) = buf.getInt((idx * Int.SIZE_BYTES).toLong())
-    fun setInt(idx: Int, value: Int) = buf.setInt((idx * Int.SIZE_BYTES).toLong(), value)
-    fun setIntSafe(idx: Int, value: Int) = apply { handleCapacity(idx + 1, Int.SIZE_BYTES) }.setInt(idx, value)
 
-    override fun close() = buf.close()
+    fun writeInt(value: Int) {
+        ensureWritable(Int.SIZE_BYTES.toLong())
+        buf.writeInt(value)
+    }
+
+    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) = buffers.add(buf.readerIndex(0))
+
+    fun reset() {
+        buf.setZero(0, buf.capacity())
+        buf.readerIndex(0)
+        buf.writerIndex(0)
+    }
+
+    override fun close() {
+        buf.close()
+    }
 }
