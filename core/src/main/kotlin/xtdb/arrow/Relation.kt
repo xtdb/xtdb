@@ -6,6 +6,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
@@ -18,6 +19,12 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
 
     constructor(vectors: List<Vector>, rowCount: Int = 0)
             : this(vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
+
+    constructor(allocator: BufferAllocator, schema: Schema, rowCount: Int = 0)
+            : this(allocator, schema.fields, rowCount)
+
+    constructor(allocator: BufferAllocator, fields: List<Field>, rowCount: Int = 0)
+            : this(fields.map { Vector.fromField(it, allocator) }, rowCount)
 
     fun endRow() = ++rowCount
 
@@ -136,9 +143,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
             require(readCh.size() > MAGIC.size * 2 + 4) { "File is too small to be an Arrow file" }
 
             val footer = readCh.readFooter()
-            val rel = Relation(footer.schema.fields.map { Vector.fromField(it, al) })
 
-            return rel.Loader(al, readCh, footer)
+            return Relation(al, footer.schema).Loader(al, readCh, footer)
         }
     }
 
