@@ -46,7 +46,7 @@ class RelationTest {
     }
 
     @Test
-    fun testRoundTrip() {
+    fun testScalarRoundTrip() {
         val buf = ByteArrayOutputStream()
 
         IntVector(allocator, "i32", false).use { i32 ->
@@ -104,6 +104,63 @@ class RelationTest {
             assertEquals("Hello", utf8.getObject(0))
             assertEquals(2, i32.getInt(1))
             assertTrue(utf8.isNull(1))
+        }
+    }
+
+    @Test
+    fun testListRoundTrip() {
+        val buf = ByteArrayOutputStream()
+
+        val elVector = IntVector(allocator, "els", true)
+
+        val list0 = listOf(1, 4, null, 12)
+        val list1 = listOf(8)
+        val list2 = listOf(1, 0, -1, null)
+
+        ListVector(allocator, "list", false, elVector).use { listVec ->
+            val rel = Relation(listOf(listVec))
+
+            rel.startUnload(Channels.newChannel(buf))
+                .use { unloader ->
+                    listVec.writeObject(list0)
+                    rel.endRow()
+                    listVec.writeObject(list1)
+                    rel.endRow()
+
+                    unloader.writeBatch()
+                    rel.reset()
+
+                    listVec.writeObject(list2)
+                    rel.endRow()
+
+                    unloader.writeBatch()
+
+                    unloader.endFile()
+                }
+        }
+
+        Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+            val rel = loader.relation
+            val listVec = rel["list"]!!
+
+            assertEquals(2, loader.batches.size)
+
+            loader.batches[0].load()
+
+            assertEquals(2, rel.rowCount)
+            assertEquals(list0, listVec.getObject(0))
+            assertEquals(list1, listVec.getObject(1))
+
+            loader.batches[1].load()
+
+            assertEquals(1, rel.rowCount)
+            assertEquals(list2, listVec.getObject(0))
+
+            loader.batches[0].load()
+
+            assertEquals(2, rel.rowCount)
+            assertEquals(list0, listVec.getObject(0))
+            assertEquals(list1, listVec.getObject(1))
         }
     }
 

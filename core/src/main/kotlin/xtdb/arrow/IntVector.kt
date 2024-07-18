@@ -8,6 +8,11 @@ class IntVector(allocator: BufferAllocator, override val name: String, override 
 
     override val arrowType: ArrowType = MinorType.INT.type
 
+    override fun writeNull() {
+        super.writeNull()
+        writeInt0(0)
+    }
+
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
 

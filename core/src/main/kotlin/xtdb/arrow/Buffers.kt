@@ -45,11 +45,46 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.writerIndex(validityBufferSize.toLong())
     }
 
+    fun getByte(idx: Int) = buf.getByte((idx * Byte.SIZE_BYTES).toLong())
+
+    fun writeByte(value: Byte) {
+        ensureWritable(Byte.SIZE_BYTES.toLong())
+        buf.writeByte(value.toInt())
+    }
+
+    fun getShort(idx: Int) = buf.getShort((idx * Short.SIZE_BYTES).toLong())
+
+    fun writeShort(value: Short) {
+        ensureWritable(Short.SIZE_BYTES.toLong())
+        buf.writeShort(value.toInt())
+    }
+
     fun getInt(idx: Int) = buf.getInt((idx * Int.SIZE_BYTES).toLong())
 
     fun writeInt(value: Int) {
         ensureWritable(Int.SIZE_BYTES.toLong())
         buf.writeInt(value)
+    }
+
+    fun getLong(idx: Int) = buf.getLong((idx * Long.SIZE_BYTES).toLong())
+
+    fun writeLong(value: Long) {
+        ensureWritable(Long.SIZE_BYTES.toLong())
+        buf.writeLong(value)
+    }
+
+    fun getFloat(idx: Int) = buf.getFloat((idx * Float.SIZE_BYTES).toLong())
+
+    fun writeFloat(value: Float) {
+        ensureWritable(Float.SIZE_BYTES.toLong())
+        buf.writeFloat(value)
+    }
+
+    fun getDouble(idx: Int) = buf.getDouble((idx * Double.SIZE_BYTES).toLong())
+
+    fun writeDouble(value: Double) {
+        ensureWritable(Double.SIZE_BYTES.toLong())
+        buf.writeDouble(value)
     }
 
     fun getBytes(start: Int, out: ByteArray): ByteArray {

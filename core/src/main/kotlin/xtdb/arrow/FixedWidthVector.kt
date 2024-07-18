@@ -19,12 +19,57 @@ sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
     override fun writeNull() = validityBuffer.writeBit(valueCount++, 0)
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
+    protected fun getByte0(idx: Int) =
+        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
+        else dataBuffer.getByte(idx)
+
+    protected fun writeByte0(value: Byte) {
+        dataBuffer.writeByte(value)
+        writeNotNull()
+    }
+
+    protected fun getShort0(idx: Int) =
+        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
+        else dataBuffer.getShort(idx)
+
+    protected fun writeShort0(value: Short) {
+        dataBuffer.writeShort(value)
+        writeNotNull()
+    }
+
     protected fun getInt0(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
         else dataBuffer.getInt(idx)
 
     protected fun writeInt0(value: Int) {
         dataBuffer.writeInt(value)
+        writeNotNull()
+    }
+
+    protected fun getLong0(idx: Int) =
+        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
+        else dataBuffer.getLong(idx)
+
+    protected fun writeLong0(value: Long) {
+        dataBuffer.writeLong(value)
+        writeNotNull()
+    }
+
+    protected fun getFloat0(idx: Int) =
+        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
+        else dataBuffer.getFloat(idx)
+
+    protected fun writeFloat0(value: Float) {
+        dataBuffer.writeFloat(value)
+        writeNotNull()
+    }
+
+    protected fun getDouble0(idx: Int) =
+        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
+        else dataBuffer.getDouble(idx)
+
+    protected fun writeDouble0(value: Double) {
+        dataBuffer.writeDouble(value)
         writeNotNull()
     }
 

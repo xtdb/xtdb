@@ -1,0 +1,24 @@
+package xtdb.arrow
+
+import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.types.Types.MinorType
+import org.apache.arrow.vector.types.pojo.ArrowType
+
+class FloatVector(allocator: BufferAllocator, override val name: String, override var nullable: Boolean) : FixedWidthVector(allocator) {
+
+    override val arrowType: ArrowType = MinorType.FLOAT4.type
+
+    override fun writeNull() {
+        super.writeNull()
+        writeFloat0(0F)
+    }
+
+    override fun getFloat(idx: Int) = getFloat0(idx)
+    override fun writeFloat(value: Float) = writeFloat0(value)
+
+    override fun getObject0(idx: Int) = getFloat(idx)
+
+    override fun writeObject0(value: Any) {
+        if (value is Float) writeFloat(value) else TODO("not a Float")
+    }
+}
