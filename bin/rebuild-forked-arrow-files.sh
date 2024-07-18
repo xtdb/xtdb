@@ -28,4 +28,5 @@ mkdir -p "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"{complex/impl,i
     cp vector/src/main/java/org/apache/arrow/vector/BaseLargeVariableWidthVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"
     cp vector/src/main/java/org/apache/arrow/vector/BaseVariableWidthVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"
     cp vector/src/main/java/org/apache/arrow/vector/complex/ListVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"
+    cp vector/src/main/java/org/apache/arrow/vector/complex/FixedSizeListVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"
 )
