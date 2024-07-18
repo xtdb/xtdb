@@ -8,7 +8,8 @@
             [xtdb.bench.auctionmark :as am]
             [xtdb.bench.measurement :as bm]
             [xtdb.node :as xtn])
-  (:import [clojure.lang ExceptionInfo]))
+  (:import [xtdb.api.metrics Metrics]
+           [clojure.lang ExceptionInfo]))
 
 (def run-duration (or (System/getenv "AUCTIONMARK_DURATION") "PT24H"))
 (def scale-factor (or (some-> (System/getenv "AUCTIONMARK_SCALE_FACTOR") (Float/parseFloat)) 0.1))
@@ -60,10 +61,11 @@
   (let [am-config {:seed 0
                    :scale-factor scale-factor}
         load-phase-bench (am/load-phase-only am-config)
-        load-phase-fn (b/compile-benchmark load-phase-bench bm/wrap-task)]
+        load-phase-fn (b/compile-benchmark load-phase-bench bm/wrap-task)
+        ^Metrics metrics (-> node :system :xtdb.metrics/registry)]
     (log/info "Running Load Phase with the following config... \n" am-config)
     (try
-      (binding [bm/*registry* (:registry node)]
+      (binding [bm/*registry* (.getRegistry metrics)]
         (load-phase-fn node))
       (send-message-to-slack
        (format ":white_check_mark: (%s) Auctionmark Load Phase successfully ran for *Scale Factor*: `%s`"  platform scale-factor))
@@ -82,10 +84,11 @@
                    ;; May as well sync data after running the threads prior to closing the node to check for oddities
                    :sync true}
         benchmark (am/benchmark am-config)
-        benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
+        benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)
+        ^Metrics metrics (-> node :system :xtdb.metrics/registry)]
     (log/info "Running Auctionmark Benchmark with the following config... \n" am-config)
     (try
-      (binding [bm/*registry* (:registry node)]
+      (binding [bm/*registry* (.getRegistry metrics)]
         (benchmark-fn node))
       (send-message-to-slack
        (format
