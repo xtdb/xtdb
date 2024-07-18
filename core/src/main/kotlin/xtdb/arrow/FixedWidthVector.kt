@@ -19,6 +19,15 @@ sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
     override fun writeNull() = validityBuffer.writeBit(valueCount++, 0)
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
+    protected fun getBoolean0(idx: Int) =
+        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
+        else dataBuffer.getBit(idx)
+
+    protected fun writeBoolean0(value: Boolean) {
+        dataBuffer.setBit(valueCount, if (value) 1 else 0)
+        writeNotNull()
+    }
+
     protected fun getByte0(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
         else dataBuffer.getByte(idx)
@@ -71,6 +80,17 @@ sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
     protected fun writeDouble0(value: Double) {
         dataBuffer.writeDouble(value)
         writeNotNull()
+    }
+
+    protected fun getBytes0(idx: Int, byteWidth: Int): ByteArray {
+        val start = idx * byteWidth
+        val res = ByteArray(byteWidth)
+        return dataBuffer.getBytes(start, res)
+    }
+
+    override fun writeBytes(bytes: ByteArray) {
+        writeNotNull()
+        dataBuffer.writeBytes(bytes)
     }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
