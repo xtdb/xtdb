@@ -451,10 +451,10 @@
   (doto (.getDeclaredMethod AllocationManager "associate" (into-array Class [BufferAllocator]))
     (.setAccessible true)))
 
-(defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf 
-  ([^BufferAllocator allocator ^ByteBuffer nio-buffer]
+(defn ->arrow-buf-view
+  (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
    (->arrow-buf-view allocator nio-buffer nil))
-  ([^BufferAllocator allocator ^ByteBuffer nio-buffer release-fn]
+  (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer release-fn]
    (let [nio-buffer (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
                       nio-buffer
                       (-> (ByteBuffer/allocateDirect (.remaining nio-buffer))
