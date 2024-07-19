@@ -746,6 +746,10 @@
                           sym)
                         (into [] (map-indexed ->projected-col-expr)))})
 
+(defrecord CannotParseInteger[s]
+  PlanError
+  (error-string [_] (format "Cannot parse integer: %s" s)))
+
 (defn seconds-fraction->nanos ^long [seconds-fraction]
   (if seconds-fraction
     (* (Long/parseLong seconds-fraction)
@@ -941,7 +945,9 @@
 
   (visitLiteralExpr [this ctx] (-> (.literal ctx) (.accept this)))
   (visitFloatLiteral [_ ctx] (parse-double (.getText ctx)))
-  (visitIntegerLiteral [_ ctx] (parse-long (.getText ctx)))
+  (visitIntegerLiteral [_ ctx]
+    (or (parse-long (.getText ctx))
+        (add-err! env (->CannotParseInteger (.getText ctx)))))
 
   (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
 

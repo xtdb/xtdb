@@ -38,10 +38,11 @@
                               (string? eid) (.getBytes (str "s" eid))
                               (keyword? eid) (.getBytes (str "k" eid))
                               (integer? eid) (.getBytes (str "i" eid))
-                              :else (let [id-type (symbol (.getName (class eid)))]
+                              :else (let [id-type (some-> (class eid) .getName symbol)]
                                       (throw (err/runtime-err :xtdb/invalid-id
                                                               {::err/message (format "Invalid ID type: %s" id-type)
-                                                               :type id-type}))))]
+                                                               :type id-type
+                                                               :eid eid}))))]
        (-> ^MessageDigest (.get !msg-digest)
            (.digest eid-bytes)
            (Arrays/copyOfRange 0 16))))))

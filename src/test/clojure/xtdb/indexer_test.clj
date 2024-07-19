@@ -1,27 +1,27 @@
 (ns xtdb.indexer-test
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.serde :as serde]
-            [xtdb.compactor :as c])
+            [xtdb.util :as util])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            (java.time Duration InstantSource)
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
-           (xtdb.api TransactionKey)
            xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            (xtdb.watermark IWatermarkSource)))
@@ -585,3 +585,12 @@
                                       {:query "SELECT _id, foo FROM docs"}]}
              (-> (xt/execute-tx node [[:sql "SELECT _id, foo FROM docs"]])
                  (dissoc :system-time))))))
+
+(t/deftest above-max-long-halts-ingestion-3495
+  (util/with-open [node (xtn/start-node)]
+    (t/is (= (str/trim "
+Errors planning SQL statement:
+  - Cannot parse integer: 9223372036854775808")
+             (-> (xt/execute-tx node [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]])
+                 (:error)
+                 (ex-message))))))
