@@ -4,14 +4,13 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-class LongVector(allocator: BufferAllocator, override val name: String, override var nullable: Boolean) : FixedWidthVector(allocator) {
+class LongVector(
+    allocator: BufferAllocator,
+    override val name: String,
+    override var nullable: Boolean
+) : FixedWidthVector(allocator, Long.SIZE_BYTES) {
 
     override val arrowType: ArrowType = MinorType.BIGINT.type
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

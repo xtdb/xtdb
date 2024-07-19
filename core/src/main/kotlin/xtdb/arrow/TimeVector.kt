@@ -6,7 +6,7 @@ import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import java.time.LocalTime
 
-sealed class TimeVector(allocator: BufferAllocator) : FixedWidthVector(allocator) {
+sealed class TimeVector(allocator: BufferAllocator, byteWidth: Int) : FixedWidthVector(allocator, byteWidth) {
     abstract val unit: TimeUnit
 
     abstract override fun getObject0(idx: Int): LocalTime
@@ -34,13 +34,8 @@ class Time32Vector(
     override val name: String,
     override var nullable: Boolean,
     override val unit: TimeUnit
-) : TimeVector(allocator) {
-    override val arrowType = ArrowType.Time(unit, 32)
-
-    override fun writeNull() {
-        super.writeNull()
-        writeInt0(0)
-    }
+) : TimeVector(allocator, Int.SIZE_BYTES) {
+    override val arrowType = ArrowType.Time(unit, Int.SIZE_BITS)
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -57,13 +52,8 @@ class Time64Vector(
     override val name: String,
     override var nullable: Boolean,
     override val unit: TimeUnit
-) : TimeVector(allocator) {
-    override val arrowType = ArrowType.Time(unit, 64)
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
+) : TimeVector(allocator, Long.SIZE_BYTES) {
+    override val arrowType = ArrowType.Time(unit, Long.SIZE_BITS)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

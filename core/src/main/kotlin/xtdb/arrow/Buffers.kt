@@ -45,6 +45,13 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.writerIndex(validityBufferSize.toLong())
     }
 
+    fun writeZero(elWidth: Int) {
+        ensureWritable(elWidth.toLong())
+        val writerIndex = buf.writerIndex()
+        buf.setZero(writerIndex, elWidth.toLong())
+        buf.writerIndex(writerIndex + elWidth)
+    }
+
     fun getByte(idx: Int) = buf.getByte((idx * Byte.SIZE_BYTES).toLong())
 
     fun writeByte(value: Byte) {
@@ -113,6 +120,4 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     override fun close() {
         buf.close()
     }
-
-
 }

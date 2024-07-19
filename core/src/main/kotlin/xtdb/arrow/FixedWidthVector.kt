@@ -15,16 +15,21 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
     TimeUnit.NANOSECOND -> seconds * 1_000_000_000 + nanos
 }
 
-sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
+sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : Vector() {
 
-    override val arrowField: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
+    final override val arrowField: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
     abstract val arrowType: ArrowType
 
     private val validityBuffer = ExtensibleBuffer(allocator)
     private val dataBuffer = ExtensibleBuffer(allocator)
 
-    override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
-    override fun writeNull() = validityBuffer.writeBit(valueCount++, 0)
+    final override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
+
+    final override fun writeNull() {
+        if (byteWidth == 0) dataBuffer.writeBit(valueCount, 0) else dataBuffer.writeZero(byteWidth)
+        validityBuffer.writeBit(valueCount++, 0)
+    }
+
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
     protected fun getBoolean0(idx: Int) =
@@ -90,24 +95,24 @@ sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
         writeNotNull()
     }
 
-    protected fun getBytes0(idx: Int, byteWidth: Int): ByteArray {
+    protected fun getBytes0(idx: Int): ByteArray {
         val start = idx * byteWidth
         val res = ByteArray(byteWidth)
         return dataBuffer.getBytes(start, res)
     }
 
     override fun writeBytes(bytes: ByteArray) {
-        writeNotNull()
         dataBuffer.writeBytes(bytes)
+        writeNotNull()
     }
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    final override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)
         dataBuffer.unloadBuffer(buffers)
     }
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    final override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
         validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
         dataBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing data buffer"))
@@ -115,13 +120,13 @@ sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
         valueCount = node.length
     }
 
-    override fun reset() {
+    final override fun reset() {
         validityBuffer.reset()
         dataBuffer.reset()
         valueCount = 0
     }
 
-    override fun close() {
+    final override fun close() {
         validityBuffer.close()
         dataBuffer.close()
     }

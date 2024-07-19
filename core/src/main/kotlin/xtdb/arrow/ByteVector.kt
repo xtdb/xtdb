@@ -4,14 +4,13 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-class ByteVector(allocator: BufferAllocator, override val name: String, override var nullable: Boolean) : FixedWidthVector(allocator) {
+class ByteVector(
+    allocator: BufferAllocator,
+    override val name: String,
+    override var nullable: Boolean
+) : FixedWidthVector(allocator, Byte.SIZE_BYTES) {
 
     override val arrowType: ArrowType = MinorType.TINYINT.type
-
-    override fun writeNull() {
-        super.writeNull()
-        writeByte0(0)
-    }
 
     override fun getByte(idx: Int) = getByte0(idx)
     override fun writeByte(value: Byte) = writeByte0(value)

@@ -20,14 +20,9 @@ class TimestampLocalVector(
     override val name: String,
     override var nullable: Boolean,
     val unit: TimeUnit = MICROSECOND,
-) : FixedWidthVector(al) {
+) : FixedWidthVector(al, Long.SIZE_BYTES) {
 
     override val arrowType = ArrowType.Timestamp(unit, null)
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)
@@ -46,14 +41,9 @@ class TimestampTzVector(
     override var nullable: Boolean,
     val unit: TimeUnit = MICROSECOND,
     val zone: ZoneId = UTC
-) : FixedWidthVector(al) {
+) : FixedWidthVector(al, Long.SIZE_BYTES) {
 
     override val arrowType = ArrowType.Timestamp(unit, zone.toString())
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

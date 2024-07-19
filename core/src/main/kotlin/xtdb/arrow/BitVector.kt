@@ -3,9 +3,9 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 
-class BitVector(al: BufferAllocator, override val name: String, override var nullable: Boolean ) : FixedWidthVector(al) {
+class BitVector(al: BufferAllocator, override val name: String, override var nullable: Boolean ) : FixedWidthVector(al,0) {
 
-    override val arrowType = MinorType.BIT.type
+    override val arrowType = MinorType.BIT.type!!
 
     override fun getBoolean(idx: Int) = getBoolean0(idx)
     override fun writeBoolean(value: Boolean) = writeBoolean0(value)

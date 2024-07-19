@@ -10,18 +10,13 @@ class DateDayVector(
     allocator: BufferAllocator,
     override val name: String,
     override var nullable: Boolean,
-) : FixedWidthVector(allocator) {
+) : FixedWidthVector(allocator, Int.SIZE_BYTES) {
     override val arrowType = ArrowType.Date(DAY)
-
-    override fun writeNull() {
-        super.writeNull()
-        writeInt0(0)
-    }
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
 
-    override fun getObject0(idx: Int) = LocalDate.ofEpochDay(getInt(idx).toLong())
+    override fun getObject0(idx: Int) = LocalDate.ofEpochDay(getInt(idx).toLong())!!
 
     override fun writeObject0(value: Any) {
         if (value is LocalDate) writeInt(value.toEpochDay().toInt()) else TODO("not a LocalDate")
@@ -34,18 +29,13 @@ class DateMilliVector(
     allocator: BufferAllocator,
     override val name: String,
     override var nullable: Boolean,
-) : FixedWidthVector(allocator) {
+) : FixedWidthVector(allocator, Long.SIZE_BYTES) {
     override val arrowType = ArrowType.Date(MILLISECOND)
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)
 
-    override fun getObject0(idx: Int) = LocalDate.ofEpochDay(getLong(idx) / MILLIS_PER_DAY)
+    override fun getObject0(idx: Int) = LocalDate.ofEpochDay(getLong(idx) / MILLIS_PER_DAY)!!
 
     override fun writeObject0(value: Any) {
         if (value is LocalDate) writeLong(value.toEpochDay() * MILLIS_PER_DAY) else TODO("not a LocalDate")

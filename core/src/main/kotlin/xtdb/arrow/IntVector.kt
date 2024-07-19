@@ -4,14 +4,13 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-class IntVector(allocator: BufferAllocator, override val name: String, override var nullable: Boolean) : FixedWidthVector(allocator) {
+class IntVector(
+    allocator: BufferAllocator,
+    override val name: String,
+    override var nullable: Boolean
+) : FixedWidthVector(allocator, Int.SIZE_BYTES) {
 
     override val arrowType: ArrowType = MinorType.INT.type
-
-    override fun writeNull() {
-        super.writeNull()
-        writeInt0(0)
-    }
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)

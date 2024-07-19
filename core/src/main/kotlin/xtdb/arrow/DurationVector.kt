@@ -7,7 +7,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import java.time.Duration
 import java.time.temporal.ChronoUnit
 
-internal fun TimeUnit.toDuration(value: Long) = when (this) {
+internal fun TimeUnit.toDuration(value: Long): Duration = when (this) {
     SECOND -> Duration.ofSeconds(value)
     MILLISECOND -> Duration.ofMillis(value)
     MICROSECOND -> Duration.of(value, ChronoUnit.MICROS)
@@ -19,13 +19,8 @@ class DurationVector(
     override val name: String,
     override var nullable: Boolean,
     val unit: TimeUnit = MICROSECOND
-) : FixedWidthVector(allocator) {
+) : FixedWidthVector(allocator, Long.SIZE_BYTES) {
     override val arrowType = ArrowType.Duration(unit)
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

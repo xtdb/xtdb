@@ -14,14 +14,9 @@ class IntervalYearMonthVector(
     al: BufferAllocator,
     override val name: String,
     override var nullable: Boolean
-) : FixedWidthVector(al) {
+) : FixedWidthVector(al, Int.SIZE_BYTES) {
 
     override val arrowType: ArrowType = MinorType.INTERVALYEAR.type
-
-    override fun writeNull() {
-        super.writeNull()
-        writeInt0(0)
-    }
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -37,14 +32,9 @@ class IntervalDayTimeVector(
     al: BufferAllocator,
     override val name: String,
     override var nullable: Boolean
-) : FixedWidthVector(al) {
+) : FixedWidthVector(al, Long.SIZE_BYTES) {
 
     override val arrowType: ArrowType = MinorType.INTERVALDAY.type
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
 
     override fun getObject0(idx: Int) =
         IntervalDayTime(
@@ -68,14 +58,9 @@ class IntervalMonthDayNanoVector(
     al: BufferAllocator,
     override val name: String,
     override var nullable: Boolean
-) : FixedWidthVector(al) {
+) : FixedWidthVector(al, 16) {
 
     override val arrowType: ArrowType = MinorType.INTERVALMONTHDAYNANO.type
-
-    override fun writeNull() {
-        super.writeNull()
-        writeLong0(0)
-    }
 
     override fun getObject0(idx: Int) =
         IntervalMonthDayNano(
