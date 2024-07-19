@@ -473,7 +473,8 @@
                              (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
                                  (wrap-sql-args param-count)))
 
-            (throw (UnsupportedOperationException. (pr-str {:query :sql, :compiled-query compiled-query})))))
+            (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
+                                                         :query query-str}))))
 
         nil))))
 

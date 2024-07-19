@@ -575,3 +575,13 @@
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                          (.resolve node-dir "objects")))))))
+
+(t/deftest ingestion-stopped-query-as-tx-op-3265
+  (util/with-open [node (xtn/start-node)]
+    (t/is (= {:tx-id 0,
+              :committed? false,
+              :error #xt/illegal-arg [:xtdb.indexer/invalid-sql-tx-op
+                                      "Invalid SQL query sent as transaction operation"
+                                      {:query "SELECT _id, foo FROM docs"}]}
+             (-> (xt/execute-tx node [[:sql "SELECT _id, foo FROM docs"]])
+                 (dissoc :system-time))))))
