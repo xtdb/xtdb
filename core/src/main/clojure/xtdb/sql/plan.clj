@@ -46,7 +46,7 @@
 (defn identifier-sym [^ParserRuleContext ctx]
   (some-> ctx
           (.accept (reify SqlVisitor
-                     (visitSchemaName [_ ctx] (symbol (.getText ctx)))
+                     (visitSchemaName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitAsClause [this ctx] (-> (.columnName ctx) (.accept this)))
                      (visitQueryName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitTableName [this ctx] (-> (.identifier ctx) (.accept this)))
