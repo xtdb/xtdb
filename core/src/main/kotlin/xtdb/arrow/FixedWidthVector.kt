@@ -3,9 +3,17 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+
+internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
+    TimeUnit.SECOND -> seconds
+    TimeUnit.MILLISECOND -> seconds * 1000 + nanos / 1_000_000
+    TimeUnit.MICROSECOND -> seconds * 1_000_000 + nanos / 1000
+    TimeUnit.NANOSECOND -> seconds * 1_000_000_000 + nanos
+}
 
 sealed class FixedWidthVector(allocator: BufferAllocator) : Vector() {
 

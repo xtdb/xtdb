@@ -3,11 +3,16 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.types.DateUnit
+import org.apache.arrow.vector.types.DateUnit.DAY
 import org.apache.arrow.vector.types.FloatingPointPrecision.*
+import org.apache.arrow.vector.types.IntervalUnit.*
+import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
+import java.time.ZoneId
 
 sealed class Vector : AutoCloseable {
     abstract val name: String
@@ -114,11 +119,25 @@ sealed class Vector : AutoCloseable {
                 override fun visit(type: LargeBinary) = TODO("Not yet implemented")
                 override fun visit(type: FixedSizeBinary) = FixedSizeBinaryVector(al, name, isNullable, type.byteWidth)
 
-                override fun visit(type: Date) = TODO("Not yet implemented")
-                override fun visit(type: Time) = TODO("Not yet implemented")
-                override fun visit(type: Timestamp) = TODO("Not yet implemented")
-                override fun visit(type: Interval) = TODO("Not yet implemented")
-                override fun visit(type: Duration) = TODO("Not yet implemented")
+                override fun visit(type: Date) = when(type.unit!!) {
+                    DAY -> DateDayVector(al, name, isNullable)
+                    DateUnit.MILLISECOND -> DateMilliVector(al, name, isNullable)
+                }
+
+                override fun visit(type: Time) = when(type.unit!!) {
+                    SECOND, MILLISECOND -> Time32Vector(al, name, isNullable, type.unit)
+                    MICROSECOND, NANOSECOND -> Time64Vector(al, name, isNullable, type.unit)
+                }
+                override fun visit(type: Timestamp) =
+                    if (type.timezone == null) TimestampLocalVector(al, name, isNullable, type.unit)
+                    else TimestampTzVector(al, name, isNullable, type.unit, ZoneId.of(type.timezone))
+
+                override fun visit(type: Interval) = when (type.unit!!) {
+                    YEAR_MONTH -> IntervalYearMonthVector(al, name, isNullable)
+                    DAY_TIME -> IntervalDayTimeVector(al, name, isNullable)
+                    MONTH_DAY_NANO -> IntervalMonthDayNanoVector(al, name, isNullable)
+                }
+                override fun visit(type: Duration) = DurationVector(al, name, isNullable, type.unit)
 
                 override fun visit(type: ExtensionType) = TODO("Not yet implemented")
             })
