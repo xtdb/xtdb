@@ -594,3 +594,11 @@ Errors planning SQL statement:
              (-> (xt/execute-tx node [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]])
                  (:error)
                  (ex-message))))))
+
+#_ ; FIXME #3388
+(t/deftest hyphen-in-struct-key-halts-ingestion-3388
+  (util/with-open [node (xtn/start-node)]
+    (t/is (= :TODO
+             (-> (xt/execute-tx node [[:sql "INSERT INTO docs (xt$id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
+                 (:error)
+                 (ex-message))))))
