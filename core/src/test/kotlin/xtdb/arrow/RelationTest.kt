@@ -164,4 +164,44 @@ class RelationTest {
         }
     }
 
+    @Test
+    fun testDuvRoundTrip() {
+        val duv = DenseUnionVector(
+            allocator, "duv", false,
+            listOf(
+                IntVector(allocator, "i32", false),
+                Utf8Vector(allocator, "utf8", true)
+            )
+        )
+
+        val i32Leg = duv["i32"]!!
+        val utf8Leg = duv["utf8"]!!
+
+        i32Leg.writeInt(12)
+        utf8Leg.writeObject("hello")
+        utf8Leg.writeObject("world!")
+        i32Leg.writeInt(34)
+        utf8Leg.writeNull()
+
+        val duvValues = listOf(12, "hello", "world!", 34, null)
+
+        assertEquals(duvValues, duv.toList())
+
+        val buf = ByteArrayOutputStream()
+
+        Relation(listOf(duv), duv.valueCount).use { rel ->
+            rel.startUnload(Channels.newChannel(buf)).use { unloader ->
+                unloader.writeBatch()
+                unloader.endFile()
+            }
+        }
+
+        Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+            loader.batches.first().load()
+
+            assertEquals(duvValues, loader.relation["duv"]!!.toList())
+        }
+
+    }
+
 }

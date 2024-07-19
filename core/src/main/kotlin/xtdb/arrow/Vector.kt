@@ -4,15 +4,16 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.FloatingPointPrecision.*
+import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
 
 sealed class Vector : AutoCloseable {
     abstract val name: String
-    abstract var nullable: Boolean
+    abstract var nullable: Boolean; internal set
 
-    var valueCount: Int = 0; protected set
+    open var valueCount: Int = 0; internal set
 
     abstract val arrowField: Field
 
@@ -47,10 +48,12 @@ sealed class Vector : AutoCloseable {
     open fun writeBytes(bytes: ByteArray): Unit = unsupported("writeBytes")
 
     protected abstract fun getObject0(idx: Int): Any
-    fun getObject(idx: Int) = if (isNull(idx)) null else getObject0(idx)
+    open fun getObject(idx: Int) = if (isNull(idx)) null else getObject0(idx)
 
     protected abstract fun writeObject0(value: Any)
     fun writeObject(value: Any?) = if (value == null) writeNull() else writeObject0(value)
+
+    internal open fun toList() = (0 until valueCount).map { getObject(it) }
 
     internal abstract fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
@@ -77,7 +80,10 @@ sealed class Vector : AutoCloseable {
 
                 override fun visit(type: ListView): Vector = TODO("Not yet implemented")
 
-                override fun visit(type: Union) = TODO("Not yet implemented")
+                override fun visit(type: Union) = when (type.mode!!) {
+                    UnionMode.Sparse -> TODO("Not yet implemented")
+                    UnionMode.Dense -> DenseUnionVector(al, name, isNullable, field.children.map { fromField(it, al) })
+                }
 
                 override fun visit(type: ArrowType.Map) = TODO("Not yet implemented")
 
