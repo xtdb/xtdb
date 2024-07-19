@@ -1856,3 +1856,13 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 (t/deftest unescapes-escaped-quotes-3467
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (' ''foo'' ')"]])
   (t/is (= [{:xt/id " 'foo' "}] (xt/q tu/*node* "SELECT * FROM foo"))))
+
+(t/deftest info-schema-case-insensitivity-3511
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+  (t/is (= [{:column-name "_id",
+             :data-type ":i64",
+             :table-catalog "xtdb",
+             :table-name "foo",
+             :table-schema "public"}]
+           (xt/q tu/*node* "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = 'foo'")
+           (xt/q tu/*node* "SELECT * FROM information_schema.columns WHERE table_name = 'foo'"))))
