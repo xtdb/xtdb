@@ -602,3 +602,18 @@ Errors planning SQL statement:
              (-> (xt/execute-tx node [[:sql "INSERT INTO docs (xt$id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
                  (:error)
                  (ex-message))))))
+
+(t/deftest different-tzs-halt-ingestion-3483
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "
+INSERT INTO docs (_id, _valid_from, _valid_to)
+  VALUES (0, TIMESTAMP '2023-03-26T00:50:00.000+00:00', TIMESTAMP '2023-03-26T00:55:00.000+00:00'),
+         (0, TIMESTAMP '2023-03-26T02:00:00.000+01:00', TIMESTAMP '2023-03-26T02:05:00.000+01:00')"]])
+
+    (t/is (= [#:xt{:id 0,
+                   :valid-from #xt.time/zoned-date-time "2023-03-26T00:50Z[UTC]",
+                   :valid-to #xt.time/zoned-date-time "2023-03-26T00:55Z[UTC]"}
+              #:xt{:id 0,
+                   :valid-from #xt.time/zoned-date-time "2023-03-26T01:00Z[UTC]",
+                   :valid-to #xt.time/zoned-date-time "2023-03-26T01:05Z[UTC]"}]
+             (xt/q node "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _valid_from")))))

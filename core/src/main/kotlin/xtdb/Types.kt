@@ -49,7 +49,7 @@ private fun IntervalUnit.toLegPart() = when (this) {
     MONTH_DAY_NANO -> "month-day-nano"
 }
 
-private val TZ_STR_CACHE = Caffeine.newBuilder().build<String, String> { it.lowercase().replace('/', '_') }
+private val TZ_STR_CACHE = Caffeine.newBuilder().build<String, String> { it.lowercase().replace(Regex("[/:]"), "_") }
 
 fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
     override fun visit(type: ArrowType.Null) = "null"
