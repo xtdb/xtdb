@@ -26,7 +26,7 @@ class RelationTest {
         allocator.close()
     }
 
-    private class ByteBufferChannel(private val buf: ByteBuffer) : SeekableByteChannel {
+    internal class ByteBufferChannel(private val buf: ByteBuffer) : SeekableByteChannel {
         override fun read(dst: ByteBuffer): Int {
             val src = buf.slice().limit(dst.remaining())
             dst.put(src)

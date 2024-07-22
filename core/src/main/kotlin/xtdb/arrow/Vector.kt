@@ -73,7 +73,11 @@ sealed class Vector : AutoCloseable {
             return field.type.accept(object : ArrowTypeVisitor<Vector> {
                 override fun visit(type: Null) = NullVector(name)
 
-                override fun visit(type: Struct): Vector = TODO("Not yet implemented")
+                override fun visit(type: Struct): Vector =
+                    StructVector(
+                        al, name, isNullable,
+                        field.children.associateTo(linkedMapOf()) { it.name to fromField(it, al) }
+                    )
 
                 override fun visit(type: ArrowType.List): Vector =
                     ListVector(al, name, isNullable, fromField(field.children[0], al))
@@ -119,15 +123,16 @@ sealed class Vector : AutoCloseable {
                 override fun visit(type: LargeBinary) = TODO("Not yet implemented")
                 override fun visit(type: FixedSizeBinary) = FixedSizeBinaryVector(al, name, isNullable, type.byteWidth)
 
-                override fun visit(type: Date) = when(type.unit!!) {
+                override fun visit(type: Date) = when (type.unit!!) {
                     DAY -> DateDayVector(al, name, isNullable)
                     DateUnit.MILLISECOND -> DateMilliVector(al, name, isNullable)
                 }
 
-                override fun visit(type: Time) = when(type.unit!!) {
+                override fun visit(type: Time) = when (type.unit!!) {
                     SECOND, MILLISECOND -> Time32Vector(al, name, isNullable, type.unit)
                     MICROSECOND, NANOSECOND -> Time64Vector(al, name, isNullable, type.unit)
                 }
+
                 override fun visit(type: Timestamp) =
                     if (type.timezone == null) TimestampLocalVector(al, name, isNullable, type.unit)
                     else TimestampTzVector(al, name, isNullable, type.unit, ZoneId.of(type.timezone))
@@ -137,6 +142,7 @@ sealed class Vector : AutoCloseable {
                     DAY_TIME -> IntervalDayTimeVector(al, name, isNullable)
                     MONTH_DAY_NANO -> IntervalMonthDayNanoVector(al, name, isNullable)
                 }
+
                 override fun visit(type: Duration) = DurationVector(al, name, isNullable, type.unit)
 
                 override fun visit(type: ExtensionType) = TODO("Not yet implemented")
