@@ -32,6 +32,7 @@ import java.nio.file.Path
  *          serviceBusTopicName = "xtdb-service-bus-topic"
  *       ) {
  *          prefix = Path.of("my/custom/prefix")
+ *          userManagedIdentityClientId = "user-managed-identity-client-id"
  *       },
  *       localDiskCache = Paths.get("test-path")
  *    ),
@@ -96,12 +97,19 @@ object AzureBlobStorage {
         val serviceBusNamespace: String,
         val serviceBusTopicName: String,
         var prefix: Path? = null,
+        var userManagedIdentityClientId: String? = null,
     ) : ObjectStoreFactory {
 
         /**
          * @param prefix A file path to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory.
          */
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
+
+        /**
+         * @param userManagedIdentityClientId The client ID of the user managed identity to use for authentication, if applicable
+         */
+        fun userManagedIdentityClientId(userManagedIdentityClientId: String) = apply { this.userManagedIdentityClientId = userManagedIdentityClientId }
+
         override fun openObjectStore() = requiringResolve("xtdb.azure/open-object-store")(this) as ObjectStore
     }
 

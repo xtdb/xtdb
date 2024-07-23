@@ -21,7 +21,8 @@ object AzureEventHub {
         var pollSleepDuration: Duration = Duration.ofSeconds(1),
         var autoCreateEventHub: Boolean = false,
         var retentionPeriodInDays: Int = 7,
-        var resourceGroupName: String? = null
+        var resourceGroupName: String? = null,
+        var userManagedIdentityClientId: String? = null,
     ) : Log.Factory {
 
         fun maxWaitTime(maxWaitTime: Duration) = apply { this.maxWaitTime = maxWaitTime }
@@ -31,6 +32,7 @@ object AzureEventHub {
             apply { this.retentionPeriodInDays = retentionPeriodInDays }
 
         fun resourceGroupName(resourceGroupName: String) = apply { this.resourceGroupName = resourceGroupName }
+        fun userManagedIdentityClientId(userManagedIdentityClientId: String) = apply { this.userManagedIdentityClientId = userManagedIdentityClientId }
 
         override fun openLog() = requiringResolve("xtdb.azure/open-log")(this) as Log
     }

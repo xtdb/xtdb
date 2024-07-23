@@ -105,6 +105,11 @@ storage: !Remote
     # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
     # (Can be set as an !Env value)
     # prefix: my-xtdb-node
+    #
+    # Azure Client ID of a User Assigned Managed Identity -
+    # required when using them for authentication to Azure Services ie, inside of an Azure App Container.  
+    # (Can be set as an !Env value)
+    # userManagedIdentityClientId: user-managed-identity-client-id
 
   localDiskCache: /var/cache/xtdb/object-store
 ----

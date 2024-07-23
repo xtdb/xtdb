@@ -163,6 +163,7 @@ Main article: link:/config/storage/azure[Azure Blob Storage]
                             ;; -- optional
 
                             ;; :prefix "my-xtdb-node"
+                            ;; :user-managed-identity-client-id "user-managed-identity-client-id"
                            }]}]}
 ----
 

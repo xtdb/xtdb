@@ -21,15 +21,18 @@
            [xtdb.api.log AzureEventHub AzureEventHub$Factory]
            [xtdb.api.storage AzureBlobStorage AzureBlobStorage$Factory]))
 
-(defmethod bp/->object-store-factory ::object-store [_ {:keys [storage-account container servicebus-namespace servicebus-topic-name prefix]}]
+(defmethod bp/->object-store-factory ::object-store [_ {:keys [storage-account container servicebus-namespace servicebus-topic-name prefix user-managed-identity-client-id]}]
   (cond-> (AzureBlobStorage/azureBlobStorage storage-account container servicebus-namespace servicebus-topic-name)
-    prefix (.prefix (util/->path prefix))))
+    prefix (.prefix (util/->path prefix))
+    user-managed-identity-client-id (.userManagedIdentityClientId user-managed-identity-client-id)))
 
 ;; No minimum block size in azure
 (def minimum-part-size 0)
 
 (defn open-object-store [^AzureBlobStorage$Factory factory]
-  (let [credential (.build (DefaultAzureCredentialBuilder.))
+  (let [user-managed-identity-id (.getUserManagedIdentityClientId factory)
+        credential (.build (cond-> (DefaultAzureCredentialBuilder.)
+                             user-managed-identity-id (.managedIdentityClientId user-managed-identity-id)))
         storage-account (.getStorageAccount factory)
         container (.getContainer factory)
         servicebus-namespace (.getServiceBusNamespace factory)
@@ -59,14 +62,16 @@
 
 (defmethod xtn/apply-config! ::event-hub-log
   [^Xtdb$Config config _ {:keys [namespace event-hub-name max-wait-time poll-sleep-duration
-                                 create-event-hub? retention-period-in-days resource-group-name]}]
+                                 create-event-hub? retention-period-in-days resource-group-name
+                                 user-managed-identity-client-id]}]
   (doto config
     (.setTxLog (cond-> (AzureEventHub/azureEventHub namespace event-hub-name)
                  max-wait-time (.maxWaitTime (time/->duration max-wait-time))
                  poll-sleep-duration (.pollSleepDuration (time/->duration poll-sleep-duration))
                  create-event-hub? (.autoCreateEventHub create-event-hub?)
                  retention-period-in-days (.retentionPeriodInDays retention-period-in-days)
-                 resource-group-name (.resourceGroupName resource-group-name)))))
+                 resource-group-name (.resourceGroupName resource-group-name)
+                 user-managed-identity-client-id (.userManagedIdentityClientId user-managed-identity-client-id)))))
 
 (defn resource-group-present? [resource-group-name]
   (when-not resource-group-name
@@ -100,10 +105,12 @@
         retention-period-in-days (.getRetentionPeriodInDays factory)
         resource-group-name (.getResourceGroupName factory)
         fully-qualified-namespace (format "%s.servicebus.windows.net" namespace)
-        credential (.build (DefaultAzureCredentialBuilder.))
+        user-managed-identity-id (.getUserManagedIdentityClientId factory)
+        credential (.build (cond-> (DefaultAzureCredentialBuilder.)
+                             user-managed-identity-id (.managedIdentityClientId user-managed-identity-id)))
         event-hub-client-builder (-> (EventHubClientBuilder.)
                                      (.consumerGroup "$DEFAULT")
-                                     (.credential credential)
+                                     (.credential credential) 
                                      (.fullyQualifiedNamespace fully-qualified-namespace)
                                      (.eventHubName event-hub-name))
         subscriber-handler (xtdb-log/->notifying-subscriber-handler nil)]
