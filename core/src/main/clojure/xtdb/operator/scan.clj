@@ -359,15 +359,15 @@
         (test [_ path]
           (zero? (HashTrie/compareToPath iid-ptr path)))))))
 
-(defn- ->merge-tasks
+(defn ->merge-tasks
   "segments :: [Segment]
     Segment :: {:keys [meta-file data-file-path table-metadata page-idx-pred]} ;; for Arrow tries
              | {:keys [trie live-rel]} ;; for live tries
 
    return :: (seq {:keys [path leaves]})"
-  [segments path-pred]
+  [segments path-pred temporal-bounds]
   (let [result (ArrayList.)]
-    (->> (HashTrieKt/toMergePlan segments path-pred)
+    (->> (HashTrieKt/toMergePlan segments path-pred temporal-bounds)
          (run! (fn [^MergePlanTask merge-plan-task]
                  (let [path (.getPath merge-plan-task)
                        mp-nodes (.getMpNodes merge-plan-task)
@@ -497,7 +497,8 @@
                              ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
                              table-path (util/table-name->table-path table-name)
                              current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
-                                                     (trie/current-trie-files))]
+                                                     (trie/current-trie-files))
+                             temporal-bounds (->temporal-bounds params basis scan-opts)]
 
                          (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                            (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
@@ -519,7 +520,8 @@
                                                                     live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
                                                                                             (assoc :live-rel (.liveRelation live-table-wm)))))
 
-                                                                  (->path-pred iid-arrow-buf))
+                                                                  (->path-pred iid-arrow-buf)
+                                                                  temporal-bounds)
                                                    []))]
 
                              (util/with-close-on-catch [out-rel (RelationWriter. allocator
@@ -527,7 +529,7 @@
                                                                                    (vw/->writer (.createVector field allocator))))]
                                (->TrieCursor allocator (.iterator ^Iterable merge-tasks) out-rel
                                              col-names col-preds
-                                             (->temporal-bounds params basis scan-opts)
+                                             temporal-bounds
                                              params
                                              (->vsr-cache buffer-pool allocator)
                                              buffer-pool)))))))}))))

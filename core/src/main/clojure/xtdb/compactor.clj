@@ -20,6 +20,7 @@
            xtdb.bitemporal.IPolygonReader
            (xtdb.metadata IMetadataManager)
            (xtdb.trie EventRowPointer HashTrieKt IDataRel MergePlanTask)
+           (xtdb.util TemporalBounds)
            xtdb.vector.IRelationWriter
            xtdb.vector.IRowCopier
            xtdb.vector.IVectorWriter
@@ -70,7 +71,8 @@
                                                                            (let [^bytes page-path page-path
                                                                                  len (min path-len (alength page-path))]
                                                                              (Arrays/equals path-filter 0 len
-                                                                                            page-path 0 len)))))))
+                                                                                            page-path 0 len))))))
+                                                                   (TemporalBounds.))
             :let [_ (when (Thread/interrupted)
                       (throw (InterruptedException.)))
 

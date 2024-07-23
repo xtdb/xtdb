@@ -6,7 +6,6 @@
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
-            [xtdb.log :as xtdb.log]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -19,25 +18,24 @@
             [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
+           (java.io FileOutputStream)
            java.net.ServerSocket
-           (java.io ByteArrayOutputStream FileOutputStream)
            (java.nio.channels Channels)
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           (java.time Duration Instant InstantSource Period)
+           (java.time Instant InstantSource LocalTime Period YearMonth ZoneOffset ZoneId)
+           (java.time.temporal ChronoUnit)
            (java.util LinkedList TreeMap)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo Schema)
            (org.apache.arrow.vector.ipc ArrowFileWriter)
+           (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
            (xtdb ICursor)
-           (xtdb.api IXtdb TransactionKey)
-           xtdb.api.log.Logs
+           (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
-           xtdb.indexer.IIndexer
            xtdb.indexer.live_index.ILiveTable
            xtdb.util.RowCounter
            (xtdb.vector IVectorReader)))
@@ -129,6 +127,17 @@
 
   (^TransactionKey [tx node timeout]
    (idx/await-tx tx node timeout)))
+
+(defn ->instants
+  ([u] (->instants u 1))
+  ([u ^long len]
+   (letfn [(to-seq [^ChronoUnit unit]
+             (->> (iterate #(.plus ^YearMonth % len unit) (YearMonth/of 2020 1))
+                  (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC)))))]
+     (case u
+       :day (iterate #(.plus ^Instant % (Period/ofDays len)) (.toInstant #inst "2020-01-01"))
+       :month (to-seq ChronoUnit/MONTHS)
+       :year (to-seq ChronoUnit/YEARS)))))
 
 (defn ->mock-clock
   (^java.time.InstantSource []
