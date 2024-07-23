@@ -1,9 +1,12 @@
 (ns xtdb.operator.scan-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
+            [xtdb.expression :as expr]
             [xtdb.node :as xtn]
-            xtdb.query
             [xtdb.operator.scan :as scan]
+            xtdb.query
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -676,3 +679,58 @@
                             [:put-docs :docs {:xt/id id}]))
 
   (t/is (= 2000 (count (xt/q tu/*node* '(from :docs [{:xt/id id}]))))))
+
+(deftest test-recency-filtering
+  (tu/with-tmp-dirs #{node-dir}
+    (binding [c/*page-size* 1
+              c/*l1-file-size-rows* 256
+              c/*ignore-signal-block?* true]
+      (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]
+                                        :storage [:local {:path (io/file (.toFile node-dir) "objects")}]
+                                        :indexer {:rows-per-chunk 1}})]
+        ;; 2020 - 2025
+        (let [tx-key (last (for [i (range 6)]
+                             (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :col i}]])))]
+
+
+          (tu/finish-chunk! node)
+          ;; compaction happens in 2026
+          (c/compact-all! node)
+
+          (let [query-opts {:node node
+                            :basis {:at-tx tx-key
+                                    :current-time (:system-time tx-key)}}]
+
+            ;; no filter, we should still get the latest entry (2025)
+            (t/is (= [{:xt/id 1,
+                       :xt/valid-from #xt.time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     (tu/query-ra '[:scan {:table docs} [xt$id xt$valid_from]] query-opts)))
+
+            ;; one day earlier we still get the 2024 entry
+            (t/is (= [{:xt/id 1,
+                       :xt/valid-from #xt.time/zoned-date-time "2024-01-01T00:00Z[UTC]",
+                       :xt/valid-to #xt.time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     (tu/query-ra '[:scan {:table docs} [xt$id xt$valid_from xt$valid_to]]
+                                  (update-in query-opts [:basis :current-time] (constantly #xt.time/instant "2024-12-30T00:00:00Z")))))
+
+
+            ;; two entries 2024 and 2025
+            (t/is (= [{:xt/id 1,
+                       :xt/valid-from #xt.time/zoned-date-time "2025-01-01T00:00Z[UTC]"}
+                      {:xt/id 1,
+                       :xt/valid-from #xt.time/zoned-date-time "2024-01-01T00:00Z[UTC]",
+                       :xt/valid-to #xt.time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     (tu/query-ra '[:scan {:table docs :for-valid-time [:between #inst "2024" #inst "2026"]}
+                                    [xt$id xt$valid_from xt$valid_to]]
+                                  query-opts)))
+
+
+            ;; newest entry, basis at 2025
+            (t/is (= [{:xt/id 1,
+                       :xt/valid-from #xt.time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     (tu/query-ra '[:scan {:table docs :for-valid-time [:between #inst "2026" nil]}
+                                    [xt$id xt$valid_from xt$valid_to]]
+                                  query-opts)))
+            ;; everything
+            (t/is (= [{:xt/id 1} {:xt/id 1} {:xt/id 1} {:xt/id 1} {:xt/id 1} {:xt/id 1}]
+                     (tu/query-ra '[:scan {:table docs :for-valid-time :all-time} [xt$id]] query-opts)))))))))

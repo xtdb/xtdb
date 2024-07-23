@@ -5,9 +5,12 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.trie.ArrowHashTrie.IidBranch
 import xtdb.trie.ArrowHashTrie.RecencyBranch
 import xtdb.trie.HashTrie.Node
+import xtdb.util.TemporalBounds
+import java.time.Instant
 import java.util.*
 import java.util.function.Predicate
 import java.util.stream.Stream
+import kotlin.math.min
 
 internal typealias RecencyArray = LongArray
 
@@ -82,9 +85,10 @@ data class MergePlanNode(val segment: ISegment, val node: Node<*>)
 class MergePlanTask(val mpNodes: List<MergePlanNode>, val path: ByteArray)
 
 @Suppress("UNUSED_EXPRESSION")
-fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?): List<MergePlanTask> {
+fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
+    val minRecency = min(temporalBounds.validTo.lower, temporalBounds.systemTo.lower)
 
     val initialMpNodes = segments.mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode(seg, it) } }
     if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
@@ -97,10 +101,10 @@ fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?): List
             mpNodes.any { it.node is RecencyBranch } -> {
                 val newMpNodes = mutableListOf<MergePlanNode>()
                 for (mpNode in mergePlanTask.mpNodes) {
-                    // TODO filter by recencies #3166
                     val recencies = mpNode.node.recencies
                     if (recencies != null) {
-                        for (i in recencies.indices) {
+                        for(i in recencies.indices.reversed()) {
+                            if (recencies[i] < minRecency) break
                             newMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
                         }
                     } else {

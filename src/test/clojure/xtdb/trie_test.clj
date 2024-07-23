@@ -29,39 +29,111 @@
     (t/is (= [0 nil 22 46 32] (parse (trie/->log-l0-l1-trie-key 0 22 46 32))))
     (t/is (= [2 [0 0 1 3] nil 120 nil] (parse (trie/->log-l2+-trie-key 2 (byte-array [0 0 1 3]) 120))))))
 
-(deftest test-merge-plan-with-nil-nodes-2700
-  (letfn [(->arrow-hash-trie [^VectorSchemaRoot meta-root]
-            (ArrowHashTrie. (.getVector meta-root "nodes")))]
-    (with-open [al (RootAllocator.)
-                t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
-                                                          {Long/MAX_VALUE 3, (time/instant->micros (time/->instant #inst "2023-01-01")) 4}])
-                log-root (tu/open-arrow-hash-trie-root al 0)
-                log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
+(defn- ->arrow-hash-trie [^VectorSchemaRoot meta-root]
+  (ArrowHashTrie. (.getVector meta-root "nodes")))
 
-      (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
-                {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
-                {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]}
-                {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
-                {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
-                {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
-                {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
-               (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
-                                                 (assoc :seg :t1))
-                                             (-> (trie/->Segment (->arrow-hash-trie log-root))
-                                                 (assoc :seg :log))
-                                             (-> (trie/->Segment (->arrow-hash-trie log2-root))
-                                                 (assoc :seg :log2))]
-                                            nil)
-                    (map (fn [^MergePlanTask merge-plan-node]
-                           (let [path (.getPath merge-plan-node)
-                                 mp-nodes (.getMpNodes merge-plan-node)]
-                             {:path (vec path)
-                              :pages (mapv (fn [^MergePlanNode merge-plan-node]
-                                             (let [segment (.getSegment merge-plan-node)
-                                                   ^ArrowHashTrie$Leaf node (.getNode merge-plan-node)]
-                                               {:seg (:seg segment), :page-idx (.getDataPageIndex node)}))
-                                           mp-nodes)})))
-                    (sort-by :path)))))))
+(defn- merge-plan-nodes->path+pages [mp-nodes]
+  (->> mp-nodes
+       (map (fn [^MergePlanTask merge-plan-node]
+              (let [path (.getPath merge-plan-node)
+                    mp-nodes (.getMpNodes merge-plan-node)]
+                {:path (vec path)
+                 :pages (mapv (fn [^MergePlanNode merge-plan-node]
+                                (let [segment (.getSegment merge-plan-node)
+                                      ^ArrowHashTrie$Leaf node (.getNode merge-plan-node)]
+                                  {:seg (:seg segment), :page-idx (.getDataPageIndex node)}))
+                              mp-nodes)})))
+       (sort-by :path)))
+
+(deftest test-merge-plan-with-nil-nodes-2700
+  (with-open [al (RootAllocator.)
+              t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
+                                                        {Long/MAX_VALUE 3, (time/instant->micros (time/->instant #inst "2023-01-01")) 4}])
+              log-root (tu/open-arrow-hash-trie-root al 0)
+              log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
+
+    (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
+              {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
+              {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]}
+              {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
+              {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
+              {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
+              {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
+             (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
+                                               (assoc :seg :t1))
+                                           (-> (trie/->Segment (->arrow-hash-trie log-root))
+                                               (assoc :seg :log))
+                                           (-> (trie/->Segment (->arrow-hash-trie log2-root))
+                                               (assoc :seg :log2))]
+                                          nil
+                                          (TemporalBounds.))
+                  (merge-plan-nodes->path+pages))))))
+
+(deftest test-merge-plan-recency-filtering
+  (with-open [al (RootAllocator.)
+              t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]}
+                                                        {Long/MAX_VALUE 2}
+                                                        nil
+                                                        {(time/instant->micros (time/->instant #inst "2020-01-01")) 3
+                                                         Long/MAX_VALUE 4}])
+              t2-root (tu/open-arrow-hash-trie-root al [{(time/instant->micros (time/->instant #inst "2019-01-01")) 0
+                                                         (time/instant->micros (time/->instant #inst "2020-01-01")) 1
+                                                         Long/MAX_VALUE [nil 2 nil 3]}
+                                                        nil
+                                                        nil
+                                                        {(time/instant->micros (time/->instant #inst "2020-01-01")) 4
+                                                         Long/MAX_VALUE 5}])]
+    (t/testing "pages 3 of t1 and 0,1 and 4 of t2 should not make it to the output"
+      ;; setting up bounds for a current-time 2020-01-01
+      (let [temporal-bounds (TemporalBounds.)
+            current-time (time/instant->micros (time/->instant #inst "2020-01-01"))]
+        (.lte (.getSystemFrom temporal-bounds) current-time)
+        (.gt (.getSystemTo temporal-bounds) current-time)
+        (.lte (.getValidFrom temporal-bounds) current-time)
+        (.gt (.getValidTo temporal-bounds) current-time)
+
+
+        (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
+                  {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 5}]}
+                  {:path [0 1],
+                   :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
+                  {:path [0 3],
+                   :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
+                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
+                                                   (assoc :seg :t1))
+                                               (-> (trie/->Segment (->arrow-hash-trie t2-root))
+                                                   (assoc :seg :t2))]
+                                              nil
+                                              temporal-bounds)
+                      (merge-plan-nodes->path+pages))))))
+
+    (t/testing "going one cronon below should bring in pages 3 of t1 and pages 1 and 4 of t2"
+      (let [temporal-bounds (TemporalBounds.)
+            current-time (- (time/instant->micros (time/->instant #inst "2020-01-01")) 1) ]
+        (.lte (.getSystemFrom temporal-bounds) current-time)
+        (.gt (.getSystemTo temporal-bounds) current-time)
+        (.lte (.getValidFrom temporal-bounds) current-time)
+        (.gt (.getValidTo temporal-bounds) current-time)
+
+
+        (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
+                  {:path [3],
+                   :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :t2, :page-idx 5} {:seg :t2, :page-idx 4}]}
+                  {:path [0 0],
+                   :pages [{:seg :t2, :page-idx 1}]}
+                  {:path [0 1],
+                   :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2} {:seg :t2, :page-idx 1}]}
+                  {:path [0 2],
+                   :pages [{:seg :t2, :page-idx 1}]}
+                  {:path [0 3],
+                   :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3} {:seg :t2, :page-idx 1}]}]
+                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
+                                                   (assoc :seg :t1))
+                                               (-> (trie/->Segment (->arrow-hash-trie t2-root))
+                                                   (assoc :seg :t2))]
+                                              nil
+                                              temporal-bounds)
+                      (merge-plan-nodes->path+pages))))))))
 
 (defn ->trie-file-name
   " L0/L1 keys are submitted as [level first-row next-row rows]; L2+ as [level part-vec next-row]"
@@ -254,7 +326,8 @@
                                      {:seg :t2, :page-idx 0}]}]
                            (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment arrow-hash-trie1) (assoc :seg :t1))
                                                          (-> (trie/->Segment arrow-hash-trie2) (assoc :seg :t2))]
-                                                        (scan/->path-pred iid-arrow-buf))
+                                                        (scan/->path-pred iid-arrow-buf)
+                                                        (TemporalBounds.))
                                 (mapv (fn [^MergePlanTask merge-plan-node]
                                         (let [path (.getPath merge-plan-node)
                                               mp-nodes (.getMpNodes merge-plan-node)]

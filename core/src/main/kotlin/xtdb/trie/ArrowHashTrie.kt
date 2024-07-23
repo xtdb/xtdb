@@ -52,7 +52,6 @@ class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
 
         override val recencies: RecencyArray
             get() {
-                val startIdx = startIdx
                 return RecencyArray(count) { idx ->
                     recencyVec.getLong(idx + startIdx)
                 }
