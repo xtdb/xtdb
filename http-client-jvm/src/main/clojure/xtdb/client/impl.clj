@@ -92,7 +92,7 @@
     (xtp/submit-tx client tx-ops opts))
 
   (executeTx [client opts tx-ops]
-    (xtp/submit-tx client tx-ops opts))
+    (xtp/execute-tx client tx-ops opts))
 
   xtp/PNode
   (submit-tx [client tx-ops opts]
