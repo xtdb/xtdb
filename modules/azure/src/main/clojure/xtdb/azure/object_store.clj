@@ -59,16 +59,17 @@
 
 (def ^Base64$Encoder base-64-encoder (Base64/getEncoder))
 
-(defn block-number->base64-block-id [block-number]
-  (.encodeToString base-64-encoder (.getBytes (str block-number))))
+
+
+(defn random-block-id []
+  (.encodeToString base-64-encoder (.getBytes (str (random-uuid)))))
 
 (defrecord MultipartUpload [^BlockBlobClient block-blob-client on-complete ^List !staged-block-ids]
   IMultipartUpload
   (uploadPart [_  buf]
     (CompletableFuture/completedFuture
-     (let [block-number (inc (count !staged-block-ids))
-           block-id (block-number->base64-block-id block-number)
-           binary-data (BinaryData/fromByteBuffer buf)]
+     (let [block-id (random-block-id)
+           binary-data (BinaryData/fromByteBuffer buf)] 
        (.stageBlock block-blob-client block-id binary-data)
        (.add !staged-block-ids block-id))))
 

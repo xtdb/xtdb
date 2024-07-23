@@ -251,3 +251,27 @@
         (t/is (instance? ObjectStore object-store))
         ;; Ensure some files are written
         (t/is (seq (.listAllObjects object-store)))))))
+
+(t/deftest ^:azure multipart-uploads-with-more-parts-work-correctly
+  (with-open [os (object-store (random-uuid))]
+    (let [blob-container-client (:blob-container-client os)
+          prefix (:prefix os)
+          multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-larger-multi-put"))
+          part-size 500]
+
+      (dotimes [_ 20]
+        (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+          @(.uploadPart multipart-upload (.flip file-part))))
+      
+      (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
+        @(.complete multipart-upload)
+        (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
+          (t/is (= #{} uncomitted-blobs))))
+
+      (t/testing "Multipart upload works correctly - file present and contents correct"
+        (t/is (= (mapv util/->path ["test-larger-multi-put"])
+                 (.listAllObjects ^ObjectStore os)))
+
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-larger-multi-put"))]
+          (t/testing "capacity should be equal to total of 20 parts"
+            (t/is (= (* 20 part-size) (.capacity uploaded-buffer)))))))))
