@@ -400,7 +400,7 @@
                        :in-memory :xtdb.log/memory-log
                        :local :xtdb.log/local-directory-log
                        :kafka :xtdb.kafka/log
-                       :azure-event-hub :xtdb.azure/event-hub-log)
+                       :azure :xtdb.azure/event-hub-log)
                      opts))
 
 (defmethod ig/init-key :xtdb/log [_ ^Log$Factory factory]

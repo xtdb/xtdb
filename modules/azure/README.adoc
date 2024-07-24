@@ -122,11 +122,11 @@ The Azure Resource Manager stack will create the following resources within the 
 
 We can swap out the implementation of the log with one based on Azure Eventhubs. To do so, we can add `:azure-event-hub` and it's configuration map, within the `:log` config for our node:
 ```clojure
-{:log [:azure-event-hub {:namespace "eventhub-namespace"
-                         :resource-group-name "resource-group-name"
-                         :event-hub-name "example-event-hub"
-                         :create-event-hub? true
-                         :retention-period-in-days 7}]}
+{:log [:azure {:namespace "eventhub-namespace"
+               :resource-group-name "resource-group-name"
+               :event-hub-name "example-event-hub"
+               :create-event-hub? true
+               :retention-period-in-days 7}]}
 ```
 
 === Parameters

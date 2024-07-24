@@ -6,6 +6,7 @@ import io.mockk.unmockkObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import xtdb.api.log.AzureEventHub
 import xtdb.api.log.Kafka
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
@@ -18,6 +19,7 @@ import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.aws.CloudWatchMetrics
 import xtdb.aws.S3.s3
 import java.nio.file.Paths
+import java.time.Duration
 
 class YamlSerdeTest {
     @Test
@@ -79,6 +81,24 @@ class YamlSerdeTest {
             nodeConfig(kafkaConfig).txLog
         )
     }
+
+     @Test
+     fun testEventHubTxLog() {
+         val eventHubConfig= """
+         txLog: !Azure
+             namespace: xtdb-namespace
+             eventHubName: xtdb-topic
+             maxWaitTime: PT5S
+             pollSleepDuration: PT1S
+         """.trimIndent()
+
+         assertEquals(
+             AzureEventHub.Factory(namespace = "xtdb-namespace", eventHubName = "xtdb-topic", maxWaitTime = Duration.ofSeconds(5), pollSleepDuration = Duration.ofSeconds(1)),
+             nodeConfig(eventHubConfig).txLog
+         )
+     }
+
+
 
     @Test
     fun testStorageDecoding() {

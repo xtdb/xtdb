@@ -1,9 +1,13 @@
-@file:UseSerializers(DurationSerde::class)
+@file:UseSerializers(StringWithEnvVarSerde::class, PathWithEnvVarSerde::class, DurationSerde::class)
+
 package xtdb.api.log
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
+import xtdb.api.PathWithEnvVarSerde
+import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.Xtdb
 import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
@@ -14,6 +18,7 @@ object AzureEventHub {
     fun azureEventHub(namespace: String, eventHubName: String) = Factory(namespace, eventHubName)
 
     @Serializable
+    @SerialName("!Azure")
     data class Factory(
         val namespace: String,
         val eventHubName: String,
