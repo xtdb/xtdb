@@ -200,6 +200,38 @@
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 
+(t/deftest ^:azure multipart-multi-object-store-list-test
+  (let [prefix (random-uuid)]
+    (with-open [os-1 (object-store prefix)
+                os-2 (object-store prefix)]
+      (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os-1 (util/->path "multi-put-list-test"))
+            wait-time-ms 5000]
+      ;; Doing a multipart upload against the first object store
+        @(.uploadPart multipart-upload (.flip ^ByteBuffer (os-test/generate-random-byte-buffer 500)))
+        @(.uploadPart multipart-upload (.flip ^ByteBuffer (os-test/generate-random-byte-buffer 500)))
+        @(.complete multipart-upload)
+
+      ;; Wait to let the service bus catch up
+        (Thread/sleep wait-time-ms)
+
+        (t/testing "File should be available on object store that submitted it"
+          (t/is (= (mapv util/->path ["multi-put-list-test"])
+                   (.listAllObjects ^ObjectStore os-1))))
+
+        (t/testing "File should be available on the other object store (ie, via service bus subscription)"
+          (t/is (= (mapv util/->path ["multi-put-list-test"])
+                   (.listAllObjects ^ObjectStore os-2))))
+
+        (t/testing "Deleting file should make it unavailable on both object stores"
+        ;; Delete object from store
+          @(.deleteObject ^ObjectStore os-1 (util/->path "multi-put-list-test"))
+          
+        ;; Wait to let the service bus catch up
+          (Thread/sleep wait-time-ms)
+          
+          (t/is (= [] (.listAllObjects ^ObjectStore os-1)))
+          (t/is (= [] (.listAllObjects ^ObjectStore os-2))))))))
+
 (t/deftest ^:azure node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node

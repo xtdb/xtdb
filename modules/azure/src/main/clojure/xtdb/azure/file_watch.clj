@@ -63,14 +63,15 @@
                                                                            (accept [_ msg]
                                                                              (let [parsed-msg (json/read-str (.. ^ServiceBusReceivedMessageContext msg getMessage getBody toString) :key-fn keyword)
                                                                                    msg-data (:data parsed-msg)
-                                                                                   event-type (get {"PutBlob" :create "DeleteBlob" :delete} (:api msg-data))
+                                                                                   event-type (get {"PutBlob" :create "PutBlockList" :create-multipart "DeleteBlob" :delete} (:api msg-data))
                                                                                    file-url (:url msg-data)
                                                                                    file (when (string/starts-with? file-url base-file-url)
                                                                                           (util/->path (subs file-url (count base-file-url))))] 
-                                                                               (log/debug (format "Message received, performing %s on file %s" event-type file))
+                                                                               (log/debugf "Message received, performing %s on file %s" event-type file)
                                                                                (when (and event-type file)
                                                                                  (cond
                                                                                    (= event-type :create) (.add file-name-cache file)
+                                                                                   (= event-type :create-multipart) (.add file-name-cache file)
                                                                                    (= event-type :delete) (.remove file-name-cache file)))))))
                                                         (.processError (reify Consumer
                                                                          (accept [_ msg]
