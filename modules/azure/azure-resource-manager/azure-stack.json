@@ -57,6 +57,13 @@
         "description": "Provide a name for the service bus topic."
       }
     },
+    "serviceBusMessageRetentionPeriod": {
+      "type": "string",
+      "defaultValue": "PT5M",
+      "metadata": {
+        "description": "The duration for which messages are retained in the topic."
+      }
+    },
     "customRoleName": {
       "type": "string",
       "defaultValue": "xtdb-role",
@@ -130,7 +137,8 @@
             "[concat('Microsoft.ServiceBus/namespaces/', parameters('serviceBusNamespaceName'))]"
           ],
           "properties": {
-            "path": "[parameters('serviceBusTopicName')]"
+            "path": "[parameters('serviceBusTopicName')]",
+            "defaultMessageTimeToLive": "[parameters('serviceBusMessageRetentionPeriod')]"
           }
         }
       ]

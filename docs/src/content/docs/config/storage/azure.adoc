@@ -33,7 +33,7 @@ To use Azure Blob Storage as the object store, the following infrastructure is r
 .. A **Storage Account Container** within the storage account.
 . An **EventGrid System Topic**, subscribed to blob creation/deletion events on the container.
 . A `standard` tier **Service Bus Namespace**
-.. A **Service Bus Topic** within the namespace.
+.. A **Service Bus Topic** within the namespace (this should have a low time to live for messages).
 . A Custom Role Definition, granting XTDB permission to:
 .. Use the created storage container (Get, Put, Delete and List)
 .. Read messages sent to **EventGrid**

@@ -101,6 +101,7 @@ The paramaterized stack expects the following to be provided:
 * The name of the EventGrid system topic we use for container events -- Defaults to `xtdb-storage-account-system-topic`
 * The name to use for the Service Bus namespace -- Defaults to `xtdb-storage-account-eventbus`
 * The name to use for the Service Bus topic created in the namespace above -- Defaults to `xtdb-storage-bus-topic`
+* The (ISO 8601) duration of time to retain messages in the Service Bus topic -- Defaults to `PT5M` (5 minutes)
 * The name of the custom XTDB role to create with permissions for the created resources -- Defaults to `xtdb-role`
 
 ==== Created Resources
