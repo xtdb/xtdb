@@ -11,12 +11,14 @@
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import (com.azure.storage.blob BlobContainerClient)
+  (:import (com.azure.identity DefaultAzureCredentialBuilder)
+           (com.azure.storage.blob BlobContainerClient)
            (com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions)
            (java.io Closeable)
            (java.nio ByteBuffer)
            (java.nio.file Path)
            (java.time Duration)
+           (xtdb.api.log Log)
            (xtdb.api.storage AzureBlobStorage ObjectStore)
            (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
@@ -108,35 +110,50 @@
       (t/is (= (mapv util/->path ["alan" "alice"])
                (.listAllObjects ^ObjectStore os-2))))))
 
+
+
 ;; Currently not testing this regularly:
 ;; Need to setup the event hub namespace `xtdb-test-eventhub` and configure to run.
 ;; Ensure your credentials have eventhub permissions for the eventhub namespace 
 ;; As this costs a set price per month, we test it occasionally when changes are made to it
 ;; We do not currently have a set of log tests, so we just submit + query a document
-;; TODO: Investigate this, currently failing to submit
-;; (t/deftest ^:azure test-eventhub-log
-;;   (let [event-hub-name (str "xtdb.azure-test-hub." (UUID/randomUUID))]
-;;     (t/testing "creating a new eventhub with create-event-hub, sending a message"
-;;       (with-open [node (xtn/start-node {:log [:azure-event-hub {:namespace eventhub-namespace
-;;                                                                 :resource-group-name resource-group-name
-;;                                                                 :event-hub-name event-hub-name
-;;                                                                 :create-event-hub? true
-;;                                                                 :max-wait-time "PT1S"
-;;                                                                 :poll-sleep-duration "PT1S"
-;;                                                                 :retention-period-in-days 1}]})]
-;;         (t/testing "EventHubLog successfully created"
-;;           (let [log (get-in node [:system :xtdb/log])]
-;;             (t/is (instance? Log log))))
+(t/deftest ^:azure test-eventhub-log
+  (util/with-tmp-dirs #{local-disk-cache}
+    (let [event-hub-name (str "xtdb.azure-test-hub." (random-uuid))]
+      (try
+        (t/testing "creating a new eventhub with create-event-hub, sending a message"
+          (with-open [node (xtn/start-node {:log [:azure {:namespace eventhub-namespace
+                                                          :resource-group-name resource-group-name
+                                                          :event-hub-name event-hub-name
+                                                          :create-event-hub? true
+                                                          :max-wait-time "PT1S"
+                                                          :poll-sleep-duration "PT1S"
+                                                          :retention-period-in-days 1}]
+                                            :storage [:local {:path local-disk-cache}]})]
+            (t/testing "EventHubLog successfully created"
+              (let [log (get-in node [:system :xtdb/log])]
+                (t/is (instance? Log log))))
+            
+            (t/is (xt/execute-tx node [[:put-docs :foo {:xt/id "foo"}]]))
+            (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}]))))))
         
-;;         (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
-;;         (t/is (= [{:id :foo}] (xt/q node '(from :xt_docs [{:xt/id id}]))))))
-    
-;;     (t/testing "connecting to previously created event-hub"
-;;       (with-open [node (xtn/start-node {:log [:azure-event-hub {:namespace eventhub-namespace
-;;                                                                 :event-hub-name event-hub-name
-;;                                                                 :max-wait-time "PT1S"
-;;                                                                 :poll-sleep-duration "PT1S"}]})]
-;;         (t/is (= [{:id :foo}] (xt/q node '(from :xt_docs [{:xt/id id}]))))))))
+        ;; Wait/allow connections to clear
+        (Thread/sleep 10000)
+        
+        (t/testing "connecting to previously created event-hub"
+          (with-open [node (xtn/start-node {:log [:azure {:namespace eventhub-namespace
+                                                          :event-hub-name "xtdb.azure-test-hub.29ebdc43-6d89-40f2-bac0-e22a131934ee"
+                                                          :max-wait-time "PT1S"
+                                                          :poll-sleep-duration "PT1S"}]
+                                            :storage [:local {:path local-disk-cache}]})]
+            ;; Allow the log to catch up
+            (Thread/sleep 5000)
+            (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}]))))))
+        
+        (finally
+          ;; Clearup eventhub 
+          (let [credential (.build (DefaultAzureCredentialBuilder.))]
+            (azure/delete-event-hub-if-exists credential resource-group-name eventhub-namespace event-hub-name)))))))
 
 (defn list-filenames [^BlobContainerClient blob-container-client ^Path prefix ^ListBlobsOptions list-opts]
   (->> (.listBlobs blob-container-client list-opts nil)

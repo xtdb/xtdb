@@ -95,6 +95,17 @@
         (log/error "Error when creating event hub - " (.getMessage e))
         (throw e)))))
 
+;; Used within tests
+(defn delete-event-hub-if-exists [^TokenCredential azure-credential resource-group-name namespace event-hub-name]
+  (let [event-hub-manager (EventHubsManager/authenticate azure-credential (AzureProfile. (AzureEnvironment/AZURE)))
+        ^EventHubs event-hubs (.eventHubs event-hub-manager)
+        event-hub-exists? (some
+                           #(= event-hub-name (.name ^EventHub %))
+                           (.listByNamespace event-hubs resource-group-name namespace))]
+    (when event-hub-exists?
+      (-> event-hubs
+          (.deleteByName resource-group-name namespace event-hub-name)))))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-log [^AzureEventHub$Factory factory]
   (let [namespace (.getNamespace factory)

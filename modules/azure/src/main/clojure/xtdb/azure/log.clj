@@ -49,7 +49,7 @@
                       (->consumer (fn [e]
                                     (.completeExceptionally fut e)))
                       (fn [] (let [{:keys [offset timestamp]} (get-partition-properties consumer)]
-                               (.complete fut (Log$Record. (serde/->TxKey offset timestamp) record))))))
+                               (.complete fut (serde/->TxKey offset timestamp))))))
       fut))
 
   (readRecords [_ after-tx-id limit]
