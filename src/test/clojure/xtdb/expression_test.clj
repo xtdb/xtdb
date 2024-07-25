@@ -1,5 +1,6 @@
 (ns xtdb.expression-test
-  (:require [clojure.string :as str]
+  (:require [clojure.tools.logging :as log]
+            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.generators :as tcg]
@@ -20,6 +21,12 @@
            xtdb.vector.IVectorReader))
 
 (t/use-fixtures :each tu/with-allocator)
+
+(defmethod expr/codegen-call [:dbg :any] [{:keys [tag], [arg-type] :arg-types}]
+  {:return-type arg-type
+   :->call-code (fn [[arg]]
+                  `(doto ~arg
+                     (->> pr-str (log/debugf "%s: %s" ~(if tag (format " (%s)" tag) "")))))})
 
 (defn ->data-vecs []
   [(tu/open-vec "a" (map double (range 1000)))
