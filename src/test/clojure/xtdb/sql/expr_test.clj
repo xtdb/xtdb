@@ -765,6 +765,22 @@
   (t/is (= [{:interval #xt/interval-mdn ["P3M" "PT0S"]}]
            (xt/q tu/*node* "SELECT DATE_TRUNC(MONTH, INTERVAL '3' MONTH + INTERVAL 'P4D' + INTERVAL '2' SECOND) as \"interval\""))))
 
+(t/deftest test-date-bin
+  (t/is (= [#:xt{:column-1 #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                 :column-2 #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                 :column-3 #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                 :column-4 #xt.time/zoned-date-time "2020-01-01T12:30Z[UTC]",
+                 :column-5 #xt.time/zoned-date-time "2020-01-01T12:30Z[UTC]",
+                 :column-6 #xt.time/zoned-date-time "2019-12-31T00:00Z[UTC]"}]
+           (xt/q tu/*node* "
+SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
+       DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T12:34:00Z'),
+       DATE_BIN(INTERVAL 'PT15M', TIMESTAMP '2020-01-01T00:00:00Z'),
+       DATE_BIN(INTERVAL 'PT15M', TIMESTAMP '2020-01-01T12:30:00Z'),
+       DATE_BIN(INTERVAL 'PT15M', TIMESTAMP '2020-01-01T12:34:00Z'),
+       DATE_BIN(INTERVAL 'P3D', TIMESTAMP '2020-01-01T12:34:00Z')
+"))))
+
 (t/deftest test-extract-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are

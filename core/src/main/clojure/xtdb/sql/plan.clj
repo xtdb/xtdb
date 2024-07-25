@@ -965,6 +965,8 @@
   (visitTimeLiteral [this ctx] (parse-time-literal (.accept (.characterString ctx) this) env))
   (visitTimestampLiteral [this ctx] (parse-timestamp-literal (.accept (.characterString ctx) this) env))
 
+  (visitIntervalLiteral0 [this ctx] (.accept (.intervalLiteral ctx) this))
+
   (visitIntervalLiteral [this ctx]
     (let [csl (some-> (.characterString ctx) (.accept this))
           iq-map (some-> (.intervalQualifier ctx) (iq-context->iq-map))
@@ -1362,6 +1364,14 @@
       (if dt-tz
         (list 'date_trunc dtp dts dt-tz)
         (list 'date_trunc dtp dts))))
+
+  (visitDateBinFunction [this ctx]
+    (xt/template
+     (date-bin ~(-> (.intervalLiteral ctx) (.accept this))
+               ~(-> (.expr (.dateBinSource ctx)) (.accept this))
+               ~@(some-> (.dateBinOrigin ctx)
+                         (.accept this)
+                         vector))))
 
   (visitAgeFunction [this ctx]
     (let [ve1 (-> (.expr ctx 0) (.accept this))

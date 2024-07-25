@@ -8,7 +8,6 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
-           java.time.temporal.ChronoUnit
            (org.apache.arrow.vector PeriodDuration)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -1644,3 +1643,19 @@
          '(immediately-lags? x y)
          {:x {:xt$from #inst "2021", :xt$to #inst "2024"}
           :y {:xt$from #inst "2021", :xt$to #inst "2025"}}))))
+
+(deftest test-date-bin
+  (t/is (= (time/->zdt #inst "2020")
+           (et/project1 '(date-bin i src)
+                        {:i #xt/interval-mdn ["P0D" "PT15M"]
+                         :src #inst "2020"})))
+
+  (t/is (= (time/->zdt #inst "2020")
+           (et/project1 '(date-bin i src)
+                        {:i #xt/interval-mdn ["P0D" "PT15M"]
+                         :src #inst "2020-01-01T00:10:10Z"})))
+
+  (t/is (= (time/->zdt #inst "2020-01-01T00:15Z")
+           (et/project1 '(date-bin i src)
+                        {:i #xt/interval-mdn ["P0D" "PT15M"]
+                         :src #inst "2020-01-01T00:20:10Z"}))))

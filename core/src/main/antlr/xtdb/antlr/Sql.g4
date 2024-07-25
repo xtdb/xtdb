@@ -70,6 +70,8 @@ sessionCharacteristic : 'TRANSACTION' transactionMode (',' transactionMode)* ;
 
 /// §5.3 Literals
 
+intervalLiteral : 'INTERVAL' (PLUS | MINUS)? characterString intervalQualifier? ;
+
 literal
     : ('+' | '-')? UNSIGNED_FLOAT #FloatLiteral
     | ('+' | '-')? UNSIGNED_INTEGER #IntegerLiteral
@@ -78,7 +80,7 @@ literal
     | 'DATE' characterString #DateLiteral
     | 'TIME' characterString #TimeLiteral
     | 'TIMESTAMP' characterString #TimestampLiteral
-    | 'INTERVAL' (PLUS | MINUS)? characterString intervalQualifier? #IntervalLiteral
+    | intervalLiteral #IntervalLiteral0
     | 'DURATION' characterString #DurationLiteral
     | 'UUID' characterString #UUIDLiteral
     | (TRUE | FALSE) #BooleanLiteral
@@ -309,6 +311,7 @@ exprPrimary
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
     | 'LOCALTIME' ('(' precision ')')? # LocalTimeFunction
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
+    | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource (',' dateBinOrigin)? ')' # DateBinFunction
 
     // interval value functions
     | 'AGE' '(' expr ',' expr ')' # AgeFunction
@@ -439,6 +442,9 @@ dateTruncPrecision
 
 dateTruncSource : expr ;
 dateTruncTimeZone : characterString ;
+
+dateBinSource : expr ;
+dateBinOrigin : expr ;
 
 /// §6.34 <interval value function>
 

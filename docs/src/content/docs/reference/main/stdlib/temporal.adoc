@@ -237,6 +237,12 @@ a| Returns true iff `p1` starts after `p2` ends
 | `(date-trunc "unit" interval)` | `DATE_TRUNC(unit, interval)`
 | Truncates the given interval to the given time-unit, which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or `MICROSECOND`
 
+| | `DATE_BIN(stride, timestamp [, origin])`
+a|
+Bins the given timestamp within the given 'stride' interval, optionally relative to the given origin (or '1970-01-01' if not supplied).
+
+e.g. `TIMESTAMP '2024-01-01T12:34:00Z'` with an `INTERVAL 'PT20M'` stride would yield `2024-01-01T12:20Z`.
+
 | `(extract "field" date-time)` | `EXTRACT(field FROM date_time)`
 | Extracts the given field from the date-time. Field must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE` or `SECOND`. Datetimes with timezones additionally support field values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE`.
 

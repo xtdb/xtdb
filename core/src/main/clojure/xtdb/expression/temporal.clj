@@ -3,7 +3,8 @@
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.time :as time]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.expression.macro :as macro])
   (:import (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
@@ -800,6 +801,13 @@
    :->call-code (fn [emitted-args]
                   `(quot ~@emitted-args))})
 
+(defmethod expr/codegen-call [:/ :duration :interval] [{[d-type _i-type] :arg-types, :as expr}]
+  (recall-with-cast expr d-type d-type))
+
+(defmethod expr/codegen-call [:/ :duration :duration] [{[[_ x-unit] [_ y-unit]] :arg-types}]
+  (with-arg-unit-conversion x-unit y-unit
+    (constantly :i64) #(do `(quot ~@%))))
+
 ;;;; Boolean operations
 
 (defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-tz] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
@@ -1248,20 +1256,20 @@
 (defn field->truncate-fn
   [field]
   (case field
-     "MILLENNIUM" `(DateTruncator/truncateYear 1000)
-     "CENTURY" `(DateTruncator/truncateYear 100)
-     "DECADE" `(DateTruncator/truncateYear 10)
-     "YEAR" `(DateTruncator/truncateYear)
-     "QUARTER" `(DateTruncator/truncateQuarter)
-     "MONTH" `(DateTruncator/truncateMonth)
-     "WEEK" `(DateTruncator/truncateWeek)
-     `(.truncatedTo ~(case field
-                       "DAY" `ChronoUnit/DAYS
-                       "HOUR" `ChronoUnit/HOURS
-                       "MINUTE" `ChronoUnit/MINUTES
-                       "SECOND" `ChronoUnit/SECONDS
-                       "MILLISECOND" `ChronoUnit/MILLIS
-                       "MICROSECOND" `ChronoUnit/MICROS))))
+    "MILLENNIUM" `(DateTruncator/truncateYear 1000)
+    "CENTURY" `(DateTruncator/truncateYear 100)
+    "DECADE" `(DateTruncator/truncateYear 10)
+    "YEAR" `(DateTruncator/truncateYear)
+    "QUARTER" `(DateTruncator/truncateQuarter)
+    "MONTH" `(DateTruncator/truncateMonth)
+    "WEEK" `(DateTruncator/truncateWeek)
+    `(.truncatedTo ~(case field
+                      "DAY" `ChronoUnit/DAYS
+                      "HOUR" `ChronoUnit/HOURS
+                      "MINUTE" `ChronoUnit/MINUTES
+                      "SECOND" `ChronoUnit/SECONDS
+                      "MILLISECOND" `ChronoUnit/MILLIS
+                      "MICROSECOND" `ChronoUnit/MICROS))))
 
 ;; 1. We pass in the arrow timestamp - essentially a Long with some units (ts-unit) and a timezone (tz)
 ;; 2. Convert the tz to a ZoneId
@@ -1669,3 +1677,18 @@
   ;; add aliases with `?` suffix
   (defmethod expr/codegen-call [(keyword (str (name pred-name) "?")) :struct :struct] [expr]
     (expr/codegen-call (assoc expr :f pred-name))))
+
+(defmethod macro/macroexpand1-call :date_bin [{:keys [args]}]
+  (let [[interval src origin] args
+        i-sym (gensym 'interval)
+        o-sym (gensym 'origin)]
+    {:op :let, :local i-sym, :expr interval
+     :body {:op :let, :local o-sym, :expr (or origin {:op :literal, :literal Instant/EPOCH})
+            :body {:op :call, :f :+
+                   :args [{:op :local, :local o-sym}
+                          {:op :call, :f :*
+                           :args [{:op :local, :local i-sym}
+                                  {:op :call, :f :/,
+                                   :args [{:op :call, :f :-
+                                           :args [src {:op :local, :local o-sym}]}
+                                          {:op :local, :local i-sym}]}]}]}}}))
