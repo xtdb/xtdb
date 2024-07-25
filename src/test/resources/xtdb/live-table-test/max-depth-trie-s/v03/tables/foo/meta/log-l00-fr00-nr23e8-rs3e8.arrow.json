@@ -221,58 +221,58 @@
           "name" : "columns",
           "count" : 1,
           "VALIDITY" : [1],
-          "OFFSET" : [0,2],
+          "OFFSET" : [0,4],
           "children" : [{
             "name" : "$data$",
-            "count" : 2,
-            "VALIDITY" : [1,1],
+            "count" : 4,
+            "VALIDITY" : [1,1,1,1],
             "children" : [{
               "name" : "col-name",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "OFFSET" : [0,14,20],
-              "DATA" : ["xt$system_from","xt$iid"]
+              "count" : 4,
+              "VALIDITY" : [1,1,1,1],
+              "OFFSET" : [0,14,27,38,44],
+              "DATA" : ["xt$system_from","xt$valid_from","xt$valid_to","xt$iid"]
             },{
               "name" : "root-col?",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "DATA" : [1,1]
+              "count" : 4,
+              "VALIDITY" : [1,1,1,1],
+              "DATA" : [1,1,1,1]
             },{
               "name" : "count",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "DATA" : ["1000","1000"]
+              "count" : 4,
+              "VALIDITY" : [1,1,1,1],
+              "DATA" : ["1000","1000","1000","1000"]
             },{
               "name" : "types",
-              "count" : 2,
-              "VALIDITY" : [1,1],
+              "count" : 4,
+              "VALIDITY" : [1,1,1,1],
               "children" : [{
                 "name" : "timestamp-tz-micro-utc",
-                "count" : 2,
-                "VALIDITY" : [1,0],
+                "count" : 4,
+                "VALIDITY" : [1,1,1,0],
                 "children" : [{
                   "name" : "min",
-                  "count" : 2,
-                  "VALIDITY" : [1,0],
-                  "DATA" : [946684800000000,0]
+                  "count" : 4,
+                  "VALIDITY" : [1,1,1,0],
+                  "DATA" : [946684800000000,0,0,0]
                 },{
                   "name" : "max",
-                  "count" : 2,
-                  "VALIDITY" : [1,0],
-                  "DATA" : [946684800000000,0]
+                  "count" : 4,
+                  "VALIDITY" : [1,1,1,0],
+                  "DATA" : [946684800000000,0,0,0]
                 }]
               },{
                 "name" : "fixed-size-binary",
-                "count" : 2,
-                "VALIDITY" : [0,1],
-                "DATA" : [0,1]
+                "count" : 4,
+                "VALIDITY" : [0,0,0,1],
+                "DATA" : [0,0,0,1]
               }]
             },{
               "name" : "bloom",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "OFFSET" : [0,38,68],
-              "DATA" : ["3a3000000300000002000000040000000f000000200000002200000024000000502e01bd9f9f","3a300000020000000000010008000000180000001c000000301322332923"]
+              "count" : 4,
+              "VALIDITY" : [1,1,1,1],
+              "OFFSET" : [0,38,76,114,144],
+              "DATA" : ["3a3000000300000002000000040000000f000000200000002200000024000000502e01bd9f9f","3a3000000300000000000000050000000a0000002000000022000000240000000000fc2af855","3a3000000300000000000000050000000a0000002000000022000000240000000000fc2af855","3a300000020000000000010008000000180000001c000000301322332923"]
             }]
           }]
         }]

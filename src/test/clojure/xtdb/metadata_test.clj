@@ -131,7 +131,7 @@
       (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
         (let [page-idx-pred (.build literal-selector table-metadata)]
 
-          (t/is (= #{"xt$iid" "xt$id" "xt$system_from"}
+          (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}
                    (.columnNames table-metadata)))
 
           (doseq [page-idx relevant-pages]
@@ -147,7 +147,7 @@
 
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
       (let [page-idx-pred (.build true-selector table-metadata)]
-        (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "boolean_or_int"}
+        (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "xt$valid_from" "xt$valid_to" "boolean_or_int"}
                  (.columnNames table-metadata)))
 
         (t/is (true? (.test page-idx-pred 0)))))))
@@ -169,5 +169,5 @@
 
                          (.resolve node-dir "objects/v03/tables/"))
 
-          (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "colours" "$data$"}
+          (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "xt$valid_from" "xt$valid_to" "colours" "$data$"}
                    (.columnNames table-metadata))))))))

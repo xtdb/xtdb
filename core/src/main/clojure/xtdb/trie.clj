@@ -146,6 +146,8 @@
             (.startStruct leaf-wtr)
 
             (.writeMetadata page-meta-wtr (into [(.readerForName leaf-rdr "xt$system_from")
+                                                 (.readerForName leaf-rdr "xt$valid_from")
+                                                 (.readerForName leaf-rdr "xt$valid_to")
                                                  (.readerForName leaf-rdr "xt$iid")]
                                                 (map #(.structKeyReader put-rdr %))
                                                 (.structKeys put-rdr)))
