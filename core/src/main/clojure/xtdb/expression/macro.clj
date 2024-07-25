@@ -1,11 +1,20 @@
 (ns xtdb.expression.macro
   (:require [xtdb.expression.walk :as walk]
-            [xtdb.error :as err]))
+            [xtdb.util :as util]))
+
+;; duplicated from xtdb.expression to avoid cyclic dependencies
+(def normalise-fn-name
+  (-> (fn [f]
+        (let [f (keyword (namespace f) (name f))]
+          (case f
+            (:- :/) f
+            (util/kw->normal-form-kw f))))
+      memoize))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti macroexpand1-call
   (fn [{:keys [f] :as call-expr}]
-    (keyword (name f)))
+    (normalise-fn-name f))
   :default ::default)
 
 (defmethod macroexpand1-call ::default [expr] expr)
@@ -132,7 +141,7 @@
             :args [{:op :call, :f :>=, :args [local-expr left]}
                    {:op :call, :f :<=, :args [local-expr right]}]}}))
 
-(defmethod macroexpand1-call :between-symmetric [{[x left right :as args] :args, :as expr}]
+(defmethod macroexpand1-call :between_symmetric [{[x left right :as args] :args, :as expr}]
   (assert (= 3 (count args)) (format "`between-symmetric` expects 3 args: '%s'" (pr-str expr)))
 
   (let [local (gensym 'between-symmetric)
