@@ -13,7 +13,7 @@
             [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.time :as time]
-            [xtdb.trie :as trie]
+            [xtdb.trie :as trie :refer [MergePlanPage]]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -231,10 +231,6 @@
 
 (defrecord LeafPointer [ev-ptr rel-idx])
 
-(defprotocol MergePlanPage
-  (load-page [mpg buffer-pool vsr-cache])
-  (test-metadata [msg]))
-
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks, ^IRelationWriter out-rel
                      col-names, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
@@ -253,7 +249,7 @@
                   calculate-polygon (bitemp/polygon-calculator temporal-bounds)
                   bitemp-consumer (->bitemporal-consumer out-rel col-names)
                   leaf-rdrs (for [leaf leaves
-                                  :let [^RelationReader data-rdr (load-page leaf buffer-pool vsr-cache)]]
+                                  :let [^RelationReader data-rdr (trie/load-page leaf buffer-pool vsr-cache)]]
                               (cond-> data-rdr
                                 iid-pred (.select (.select iid-pred allocator data-rdr params))))
                   [temporal-cols content-cols] ((juxt filter remove) temporal-column? col-names)
@@ -349,7 +345,7 @@
         (test [_ path]
           (zero? (HashTrie/compareToPath iid-ptr path)))))))
 
-(defrecord ArrowMergePlanPage [data-file-path ^IntPredicate page-idx-pred ^long page-idx]
+(defrecord ArrowMergePlanPage [data-file-path ^IntPredicate page-idx-pred ^long page-idx ^ITableMetadata table-metadata]
   MergePlanPage
   (load-page [_mpg buffer-pool vsr-cache]
     (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
@@ -359,29 +355,20 @@
         (vr/<-root vsr))))
 
   (test-metadata [_mpg]
-    (.test page-idx-pred page-idx)))
+    (.test page-idx-pred page-idx))
+
+  (temporal-bounds [_mpg] (.temporalBounds table-metadata (int page-idx))))
+
+(def ^:private non-constraint-bounds (TemporalBounds.))
 
 (defrecord LiveMergePlanPage [^RelationReader live-rel trie ^LiveHashTrie$Leaf leaf]
   MergePlanPage
   (load-page [_mpg _buffer-pool _vsr-cache]
     (.select live-rel (.mergeSort leaf trie)))
 
-  (test-metadata [_mpg] true))
+  (test-metadata [_mpg] true)
 
-(defn ->merge-task [mp-pages]
-  (let [leaves (ArrayList.)]
-    (loop [[mp-page & more-mp-pages] mp-pages
-           node-taken? false]
-      (if mp-page
-        (let [take-node? (test-metadata mp-page)]
-
-          (when (or take-node? node-taken?)
-            (.add leaves mp-page))
-
-          (recur more-mp-pages (or node-taken? take-node?)))
-
-        (when node-taken?
-          (vec leaves))))))
+  (temporal-bounds [_msg] non-constraint-bounds))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -449,7 +436,7 @@
                                                 :param-types (update-vals param-fields types/field->col-type)}]
                                (MapEntry/create col-name
                                                 (expr/->expression-selection-spec (expr/form->expr select-form input-types)
-                                                                                     input-types))))
+                                                                                  input-types))))
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
@@ -480,7 +467,6 @@
                              current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
                                                      (trie/current-trie-files))
                              temporal-bounds (->temporal-bounds params basis scan-opts)]
-
                          (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                            (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
                                                (let [segments (cond-> (mapv (fn [meta-file-path]
@@ -489,26 +475,29 @@
                                                                                 (into (trie/->Segment trie)
                                                                                       {:data-file-path (trie/->table-data-file-path table-path
                                                                                                                                     (:trie-key (trie/parse-trie-file-path meta-file-path)))
+                                                                                       :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                                (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                                  (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                                  page-idx-pred))
+                                                                                                              (.build metadata-pred table-metadata)
+                                                                                                              col-names)
                                                                                        :table-metadata table-metadata})))
                                                                             current-meta-files)
 
                                                                 live-table-wm (conj (trie/->Segment (.liveTrie live-table-wm))))]
                                                  (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf) temporal-bounds)
                                                       (into [] (keep (fn [^MergePlanTask mpt]
-                                                                       (when-let [leaves (->merge-task
+                                                                       (when-let [leaves (trie/->merge-task
                                                                                           (for [^MergePlanNode mpn (.getMpNodes mpt)
-                                                                                                :let [{:keys [data-file-path table-metadata]} (.getSegment mpn)
+                                                                                                :let [{:keys [data-file-path table-metadata page-idx-pred]} (.getSegment mpn)
                                                                                                       node (.getNode mpn)]]
                                                                                             (if data-file-path
                                                                                               (->ArrowMergePlanPage data-file-path
-                                                                                                                    (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                                              (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                                                                (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                                                page-idx-pred))
-                                                                                                                            (.build metadata-pred table-metadata)
-                                                                                                                            col-names)
-                                                                                                                    (.getDataPageIndex ^ArrowHashTrie$Leaf node))
-                                                                                              (->LiveMergePlanPage (.liveRelation live-table-wm) (.liveTrie live-table-wm) node))))]
+                                                                                                                    page-idx-pred
+                                                                                                                    (.getDataPageIndex ^ArrowHashTrie$Leaf node)
+                                                                                                                    table-metadata)
+                                                                                              (->LiveMergePlanPage (.liveRelation live-table-wm) (.liveTrie live-table-wm) node)))
+                                                                                          temporal-bounds)]
                                                                          {:path (.getPath mpt)
                                                                           :leaves leaves})))))))]
 
