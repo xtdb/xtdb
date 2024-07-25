@@ -11,7 +11,7 @@ data class TemporalBounds(
     val systemTo: TemporalColumn = TemporalColumn()) {
 
 
-    class TemporalColumn (
+    data class TemporalColumn (
         var lower: Long = Long.MIN_VALUE,
         var upper: Long = Long.MAX_VALUE) {
 
