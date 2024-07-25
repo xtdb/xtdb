@@ -30,6 +30,7 @@
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
+           (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader IVectorWriter)
            (xtdb.vector.extensions KeywordType SetType TransitType UriType UuidType)))
 
@@ -320,13 +321,16 @@
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache}))
 
+
 (defrecord TableMetadata [^HashTrie trie
                           ^Relation meta-rel
                           ^ArrowBuf buf
                           ^IVectorReader metadata-leaf-rdr
                           col-names
                           ^Map page-idx-cache
-                          ^AtomicInteger ref-count]
+                          ^AtomicInteger ref-count
+                          ^IVectorReader min-rdr
+                          ^IVectorReader max-rdr]
   ITableMetadata
   (metadataReader [_] metadata-leaf-rdr)
   (columnNames [_] col-names)
@@ -341,11 +345,20 @@
         (when (.getObject bloom-rdr bloom-vec-idx)
           (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))
 
+  (temporalBounds[_ page-idx]
+    (let [^long system-from-idx (.get page-idx-cache (PageIndexKey. "xt$system_from" page-idx))
+          ^long valid-from-idx (.get page-idx-cache (PageIndexKey. "xt$valid_from" page-idx))
+          ^long valid-to-idx (.get page-idx-cache (PageIndexKey. "xt$valid_to" page-idx))]
+      (TemporalBounds. (TemporalDimension. (.getLong min-rdr valid-from-idx) (.getLong max-rdr valid-to-idx))
+                       (TemporalDimension. (.getLong min-rdr system-from-idx) Long/MAX_VALUE))))
+
   AutoCloseable
   (close [_]
     (when (zero? (.decrementAndGet ref-count))
       (util/close meta-rel)
       (util/close buf))))
+
+(def ^:private temporal-col-type-leg-name (name (types/arrow-type->leg (types/->arrow-type [:timestamp-tz :micro "UTC"]))))
 
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path]
   (util/with-close-on-catch [buf (.getBuffer buffer-pool file-path)]
@@ -357,8 +370,16 @@
           (let [rdr (.getOldRelReader rel)
                 ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
                                                    (.legReader "leaf"))
-                {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]
-            (->TableMetadata (ArrowHashTrie. nodes-vec) rel buf metadata-reader col-names page-idx-cache (AtomicInteger. 1))))))))
+                {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)
+                temporal-col-types-rdr (some-> (.structKeyReader metadata-reader "columns")
+                                               (.listElementReader)
+                                               (.structKeyReader "types")
+                                               (.structKeyReader temporal-col-type-leg-name))
+
+                min-rdr (some-> temporal-col-types-rdr (.structKeyReader "min"))
+                max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
+            (->TableMetadata (ArrowHashTrie. nodes-vec) rel buf metadata-reader col-names page-idx-cache (AtomicInteger. 1)
+                             min-rdr max-rdr)))))))
 
 (deftype MetadataManager [^IBufferPool buffer-pool
                           ^Cache table-metadata-cache

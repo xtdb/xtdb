@@ -15,7 +15,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.error :as err])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            (java.io FileOutputStream)
@@ -39,6 +40,7 @@
            xtdb.arrow.Relation
            xtdb.indexer.live_index.ILiveTable
            xtdb.util.RowCounter
+           (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
@@ -306,6 +308,23 @@
 (defmacro with-log-level [ns level & body]
   `(with-log-levels {~ns ~level} ~@body))
 
+(defn ->min-max-page-bounds
+  ([min max] (->min-max-page-bounds min max min))
+  ([vt-min vt-max st-min] (->min-max-page-bounds vt-min vt-max st-min Long/MAX_VALUE))
+  ([vt-min vt-max st-min st-max]
+   (TemporalBounds. (TemporalDimension. vt-min vt-max) (TemporalDimension. st-min st-max))))
+
+(defn ->page-bounds-fn [page-idx-pred->bounds]
+  (let [page-idx-pred->bounds (update-vals page-idx-pred->bounds #(apply ->min-max-page-bounds %))]
+    (fn page-bounds-fn [page-idx]
+      (if-let [bounds (reduce-kv (fn [_ page-idx-pred bounds]
+                                   (when (page-idx-pred page-idx)
+                                     (reduced bounds)))
+                                 nil
+                                 page-idx-pred->bounds)]
+        bounds
+        (throw (IllegalStateException. (str "No bounds found for page " page-idx "!")))))))
+
 (defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
   (util/with-close-on-catch [meta-rel (Relation. al trie/meta-rel-schema)]
     (let [nodes-wtr (.get meta-rel "nodes")
@@ -360,6 +379,29 @@
         (write-paths paths)))
 
     meta-rel))
+
+(defn verify-hash-tries+page-bounds [paths page-bounds]
+  (letfn [(get-bounds [page-idx]
+            (or (reduce-kv (fn [_ page-idx-pred bounds] (when (page-idx-pred page-idx) (reduced bounds))) nil page-bounds)
+                (throw (IllegalStateException. "Missing page bounds!"))))
+          (get-receny-paths [paths]
+            (cond (nil? paths) nil
+                  (number? paths) (list (list paths))
+                  (vector? paths) (->> (mapcat get-receny-paths paths)
+                                       (filter identity))
+                  (map? paths) (mapcat (fn [[k v]]
+                                         (->> (get-receny-paths v)
+                                              (filter identity)
+                                              (map #(cons k %)))) paths)))]
+    (let [recency-paths (get-receny-paths paths)]
+      (doseq [recency-path recency-paths
+              :let [recencies (butlast recency-path)
+                    page-idx (last recency-path)
+                    [_min-vt max-vt _min-st max-st :as v] (get-bounds page-idx)
+                    max-st (or max-st Long/MAX_VALUE)]]
+        (assert (apply >= recencies))
+        (doseq [recency recencies]
+          (assert (<= (min max-vt max-st) recency)))))))
 
 (defn write-arrow-data-file ^org.apache.arrow.vector.VectorSchemaRoot
   [^BufferAllocator al, page-idx->documents, ^Path data-file-path]

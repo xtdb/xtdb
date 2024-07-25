@@ -19,7 +19,8 @@
            org.apache.arrow.vector.types.UnionMode
            (xtdb.arrow Relation Relation$Loader)
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment LiveHashTrie LiveHashTrie$Leaf MergePlanNode TrieWriter)))
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment LiveHashTrie LiveHashTrie$Leaf MergePlanNode TrieWriter)
+           (xtdb.util TemporalBounds TemporalDimension)))
 
 (def ^:private ^java.lang.ThreadLocal !msg-digest
   (ThreadLocal/withInitial
@@ -337,6 +338,59 @@
 (defrecord Segment [trie]
   ISegment
   (getTrie [_] trie))
+
+(defprotocol MergePlanPage
+  (load-page [mpg buffer-pool vsr-cache])
+  (test-metadata [msg])
+  (temporal-bounds [msg]))
+
+(defn max-valid-to ^long [^TemporalBounds tb]
+  (.getUpper (.getValidTime tb)))
+
+(defn min-valid-from ^long [^TemporalBounds tb]
+  (.getLower (.getValidTime tb)))
+
+(defn ->merge-task
+  ([mp-pages] (->merge-task mp-pages (TemporalBounds.)))
+  ([mp-pages ^TemporalBounds query-bounds]
+   (let [leaves (ArrayList.)]
+     (loop [[mp-page & more-mp-pages] mp-pages
+            node-taken? false
+            largest-valid-to Long/MIN_VALUE
+            non-taken-pages []]
+       (if mp-page
+         (let [^TemporalBounds page-bounds (temporal-bounds mp-page)
+               take-node? (and (.intersects page-bounds query-bounds)
+                               (test-metadata mp-page))]
+
+           (if take-node?
+             (do
+               (.add leaves mp-page)
+               (recur more-mp-pages
+                      true
+                      (max largest-valid-to (max-valid-to page-bounds))
+                      non-taken-pages))
+
+             (recur more-mp-pages
+                    node-taken?
+                    largest-valid-to
+                    (cond-> non-taken-pages
+                      (let [page-valid-time (.getValidTime page-bounds)]
+                        (and node-taken?
+                             (.intersects (.getSystemTime page-bounds) (.getSystemTime query-bounds))
+                             ;; this page can bound a page in the query set
+                             (< (.getLower (.getValidTime query-bounds)) (.getUpper page-valid-time))
+                             (< (.getLower page-valid-time) largest-valid-to)))
+                      (conj mp-page)))))
+
+         (when node-taken?
+           (loop [[page & more-pages] non-taken-pages]
+             (when page
+               (let [smallest-valid-from (min-valid-from (temporal-bounds page))]
+                 (when (< smallest-valid-from largest-valid-to)
+                   (.add leaves page))
+                 (recur more-pages))))
+           (vec leaves)))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel

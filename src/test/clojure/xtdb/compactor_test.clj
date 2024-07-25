@@ -381,7 +381,7 @@
                                      (filter zero?)))))))))))))
 
 (t/deftest test-l2-compaction-badly-distributed
-  (let [node-dir (util/->path "target/compactor/test-l1-compaction-badly-distributed")]
+  (let [node-dir (util/->path "target/compactor/test-l2-compaction-badly-distributed")]
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
