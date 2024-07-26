@@ -20,14 +20,14 @@
      (f val))))
 
 (defn event-data->tx-instant [^EventData data]
-  (serde/->TxKey (.getOffset data) (.getEnqueuedTime data)))
+  (serde/->TxKey (.getSequenceNumber data) (.getEnqueuedTime data)))
 
 (def producer-send-options
   (.setPartitionId (SendOptions.) "0"))
 
 (defn get-partition-properties [^EventHubConsumerClient consumer]
   (let [partition-properties (.getPartitionProperties consumer "0")]
-    {:offset (Long/parseLong (.getLastEnqueuedOffset partition-properties))
+    {:sequence-number (.getLastEnqueuedSequenceNumber partition-properties)
      :timestamp (.getLastEnqueuedTime partition-properties)}))
 
 (defn- ->log-record [^PartitionEvent event]
@@ -48,13 +48,13 @@
           (.subscribe nil
                       (->consumer (fn [e]
                                     (.completeExceptionally fut e)))
-                      (fn [] (let [{:keys [offset timestamp]} (get-partition-properties consumer)]
-                               (.complete fut (serde/->TxKey offset timestamp))))))
+                      (fn [] (let [{:keys [sequence-number timestamp]} (get-partition-properties consumer)]
+                               (.complete fut (serde/->TxKey sequence-number timestamp))))))
       fut))
 
   (readRecords [_ after-tx-id limit]
     (let [event-position (if after-tx-id
-                           (EventPosition/fromOffset after-tx-id)
+                           (EventPosition/fromSequenceNumber after-tx-id)
                            (EventPosition/earliest))]
       (try
         (->> (.receiveFromPartition consumer "0" limit event-position max-wait-time)
