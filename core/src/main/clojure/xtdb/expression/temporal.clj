@@ -13,7 +13,7 @@
            [java.util Map]
            (org.apache.arrow.vector PeriodDuration)
            [xtdb DateTruncator]
-           [xtdb.vector IValueReader ValueBox]))
+           [xtdb.vector IListValueReader IValueReader ValueBox]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -97,11 +97,6 @@
                   (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
                   (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
       (throw (->iae "Interval end field must have less significance than the start field.")))))
-
-(defn- time-unit->eot-v [time-unit]
-  (case time-unit
-    (:second :milli) Integer/MAX_VALUE
-    (:micro :nano) Long/MAX_VALUE))
 
 (defn- ts->inst [form ts-unit]
   (case ts-unit
@@ -1692,3 +1687,58 @@
                                    :args [{:op :call, :f :-
                                            :args [src {:op :local, :local o-sym}]}
                                           {:op :local, :local i-sym}]}]}]}}}))
+
+
+(defmethod macro/macroexpand1-call :range_bins [{:keys [args] :as expr}]
+  (cond-> expr
+    (= 3 (count args)) (update :args conj {:op :literal, :literal Instant/EPOCH})))
+
+(defn emit-range-bins ^xtdb.vector.IListValueReader [^long stride, ^long r-from, ^long r-to, ^long origin]
+  (let [from-box (ValueBox.)
+        to-box (ValueBox.)
+        weight-box (ValueBox.)
+        box (doto (ValueBox.)
+              (.writeObject {"xt$from" from-box
+                             "xt$to" to-box
+                             "xt$weight" weight-box}))
+        r-size (- r-to r-from)
+
+        base (-> (- r-from origin)
+                 (quot stride)
+                 (* stride)
+                 (+ origin))
+        top (-> (- r-to origin 1)
+                (quot stride)
+                inc
+                (* stride)
+                (+ origin))
+        n-bins (quot (- top base) stride)]
+
+    (reify IListValueReader
+      (size [_] n-bins)
+
+      (nth [_ idx]
+        (let [bin-from (doto (+ base (* idx stride))
+                         (->> (.writeLong from-box)))
+              bin-to (doto (+ base (* (inc idx) stride))
+                       (->> (.writeLong to-box)))]
+          (.writeDouble weight-box (/ (double (- (min bin-to r-to) (max bin-from r-from)))
+                                      r-size))
+          box)))))
+
+(defmethod expr/codegen-call [:range_bins :interval :timestamp-tz :timestamp-tz :timestamp-tz] [{[i-type from-type to-type origin-type] :arg-types}]
+  (assert (= (subvec from-type 0 2)
+             (subvec to-type 0 2)
+             (subvec origin-type 0 2)
+             (subvec types/temporal-col-type 0 2))
+          (format "TODO: from-type = %s; to-type = %s; origin-type = %s"
+                  (pr-str from-type) (pr-str to-type)))
+
+  (let [{bb1 :batch-bindings, stride->duration :->call-code} (expr/codegen-cast {:source-type i-type, :target-type [:duration :micro]})]
+    {:return-type [:list [:struct {'xt$from types/temporal-col-type,
+                                   'xt$to types/temporal-col-type,
+                                   'xt$weight :f64}]]
+     :batch-bindings bb1
+     :->call-code (fn [[stride-code from-code to-code origin-code]]
+                    `(emit-range-bins ~(stride->duration [stride-code])
+                                      ~from-code ~to-code ~origin-code))}))

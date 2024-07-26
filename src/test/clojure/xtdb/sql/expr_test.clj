@@ -781,6 +781,33 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
        DATE_BIN(INTERVAL 'P3D', TIMESTAMP '2020-01-01T12:34:00Z')
 "))))
 
+(t/deftest test-range-bins
+  (t/is (= [{:starts [{:xt/from #xt.time/zoned-date-time "2024-01-01T00:00Z[UTC]"
+                       :xt/to #xt.time/zoned-date-time "2024-01-01T00:15Z[UTC]"
+                       :xt/weight 0.75}
+                      {:xt/from #xt.time/zoned-date-time "2024-01-01T00:15Z[UTC]"
+                       :xt/to #xt.time/zoned-date-time "2024-01-01T00:30Z[UTC]"
+                       :xt/weight 0.25}]
+             :days [{:xt/from #xt.time/zoned-date-time "2023-12-31T00:00Z[UTC]"
+                     :xt/to #xt.time/zoned-date-time "2024-01-03T00:00Z[UTC]",
+                     :xt/weight 1.0}]
+             :with-origin [{:xt/from #xt.time/zoned-date-time "2024-01-01T00:00Z[UTC]"
+                            :xt/to #xt.time/zoned-date-time "2024-01-04T00:00Z[UTC]",
+                            :xt/weight 1.0}]}]
+           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME TO ALL
+                            SELECT RANGE_BINS(INTERVAL 'PT15M',
+                                              PERIOD(TIMESTAMP '2024-01-01T00:00:00Z', TIMESTAMP '2024-01-01T00:20:00Z'))
+                                     AS starts,
+
+                                   RANGE_BINS(INTERVAL 'P3D',
+                                              PERIOD(TIMESTAMP '2024-01-01T00:00:00Z', TIMESTAMP '2024-01-02T00:00:00Z'))
+                                     AS days,
+
+                                   RANGE_BINS(INTERVAL 'P3D',
+                                              PERIOD(TIMESTAMP '2024-01-01T00:00:00Z', TIMESTAMP '2024-01-02T00:00:00Z'),
+                                              TIMESTAMP '2020-01-01T00:00:00Z')
+                                     AS with_origin"))))
+
 (t/deftest test-extract-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are

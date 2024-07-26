@@ -243,6 +243,25 @@ Bins the given timestamp within the given 'stride' interval, optionally relative
 
 e.g. `TIMESTAMP '2024-01-01T12:34:00Z'` with an `INTERVAL 'PT20M'` stride would yield `2024-01-01T12:20Z`.
 
+| | `RANGE_BINS(stride, period [, origin])`
+a|
+Aligns the given period within bins of the given 'stride' interval, optionally relative to the given origin (or '1970-01-01' if not supplied).
+
+Returns an array of structs, each containing the `_from` and `_to` of the bin, and a `_weight` representing the proportion of the original range contained within the given bin.
+
+e.g.
+
+* A period of 00:05-00:10 within 15 minute bins yields one bin, 00:00-00:15 with weight 1.0:
++
+`RANGE_BINS(INTERVAL 'PT15M', PERIOD(TIMESTAMP '2020-01-01T00:05Z', TIMESTAMP '2020-01-01T00:10Z'))`
++
+-> `[{_from: '2020-01-01T00:00Z', _to: '2020-01-01T00:15Z', _weight: 1.0}]`
+* A period of 12:57-13:02 within hourly bins yields two bins, 12:00-13:00 with weight 0.6, and 13:00-14:00 with weight 0.4:
++
+`RANGE_BINS(INTERVAL 'PT1H', PERIOD(TIMESTAMP '2020-01-01T12:57Z', TIMESTAMP '2020-01-01T13:02Z'))`
++
+-> `[{_from: '2020-01-01T12:00Z', _to: '2020-01-01T13:00Z', _weight: 0.6}, {_from: '2020-01-01T13:00Z', _to: '2020-01-01T14:00Z', _weight: 0.4}]`
+
 | `(extract "field" date-time)` | `EXTRACT(field FROM date_time)`
 | Extracts the given field from the date-time. Field must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE` or `SECOND`. Datetimes with timezones additionally support field values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE`.
 

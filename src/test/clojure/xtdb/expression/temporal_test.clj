@@ -8,6 +8,7 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+           java.time.temporal.ChronoUnit
            (org.apache.arrow.vector PeriodDuration)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
@@ -1659,3 +1660,39 @@
            (et/project1 '(date-bin i src)
                         {:i #xt/interval-mdn ["P0D" "PT15M"]
                          :src #inst "2020-01-01T00:20:10Z"}))))
+
+(deftest test-range-bins
+  (let [base (time/->zdt #inst "2020-01-01")]
+    (letfn [(f [start end]
+              (for [{:keys [xt/from xt/to xt/weight]} (et/project1 '(range-bins i from to)
+                                                                   {:i #xt/interval-mdn ["P0D" "PT15M"]
+                                                                    :from (.plusMinutes base start)
+                                                                    :to (.plusMinutes base end)})]
+                [(.between ChronoUnit/MINUTES base from)
+                 (.between ChronoUnit/MINUTES base to)
+                 weight]))]
+
+      (t/is (= [[0 15 1.0]] (f 0 10))
+            "starts")
+
+      (t/is (= [[0 15 1.0]] (f 10 15))
+            "finishes")
+
+      (t/is (= [[0 15 0.75] [15 30 0.25]]
+               (f 0 20))
+            "started by")
+
+      (t/is (= [[0 15 0.25] [15 30 0.75]]
+               (f 10 30))
+            "finished by")
+
+      (t/is (= [[0 15 1.0]] (f 0 15))
+            "equals")
+
+      (t/is (= [[0 15 0.4] [15 30 0.6]]
+               (f 13 18))
+            "overlaps")
+
+      (t/is (= [[0 15 0.08] [15 30 0.6] [30 45 0.32]]
+               (f 13 38))
+            "contains"))))

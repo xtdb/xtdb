@@ -1370,8 +1370,20 @@
      (date-bin ~(-> (.intervalLiteral ctx) (.accept this))
                ~(-> (.expr (.dateBinSource ctx)) (.accept this))
                ~@(some-> (.dateBinOrigin ctx)
+                         .expr
                          (.accept this)
                          vector))))
+
+  (visitRangeBinsFunction [this ctx]
+    (let [{:keys [from to]} (-> (.rangeBinsSource ctx) .periodPredicand (.accept this))]
+      (xt/template
+       (range-bins ~(-> (.intervalLiteral ctx) (.accept this))
+                   ~from
+                   ~to
+                   ~@(some-> (.dateBinOrigin ctx)
+                             .expr
+                             (.accept this)
+                             vector)))))
 
   (visitAgeFunction [this ctx]
     (let [ve1 (-> (.expr ctx 0) (.accept this))

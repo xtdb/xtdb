@@ -312,6 +312,7 @@ exprPrimary
     | 'LOCALTIME' ('(' precision ')')? # LocalTimeFunction
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
     | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource (',' dateBinOrigin)? ')' # DateBinFunction
+    | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource (',' dateBinOrigin)? ')' #RangeBinsFunction
 
     // interval value functions
     | 'AGE' '(' expr ',' expr ')' # AgeFunction
@@ -444,6 +445,7 @@ dateTruncSource : expr ;
 dateTruncTimeZone : characterString ;
 
 dateBinSource : expr ;
+rangeBinsSource : periodPredicand ;
 dateBinOrigin : expr ;
 
 /// §6.34 <interval value function>
