@@ -25,6 +25,7 @@
 (def project-id "xtdb-scratch")
 (def pubsub-topic "gcp-test-xtdb-object-store-notif-topic")
 (def test-bucket "gcp-test-xtdb-object-store")
+(def wait-time-ms 10000)
 
 (defn config-present? []
   (try
@@ -90,8 +91,7 @@
                  (.listAllObjects ^ObjectStore os)))))))
 
 (t/deftest ^:google-cloud multiple-object-store-list-test
-  (let [prefix (random-uuid)
-        wait-time-ms 5000]
+  (let [prefix (random-uuid)]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
       (os-test/put-edn os-1 (util/->path "alice") :alice)
@@ -104,8 +104,7 @@
                (.listAllObjects ^ObjectStore os-2))))))
 
 (t/deftest ^:google-cloud put-object-twice-shouldnt-throw
-  (let [prefix (random-uuid)
-        wait-time-ms 5000]
+  (let [prefix (random-uuid)]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
       (t/is (os-test/put-edn os-1 (util/->path "alice") :alice))

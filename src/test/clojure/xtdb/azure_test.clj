@@ -33,6 +33,7 @@
                                  (System/getenv "AZURE_CLIENT_SECRET")
                                  (System/getenv "AZURE_TENANT_ID")
                                  (System/getenv "AZURE_SUBSCRIPTION_ID"))))
+(def wait-time-ms 10000)
 
 (defn cli-available? []
   (= 0 (:exit (sh/sh "az" "--help"))))
@@ -90,8 +91,7 @@
                  (.listAllObjects ^ObjectStore os)))))))
 
 (t/deftest ^:azure multiple-object-store-list-test
-  (let [prefix (random-uuid)
-        wait-time-ms 5000]
+  (let [prefix (random-uuid)]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
       (os-test/put-edn os-1 (util/->path "alice") :alice)
@@ -136,7 +136,7 @@
                                                           :poll-sleep-duration "PT1S"}]
                                             :storage [:local {:path local-disk-cache}]})]
             ;; Allow the log to catch up 
-            (Thread/sleep 2000)
+            (Thread/sleep wait-time-ms)
             (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}]))))))
         
         (finally
@@ -210,8 +210,7 @@
   (let [prefix (random-uuid)]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
-      (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os-1 (util/->path "multi-put-list-test"))
-            wait-time-ms 5000]
+      (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os-1 (util/->path "multi-put-list-test"))]
       ;; Doing a multipart upload against the first object store
         @(.uploadPart multipart-upload (.flip ^ByteBuffer (os-test/generate-random-byte-buffer 500)))
         @(.uploadPart multipart-upload (.flip ^ByteBuffer (os-test/generate-random-byte-buffer 500)))
