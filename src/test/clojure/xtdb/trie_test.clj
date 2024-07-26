@@ -48,17 +48,18 @@
 (deftest test-merge-plan-with-nil-nodes-2700
   (with-open [al (RootAllocator.)
               t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
-                                                        {Long/MAX_VALUE 3, (time/instant->micros (time/->instant #inst "2023-01-01")) 4}])
+                                                        {(time/instant->micros (time/->instant #inst "2023-01-01")) 3
+                                                         Long/MAX_VALUE 4}])
               log-root (tu/open-arrow-hash-trie-root al 0)
               log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
 
     (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
               {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
-              {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :log, :page-idx 0} {:seg :log2, :page-idx 1}]}
+              {:path [3], :pages [{:page-idx 1, :seg :log2} {:page-idx 0, :seg :log} {:page-idx 3, :seg :t1} {:page-idx 4, :seg :t1}]}
               {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
-              {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
+              {:path [0 1], :pages [{:seg :log, :page-idx 0} {:seg :t1, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
-              {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
+              {:path [0 3], :pages [{:seg :log, :page-idx 0} {:seg :t1, :page-idx 1}]}]
              (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
                                                (assoc :seg :t1))
                                            (-> (trie/->Segment (->arrow-hash-trie log-root))
@@ -94,11 +95,11 @@
 
 
         (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                  {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 5}]}
+                  {:path [3], :pages [{:seg :t2, :page-idx 5} {:seg :t1, :page-idx 4}]}
                   {:path [0 1],
-                   :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
+                   :pages [{:seg :t2, :page-idx 2} {:seg :t1, :page-idx 0}]}
                   {:path [0 3],
-                   :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
+                   :pages [{:seg :t2, :page-idx 3} {:seg :t1, :page-idx 1}]}]
                  (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
                                                    (assoc :seg :t1))
                                                (-> (trie/->Segment (->arrow-hash-trie t2-root))
@@ -118,15 +119,14 @@
 
         (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
                   {:path [3],
-                   :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 3} {:seg :t2, :page-idx 5} {:seg :t2, :page-idx 4}]}
-                  {:path [0 0],
-                   :pages [{:seg :t2, :page-idx 1}]}
+                   :pages [{:seg :t2, :page-idx 4} {:seg :t2, :page-idx 5} {:seg :t1, :page-idx 3} {:seg :t1, :page-idx 4}]}
+                  {:path [0 0], :pages [{:seg :t2, :page-idx 1}]}
                   {:path [0 1],
-                   :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2} {:seg :t2, :page-idx 1}]}
-                  {:path [0 2],
-                   :pages [{:seg :t2, :page-idx 1}]}
+                   :pages [{:seg :t2, :page-idx 1} {:seg :t2, :page-idx 2} {:seg :t1, :page-idx 0}]}
+                  {:path [0 2], :pages [{:seg :t2, :page-idx 1}]}
                   {:path [0 3],
-                   :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3} {:seg :t2, :page-idx 1}]}]
+                   :pages [{:seg :t2, :page-idx 1} {:seg :t2, :page-idx 3} {:seg :t1, :page-idx 1}]}]
+
                  (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
                                                    (assoc :seg :t1))
                                                (-> (trie/->Segment (->arrow-hash-trie t2-root))
@@ -269,8 +269,9 @@
       (util/with-tmp-dirs #{tmp-dir}
         (with-open [al (RootAllocator.)
                     iid-arrow-buf (util/->arrow-buf-view al (trie/->iid eid))
-                    t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [0 nil nil 1]
-                                                               (time/instant->micros (time/->instant #inst "2023-01-01")) [2 nil nil 3]}
+                    t1-root (tu/open-arrow-hash-trie-root al [{(time/instant->micros (time/->instant #inst "2023-01-01"))
+                                                               [0 nil nil 1]
+                                                               Long/MAX_VALUE [2 nil nil 3]}
                                                               nil nil 4])
                     t2-root (tu/open-arrow-hash-trie-root al [0 nil nil nil])]
           (let [id #uuid "00000000-0000-0000-0000-000000000000"
@@ -321,19 +322,11 @@
                     (.close trie-cursor))
 
                   (t/is (= [{:path [0 0],
-                             :pages [{:seg :t1, :page-idx 2}
+                             :pages [{:seg :t2, :page-idx 0}
                                      {:seg :t1, :page-idx 0}
-                                     {:seg :t2, :page-idx 0}]}]
+                                     {:seg :t1, :page-idx 2}]}]
                            (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment arrow-hash-trie1) (assoc :seg :t1))
                                                          (-> (trie/->Segment arrow-hash-trie2) (assoc :seg :t2))]
                                                         (scan/->path-pred iid-arrow-buf)
                                                         (TemporalBounds.))
-                                (mapv (fn [^MergePlanTask merge-plan-node]
-                                        (let [path (.getPath merge-plan-node)
-                                              mp-nodes (.getMpNodes merge-plan-node)]
-                                          {:path (vec path)
-                                           :pages (mapv (fn [^MergePlanNode merge-plan-node]
-                                                          (let [segment (.getSegment merge-plan-node)
-                                                                ^ArrowHashTrie$Leaf node (.getNode merge-plan-node)]
-                                                            {:seg (:seg segment), :page-idx (.getDataPageIndex node)}))
-                                                        mp-nodes)})))))))))))))))
+                                (merge-plan-nodes->path+pages)))))))))))))

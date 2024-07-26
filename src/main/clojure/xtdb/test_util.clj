@@ -137,6 +137,8 @@
      (case u
        :day (iterate #(.plus ^Instant % (Period/ofDays len)) (.toInstant #inst "2020-01-01"))
        :month (to-seq ChronoUnit/MONTHS)
+       :quarter (->> (iterate #(.plusMonths ^YearMonth % (* 3 len)) (YearMonth/of 2020 1))
+                     (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC))))
        :year (to-seq ChronoUnit/YEARS)))))
 
 (defn ->mock-clock

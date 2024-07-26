@@ -3,7 +3,6 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.expression :as expr]
             [xtdb.node :as xtn]
             [xtdb.operator.scan :as scan]
             xtdb.query
@@ -679,6 +678,20 @@
                             [:put-docs :docs {:xt/id id}]))
 
   (t/is (= 2000 (count (xt/q tu/*node* '(from :docs [{:xt/id id}]))))))
+
+(deftest test-leaves-are-in-system-order
+  (binding [c/*page-size* 1]
+    (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]})]
+
+      (dotimes [i 2]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version i}]]))
+      (tu/finish-chunk! node)
+      (c/compact-all! node)
+
+      (t/is (= [{:xt/id 1,
+                 :xt/valid-to #xt.time/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
+               (xt/q node '(from :docs {:bind [xt/id xt/valid-to {:version 0}]
+                                        :for-valid-time :all-time})))))))
 
 (deftest test-recency-filtering
   (tu/with-tmp-dirs #{node-dir}

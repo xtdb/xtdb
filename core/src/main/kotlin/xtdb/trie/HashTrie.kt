@@ -111,7 +111,8 @@ fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, tempo
                         newMpNodes += mpNode
                     }
                 }
-                stack.push(MergePlanTask(newMpNodes, mergePlanTask.path))
+                // we rely on nodes being in system time order later on
+                stack.push(MergePlanTask(newMpNodes.reversed(), mergePlanTask.path))
             }
 
             pathPred != null && !pathPred.test(mergePlanTask.path) -> null
