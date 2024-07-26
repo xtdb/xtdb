@@ -52,13 +52,7 @@
 
     :else (f)))
 
-(defn wait-between-tests [f]
-  (log/info "Waiting 10 seconds between tests... (Allowing AQMP conneciton time to clear up)")
-  (Thread/sleep 10000)
-  (f))
-
 (t/use-fixtures :once run-if-auth-available)
-(t/use-fixtures :each wait-between-tests)
 
 (defn object-store ^Closeable [prefix]
   (let [factory (-> (AzureBlobStorage/azureBlobStorage storage-account container servicebus-namespace servicebus-topic-name)
@@ -110,8 +104,6 @@
       (t/is (= (mapv util/->path ["alan" "alice"])
                (.listAllObjects ^ObjectStore os-2))))))
 
-
-
 ;; Currently not testing this regularly:
 ;; Need to setup the event hub namespace `xtdb-test-eventhub` and configure to run.
 ;; Ensure your credentials have eventhub permissions for the eventhub namespace 
@@ -135,19 +127,16 @@
                 (t/is (instance? Log log))))
             
             (t/is (xt/execute-tx node [[:put-docs :foo {:xt/id "foo"}]]))
-            (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}]))))))
-        
-        ;; Wait/allow connections to clear
-        (Thread/sleep 10000)
+            (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}])))))) 
         
         (t/testing "connecting to previously created event-hub"
           (with-open [node (xtn/start-node {:log [:azure {:namespace eventhub-namespace
-                                                          :event-hub-name "xtdb.azure-test-hub.29ebdc43-6d89-40f2-bac0-e22a131934ee"
+                                                          :event-hub-name event-hub-name
                                                           :max-wait-time "PT1S"
                                                           :poll-sleep-duration "PT1S"}]
                                             :storage [:local {:path local-disk-cache}]})]
-            ;; Allow the log to catch up
-            (Thread/sleep 5000)
+            ;; Allow the log to catch up 
+            (Thread/sleep 2000)
             (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}]))))))
         
         (finally

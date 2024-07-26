@@ -29,12 +29,12 @@ dependencies {
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
 
-    api("com.azure", "azure-storage-blob", "12.22.0")
-    api("com.azure", "azure-messaging-eventhubs", "5.15.0")
-    api("com.azure", "azure-messaging-servicebus", "7.14.5")
-    api("com.azure", "azure-identity", "1.9.0")
-    api("com.azure", "azure-core-management", "1.11.1")
-    api("com.azure.resourcemanager", "azure-resourcemanager-eventhubs", "2.26.0")
+    api("com.azure", "azure-storage-blob", "12.27.0")
+    api("com.azure", "azure-messaging-eventhubs", "5.18.5")
+    api("com.azure", "azure-messaging-servicebus", "7.17.1")
+    api("com.azure", "azure-identity", "1.13.1")
+    api("com.azure", "azure-core-management", "1.15.1")
+    api("com.azure.resourcemanager", "azure-resourcemanager-eventhubs", "2.40.0")
 
     api(kotlin("stdlib-jdk8"))
 }
