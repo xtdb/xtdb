@@ -45,6 +45,38 @@ class StructVectorTest {
     }
 
     @Test
+    fun useNestedWriters() {
+        val children = linkedMapOf(
+            "i32" to IntVector(allocator, "i32", false),
+            "utf8" to Utf8Vector(allocator, "utf8", true)
+        )
+
+        StructVector(allocator, "struct", false, children).use { structVec ->
+            val i32Writer = structVec.vectorForKey("i32")!!
+            val utf8Writer = structVec.vectorForKey("utf8")!!
+
+            i32Writer.writeInt(4)
+            utf8Writer.writeObject("Hello")
+            structVec.endStruct()
+
+            i32Writer.writeInt(8)
+            structVec.endStruct()
+
+            i32Writer.writeInt(12)
+            utf8Writer.writeObject("world!")
+            structVec.endStruct()
+
+            assertEquals(
+                listOf(
+                    mapOf("i32" to 4, "utf8" to "Hello"),
+                    mapOf("i32" to 8),
+                    mapOf("i32" to 12, "utf8" to "world!")
+                ),
+                structVec.toList())
+        }
+    }
+
+    @Test
     fun roundTripsThroughFile() {
         val m1 = mapOf("i32" to 4, "utf8" to "Hello")
         val m2 = mapOf("i32" to 8)

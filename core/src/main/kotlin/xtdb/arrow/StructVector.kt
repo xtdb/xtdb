@@ -20,10 +20,19 @@ class StructVector(
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 
+    private fun writeAbsents() {
+        val valueCount = this.valueCount
+
+        children.sequencedValues().forEach { child ->
+            (child.valueCount until valueCount).forEach { _ -> child.writeNull() }
+        }
+    }
+
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
     override fun writeNull() {
         validityBuffer.writeBit(valueCount++, 0)
+        writeAbsents()
     }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
@@ -42,6 +51,13 @@ class StructVector(
         valueCount = node.length
     }
 
+    override fun vectorForKey(name: String) = children[name]
+
+    override fun endStruct() {
+        validityBuffer.writeBit(valueCount++, 1)
+        writeAbsents()
+    }
+
     override fun getObject0(idx: Int): Any =
         children.sequencedEntrySet()
             .associateBy({ it.key }, { it.value.getObject(idx) })
@@ -50,17 +66,10 @@ class StructVector(
     override fun writeObject0(value: Any) =
         if (value !is Map<*, *>) TODO("unknown type: ${value::class.simpleName}")
         else {
-            validityBuffer.writeBit(valueCount++, 1)
-            val unseenKeys = HashSet(children.keys)
             value.forEach {
-                val k = it.key
-                (children[k] ?: TODO("promotion not supported yet")).writeObject(it.value)
-                unseenKeys.remove(k)
+                (children[it.key] ?: TODO("promotion not supported yet")).writeObject(it.value)
             }
-
-            unseenKeys.forEach {
-                children[it]!!.writeNull()
-            }
+            endStruct()
         }
 
     override fun reset() {

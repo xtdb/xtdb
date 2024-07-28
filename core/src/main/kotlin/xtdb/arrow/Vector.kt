@@ -56,7 +56,11 @@ sealed class Vector : AutoCloseable {
     open fun getObject(idx: Int) = if (isNull(idx)) null else getObject0(idx)
 
     protected abstract fun writeObject0(value: Any)
+
     fun writeObject(value: Any?) = if (value == null) writeNull() else writeObject0(value)
+
+    open fun vectorForKey(name: String): Vector? = unsupported("vectorForKey")
+    open fun endStruct(): Unit = unsupported("endStruct")
 
     internal open fun toList() = (0 until valueCount).map { getObject(it) }
 
