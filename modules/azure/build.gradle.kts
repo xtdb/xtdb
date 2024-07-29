@@ -36,5 +36,8 @@ dependencies {
     api("com.azure", "azure-core-management", "1.15.1")
     api("com.azure.resourcemanager", "azure-resourcemanager-eventhubs", "2.40.0")
 
+    // metrics
+    api("io.micrometer", "micrometer-registry-azure-monitor", "1.12.2")
+
     api(kotlin("stdlib-jdk8"))
 }

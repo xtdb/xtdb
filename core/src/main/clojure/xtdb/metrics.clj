@@ -47,7 +47,8 @@
   (xtn/apply-config! config
                      (case tag
                        :prometheus :xtdb.metrics/prometheus
-                       :cloudwatch :xtdb.aws.cloudwatch/metrics)
+                       :cloudwatch :xtdb.aws.cloudwatch/metrics
+                       :azure-monitor :xtdb.azure.monitor/metrics)
                      opts))
 
 (defmethod ig/init-key :xtdb.metrics/registry [_ ^Metrics$Factory factory]
