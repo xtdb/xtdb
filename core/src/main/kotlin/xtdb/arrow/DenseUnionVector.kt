@@ -8,29 +8,39 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 
 class DenseUnionVector(
-    allocator: BufferAllocator,
+    private val allocator: BufferAllocator,
     override val name: String,
     override var nullable: Boolean,
     legs: List<Vector>
 ) : Vector() {
 
-    inner class LegVector(private val typeId: Byte, val inner: Vector) : Vector() {
+    private val legs = legs.toMutableList()
 
+    inner class LegReader(val inner: VectorReader) : VectorReader {
         override val name get() = inner.name
-
-        override var nullable: Boolean
-            get() = inner.nullable
-            set(value) {
-                inner.nullable = value
-            }
-
-        override var valueCount
-            get() = inner.valueCount
-            set(value) {
-                inner.valueCount = value
-            }
-
+        override val nullable get() = inner.nullable
+        override val valueCount get() = inner.valueCount
         override val arrowField get() = inner.arrowField
+
+        override fun isNull(idx: Int) = inner.isNull(getOffset(idx))
+        override fun getByte(idx: Int) = inner.getByte(getOffset(idx))
+        override fun getShort(idx: Int) = inner.getShort(getOffset(idx))
+        override fun getInt(idx: Int) = inner.getInt(getOffset(idx))
+        override fun getLong(idx: Int) = inner.getLong(getOffset(idx))
+        override fun getFloat(idx: Int) = inner.getFloat(getOffset(idx))
+        override fun getDouble(idx: Int) = inner.getDouble(getOffset(idx))
+        override fun getBytes(idx: Int) = inner.getBytes(getOffset(idx))
+        override fun getObject(idx: Int) = inner.getObject(getOffset(idx))
+
+        override fun getListCount(idx: Int) = inner.getListCount(getOffset(idx))
+        override fun getListStartIndex(idx: Int) = inner.getListStartIndex(getOffset(idx))
+
+        override fun toList() = inner.toList()
+
+        override fun close() = Unit
+    }
+
+    inner class LegWriter(private val typeId: Byte, val inner: Vector) : VectorWriter {
 
         private fun writeValueThen(): Vector {
             typeBuffer.writeByte(typeId)
@@ -39,84 +49,93 @@ class DenseUnionVector(
             return inner
         }
 
-        override fun isNull(idx: Int) = inner.isNull(getOffset(idx))
         override fun writeNull() = writeValueThen().writeNull()
 
-        override fun getByte(idx: Int) = inner.getByte(getOffset(idx))
         override fun writeByte(value: Byte) = writeValueThen().writeByte(value)
 
-        override fun getShort(idx: Int) = inner.getShort(getOffset(idx))
         override fun writeShort(value: Short) = writeValueThen().writeShort(value)
 
-        override fun getInt(idx: Int) = inner.getInt(getOffset(idx))
         override fun writeInt(value: Int) = writeValueThen().writeInt(value)
 
-        override fun getLong(idx: Int) = inner.getLong(getOffset(idx))
         override fun writeLong(value: Long) = writeValueThen().writeLong(value)
 
-        override fun getFloat(idx: Int) = inner.getFloat(getOffset(idx))
         override fun writeFloat(value: Float) = writeValueThen().writeFloat(value)
 
-        override fun getDouble(idx: Int) = inner.getDouble(getOffset(idx))
         override fun writeDouble(value: Double) = writeValueThen().writeDouble(value)
 
-        override fun getBytes(idx: Int) = inner.getBytes(getOffset(idx))
         override fun writeBytes(bytes: ByteArray) = writeValueThen().writeBytes(bytes)
 
-        override fun getObject(idx: Int) = inner.getObject(getOffset(idx))
-        override fun getObject0(idx: Int) = throw UnsupportedOperationException()
-        override fun writeObject0(value: Any) = writeValueThen().writeObject(value)
+        override fun writeObject(value: Any?) = writeValueThen().writeObject(value)
+
+        override fun endStruct() = writeValueThen().endStruct()
+
+        override fun endList() = writeValueThen().endList()
+
+        override fun reset() = inner.reset()
+        override fun close() = Unit
 
         override fun toList() = inner.toList()
-
-        override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-            inner.unloadBatch(nodes, buffers)
-        }
-
-        override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-            inner.loadBatch(nodes, buffers)
-        }
-
-        override fun reset() {
-            inner.reset()
-        }
-
-        override fun close() {
-            inner.close()
-        }
     }
-
-    private val legs = legs.mapIndexed { idx, leg -> LegVector(idx.toByte(), leg)}
-    operator fun get(typeId: Byte) = legs[typeId.toInt()]
-    operator fun get(leg: String) = legs.find { it.name == leg }
 
     override val arrowField = Field(name, FieldType.notNullable(MinorType.DENSEUNION.type), legs.map { it.arrowField })
 
     private val typeBuffer = ExtensibleBuffer(allocator)
-    fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
+    private fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
     internal fun typeIds() = (0 until valueCount).map { typeBuffer.getByte(it) }
 
     private val offsetBuffer = ExtensibleBuffer(allocator)
     fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
     internal fun offsets() = (0 until valueCount).map { offsetBuffer.getInt(it) }
 
-    private fun leg(idx: Int) = legs[getTypeId(idx).toInt()]
-
-    override fun isNull(idx: Int): Boolean {
+    private fun leg(idx: Int): Vector? {
         val typeId = getTypeId(idx)
-
-        return (typeId == (-1).toByte()) || legs[typeId.toInt()].isNull(idx)
+        return if (typeId >= 0) legs[getTypeId(idx).toInt()] else null
     }
+
+    override fun isNull(idx: Int) = leg(idx)?.isNull(idx) ?: false
 
     override fun writeNull() {
         typeBuffer.writeByte(-1)
         offsetBuffer.writeInt(0)
     }
 
-    override fun getObject(idx: Int) = leg(idx).getObject(idx)
-
+    override fun getObject(idx: Int) = leg(idx)?.getObject(getOffset(idx))
     override fun getObject0(idx: Int) = throw UnsupportedOperationException()
     override fun writeObject0(value: Any) = throw UnsupportedOperationException()
+
+    override fun legReader(name: String): VectorReader {
+        for (i in legs.indices) {
+            val leg = legs[i]
+            if (leg.name == name) return LegReader(leg)
+        }
+
+        error("no leg: $name")
+    }
+
+    override fun legWriter(name: String): VectorWriter {
+        for (i in legs.indices) {
+            val leg = legs[i]
+            if (leg.name == name) return LegWriter(i.toByte(), leg)
+        }
+
+        TODO("auto-creation")
+    }
+
+    override fun legWriter(name: String, fieldType: FieldType): VectorWriter {
+        for (i in legs.indices) {
+            val leg = legs[i]
+            if (leg.name == name) {
+                if (leg.arrowField.fieldType != fieldType) TODO("promotion")
+
+                return LegWriter(i.toByte(), leg)
+            }
+        }
+
+        return LegWriter(
+            legs.size.toByte(),
+            fromField(Field(name, fieldType, emptyList()), allocator).also { legs.add(it) }
+        )
+    }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))

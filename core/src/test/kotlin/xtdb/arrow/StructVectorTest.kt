@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.RelationTest.ByteBufferChannel
+import xtdb.toFieldType
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -52,8 +53,8 @@ class StructVectorTest {
         )
 
         StructVector(allocator, "struct", false, children).use { structVec ->
-            val i32Writer = structVec.vectorForKey("i32")!!
-            val utf8Writer = structVec.vectorForKey("utf8")!!
+            val i32Writer = structVec.keyWriter("i32")
+            val utf8Writer = structVec.keyWriter("utf8")
 
             i32Writer.writeInt(4)
             utf8Writer.writeObject("Hello")
@@ -74,6 +75,35 @@ class StructVectorTest {
                 ),
                 structVec.toList())
         }
+    }
+
+    @Test
+    fun createsMissingVectors() {
+        StructVector(allocator, "struct", false).use { structVec ->
+            val i32Writer = structVec.keyWriter("i32", 4.toFieldType())
+
+            i32Writer.writeInt(4)
+            structVec.endStruct()
+
+            val utf8Writer = structVec.keyWriter("utf8", "foo".toFieldType())
+
+            i32Writer.writeInt(8)
+            utf8Writer.writeObject("Hello")
+            structVec.endStruct()
+
+            i32Writer.writeInt(12)
+            utf8Writer.writeObject("world!")
+            structVec.endStruct()
+
+            assertEquals(
+                listOf(
+                    mapOf("i32" to 4),
+                    mapOf("i32" to 8, "utf8" to "Hello"),
+                    mapOf("i32" to 12, "utf8" to "world!")
+                ),
+                structVec.toList())
+        }
+
     }
 
     @Test

@@ -17,14 +17,17 @@ private val MAGIC = "ARROW1".toByteArray()
 
 class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0) : AutoCloseable {
 
+    @JvmOverloads
     constructor(vectors: List<Vector>, rowCount: Int = 0)
             : this(vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
 
+    @JvmOverloads
     constructor(allocator: BufferAllocator, schema: Schema, rowCount: Int = 0)
             : this(allocator, schema.fields, rowCount)
 
+    @JvmOverloads
     constructor(allocator: BufferAllocator, fields: List<Field>, rowCount: Int = 0)
-            : this(fields.map { Vector.fromField(it, allocator) }, rowCount)
+            : this(fields.map { fromField(it, allocator) }, rowCount)
 
     fun endRow() = ++rowCount
 

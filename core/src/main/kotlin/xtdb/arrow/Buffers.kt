@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.BitVectorHelper
+import java.nio.ByteBuffer
 import kotlin.math.max
 
 internal val NULL_CHECKS =
@@ -26,12 +27,12 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     }
 
     private fun ensureWritable(elWidth: Long): ArrowBuf {
-        if (buf.writableBytes() < elWidth) realloc()
+        while (buf.writableBytes() < elWidth) realloc()
         return buf
     }
 
     private fun ensureCapacity(capacity: Long): ArrowBuf {
-        if (buf.capacity() < capacity) realloc()
+        while (buf.capacity() < capacity) realloc()
         return buf
     }
 
@@ -102,6 +103,14 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     fun writeBytes(bytes: ByteArray) {
         ensureWritable(bytes.size.toLong())
         buf.writeBytes(bytes)
+    }
+
+    fun writeBytes(bytes: ByteBuffer) {
+        val bytesDup = bytes.duplicate()
+        ensureWritable(bytesDup.remaining().toLong())
+        val byteArray = ByteArray(bytesDup.remaining())
+        bytesDup.get(byteArray)
+        buf.writeBytes(byteArray)
     }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) = buffers.add(buf.readerIndex(0))

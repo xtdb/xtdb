@@ -9,7 +9,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import java.util.*
 
 class StructVector(
-    allocator: BufferAllocator,
+    private val allocator: BufferAllocator,
     override val name: String,
     override var nullable: Boolean,
     private val children: SequencedMap<String, Vector> = LinkedHashMap()
@@ -24,7 +24,7 @@ class StructVector(
         val valueCount = this.valueCount
 
         children.sequencedValues().forEach { child ->
-            (child.valueCount until valueCount).forEach { _ -> child.writeNull() }
+            repeat(valueCount - child.valueCount) { child.writeNull() }
         }
     }
 
@@ -51,7 +51,22 @@ class StructVector(
         valueCount = node.length
     }
 
-    override fun vectorForKey(name: String) = children[name]
+    override fun keyReader(name: String): Vector = children[name] ?: error("no key: $name")
+
+    override fun keyWriter(name: String) = children[name] ?: TODO("auto-creation")
+
+    override fun keyWriter(name: String, fieldType: FieldType) =
+        children.compute(name) { _, v ->
+            if (v == null) {
+                fromField(Field(name, fieldType, emptyList()), allocator).also { newVec ->
+                    repeat(valueCount) { newVec.writeNull() }
+                }
+            } else {
+                val existingFieldType = v.arrowField.fieldType
+                if (existingFieldType != fieldType) TODO("promotion to union")
+                v
+            }
+        }!!
 
     override fun endStruct() {
         validityBuffer.writeBit(valueCount++, 1)

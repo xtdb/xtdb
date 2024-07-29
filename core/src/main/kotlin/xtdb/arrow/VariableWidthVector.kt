@@ -6,6 +6,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import java.nio.ByteBuffer
 
 abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
 
@@ -45,6 +46,11 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
 
     override fun writeBytes(bytes: ByteArray) {
         writeNotNull(bytes.size)
+        dataBuffer.writeBytes(bytes)
+    }
+
+    protected fun writeBytes(bytes: ByteBuffer) {
+        writeNotNull(bytes.remaining())
         dataBuffer.writeBytes(bytes)
     }
 

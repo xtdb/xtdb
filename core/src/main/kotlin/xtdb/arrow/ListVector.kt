@@ -7,7 +7,12 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 
-class ListVector(allocator: BufferAllocator, override val name: String, override var nullable: Boolean, private val elVector: Vector) : Vector() {
+class ListVector(
+    allocator: BufferAllocator,
+    override val name: String,
+    override var nullable: Boolean,
+    private val elVector: Vector
+) : Vector() {
 
     override val arrowField: Field
         get() = Field(name, FieldType(nullable, MinorType.LIST.type, null), listOf(elVector.arrowField))
@@ -50,6 +55,17 @@ class ListVector(allocator: BufferAllocator, override val name: String, override
 
         else -> TODO("unknown type")
     }
+
+    override fun elementReader() = elVector
+    override fun elementWriter() = elVector
+
+    override fun elementWriter(fieldType: FieldType): VectorWriter =
+        if (elVector.arrowField.fieldType == fieldType) elVector else TODO("promote elVector")
+
+    override fun endList() = writeNotNull(elVector.valueCount - lastOffset)
+
+    override fun getListCount(idx: Int) = offsetBuffer.getInt(idx + 1) - offsetBuffer.getInt(idx)
+    override fun getListStartIndex(idx: Int) = offsetBuffer.getInt(idx)
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
