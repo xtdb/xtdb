@@ -36,6 +36,7 @@
            (xtdb ICursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
+           xtdb.arrow.Relation
            xtdb.indexer.live_index.ILiveTable
            xtdb.util.RowCounter
            (xtdb.vector IVectorReader)))
@@ -305,30 +306,26 @@
 (defmacro with-log-level [ns level & body]
   `(with-log-levels {~ns ~level} ~@body))
 
-(defn open-arrow-hash-trie-root ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator al, paths]
-  (util/with-close-on-catch [meta-root (VectorSchemaRoot/create trie/meta-rel-schema al)]
-    (let [meta-wtr (vw/root->writer meta-root)
-          meta-wp (.writerPosition meta-wtr)
-          nodes-wtr (.colWriter meta-wtr "nodes")
-          nil-wtr (.legWriter nodes-wtr :nil)
-          iid-branch-wtr (.legWriter nodes-wtr :branch-iid)
-          iid-branch-el-wtr (.listElementWriter iid-branch-wtr)
-          recency-branch-wtr (.legWriter nodes-wtr :branch-recency)
-          recency-branch-el-wtr (.listElementWriter recency-branch-wtr)
-          recency-wtr (.structKeyWriter recency-branch-el-wtr "recency")
-          recency-idx-wtr (.structKeyWriter recency-branch-el-wtr "idx")
+(defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
+  (util/with-close-on-catch [meta-rel (Relation. al trie/meta-rel-schema)]
+    (let [nodes-wtr (.get meta-rel "nodes")
+          nil-wtr (.legWriter nodes-wtr "nil")
+          iid-branch-wtr (.legWriter nodes-wtr "branch-iid")
+          iid-branch-el-wtr (.elementWriter iid-branch-wtr)
+          recency-branch-wtr (.legWriter nodes-wtr "branch-recency")
+          recency-branch-el-wtr (.elementWriter recency-branch-wtr)
+          recency-wtr (.keyWriter recency-branch-el-wtr "recency")
+          recency-idx-wtr (.keyWriter recency-branch-el-wtr "idx")
 
-          data-wtr (.legWriter nodes-wtr :leaf)
-          data-page-idx-wtr (.structKeyWriter data-wtr "data-page-idx")
-          metadata-wtr (.structKeyWriter data-wtr "columns")]
+          data-wtr (.legWriter nodes-wtr "leaf")
+          data-page-idx-wtr (.keyWriter data-wtr "data-page-idx")
+          metadata-wtr (.keyWriter data-wtr "columns")]
       (letfn [(write-paths [paths]
                 (cond
                   (nil? paths) (.writeNull nil-wtr)
 
                   (number? paths) (do
-                                    (.startStruct data-wtr)
                                     (.writeInt data-page-idx-wtr paths)
-                                    (.startList metadata-wtr)
                                     (.endList metadata-wtr)
                                     (.endStruct data-wtr))
 
@@ -337,9 +334,8 @@
                                       (.add !page-idxs (if child
                                                          (do
                                                            (write-paths child)
-                                                           (dec (.getPosition meta-wp)))
+                                                           (dec (.getRowCount meta-rel)))
                                                          -1)))
-                                    (.startList iid-branch-wtr)
                                     (.forEach (.build !page-idxs)
                                               (reify IntConsumer
                                                 (accept [_ idx]
@@ -351,24 +347,19 @@
                   (map? paths) (let [!page-idxs (TreeMap.)]
                                  (doseq [[recency child] paths]
                                    (write-paths child)
-                                   (.put !page-idxs recency (dec (.getPosition meta-wp))))
-
-                                 (.startList recency-branch-wtr)
+                                   (.put !page-idxs recency (dec (.getRowCount meta-rel))))
 
                                  (doseq [[^long recency, ^long idx] !page-idxs]
-                                   (.startStruct recency-branch-el-wtr)
                                    (.writeLong recency-wtr recency)
                                    (.writeInt recency-idx-wtr idx)
                                    (.endStruct recency-branch-el-wtr))
 
                                  (.endList recency-branch-wtr)))
 
-                (.endRow meta-wtr))]
-        (write-paths paths))
+                (.endRow meta-rel))]
+        (write-paths paths)))
 
-      (.syncRowCount meta-wtr))
-
-    meta-root))
+    meta-rel))
 
 (defn write-arrow-data-file ^org.apache.arrow.vector.VectorSchemaRoot
   [^BufferAllocator al, page-idx->documents, ^Path data-file-path]

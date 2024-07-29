@@ -18,6 +18,7 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            (xtdb.api IndexerConfig)
            xtdb.api.storage.Storage$InMemoryStorageFactory
+           xtdb.arrow.Relation
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
@@ -72,14 +73,13 @@
 
       (util/with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
                        ^ArrowBuf leaf-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
-                       trie-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))) allocator)
+                       trie-loader (Relation/load allocator (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))))
                        leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
-        (let [trie-root (.getVectorSchemaRoot trie-rdr)
-              nodes-vec (.getVector trie-root "nodes")
+        (let [trie-rel (.getRelation trie-loader)
               iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
-          (.loadNextBatch trie-rdr)
+          (.loadBatch trie-loader 0)
           (t/is (= iid-bytes
-                   (->> (.getLeaves (ArrowHashTrie. nodes-vec))
+                   (->> (.getLeaves (ArrowHashTrie. (.get trie-rel "nodes")))
                         (mapcat (fn [^ArrowHashTrie$Leaf leaf]
                                   ;; would be good if ArrowFileReader accepted a page-idx...
                                   (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))

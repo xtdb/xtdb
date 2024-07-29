@@ -8,7 +8,6 @@
             [xtdb.serde :as serde]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (com.cognitect.transit TransitFactory)
            (com.github.benmanes.caffeine.cache Cache Caffeine RemovalListener)
@@ -21,17 +20,17 @@
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date
                                                ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int
                                                ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct
                                                ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union
                                                ArrowType$Utf8 Field FieldType)
+           xtdb.arrow.Relation
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
-           (xtdb.vector IVectorReader IVectorWriter RelationReader)
+           (xtdb.vector IVectorReader IVectorWriter)
            (xtdb.vector.extensions KeywordType SetType TransitType UriType UuidType)))
 
 (def arrow-read-handlers
@@ -315,7 +314,8 @@
         col-names (HashSet.)]
 
     (dotimes [meta-idx meta-row-count]
-      (when-not (.isNull cols-rdr meta-idx)
+      (when-not (or (.isNull metadata-rdr meta-idx)
+                    (.isNull cols-rdr meta-idx))
         (let [cols-start-idx (.getListStartIndex cols-rdr meta-idx)
               data-page-idx (if-let [data-page-idx (.getObject data-page-idx-rdr meta-idx)]
                               data-page-idx
@@ -331,7 +331,7 @@
      :page-idx-cache page-idx-cache}))
 
 (defrecord TableMetadata [^HashTrie trie
-                          ^RelationReader meta-rel-reader
+                          ^Relation meta-rel
                           ^ArrowBuf buf
                           ^IVectorReader metadata-leaf-rdr
                           col-names
@@ -341,6 +341,7 @@
   (metadataReader [_] metadata-leaf-rdr)
   (columnNames [_] col-names)
   (rowIndex [_ col-name page-idx] (.getOrDefault page-idx-cache (PageIndexKey. col-name page-idx) -1))
+
   (iidBloomBitmap [_ page-idx]
     (let [bloom-rdr (-> (.structKeyReader metadata-leaf-rdr "columns")
                         (.listElementReader)
@@ -353,20 +354,21 @@
   AutoCloseable
   (close [_]
     (when (zero? (.decrementAndGet ref-count))
-      (util/close meta-rel-reader)
+      (util/close meta-rel)
       (util/close buf))))
 
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path]
   (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
-    (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf buf)
-          nodes-vec (.getVector root "nodes")]
-      (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
-        (.load loader record-batch)
-        (let [rdr (vr/<-root root)
-              ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
-                                                 (.legReader :leaf))
-              {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]
-          (->TableMetadata (ArrowHashTrie. nodes-vec) rdr buf metadata-reader col-names page-idx-cache (AtomicInteger. 1)))))))
+    (let [loader (Relation/load (.getAllocator (.getReferenceManager buf))
+                                (util/->seekable-byte-channel (.nioBuffer buf 0 (.capacity buf))))
+          rel (.getRelation loader)
+          nodes-vec (.get rel "nodes")]
+      (.loadBatch loader 0)
+      (let [rdr (.getRelReader rel)
+            ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
+                                               (.legReader :leaf))
+            {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]
+        (->TableMetadata (ArrowHashTrie. nodes-vec) rel buf metadata-reader col-names page-idx-cache (AtomicInteger. 1))))))
 
 (deftype MetadataManager [^IBufferPool buffer-pool
                           ^Cache table-metadata-cache
