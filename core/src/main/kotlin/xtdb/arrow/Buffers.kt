@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BitVectorHelper
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -15,9 +16,16 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty)
 
-    private fun realloc() {
+    private fun newCapacity(currentCapacity: Long, targetCapacity: Long): Long {
+        var newCapacity = max(currentCapacity, 128)
+        while (newCapacity < targetCapacity) newCapacity *= 2
+        return newCapacity
+    }
+
+    private fun realloc(targetCapacity: Long) {
         val currentCapacity = buf.capacity()
-        val newBuf = allocator.buffer(max(128, currentCapacity * 2)).apply {
+
+        val newBuf = allocator.buffer(newCapacity(currentCapacity, targetCapacity)).apply {
             setBytes(0, buf, 0, currentCapacity)
             writerIndex(buf.writerIndex())
         }
@@ -27,12 +35,12 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     }
 
     private fun ensureWritable(elWidth: Long): ArrowBuf {
-        while (buf.writableBytes() < elWidth) realloc()
+        while (buf.writableBytes() < elWidth) realloc(buf.writerIndex() + elWidth)
         return buf
     }
 
     private fun ensureCapacity(capacity: Long): ArrowBuf {
-        while (buf.capacity() < capacity) realloc()
+        while (buf.capacity() < capacity) realloc(capacity)
         return buf
     }
 
@@ -112,6 +120,9 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         bytesDup.get(byteArray)
         buf.writeBytes(byteArray)
     }
+
+    fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
+        (reuse ?: ArrowBufPointer()).apply { set(this@ExtensibleBuffer.buf, idx.toLong(), len.toLong()) }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) = buffers.add(buf.readerIndex(0))
 

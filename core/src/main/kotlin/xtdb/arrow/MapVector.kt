@@ -27,6 +27,9 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun isNull(idx: Int) = listVector.isNull(idx)
     override fun writeNull() = listVector.writeNull()
 
+    override fun getListCount(idx: Int) = listVector.getListCount(idx)
+    override fun getListStartIndex(idx: Int) = listVector.getListStartIndex(idx)
+
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.unloadBatch(nodes, buffers)
 
@@ -66,12 +69,18 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         else -> TODO("promotion: ${value::class.simpleName}")
     }
 
-    override fun mapKeyReader() = listVector.elementReader().mapKeyReader()
-    override fun mapValueReader() = listVector.elementReader().mapValueReader()
-    override fun mapKeyWriter() = listVector.elementWriter().mapKeyWriter()
-    override fun mapKeyWriter(fieldType: FieldType) = listVector.elementWriter().mapKeyWriter(fieldType)
-    override fun mapValueWriter() = listVector.elementWriter().mapValueWriter()
-    override fun mapValueWriter(fieldType: FieldType) = listVector.elementWriter().mapValueWriter(fieldType)
+    override fun elementReader() = listVector.elementReader()
+    override fun elementWriter() = listVector.elementWriter()
+    override fun elementWriter(fieldType: FieldType) = listVector.elementWriter(fieldType)
+
+    override fun endList() = listVector.endList()
+
+    override fun mapKeyReader() = elementReader().mapKeyReader()
+    override fun mapValueReader() = elementReader().mapValueReader()
+    override fun mapKeyWriter() = elementWriter().mapKeyWriter()
+    override fun mapKeyWriter(fieldType: FieldType) = elementWriter().mapKeyWriter(fieldType)
+    override fun mapValueWriter() = elementWriter().mapValueWriter()
+    override fun mapValueWriter(fieldType: FieldType) = elementWriter().mapValueWriter(fieldType)
 
     override fun reset() = listVector.reset()
     override fun close() = listVector.close()

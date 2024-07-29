@@ -8,7 +8,7 @@ class Utf8Vector(al: BufferAllocator, override val name: String, override var nu
 
     override val arrowType: ArrowType = Types.MinorType.VARCHAR.type
 
-    override fun getObject0(idx: Int) = getBytes(idx).toString(Charsets.UTF_8)
+    override fun getObject0(idx: Int): String = getBytes(idx).toString(Charsets.UTF_8)
 
     override fun writeObject0(value: Any) = when {
         value is String -> writeBytes(value.toByteArray())

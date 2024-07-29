@@ -14,6 +14,8 @@ import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
+import xtdb.vector.extensions.KeywordType
+import xtdb.vector.extensions.UuidType
 import java.time.ZoneId
 
 internal fun Any.unsupported(op: String): Nothing =
@@ -24,7 +26,7 @@ sealed class Vector : VectorReader, VectorWriter {
     abstract override var nullable: Boolean; internal set
     override var valueCount: Int = 0; internal set
 
-    protected abstract fun getObject0(idx: Int): Any
+    internal abstract fun getObject0(idx: Int): Any
     override fun getObject(idx: Int) = if (isNull(idx)) null else getObject0(idx)
 
     protected abstract fun writeObject0(value: Any)
@@ -118,6 +120,10 @@ fun fromField(field: Field, al: BufferAllocator): Vector {
 
         override fun visit(type: Duration) = DurationVector(al, name, isNullable, type.unit)
 
-        override fun visit(type: ExtensionType) = TODO("Not yet implemented")
+        override fun visit(type: ExtensionType) = when (type) {
+            KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))
+            UuidType -> UuidVector(FixedSizeBinaryVector(al, name, isNullable, 16))
+            else -> error("unknown extension: $type")
+        }
     })
 }

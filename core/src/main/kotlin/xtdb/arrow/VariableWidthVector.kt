@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -54,6 +55,11 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         dataBuffer.writeBytes(bytes)
     }
 
+    override fun getPointer(idx: Int, reuse: ArrowBufPointer?): ArrowBufPointer =
+        offsetBuffer.getInt(idx).let { start ->
+            dataBuffer.getPointer(start, offsetBuffer.getInt(idx + 1) - start, reuse)
+        }
+
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)
@@ -62,11 +68,11 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
     }
 
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
+        val node = nodes.removeFirstOrNull() ?: error("missing node")
 
-        validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
-        offsetBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing offset buffer"))
-        dataBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing data buffer"))
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
+        offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing offset buffer"))
+        dataBuffer.loadBuffer(buffers.removeFirst() ?: error("missing data buffer"))
 
         valueCount = node.length
     }

@@ -75,10 +75,11 @@ class ListVector(
     }
 
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
+        val node = nodes.removeFirstOrNull() ?: error("missing node")
 
-        validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
-        offsetBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing offset buffer"))
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
+        offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing offset buffer"))
+
         elVector.loadBatch(nodes, buffers)
 
         valueCount = node.length

@@ -8,6 +8,8 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.VectorReader.Companion
+import xtdb.vector.RelationReader
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
@@ -110,6 +112,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
 
         val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
 
+        fun loadBatch(idx: Int) = batches[idx].load()
+
         override fun close() {
             relation.close()
             ch.close()
@@ -141,6 +145,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
             return ArrowFooter(Footer.getRootAsFooter(footerBuffer))
         }
 
+        @JvmStatic
         fun load(al: BufferAllocator, ch: SeekableByteChannel): Loader {
             val readCh = SeekableReadChannel(ch)
             require(readCh.size() > MAGIC.size * 2 + 4) { "File is too small to be an Arrow file" }
@@ -164,4 +169,11 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
     }
 
     operator fun get(s: String) = vectors[s]
+
+    @Suppress("unused")
+    fun toLists(): Map<String, List<*>> {
+        return vectors.mapValues { it.value.toList() }
+    }
+
+    val relReader: RelationReader get() = RelationReader.from(vectors.sequencedValues().map(VectorReader.Companion::Adapter), rowCount)
 }

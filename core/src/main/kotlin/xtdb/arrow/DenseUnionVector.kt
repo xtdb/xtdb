@@ -23,6 +23,7 @@ class DenseUnionVector(
         override val arrowField get() = inner.arrowField
 
         override fun isNull(idx: Int) = inner.isNull(getOffset(idx))
+        override fun getBoolean(idx: Int) = inner.getBoolean(getOffset(idx))
         override fun getByte(idx: Int) = inner.getByte(getOffset(idx))
         override fun getShort(idx: Int) = inner.getShort(getOffset(idx))
         override fun getInt(idx: Int) = inner.getInt(getOffset(idx))
@@ -34,6 +35,11 @@ class DenseUnionVector(
 
         override fun getListCount(idx: Int) = inner.getListCount(getOffset(idx))
         override fun getListStartIndex(idx: Int) = inner.getListStartIndex(getOffset(idx))
+        override fun elementReader() = inner.elementReader()
+
+        override fun keyReader(name: String) = inner.keyReader(name)?.let { LegReader(it) }
+        override fun mapKeyReader() = inner.mapKeyReader()
+        override fun mapValueReader() = inner.mapValueReader()
 
         override fun toList() = inner.toList()
 
@@ -67,8 +73,12 @@ class DenseUnionVector(
 
         override fun writeObject(value: Any?) = writeValueThen().writeObject(value)
 
+        override fun keyWriter(name: String) = inner.keyWriter(name)
+        override fun keyWriter(name: String, fieldType: FieldType) = inner.keyWriter(name, fieldType)
         override fun endStruct() = writeValueThen().endStruct()
 
+        override fun elementWriter() = inner.elementWriter()
+        override fun elementWriter(fieldType: FieldType) = inner.elementWriter(fieldType)
         override fun endList() = writeValueThen().endList()
 
         override fun reset() = inner.reset()
@@ -103,13 +113,15 @@ class DenseUnionVector(
     override fun getObject0(idx: Int) = throw UnsupportedOperationException()
     override fun writeObject0(value: Any) = throw UnsupportedOperationException()
 
-    override fun legReader(name: String): VectorReader {
+    override fun getLeg(idx: Int) = leg(idx)!!.name
+
+    override fun legReader(name: String): VectorReader? {
         for (i in legs.indices) {
             val leg = legs[i]
             if (leg.name == name) return LegReader(leg)
         }
 
-        error("no leg: $name")
+        return null
     }
 
     override fun legWriter(name: String): VectorWriter {
@@ -146,10 +158,10 @@ class DenseUnionVector(
     }
 
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
+        val node = nodes.removeFirstOrNull() ?: throw IllegalStateException("missing node")
 
-        typeBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing type buffer"))
-        offsetBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing offset buffer"))
+        typeBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing type buffer"))
+        offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing offset buffer"))
         legs.forEach { it.loadBatch(nodes, buffers) }
 
         valueCount = node.length

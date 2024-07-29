@@ -22,12 +22,12 @@ class NullVector(override val name: String) : Vector() {
     override fun writeObject0(value: Any) = error("NullVector writeObject0")
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: error("missing node")
-        valueCount = node.length
+        nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
     }
 
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
+        val node = nodes.removeFirst() ?: error("missing node")
+        valueCount = node.length
     }
 
     override fun reset() {

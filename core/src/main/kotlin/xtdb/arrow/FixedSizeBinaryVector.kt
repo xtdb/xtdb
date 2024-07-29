@@ -12,7 +12,9 @@ class FixedSizeBinaryVector(
 
     override val arrowType = ArrowType.FixedSizeBinary(byteWidth)
 
-    override fun getObject0(idx: Int) = getBytes0(idx)
+    override fun getBytes(idx: Int) = getBytes0(idx)
+
+    override fun getObject0(idx: Int) = getBytes(idx)
 
     override fun writeObject0(value: Any) = when (value) {
         is ByteArray -> writeBytes(value)

@@ -51,7 +51,7 @@ class StructVector(
         valueCount = node.length
     }
 
-    override fun keyReader(name: String): Vector = children[name] ?: error("no key: $name")
+    override fun keyReader(name: String) = children[name]
 
     override fun keyWriter(name: String) = children[name] ?: TODO("auto-creation")
 

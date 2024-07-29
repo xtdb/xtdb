@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -105,6 +106,9 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
         dataBuffer.writeBytes(bytes)
         writeNotNull()
     }
+
+    final override fun getPointer(idx: Int, reuse: ArrowBufPointer?) =
+        dataBuffer.getPointer(idx * byteWidth, byteWidth, reuse)
 
     final override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
