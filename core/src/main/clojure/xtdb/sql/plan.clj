@@ -630,6 +630,20 @@
                            (-> (->col-sym (str "xt$ordinal." (swap! !id-count inc)))
                                (vary-meta assoc :unnamed-unnest-col? true)))))))
 
+  (visitGenerateSeriesTable [{{:keys [!id-count]} :env} ctx]
+    (let [table-alias (identifier-sym (.tableAlias ctx))
+          unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+          col (or (->col-sym (first (->table-projection (.tableProjection ctx))))
+                  (-> (->col-sym (str "xt$genseries." (swap! !id-count inc)))
+             (vary-meta assoc :unnamed-unnest-col? true)))
+
+          [start stop step] (for [e (.expr ctx)]
+                              (.accept e (->ExprPlanVisitor env (or left-scope scope))))
+          step (or step 1)
+          col-values (vec (take-while #(<= % stop)
+                            (iterate #(+ % step) start)))]
+      (->UnnestTable env table-alias unique-table-alias col col-values nil)))
+
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
 
   (visitArrowTable [{{:keys [!id-count]} :env} ctx]
