@@ -73,6 +73,11 @@ class StructVector(
         writeAbsents()
     }
 
+    override fun mapKeyReader(): VectorReader = children.sequencedValues().firstOrNull() ?: TODO("auto-creation")
+    override fun mapValueReader(): VectorReader = children.sequencedValues().lastOrNull() ?: TODO("auto-creation")
+    override fun mapKeyWriter(): VectorWriter = children.sequencedValues().firstOrNull() ?: TODO("auto-creation")
+    override fun mapValueWriter(): VectorWriter = children.sequencedValues().lastOrNull() ?: TODO("auto-creation")
+
     override fun getObject0(idx: Int): Any =
         children.sequencedEntrySet()
             .associateBy({ it.key }, { it.value.getObject(idx) })

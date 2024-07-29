@@ -1,0 +1,78 @@
+package xtdb.arrow
+
+import org.apache.arrow.memory.ArrowBuf
+import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
+
+class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
+
+    override val name get() = listVector.name
+    override var nullable: Boolean
+        get() = listVector.nullable
+        set(value) {
+            listVector.nullable = value
+        }
+
+    override val arrowField: Field
+        get() = Field(name, FieldType(nullable, ArrowType.Map(keysSorted), null), listVector.arrowField.children)
+
+    override var valueCount: Int
+        get() = listVector.valueCount
+        set(value) {
+            listVector.valueCount = value
+        }
+
+    override fun isNull(idx: Int) = listVector.isNull(idx)
+    override fun writeNull() = listVector.writeNull()
+
+    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.unloadBatch(nodes, buffers)
+
+    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.loadBatch(nodes, buffers)
+
+    override fun getObject0(idx: Int): Any {
+        val startIdx = listVector.getListStartIndex(idx)
+        val entryCount = listVector.getListCount(idx)
+
+        val elReader = listVector.elementReader()
+        val keyReader = elReader.mapKeyReader()
+        val valueReader = elReader.mapValueReader()
+
+        return (0 until entryCount).associate { elIdx ->
+            (startIdx + elIdx).let { entryIdx ->
+                keyReader.getObject(entryIdx) to valueReader.getObject(entryIdx)
+            }
+        }
+    }
+
+    override fun writeObject0(value: Any) = when (value) {
+        is Map<*, *> -> {
+            val elWriter = listVector.elementWriter()
+            val keyWriter = elWriter.mapKeyWriter()
+            val valueWriter = elWriter.mapValueWriter()
+
+            value.forEach { k, v ->
+                keyWriter.writeObject(k)
+                valueWriter.writeObject(v)
+                elWriter.endStruct()
+            }
+
+            listVector.endList()
+        }
+
+        else -> TODO("promotion: ${value::class.simpleName}")
+    }
+
+    override fun mapKeyReader() = listVector.elementReader().mapKeyReader()
+    override fun mapValueReader() = listVector.elementReader().mapValueReader()
+    override fun mapKeyWriter() = listVector.elementWriter().mapKeyWriter()
+    override fun mapKeyWriter(fieldType: FieldType) = listVector.elementWriter().mapKeyWriter(fieldType)
+    override fun mapValueWriter() = listVector.elementWriter().mapValueWriter()
+    override fun mapValueWriter(fieldType: FieldType) = listVector.elementWriter().mapValueWriter(fieldType)
+
+    override fun reset() = listVector.reset()
+    override fun close() = listVector.close()
+}

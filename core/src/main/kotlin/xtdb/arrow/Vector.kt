@@ -1,4 +1,5 @@
 @file:JvmName("Vectors")
+
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
@@ -63,7 +64,10 @@ fun fromField(field: Field, al: BufferAllocator): Vector {
             UnionMode.Dense -> DenseUnionVector(al, name, isNullable, field.children.map { fromField(it, al) })
         }
 
-        override fun visit(type: ArrowType.Map) = TODO("Not yet implemented")
+        override fun visit(type: ArrowType.Map): MapVector {
+            val structVec = fromField(field.children.first(), al)
+            return MapVector(ListVector(al, name, isNullable, structVec), type.keysSorted)
+        }
 
         override fun visit(type: Bool) = BitVector(al, name, isNullable)
 
