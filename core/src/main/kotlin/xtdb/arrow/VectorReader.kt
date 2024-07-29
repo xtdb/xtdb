@@ -69,7 +69,7 @@ interface VectorReader : AutoCloseable {
             override fun getPointer(idx: Int, reuse: ArrowBufPointer) = vector.getPointer(idx, reuse)
 
             override fun getObject(idx: Int) = vector.getObject(idx)
-            override fun getObject(idx: Int, keyFn: IKeyFn<*>?) = TODO()
+            override fun getObject(idx: Int, keyFn: IKeyFn<*>?) = getObject(idx)
 
             override fun structKeyReader(colName: String) = vector.keyReader(colName)?.let { Adapter(it) }
 

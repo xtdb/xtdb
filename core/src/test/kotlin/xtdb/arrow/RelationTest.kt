@@ -201,7 +201,5 @@ class RelationTest {
 
             assertEquals(duvValues, loader.relation["duv"]!!.toList())
         }
-
     }
-
 }

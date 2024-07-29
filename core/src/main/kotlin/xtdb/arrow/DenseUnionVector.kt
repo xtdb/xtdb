@@ -16,13 +16,13 @@ class DenseUnionVector(
 
     private val legs = legs.toMutableList()
 
-    inner class LegReader(val inner: VectorReader) : VectorReader {
+    inner class LegReader(val typeId: Byte, val inner: VectorReader) : VectorReader {
         override val name get() = inner.name
         override val nullable get() = inner.nullable
-        override val valueCount get() = inner.valueCount
+        override val valueCount get() = this@DenseUnionVector.valueCount
         override val arrowField get() = inner.arrowField
 
-        override fun isNull(idx: Int) = inner.isNull(getOffset(idx))
+        override fun isNull(idx: Int) = getTypeId(idx) != typeId || inner.isNull(getOffset(idx))
         override fun getBoolean(idx: Int) = inner.getBoolean(getOffset(idx))
         override fun getByte(idx: Int) = inner.getByte(getOffset(idx))
         override fun getShort(idx: Int) = inner.getShort(getOffset(idx))
@@ -37,7 +37,7 @@ class DenseUnionVector(
         override fun getListStartIndex(idx: Int) = inner.getListStartIndex(getOffset(idx))
         override fun elementReader() = inner.elementReader()
 
-        override fun keyReader(name: String) = inner.keyReader(name)?.let { LegReader(it) }
+        override fun keyReader(name: String) = inner.keyReader(name)?.let { LegReader(typeId, it) }
         override fun mapKeyReader() = inner.mapKeyReader()
         override fun mapValueReader() = inner.mapValueReader()
 
@@ -118,7 +118,7 @@ class DenseUnionVector(
     override fun legReader(name: String): VectorReader? {
         for (i in legs.indices) {
             val leg = legs[i]
-            if (leg.name == name) return LegReader(leg)
+            if (leg.name == name) return LegReader(i.toByte(), leg)
         }
 
         return null
