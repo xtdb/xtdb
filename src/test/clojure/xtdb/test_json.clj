@@ -43,6 +43,11 @@
 
       json-file)))
 
+(comment
+  (with-open [al (RootAllocator.)]
+    (binding [tu/*allocator* al]
+      (write-arrow-json-file (util/->path "/tmp/test.arrow")))))
+
 (defn check-arrow-json-file [^Path expected, ^Path actual]
   (t/is (= (sort-arrow-json (json/read-value (Files/readString expected)))
            (sort-arrow-json (json/read-value (Files/readString actual))))

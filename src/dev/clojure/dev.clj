@@ -120,7 +120,7 @@
             :else v))))))
 
 (comment
-  (->> (util/->path "/tmp/tpch/tables/customer/t1-content/c_name/r00-tx00.arrow")
+  (->> (util/->path "/tmp/test.arrow")
        (read-arrow-file)
        (into [] cat)))
 

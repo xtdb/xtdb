@@ -15,6 +15,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            org.apache.arrow.vector.VectorSchemaRoot
            (xtdb ICursor)
+           xtdb.arrow.Relation
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrieKt MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds)
            (xtdb.vector RelationWriter)))
@@ -29,8 +30,8 @@
     (t/is (= [0 nil 22 46 32] (parse (trie/->log-l0-l1-trie-key 0 22 46 32))))
     (t/is (= [2 [0 0 1 3] nil 120 nil] (parse (trie/->log-l2+-trie-key 2 (byte-array [0 0 1 3]) 120))))))
 
-(defn- ->arrow-hash-trie [^VectorSchemaRoot meta-root]
-  (ArrowHashTrie. (.getVector meta-root "nodes")))
+(defn- ->arrow-hash-trie [^Relation meta-rel]
+  (ArrowHashTrie. (.get meta-rel "nodes")))
 
 (defn- merge-plan-nodes->path+pages [mp-nodes]
   (->> mp-nodes
@@ -47,11 +48,11 @@
 
 (deftest test-merge-plan-with-nil-nodes-2700
   (with-open [al (RootAllocator.)
-              t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
-                                                        {(time/instant->micros (time/->instant #inst "2023-01-01")) 3
-                                                         Long/MAX_VALUE 4}])
-              log-root (tu/open-arrow-hash-trie-root al 0)
-              log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
+              t1-rel (tu/open-arrow-hash-trie-rel al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
+                                                      {(time/instant->micros (time/->instant #inst "2023-01-01")) 3
+                                                       Long/MAX_VALUE 4}])
+              log-rel (tu/open-arrow-hash-trie-rel al 0)
+              log2-rel (tu/open-arrow-hash-trie-rel al [nil nil 0 1])]
 
     (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
               {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
@@ -60,11 +61,11 @@
               {:path [0 1], :pages [{:seg :log, :page-idx 0} {:seg :t1, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
               {:path [0 3], :pages [{:seg :log, :page-idx 0} {:seg :t1, :page-idx 1}]}]
-             (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
+             (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
                                                (assoc :seg :t1))
-                                           (-> (trie/->Segment (->arrow-hash-trie log-root))
+                                           (-> (trie/->Segment (->arrow-hash-trie log-rel))
                                                (assoc :seg :log))
-                                           (-> (trie/->Segment (->arrow-hash-trie log2-root))
+                                           (-> (trie/->Segment (->arrow-hash-trie log2-rel))
                                                (assoc :seg :log2))]
                                           nil
                                           (TemporalBounds.))
@@ -72,18 +73,18 @@
 
 (deftest test-merge-plan-recency-filtering
   (with-open [al (RootAllocator.)
-              t1-root (tu/open-arrow-hash-trie-root al [{Long/MAX_VALUE [nil 0 nil 1]}
-                                                        {Long/MAX_VALUE 2}
-                                                        nil
-                                                        {(time/instant->micros (time/->instant #inst "2020-01-01")) 3
-                                                         Long/MAX_VALUE 4}])
-              t2-root (tu/open-arrow-hash-trie-root al [{(time/instant->micros (time/->instant #inst "2019-01-01")) 0
-                                                         (time/instant->micros (time/->instant #inst "2020-01-01")) 1
-                                                         Long/MAX_VALUE [nil 2 nil 3]}
-                                                        nil
-                                                        nil
-                                                        {(time/instant->micros (time/->instant #inst "2020-01-01")) 4
-                                                         Long/MAX_VALUE 5}])]
+              t1-rel (tu/open-arrow-hash-trie-rel al [{Long/MAX_VALUE [nil 0 nil 1]}
+                                                      {Long/MAX_VALUE 2}
+                                                      nil
+                                                      {(time/instant->micros (time/->instant #inst "2020-01-01")) 3
+                                                       Long/MAX_VALUE 4}])
+              t2-rel (tu/open-arrow-hash-trie-rel al [{(time/instant->micros (time/->instant #inst "2019-01-01")) 0
+                                                       (time/instant->micros (time/->instant #inst "2020-01-01")) 1
+                                                       Long/MAX_VALUE [nil 2 nil 3]}
+                                                      nil
+                                                      nil
+                                                      {(time/instant->micros (time/->instant #inst "2020-01-01")) 4
+                                                       Long/MAX_VALUE 5}])]
     (t/testing "pages 3 of t1 and 0,1 and 4 of t2 should not make it to the output"
       ;; setting up bounds for a current-time 2020-01-01
       (let [temporal-bounds (TemporalBounds.)
@@ -100,15 +101,15 @@
                    :pages [{:seg :t2, :page-idx 2} {:seg :t1, :page-idx 0}]}
                   {:path [0 3],
                    :pages [{:seg :t2, :page-idx 3} {:seg :t1, :page-idx 1}]}]
-                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
+                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
                                                    (assoc :seg :t1))
-                                               (-> (trie/->Segment (->arrow-hash-trie t2-root))
+                                               (-> (trie/->Segment (->arrow-hash-trie t2-rel))
                                                    (assoc :seg :t2))]
                                               nil
                                               temporal-bounds)
                       (merge-plan-nodes->path+pages))))))
 
-    (t/testing "going one cronon below should bring in pages 3 of t1 and pages 1 and 4 of t2"
+    (t/testing "going one chronon below should bring in pages 3 of t1 and pages 1 and 4 of t2"
       (let [temporal-bounds (TemporalBounds.)
             current-time (- (time/instant->micros (time/->instant #inst "2020-01-01")) 1) ]
         (.lte (.getSystemFrom temporal-bounds) current-time)
@@ -127,9 +128,9 @@
                   {:path [0 3],
                    :pages [{:seg :t2, :page-idx 1} {:seg :t2, :page-idx 3} {:seg :t1, :page-idx 1}]}]
 
-                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-root))
+                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
                                                    (assoc :seg :t1))
-                                               (-> (trie/->Segment (->arrow-hash-trie t2-root))
+                                               (-> (trie/->Segment (->arrow-hash-trie t2-rel))
                                                    (assoc :seg :t2))]
                                               nil
                                               temporal-bounds)
@@ -263,70 +264,68 @@
   (Paths/get s, (make-array String 0)))
 
 (deftest test-trie-cursor-with-multiple-recency-nodes-from-same-file-3298
-  (letfn [(->arrow-hash-trie [^VectorSchemaRoot meta-root]
-            (ArrowHashTrie. (.getVector meta-root "nodes")))]
-    (let [eid #uuid "00000000-0000-0000-0000-000000000000"]
-      (util/with-tmp-dirs #{tmp-dir}
-        (with-open [al (RootAllocator.)
-                    iid-arrow-buf (util/->arrow-buf-view al (trie/->iid eid))
-                    t1-root (tu/open-arrow-hash-trie-root al [{(time/instant->micros (time/->instant #inst "2023-01-01"))
-                                                               [0 nil nil 1]
-                                                               Long/MAX_VALUE [2 nil nil 3]}
-                                                              nil nil 4])
-                    t2-root (tu/open-arrow-hash-trie-root al [0 nil nil nil])]
-          (let [id #uuid "00000000-0000-0000-0000-000000000000"
-                t1-data-file "t1-data-file.arrow"
-                t2-data-file "t2-data-file.arrow"]
+  (let [eid #uuid "00000000-0000-0000-0000-000000000000"]
+    (util/with-tmp-dirs #{tmp-dir}
+      (with-open [al (RootAllocator.)
+                  iid-arrow-buf (util/->arrow-buf-view al (trie/->iid eid))
+                  t1-rel (tu/open-arrow-hash-trie-rel al [{(time/instant->micros (time/->instant #inst "2023-01-01"))
+                                                           [0 nil nil 1]
+                                                           Long/MAX_VALUE [2 nil nil 3]}
+                                                          nil nil 4])
+                  t2-rel (tu/open-arrow-hash-trie-rel al [0 nil nil nil])]
+        (let [id #uuid "00000000-0000-0000-0000-000000000000"
+              t1-data-file "t1-data-file.arrow"
+              t2-data-file "t2-data-file.arrow"]
 
 
-            (tu/write-arrow-data-file al
-                                      {0 [[:put {:xt/id id :foo "bar2" :xt/system-from 2}]
-                                          [:put {:xt/id id :foo "bar1" :xt/system-from 1}]]
-                                       1 []
-                                       2 [[:put {:xt/id id :foo "bar0" :xt/system-from 0}]]
-                                       3 []
-                                       4 []}
-                                      (.resolve tmp-dir t1-data-file))
+          (tu/write-arrow-data-file al
+                                    {0 [[:put {:xt/id id :foo "bar2" :xt/system-from 2}]
+                                        [:put {:xt/id id :foo "bar1" :xt/system-from 1}]]
+                                     1 []
+                                     2 [[:put {:xt/id id :foo "bar0" :xt/system-from 0}]]
+                                     3 []
+                                     4 []}
+                                    (.resolve tmp-dir t1-data-file))
 
-            (tu/write-arrow-data-file al
-                                      {0 [[:put {:xt/id id :foo "bar3" :xt/system-from 3}]]}
-                                      (.resolve tmp-dir t2-data-file))
+          (tu/write-arrow-data-file al
+                                    {0 [[:put {:xt/id id :foo "bar3" :xt/system-from 3}]]}
+                                    (.resolve tmp-dir t2-data-file))
 
-            (with-open [buffer-pool (bp/dir->buffer-pool al tmp-dir)]
+          (with-open [buffer-pool (bp/dir->buffer-pool al tmp-dir)]
 
-              (let [arrow-hash-trie1 (->arrow-hash-trie t1-root)
-                    arrow-hash-trie2 (->arrow-hash-trie t2-root)
-                    seg-t1 (-> (trie/->Segment arrow-hash-trie1)
-                               (assoc :data-file-path (str->path t1-data-file)))
-                    seg-t2 (-> (trie/->Segment arrow-hash-trie2)
-                               (assoc :data-file-path (str->path t2-data-file)))
-                    leaves [[:arrow seg-t1 0] [:arrow seg-t1 2] [:arrow seg-t2 0]]
-                    merge-tasks [{:leaves leaves :path (byte-array [0 0])} ]]
-                (util/with-close-on-catch [out-rel (RelationWriter. al (for [^Field field
-                                                                             [(types/->field "xt$id" (types/->arrow-type :uuid) false)
-                                                                              (types/->field "foo" (types/->arrow-type :utf8) false)]]
-                                                                         (vw/->writer (.createVector field al))))]
+            (let [arrow-hash-trie1 (->arrow-hash-trie t1-rel)
+                  arrow-hash-trie2 (->arrow-hash-trie t2-rel)
+                  seg-t1 (-> (trie/->Segment arrow-hash-trie1)
+                             (assoc :data-file-path (str->path t1-data-file)))
+                  seg-t2 (-> (trie/->Segment arrow-hash-trie2)
+                             (assoc :data-file-path (str->path t2-data-file)))
+                  leaves [[:arrow seg-t1 0] [:arrow seg-t1 2] [:arrow seg-t2 0]]
+                  merge-tasks [{:leaves leaves :path (byte-array [0 0])} ]]
+              (util/with-close-on-catch [out-rel (RelationWriter. al (for [^Field field
+                                                                           [(types/->field "xt$id" (types/->arrow-type :uuid) false)
+                                                                            (types/->field "foo" (types/->arrow-type :utf8) false)]]
+                                                                       (vw/->writer (.createVector field al))))]
 
-                  (let [^ICursor trie-cursor (scan/->TrieCursor al (.iterator ^Iterable merge-tasks) out-rel
-                                                                ["xt$id" "foo"] {}
-                                                                (TemporalBounds.)
-                                                                nil
-                                                                (scan/->vsr-cache buffer-pool al)
-                                                                buffer-pool)]
+                (let [^ICursor trie-cursor (scan/->TrieCursor al (.iterator ^Iterable merge-tasks) out-rel
+                                                              ["xt$id" "foo"] {}
+                                                              (TemporalBounds.)
+                                                              nil
+                                                              (scan/->vsr-cache buffer-pool al)
+                                                              buffer-pool)]
 
-                    (t/is (= [[{:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar3"}
-                               {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar2"}
-                               {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar1"}
-                               {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar0"}]]
-                             (tu/<-cursor trie-cursor)))
-                    (.close trie-cursor))
+                  (t/is (= [[{:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar3"}
+                             {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar2"}
+                             {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar1"}
+                             {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar0"}]]
+                           (tu/<-cursor trie-cursor)))
+                  (.close trie-cursor))
 
-                  (t/is (= [{:path [0 0],
-                             :pages [{:seg :t2, :page-idx 0}
-                                     {:seg :t1, :page-idx 0}
-                                     {:seg :t1, :page-idx 2}]}]
-                           (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment arrow-hash-trie1) (assoc :seg :t1))
-                                                         (-> (trie/->Segment arrow-hash-trie2) (assoc :seg :t2))]
-                                                        (scan/->path-pred iid-arrow-buf)
-                                                        (TemporalBounds.))
-                                (merge-plan-nodes->path+pages)))))))))))))
+                (t/is (= [{:path [0 0],
+                           :pages [{:seg :t2, :page-idx 0}
+                                   {:seg :t1, :page-idx 0}
+                                   {:seg :t1, :page-idx 2}]}]
+                         (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment arrow-hash-trie1) (assoc :seg :t1))
+                                                       (-> (trie/->Segment arrow-hash-trie2) (assoc :seg :t2))]
+                                                      (scan/->path-pred iid-arrow-buf)
+                                                      (TemporalBounds.))
+                              (merge-plan-nodes->path+pages))))))))))))

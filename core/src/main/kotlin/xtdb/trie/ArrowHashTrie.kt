@@ -1,34 +1,30 @@
 package xtdb.trie
 
-import org.apache.arrow.vector.IntVector
-import org.apache.arrow.vector.complex.DenseUnionVector
-import org.apache.arrow.vector.complex.ListVector
-import org.apache.arrow.vector.complex.StructVector
-import xtdb.vector.ValueVectorReader.from
+import xtdb.arrow.Vector
 
-private const val BRANCH_IID_TYPE_ID: Byte = 1
-private const val BRANCH_RECENCY_TYPE_ID: Byte = 2
-private const val LEAF_TYPE_ID: Byte = 3
+private const val NIL = "nil"
+private const val BRANCH_IID = "branch-iid"
+private const val BRANCH_RECENCY = "branch-recency"
+private const val LEAF = "leaf"
+private const val DATA_PAGE_IDX = "data-page-idx"
 
-class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
+class ArrowHashTrie(private val nodesVec: Vector) :
     HashTrie<ArrowHashTrie.Node> {
 
-    private val iidBranchVec: ListVector = nodesVec.getVectorByType(BRANCH_IID_TYPE_ID) as ListVector
-    private val iidBranchElVec: IntVector = iidBranchVec.dataVector as IntVector
+    private val iidBranchVec = nodesVec.legReader(BRANCH_IID)!!
+    private val iidBranchElVec = iidBranchVec.elementReader()
 
-    private val recencyBranchVec = from(nodesVec.getVectorByType(BRANCH_RECENCY_TYPE_ID))
+    private val recencyBranchVec = nodesVec.legReader(BRANCH_RECENCY)!!
     private val recencyVec = recencyBranchVec.mapKeyReader()
     private val recencyIdxVec = recencyBranchVec.mapValueReader()
 
-    private val dataPageIdxVec: IntVector =
-        (nodesVec.getVectorByType(LEAF_TYPE_ID) as StructVector)
-            .getChild("data-page-idx", IntVector::class.java)
+    private val dataPageIdxVec = nodesVec.legReader(LEAF)!!.keyReader(DATA_PAGE_IDX)!!
 
     interface Node : HashTrie.Node<Node>
 
     inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node {
-        private val startIdx = iidBranchVec.getElementStartIndex(branchVecIdx)
-        private val count = iidBranchVec.getElementEndIndex(branchVecIdx) - startIdx
+        private val startIdx = iidBranchVec.getListStartIndex(branchVecIdx)
+        private val count = iidBranchVec.getListCount(branchVecIdx)
 
         override val iidChildren: Array<Node?>
             get() = Array(count) { childBucket ->
@@ -36,7 +32,7 @@ class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
                 if (iidBranchElVec.isNull(childIdx))
                     null
                 else
-                    forIndex(conjPath(path, childBucket.toByte()), iidBranchElVec[childIdx])
+                    forIndex(conjPath(path, childBucket.toByte()), iidBranchElVec.getInt(childIdx))
             }
 
         override val recencies = null
@@ -51,10 +47,8 @@ class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
         private val count = recencyBranchVec.getListCount(branchVecIdx)
 
         override val recencies: RecencyArray
-            get() {
-                return RecencyArray(count) { idx ->
-                    recencyVec.getLong(idx + startIdx)
-                }
+            get() = RecencyArray(count) { idx ->
+                recencyVec.getLong(idx + startIdx)
             }
 
         override fun recencyNode(idx: Int) =
@@ -63,24 +57,21 @@ class ArrowHashTrie(private val nodesVec: DenseUnionVector) :
     }
 
     inner class Leaf(override val path: ByteArray, private val leafOffset: Int) : Node {
-        val dataPageIndex: Int get() = dataPageIdxVec[leafOffset]
+        val dataPageIndex get() = dataPageIdxVec.getInt(leafOffset)
 
         override val iidChildren = null
         override val recencies = null
         override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
     }
 
-    private fun forIndex(path: ByteArray, idx: Int): Node? {
-        val nodeOffset = nodesVec.getOffset(idx)
-
-        return when (nodesVec.getTypeId(idx)) {
-            0.toByte() -> null
-            BRANCH_IID_TYPE_ID -> IidBranch(path, nodeOffset)
-            BRANCH_RECENCY_TYPE_ID -> RecencyBranch(path, nodeOffset)
-            LEAF_TYPE_ID -> Leaf(path, nodeOffset)
-            else -> throw UnsupportedOperationException()
+    private fun forIndex(path: ByteArray, idx: Int) =
+        when (nodesVec.getLeg(idx)) {
+            NIL -> null
+            BRANCH_IID -> IidBranch(path, idx)
+            BRANCH_RECENCY -> RecencyBranch(path, idx)
+            LEAF -> Leaf(path, idx)
+            else -> error("unknown leg: ${nodesVec.getLeg(idx)}")
         }
-    }
 
     override val rootNode get() = forIndex(ByteArray(0), nodesVec.valueCount - 1)
 }

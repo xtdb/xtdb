@@ -11,6 +11,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.RuntimeException
+import xtdb.arrow.toLong
 import xtdb.types.ClojureForm
 import xtdb.types.IntervalDayTime
 import xtdb.types.IntervalMonthDayNano
@@ -138,13 +139,6 @@ private class DateMilliVectorWriter(override val vector: DateMilliVector) : Scal
     }
 
     override fun writeValue0(v: IValueReader) = writeLong(v.readLong())
-}
-
-private fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
-    TimeUnit.SECOND -> seconds
-    TimeUnit.MILLISECOND -> seconds * 1000 + nanos / 1_000_000
-    TimeUnit.MICROSECOND -> seconds * 1_000_000 + nanos / 1000
-    TimeUnit.NANOSECOND -> seconds * 1_000_000_000 + nanos
 }
 
 private class TimestampVectorWriter(override val vector: TimeStampVector) : ScalarVectorWriter(vector) {
