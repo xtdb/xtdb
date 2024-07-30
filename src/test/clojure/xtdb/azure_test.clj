@@ -312,3 +312,42 @@
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-larger-multi-put"))]
           (t/testing "capacity should be equal to total of 20 parts"
             (t/is (= (* 20 part-size) (.capacity uploaded-buffer)))))))))
+
+(t/deftest ^:azure multipart-object-already-exists
+  (with-open [os (object-store (random-uuid))]
+    (let [blob-container-client (:blob-container-client os)
+          prefix (:prefix os)
+          part-size 500]
+
+      (t/testing "Initial multipart works correctly"
+        (let [initial-multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multipart"))]
+          (dotimes [_ 2]
+            (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+              @(.uploadPart initial-multipart-upload (.flip file-part))))
+
+          @(.complete initial-multipart-upload)
+
+          (t/is (= (mapv util/->path ["test-multipart"])
+                   (.listAllObjects ^ObjectStore os)))
+          
+          (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
+            (t/is (= #{} uncomitted-blobs)))))
+
+      (t/testing "Attempt to multipart upload to an existing object shouldn't throw, should abort and remove uncomitted blobs"
+        (let [second-multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multipart"))]
+          (dotimes [_ 3]
+            (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+              (t/is @(.uploadPart second-multipart-upload (.flip file-part)))))
+
+          @(.complete second-multipart-upload)
+          
+          (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
+            (t/is (= #{} uncomitted-blobs)))))
+      
+      (t/testing "still has the original object"
+        (t/is (= (mapv util/->path ["test-multipart"])
+                 (.listAllObjects ^ObjectStore os)))
+        
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multipart"))]
+          (t/testing "capacity should be equal to total of 2 parts (ie, initial upload)"
+            (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))

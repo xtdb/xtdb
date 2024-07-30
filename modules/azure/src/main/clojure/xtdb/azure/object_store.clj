@@ -1,5 +1,6 @@
 (ns xtdb.azure.object-store
-  (:require [xtdb.object-store :as os]
+  (:require [clojure.tools.logging :as log]
+            [xtdb.object-store :as os]
             [xtdb.file-list :as file-list]
             [xtdb.util :as util])
   (:import [com.azure.core.util BinaryData]
@@ -69,24 +70,32 @@
   (uploadPart [_  buf]
     (CompletableFuture/completedFuture
      (let [block-id (random-block-id)
-           binary-data (BinaryData/fromByteBuffer buf)] 
+           binary-data (BinaryData/fromByteBuffer buf)]
        (.stageBlock block-blob-client block-id binary-data)
        (.add !staged-block-ids block-id))))
 
   (complete [_]
     (CompletableFuture/completedFuture
      (do
-       (.commitBlockList block-blob-client !staged-block-ids)
+       ;; Commit the staged blocks - if already exists, abort the upload and complete
+       (try
+         (.commitBlockList block-blob-client !staged-block-ids)
+         (catch BlobStorageException e
+           (if (= 409 (.getStatusCode e))
+             (log/infof "Blob already exists for %s - aborting multipart upload" (.getBlobUrl block-blob-client))
+             (throw e))))
        ;; Run passed in on-complete function (adds the key to the filename cache)
        (on-complete))))
-  
+
   (abort [_]
     (CompletableFuture/completedFuture
-     (do
+     (try
        ;; Commit an empty blocklist removes all staged & uncomitted files
        (.commitBlockList block-blob-client [])
        ;; Delete the empty blob
-       (.deleteIfExists block-blob-client)))))
+       (.deleteIfExists block-blob-client)
+       (catch BlobStorageException e
+         (if (= 409 (.getStatusCode e)) nil (throw e)))))))
 
 (defn- start-multipart [^BlobContainerClient blob-container-client blob-name on-complete-fn]
   (let [block-blob-client (-> blob-container-client 
