@@ -1,0 +1,18 @@
+{:log [:kafka {:topic-name #env XTDB_TOPIC_NAME
+               :bootstrap-servers #env KAFKA_BOOTSTRAP_SERVERS
+               :properties-map {"compression.type" #env KAFKA_COMPRESSION_TYPE
+                                "security.protocol" "SASL_SSL"
+                                "sasl.mechanism" "PLAIN"
+                                "sasl.jaas.config" #env KAFKA_SASL_JAAS_CONFIG}}]
+
+ :storage [:remote {:object-store [:azure {:storageAccount #env XTDB_AZURE_STORAGE_ACCOUNT
+                                           :container #env XTDB_AZURE_STORAGE_CONTAINER
+                                           :serviceBusNamespace #env XTDB_AZURE_SERVICE_BUS_NAMESPACE
+                                           :serviceBusTopicName #env XTDB_AZURE_SERVICE_BUS_TOPIC_NAME
+                                           :prefix "xtdb-object-store"
+                                           :userManagedIdentityClientId #env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID}]
+                    :local-disk-cache "/var/lib/xtdb/disk-cache"}]
+ 
+ :http-server {:port 3000}
+
+ :xtdb/metrics-server {}}
