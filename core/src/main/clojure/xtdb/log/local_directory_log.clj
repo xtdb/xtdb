@@ -156,11 +156,11 @@
 (defn- latest-submitted-tx [^Path root-path]
   (let [log-path (.resolve root-path "LOG")]
     (if-not (util/path-exists log-path)
-      0
+      nil
       (with-open [log-channel (util/->file-channel log-path)]
         (let [size (.size log-channel)]
           (if (zero? size)
-            0
+            nil
             (try
               (.position log-channel (- size Long/BYTES))
               (let [log-in (DataInputStream. (BufferedInputStream. (Channels/newInputStream log-channel)))
