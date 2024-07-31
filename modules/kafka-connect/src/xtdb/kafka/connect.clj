@@ -30,8 +30,8 @@
     (instance? java.util.HashMap val) (zipmap (map keyword (.keySet ^java.util.HashMap val)) (map get-struct-contents (.values ^java.util.HashMap val)))
     :else val))
 
-(defn- struct->edn [^Schema _schema ^Struct s]
-  (let [ output-map (get-struct-contents s)]
+(defn- struct->edn [^Struct s]
+  (let [output-map (get-struct-contents s)]
     (log/info "map val: " output-map)
     output-map))
 
@@ -40,7 +40,7 @@
         value (.value record)]
     (cond
       (and (instance? Struct value) schema)
-      (struct->edn schema value)
+      (struct->edn value)
 
       (and (instance? Map value)
            (nil? schema)
