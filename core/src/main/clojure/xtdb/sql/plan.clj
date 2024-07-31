@@ -58,7 +58,7 @@
                      (visitRegularIdentifier [_ ctx] (symbol (util/str->normal-form-str (.getText ctx))))
                      (visitDelimitedIdentifier [_ ctx]
                        (let [di-str (.getText ctx)]
-                         (symbol (subs di-str 1 (dec (count di-str))))))))))
+                         (symbol (util/underscore-form->xt-form (subs di-str 1 (dec (count di-str)))))))))))
 
 (defprotocol Scope
   (available-cols [scope chain])

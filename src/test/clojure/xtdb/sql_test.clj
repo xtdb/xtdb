@@ -1159,9 +1159,9 @@
 
 (deftest test-delimited-identifiers-in-insert-column-list-2549
   (t/is (=plan-file
-          "test-delimited-identifiers-in-insert-column-list-2549"
-          (plan-sql
-            "INSERT INTO posts (_id, \"user-id\") VALUES (1234, 5678)"))))
+         "test-delimited-identifiers-in-insert-column-list-2549"
+         (plan-sql
+          "INSERT INTO posts (\"_id\", \"user-id\") VALUES (1234, 5678)"))))
 
 (deftest test-table-period-specification-ordering-2260
   (let [opts {:table-info {"foo" #{"bar"}}}
