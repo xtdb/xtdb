@@ -67,17 +67,42 @@
       (throw (err/illegal-arg :unknown-message-type
                               {::err/message (str "Unknown message type: " record)})))))
 
-(defn- find-eid [props ^SinkRecord record doc]
-  (let [id (or (get doc :xt/id)
-               (some->> (get props XtdbSinkConnector/ID_KEY_CONFIG)
-                        (keyword)
-                        (get doc))
-               (.key record))]
+(defn- find-record-key-eid [props ^SinkRecord record]
+  (let [r-key (.key record)
+        id-field (get props XtdbSinkConnector/ID_FIELD_CONFIG)]
+    (if (nil? r-key)
+      (throw (err/illegal-arg :missing-id
+                              {::err/message (str "Missing key in record: " record)}))
+      (if (instance? Struct r-key)
+        (if (= "" id-field)
+          (throw (err/illegal-arg :invalid-key-type
+                                  {::err/message (str "Invalid key type in record: " record)}))
+          (let [r-doc (struct->edn r-key)
+                id (get r-doc (keyword id-field))]
+            (when-not id
+              (throw (err/illegal-arg :missing-id
+                                      {::err/message (str "Missing ID in record: " record)})))
+            id))
+        (if (not= "" id-field)
+          (do
+            (log/info "id-field:" id-field)
+            (throw (err/illegal-arg :invalid-key-type
+                                    {::err/message (str "Expected struct key found primitive: " record)})))
+          ;; TODO: Check if valid primitive type
+          r-key)))))
+
+(defn- find-record-value-eid [props ^SinkRecord record doc]
+  (let [id-field (get props XtdbSinkConnector/ID_FIELD_CONFIG)
+        id (get doc (keyword id-field))]
     (when-not id
       (throw (err/illegal-arg :missing-id
                               {::err/message (str "Missing ID in record: " record)})))
     id))
 
+(defn- find-eid [props ^SinkRecord record doc]
+  (case (get props XtdbSinkConnector/ID_MODE_CONFIG)
+    "record_key" (find-record-key-eid props record)
+    "record_value" (find-record-value-eid props record doc)))
 
 (defn- tombstone? [^SinkRecord record]
   (and (nil? (.value record)) (.key record)))
@@ -86,7 +111,11 @@
   (log/info "sink record:" record)
   (let [topic (keyword (.topic record))
         tx-op (if (tombstone? record)
-                [:delete-docs topic (.key record)]
+                (if (= "record_key" (get props XtdbSinkConnector/ID_MODE_CONFIG))
+                  (let [id (find-record-key-eid props record)]
+                    [:delete-docs topic id])
+                  (throw (err/illegal-arg :unsupported-tombstone-mode
+                                          {::err/message (str "Unsupported tombstone mode: " record)})))
                 (let [doc (record->edn record)
                       id (find-eid props record doc)]
                   [:put-docs topic (assoc doc :xt/id id)]))]

@@ -1,9 +1,12 @@
 package xtdb.kafka.connect;
 
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
+import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.AppInfoParser;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.sink.SinkConnector;
@@ -12,21 +15,34 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class XtdbSinkConnector extends SinkConnector {
 
     public static final String URL_CONFIG = "url";
-    public static final String ID_KEY_CONFIG = "id.key";
+    public static final String ID_MODE_CONFIG = "id.mode";
+    public static final String ID_FIELD_CONFIG = "id.field";
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
         .define(URL_CONFIG,
                 Type.STRING,
                 ConfigDef.NO_DEFAULT_VALUE,
                 Importance.HIGH,
                 "Destination URL of XTDB HTTP end point.")
-        .define(ID_KEY_CONFIG, Type.STRING, "xt/id", Importance.LOW, "Record key to use as :xt/id.");
+        .define(ID_MODE_CONFIG,
+                Type.STRING,
+                ConfigDef.NO_DEFAULT_VALUE,
+                EnumValidator.of("record_key", "record_value"),
+                Importance.HIGH,
+                "The id mode. Supported modes are `record_key` and `record_value`.")
+        .define(ID_FIELD_CONFIG,
+                Type.STRING,
+                "",
+                Importance.MEDIUM,
+                "The field name to use as _id or empty if using a primitive `record_key`.");
 
     private String url;
-    private String idKey;
+    private String idMode;
+    private String idField;
 
     @Override
     public String version() {
@@ -37,7 +53,8 @@ public class XtdbSinkConnector extends SinkConnector {
     public void start(Map<String, String> props) {
         AbstractConfig parsedConfig = new AbstractConfig(CONFIG_DEF, props);
         url = parsedConfig.getString(URL_CONFIG);
-        idKey = parsedConfig.getString(ID_KEY_CONFIG);
+        idMode = parsedConfig.getString(ID_MODE_CONFIG);
+        idField = parsedConfig.getString(ID_FIELD_CONFIG);
     }
 
     @Override
@@ -50,9 +67,9 @@ public class XtdbSinkConnector extends SinkConnector {
         ArrayList<Map<String, String>> configs = new ArrayList<>();
         for (int i = 0; i < maxTasks; i++) {
             Map<String, String> config = new HashMap<>();
-            if (url != null)
-                config.put(ID_KEY_CONFIG, idKey);
             config.put(URL_CONFIG, url);
+            config.put(ID_MODE_CONFIG, idMode);
+            config.put(ID_FIELD_CONFIG, idField);
             configs.add(config);
         }
         return configs;
@@ -65,5 +82,29 @@ public class XtdbSinkConnector extends SinkConnector {
     @Override
     public ConfigDef config() {
         return CONFIG_DEF;
+    }
+
+    private static class EnumValidator implements ConfigDef.Validator {
+        private final Set<String> validValues;
+
+        private EnumValidator(Set<String> validValues) {
+            this.validValues = validValues;
+        }
+
+        public static EnumValidator of(String... values) {
+            return new EnumValidator(Set.of(values));
+        }
+
+        @Override
+        public void ensureValid(String key, Object value) {
+            if (value != null && !validValues.contains(value)) {
+              throw new ConfigException(key, value, "Invalid enumerator");
+            }
+        }
+
+        @Override
+        public String toString() {
+            return validValues.toString();
+        }
     }
 }
