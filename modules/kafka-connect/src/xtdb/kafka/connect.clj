@@ -78,11 +78,14 @@
                               {::err/message (str "Missing ID in record: " record)})))
     id))
 
+
+(defn- tombstone? [^SinkRecord record]
+  (and (nil? (.value record)) (.key record)))
+
 (defn transform-sink-record [props ^SinkRecord record]
   (log/info "sink record:" record)
   (let [topic (keyword (.topic record))
-        tx-op (if (and (nil? (.value record))
-                       (.key record))
+        tx-op (if (tombstone? record)
                 [:delete-docs topic (.key record)]
                 (let [doc (record->edn record)
                       id (find-eid props record doc)]
