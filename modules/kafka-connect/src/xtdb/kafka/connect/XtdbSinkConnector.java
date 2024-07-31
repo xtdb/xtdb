@@ -18,7 +18,11 @@ public class XtdbSinkConnector extends SinkConnector {
     public static final String URL_CONFIG = "url";
     public static final String ID_KEY_CONFIG = "id.key";
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
-        .define(URL_CONFIG, Type.STRING, "http://localhost:3000", Importance.HIGH, "Destination URL of XTDB HTTP end point.")
+        .define(URL_CONFIG,
+                Type.STRING,
+                ConfigDef.NO_DEFAULT_VALUE,
+                Importance.HIGH,
+                "Destination URL of XTDB HTTP end point.")
         .define(ID_KEY_CONFIG, Type.STRING, "xt/id", Importance.LOW, "Record key to use as :xt/id.");
 
     private String url;
@@ -47,9 +51,8 @@ public class XtdbSinkConnector extends SinkConnector {
         for (int i = 0; i < maxTasks; i++) {
             Map<String, String> config = new HashMap<>();
             if (url != null)
-                config.put(URL_CONFIG, url);
-            if (url != null)
                 config.put(ID_KEY_CONFIG, idKey);
+            config.put(URL_CONFIG, url);
             configs.add(config);
         }
         return configs;
