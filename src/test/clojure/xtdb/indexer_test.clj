@@ -356,7 +356,9 @@
 
           (t/is (= last-tx-key (tu/latest-completed-tx node))))
 
-        (t/is (zero? (.count (Files/list object-dir))))))))
+        (t/is (zero? (->> (.toList (Files/list object-dir))
+                          (filter util/is-file?)
+                          count)))))))
 
 (t/deftest can-ingest-ts-devices-mini
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini")]

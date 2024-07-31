@@ -274,6 +274,9 @@
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
 
+(defn is-file? [^Path path]
+  (Files/isRegularFile path (make-array LinkOption 0)))
+
 (defn create-parents [^Path path]
   (let [parents (.getParent path)]
     (when-not (path-exists parents)

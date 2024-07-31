@@ -261,3 +261,10 @@
 
       (with-open [^ArrowBuf buf @(.getBuffer bp (util/->path "b"))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf))))))))
+
+(t/deftest local-buffer-pool
+  (tu/with-tmp-dirs #{tmp-dir}
+    (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir))]
+      (t/testing "empty buffer pool"
+        (t/is (= [] (.listAllObjects bp)))
+        (t/is (= [] (.listObjects bp (.toPath (io/file "foo")))))))))
