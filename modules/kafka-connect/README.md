@@ -124,6 +124,9 @@ With some data that looks like:
 }
 ```
 
+If storing datetimes with timezones is important to you, I would suggest
+writing a [custom transform](https://docs.confluent.io/platform/current/connect/transforms/custom.html).
+
 ## Development
 
 REPL:
