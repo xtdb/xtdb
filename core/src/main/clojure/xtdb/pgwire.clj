@@ -1187,6 +1187,7 @@
              (-> st
                  (assoc :transaction
                         {:basis {:current-time (.instant clock)
+                                 ;;TODO is latest-submitted-tx being updated? or is this nil?
                                  :at-tx (time/max-tx (:latest-completed-tx (xt/status node))
                                                      latest-submitted-tx)}
 

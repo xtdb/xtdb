@@ -18,7 +18,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector, params]
+(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector, schema params]
   ICursor
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
@@ -26,7 +26,7 @@
                                (reify Consumer
                                  (accept [_ in-rel]
                                    (let [^RelationReader in-rel in-rel]
-                                     (when-let [idxs (.select selector allocator in-rel params)]
+                                     (when-let [idxs (.select selector allocator in-rel schema params)]
                                        (when-not (zero? (alength idxs))
                                          (.accept c (.select in-rel idxs))
                                          (aset advanced? 0 true)))))))
@@ -43,6 +43,6 @@
                          :param-types (update-vals param-fields types/field->col-type)}
             selector (expr/->expression-relation-selector (expr/form->expr predicate input-types) input-types)]
         {:fields inner-fields
-         :->cursor (fn [{:keys [allocator params]} in-cursor]
-                     (-> (SelectCursor. allocator in-cursor selector params)
+         :->cursor (fn [{:keys [allocator params schema]} in-cursor]
+                     (-> (SelectCursor. allocator in-cursor selector schema params)
                          (coalesce/->coalescing-cursor allocator)))}))))

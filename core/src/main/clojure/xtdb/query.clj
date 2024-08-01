@@ -5,6 +5,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
+            xtdb.expression.pg
             xtdb.expression.temporal
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
@@ -183,41 +184,50 @@
                  (columnFields [_]
                    (->column-fields ordered-outer-projection fields))
                  (openCursor [_]
-                   (when relevant-schema-at-prepare-time
-                     (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
-                                                          (.scanFields scan-emitter wm
-                                                                       (mapcat #(map (partial vector (key %)) (val %))
-                                                                               (scan/tables-with-cols wm-src scan-emitter))))]
+                   (let [table-info-at-execution-time (when wm-src (scan/tables-with-cols wm-src scan-emitter))]
+                     (when relevant-schema-at-prepare-time
+                       (let [schema-at-execution-time (with-open [wm (.openWatermark wm-src)]
+                                                        (.scanFields scan-emitter wm
+                                                                     (mapcat #(map (partial vector (key %)) (val %))
+                                                                             table-info-at-execution-time)))]
 
-                       ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
-                       ;;especially given our "per path schema" principal.
-                       (when-not (= relevant-schema-at-prepare-time
-                                    (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
-                         (throw (err/runtime-err :prepared-query-out-of-date
-                                                 ;;TODO consider adding the schema diff to the error, potentially quite large.
-                                                 {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
-                   (.acquire ref-ctr)
-                   (let [^BufferAllocator allocator
-                         (if allocator
-                           (util/->child-allocator allocator "BoundQuery/openCursor")
-                           (RootAllocator.))
-                         wm (some-> wm-src (.openWatermark))
-]
-                     (try
-                       (binding [expr/*clock* clock]
-                         (-> (->cursor {:allocator allocator, :watermark wm
-                                        :clock clock,
-                                        :basis (-> basis
-                                                   (update :at-tx (fnil identity (some-> wm .txBasis)))
-                                                   (assoc :current-time current-time))
-                                        :params params})
-                             (wrap-cursor wm allocator clock ref-ctr fields)))
+                         ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
+                         ;;especially given our "per path schema" principal.
+                         (when-not (= relevant-schema-at-prepare-time
+                                      (select-keys schema-at-execution-time (keys relevant-schema-at-prepare-time)))
+                           (throw (err/runtime-err :prepared-query-out-of-date
+                                                   ;;TODO consider adding the schema diff to the error, potentially quite large.
+                                                   {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
+                     (.acquire ref-ctr)
+                     (let [^BufferAllocator allocator
+                           (if allocator
+                             (util/->child-allocator allocator "BoundQuery/openCursor")
+                             (RootAllocator.))
+                           wm (some-> wm-src (.openWatermark))]
+                       (try
+                         (binding [expr/*clock* clock]
+                           (-> (->cursor {:allocator allocator, :watermark wm
+                                          :clock clock,
+                                          :basis (-> basis
+                                                     (update :at-tx (fnil identity (some-> wm .txBasis)))
+                                                     (assoc :current-time current-time))
+                                          :params params
+                                          :schema
+                                          (let [tables (merge info-schema/table-info
+                                                              {'xt/txs #{"xt$id" "committed" "error" "tx_time"}}
+                                                              (info-schema/namespace-public-tables table-info))]
+                                            {:tables tables
+                                             :oid->table (->> tables
+                                                              (map (fn [[tn _]] [(hash tn) tn]))
+                                                              (into {}))})})
 
-                       (catch Throwable t
-                         (.release ref-ctr)
-                         (util/try-close wm)
-                         (util/try-close allocator)
-                         (throw t)))))
+                               (wrap-cursor wm allocator clock ref-ctr fields)))
+
+                         (catch Throwable t
+                           (.release ref-ctr)
+                           (util/try-close wm)
+                           (util/try-close allocator)
+                           (throw t))))))
 
                  AutoCloseable
                  (close [_] (util/try-close params)))))))))))

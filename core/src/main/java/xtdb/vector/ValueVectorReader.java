@@ -14,6 +14,7 @@ import xtdb.api.query.IKeyFn;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
+import xtdb.types.RegClass;
 import xtdb.vector.extensions.*;
 
 import java.net.URI;
@@ -396,6 +397,22 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return Keyword.intern((String) underlyingVec.getObject(idx));
+            }
+        };
+    }
+
+    public static IVectorReader regClassVector(RegClassVector v) {
+        var underlyingVec = intVector(v.getUnderlyingVector());
+
+        return new ValueVectorReader(v) {
+            @Override
+            public int getInt(int idx) {
+                return underlyingVec.getInt(idx);
+            }
+
+            @Override
+            Object getObject0(int idx, IKeyFn<?> keyFn) {
+                return new RegClass(getInt(idx));
             }
         };
     }

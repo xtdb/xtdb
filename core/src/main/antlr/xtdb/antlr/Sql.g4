@@ -167,6 +167,7 @@ dataType
     | 'VARCHAR' # CharacterStringType
     | 'DURATION' ('(' precision ')')? # DurationType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
+    | 'REGCLASS' #RegClassType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
     ;
 
