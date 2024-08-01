@@ -68,7 +68,10 @@
                     :test-bm
                     ((requiring-resolve 'xtdb.bench.test-benchmark/benchmark) benchmark-opts)
                     :products
-                    ((requiring-resolve 'xtdb.bench.products/benchmark) benchmark-opts))
+                    ((requiring-resolve 'xtdb.bench.products/benchmark) benchmark-opts)
+                    :readings
+                    ((requiring-resolve 'xtdb.bench.readings/benchmark) benchmark-opts))
+
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (with-open [node (->local-node node-opts)]
       (let [^Metrics metrics (-> node :system :xtdb.metrics/registry)]

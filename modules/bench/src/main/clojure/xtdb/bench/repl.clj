@@ -27,12 +27,13 @@
   "type - the type of benchmark to run
    opts - the benchmark options
    node-dir (optional) - the directory to run the benchmark in"
-  [{:keys [type node-dir opts]}]
+  [{:keys [type node-dir node-opts opts]}]
   (util/with-tmp-dirs #{node-tmp-dir}
     (bxt/run-benchmark
-     {:node-opts {:node-dir (or node-dir node-tmp-dir)
-                  :instant-src (InstantSource/system)
-                  :metrics? true}
+     {:node-opts (merge {:node-dir (or node-dir node-tmp-dir)
+                         :instant-src (InstantSource/system)
+                         :metrics? true}
+                        node-opts)
       :benchmark-type type
       :benchmark-opts opts})))
 
@@ -51,7 +52,6 @@
                     :node-dir node-dir}))
 
   (def node-dir (.toPath (io/file "dev/auctionmark")))
-  (util/delete-dir node-dir)
 
   (run-bench {:type :auctionmark
               :opts {:duration "PT30S"
@@ -61,7 +61,18 @@
                      :sync true}
               :node-dir node-dir})
 
+
+  ;; readings
+  (def node-dir (.toPath (io/file "dev/readings")))
+  (util/delete-dir node-dir)
+  (run-bench {:type :readings
+              :opts {:load-phase true
+                     ;; ~2 years
+                     :size (* 2 (+ (* 366 24 12) 1000))
+                     :devices 10}
+              :node-dir node-dir})
+
+
   ;; test benchmark
   (run-bench {:type :test-bm
-              :opts {:duration "PT1H"}})
-  )
+              :opts {:duration "PT1H"}}))
