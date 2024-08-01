@@ -138,6 +138,8 @@
              (->> (iterate #(.plus ^YearMonth % len unit) (YearMonth/of 2020 1))
                   (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC)))))]
      (case u
+       :second (iterate #(.plusMillis ^Instant % (* 1000 len)) (.toInstant #inst "2020-01-01"))
+       :minute (iterate #(.plusMillis ^Instant % (* 1000 60 len)) (.toInstant #inst "2020-01-01"))
        :day (iterate #(.plus ^Instant % (Period/ofDays len)) (.toInstant #inst "2020-01-01"))
        :month (to-seq ChronoUnit/MONTHS)
        :quarter (->> (iterate #(.plusMonths ^YearMonth % (* 3 len)) (YearMonth/of 2020 1))
