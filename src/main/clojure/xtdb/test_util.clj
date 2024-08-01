@@ -133,16 +133,23 @@
 
 (defn ->instants
   ([u] (->instants u 1))
-  ([u ^long len]
-   (letfn [(to-seq [^ChronoUnit unit]
-             (->> (iterate #(.plus ^YearMonth % len unit) (YearMonth/of 2020 1))
-                  (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC)))))]
-     (case u
-       :day (iterate #(.plus ^Instant % (Period/ofDays len)) (.toInstant #inst "2020-01-01"))
-       :month (to-seq ChronoUnit/MONTHS)
-       :quarter (->> (iterate #(.plusMonths ^YearMonth % (* 3 len)) (YearMonth/of 2020 1))
-                     (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC))))
-       :year (to-seq ChronoUnit/YEARS)))))
+  ([u len] (->instants u len #inst "2020-01-01"))
+  ([u ^long len inst-like]
+   (let [inst (time/->instant inst-like)
+         zdt (.atZone inst (ZoneId/of "UTC"))
+         year (.getYear zdt)
+         month (.getValue (.getMonth zdt))]
+     (letfn [(to-seq [^ChronoUnit unit]
+               (->> (iterate #(.plus ^YearMonth % len unit) (YearMonth/of year month))
+                    (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC)))))]
+       (case u
+         :second (iterate #(.plusMillis ^Instant % (* 1000 len)) inst)
+         :minute (iterate #(.plusMillis ^Instant % (* 1000 60 len)) inst)
+         :day (iterate #(.plus ^Instant % (Period/ofDays len)) inst)
+         :month (to-seq ChronoUnit/MONTHS)
+         :quarter (->> (iterate #(.plusMonths ^YearMonth % (* 3 len)) (YearMonth/of year month))
+                       (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC))))
+         :year (to-seq ChronoUnit/YEARS))))))
 
 (defn ->mock-clock
   (^java.time.InstantSource []
