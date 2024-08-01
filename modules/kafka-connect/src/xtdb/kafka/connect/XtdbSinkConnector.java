@@ -76,6 +76,9 @@ public class XtdbSinkConnector extends SinkConnector {
         url = parsedConfig.getString(URL_CONFIG);
         idMode = parsedConfig.getString(ID_MODE_CONFIG);
         idField = parsedConfig.getString(ID_FIELD_CONFIG);
+        if (idMode.equals("record_value") && idField.isEmpty()) {
+            throw new ConfigException(ID_FIELD_CONFIG, idField, "id.field must be set when id.mode is record_value");
+        }
         validFromField = parsedConfig.getString(VALID_FROM_FIELD_CONFIG);
         validToField = parsedConfig.getString(VALID_TO_FIELD_CONFIG);
         tableNameFormat = parsedConfig.getString(TABLE_NAME_FORMAT_CONFIG);
