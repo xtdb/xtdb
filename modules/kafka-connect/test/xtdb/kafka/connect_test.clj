@@ -37,9 +37,7 @@
                              XtdbSinkConnector/ID_MODE_CONFIG "record_key"})]
         (sink props [(->sink-record
                        {:topic "foo"
-                        :key-schema nil
                         :key-value 1
-                        :value-schema nil
                         :value-value {:value {:a 1}}})])
         (t/is
           (= (xt/q *node* "SELECT * FROM foo")
@@ -54,9 +52,6 @@
                              XtdbSinkConnector/TABLE_NAME_FORMAT_CONFIG "pre_${topic}_post"})]
         (sink props [(->sink-record
                        {:topic "foo"
-                        :key-schema nil
-                        :key-value nil
-                        :value-schema nil
                         :value-value {:my-id-field 1
                                       :my-valid-from-field #inst "2021-01-01T00:00:00Z"
                                       :my-valid-to-field #inst "2021-01-02T00:00:00Z"
