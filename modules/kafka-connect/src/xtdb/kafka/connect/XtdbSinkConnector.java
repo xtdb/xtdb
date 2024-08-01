@@ -36,22 +36,22 @@ public class XtdbSinkConnector extends SinkConnector {
                 ConfigDef.NO_DEFAULT_VALUE,
                 EnumValidator.of("record_key", "record_value"),
                 Importance.HIGH,
-                "The id mode. Supported modes are `record_key` and `record_value`.")
+                "Where to get the `_id` from. Supported modes are `record_key` and `record_value`.")
         .define(ID_FIELD_CONFIG,
                 Type.STRING,
                 "",
                 Importance.MEDIUM,
-                "The field name to use as _id or empty if using a primitive `record_key`.")
+                "The field name to use as the `_id`. Leave blank if using a primitive `record_key`.")
         .define(VALID_FROM_FIELD_CONFIG,
                 Type.STRING,
                 "",
                 Importance.LOW,
-                "The field name to use as _valid_from. Leave empty to use the default _valid_from.")
+                "The field name to use as `_valid_from`. Leave blank to use xtdb's default `_valid_from`.")
         .define(VALID_TO_FIELD_CONFIG,
                 Type.STRING,
                 "",
                 Importance.LOW,
-                "The field name to use as _valid_to. Leave empty to use the default _valid_to.")
+                "The field name to use as `_valid_to`. Leave blank to use xtdb's default `_valid_to`.")
         .define(TABLE_NAME_FORMAT_CONFIG,
                 Type.STRING,
                 "${topic}",
