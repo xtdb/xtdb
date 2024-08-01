@@ -25,9 +25,9 @@
    (sync-node node nil))
 
   ([node ^Duration timeout]
-   @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer)
-                   (xtp/latest-submitted-tx node)
-                   timeout)))
+   (.awaitTx ^IIndexer (util/component node :xtdb/indexer)
+             (xtp/latest-submitted-tx node)
+             timeout)))
 
 (defn finish-chunk! [node]
   (li/finish-chunk! (util/component node :xtdb.indexer/live-index)))
