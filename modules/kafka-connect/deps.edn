@@ -14,6 +14,8 @@
         cheshire/cheshire {:mvn/version "5.13.0"}
         org.slf4j/slf4j-api {:mvn/version "1.7.36"}}
  :aliases
- {:dev {}
+ {:dev {:extra-paths ["test"]
+        :jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
+                   "-Dio.netty.tryReflectionSetAccessible=true"]}
   :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
           :ns-default build}}}
