@@ -22,6 +22,8 @@ public class XtdbSinkConnector extends SinkConnector {
     public static final String URL_CONFIG = "url";
     public static final String ID_MODE_CONFIG = "id.mode";
     public static final String ID_FIELD_CONFIG = "id.field";
+    public static final String VALID_FROM_FIELD_CONFIG = "validFrom.field";
+    public static final String VALID_TO_FIELD_CONFIG = "validTo.field";
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
         .define(URL_CONFIG,
                 Type.STRING,
@@ -38,11 +40,23 @@ public class XtdbSinkConnector extends SinkConnector {
                 Type.STRING,
                 "",
                 Importance.MEDIUM,
-                "The field name to use as _id or empty if using a primitive `record_key`.");
+                "The field name to use as _id or empty if using a primitive `record_key`.")
+        .define(VALID_FROM_FIELD_CONFIG,
+                Type.STRING,
+                "",
+                Importance.LOW,
+                "The field name to use as _valid_from. Leave empty to use the default _valid_from.")
+        .define(VALID_TO_FIELD_CONFIG,
+                Type.STRING,
+                "",
+                Importance.LOW,
+                "The field name to use as _valid_to. Leave empty to use the default _valid_to.");
 
     private String url;
     private String idMode;
     private String idField;
+    private String validFromField;
+    private String validToField;
 
     @Override
     public String version() {
@@ -55,6 +69,8 @@ public class XtdbSinkConnector extends SinkConnector {
         url = parsedConfig.getString(URL_CONFIG);
         idMode = parsedConfig.getString(ID_MODE_CONFIG);
         idField = parsedConfig.getString(ID_FIELD_CONFIG);
+        validFromField = parsedConfig.getString(VALID_FROM_FIELD_CONFIG);
+        validToField = parsedConfig.getString(VALID_TO_FIELD_CONFIG);
     }
 
     @Override
@@ -70,6 +86,8 @@ public class XtdbSinkConnector extends SinkConnector {
             config.put(URL_CONFIG, url);
             config.put(ID_MODE_CONFIG, idMode);
             config.put(ID_FIELD_CONFIG, idField);
+            config.put(VALID_FROM_FIELD_CONFIG, validFromField);
+            config.put(VALID_TO_FIELD_CONFIG, validToField);
             configs.add(config);
         }
         return configs;

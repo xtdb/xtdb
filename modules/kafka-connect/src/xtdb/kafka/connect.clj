@@ -107,6 +107,11 @@
 (defn- tombstone? [^SinkRecord record]
   (and (nil? (.value record)) (.key record)))
 
+(defn- relation [table valid-from valid-to]
+  (cond-> {:into table}
+          valid-from (assoc :valid-from valid-from)
+          valid-to (assoc :valid-to valid-to)))
+
 (defn transform-sink-record [props ^SinkRecord record]
   (log/info "sink record:" record)
   (let [topic (keyword (.topic record))
@@ -117,8 +122,12 @@
                   (throw (err/illegal-arg :unsupported-tombstone-mode
                                           {::err/message (str "Unsupported tombstone mode: " record)})))
                 (let [doc (record->edn record)
-                      id (find-eid props record doc)]
-                  [:put-docs topic (assoc doc :xt/id id)]))]
+                      id (find-eid props record doc)
+                      valid-from-field (get props XtdbSinkConnector/VALID_FROM_FIELD_CONFIG)
+                      valid-from (get doc (keyword valid-from-field))
+                      valid-to-field (get props XtdbSinkConnector/VALID_TO_FIELD_CONFIG)
+                      valid-to (get doc (keyword valid-to-field))]
+                  [:put-docs (relation topic valid-from valid-to) (assoc doc :xt/id id)]))]
     (log/info "tx op:" tx-op)
     tx-op))
 
