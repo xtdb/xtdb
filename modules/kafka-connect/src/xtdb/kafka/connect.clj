@@ -1,5 +1,6 @@
 (ns xtdb.kafka.connect
   (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.error :as err]
             [xtdb.api :as xt]
@@ -112,13 +113,18 @@
           valid-from (assoc :valid-from valid-from)
           valid-to (assoc :valid-to valid-to)))
 
+(defn table-name [props ^SinkRecord record]
+  (let [topic (.topic record)
+        table-name-format (get props XtdbSinkConnector/TABLE_NAME_FORMAT_CONFIG)]
+    (keyword (str/replace table-name-format "${topic}" topic))))
+
 (defn transform-sink-record [props ^SinkRecord record]
   (log/info "sink record:" record)
-  (let [topic (keyword (.topic record))
+  (let [table (table-name props record)
         tx-op (if (tombstone? record)
                 (if (= "record_key" (get props XtdbSinkConnector/ID_MODE_CONFIG))
                   (let [id (find-record-key-eid props record)]
-                    [:delete-docs topic id])
+                    [:delete-docs table id])
                   (throw (err/illegal-arg :unsupported-tombstone-mode
                                           {::err/message (str "Unsupported tombstone mode: " record)})))
                 (let [doc (record->edn record)
@@ -127,7 +133,7 @@
                       valid-from (get doc (keyword valid-from-field))
                       valid-to-field (get props XtdbSinkConnector/VALID_TO_FIELD_CONFIG)
                       valid-to (get doc (keyword valid-to-field))]
-                  [:put-docs (relation topic valid-from valid-to) (assoc doc :xt/id id)]))]
+                  [:put-docs (relation table valid-from valid-to) (assoc doc :xt/id id)]))]
     (log/info "tx op:" tx-op)
     tx-op))
 

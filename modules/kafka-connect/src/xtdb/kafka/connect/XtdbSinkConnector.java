@@ -24,6 +24,7 @@ public class XtdbSinkConnector extends SinkConnector {
     public static final String ID_FIELD_CONFIG = "id.field";
     public static final String VALID_FROM_FIELD_CONFIG = "validFrom.field";
     public static final String VALID_TO_FIELD_CONFIG = "validTo.field";
+    public static final String TABLE_NAME_FORMAT_CONFIG = "table.name.format";
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
         .define(URL_CONFIG,
                 Type.STRING,
@@ -50,13 +51,19 @@ public class XtdbSinkConnector extends SinkConnector {
                 Type.STRING,
                 "",
                 Importance.LOW,
-                "The field name to use as _valid_to. Leave empty to use the default _valid_to.");
+                "The field name to use as _valid_to. Leave empty to use the default _valid_to.")
+        .define(TABLE_NAME_FORMAT_CONFIG,
+                Type.STRING,
+                "${topic}",
+                Importance.MEDIUM,
+                "A format string for the destination table name, which may contain `${topic}` as a placeholder for the originating topic name.");
 
     private String url;
     private String idMode;
     private String idField;
     private String validFromField;
     private String validToField;
+    private String tableNameFormat;
 
     @Override
     public String version() {
@@ -71,6 +78,7 @@ public class XtdbSinkConnector extends SinkConnector {
         idField = parsedConfig.getString(ID_FIELD_CONFIG);
         validFromField = parsedConfig.getString(VALID_FROM_FIELD_CONFIG);
         validToField = parsedConfig.getString(VALID_TO_FIELD_CONFIG);
+        tableNameFormat = parsedConfig.getString(TABLE_NAME_FORMAT_CONFIG);
     }
 
     @Override
@@ -88,6 +96,7 @@ public class XtdbSinkConnector extends SinkConnector {
             config.put(ID_FIELD_CONFIG, idField);
             config.put(VALID_FROM_FIELD_CONFIG, validFromField);
             config.put(VALID_TO_FIELD_CONFIG, validToField);
+            config.put(TABLE_NAME_FORMAT_CONFIG, tableNameFormat);
             configs.add(config);
         }
         return configs;
