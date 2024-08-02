@@ -56,11 +56,11 @@
 
     (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
               {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
-              {:path [3], :pages [{:page-idx 1, :seg :log2} {:page-idx 0, :seg :log} {:page-idx 3, :seg :t1} {:page-idx 4, :seg :t1}]}
+              {:path [3], :pages [{:page-idx 3, :seg :t1} {:page-idx 4, :seg :t1} {:page-idx 0, :seg :log} {:page-idx 1, :seg :log2}]}
               {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
-              {:path [0 1], :pages [{:seg :log, :page-idx 0} {:seg :t1, :page-idx 0}]}
+              {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
-              {:path [0 3], :pages [{:seg :log, :page-idx 0} {:seg :t1, :page-idx 1}]}]
+              {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0} ]}]
              (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
                                                (assoc :seg :t1))
                                            (-> (trie/->Segment (->arrow-hash-trie log-rel))
@@ -96,11 +96,11 @@
 
 
         (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                  {:path [3], :pages [{:seg :t2, :page-idx 5} {:seg :t1, :page-idx 4}]}
+                  {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 5}]}
                   {:path [0 1],
-                   :pages [{:seg :t2, :page-idx 2} {:seg :t1, :page-idx 0}]}
+                   :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
                   {:path [0 3],
-                   :pages [{:seg :t2, :page-idx 3} {:seg :t1, :page-idx 1}]}]
+                   :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
                  (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
                                                    (assoc :seg :t1))
                                                (-> (trie/->Segment (->arrow-hash-trie t2-rel))
@@ -118,23 +118,25 @@
         (.gt (.getValidTo temporal-bounds) current-time)
 
 
-        (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                  {:path [3],
-                   :pages [{:seg :t2, :page-idx 4} {:seg :t2, :page-idx 5} {:seg :t1, :page-idx 3} {:seg :t1, :page-idx 4}]}
-                  {:path [0 0], :pages [{:seg :t2, :page-idx 1}]}
-                  {:path [0 1],
-                   :pages [{:seg :t2, :page-idx 1} {:seg :t2, :page-idx 2} {:seg :t1, :page-idx 0}]}
-                  {:path [0 2], :pages [{:seg :t2, :page-idx 1}]}
-                  {:path [0 3],
-                   :pages [{:seg :t2, :page-idx 1} {:seg :t2, :page-idx 3} {:seg :t1, :page-idx 1}]}]
-
-                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                                   (assoc :seg :t1))
-                                               (-> (trie/->Segment (->arrow-hash-trie t2-rel))
-                                                   (assoc :seg :t2))]
-                                              nil
-                                              temporal-bounds)
-                      (merge-plan-nodes->path+pages))))))))
+        (t/is (=
+               [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
+                {:path [3],
+                 :pages [{:seg :t1, :page-idx 3} {:seg :t1, :page-idx 4} {:seg :t2, :page-idx 4} {:seg :t2, :page-idx 5}]}
+                {:path [0 0],
+                 :pages [{:seg :t2, :page-idx 1}]}
+                {:path [0 1],
+                 :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 1} {:seg :t2, :page-idx 2}]}
+                {:path [0 2],
+                 :pages [{:seg :t2, :page-idx 1}]}
+                {:path [0 3],
+                 :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 1} {:seg :t2, :page-idx 3}]}]
+               (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
+                                                 (assoc :seg :t1))
+                                             (-> (trie/->Segment (->arrow-hash-trie t2-rel))
+                                                 (assoc :seg :t2))]
+                                            nil
+                                            temporal-bounds)
+                    (merge-plan-nodes->path+pages))))))))
 
 (defn ->trie-file-name
   " L0/L1 keys are submitted as [level first-row next-row rows]; L2+ as [level part-vec next-row]"
@@ -321,9 +323,9 @@
                   (.close trie-cursor))
 
                 (t/is (= [{:path [0 0],
-                           :pages [{:seg :t2, :page-idx 0}
-                                   {:seg :t1, :page-idx 0}
-                                   {:seg :t1, :page-idx 2}]}]
+                           :pages [{:seg :t1, :page-idx 0}
+                                   {:seg :t1, :page-idx 2}
+                                   {:seg :t2, :page-idx 0}]}]
                          (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment arrow-hash-trie1) (assoc :seg :t1))
                                                        (-> (trie/->Segment arrow-hash-trie2) (assoc :seg :t2))]
                                                       (scan/->path-pred iid-arrow-buf)

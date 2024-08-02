@@ -84,6 +84,7 @@ data class MergePlanNode(val segment: ISegment, val node: Node<*>)
 
 class MergePlanTask(val mpNodes: List<MergePlanNode>, val path: ByteArray)
 
+// IMPORTANT - Tries (i.e segments) and nodes need to be returned in system time order
 @Suppress("UNUSED_EXPRESSION")
 fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
@@ -103,16 +104,17 @@ fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, tempo
                 for (mpNode in mergePlanTask.mpNodes) {
                     val recencies = mpNode.node.recencies
                     if (recencies != null) {
+                        val tempMpNodes = mutableListOf<MergePlanNode>()
                         for(i in recencies.indices.reversed()) {
                             if (recencies[i] < minRecency) break
-                            newMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
+                            tempMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
                         }
+                        newMpNodes += tempMpNodes.reversed()
                     } else {
                         newMpNodes += mpNode
                     }
                 }
-                // we rely on nodes being in system time order later on
-                stack.push(MergePlanTask(newMpNodes.reversed(), mergePlanTask.path))
+                stack.push(MergePlanTask(newMpNodes, mergePlanTask.path))
             }
 
             pathPred != null && !pathPred.test(mergePlanTask.path) -> null
