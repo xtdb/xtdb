@@ -7,7 +7,7 @@ plugins {
     id("com.github.johnrengelman.shadow")
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
 dependencies {
     api(project(":xtdb-api"))
