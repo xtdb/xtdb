@@ -268,3 +268,10 @@
       (t/testing "empty buffer pool"
         (t/is (= [] (.listAllObjects bp)))
         (t/is (= [] (.listObjects bp (.toPath (io/file "foo")))))))))
+
+(t/deftest dont-list-temporary-objects-3544
+  (tu/with-tmp-dirs #{tmp-dir}
+    (let [schema (Schema. [(types/col-type->field "a" :i32)])]
+      (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir))
+                  _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) (VectorSchemaRoot/create schema tu/*allocator*))]
+        (t/is (= [] (.listAllObjects bp)))))))

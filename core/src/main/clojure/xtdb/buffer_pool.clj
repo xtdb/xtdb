@@ -139,13 +139,11 @@
   (->MemoryBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                       (TreeMap.)))
 
-(defn- create-tmp-path ^Path [^Path disk-store]
-  (Files/createTempFile (doto (.resolve disk-store ".tmp") util/mkdirs)
-                        "upload" ".arrow"
-                        (make-array FileAttribute 0)))
+(defn- create-tmp-path ^Path [^Path tmp-dir]
+  (Files/createTempFile tmp-dir "upload" ".arrow" (make-array FileAttribute 0)))
 
 
-(defrecord LocalBufferPool [allocator, ^Cache memory-store, ^Path disk-store, ^long max-size]
+(defrecord LocalBufferPool [allocator, ^Cache memory-store, ^Path disk-store, ^Path tmp-dir, ^long max-size]
   IBufferPool
   (getBuffer [_ k]
     (let [cached-buffer (cache-get memory-store k)]
@@ -175,7 +173,7 @@
   (putObject [_ k buffer]
     (CompletableFuture/completedFuture
      (try
-       (let [tmp-path (create-tmp-path disk-store)]
+       (let [tmp-path (create-tmp-path tmp-dir)]
          (util/write-buffer-to-path buffer tmp-path)
 
          (let [file-path (.resolve disk-store k)]
@@ -199,19 +197,19 @@
         [])))
 
   (openArrowWriter [_ k vsr]
-    (let [tmp-path (create-tmp-path disk-store)]
+    (let [tmp-path (create-tmp-path tmp-dir)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  aw (ArrowFileWriter. vsr nil file-ch)]
         (try
           (.start aw)
-          (catch ClosedByInterruptException e
+          (catch ClosedByInterruptException _e
             (throw (InterruptedException.))))
 
         (reify IArrowWriter
           (writeBatch [_]
             (try
               (.writeBatch aw)
-              (catch ClosedByInterruptException e
+              (catch ClosedByInterruptException _e
                 (throw (InterruptedException.)))))
 
           (end [_]
@@ -235,7 +233,8 @@
   Closeable
   (close [_]
     (free-memory memory-store)
-    (util/close allocator)))
+    (util/close allocator)
+    (util/delete-dir tmp-dir)))
 
 (defn ->memory-buffer-cache ^Cache [^long max-cache-bytes]
   (-> (Caffeine/newBuilder)
@@ -250,11 +249,13 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory]
-  (let [disk-store-path (-> (.getPath factory) (.resolve storage-root))]
+  (let [disk-store-path (-> (.getPath factory) (.resolve storage-root))
+        tmp-dir (util/tmp-dir "buffer-pool-tmp-dir")]
     (util/mkdirs disk-store-path)
     (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                        (->memory-buffer-cache (.getMaxCacheBytes factory))
                        disk-store-path
+                       tmp-dir
                        (.getMaxCacheBytes factory))))
 
 (defn dir->buffer-pool
@@ -341,7 +342,8 @@
                              ^Path local-disk-cache
                              ^AsyncCache local-disk-cache-evictor
                              ^ObjectStore object-store
-                             !evictor-max-weight]
+                             !evictor-max-weight
+                             ^Path tmp-dir]
   IBufferPool
   (getBuffer [_ k]
     (let [cached-buffer (cache-get memory-store k)]
@@ -396,7 +398,7 @@
   (listObjects [_ dir] (.listObjects object-store dir))
 
   (openArrowWriter [_ k vsr]
-    (let [tmp-path (create-tmp-path local-disk-cache)]
+    (let [tmp-path (create-tmp-path tmp-dir)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  aw (ArrowFileWriter. vsr nil file-ch)]
 
@@ -447,7 +449,7 @@
                (upload-multipart-buffers object-store k buffers)))
 
             (.thenRun (fn []
-                        (let [tmp-path (create-tmp-path local-disk-cache)]
+                        (let [tmp-path (create-tmp-path tmp-dir)]
                           (util/with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
                             (.write file-ch buffer))
 
@@ -473,7 +475,8 @@
   (close [_]
     (free-memory memory-store)
     (util/close object-store)
-    (util/close allocator)))
+    (util/close allocator)
+    (util/delete-dir tmp-dir)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -521,6 +524,7 @@
 (defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (let [^Path local-disk-cache (.getLocalDiskCache factory)
+          tmp-dir (util/tmp-dir "buffer-pool-tmp-dir")
           local-disk-size-limit (or (.getMaxDiskCacheBytes factory)
                                     (calculate-limit-from-percentage-of-disk local-disk-cache (.getMaxDiskCachePercentage factory)))
           ^AsyncCache local-disk-cache-evictor (->local-disk-cache-evictor local-disk-size-limit local-disk-cache)
@@ -533,13 +537,14 @@
                          ^Policy$Eviction eviction-policy (.get (.eviction (.policy sync-cache)))]
                      (.setMaximum eviction-policy (max 0 new-size)))))
 
-      
+
       (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                           (->memory-buffer-cache (.getMaxCacheBytes factory))
                           local-disk-cache
                           local-disk-cache-evictor
                           object-store
-                          !evictor-max-weight))))
+                          !evictor-max-weight
+                          tmp-dir))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}
