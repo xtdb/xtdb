@@ -1,4 +1,4 @@
-@file:UseSerializers(DurationSerde::class)
+@file:UseSerializers(StringMapWithEnvVarsSerde::class, DurationSerde::class, StringWithEnvVarSerde::class, PathWithEnvVarSerde::class)
 package xtdb.api.log
 
 import kotlinx.serialization.SerialName
@@ -7,6 +7,7 @@ import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
+import xtdb.api.StringMapWithEnvVarsSerde
 import xtdb.api.Xtdb
 import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
@@ -49,14 +50,14 @@ object Kafka {
     @Serializable
     @SerialName("!Kafka")
     data class Factory(
-        @Serializable(StringWithEnvVarSerde::class) val bootstrapServers: String,
-        @Serializable(StringWithEnvVarSerde::class) val topicName: String,
+        val bootstrapServers: String,
+        val topicName: String,
         var autoCreateTopic: Boolean = true,
         var replicationFactor: Int = 1,
         var pollDuration: Duration = Duration.ofSeconds(1),
         var topicConfig: Map<String, String> = emptyMap(),
         var propertiesMap: Map<String, String> = emptyMap(),
-        @Serializable(PathWithEnvVarSerde::class) var propertiesFile: Path? = null
+        var propertiesFile: Path? = null
     ) : Log.Factory {
 
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }

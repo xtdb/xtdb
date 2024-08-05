@@ -268,4 +268,38 @@ class YamlSerdeTest {
 
         unmockkObject(EnvironmentVariableProvider)
     }
+
+    @Test
+    fun testNestedEnvVarInMaps() {
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("KAFKA_BOOTSTRAP_SERVERS") } returns "localhost:9092"
+        val saslConfig =
+            "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"user\" password=\"password\";"
+        every { EnvironmentVariableProvider.getEnvVariable("KAFKA_SASL_JAAS_CONFIG") } returns saslConfig
+
+        val inputWithEnv = """
+        txLog: !Kafka
+            bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+            topicName: xtdb_topic
+            propertiesMap:
+                security.protocol: SASL_SSL
+                sasl.mechanism: PLAIN
+                sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
+        """.trimIndent()
+
+        assertEquals(
+            Kafka.Factory(
+                bootstrapServers = "localhost:9092",
+                topicName = "xtdb_topic",
+                propertiesMap = mapOf(
+                    "security.protocol" to "SASL_SSL",
+                    "sasl.mechanism" to "PLAIN",
+                    "sasl.jaas.config" to saslConfig
+                )
+            ),
+            nodeConfig(inputWithEnv).txLog
+        )
+
+        unmockkObject(EnvironmentVariableProvider)
+    }
 }
