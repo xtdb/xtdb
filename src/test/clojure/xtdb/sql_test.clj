@@ -757,9 +757,9 @@
                         "SELECT SUM(heads) AS sum_heads, MIN(heads) AS min_heads, MAX(heads) AS max_heads, COUNT(heads) AS count_heads FROM docs")))
           "various aggs")
 
-    (t/is (= #{{:any-medusa true, :some-medusa true, :every-medusa false}}
+    (t/is (= #{{:or-medusa true, :and-medusa false, :every-medusa false}}
              (set (xt/q tu/*node*
-                    "SELECT ANY(_id = 'medusa') AS any_medusa, SOME(_id = 'medusa') AS some_medusa, EVERY(_id = 'medusa') AS every_medusa FROM docs")))
+                    "SELECT BOOL_OR(_id = 'medusa') AS or_medusa, BOOL_AND(_id = 'medusa') AS and_medusa, EVERY(_id = 'medusa') AS every_medusa FROM docs")))
       "bool aggs")
 
     (t/is (= #{{:heads 1, :count-heads 3}}

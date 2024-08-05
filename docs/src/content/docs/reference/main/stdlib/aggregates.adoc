@@ -40,20 +40,16 @@ In line with the SQL spec (which XTDB also respects in XTQL queries):
 |===
 | XTQL | SQL |
 
-| `(all xs)`
+| `(bool-and xs)`
 
 `(every xs)`
-| `ALL(xs)`
+| `BOOL_AND(xs)`
 
   `EVERY(xs)`
 | true if all values are true; false otherwise
 
-| `(any xs)`
-
-  `(some xs)`
-| `ANY(xs)`
-
-  `SOME(xs)`
+| `(bool-or xs)`
+| `BOOL_OR(xs)`
 | false if all values are false; true otherwise
 |===
 

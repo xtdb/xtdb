@@ -564,10 +564,9 @@
                                            :args [{:op :local, :local acc-local}
                                                   {:op :local, :local val-local}]}})))
 
-(defmethod ->aggregate-factory :all [agg-opts] (bool-agg-factory :and agg-opts))
-(defmethod ->aggregate-factory :every [agg-opts] (->aggregate-factory (assoc agg-opts :f :all)))
-(defmethod ->aggregate-factory :any [agg-opts] (bool-agg-factory :or agg-opts))
-(defmethod ->aggregate-factory :some [agg-opts] (->aggregate-factory (assoc agg-opts :f :any)))
+(defmethod ->aggregate-factory :bool_and [agg-opts] (bool-agg-factory :and agg-opts))
+(defmethod ->aggregate-factory :every [agg-opts] (->aggregate-factory (assoc agg-opts :f :bool_and)))
+(defmethod ->aggregate-factory :bool_or [agg-opts] (bool-agg-factory :or agg-opts))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor

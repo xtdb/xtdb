@@ -723,7 +723,9 @@ aggregateFunction
 
 setFunctionType
     : 'AVG' | 'MAX' | 'MIN' | 'SUM' | 'COUNT'
-    | 'EVERY' | 'ANY' | 'SOME'
+    // Removed 'ANY' and 'SOME' as aggregate functions, as it introduces ambiguities with
+    // the `= ANY` comparison operator.  (Following the same approach as PostgreSQL).
+    | 'EVERY' | 'BOOL_AND' | 'BOOL_OR'
     | 'STDDEV_POP' | 'STDDEV_SAMP' | 'VAR_SAMP' | 'VAR_POP' ;
 
 setQuantifier : 'DISTINCT' | 'ALL' ;
