@@ -425,6 +425,14 @@
                       (aggregate category {:sum-doubles (* 2 (*
                                                               (* 2 (sum v))
                                                               (sum (* 2 v))))})))))
+
+  (t/is (= [{:category :c0, :any-2 true}
+            {:category :c1, :any-2 false}]
+           (xt/q tu/*node*
+                 '(-> (from :docs [{:category category :v v}])
+                      (aggregate category {:any-2 (bool-or (= v 2))}))))
+    "bool agg")
+
   (t/is (= [{:v 1, :v-double 2} {:v 4, :v-double 8} {:v 2, :v-double 4}]
            (xt/q tu/*node*
                  '(-> (from :docs [{:category category :v v}])

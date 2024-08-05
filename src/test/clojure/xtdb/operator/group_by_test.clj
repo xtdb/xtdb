@@ -352,7 +352,7 @@
                    {:k "tfn", :all-vs false, :any-vs true}}
             :col-types '{k :utf8, all-vs [:union #{:null :bool}], any-vs [:union #{:null :bool}]}}
 
-           (-> (tu/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
+           (-> (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
                              [::tu/blocks
                               [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
                                 {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
@@ -364,17 +364,17 @@
                (update :res set))))
 
   (t/is (= []
-           (tu/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
+           (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
                          [::tu/blocks '{k :utf8, v [:union #{:bool :null}]}
                           []]])))
 
   (t/is (= [{}]
-           (tu/query-ra [:group-by '[{all-vs (all v)} {any-vs (any v)}]
+           (tu/query-ra [:group-by '[{all-vs (bool-and v)} {any-vs (bool-or v)}]
                          [::tu/blocks '{v [:union #{:bool :null}]}
                           []]])))
 
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (all b)}]
+           (tu/query-ra '[:group-by [{n (bool-and b)}]
                           [::tu/blocks
                            [[{:b nil}]]]]))))
 
