@@ -20,6 +20,7 @@ One of:
 - `record_key`
   - The record key must be either a Struct or a primitive value
   - If the key is a struct then `id.field` must be used to select a field to use as the `_id`
+  - **Required** if you want [tombstones](https://kafka.apache.org/documentation/#design_compactionbasics) to delete records
 - `record_value`
   - `id.field` must be used to select a field to use as the `_id`
 
