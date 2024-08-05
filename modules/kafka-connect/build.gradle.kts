@@ -20,7 +20,7 @@ dependencies {
     api(project(":xtdb-http-client-jvm"))
 
     api(kotlin("stdlib-jdk8"))
-    api("org.apache.kafka", "connect-api", "3.8.0")
+    compileOnly("org.apache.kafka", "connect-api", "3.8.0")
 
     api("org.clojure", "tools.logging", "1.2.4")
     api("cheshire", "cheshire", "5.13.0")
