@@ -1,0 +1,22 @@
+txLog: !Kafka
+  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  topicName: !Env XTDB_TOPIC_NAME
+
+storage: !Remote
+  objectStore: !Azure
+    storageAccount: !Env XTDB_AZURE_STORAGE_ACCOUNT
+    container: !Env XTDB_AZURE_STORAGE_CONTAINER
+    serviceBusNamespace: !Env XTDB_AZURE_SERVICE_BUS_NAMESPACE
+    serviceBusTopicName: !Env XTDB_AZURE_SERVICE_BUS_TOPIC_NAME
+    prefix: "xtdb-object-store"
+    userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
+  localDiskCache: !Env XTDB_LOCAL_DISK_CACHE
+
+metrics: !Prometheus
+  port: 8080
+
+modules: 
+- !HttpServer
+  port: 3000
+- !PgwireServer
+  port: 5432

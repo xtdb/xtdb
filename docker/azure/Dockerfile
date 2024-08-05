@@ -14,8 +14,14 @@ ENTRYPOINT ["java", \
     "-cp","xtdb-azure.jar", \
     "clojure.main", "-m", "xtdb.main"]
 
+CMD ["-f", "azure_config.yaml"]
+
 HEALTHCHECK --start-period=15s --timeout=3s \
     CMD curl -f http://localhost:3000/status || exit 1
+
+EXPOSE 5432
+EXPOSE 3000
+EXPOSE 8080
 
 RUN mkdir -p /var/lib/xtdb
 VOLUME /var/lib/xtdb
@@ -28,5 +34,5 @@ ENV XTDB_VERSION=${XTDB_VERSION}
 LABEL org.opencontainers.image.version=${XTDB_VERSION}
 LABEL org.opencontainers.image.revision=${GIT_SHA}
 
-ADD azure_config.edn xtdb.edn
+ADD azure_config.yaml azure_config.yaml
 ADD build/libs/xtdb-azure.jar xtdb-azure.jar
