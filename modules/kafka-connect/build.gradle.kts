@@ -11,7 +11,6 @@ java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 dependencies {
     api(project(":xtdb-api"))
-    api(project(":xtdb-core"))
     api(project(":xtdb-http-client-jvm"))
 
     api("org.apache.kafka", "connect-api", "3.8.0")
