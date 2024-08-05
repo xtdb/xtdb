@@ -31,7 +31,7 @@
 
 (defn- struct->edn [^Struct s]
   (let [output-map (get-struct-contents s)]
-    (log/info "map val: " output-map)
+    (log/debug "map val: " output-map)
     output-map))
 
 (defn- record->edn [^SinkRecord record]
@@ -84,7 +84,7 @@
             id))
         (if (not= "" id-field)
           (do
-            (log/info "id-field:" id-field)
+            (log/debug "id-field:" id-field)
             (throw (err/illegal-arg :invalid-key-type
                                     {::err/message (str "Expected struct key found primitive: " record)})))
           ;; TODO: Check if valid primitive type
@@ -117,7 +117,7 @@
     (keyword (str/replace table-name-format "${topic}" topic))))
 
 (defn transform-sink-record [^XtdbSinkConfig conf, ^SinkRecord record]
-  (log/info "sink record:" record)
+  (log/debug "sink record:" record)
   (let [table (table-name conf record)
         tx-op (if (tombstone? record)
                 (if (= "record_key" (.getIdMode conf))
@@ -132,7 +132,7 @@
                       valid-to-field (.getValidToField conf)
                       valid-to (get doc (keyword valid-to-field))]
                   [:put-docs (relation table valid-from valid-to) (assoc doc :xt/id id)]))]
-    (log/info "tx op:" tx-op)
+    (log/debug "tx op:" tx-op)
     tx-op))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
