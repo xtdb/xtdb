@@ -3,13 +3,11 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.error :as err]
-            [xtdb.api :as xt]
-            ; For XtdbSinkTask
-            [xtdb.client])
+            [xtdb.api :as xt])
   (:import [org.apache.kafka.connect.data Schema Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
            [java.util Map]
-           xtdb.kafka.connect.XtdbSinkConnector))
+           (xtdb.kafka.connect XtdbSinkConfig)))
 
 (defn- map->edn [m]
   (->> (for [[k v] m]
@@ -68,9 +66,9 @@
       (throw (err/illegal-arg :unknown-message-type
                               {::err/message (str "Unknown message type: " record)})))))
 
-(defn- find-record-key-eid [props ^SinkRecord record]
+(defn- find-record-key-eid [^XtdbSinkConfig conf, ^SinkRecord record]
   (let [r-key (.key record)
-        id-field (get props XtdbSinkConnector/ID_FIELD_CONFIG)]
+        id-field (.getIdField conf)]
     (if (nil? r-key)
       (throw (err/illegal-arg :missing-id
                               {::err/message (str "Missing key in record: " record)}))
@@ -92,18 +90,18 @@
           ;; TODO: Check if valid primitive type
           r-key)))))
 
-(defn- find-record-value-eid [props ^SinkRecord record doc]
-  (let [id-field (get props XtdbSinkConnector/ID_FIELD_CONFIG)
+(defn- find-record-value-eid [^XtdbSinkConfig conf, ^SinkRecord record, doc]
+  (let [id-field (.getIdField conf)
         id (get doc (keyword id-field))]
     (when-not id
       (throw (err/illegal-arg :missing-id
                               {::err/message (str "Missing ID in record: " record)})))
     id))
 
-(defn- find-eid [props ^SinkRecord record doc]
-  (case (get props XtdbSinkConnector/ID_MODE_CONFIG)
-    "record_key" (find-record-key-eid props record)
-    "record_value" (find-record-value-eid props record doc)))
+(defn- find-eid [^XtdbSinkConfig conf ^SinkRecord record doc]
+  (case (.getIdMode conf)
+    "record_key" (find-record-key-eid conf record)
+    "record_value" (find-record-value-eid conf record doc)))
 
 (defn- tombstone? [^SinkRecord record]
   (and (nil? (.value record)) (.key record)))
@@ -113,30 +111,31 @@
           valid-from (assoc :valid-from valid-from)
           valid-to (assoc :valid-to valid-to)))
 
-(defn table-name [props ^SinkRecord record]
+(defn table-name [^XtdbSinkConfig conf, ^SinkRecord record]
   (let [topic (.topic record)
-        table-name-format (get props XtdbSinkConnector/TABLE_NAME_FORMAT_CONFIG)]
+        table-name-format (.getTableNameFormat conf)]
     (keyword (str/replace table-name-format "${topic}" topic))))
 
-(defn transform-sink-record [props ^SinkRecord record]
+(defn transform-sink-record [^XtdbSinkConfig conf, ^SinkRecord record]
   (log/info "sink record:" record)
-  (let [table (table-name props record)
+  (let [table (table-name conf record)
         tx-op (if (tombstone? record)
-                (if (= "record_key" (get props XtdbSinkConnector/ID_MODE_CONFIG))
-                  (let [id (find-record-key-eid props record)]
+                (if (= "record_key" (.getIdMode conf))
+                  (let [id (find-record-key-eid conf record)]
                     [:delete-docs table id])
                   (throw (err/illegal-arg :unsupported-tombstone-mode
                                           {::err/message (str "Unsupported tombstone mode: " record)})))
                 (let [doc (record->edn record)
-                      id (find-eid props record doc)
-                      valid-from-field (get props XtdbSinkConnector/VALID_FROM_FIELD_CONFIG)
+                      id (find-eid conf record doc)
+                      valid-from-field (.getValidFromField conf)
                       valid-from (get doc (keyword valid-from-field))
-                      valid-to-field (get props XtdbSinkConnector/VALID_TO_FIELD_CONFIG)
+                      valid-to-field (.getValidToField conf)
                       valid-to (get doc (keyword valid-to-field))]
                   [:put-docs (relation table valid-from valid-to) (assoc doc :xt/id id)]))]
     (log/info "tx op:" tx-op)
     tx-op))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-sink-records [api props records]
   (when (seq records)
     (xt/submit-tx api (vec (for [record records]
