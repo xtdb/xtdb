@@ -3,19 +3,8 @@ import xtdb.DataReaderTransformer
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
-    `maven-publish`
     signing
     id("com.github.johnrengelman.shadow")
-}
-
-// TODO: Not sure of how to publish this
-publishing {
-    publications.create("maven", MavenPublication::class) {
-        pom {
-            name.set("XTDB Kafka Connect")
-            description.set("XTDB Kafka Connect")
-        }
-    }
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
