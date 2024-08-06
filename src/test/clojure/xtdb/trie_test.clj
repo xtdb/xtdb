@@ -1,7 +1,7 @@
 (ns xtdb.trie-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.operator.scan :as scan]
+            [xtdb.operator.scan :as scan :refer [MergePlanPage]]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -11,9 +11,9 @@
             [xtdb.vector.writer :as vw]
             [xtdb.buffer-pool :as bp])
   (:import (java.nio.file Paths)
+           (java.util.function IntPredicate)
            (org.apache.arrow.memory RootAllocator)
            (org.apache.arrow.vector.types.pojo Field)
-           org.apache.arrow.vector.VectorSchemaRoot
            (xtdb ICursor)
            xtdb.arrow.Relation
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrieKt MergePlanNode MergePlanTask)
@@ -137,6 +137,22 @@
                                             nil
                                             temporal-bounds)
                     (merge-plan-nodes->path+pages))))))))
+
+(defrecord MockMergePlanPage [page metadata-matches?]
+  MergePlanPage
+  (load-page [_ _ _] (throw (UnsupportedOperationException.)))
+  (test-metadata [_] metadata-matches?))
+
+(deftest test-to-merge-task
+  (t/is (= [1 2] (->> (scan/->merge-task [(->MockMergePlanPage 0 false)
+                                          (->MockMergePlanPage 1 true)
+                                          (->MockMergePlanPage 2 false)])
+                      (map :page))))
+
+  (t/is (= [0 1 2] (->> (scan/->merge-task [(->MockMergePlanPage 0 true)
+                                            (->MockMergePlanPage 1 false)
+                                            (->MockMergePlanPage 2 false)])
+                        (map :page)))))
 
 (defn ->trie-file-name
   " L0/L1 keys are submitted as [level first-row next-row rows]; L2+ as [level part-vec next-row]"
@@ -265,6 +281,9 @@
 (defn- str->path [s]
   (Paths/get s, (make-array String 0)))
 
+(defn ->constantly-pred [v]
+  (reify IntPredicate (test [_ _] v)))
+
 (deftest test-trie-cursor-with-multiple-recency-nodes-from-same-file-3298
   (let [eid #uuid "00000000-0000-0000-0000-000000000000"]
     (util/with-tmp-dirs #{tmp-dir}
@@ -297,11 +316,9 @@
 
             (let [arrow-hash-trie1 (->arrow-hash-trie t1-rel)
                   arrow-hash-trie2 (->arrow-hash-trie t2-rel)
-                  seg-t1 (-> (trie/->Segment arrow-hash-trie1)
-                             (assoc :data-file-path (str->path t1-data-file)))
-                  seg-t2 (-> (trie/->Segment arrow-hash-trie2)
-                             (assoc :data-file-path (str->path t2-data-file)))
-                  leaves [[:arrow seg-t1 0] [:arrow seg-t1 2] [:arrow seg-t2 0]]
+                  leaves [(scan/->ArrowMergePlanPage (str->path t1-data-file) (->constantly-pred true) 0)
+                          (scan/->ArrowMergePlanPage (str->path t1-data-file) (->constantly-pred true) 2)
+                          (scan/->ArrowMergePlanPage (str->path t2-data-file) (->constantly-pred true) 0)]
                   merge-tasks [{:leaves leaves :path (byte-array [0 0])} ]]
               (util/with-close-on-catch [out-rel (RelationWriter. al (for [^Field field
                                                                            [(types/->field "xt$id" (types/->arrow-type :uuid) false)

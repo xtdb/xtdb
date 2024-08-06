@@ -230,19 +230,11 @@
     (.push used-entries vsr)
     vsr))
 
-(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache [leaf-tag & leaf-args]]
-  (case leaf-tag
-    :arrow
-    (let [[{:keys [data-file-path]} page-idx] leaf-args]
-      (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
-        (let [vsr (cache-vsr vsr-cache data-file-path)
-              loader (VectorLoader. vsr)]
-          (.load loader rb)
-          (vr/<-root vsr))))
-
-    :live (first leaf-args)))
-
 (defrecord LeafPointer [ev-ptr rel-idx])
+
+(defprotocol MergePlanPage
+  (load-page [mpg buffer-pool vsr-cache])
+  (test-metadata [msg]))
 
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks, ^IRelationWriter out-rel
                      col-names, ^Map col-preds,
@@ -262,7 +254,7 @@
                   calculate-polygon (bitemp/polygon-calculator temporal-bounds)
                   bitemp-consumer (->bitemporal-consumer out-rel col-names)
                   leaf-rdrs (for [leaf leaves
-                                  :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache leaf)]]
+                                  :let [^RelationReader data-rdr (load-page leaf buffer-pool vsr-cache)]]
                               (cond-> data-rdr
                                 iid-pred (.select (.select iid-pred allocator data-rdr params))))
                   [temporal-cols content-cols] ((juxt filter remove) temporal-column? col-names)
@@ -358,48 +350,39 @@
         (test [_ path]
           (zero? (HashTrie/compareToPath iid-ptr path)))))))
 
-(defn ->merge-tasks
-  "segments :: [Segment]
-    Segment :: {:keys [meta-file data-file-path table-metadata page-idx-pred]} ;; for Arrow tries
-             | {:keys [trie live-rel]} ;; for live tries
+(defrecord ArrowMergePlanPage [data-file-path ^IntPredicate page-idx-pred ^long page-idx]
+  MergePlanPage
+  (load-page [_mpg buffer-pool vsr-cache]
+    (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
+      (let [vsr (cache-vsr vsr-cache data-file-path)
+            loader (VectorLoader. vsr)]
+        (.load loader rb)
+        (vr/<-root vsr))))
 
-   return :: (seq {:keys [path leaves]})"
-  [segments path-pred temporal-bounds]
-  (let [result (ArrayList.)]
-    (->> (HashTrieKt/toMergePlan segments path-pred temporal-bounds)
-         (run! (fn [^MergePlanTask merge-plan-task]
-                 (let [path (.getPath merge-plan-task)
-                       mp-nodes (.getMpNodes merge-plan-task)
-                       leaves (ArrayList.)]
-                   (loop [[^MergePlanNode mp-node & more-mp-nodes] mp-nodes
-                          node-taken? false]
-                     (if mp-node
-                       (let [segment (.getSegment mp-node)
-                             trie-node (.getNode mp-node)]
-                         (if-not trie-node
-                           (recur more-mp-nodes node-taken?)
+  (test-metadata [_mpg]
+    (.test page-idx-pred page-idx)))
 
-                           (condp = (class trie-node)
-                             ArrowHashTrie$Leaf
-                             (let [{:keys [^IntPredicate page-idx-pred]} segment
-                                   page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
-                                   take-node? (.test page-idx-pred page-idx)]
+(defrecord LiveMergePlanPage [^RelationReader live-rel trie ^LiveHashTrie$Leaf leaf]
+  MergePlanPage
+  (load-page [_mpg _buffer-pool _vsr-cache]
+    (.select live-rel (.mergeSort leaf trie)))
 
+  (test-metadata [_mpg] true))
 
-                               (when (or take-node? node-taken?)
-                                 (.add leaves [:arrow segment page-idx]))
+(defn ->merge-task [mp-pages]
+  (let [leaves (ArrayList.)]
+    (loop [[mp-page & more-mp-pages] mp-pages
+           node-taken? false]
+      (if mp-page
+        (let [take-node? (test-metadata mp-page)]
 
-                               (recur more-mp-nodes (or node-taken? take-node?)))
+          (when (or take-node? node-taken?)
+            (.add leaves mp-page))
 
-                             LiveHashTrie$Leaf
-                             (let [^LiveHashTrie$Leaf trie-node trie-node
-                                   {:keys [^RelationReader live-rel, trie]} segment]
-                               (.add leaves [:live (.select live-rel (.mergeSort trie-node trie))])
-                               (recur more-mp-nodes true)))))
+          (recur more-mp-pages (or node-taken? take-node?)))
 
-                       (when node-taken?
-                         (.add result {:path path, :leaves (vec leaves)}))))))))
-    result))
+        (when node-taken?
+          (vec leaves))))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -501,27 +484,34 @@
 
                          (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                            (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
-                                               (or (->merge-tasks (cond-> (mapv (fn [meta-file-path]
-                                                                                  (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
-                                                                                    (.add table-metadatas table-metadata)
-                                                                                    (into (trie/->Segment trie)
-                                                                                          {:data-file-path (trie/->table-data-file-path table-path (:trie-key (trie/parse-trie-file-path meta-file-path)))
+                                               (let [segments (cond-> (mapv (fn [meta-file-path]
+                                                                              (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
+                                                                                (.add table-metadatas table-metadata)
+                                                                                (into (trie/->Segment trie)
+                                                                                      {:data-file-path (trie/->table-data-file-path table-path
+                                                                                                                                    (:trie-key (trie/parse-trie-file-path meta-file-path)))
+                                                                                       :table-metadata table-metadata})))
+                                                                            current-meta-files)
 
-                                                                                           :table-metadata table-metadata
-                                                                                           :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                                    (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                                                      (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                                      page-idx-pred))
-                                                                                                                  (.build metadata-pred table-metadata)
-                                                                                                                  col-names)})))
-                                                                                current-meta-files)
-
-                                                                    live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
-                                                                                            (assoc :live-rel (.liveRelation live-table-wm)))))
-
-                                                                  (->path-pred iid-arrow-buf)
-                                                                  temporal-bounds)
-                                                   []))]
+                                                                live-table-wm (conj (trie/->Segment (.liveTrie live-table-wm))))]
+                                                 (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf) temporal-bounds)
+                                                      (into [] (keep (fn [^MergePlanTask mpt]
+                                                                       (when-let [leaves (->merge-task
+                                                                                          (for [^MergePlanNode mpn (.getMpNodes mpt)
+                                                                                                :let [{:keys [data-file-path table-metadata]} (.getSegment mpn)
+                                                                                                      node (.getNode mpn)]]
+                                                                                            (if data-file-path
+                                                                                              (->ArrowMergePlanPage data-file-path
+                                                                                                                    (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                                              (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                                                (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                                                page-idx-pred))
+                                                                                                                            (.build metadata-pred table-metadata)
+                                                                                                                            col-names)
+                                                                                                                    (.getDataPageIndex ^ArrowHashTrie$Leaf node))
+                                                                                              (->LiveMergePlanPage (.liveRelation live-table-wm) (.liveTrie live-table-wm) node))))]
+                                                                         {:path (.getPath mpt)
+                                                                          :leaves leaves})))))))]
 
                              (util/with-close-on-catch [out-rel (RelationWriter. allocator
                                                                                  (for [^Field field (vals fields)]
