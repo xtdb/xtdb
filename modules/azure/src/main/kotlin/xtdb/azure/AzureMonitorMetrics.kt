@@ -8,13 +8,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import xtdb.api.metrics.Metrics
 import xtdb.api.module.XtdbModule
+import xtdb.api.StringWithEnvVarSerde
 
 class AzureMonitorMetrics(override val registry: MeterRegistry) : Metrics {
 
     @Serializable
     @SerialName("!AzureMonitor")
     data class Factory (
-        @Serializable val instrumentationKey: String = "xtdb.metrics",
+        @Serializable(StringWithEnvVarSerde::class) val instrumentationKey: String = "xtdb.metrics",
     ): Metrics.Factory {
         override fun openMetrics(): Metrics {
             val config = object : AzureMonitorConfig {
