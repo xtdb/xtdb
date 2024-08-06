@@ -838,3 +838,28 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                       cursor (.openCursor bq)]
 
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
+
+(deftest test-default-param-types
+
+  (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT ? v" {:param-types nil})]
+
+    (t/is (= [{'?_0
+               #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :utf8 true]]}]
+             (.paramFields pq))
+          "unspecified param-types are assumed to be utf8")
+
+     (t/testing "preparedQuery rebound with args matching the assumed type"
+
+       (with-open [bq (.bind pq {:args ["42"]})
+                   cursor (.openCursor bq)]
+
+                   (t/is (= [[{:v "42"}]]
+                            (tu/<-cursor cursor))))
+
+       (t/testing "or can be rebound with a different type"
+
+         (with-open [bq (.bind pq {:args [44]})
+                     cursor (.openCursor bq)]
+
+           (t/is (= [[{:v 44}]]
+                    (tu/<-cursor cursor))))))))

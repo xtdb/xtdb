@@ -7,6 +7,7 @@
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
+            [pg.core :as pg]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
@@ -20,7 +21,9 @@
            (java.time Clock Instant ZoneId ZoneOffset LocalDate OffsetDateTime LocalDateTime)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
-           (org.postgresql.util PGobject PSQLException)))
+           (org.postgresql.util PGobject PSQLException)
+           (org.pg.enums OID)
+           (org.pg.error PGError)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -67,6 +70,21 @@
         (finally
           (util/try-close *server*)
           (util/try-close *node*))))))
+
+(defn- pg-config [params]
+  (when-not *port*
+    (require-server))
+
+  (merge
+   {:host "localhost"
+    :port *port*
+    :user "xtdb"
+    :database "xtdb"}
+  params))
+
+;; connect to the database
+(defn- pg-conn [params]
+  (pg/connect (pg-config params)))
 
 (defn- jdbc-url [& params]
   (when-not *port*
@@ -1270,7 +1288,7 @@
               {:_id 0, :committed true, :error nil}]
              (q conn ["SELECT * EXCLUDE tx_time FROM xt.txs"])))))
 
-(deftest test-null-type
+(deftest test-untyped-null-type
   (with-open [conn (jdbc-conn "prepareThreshold" -1)
               stmt (.prepareStatement conn "SELECT ?")]
 
@@ -1278,15 +1296,7 @@
 
       (.setObject stmt 1 nil)
 
-      ;;pgjdbc throws a java.lang.AssertionError: Misuse of castNonNull: called with a null argument
-      ;;when JRE assertions are enabled (as they are in test tasks)
-      ;;this error is likely happening because we opt to describe the param type of null and unknown params
-      ;;as unknown rather than as text (or some other inferred type). This is a departure from pg but
-      ;;arguably more true for xtdb.
-      ;;
-      ;;We could do a pg does and eagerly infer a type, however I think we should wait to see if there is a
-      ;;need for clients to be able to describe untyped null/unknown params before making a decision here.
-      #_(t/is (= [nil] (param-metadata stmt)))
+        (t/is (= ["text"] (param-metadata stmt)))
 
       (with-open [rs (.executeQuery stmt)]
 
@@ -1304,14 +1314,35 @@
         (t/is (= [{"_column_1" "int8"}] (result-metadata stmt) (result-metadata rs)))
         (t/is (= [{"_column_1" 4}] (rs->maps rs)))))))
 
+(deftest test-typed-null-type
+  (with-open [conn (jdbc-conn "prepareThreshold" -1)
+              stmt (.prepareStatement conn "SELECT ?")]
+
+    (t/testing "typed null param"
+
+      (.setObject stmt 1 nil Types/INTEGER)
+
+      (t/is (= ["int4"] (param-metadata stmt)))
+
+      (with-open [rs (.executeQuery stmt)]
+
+        (t/is (= [{"_column_1" "text"}] (result-metadata stmt) (result-metadata rs))
+              "untyped nulls are of type text in result sets")
+        ;;the reason the above null is untyped and rather than int4 is that during bind
+        ;;we prefer to use the type of the arg itself (in this case nil which is simply of type nil
+        ;;in xt) rather than force it to be the type originally specified as part of query prep
+        ;;
+        ;;could be a mistake, postgres would almost certainly describe this as an int4 in the result set
+
+        (t/is (= [{"_column_1" nil}] (rs->maps rs)))))))
+
 (deftest test-prepared-statements-with-unknown-params
   (with-open [conn (jdbc-conn "prepareThreshold" -1)
               stmt (.prepareStatement conn "SELECT ?")]
 
-    ;;see above
-    #_(t/testing "unknown param types are assumed to be of type null"
+    (t/testing "unknown param types are assumed to be of type text"
 
-      (t/is (= [nil] (param-metadata stmt))))
+      (t/is (= ["text"] (param-metadata stmt))))
 
     (t/testing "Once a param value is supplied statement updates correctly and can be executed"
 
@@ -1516,3 +1547,48 @@
                       "2022-08-16 11:08:03.123456"
                       "\"2022-08-16T11:08:03.123456789\""]]
                     (read))))))))
+
+(deftest test-pg
+  (with-open [conn (pg-conn {})]
+    (t/is (= [{:v 1}]
+             (pg/query conn "SELECT 1 v")))))
+
+(deftest test-unspecified-param-types
+  (with-open [conn (pg-conn {})]
+
+    (t/testing "params with unspecified types are assumed to be text"
+
+      (t/is (= [{:v "1"}]
+               (pg/execute conn "SELECT $1 v" {:params ["1"]}))
+            "given text params query is executable")
+
+      (t/is (thrown-with-msg?
+             PGError #"cannot text-encode a value: 1, OID: TEXT, type: java.lang.Long"
+             (pg/execute conn "SELECT $1 v" {:params [1]}))
+            "non text params error"))
+
+    (t/is (thrown?
+           PGError
+           (pg/execute conn "INSERT INTO foo(xt$id, v) VALUES (1, $1)" {:params ["1"]}))
+          "dml with unspecified params error")
+    ;;this is because we rely on sending the query string to the server to infer the param count
+    ;;which allows us to correctly describe the number of defaulted params.
+    ))
+
+(deftest test-postgres-native-params
+  (with-open [conn (pg-conn {})]
+
+    (t/is (= [{:v 1}]
+             (pg/execute conn "SELECT $1 v" {:params [1]
+                                             :oids [OID/INT8]}))
+          "Users can execute queries with explicit param types")
+
+    (t/testing "Users can execute dml with explicit param types"
+
+      (pg/execute conn
+                  "INSERT INTO foo(xt$id, v) VALUES (1, $1)"
+                  {:params [1]
+                   :oids [OID/INT8]})
+
+      (t/is (= [{:_id 1, :v 1}]
+               (pg/query conn "SELECT * FROM foo"))))))
