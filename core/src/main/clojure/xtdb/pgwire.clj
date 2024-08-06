@@ -1,5 +1,6 @@
 (ns xtdb.pgwire
   (:require [clojure.data.json :as json]
+            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
@@ -1080,17 +1081,18 @@
         (log/debug e "Error on execute-tx")
         (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
 
-(defn- ->xtify-param [session {:keys [arg-types param-format]}]
+(defn- ->xtify-param [session {:keys [param-format param-fields]}]
   (fn xtify-param [param-idx param]
-    (let [param-oid (nth arg-types param-idx nil)
-          param-format (nth param-format param-idx nil)
-          param-format (or param-format (nth param-format param-idx :text))
-          mapping (get types/pg-types-by-oid param-oid)
-          _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
-          {:keys [read-binary, read-text]} mapping]
-      (if (= :binary param-format)
-        (read-binary session param)
-        (read-text session param)))))
+    (when-not (nil? param)
+      (let [param-oid (:column-oid (nth param-fields param-idx))
+            param-format (nth param-format param-idx nil)
+            param-format (or param-format (nth param-format param-idx :text))
+            mapping (get types/pg-types-by-oid param-oid)
+            _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
+            {:keys [read-binary, read-text]} mapping]
+        (if (= :binary param-format)
+          (read-binary session param)
+          (read-text session param))))))
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params] :as stmt}]
   (let [{:keys [session transaction]} @conn-state
@@ -1164,20 +1166,26 @@
             (assoc defaults :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string)
                                                        (str col)))))
         data {:columns (mapv apply-defaults cols)}]
+
+    (log/trace "Sending Row Description - " (assoc data :input-cols cols))
     (cmd-write-msg conn msg-row-description data)))
 
 (defn cmd-describe-canned-response [conn canned-response]
   (let [{:keys [cols]} canned-response]
     (cmd-send-row-description conn cols)))
 
-(defn cmd-describe-portal [conn {:keys [fields] :as x}]
+(defn cmd-describe-portal [conn {:keys [fields]}]
   ;;TODO here we should grab the format-codes off the portal and return them
   ;;better instead to perhaps assoc the format code onto the fields at bind time
   ;;lets us deal with the optionality (if 1 element it describes all cols) at a single point in time
   (cmd-send-row-description conn fields))
 
-(defn cmd-describe-prepared-stmt [conn {:keys [arg-types fields]}]
-  (cmd-write-msg conn msg-parameter-description {:parameter-oids arg-types})
+(defn cmd-send-parameter-description [conn {:keys [param-fields]}]
+  (log/trace "Sending Parameter Description - " {:param-fields param-fields})
+  (cmd-write-msg conn msg-parameter-description {:parameter-oids (mapv :column-oid param-fields)}))
+
+(defn cmd-describe-prepared-stmt [conn {:keys [fields] :as stmt}]
+  (cmd-send-parameter-description conn stmt)
   (cmd-send-row-description conn fields))
 
 (defn cmd-begin [{:keys [node conn-state] :as conn} access-mode]
@@ -1230,6 +1238,9 @@
     (case statement-type
       :empty-query (cmd-write-msg conn msg-no-data)
       :canned-response (cmd-describe-canned-response conn canned-response)
+      :dml (do (when (= :prepared-stmt describe-type)
+                 (cmd-send-parameter-description conn describe-target))
+               (cmd-write-msg conn msg-no-data))
       :query (if (= :prepared-stmt describe-type)
                (cmd-describe-prepared-stmt conn describe-target)
                (cmd-describe-portal conn describe-target))
@@ -1347,8 +1358,14 @@
                                 :param-types (map #(get-in types/pg-types-by-oid [% :col-type]) arg-types)
                                 :default-tz (.getZone clock)}
                     pq (.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt) query-opts)]
-                {:prepared-stmt (assoc stmt :prepared-stmt pq :fields (map types/field->pg-type (.columnFields pq)))
+
+                {:prepared-stmt (assoc
+                                 stmt
+                                 :prepared-stmt pq
+                                 :fields (map types/field->pg-type (.columnFields pq))
+                                 :param-fields (map types/field->pg-type (.paramFields pq)))
                  :prep-outcome :success})
+
               (catch InterruptedException e
                 (log/trace e "Interrupt thrown compiling query")
                 (throw e))
@@ -1357,7 +1374,10 @@
                 (cmd-send-error
                  conn
                  (err-pg-exception e "unexpected server error compiling query"))))
-            {:prepared-stmt stmt
+
+            {:prepared-stmt (assoc stmt :param-fields (->> arg-types
+                                                           (map types/pg-types-by-oid)
+                                                           (map #(set/rename-keys % {:oid :column-oid}))))
              :prep-outcome :success})
           (assoc :stmt-name stmt-name)))))
 

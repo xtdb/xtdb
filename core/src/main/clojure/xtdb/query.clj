@@ -58,6 +58,7 @@
   ;; NOTE we could arguably take the actual params here rather than param-fields
   ;; but if we were to make params a VSR this would then make BoundQuery a closeable resource
   ;; ... or at least raise questions about who then owns the params
+  (paramFields [])
   (columnFields [])
   (^xtdb.query.BoundQuery bind [queryOpts]
    "queryOpts :: {:params, :table-args, :basis, :default-tz}"))
@@ -98,13 +99,13 @@
 
 (defn mapify-params [params]
   (->> params
-       (into {} (map-indexed (fn [idx v]
-                               (if (map-entry? v)
-                                 (MapEntry/create (param-sym (str (symbol (key v)))) (val v))
-                                 (MapEntry/create (symbol (str "?_" idx)) v)))))))
+       (map-indexed (fn [idx v]
+                      (if (map-entry? v)
+                        {(param-sym (str (symbol (key v)))) (val v)}
+                        {(symbol (str "?_" idx)) v})))))
 
 (defn open-args [^BufferAllocator allocator, args]
-  (vw/open-params allocator (mapify-params args)))
+  (vw/open-params allocator (into {} (mapify-params args))))
 
 (defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^IWatermarkSource wm-src]}
                  conformed-query scan-cols default-tz param-fields]
@@ -134,17 +135,19 @@
   (^xtdb.query.PreparedQuery [query, {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
                                              ^RefCounter ref-ctr ^IWatermarkSource wm-src] :as deps}
                               {:keys [param-types default-tz table-info]}]
+
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
        (throw (err/illegal-arg :malformed-query
                                {:plan query
                                 :explain (s/explain-data ::lp/logical-plan query)})))
 
-     (let [tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
+     (let [param-count (or (:param-count (meta query)) 0)
+           param-types-with-defaults (->> (concat param-types (repeat :utf8))
+                                          (take param-count))
+           tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
            scan-cols (->> tables
                           (into #{} (mapcat scan/->scan-cols)))
-
-
 
            _ (assert (or scan-emitter (empty? scan-cols)))
 
@@ -158,12 +161,13 @@
 
            cache (ConcurrentHashMap.)
            ordered-outer-projection (:named-projection (meta query))
-           param-fields (mapify-params (map (comp types/col-type->field types/col-type->nullable-col-type) param-types))
+           param-fields (mapify-params (mapv (comp types/col-type->field types/col-type->nullable-col-type) param-types-with-defaults))
            default-tz (or default-tz (.getZone expr/*clock*))]
 
        (reify PreparedQuery
+         (paramFields [_] param-fields)
          (columnFields [_]
-           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields)]
+           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz (into {} param-fields))]
              ;; could store column-fields in the cache/map too
              (->column-fields ordered-outer-projection fields)))
          (bind [_ {:keys [args params basis default-tz]
