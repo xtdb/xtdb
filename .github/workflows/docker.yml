@@ -16,6 +16,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v3
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
@@ -41,7 +44,7 @@ jobs:
           context: docker/standalone
           platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/xtdb/xtdb-standalone-ea:latest
+          tags: ghcr.io/xtdb/xtdb-standalone-ea:latest,ghcr.io/xtdb/xtdb-standalone-ea:${{ steps.date.outputs.date }}
           build-args: |
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION="dev-SNAPSHOT"
@@ -55,6 +58,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v3
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
@@ -80,7 +86,7 @@ jobs:
           context: docker/aws
           platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/xtdb/xtdb-aws-ea:latest
+          tags: ghcr.io/xtdb/xtdb-aws-ea:latest,ghcr.io/xtdb/xtdb-aws-ea:${{ steps.date.outputs.date }}
           build-args: |
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION="dev-SNAPSHOT"
@@ -94,6 +100,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v3
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
@@ -119,7 +128,7 @@ jobs:
           context: docker/azure
           platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/xtdb/xtdb-azure-ea:latest
+          tags: ghcr.io/xtdb/xtdb-azure-ea:latest,ghcr.io/xtdb/xtdb-azure-ea:${{ steps.date.outputs.date }}
           build-args: |
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION="dev-SNAPSHOT"
