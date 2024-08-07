@@ -626,7 +626,7 @@ asClause : 'AS'? columnName ;
 
 /// §7.13 <query expression>
 
-queryExpression : withClause? queryExpressionBody orderByClause? resultOffsetClause? fetchFirstClause? ;
+queryExpression : withClause? queryExpressionBody orderByClause? offsetAndLimit?  ;
 withClause : 'WITH' RECURSIVE? withListElement (',' withListElement)* ;
 withListElement : queryName ('(' columnNameList ')')? 'AS' subquery ;
 
@@ -646,6 +646,12 @@ queryTerm
     
 
 orderByClause : 'ORDER' 'BY' sortSpecificationList ;
+
+offsetAndLimit
+    : resultOffsetClause fetchFirstClause?
+    | fetchFirstClause resultOffsetClause?
+    ;
+
 resultOffsetClause : 'OFFSET' offsetRowCount ( 'ROW' | 'ROWS' )? ;
 
 fetchFirstClause

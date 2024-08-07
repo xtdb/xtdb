@@ -232,7 +232,17 @@
 
   (t/is (=plan-file
           "basic-query-22"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si LIMIT 10 OFFSET 5"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
+
+  (t/is (=plan-file
+          "basic-query-22"
           (plan-sql "FROM StarsIn AS si SELECT si.movieTitle OFFSET 5 LIMIT 10"
+                    {:table-info {"stars_in" #{"movie_title"}}})))
+
+  (t/is (=plan-file
+          "basic-query-22"
+          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle LIMIT 10 OFFSET 5"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file

@@ -1780,8 +1780,9 @@
 
         (remove-ns-qualifiers query-expr env)
 
-        (let [offset-clause (.resultOffsetClause ctx)
-              limit-clause (.fetchFirstClause ctx)]
+        (let [offset+limit (.offsetAndLimit ctx)
+              offset-clause (some-> offset+limit .resultOffsetClause)
+              limit-clause (some-> offset+limit .fetchFirstClause)]
           (cond-> query-expr
             (or offset-clause limit-clause)
             (update :plan (fn [plan]

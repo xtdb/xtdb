@@ -38,10 +38,12 @@ return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
 === <query>
 [railroad]
 ----
-const limitClause = rr.Optional(rr.Sequence("LIMIT", "<limit>"), "skip")
-const offsetClause = rr.Optional(rr.Sequence("OFFSET", "<offset>"), "skip")
 const orderByClause = rr.Optional(rr.Sequence("ORDER", "BY", rr.OneOrMore("<value>", ",")), "skip")
-const orderClauses = rr.Sequence(orderByClause, limitClause, offsetClause)
+
+const limitClause = rr.Sequence("LIMIT", "<limit>")
+const offsetClause = rr.Sequence("OFFSET", "<offset>")
+const offsetAndLimit = rr.Optional(rr.Choice(0, rr.Sequence(limitClause, rr.Optional(offsetClause, "skip")), rr.Sequence(offsetClause, rr.Optional(limitClause, "skip"))), "skip")
+const orderClauses = rr.Sequence(orderByClause, offsetAndLimit)
 return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<query term>"), orderClauses))
 ----
 
