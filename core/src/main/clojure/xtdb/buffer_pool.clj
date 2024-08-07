@@ -478,7 +478,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn ->local-disk-cache-evictor ^com.github.benmanes.caffeine.cache.AsyncCache [size ^Path local-disk-cache]
-  (log/infof "Creating local-disk-cache with size limit of %s bytes" size)
+  (log/debugf "Creating local-disk-cache with size limit of %s bytes" size)
   (let [cache (-> (Caffeine/newBuilder)
                   (.maximumWeight size)
                   (.weigher (reify Weigher
@@ -515,7 +515,7 @@
   (let [file-store (Files/getFileStore local-disk-cache)
         total-disk-space-bytes (.getTotalSpace file-store)
         disk-size-limit (long (* total-disk-space-bytes (/ percentage 100.0)))]
-    (log/infof "%s%% of total disk space on filestore %s is %s bytes" percentage (.name file-store) disk-size-limit)
+    (log/debugf "%s%% of total disk space on filestore %s is %s bytes" percentage (.name file-store) disk-size-limit)
     disk-size-limit))
 
 (defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory]
