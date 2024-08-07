@@ -924,6 +924,10 @@
       {:cast-type :interval
        :cast-opts (when interval-qualifier (iq-context->iq-map interval-qualifier))}))
 
+  (visitRegClassType [_ ctx]
+    {:cast-type :regclass
+     :cast-opts {}})
+
   (visitCharacterStringType [_ _] {:cast-type :utf8}))
 
 (defn handle-cast-expr [ve {:keys [cast-type cast-opts ->cast-fn]}] 
@@ -1441,6 +1445,7 @@
 
   (visitCurrentUserFunction [_ _] '(current-user))
   (visitCurrentSchemaFunction [_ _] '(current-schema))
+  (visitCurrentSchemasFunction [this ctx] (list 'current-schemas (-> (.expr ctx) (.accept this))))
   (visitCurrentDatabaseFunction [_ _] '(current-database))
 
   (visitSimpleCaseExpr [this ctx]

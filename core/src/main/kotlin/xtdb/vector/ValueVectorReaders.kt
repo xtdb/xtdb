@@ -67,6 +67,7 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
 
     override fun visit(v: ExtensionTypeVector<*>, value: Any?): IVectorReader = when (v) {
         is KeywordVector -> keywordVector(v)
+        is RegClassVector -> regClassVector(v)
         is UuidVector -> uuidVector(v)
         is UriVector -> uriVector(v)
         is TransitVector -> transitVector(v)

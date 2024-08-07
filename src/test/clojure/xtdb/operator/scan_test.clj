@@ -567,7 +567,7 @@
                 (let [iid-wtr (.colWriter rel-wrt "xt$iid")]
                   (doseq [uuid uuids]
                     (.writeBytes iid-wtr (util/uuid->byte-buffer uuid))))
-                (.select iid-selector tu/*allocator* (vw/rel-wtr->rdr rel-wrt) nil)))]
+                (.select iid-selector tu/*allocator* (vw/rel-wtr->rdr rel-wrt) {} nil)))]
 
       (t/is (= nil
                (seq (test-uuids [])))

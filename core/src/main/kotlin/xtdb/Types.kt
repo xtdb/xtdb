@@ -17,10 +17,7 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.types.ClojureForm
-import xtdb.types.IntervalDayTime
-import xtdb.types.IntervalMonthDayNano
-import xtdb.types.IntervalYearMonth
+import xtdb.types.*
 import xtdb.vector.extensions.*
 import java.math.BigDecimal
 import java.net.URI
@@ -84,6 +81,7 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
 
     override fun visit(type: ArrowType.ExtensionType) = when (type) {
         is KeywordType -> "keyword"
+        is RegClassType -> "regclass"
         is TransitType -> "transit"
         is UuidType -> "uuid"
         is UriType -> "uri"
@@ -127,6 +125,7 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     is URI -> UriType
     is Keyword -> KeywordType
     is ClojureForm -> TransitType
+    is RegClass -> RegClassType
     is IllegalArgumentException -> TransitType
     is RuntimeException -> TransitType
 

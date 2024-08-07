@@ -242,17 +242,23 @@
     (util/close vsr)
     (some-> out-rel .close)))
 
-(defn ->cursor [allocator derived-table-schema table col-names col-preds params ^IMetadataManager metadata-mgr ^Watermark wm]
+(defn namespace-public-tables [tables]
+  (update-keys
+   tables
+   (fn [table]
+     (let [parts (str/split table #"\$")]
+       (if (= 1 (count parts))
+         (symbol "public" (first parts))
+         (symbol (str/join "." (butlast parts)) (last parts)))))))
+
+(defn ->cursor [allocator derived-table-schema table col-names col-preds schema params ^IMetadataManager metadata-mgr ^Watermark wm]
   (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (or (vals (select-keys derived-table-schema col-names)) [])) allocator)]
     (let [schema-info (-> (merge-with merge
                                       (.allColumnFields metadata-mgr)
                                       (some-> (.liveIndex wm)
                                               (.allColumnFields)))
-                          (update-keys (fn [table]
-                                         (let [parts (str/split table #"\$")]
-                                           (if (= 1 (count parts))
-                                             (symbol "public" (first parts))
-                                             (symbol (str/join "." (butlast parts)) (last parts)))))))
+                          (namespace-public-tables))
+
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (case table
                                      information_schema/tables (tables out-rel-wtr schema-info)
@@ -270,7 +276,7 @@
 
       ;;TODO reuse relation selector code from tri cursor
       (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
-                                          (.select rel (.select col-pred allocator rel params)))
+                                          (.select rel (.select col-pred allocator rel schema params)))
                                         (-> out-rel
                                             (vr/with-absent-cols allocator col-names))
                                         (vals col-preds)) root))))

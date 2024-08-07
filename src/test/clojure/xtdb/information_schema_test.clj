@@ -329,6 +329,14 @@
               :typnotnull false,
               :typname "timestamptz",
               :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 2205,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "regclass",
+              :typnamespace -2125819141,
               :typbasetype 0}}
            (set (tu/query-ra '[:scan
                                {:table pg_catalog/pg_type}

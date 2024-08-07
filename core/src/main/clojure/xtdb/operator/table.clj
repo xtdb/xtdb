@@ -66,7 +66,7 @@
 
         (vr/rel-reader out-cols row-count)))))
 
-(defn- emit-rows-table [rows table-expr {:keys [param-fields] :as opts}]
+(defn- emit-rows-table [rows table-expr {:keys [param-fields schema] :as opts}]
   (let [param-types (update-vals param-fields types/field->col-type)
         field-sets (HashMap.)
         row-count (count rows)
@@ -107,7 +107,7 @@
                     projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
                 (.add field-set (types/col-type->field (.getColumnType projection-spec)))
                 (.put out-row k (fn [{:keys [allocator params]}]
-                                  (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
+                                  (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema params)]
                                     (.getObject out-vec 0 key-fn))))))))
         (.add out-rows out-row)))
 
@@ -120,7 +120,7 @@
                                (fn [v opts]
                                  (if (fn? v) (v opts) v))))})))
 
-(defn- emit-col-table [col-spec table-expr {:keys [param-fields] :as opts}]
+(defn- emit-col-table [col-spec table-expr {:keys [param-fields schema] :as opts}]
   (let [[out-col v] (first col-spec)
         param-types (update-vals param-fields types/field->col-type)
 
@@ -135,7 +135,7 @@
                  (restrict-cols table-expr))
 
      :->out-rel (fn [{:keys [allocator ^RelationReader params]}]
-                  (util/with-open [list-rdr (.project projection-spec allocator (vr/rel-reader [] 1) params)]
+                  (util/with-open [list-rdr (.project projection-spec allocator (vr/rel-reader [] 1) schema params)]
                     (let [list-rdr (cond-> list-rdr
                                      (instance? ArrowType$Union (.getType (.getField list-rdr))) (.legReader :list))]
 

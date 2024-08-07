@@ -1037,16 +1037,26 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 (t/deftest test-min-long-value-275
   (t/is (= Long/MIN_VALUE (plan/plan-expr "-9223372036854775808"))))
 
-(t/deftest test-postgres-session-variables
+(t/deftest test-postgres-session-information-functions
   ;; These currently return hard-coded values.
-  (t/is (= [{:xt/column-1 "xtdb"}]
-           (xt/q tu/*node* "SELECT current_user")))
+  (t/is (= [{:v "xtdb"}]
+           (xt/q tu/*node* "SELECT current_user v")))
 
-  (t/is (= [{:xt/column-1 "xtdb"}]
-           (xt/q tu/*node* "SELECT current_database")))
+  (t/is (= [{:v "xtdb"}]
+           (xt/q tu/*node* "SELECT current_database v")))
 
-  (t/is (= [{:xt/column-1 "public"}]
-           (xt/q tu/*node* "SELECT current_schema"))))
+  (t/is (= [{:v "public"}]
+           (xt/q tu/*node* "SELECT current_schema v")
+           (xt/q tu/*node* "SELECT current_schema() v")))
+
+  (t/is (= [{:v ["pg_catalog" "public"]}]
+           (xt/q tu/*node* "SELECT current_schemas(true) v")))
+
+  (t/is (= [{:v ["public"]}]
+           (xt/q tu/*node* "SELECT current_schemas(false) v")))
+
+  (t/is (= [{:v ["pg_catalog" "public"]} {:v ["public"]}]
+           (xt/q tu/*node* "SELECT current_schemas(a) v FROM (VALUES (true), (false)) AS x(a)"))))
 
 (t/deftest test-postgres-access-control-functions
   ;; These current functions should always should return true
