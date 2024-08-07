@@ -82,7 +82,7 @@
 
   (listObjects [_this prefix]
     (->> (.keySet (.tailMap os prefix))
-         (into [] (take-while #(str/starts-with? % prefix)))))
+         (into [] (take-while #(.startsWith ^Path % (util/->path prefix))))))
 
   (deleteObject [_this k]
     (.remove os k)
