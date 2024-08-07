@@ -407,8 +407,7 @@
     ;; rather than assuming we'll always have/use the whole file.
     (let [arrow-data-rels (->> trie-keys
                                (mapv (fn [trie-key]
-                                       (.add data-bufs (-> @(.getBuffer buffer-pool (->table-data-file-path table-path trie-key))
-                                                           util/rethrowing-cause))
+                                       (.add data-bufs (.getBuffer buffer-pool (->table-data-file-path table-path trie-key)))
                                        (let [data-buf (.get data-bufs (dec (.size data-bufs)))
                                              arrow-footer (util/read-arrow-footer data-buf)]
                                          (ArrowDataRel. data-buf arrow-footer (.getRecordBatches arrow-footer) (ArrayList.))))))]

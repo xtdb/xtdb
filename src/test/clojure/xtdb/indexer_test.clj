@@ -111,13 +111,13 @@
           #_ ; TODO port to buffer pool test that doesn't depend on the structure of the indexer
           (t/testing "buffer pool"
             (let [buffer-name "chunk-00/device_info/metadata.arrow"
-                  ^ArrowBuf buffer @(.getBuffer bp buffer-name)
+                  buffer (.getBuffer bp buffer-name)
                   footer (util/read-arrow-footer buffer)]
               (t/is (= 1 (count (.buffers ^BufferPool bp))))
               (t/is (instance? ArrowBuf buffer))
               (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-              (with-open [^ArrowBuf same-buffer @(.getBuffer bp buffer-name)]
+              (with-open [same-buffer (.getBuffer bp buffer-name)]
                 (t/is (identical? buffer same-buffer))
                 (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
 

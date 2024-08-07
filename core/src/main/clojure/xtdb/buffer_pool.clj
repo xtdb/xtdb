@@ -68,17 +68,10 @@
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
   (getBuffer [_ k]
-    (let [cached-buffer (locking memory-store
-                          (some-> (.get memory-store k) retain))]
-      (cond
-        (nil? k)
-        (CompletableFuture/completedFuture nil)
-
-        cached-buffer
-        (CompletableFuture/completedFuture cached-buffer)
-
-        :else
-        (CompletableFuture/failedFuture (os/obj-missing-exception k)))))
+    (when k
+      (or (locking memory-store
+            (some-> (.get memory-store k) retain))
+          (throw (os/obj-missing-exception k)))))
 
   (putObject [_ k buffer]
     (CompletableFuture/completedFuture
@@ -148,29 +141,19 @@
 (defrecord LocalBufferPool [allocator, ^Cache memory-store, ^Path disk-store, ^long max-size]
   IBufferPool
   (getBuffer [_ k]
-    (let [cached-buffer (cache-get memory-store k)]
-      (cond
-        (nil? k)
-        (CompletableFuture/completedFuture nil)
-
-        cached-buffer
-        (CompletableFuture/completedFuture cached-buffer)
-
-        :else
-        (let [buffer-cache-path (.resolve disk-store k)]
+    (when k
+      (or (cache-get memory-store k)
           (locking disk-store
-            (-> (if (util/path-exists buffer-cache-path)
-                  ;; todo could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
-                  (CompletableFuture/completedFuture buffer-cache-path)
-                  (CompletableFuture/failedFuture (os/obj-missing-exception k)))
-                (util/then-apply
-                  (fn [path]
-                    (try
-                      (let [nio-buffer (util/->mmap-path path)
-                            create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)]
-                        (cache-compute memory-store k create-arrow-buf))
-                      (catch ClosedByInterruptException _
-                        (throw (InterruptedException.))))))))))))
+            (let [buffer-cache-path (.resolve disk-store k)]
+              ;; TODO could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
+              (when-not (util/path-exists buffer-cache-path)
+                (throw (os/obj-missing-exception k)))
+
+              (try
+                (let [nio-buffer (util/->mmap-path buffer-cache-path)]
+                  (cache-compute memory-store k #(util/->arrow-buf-view allocator nio-buffer)))
+                (catch ClosedByInterruptException _
+                  (throw (InterruptedException.)))))))))
 
   (putObject [_ k buffer]
     (CompletableFuture/completedFuture
@@ -332,9 +315,10 @@
         (upload-multipart-buffers object-store k (arrow-buf->parts arrow-buf))
         nil))))
 
-(defn update-evictor-key [^AsyncCache local-disk-cache-evictor ^Path k update-fn]
-  (.. local-disk-cache-evictor asMap (compute k (reify BiFunction
-                                                  (apply [_ _k fut] (update-fn fut)))))) 
+(defn update-evictor-key {:style/indent 2} [^AsyncCache local-disk-cache-evictor ^Path k update-fn]
+  (-> (.asMap local-disk-cache-evictor)
+      (.compute k (reify BiFunction
+                    (apply [_ _k fut] (update-fn fut))))))
 
 (defrecord RemoteBufferPool [allocator
                              ^Cache memory-store
@@ -344,52 +328,44 @@
                              !evictor-max-weight]
   IBufferPool
   (getBuffer [_ k]
-    (let [cached-buffer (cache-get memory-store k)]
-      (cond
-        (nil? k)
-        (CompletableFuture/completedFuture nil)
+    (when k
+      (or (cache-get memory-store k)
+          (let [buffer-cache-path (.resolve local-disk-cache k)
+                {:keys [file-size ctx]} @(update-evictor-key local-disk-cache-evictor k
+                                                             (fn [^CompletableFuture fut]
+                                                               (-> (if (util/path-exists buffer-cache-path)
+                                                                     (-> (or fut (CompletableFuture/completedFuture {:pinned? false}))
+                                                                         (util/then-apply
+                                                                          (fn [{:keys [pinned?]}]
+                                                                            (log/tracef "Key %s found in local-disk-cache - returning buffer" k)
+                                                                            {:path buffer-cache-path :previously-pinned? pinned?})))
+                                                                     (do (util/create-parents buffer-cache-path)
+                                                                         (log/debugf "Key %s not found in local-disk-cache, loading from object store" k)
+                                                                         (-> (.getObject object-store k buffer-cache-path)
+                                                                             (util/then-apply
+                                                                              (fn [path]
+                                                                                {:path path :previously-pinned? false})))))
+                                                                   (util/then-apply
+                                                                    (fn [{:keys [path previously-pinned?]}]
+                                                                      (let [file-size (util/size-on-disk path)
+                                                                            nio-buffer (util/->mmap-path path)
+                                                                            buffer-release-fn (fn []
+                                                                                                (update-evictor-key local-disk-cache-evictor k
+                                                                                                                    (fn [^CompletableFuture fut]
+                                                                                                                      (some-> fut
+                                                                                                                              (util/then-apply (fn [{:keys [pinned? file-size]}]
+                                                                                                                                                 (when pinned?
+                                                                                                                                                   (swap! !evictor-max-weight + file-size))
+                                                                                                                                                 {:pinned? false :file-size file-size}))))))
+                                                                            create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer buffer-release-fn)
+                                                                            buf (cache-compute memory-store k create-arrow-buf)]
+                                                                        {:pinned? true :file-size file-size :ctx {:buf buf :previously-pinned? previously-pinned?}}))))))
+                {:keys [previously-pinned? buf]} ctx]
 
-        cached-buffer
-        (CompletableFuture/completedFuture cached-buffer)
+            (when-not previously-pinned?
+              (swap! !evictor-max-weight - file-size))
 
-        :else
-        (let [buffer-cache-path (.resolve local-disk-cache k)]
-          (->
-           (update-evictor-key local-disk-cache-evictor k
-                               (fn [^CompletableFuture fut]
-                                 (-> (if (util/path-exists buffer-cache-path)
-                                       (-> (or fut (CompletableFuture/completedFuture {:pinned? false}))
-                                           (util/then-apply 
-                                            (fn [{:keys [pinned?]}]
-                                              (log/tracef "Key %s found in local-disk-cache - returning buffer" k)
-                                              {:path buffer-cache-path :previously-pinned? pinned?})))
-                                       (do (util/create-parents buffer-cache-path)
-                                           (log/debugf "Key %s not found in local-disk-cache, loading from object store" k)
-                                           (-> (.getObject object-store k buffer-cache-path)
-                                               (util/then-apply 
-                                                (fn [path]
-                                                  {:path path :previously-pinned? false})))))
-                                     (util/then-apply
-                                      (fn [{:keys [path previously-pinned?]}]
-                                        (let [file-size (util/size-on-disk path)
-                                              nio-buffer (util/->mmap-path path)
-                                              buffer-release-fn (fn []
-                                                                  (update-evictor-key local-disk-cache-evictor k
-                                                                                      (fn [^CompletableFuture fut]
-                                                                                        (some-> fut
-                                                                                                (util/then-apply (fn [{:keys [pinned? file-size]}]
-                                                                                                                   (when pinned?
-                                                                                                                     (swap! !evictor-max-weight + file-size))
-                                                                                                                   {:pinned? false :file-size file-size}))))))
-                                              create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer buffer-release-fn)
-                                              buf (cache-compute memory-store k create-arrow-buf)]
-                                          {:pinned? true :file-size file-size :ctx {:buf buf :previously-pinned? previously-pinned?}}))))))
-           (util/then-apply
-            (fn [{:keys [file-size ctx]}] 
-              (let [{:keys [previously-pinned? buf]} ctx] 
-                (when-not previously-pinned? 
-                  (swap! !evictor-max-weight - file-size))
-                buf))))))))
+            buf))))
 
   (listAllObjects [_] (.listAllObjects object-store))
 
@@ -569,11 +545,11 @@
                      max-disk-cache-percentage (.maxDiskCachePercentage max-disk-cache-percentage))))
 
 (defn get-footer ^ArrowFooter [^IBufferPool bp ^Path path]
-  (util/with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
+  (util/with-open [arrow-buf (.getBuffer bp path)]
     (util/read-arrow-footer arrow-buf)))
 
 (defn open-record-batch ^ArrowRecordBatch [^IBufferPool bp ^Path path block-idx]
-  (util/with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
+  (util/with-open [arrow-buf (.getBuffer bp path)]
     (try
       (let [footer (util/read-arrow-footer arrow-buf)
             blocks (.getRecordBatches footer)

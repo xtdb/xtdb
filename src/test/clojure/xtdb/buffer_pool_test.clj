@@ -83,7 +83,7 @@
   (let [{:keys [^Path disk-store, object-store, ^Path local-disk-cache, ^AsyncCache local-disk-cache-evictor]} bp]
 
     (t/testing "immediate get from buffers map produces correct buffer"
-      (util/with-open [buf @(.getBuffer bp k)]
+      (util/with-open [buf (.getBuffer bp k)]
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf))))))
 
     (when disk-store
@@ -93,7 +93,7 @@
 
       (t/testing "if the buffer is evicted, it is loaded from disk"
         (bp/evict-cached-buffer! bp k)
-        (util/with-open [buf @(.getBuffer bp k)]
+        (util/with-open [buf (.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))
 
     (when object-store
@@ -103,7 +103,7 @@
         (.remove (.asMap local-disk-cache-evictor) (.resolve local-disk-cache k))
         (util/delete-file (.resolve local-disk-cache k)) 
         ;; Will fetch from object store again
-        (util/with-open [buf @(.getBuffer bp k)]
+        (util/with-open [buf (.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
 
 (defrecord SimulatedObjectStore [calls buffers]
@@ -199,7 +199,7 @@
 
         (t/is @multipart-branch-taken true)
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (util/with-open [buf @(.getBuffer bp (util/->path "aw"))]
+        (util/with-open [buf (.getBuffer bp (util/->path "aw"))]
           (let [{:keys [root]} (util/read-arrow-buf buf)]
             (util/close root)))))))
 
@@ -211,7 +211,7 @@
   ;; PutObject on ObjectStore
   @(.putObject bp k (utf8-buf (apply str (repeat len "a"))))
   ;; Add to local disk cache
-  (with-open [^ArrowBuf _buf @(.getBuffer bp k)]))
+  (with-open [^ArrowBuf _buf (.getBuffer bp k)]))
 
 (t/deftest local-disk-cache-max-size
   (util/with-tmp-dirs #{local-disk-cache}
@@ -256,10 +256,10 @@
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
                         (.maxDiskCacheBytes 10)
                         (.maxCacheBytes 12)))]
-      (with-open [^ArrowBuf buf @(.getBuffer bp (util/->path "a"))]
+      (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "a"))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf)))))
 
-      (with-open [^ArrowBuf buf @(.getBuffer bp (util/->path "b"))]
+      (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "b"))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf))))))))
 
 (t/deftest local-buffer-pool

@@ -71,8 +71,8 @@
     (t/testing "finish chunk"
       (li/finish-chunk! live-index)
 
-      (util/with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
-                       ^ArrowBuf leaf-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
+      (util/with-open [trie-buf (.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
+                       leaf-buf (.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
                        trie-loader (Relation/load allocator (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))))
                        leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
         (let [trie-rel (.getRelation trie-loader)

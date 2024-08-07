@@ -8,7 +8,6 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.arrow.VectorReader.Companion
 import xtdb.vector.RelationReader
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel

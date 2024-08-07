@@ -358,7 +358,7 @@
       (util/close buf))))
 
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path]
-  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
+  (util/with-close-on-catch [buf (.getBuffer buffer-pool file-path)]
     (let [loader (Relation/load (.getAllocator (.getReferenceManager buf))
                                 (util/->seekable-byte-channel (.nioBuffer buf 0 (.capacity buf))))
           rel (.getRelation loader)
@@ -406,24 +406,17 @@
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
           (.getValue)))
 
-(defn- get-bytes ^java.util.concurrent.CompletableFuture #_<bytes> [^IBufferPool buffer-pool, ^Path obj-key]
-  (-> (.getBuffer buffer-pool obj-key)
-      (util/then-apply
-       (fn [^ArrowBuf buffer]
-         (assert buffer)
-
-         (try
-           (let [bb (.nioBuffer buffer 0 (.capacity buffer))
-                 ba (byte-array (.remaining bb))]
-             (.get bb ba)
-             ba)
-           (finally
-             (.close buffer)))))))
+(defn- get-bytes ^bytes [^IBufferPool buffer-pool, ^Path obj-key]
+  (util/with-open [buffer (.getBuffer buffer-pool obj-key)]
+    (let [bb (.nioBuffer buffer 0 (.capacity buffer))
+          ba (byte-array (.remaining bb))]
+      (.get bb ba)
+      ba)))
 
 (defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^IBufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
     (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
-      (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
+      (with-open [is (ByteArrayInputStream. (get-bytes buffer-pool cm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers (merge serde/transit-read-handlers
                                                              arrow-read-handlers)})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))

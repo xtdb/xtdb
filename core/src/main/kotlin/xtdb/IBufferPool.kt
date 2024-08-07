@@ -7,7 +7,7 @@ import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
 interface IBufferPool : AutoCloseable {
-    fun getBuffer(key: Path): CompletableFuture<ArrowBuf>
+    fun getBuffer(key: Path): ArrowBuf
 
     fun putObject(k: Path, buffer: ByteBuffer): CompletableFuture<*>
 

@@ -40,10 +40,10 @@
   (populate-node node-opts)
   (tu/with-system {:xtdb/allocator {}
                    :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))}
-                  (fn []
-                    (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
+    (fn []
+      (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
             objs (.listAllObjects buffer-pool)
-            get-item #(with-open [^ArrowBuf _buf (deref (.getBuffer buffer-pool (rand-nth objs)))]
+            get-item #(with-open [_buf (.getBuffer buffer-pool (rand-nth objs))]
                         (Thread/sleep 10))
             f-call #(future
                       (dotimes [_ 300]
