@@ -296,8 +296,8 @@
                        (let [[^ParserRuleContext sc & more-scs] (.sessionCharacteristic ctx)]
                          (assert (nil? more-scs) "pgwire only supports one for now")
 
-                         (into {:statement-type :set-session-characteristics}
-                               (.accept sc this))))
+                         (into {:statement-type :set-session-characteristics
+                                :session-characteristics [(.accept sc this)]})))
 
                      (visitSessionCharacteristic [this ctx]
                        (let [[^ParserRuleContext txc & more-txcs] (.transactionMode ctx)]
@@ -1249,8 +1249,13 @@
   (swap! conn-state update-in [:session :clock] (fn [^Clock clock] (.withZone clock tz)))
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} [k v]]
-  (swap! conn-state assoc-in [:session k] v)
+(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
+  ;;TODO assumes that all session characteristics are single entry map due to access-mode returning this.
+  ;;I think how we pass around sessions variables/transaction access-mode etc. wants a bit of a refactor,
+  ;;associng everything onto the portal seems fragile.
+  (doseq [sc session-characteristics
+          :let [[k v] (first sc)]]
+    (swap! conn-state assoc-in [:session k] v))
   (cmd-write-msg conn msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
 (defn- permissibility-err
@@ -1420,12 +1425,13 @@
   [{:keys [conn-state] :as conn}
    {:keys [portal-name _limit]}]
   ;;TODO implement limit for queries that return rows
-  (if-some [{:keys [statement-type canned-response access-mode parameter tz value] :as portal} (get-in @conn-state [:portals portal-name])]
+  (if-some [{:keys [statement-type canned-response access-mode parameter tz value session-characteristics] :as portal}
+            (get-in @conn-state [:portals portal-name])]
 
     (case statement-type
       :empty-query (cmd-write-msg conn msg-empty-query)
       :canned-response (cmd-write-canned-response conn canned-response)
-      :set-session-characteristics (cmd-set-session-characteristics conn (first (dissoc portal :statement-type)))
+      :set-session-characteristics (cmd-set-session-characteristics conn session-characteristics)
       :set-session-parameter (cmd-set-session-parameter conn parameter value)
       :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
       :set-time-zone (cmd-set-time-zone conn tz)
