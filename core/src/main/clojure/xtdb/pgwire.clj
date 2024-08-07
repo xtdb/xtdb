@@ -1094,9 +1094,14 @@
           (read-binary session param)
           (read-text session param))))))
 
-(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params] :as stmt}]
+(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
   (let [{:keys [session transaction]} @conn-state
         ^Clock clock (:clock session)
+        _ (when-not (= (count param-fields) (count params))
+            (log/error "Missing types for params in DML statement")
+            (cmd-send-error
+             conn
+             (err-protocol-violation "Missing types for params - Client must specify types for all params in DML statements")))
         xtify-param (->xtify-param session stmt)
         xt-params (vec (map-indexed xtify-param params))
 
@@ -1378,6 +1383,9 @@
             {:prepared-stmt (assoc stmt :param-fields (->> arg-types
                                                            (map types/pg-types-by-oid)
                                                            (map #(set/rename-keys % {:oid :column-oid}))))
+             ;; NOTE this means that for DML statments we assume the number and type of params is exactly
+             ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
+             ;; If a client subsequently binds a different number of params we will send an error msg
              :prep-outcome :success})
           (assoc :stmt-name stmt-name)))))
 
