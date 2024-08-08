@@ -21,16 +21,15 @@ publishing {
 
 dependencies {
     compileOnlyApi(files("src/main/resources"))
-    implementation("org.clojure", "clojure", "1.11.1")
     api("org.clojure", "spec.alpha", "0.3.218")
 
     api("com.cognitect", "transit-clj", "1.0.333")
     api("com.cognitect", "transit-java", "1.0.371")
 
-    api(libs.arrow.algorithm)
-    api(libs.arrow.compression)
-    api(libs.arrow.vector)
-    api(libs.arrow.memory.netty)
+    api(deps.arrow.algorithm)
+    api(deps.arrow.compression)
+    api(deps.arrow.vector)
+    api(deps.arrow.memory.netty)
 
     api(kotlin("stdlib-jdk8"))
     api("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.0")

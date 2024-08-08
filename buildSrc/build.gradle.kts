@@ -9,7 +9,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.clojure", "clojure", "1.11.1")
+    implementation("org.clojure", "clojure", "1.12.0-rc1")
     implementation(gradleApi())
     implementation("gradle.plugin.com.github.johnrengelman:shadow:7.1.2")
 }

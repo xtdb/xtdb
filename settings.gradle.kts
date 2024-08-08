@@ -35,12 +35,14 @@ include("modules:bench", "modules:datasets")
 
 dependencyResolutionManagement {
     versionCatalogs {
-        create("libs") {
+        create("deps") {
             version("arrow", "17.0.0")
             library("arrow-algorithm", "org.apache.arrow", "arrow-algorithm").versionRef("arrow")
             library("arrow-compression", "org.apache.arrow", "arrow-compression").versionRef("arrow")
             library("arrow-vector", "org.apache.arrow", "arrow-vector").versionRef("arrow")
             library("arrow-memory-netty", "org.apache.arrow", "arrow-memory-netty").versionRef("arrow")
+
+            library("clojure-lang", "org.clojure", "clojure").version("1.12.0-rc1")
         }
     }
 }

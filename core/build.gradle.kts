@@ -24,6 +24,7 @@ dependencies {
     api(project(":xtdb-api"))
     compileOnlyApi(files("src/main/resources"))
 
+    implementation(deps.clojure.lang)
     api("org.clojure", "tools.logging", "1.2.4")
     api("org.clojure", "spec.alpha", "0.3.218")
     api("org.clojure", "data.json", "2.4.0")
@@ -31,10 +32,10 @@ dependencies {
     api("org.clojure", "tools.cli", "1.0.206")
     api("com.cognitect", "transit-clj", "1.0.329")
 
-    api(libs.arrow.algorithm)
-    api(libs.arrow.compression)
-    api(libs.arrow.vector)
-    api(libs.arrow.memory.netty)
+    api(deps.arrow.algorithm)
+    api(deps.arrow.compression)
+    api(deps.arrow.vector)
+    api(deps.arrow.memory.netty)
     api("io.netty", "netty-common", "4.1.82.Final")
 
     api("org.roaringbitmap", "RoaringBitmap", "1.0.1")
