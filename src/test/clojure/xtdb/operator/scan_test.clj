@@ -686,7 +686,7 @@
       (dotimes [i 2]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version i}]]))
       (tu/finish-chunk! node)
-      (c/compact-all! node)
+      (c/compact-all! node #xt.time/duration "PT2S")
 
       (t/is (= [{:xt/id 1,
                  :xt/valid-to #xt.time/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
@@ -708,7 +708,7 @@
 
           (tu/finish-chunk! node)
           ;; compaction happens in 2026
-          (c/compact-all! node)
+          (c/compact-all! node #xt.time/duration "PT2S")
 
           (let [query-opts {:node node
                             :basis {:at-tx tx-key

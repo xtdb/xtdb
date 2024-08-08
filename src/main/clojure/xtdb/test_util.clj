@@ -425,9 +425,6 @@
 
     (.commit live-table-tx)))
 
-(defn ->live-data-rel [live-table]
-  (trie/->LiveDataRel (vw/rel-wtr->rdr (li/live-rel live-table))))
-
 (defn byte-buffer->path [^java.nio.ByteBuffer bb]
   (mapcat (fn [b]
             [(bit-and (bit-shift-right b 6) 3)

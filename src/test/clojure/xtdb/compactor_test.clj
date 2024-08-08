@@ -13,7 +13,11 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [java.time Duration]))
+  (:import java.lang.AutoCloseable
+           [java.time Duration]
+           org.apache.arrow.vector.types.pojo.Schema
+           [xtdb.trie LiveHashTrie$Leaf IDataRel]
+           [xtdb.vector IVectorReader RelationReader]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -156,6 +160,18 @@
                   {:l1-file-size-rows 32}))
             "L3 -> L4"))))
 
+(deftype LiveDataRel [^RelationReader live-rel]
+  IDataRel
+  (getSchema [_]
+    (Schema. (for [^IVectorReader rdr live-rel]
+               (.getField rdr))))
+
+  (loadPage [_ leaf]
+    (.select live-rel (.getData ^LiveHashTrie$Leaf leaf)))
+
+  AutoCloseable
+  (close [_]))
+
 (t/deftest test-merges-segments
   (util/with-open [lt0 (tu/open-live-table "foo")
                    lt1 (tu/open-live-table "foo")]
@@ -175,9 +191,9 @@
                    {:xt/id "bar", :v 2}])
 
     (let [segments [(-> (trie/->Segment (.compactLogs (li/live-trie lt0)))
-                        (assoc :data-rel (tu/->live-data-rel lt0)))
+                        (assoc :data-rel (->LiveDataRel (vw/rel-wtr->rdr (li/live-rel lt0)))))
                     (-> (trie/->Segment (.compactLogs (li/live-trie lt1)))
-                        (assoc :data-rel (tu/->live-data-rel lt1)))]]
+                        (assoc :data-rel (->LiveDataRel (vw/rel-wtr->rdr (li/live-rel lt1)))))]]
 
       (t/testing "merge segments"
         (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))

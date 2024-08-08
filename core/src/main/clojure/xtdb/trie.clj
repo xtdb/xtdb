@@ -391,30 +391,14 @@
     (util/close vsrs-to-close)
     (util/close buf)))
 
-(deftype LiveDataRel [^RelationReader live-rel]
-  IDataRel
-  (getSchema [_]
-    (Schema. (for [^IVectorReader rdr live-rel]
-               (.getField rdr))))
-
-  (loadPage [_ leaf]
-    (.select live-rel (.getData ^LiveHashTrie$Leaf leaf)))
-
-  AutoCloseable
-  (close [_]))
-
-(defn open-data-rels [^IBufferPool buffer-pool, ^Path table-path, trie-keys, ^ILiveTableWatermark live-table-wm]
+(defn open-data-rels [^IBufferPool buffer-pool, ^Path table-path, trie-keys]
   (util/with-close-on-catch [data-bufs (ArrayList.)]
-    ;; TODO get hold of these a page at a time if it's a small query,
-    ;; rather than assuming we'll always have/use the whole file.
-    (let [arrow-data-rels (->> trie-keys
-                               (mapv (fn [trie-key]
-                                       (.add data-bufs (.getBuffer buffer-pool (->table-data-file-path table-path trie-key)))
-                                       (let [data-buf (.get data-bufs (dec (.size data-bufs)))
-                                             arrow-footer (util/read-arrow-footer data-buf)]
-                                         (ArrowDataRel. data-buf arrow-footer (.getRecordBatches arrow-footer) (ArrayList.))))))]
-      (cond-> arrow-data-rels
-        live-table-wm (conj (->LiveDataRel (.liveRelation live-table-wm)))))))
+    (->> trie-keys
+         (mapv (fn [trie-key]
+                 (.add data-bufs (.getBuffer buffer-pool (->table-data-file-path table-path trie-key)))
+                 (let [data-buf (.get data-bufs (dec (.size data-bufs)))
+                       arrow-footer (util/read-arrow-footer data-buf)]
+                   (ArrowDataRel. data-buf arrow-footer (.getRecordBatches arrow-footer) (ArrayList.))))))))
 
 (defn load-data-page [^MergePlanNode merge-plan-node]
   (let [{:keys [^IDataRel data-rel]} (.getSegment merge-plan-node)
