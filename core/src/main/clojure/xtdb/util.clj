@@ -1,7 +1,6 @@
 (ns xtdb.util
   (:refer-clojure :exclude [with-open])
-  (:require [clojure.math :as math]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -10,20 +9,17 @@
   (:import [clojure.lang Keyword MapEntry Symbol]
            (java.io ByteArrayOutputStream File)
            java.lang.AutoCloseable
-           java.lang.reflect.Method
-           (java.net MalformedURLException URI URL ServerSocket)
+           (java.net MalformedURLException ServerSocket URI URL)
            java.nio.ByteBuffer
-           (java.nio.channels Channels ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel
-                              ClosedByInterruptException)
+           (java.nio.channels Channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
            java.nio.charset.StandardCharsets
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
            (java.util Collections LinkedHashMap Map UUID WeakHashMap)
-           (java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
-           (java.util.function Function)
+           (java.util.concurrent ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
            (org.apache.arrow.compression CommonsCompressionFactory)
            (org.apache.arrow.flatbuf Footer Message RecordBatch)
-           (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
+           (org.apache.arrow.memory ArrowBuf BufferAllocator ForeignAllocation)
            (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
            (org.apache.arrow.vector BaseFixedWidthVector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector UnionVector)
@@ -435,34 +431,22 @@
     (catch ClassNotFoundException _
       (fn free-direct-buffer-nop [_]))))
 
-(def ^:private ^Method allocation-manager-associate-method
-  (doto (.getDeclaredMethod AllocationManager "associate" (into-array Class [BufferAllocator]))
-    (.setAccessible true)))
-
 (defn ->arrow-buf-view
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
    (->arrow-buf-view allocator nio-buffer nil))
+
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer release-fn]
    (let [nio-buffer (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
                       nio-buffer
                       (-> (ByteBuffer/allocateDirect (.remaining nio-buffer))
                           (.put (.duplicate nio-buffer))
-                          (.clear)))
-         address (MemoryUtil/getByteBufferAddress nio-buffer)
-         size (.remaining nio-buffer)
-         allocation-manager (proxy [AllocationManager] [allocator]
-                              (getSize [] size)
-                              (memoryAddress [] address)
-                              (release0 []
+                          (.clear)))]
+     (.wrapForeignAllocation allocator
+                             (proxy [ForeignAllocation] [(.remaining nio-buffer) (MemoryUtil/getByteBufferAddress nio-buffer)]
+                               (release0 []
                                 (try-free-direct-buffer nio-buffer)
-                                (when release-fn (release-fn))))
-         listener (.getListener allocator)
-         _ (with-open [reservation (.newReservation allocator)]
-             (.onPreAllocation listener size)
-             (.reserve reservation size)
-             (.onAllocation listener size))
-         buffer-ledger (.invoke allocation-manager-associate-method allocation-manager (object-array [allocator]))]
-     (ArrowBuf. buffer-ledger nil size address))))
+                                 (when release-fn
+                                   (release-fn))))))))
 
 (defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ArrowBuf buffer]
   (let [prefix-size (if (= (.getInt buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)
