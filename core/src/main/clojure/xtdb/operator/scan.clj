@@ -225,9 +225,8 @@
                 (.pop free-entries)
                 (bp/open-vsr buffer-pool trie-leaf-file allocator)))
         ^Stack used-entries (.computeIfAbsent used trie-leaf-file
-                                              (util/->jfn
-                                                (fn [_]
-                                                  (Stack.))))]
+                                              (fn [_]
+                                                (Stack.)))]
     (.push used-entries vsr)
     vsr))
 
@@ -259,7 +258,7 @@
           (reset-vsr-cache vsr-cache)
           (with-open [out-rel (vw/->rel-writer allocator)]
             (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
-                  merge-q (PriorityQueue. (Comparator/comparing (util/->jfn #(.ev_ptr ^LeafPointer %)) (EventRowPointer/comparator)))
+                  merge-q (PriorityQueue. (Comparator/comparing #(.ev_ptr ^LeafPointer %) (EventRowPointer/comparator)))
                   calculate-polygon (bitemp/polygon-calculator temporal-bounds)
                   bitemp-consumer (->bitemporal-consumer out-rel col-names)
                   leaf-rdrs (for [leaf leaves

@@ -103,7 +103,7 @@
 
   (putObject [this k buf]
     (-> (CompletableFuture/completedFuture (put-blob this k buf))
-        (util/then-apply (fn [_] (.add file-name-cache k)))))
+        (.thenApply (fn [_] (.add file-name-cache k)))))
 
   (listAllObjects [_this]
     (into [] file-name-cache))

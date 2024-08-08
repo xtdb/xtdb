@@ -307,21 +307,6 @@
 (defn table-name->table-path [^String table-name]
   (.resolve tables-dir table-name))
 
-(defn ->jfn {:style/indent :defn} ^java.util.function.Function [f]
-  (reify Function
-    (apply [_ v]
-      (f v))))
-
-(defn then-apply {:style/indent :defn}
-  ^java.util.concurrent.CompletableFuture
-  [^CompletableFuture fut f]
-  (.thenApply fut (->jfn f)))
-
-(defn then-compose {:style/indent :defn}
-  ^java.util.concurrent.CompletableFuture
-  [^CompletableFuture fut f]
-  (.thenCompose fut (->jfn f)))
-
 (def ^Thread$UncaughtExceptionHandler uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
     (uncaughtException [_ _thread throwable]

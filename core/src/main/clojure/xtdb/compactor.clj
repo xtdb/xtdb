@@ -79,7 +79,7 @@
                   mp-nodes (.getMpNodes merge-plan-task)
                   ^bytes path (.getPath merge-plan-task)
                   data-rdrs (mapv trie/load-data-page mp-nodes)
-                  merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))
+                  merge-q (PriorityQueue. (Comparator/comparing :ev-ptr (EventRowPointer/comparator)))
                   path (if (or (nil? path-filter)
                                (> (alength path) (alength path-filter)))
                          path

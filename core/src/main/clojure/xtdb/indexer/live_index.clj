@@ -191,7 +191,7 @@
                                               {:fields (live-rel->fields live-rel)
                                                :row-count (.rowCount live-rel-rdr)})]
           (-> !fut
-              (util/then-apply (fn [_] table-metadata)))))))
+              (.thenApply (fn [_] table-metadata)))))))
 
   (openWatermark [this retain?] (live-table-wm live-rel (.live-trie this) retain?))
 
@@ -307,7 +307,7 @@
               (.put wms table-name (.openWatermark live-table-tx)))
 
             (doseq [[table-name ^ILiveTable live-table] tables]
-              (.computeIfAbsent wms table-name (util/->jfn (fn [_] (.openWatermark live-table false)))))
+              (.computeIfAbsent wms table-name (fn [_] (.openWatermark live-table false))))
 
             (reify ILiveIndexWatermark
               (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))

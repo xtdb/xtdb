@@ -259,10 +259,9 @@
       (.startStruct put-writer)
       (let [^IVectorWriter table-doc-writer
             (.computeIfAbsent table-doc-writers (util/->normal-form-str (.tableName op))
-                              (util/->jfn
-                                (fn [table]
-                                  (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
-                                    (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct))))))
+                              (fn [table]
+                                (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
+                                  (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct)))))
 
             docs (.docs op)]
 

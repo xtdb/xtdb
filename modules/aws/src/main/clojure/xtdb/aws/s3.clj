@@ -74,11 +74,11 @@
                            (.contentLength content-length)
                            ^UploadPartRequest (.build))
                        (AsyncRequestBody/fromByteBuffer buf))
-          (util/then-apply (fn [^UploadPartResponse upload-part-response]
-                             (.add !completed-parts (-> (CompletedPart/builder)
-                                                        (.partNumber part-number)
-                                                        (.eTag (.eTag upload-part-response))
-                                                        ^CompletedPart (.build))))))))
+          (.thenApply (fn [^UploadPartResponse upload-part-response]
+                        (.add !completed-parts (-> (CompletedPart/builder)
+                                                   (.partNumber part-number)
+                                                   (.eTag (.eTag upload-part-response))
+                                                   ^CompletedPart (.build))))))))
   
   (complete [_]
     (let [prefixed-key (util/prefix-key prefix k)
@@ -138,21 +138,20 @@
                            (.key (str prefixed-key))
                            (->> (.configureHead configurator))
                            ^HeadObjectRequest (.build)))
-          (util/then-apply (fn [_resp] true))
-          (.exceptionally (reify Function
-                            (apply [_ e]
-                              (let [e (.getCause ^Exception e)]
-                                (if (instance? NoSuchKeyException e)
-                                  false
-                                  (throw e))))))
-          (util/then-compose (fn [exists?]
-                               (if exists?
-                                 (CompletableFuture/completedFuture nil)
-                                 (single-object-upload this k buf))))
-          (util/then-apply (fn [_]
-                           ;; Add file name to the local cache as the last thing we do (ie - if PUT
-                           ;; fails, shouldnt add filename to the cache)
-                             (.add file-name-cache k))))))
+          (.thenApply (fn [_resp] true))
+          (.exceptionally (fn [^Exception e]
+                            (let [e (.getCause e)]
+                              (if (instance? NoSuchKeyException e)
+                                false
+                                (throw e)))))
+          (.thenCompose (fn [exists?]
+                          (if exists?
+                            (CompletableFuture/completedFuture nil)
+                            (single-object-upload this k buf))))
+          (.thenApply (fn [_]
+                        ;; Add file name to the local cache as the last thing we do (ie - if PUT
+                        ;; fails, shouldnt add filename to the cache)
+                        (.add file-name-cache k))))))
 
   (listAllObjects [_this]
     (into [] file-name-cache))
@@ -177,17 +176,17 @@
                                (.key (str prefixed-key))
                                ^CreateMultipartUploadRequest (.build))]
       (-> (.createMultipartUpload client initiate-request)
-          (util/then-apply (fn [^CreateMultipartUploadResponse initiate-response]
-                             (->MultipartUpload client
-                                                bucket
-                                                prefix
-                                                k
-                                                (.uploadId initiate-response)
-                                                (fn [k]
-                                                  ;; On complete - add filename to cache
-                                                  (.add file-name-cache k))
-                                                (atom 0)
-                                                (ArrayList.)))))))
+          (.thenApply (fn [^CreateMultipartUploadResponse initiate-response]
+                        (->MultipartUpload client
+                                           bucket
+                                           prefix
+                                           k
+                                           (.uploadId initiate-response)
+                                           (fn [k]
+                                             ;; On complete - add filename to cache
+                                             (.add file-name-cache k))
+                                           (atom 0)
+                                           (ArrayList.)))))))
 
   Closeable
   (close [_]
