@@ -82,7 +82,7 @@
   
   (complete [_]
     (let [prefixed-key (util/prefix-key prefix k)
-          !sorted-parts (sort-by (fn [^CompletedPart part] (.partNumber part)) !completed-parts)]
+          ^List !sorted-parts (sort-by (fn [^CompletedPart part] (.partNumber part)) !completed-parts)]
       (-> (.completeMultipartUpload client
                                     (-> (CompleteMultipartUploadRequest/builder)
                                         (.bucket bucket)
