@@ -376,8 +376,7 @@
                           ^:volatile-mutable ^Map fields]
   IMetadataManager
   (finishChunk [this chunk-idx new-chunk-metadata]
-    (-> @(.putObject buffer-pool (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
-        (util/rethrowing-cause))
+    (.putObject buffer-pool (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
     (set! (.fields this) (merge-fields fields new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 

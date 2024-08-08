@@ -74,9 +74,8 @@
           (throw (os/obj-missing-exception k)))))
 
   (putObject [_ k buffer]
-    (CompletableFuture/completedFuture
-     (locking memory-store
-       (.put memory-store k (util/->arrow-buf-view allocator buffer)))))
+    (locking memory-store
+      (.put memory-store k (util/->arrow-buf-view allocator buffer))))
 
   (listAllObjects [_]
     (locking memory-store (vec (.keySet ^NavigableMap memory-store))))
@@ -156,16 +155,15 @@
                   (throw (InterruptedException.)))))))))
 
   (putObject [_ k buffer]
-    (CompletableFuture/completedFuture
-     (try
-       (let [tmp-path (create-tmp-path disk-store)]
-         (util/write-buffer-to-path buffer tmp-path)
+    (try
+      (let [tmp-path (create-tmp-path disk-store)]
+        (util/write-buffer-to-path buffer tmp-path)
 
-         (let [file-path (.resolve disk-store k)]
-           (util/create-parents file-path)
-           (util/atomic-move tmp-path file-path)))
-       (catch ClosedByInterruptException _
-         (throw (InterruptedException.))))))
+        (let [file-path (.resolve disk-store k)]
+          (util/create-parents file-path)
+          (util/atomic-move tmp-path file-path)))
+      (catch ClosedByInterruptException _
+        (throw (InterruptedException.)))))
 
   (listAllObjects [_]
     (util/with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
@@ -404,34 +402,7 @@
               (.close file-ch)))))))
 
   (putObject [_ k buffer]
-    (if (or (not (instance? SupportsMultipart object-store))
-            (<= (.remaining buffer) (int min-multipart-part-size)))
-      (.putObject object-store k buffer)
-
-      (let [buffers (->> (range (.position buffer) (.limit buffer) min-multipart-part-size)
-                         (map (fn [n] (.slice buffer
-                                              (int n)
-                                              (min (int min-multipart-part-size)
-                                                   (- (.limit buffer) (int n)))))))]
-        (-> (CompletableFuture/runAsync
-             (fn []
-               (upload-multipart-buffers object-store k buffers)))
-
-            (.thenRun (fn []
-                        (let [tmp-path (create-tmp-path local-disk-cache)]
-                          (util/with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
-                            (.write file-ch buffer))
-
-                          (let [buffer-cache-path (.resolve local-disk-cache k)]
-                            (update-evictor-key local-disk-cache-evictor k
-                                                (fn [^CompletableFuture fut]
-                                                  (-> (or fut (CompletableFuture/completedFuture {:pinned? false}))
-                                                      (.thenApply (fn [{:keys [pinned?]}]
-                                                                    (log/tracef "Writing multipart file %s, to local disk cache" k)
-                                                                    (util/create-parents buffer-cache-path)
-                                                                    ;; see #2847
-                                                                    (util/atomic-move tmp-path buffer-cache-path)
-                                                                    {:pinned? pinned? :file-size (util/size-on-disk buffer-cache-path)})))))))))))))
+    @(.putObject object-store k buffer))
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]

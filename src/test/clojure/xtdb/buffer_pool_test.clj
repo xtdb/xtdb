@@ -158,25 +158,9 @@
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "if <= min part size, putObject is used"
       (with-redefs [bp/min-multipart-part-size 2]
-        @(.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
+        (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
         (t/is (= [:put] (get-remote-calls bp)))
         (test-get-object bp (util/->path "min-part-put") (utf8-buf "12"))))))
-
-(t/deftest above-min-size-multipart-test
-  (with-open [bp (remote-test-buffer-pool)]
-    (t/testing "if above min part size, multipart is used"
-      (with-redefs [bp/min-multipart-part-size 2]
-        @(.putObject bp (util/->path "min-part-multi") (utf8-buf "1234"))
-        (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (test-get-object bp (util/->path "min-part-multi") (utf8-buf "1234"))))))
-
-(t/deftest small-end-part-test
-  (with-open [bp (remote-test-buffer-pool)]
-    (t/testing "multipart, smaller end part"
-      (with-redefs [bp/min-multipart-part-size 2]
-        @(.putObject bp (util/->path "min-part-multi2") (utf8-buf "123"))
-        (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (test-get-object bp (util/->path "min-part-multi2") (utf8-buf "123"))))))
 
 (t/deftest arrow-ipc-test
   (with-open [bp (remote-test-buffer-pool)]
@@ -208,8 +192,7 @@
     {:file-count (count files) :file-names (set (map #(.getName ^File %) files))}))
 
 (defn insert-utf8-to-local-cache [^IBufferPool bp k len]
-  ;; PutObject on ObjectStore
-  @(.putObject bp k (utf8-buf (apply str (repeat len "a"))))
+  (.putObject bp k (utf8-buf (apply str (repeat len "a"))))
   ;; Add to local disk cache
   (with-open [^ArrowBuf _buf (.getBuffer bp k)]))
 

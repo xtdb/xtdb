@@ -9,7 +9,7 @@ import java.util.concurrent.CompletableFuture
 interface IBufferPool : AutoCloseable {
     fun getBuffer(key: Path): ArrowBuf
 
-    fun putObject(k: Path, buffer: ByteBuffer): CompletableFuture<*>
+    fun putObject(k: Path, buffer: ByteBuffer)
 
     /**
      * Recursively lists all objects in the buffer pool.
