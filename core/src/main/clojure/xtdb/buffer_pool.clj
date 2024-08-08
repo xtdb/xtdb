@@ -32,10 +32,10 @@
 (def ^:private min-multipart-part-size (* 5 1024 1024))
 (def ^:private max-multipart-per-upload-concurrency 4)
 
-(def ^java.nio.file.Path storage-root
-  ;; bump this if the storage format changes in a backwards-incompatible way
-  (let [version 3]
-    (util/->path (str "v" (util/->lex-hex-string version)))))
+;; bump this if the storage format changes in a backwards-incompatible way
+(def version (let [version 4] (str "v" (util/->lex-hex-string version))))
+
+(def ^java.nio.file.Path storage-root (util/->path version))
 
 (defn- free-memory [^Cache memory-store]
   ;; closing should happen via the remove method

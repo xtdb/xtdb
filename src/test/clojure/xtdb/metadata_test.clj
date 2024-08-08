@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
@@ -167,7 +168,7 @@
         (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-                         (.resolve node-dir "objects/v03/tables/"))
+                         (.resolve node-dir (str "objects/" bp/version "/tables/")))
 
           (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "xt$valid_from" "xt$valid_to" "colours" "$data$"}
                    (.columnNames table-metadata))))))))
