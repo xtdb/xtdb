@@ -73,11 +73,11 @@
 
       (util/with-open [trie-buf (.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
                        leaf-buf (.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
-                       trie-loader (Relation/load allocator (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))))
+                       trie-loader (Relation/loader allocator (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))))
+                       trie-rel (Relation. allocator (.getSchema trie-loader))
                        leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
-        (let [trie-rel (.getRelation trie-loader)
-              iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
-          (.loadBatch trie-loader 0)
+        (let [iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
+          (.loadBatch trie-loader 0 trie-rel)
           (t/is (= iid-bytes
                    (->> (.getLeaves (ArrowHashTrie. (.get trie-rel "nodes")))
                         (mapcat (fn [^ArrowHashTrie$Leaf leaf]

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.Relation.Companion.loader
 import xtdb.arrow.RelationTest.ByteBufferChannel
 import xtdb.toFieldType
 import java.io.ByteArrayOutputStream
@@ -73,7 +74,8 @@ class StructVectorTest {
                     mapOf("i32" to 8),
                     mapOf("i32" to 12, "utf8" to "world!")
                 ),
-                structVec.toList())
+                structVec.toList()
+            )
         }
     }
 
@@ -101,7 +103,8 @@ class StructVectorTest {
                     mapOf("i32" to 8, "utf8" to "Hello"),
                     mapOf("i32" to 12, "utf8" to "world!")
                 ),
-                structVec.toList())
+                structVec.toList()
+            )
         }
 
     }
@@ -141,28 +144,29 @@ class StructVectorTest {
                 }
         }
 
-        Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
-            val rel = loader.relation
-            val structVec = rel["struct"]!!
+        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+            Relation(allocator, loader.schema).use { rel ->
+                val structVec = rel["struct"]!!
 
-            assertEquals(2, loader.batches.size)
+                assertEquals(2, loader.batchCount)
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(m1, structVec.getObject(0))
-            assertEquals(m2, structVec.getObject(1))
+                assertEquals(2, rel.rowCount)
+                assertEquals(m1, structVec.getObject(0))
+                assertEquals(m2, structVec.getObject(1))
 
-            loader.batches[1].load()
+                loader.loadBatch(1, rel)
 
-            assertEquals(1, rel.rowCount)
-            assertEquals(m3, structVec.getObject(0))
+                assertEquals(1, rel.rowCount)
+                assertEquals(m3, structVec.getObject(0))
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(m1, structVec.getObject(0))
-            assertEquals(m2, structVec.getObject(1))
+                assertEquals(2, rel.rowCount)
+                assertEquals(m1, structVec.getObject(0))
+                assertEquals(m2, structVec.getObject(1))
+            }
         }
     }
 

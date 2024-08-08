@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.Relation.Companion.loader
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -76,34 +77,35 @@ class RelationTest {
             }
         }
 
-        Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
-            val rel = loader.relation
-            val i32 = rel["i32"]!!
-            val utf8 = rel["utf8"]!!
+        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+            assertEquals(2, loader.batchCount)
 
-            assertEquals(2, loader.batches.size)
+            Relation(allocator, loader.schema).use { rel ->
+                val i32 = rel["i32"]!!
+                val utf8 = rel["utf8"]!!
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(1, i32.getInt(0))
-            assertEquals("Hello", utf8.getObject(0))
-            assertEquals(2, i32.getInt(1))
-            assertTrue(utf8.isNull(1))
+                assertEquals(2, rel.rowCount)
+                assertEquals(1, i32.getInt(0))
+                assertEquals("Hello", utf8.getObject(0))
+                assertEquals(2, i32.getInt(1))
+                assertTrue(utf8.isNull(1))
 
-            loader.batches[1].load()
+                loader.loadBatch(1, rel)
 
-            assertEquals(1, rel.rowCount)
-            assertEquals(3, i32.getInt(0))
-            assertEquals("world!", utf8.getObject(0))
+                assertEquals(1, rel.rowCount)
+                assertEquals(3, i32.getInt(0))
+                assertEquals("world!", utf8.getObject(0))
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(1, i32.getInt(0))
-            assertEquals("Hello", utf8.getObject(0))
-            assertEquals(2, i32.getInt(1))
-            assertTrue(utf8.isNull(1))
+                assertEquals(2, rel.rowCount)
+                assertEquals(1, i32.getInt(0))
+                assertEquals("Hello", utf8.getObject(0))
+                assertEquals(2, i32.getInt(1))
+                assertTrue(utf8.isNull(1))
+            }
         }
     }
 
@@ -139,28 +141,29 @@ class RelationTest {
                 }
         }
 
-        Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
-            val rel = loader.relation
-            val listVec = rel["list"]!!
+        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+            assertEquals(2, loader.batchCount)
 
-            assertEquals(2, loader.batches.size)
+            Relation(allocator, loader.schema).use { rel ->
+                val listVec = rel["list"]!!
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(list0, listVec.getObject(0))
-            assertEquals(list1, listVec.getObject(1))
+                assertEquals(2, rel.rowCount)
+                assertEquals(list0, listVec.getObject(0))
+                assertEquals(list1, listVec.getObject(1))
 
-            loader.batches[1].load()
+                loader.loadBatch(1, rel)
 
-            assertEquals(1, rel.rowCount)
-            assertEquals(list2, listVec.getObject(0))
+                assertEquals(1, rel.rowCount)
+                assertEquals(list2, listVec.getObject(0))
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(list0, listVec.getObject(0))
-            assertEquals(list1, listVec.getObject(1))
+                assertEquals(2, rel.rowCount)
+                assertEquals(list0, listVec.getObject(0))
+                assertEquals(list1, listVec.getObject(1))
+            }
         }
     }
 
@@ -196,10 +199,10 @@ class RelationTest {
             }
         }
 
-        Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
-            loader.batches.first().load()
-
-            assertEquals(duvValues, loader.relation["duv"]!!.toList())
+        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+            loader.loadBatch(0, allocator).use { rel ->
+                assertEquals(duvValues, rel["duv"]!!.toList())
+            }
         }
     }
 }

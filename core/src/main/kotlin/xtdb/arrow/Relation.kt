@@ -1,6 +1,8 @@
 package xtdb.arrow
 
 import org.apache.arrow.flatbuf.Footer
+import org.apache.arrow.flatbuf.Message
+import org.apache.arrow.flatbuf.RecordBatch
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.SeekableReadChannel
@@ -91,40 +93,91 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
         rowCount = recordBatch.length
     }
 
-    inner class Loader(
+    interface Loader : AutoCloseable {
+        val schema: Schema
+        val batchCount: Int
+        fun loadBatch(idx: Int, al: BufferAllocator): Relation
+        fun loadBatch(idx: Int, rel: Relation): Relation
+    }
+
+    private class ChannelLoader(
         private val al: BufferAllocator,
         private val ch: SeekableReadChannel,
         footer: ArrowFooter
-    ) : AutoCloseable {
-        val relation get() = this@Relation
-
+    ) : Loader {
         inner class LoaderBatch(private val idx: Int, private val block: ArrowBlock) {
-            fun load() {
+            fun load(rel: Relation): Relation {
                 ch.setPosition(block.offset)
 
                 (MessageSerializer.deserializeRecordBatch(ch, block, al)
                     ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
 
-                    .use { batch -> this@Relation.load(batch) }
+                    .use { batch -> rel.load(batch) }
+
+                return rel
             }
         }
 
-        val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
+        override val schema: Schema = footer.schema
+        private val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
 
-        fun loadBatch(idx: Int) = batches[idx].load()
+        override val batchCount = batches.size
+
+        override fun loadBatch(idx: Int, al: BufferAllocator) = loadBatch(idx, Relation(al, schema))
+        override fun loadBatch(idx: Int, rel: Relation) = batches[idx].load(rel)
 
         override fun close() {
-            relation.close()
             ch.close()
         }
     }
 
+    private class BufferLoader(
+        private val buf: ArrowBuf,
+        footer: ArrowFooter
+    ) : Loader {
+        override val schema: Schema = footer.schema
+
+        inner class LoaderBatch(private val idx: Int, private val block: ArrowBlock) {
+
+            fun load(rel: Relation): Relation {
+                val prefixSize =
+                    if (buf.getInt(block.offset) == MessageSerializer.IPC_CONTINUATION_TOKEN) 8L else 4L
+
+                val metadataBuf = buf.nioBuffer(block.offset + prefixSize, block.metadataLength - prefixSize.toInt())
+
+                val bodyBuf = buf.slice(block.offset + block.metadataLength, block.bodyLength)
+                    .also { it.referenceManager.retain() }
+
+                val msg = Message.getRootAsMessage(metadataBuf.asReadOnlyBuffer())
+                val recordBatchFB = RecordBatch().also { msg.header(it) }
+
+                (MessageSerializer.deserializeRecordBatch(recordBatchFB, bodyBuf)
+                    ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
+
+                    .use { batch -> rel.load(batch) }
+
+                return rel
+            }
+        }
+
+        private val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
+
+        override val batchCount = batches.size
+
+        override fun loadBatch(idx: Int, rel: Relation) = batches[idx].load(rel)
+        override fun loadBatch(idx: Int, al: BufferAllocator) = loadBatch(idx, Relation(al, schema))
+
+        override fun close() {
+            buf.close()
+        }
+    }
+
     companion object {
-        private fun SeekableReadChannel.readFooter(): ArrowFooter {
+        private fun readFooter(ch: SeekableReadChannel): ArrowFooter {
             val buf = ByteBuffer.allocate(Int.SIZE_BYTES + MAGIC.size)
-            val footerLengthOffset = size() - buf.remaining()
-            setPosition(footerLengthOffset)
-            readFully(buf)
+            val footerLengthOffset = ch.size() - buf.remaining()
+            ch.setPosition(footerLengthOffset)
+            ch.readFully(buf)
             buf.flip()
 
             val array = buf.array()
@@ -135,23 +188,46 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
 
             val footerLength = MessageSerializer.bytesToInt(array)
             require(footerLength > 0) { "Footer length must be positive" }
-            require(footerLength + MAGIC.size * 2 + Int.SIZE_BYTES <= size()) { "Footer length exceeds file size" }
+            require(footerLength + MAGIC.size * 2 + Int.SIZE_BYTES <= ch.size()) { "Footer length exceeds file size" }
 
             val footerBuffer = ByteBuffer.allocate(footerLength)
-            setPosition(footerLengthOffset - footerLength)
-            readFully(footerBuffer)
+            ch.setPosition(footerLengthOffset - footerLength)
+            ch.readFully(footerBuffer)
             footerBuffer.flip()
             return ArrowFooter(Footer.getRootAsFooter(footerBuffer))
         }
 
         @JvmStatic
-        fun load(al: BufferAllocator, ch: SeekableByteChannel): Loader {
+        fun loader(al: BufferAllocator, ch: SeekableByteChannel): Loader {
             val readCh = SeekableReadChannel(ch)
             require(readCh.size() > MAGIC.size * 2 + 4) { "File is too small to be an Arrow file" }
 
-            val footer = readCh.readFooter()
+            return ChannelLoader(al, readCh, readFooter(readCh))
+        }
 
-            return Relation(al, footer.schema).Loader(al, readCh, footer)
+        private fun readFooter(buf: ArrowBuf): ArrowFooter {
+            val magicBytes = ByteArray(Int.SIZE_BYTES + MAGIC.size)
+            val footerLengthOffset = buf.capacity() - magicBytes.size
+            buf.getBytes(footerLengthOffset, magicBytes)
+
+            require(MAGIC.contentEquals(magicBytes.copyOfRange(Int.SIZE_BYTES, magicBytes.size))) {
+                "missing magic number at end of Arrow file"
+            }
+
+            val footerLength = MessageSerializer.bytesToInt(magicBytes)
+            require(footerLength > 0) { "Footer length must be positive" }
+            require(footerLength + MAGIC.size * 2 + Int.SIZE_BYTES <= buf.capacity()) { "Footer length exceeds file size" }
+
+            val footerBuffer = ByteBuffer.allocate(footerLength)
+            buf.getBytes(footerLengthOffset - footerLength, footerBuffer)
+            footerBuffer.flip()
+            return ArrowFooter(Footer.getRootAsFooter(footerBuffer))
+        }
+
+        @JvmStatic
+        fun loader(buf: ArrowBuf): Loader {
+            buf.referenceManager.retain()
+            return BufferLoader(buf, readFooter(buf))
         }
     }
 
@@ -174,5 +250,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
         return vectors.mapValues { it.value.toList() }
     }
 
-    val relReader: RelationReader get() = RelationReader.from(vectors.sequencedValues().map(VectorReader.Companion::Adapter), rowCount)
+    val relReader: RelationReader
+        get() = RelationReader.from(
+            vectors.sequencedValues().map(VectorReader.Companion::Adapter), rowCount
+        )
 }

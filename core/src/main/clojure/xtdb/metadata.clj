@@ -359,16 +359,16 @@
 
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path]
   (util/with-close-on-catch [buf (.getBuffer buffer-pool file-path)]
-    (let [loader (Relation/load (.getAllocator (.getReferenceManager buf))
-                                (util/->seekable-byte-channel (.nioBuffer buf 0 (.capacity buf))))
-          rel (.getRelation loader)
-          nodes-vec (.get rel "nodes")]
-      (.loadBatch loader 0)
-      (let [rdr (.getRelReader rel)
-            ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
-                                               (.legReader :leaf))
-            {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]
-        (->TableMetadata (ArrowHashTrie. nodes-vec) rel buf metadata-reader col-names page-idx-cache (AtomicInteger. 1))))))
+    (util/with-open [loader (Relation/loader buf)]
+      (util/with-close-on-catch [rel (Relation. (.getAllocator (.getReferenceManager buf))
+                                                (.getSchema loader))]
+        (let [nodes-vec (.get rel "nodes")]
+          (.loadBatch loader 0 rel)
+          (let [rdr (.getRelReader rel)
+                ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
+                                                   (.legReader :leaf))
+                {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]
+            (->TableMetadata (ArrowHashTrie. nodes-vec) rel buf metadata-reader col-names page-idx-cache (AtomicInteger. 1))))))))
 
 (deftype MetadataManager [^IBufferPool buffer-pool
                           ^Cache table-metadata-cache

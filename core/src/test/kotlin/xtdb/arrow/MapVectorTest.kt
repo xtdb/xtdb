@@ -91,26 +91,27 @@ class MapVectorTest {
             }
         }
 
-        Relation.load(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
-            val rel = loader.relation
-            val mapVec = rel["map"]!!
+        Relation.loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+            Relation(allocator, loader.schema).use { rel ->
+                val mapVec = rel["map"]!!
 
-            assertEquals(2, loader.batches.size)
+                assertEquals(2, loader.batchCount)
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(listOf(m1, m2), mapVec.toList())
+                assertEquals(2, rel.rowCount)
+                assertEquals(listOf(m1, m2), mapVec.toList())
 
-            loader.batches[1].load()
+                loader.loadBatch(1, rel)
 
-            assertEquals(1, rel.rowCount)
-            assertEquals(listOf(m3), mapVec.toList())
+                assertEquals(1, rel.rowCount)
+                assertEquals(listOf(m3), mapVec.toList())
 
-            loader.batches[0].load()
+                loader.loadBatch(0, rel)
 
-            assertEquals(2, rel.rowCount)
-            assertEquals(listOf(m1, m2), mapVec.toList())
+                assertEquals(2, rel.rowCount)
+                assertEquals(listOf(m1, m2), mapVec.toList())
+            }
         }
 
         // reads back in with original Arrow
@@ -151,7 +152,6 @@ class MapVectorTest {
 
             assertFalse(rdr.loadNextBatch())
         }
-
 
 
     }
