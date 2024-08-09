@@ -4,34 +4,30 @@ import java.time.Instant
 import kotlin.math.max
 import kotlin.math.min
 
-data class TemporalBounds(
-    val validFrom: TemporalColumn = TemporalColumn(),
-    val validTo: TemporalColumn = TemporalColumn(),
-    val systemFrom: TemporalColumn = TemporalColumn(),
-    val systemTo: TemporalColumn = TemporalColumn()) {
+data class TemporalDimension(
+    var lower: Long = Long.MIN_VALUE,
+    var upper: Long = Long.MAX_VALUE) {
 
+    fun lt(operand: Long) = apply { upper = min(operand - 1, upper) }
+    fun lte(operand: Long) = apply { upper = min(operand, upper) }
+    fun gt(operand: Long) = apply { lower = max(operand + 1, lower) }
+    fun gte(operand: Long) = apply { lower = max(operand, lower) }
 
-    data class TemporalColumn (
-        var lower: Long = Long.MIN_VALUE,
-        var upper: Long = Long.MAX_VALUE) {
+    fun intersects(other: TemporalDimension) = lower <= other.upper && other.lower <= upper
+    fun intersects(lower: Long, upper: Long) = this.lower <= upper && lower <= this.upper
 
-        fun lt(operand: Long) = apply { upper = min(operand - 1, upper) }
-        fun lte(operand: Long) = apply { upper = min(operand, upper) }
-        fun gt(operand: Long) = apply { lower = max(operand + 1, lower) }
-        fun gte(operand: Long) = apply { lower = max(operand, lower) }
-
-        fun inRange(operand: Long) = operand in lower..upper
-
-        override fun toString(): String {
-            val l = Instant.ofEpochMilli(lower / 1000)
-            val u = Instant.ofEpochMilli(upper / 1000)
-            return "TemporalColumn(lower=$l, upper=$u)"
-        }
+    override fun toString(): String {
+        val l = Instant.ofEpochMilli(lower / 1000)
+        val u = Instant.ofEpochMilli(upper / 1000)
+        return "TemporalColumn(lower=$l, upper=$u)"
     }
+}
 
-    fun inRange(validFrom: Long, validTo: Long, systemFrom: Long, systemTo: Long) =
-        (this.validFrom.inRange(validFrom)
-            && this.validTo.inRange(validTo)
-            && this.systemFrom.inRange(systemFrom)
-            && this.systemTo.inRange(systemTo))
+data class TemporalBounds(
+    val validTime: TemporalDimension = TemporalDimension(),
+    val systemTime: TemporalDimension = TemporalDimension()
+){
+    fun intersects(other: TemporalBounds) = this.validTime.intersects(other.validTime) && this.systemTime.intersects(other.systemTime)
+    fun intersects(validFrom: Long, validTo: Long, systemFrom: Long, systemTo: Long) =
+        (this.validTime.intersects(validFrom, validTo-1) && this.systemTime.intersects(systemFrom, systemTo-1))
 }

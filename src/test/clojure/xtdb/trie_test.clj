@@ -17,7 +17,7 @@
            (xtdb ICursor)
            xtdb.arrow.Relation
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrieKt MergePlanNode MergePlanTask)
-           (xtdb.util TemporalBounds)
+           (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector RelationWriter)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -87,12 +87,9 @@
                                                        Long/MAX_VALUE 5}])]
     (t/testing "pages 3 of t1 and 0,1 and 4 of t2 should not make it to the output"
       ;; setting up bounds for a current-time 2020-01-01
-      (let [temporal-bounds (TemporalBounds.)
-            current-time (time/instant->micros (time/->instant #inst "2020-01-01"))]
-        (.lte (.getSystemFrom temporal-bounds) current-time)
-        (.gt (.getSystemTo temporal-bounds) current-time)
-        (.lte (.getValidFrom temporal-bounds) current-time)
-        (.gt (.getValidTo temporal-bounds) current-time)
+      (let [current-time (time/instant->micros (time/->instant #inst "2020-01-01"))
+            temporal-bounds (TemporalBounds. (TemporalDimension. current-time current-time)
+                                             (TemporalDimension. current-time current-time))]
 
 
         (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
@@ -110,13 +107,9 @@
                       (merge-plan-nodes->path+pages))))))
 
     (t/testing "going one chronon below should bring in pages 3 of t1 and pages 1 and 4 of t2"
-      (let [temporal-bounds (TemporalBounds.)
-            current-time (- (time/instant->micros (time/->instant #inst "2020-01-01")) 1) ]
-        (.lte (.getSystemFrom temporal-bounds) current-time)
-        (.gt (.getSystemTo temporal-bounds) current-time)
-        (.lte (.getValidFrom temporal-bounds) current-time)
-        (.gt (.getValidTo temporal-bounds) current-time)
-
+      (let [current-time (dec (time/instant->micros (time/->instant #inst "2020-01-01")))
+            temporal-bounds (TemporalBounds. (TemporalDimension. current-time current-time)
+                                             (TemporalDimension. current-time current-time))]
 
         (t/is (=
                [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
