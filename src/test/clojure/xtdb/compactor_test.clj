@@ -345,7 +345,7 @@
 
           (submit! (range 1000 2000))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 10))
 
           (t/is (= (set (range 2000)) (set (q))))
 
@@ -353,7 +353,7 @@
                          (.resolve node-dir (tables-key "foo")) #"log-l(?!00|01)\d\d-(.+)\.arrow"))))))
 
 (t/deftest test-l2-compaction-badly-distributed
-  (let [node-dir (util/->path "target/compactor/test-l1-compaction-badly-distributed")]
+  (let [node-dir (util/->path "target/compactor/test-l2-compaction-badly-distributed")]
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8

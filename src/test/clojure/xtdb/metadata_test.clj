@@ -8,12 +8,14 @@
             [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
+           (xtdb.util TemporalBounds)
            (xtdb.metadata IMetadataManager)))
 
-(t/use-fixtures :each tu/with-node)
+(t/use-fixtures :each tu/with-mock-clock tu/with-node)
 (t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-param-metadata-error-310
@@ -137,6 +139,24 @@
 
           (doseq [page-idx relevant-pages]
             (t/is (true? (.test page-idx-pred page-idx)))))))))
+
+(deftest test-temporal-metadata
+  (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1}]])
+
+  (tu/finish-chunk! tu/*node*)
+
+  (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
+        meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+    (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+      (let [metadata-bounds (TemporalBounds.)
+            sys-time-micros (time/instant->micros #xt.time/instant "2020-01-01T00:00:00.000000Z")]
+        (.gte (.getSystemFrom metadata-bounds) sys-time-micros)
+        (.lte (.getSystemFrom metadata-bounds) sys-time-micros)
+        (.gte (.getValidFrom metadata-bounds) sys-time-micros)
+        (.lte (.getValidFrom metadata-bounds) sys-time-micros)
+        (.gte (.getSystemTo metadata-bounds) Long/MAX_VALUE)
+        (.gte (.getValidTo metadata-bounds) Long/MAX_VALUE)
+        (t/is (= metadata-bounds (.temporalBounds table-metadata 0)))))))
 
 (t/deftest test-boolean-metadata
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]])
