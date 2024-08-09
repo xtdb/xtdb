@@ -21,15 +21,12 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date
-                                               ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int
-                                               ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct
-                                               ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union
-                                               ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            xtdb.arrow.Relation
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
+           (xtdb.util TemporalBounds TemporalColumn)
            (xtdb.vector IVectorReader IVectorWriter)
            (xtdb.vector.extensions KeywordType SetType TransitType UriType UuidType)))
 
@@ -131,6 +128,8 @@
         (reify ContentMetadataWriter
           (writeContentMetadata [_]
             (.writeBoolean bit-wtr true)))))))
+
+(def ^:private temporal-col-type-leg-name (name (types/arrow-type->leg (types/->arrow-type [:timestamp-tz :micro "UTC"]))))
 
 (defn- ->min-max-type-handler [^IVectorWriter types-wtr, arrow-type]
   ;; we get vectors out here because this code was largely written pre writers.
@@ -330,6 +329,10 @@
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache}))
 
+(defn ->impossible-temporal-bounds []
+  (let [impossible-column (TemporalColumn. Long/MAX_VALUE Long/MIN_VALUE)]
+    (TemporalBounds. impossible-column impossible-column impossible-column impossible-column)))
+
 (defrecord TableMetadata [^HashTrie trie
                           ^Relation meta-rel
                           ^ArrowBuf buf
@@ -350,6 +353,27 @@
       (when-let [bloom-vec-idx (.get page-idx-cache (PageIndexKey. "xt$iid" page-idx))]
         (when (.getObject bloom-rdr bloom-vec-idx)
           (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))
+
+  (temporalBounds[_ page-idx]
+    ;; TODO when badly distributed there are pages with no data
+    (if-let [temporal-col-types-rdr (-> (.structKeyReader metadata-leaf-rdr "columns")
+                                        (.listElementReader)
+                                        (.structKeyReader "types")
+                                        (.structKeyReader temporal-col-type-leg-name))]
+      (let [min-rdr (.structKeyReader temporal-col-types-rdr "min")
+            max-rdr (.structKeyReader temporal-col-types-rdr "max")
+            ^long system-from-idx (.get page-idx-cache (PageIndexKey. "xt$system_from" page-idx))
+            bounds (TemporalBounds.)]
+        ;; assumes sys-from, valid-from, valid-to always appear in that order
+        (.gte (.getSystemFrom bounds) (.getLong min-rdr system-from-idx))
+        (.lte (.getSystemFrom bounds) (.getLong max-rdr system-from-idx))
+        (.gte (.getValidFrom bounds) (.getLong min-rdr (inc system-from-idx)))
+        (.lte (.getValidFrom bounds) (.getLong max-rdr (inc system-from-idx)))
+        (.gte (.getValidTo bounds) (.getLong min-rdr (+ system-from-idx 2)))
+        (.lte (.getValidTo bounds) (.getLong max-rdr (+ system-from-idx 2)))
+        (.gte (.getSystemTo bounds) Long/MAX_VALUE)
+        bounds)
+      (->impossible-temporal-bounds)))
 
   AutoCloseable
   (close [_]
