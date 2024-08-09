@@ -31,18 +31,8 @@ export default defineConfig({
                 { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
 
                 { label: 'Introduction', link: '/index.html' },
-
-                {
-                    label: 'Getting Started',
-                    collapsed: false,
-                    items: [
-                        { label: 'Quickstart', link: '/intro/getting-started' },
-                        { label: 'SQL basics', link: '/quickstart/insert-and-query' },
-                        { label: 'Query the past', link: '/quickstart/query-the-past' },
-                        { label: 'Control the timeline', link: '/quickstart/control-the-timeline' },
-
-                    ]
-                },
+                { label: 'SQL Quickstart', link: '/quickstart/sql-overview' },
+                { label: 'Installation via Docker', link: '/intro/installation-via-docker' },
 
                 {
                     label: 'Tutorials',
@@ -143,6 +133,14 @@ export default defineConfig({
                     collapsed: true,
                     items: [
                         { label: 'Overview', link: '/drivers' },
+                        {
+                            label: 'Postgres',
+                            collapsed: false,
+                            items: [
+                                { label: 'Getting started', link: '/drivers/postgres/getting-started' },
+                            ]
+                        },
+
                         {
                             label: 'HTTP + JSON',
                             collapsed: true,

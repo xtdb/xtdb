@@ -12,6 +12,23 @@ The only hard requirement in XTDB is that all INSERTs to any table must specify 
 
 For details about the exact range of supported data types, see link:/reference/main/data-types[XTDB Data Types].
 
+== Transaction model
+
+
+XTDB automatically records all versions and changes to individual rows across your database. This is widely useful for building reliable information systems, and it all starts with a link:https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying[log].
+
+=== A log of transactions
+
+A key distinction between interacting with a database like Postgres and interacting with XTDB (e.g. using `psql` or otherwise) is that all clients connected to XTDB operate in a 'stateless' manner that forces all writes to be fully serialized into a single, system-wide log of durably-recorded transactions.
+
+You can easily explore the detailed history of prior transactions with a "recent transactions" query against the system-maintained `_txs` table: `SELECT * FROM _txs ORDER BY _id DESC LIMIT 20`
+
+A key benefit of this log-oriented design is that queries can use the reliable ordering of the log to query the previous state of the database using nothing more than a past timestamp. This makes querying across a scaled-out cluster of consistent read replicas very simple.
+
+Another important aspect of the log-oriented design is that it limits transactions to being 'non-interactive', which simply means that you can't perform a 'read' that returns data back to the client within the same transaction as a 'write' _before_ the transaction has completed (has been submitted and then either commited or aborted). This intentional constraint guarantees a fully auditable, serial transaction ordering.
+
+Under the hood, a transaction in XTDB is an (link:https://en.wikipedia.org/wiki/ACID[ACID]) request that gets processed serially and asynchronously, i.e. if you wait a few milliseconds for the processing of a newly submitted transaction to finish, you can generally then read the data from that transaction in your next query (a.k.a. "read your writes"). However XTDB drivers will, by default, implicitly wait for any recently submitted transactions to be processed before subsequent queries are executed. To achieve this, all transactions are uniquely identified with an `_id` maps to a concrete 'offset' in the underlying durable log (e.g. a Kafka offset).
+
 == Temporal columns
 
 In addition to `_id`, which is the only mandatory column, 2 pairs of system-maintained temporal columns exist which track *system time* and *valid time* periods respectively:
@@ -45,7 +62,7 @@ XTDB tracks both the *system time* when data is inserted (or `UPDATE`-d) into th
 
 The *system time* columns are useful for audit purposes for providing a stable, immutable 'basis' for running repeatable queries (i.e. queries that return the same answer today as they did last week). These columns cannot be modified. The timestamp used is governed by XTDB's single-writer Write-Ahead Log component which is used for serial transaction processing.
 
-The *valid time* columns can be updated and modified at will, but only for _new_ versions of a given record (i.e. a new row sharing the same `_id` in the same table).
+The *valid time* columns can be updated and modified at will, but only for _new_ versions of a given record (i.e. a new row sharing the same `_id` in the same table). By default *valid time* will be derived from the *system time* of the transaction that causes the modification to the database.
 
 *Valid time* is useful for scenarios where it is crucial to be able offer time-travel queries whilst supporting link:https://tidyfirst.substack.com/p/eventual-business-consistency[out of order] arrival of information, and including *corrections* to past data while maintaining a general sense of *immutability*.
 

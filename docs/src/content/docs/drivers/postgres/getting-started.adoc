@@ -1,0 +1,54 @@
+---
+title: Postgres Drivers and Compatibility
+---
+
+XTDB supports the Postgres wire protocol (often referred to as 'PGWire') as the primary API interface.
+
+Whilst XTDB offers some level of compatibility with Postgres' actual SQL dialect, there are many syntactic and functional capabilities which Postgres offers that are not supported in XTDB, and users should generally always refer to XTDB's link:reference/main/sql/queries[SQL documentation].
+
+The advantage of embracing wire protocol compatibility is that many PostgreSQL clients or drivers are able to connect to XTDB seamlessly and run many useful queries without issue. There will always be exceptions and this page will document them as comprehensively as possible.
+
+== Compatibility
+
+=== Main caveats
+
+. You can use `BEGIN READ WRITE` and `COMMIT`/`ROLLBACK` to execute multiple statements in a single atomic transaction, however transaction are fundamentally non-interactive (see link:/intro/data-model[How XTDB works] for details) and this means you can't query in the middle of a transaction. All reads back to the client must happen outside of transactions.
+. JSON-ification of results - generic Postgres drivers can't comprehensively handle the 'polymorphic' and nested types that XTDB supports internally, so many complex structures will be return using JSON columns. Given the lack of link:https://en.wikipedia.org/wiki/Data_definition_language[DDL] functionality present in XTDB currently (we're link:https://github.com/xtdb/xtdb/issues/3411[working on it]), it is therefore important that you control the data you insert into a given column if you want to avoid a monomorphic (simple) type being unexpectedly later returned as a JSON string because the type definition was inadvertently widened by an errant INSERT for an unrelated row. For example, if you INSERT row X with a number for column `foo` and then query it back you will see that same number, however if you then INSERT row Y with a string for column `foo` now row X will now always return column `foo` as string (i.e. it's now JSON). This widening behaviour cannot be undone using the supported XTDB APIs. Please get in touch if you run into difficulties.
+. Lack of `SHOW` and SQL 'window functions' precludes various tools from working.
+. Transactions do not link:https://github.com/xtdb/xtdb/issues/3463[yet] return the information that is needed to correlate clients, so it is recommended to only issue write transactions from a single client for the time being (or use the HTTP API).
+. Certain classes of error messages may be opaque to the client - it may therefore be best to debug queries using the HTTP API during the development workflow for now.
+. `pg_catalog` is partially implemented but is only intended for interoperability with specific supported tools, please use the SQL standard `information_schema` instead
+
+=== List of supported connection properties
+
+|===
+|Name |Example |Description
+
+|user |ignored_user | XTDB does not support users currently, but many clients require specifying a user - provide a dummy string
+
+|password| ignored_password | XTDB does not support users currently (or their passwords), but many clients require specifying a password- provide a dummy string
+|===
+
+== Recommended third party tools
+
+The following list of third party tools includes drivers, clients or utility CLIs/GUIs that our team has tested. Picking an item from it will help us to ensure that your code will work reliably with XTDB.
+
+We recognize that our community might value some features more than others and we encourage you to link:https://github.com/xtdb/xtdb/issues/new[open an issue on GitHub] if you think we are missing something important for your language or workflow.
+
+=== CLIs
+
+link:https://www.postgresql.org/docs/current/app-psql.html[psql]
+
+=== GUIs
+
+VSCode's link:https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools[SQLTools] extension
+
+=== Libraries / Programmatic clients
+
+link:https://node-postgres.com/[node-postgres]
+
+link:https://www.psycopg.org/[Psycopg]
+
+=== Drivers
+
+link:https://jdbc.postgresql.org/[JDBC]

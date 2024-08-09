@@ -1,0 +1,65 @@
+---
+title: Installation via Docker
+---
+:icon: /images/icons
+:clojure: /drivers/clojure/getting-started.html
+:java: /drivers/java/getting-started.html
+:kotlin: /drivers/kotlin/getting-started.html
+
+== Try Online
+
+If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying right now using the link:https://play.xtdb.com/[XT Play] web-based console. The interactive link:quickstart/insert-and-query.html[SQL Quickstart] uses this console to showcase XTDB's SQL dialect and bitemporal capabilities.
+
+Otherwise, let's get XTDB downloaded and running on your own machine...
+
+== Docker Install
+
+XTDB supports production usage via the Postgres link:link:/drivers/postgres/getting-started[wire protocol] (so that you can work with various Postgres-compatible tools, drivers etc.) and also has an link:drivers/http/getting-started.html[HTTP API].
+
+You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server using the following command:
+
+[source,bash]
+----
+docker run -it --pull=always -p 6543:3000 -p 5432:5432 ghcr.io/xtdb/xtdb-standalone-ea:latest
+----
+
+This command starts a Postgres-compatibility endpoint on port 5432 and an HTTP server available at http://localhost:6543
+
+By default your data will only be stored transiently using a local directory within the Docker container, but you can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`.
+
+After seeing a 'Node started' log message (e.g. `09:00:00 | INFO  xtdb.cli | Node started`) you are able to confirm your XTDB server is running using cURL:
+
+[source,bash]
+----
+curl http://localhost:6543/status
+----
+
+If everything is running you will see this response `{"latestCompletedTx":null,"latestSubmittedTx":null}`
+
+== Connect with `psql`
+
+[source,bash]
+----
+# if you have Postgres installed, psql is already available
+psql -h localhost -p 5432
+----
+
+You can similarly connect with other Postgres-compatible tools like VSCode's link:https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools[SQLTools] extension, but not everything is guaranteed to work as expected if you are referring to Postgres' own documentation (XTDB is not attempting to be 100% compatible with Postgres). For guidance on tools we've tested, see link:/drivers/postgres/getting-started[Postgres drivers & compatability].
+
+== Run your first query
+
+[source, text]
+----
+psql (16.2, server 14)
+Type "help" for help.
+
+user=> SELECT 'foo' AS bar;
+
+ bar
+-----
+ foo
+(1 row)
+
+----
+
+Next up, if you haven't already run through the Quickstart already, you probably want to start there with inserting data, running your first queries, and learning about XTDB's novel capabilities: link:/quickstart/insert-and-query[Let's INSERT some data]!

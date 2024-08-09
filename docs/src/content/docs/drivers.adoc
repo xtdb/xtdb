@@ -2,8 +2,11 @@
 title: XTDB Client Language Drivers
 ---
 
-XTDB is accessible through our HTTP API and Java, Kotlin and Clojure drivers - drivers for JavaScript, Python and many more will be available in due course.
+XTDB is accessible via many standard Postgres drivers thanks to Postgres "wire protocol" compatibility.
 
+XTDB also offers an HTTP API as well as dedicated Java, Kotlin and Clojure drivers for interacting with the HTTP API (and which also allow for advanced, in-process usage).
+
+* link:/drivers/postgres/getting-started.html[Postgres]
 * link:/drivers/http/getting-started.html[HTTP + JSON]
 * link:/drivers/java/getting-started[Java]
 * link:/drivers/kotlin/getting-started[Kotlin]
