@@ -15,6 +15,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.vector.extensions.KeywordType
+import xtdb.vector.extensions.TransitType
 import xtdb.vector.extensions.UuidType
 import java.time.ZoneId
 
@@ -123,6 +124,7 @@ fun fromField(field: Field, al: BufferAllocator): Vector {
         override fun visit(type: ExtensionType) = when (type) {
             KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))
             UuidType -> UuidVector(FixedSizeBinaryVector(al, name, isNullable, 16))
+            TransitType -> TransitVector(VarBinaryVector(al, name, isNullable))
             else -> error("unknown extension: $type")
         }
     })
