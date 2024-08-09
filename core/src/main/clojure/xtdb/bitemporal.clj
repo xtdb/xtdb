@@ -37,7 +37,7 @@
                    valid-from (.getValidFrom ev-ptr)
                    valid-to (.getValidTo ev-ptr)]
                (when (or (nil? temporal-bounds)
-                         (.inRange (.getSystemFrom temporal-bounds) system-from))
+                         (< system-from (.getUpper (.getSystemTime temporal-bounds))))
                  (.calculateFor polygon ceiling valid-from valid-to)
                  (.applyLog ceiling system-from valid-from valid-to)
                  polygon)))))))))
