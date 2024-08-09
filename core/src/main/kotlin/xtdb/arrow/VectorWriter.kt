@@ -2,7 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.vector.types.pojo.FieldType
 
-interface VectorWriter : AutoCloseable {
+interface VectorWriter : VectorReader, AutoCloseable {
     fun writeNull()
     fun writeBoolean(value: Boolean): Unit = unsupported("writeBoolean")
     fun writeByte(value: Byte): Unit = unsupported("writeByte")
@@ -31,6 +31,4 @@ interface VectorWriter : AutoCloseable {
     fun mapValueWriter(fieldType: FieldType): VectorWriter = unsupported("mapValueWriter")
 
     fun reset()
-
-    fun toList(): List<Any?>
 }

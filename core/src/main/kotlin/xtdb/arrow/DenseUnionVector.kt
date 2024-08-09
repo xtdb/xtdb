@@ -46,7 +46,10 @@ class DenseUnionVector(
         override fun close() = Unit
     }
 
-    inner class LegWriter(private val typeId: Byte, val inner: Vector) : VectorWriter {
+    inner class LegWriter(
+        private val typeId: Byte,
+        val inner: Vector
+    ) : VectorReader by LegReader(typeId, inner), VectorWriter {
 
         private fun writeValueThen(): Vector {
             typeBuffer.writeByte(typeId)
