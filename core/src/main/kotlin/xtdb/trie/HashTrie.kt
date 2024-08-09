@@ -90,7 +90,7 @@ class MergePlanTask(val mpNodes: List<MergePlanNode>, val path: ByteArray)
 fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
-    val minRecency = min(temporalBounds.validTo.lower, temporalBounds.systemTo.lower)
+    val minRecency = min(temporalBounds.validTime.lower, temporalBounds.systemTime.lower)
 
     val initialMpNodes = segments.mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode(seg, it) } }
     if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
@@ -107,7 +107,8 @@ fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, tempo
                     if (recencies != null) {
                         val tempMpNodes = mutableListOf<MergePlanNode>()
                         for(i in recencies.indices.reversed()) {
-                            if (recencies[i] < minRecency) break
+                            // the recency of a bucket is non inclusive, i.e. no event in the bucket has the recency of the bucket
+                            if (recencies[i] <= minRecency) break
                             tempMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
                         }
                         newMpNodes += tempMpNodes.reversed()

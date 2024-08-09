@@ -38,8 +38,9 @@
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
-           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
-           (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie
+                      HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
+           (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
 
@@ -71,47 +72,44 @@
 (def ^:dynamic *column->pushdown-bloom* {})
 
 (defn- ->temporal-bounds [^RelationReader params, {:keys [^TransactionKey at-tx]}, {:keys [for-valid-time for-system-time]}]
-  (let [bounds (TemporalBounds.)]
-    (letfn [(->time-μs [[tag arg]]
-              (case tag
-                :literal (-> arg
+  (letfn [(->time-μs [[tag arg]]
+            (case tag
+              :literal (-> arg
+                           (time/sql-temporal->micros (.getZone expr/*clock*)))
+              :param (some-> (-> (.readerForName params (name arg))
+                                 (.getObject 0))
                              (time/sql-temporal->micros (.getZone expr/*clock*)))
-                :param (some-> (-> (.readerForName params (name arg))
-                                   (.getObject 0))
-                               (time/sql-temporal->micros (.getZone expr/*clock*)))
-                :now (-> (.instant expr/*clock*)
-                         (time/instant->micros))))]
+              :now (-> (.instant expr/*clock*)
+                       (time/instant->micros))))
+          (apply-constraint [constraint]
+            (if-let [[tag & args] constraint]
+              (case tag
+                :at (let [[at] args
+                          at-μs (->time-μs at)]
+                      (TemporalDimension/at at-μs))
 
+                ;; overlaps [time-from time-to]
+                :in (let [[from to] args]
+                      (TemporalDimension/in (->time-μs (or from [:now]))
+                                            (some-> to ->time-μs)))
+
+                :between (let [[from to] args]
+                           (TemporalDimension/between (->time-μs (or from [:now]))
+                                                      (some-> to ->time-μs)))
+
+                :all-time (TemporalDimension.))
+              (TemporalDimension.)))]
+
+    (let [^TemporalDimension sys-dim (apply-constraint for-system-time)
+          bounds (TemporalBounds. (apply-constraint for-valid-time) sys-dim)]
+      ;; we further constrain bases on tx
       (when-let [system-time (some-> at-tx (.getSystemTime) time/instant->micros)]
-        (.lte (.getSystemFrom bounds) system-time)
+        (.setUpper sys-dim (min (inc system-time) (.getUpper sys-dim)))
 
         (when-not for-system-time
-          (.gt (.getSystemTo bounds) system-time)))
+          (.setLower (.getSystemTime bounds) system-time)))
 
-      (letfn [(apply-constraint [constraint ^TemporalBounds$TemporalColumn start-col, ^TemporalBounds$TemporalColumn end-col]
-                (when-let [[tag & args] constraint]
-                  (case tag
-                    :at (let [[at] args
-                              at-μs (->time-μs at)]
-                          (.lte start-col at-μs)
-                          (.gt end-col at-μs))
-
-                    ;; overlaps [time-from time-to]
-                    :in (let [[from to] args]
-                          (.gt end-col (->time-μs (or from [:now])))
-                          (when-let [to-μs (some-> to ->time-μs)]
-                            (.lt start-col to-μs)))
-
-                    :between (let [[from to] args]
-                               (.gt end-col (->time-μs (or from [:now])))
-                               (when-let [to-μs (some-> to ->time-μs)]
-                                 (.lte start-col to-μs)))
-
-                    :all-time nil)))]
-
-        (apply-constraint for-valid-time (.getValidFrom bounds) (.getValidTo bounds))
-        (apply-constraint for-system-time (.getSystemFrom bounds) (.getSystemTo bounds))))
-    bounds))
+      bounds)))
 
 (defn tables-with-cols [^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
   (with-open [^Watermark wm (.openWatermark wm-src)]
@@ -277,7 +275,7 @@
                             (let [valid-from (.getValidFrom polygon i)
                                   valid-to (.getValidTo polygon i)
                                   sys-to (.getSystemTo polygon i)]
-                              (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
+                              (when (and (.intersects temporal-bounds valid-from valid-to sys-from sys-to)
                                          (not (= valid-from valid-to))
                                          (not (= sys-from sys-to)))
                                 (.startRow out-rel)
