@@ -36,10 +36,11 @@ interface HashTrie<N : Node<N>> {
         fun recencyNode(idx: Int): N
 
         fun leafStream(): Stream<out Node<N>> =
-            if (iidChildren == null)
-                Stream.of(this)
-            else
-                Arrays.stream(iidChildren).flatMap { child -> child?.leafStream() }
+            when {
+                iidChildren != null -> Arrays.stream(iidChildren).flatMap { child -> child?.leafStream() }
+                recencies != null -> recencies!!.indices.toList().stream().flatMap { idx -> recencyNode(idx).leafStream() }
+                else -> Stream.of(this)
+            }
 
         val leaves: List<Node<N>> get() = leafStream().toList()
     }
