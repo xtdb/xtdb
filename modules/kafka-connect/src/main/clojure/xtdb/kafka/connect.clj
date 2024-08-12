@@ -6,7 +6,7 @@
             [xtdb.api :as xt])
   (:import [org.apache.kafka.connect.data Schema Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
-           [java.util Map]
+           [java.util Map List]
            (xtdb.kafka.connect XtdbSinkConfig)))
 
 (defn- map->edn [m]
@@ -25,8 +25,8 @@
       (reduce conj
               (map (fn [^Field field] {(keyword (.name field)) (get-struct-contents (.get ^Struct val field))})
                    struct-fields)))
-    (instance? java.util.ArrayList val) (into [] (map get-struct-contents val))
-    (instance? java.util.HashMap val) (zipmap (map keyword (.keySet ^java.util.HashMap val)) (map get-struct-contents (.values ^java.util.HashMap val)))
+    (instance? List val) (into [] (map get-struct-contents val))
+    (instance? Map val) (zipmap (map keyword (.keySet ^Map val)) (map get-struct-contents (.values ^Map val)))
     :else val))
 
 (defn- struct->edn [^Struct s]
