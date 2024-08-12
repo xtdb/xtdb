@@ -10,7 +10,7 @@ This guide will walk you through the process of configuring & running an XTDB No
 
 NOTE: In addition to the HTTP server, the node will also run a prometheus metrics server on port `8080` and a pgwire server on port `5432`. These will not be covered within this guide and are not exposed from the container app in the sample terraform templates, but are available on the docker image for advanced usage. 
 
-All of the infrastructure will be running on Azure, setting up all the dependent resources, services and roles within a set of `terraform` templates, available in the https://github.com/xtdb/xtdb/tree/main/azure-setup-guide/terraform[**XTDB repository**].
+All of the infrastructure will be running on Azure, setting up all the dependent resources, services and roles within a set of `terraform` templates, available in the https://github.com/xtdb/xtdb/tree/main/modules/azure/docs/azure-setup-guide/terraform[**XTDB repository**].
 
 While we provide numerous parameters to configure the templates, you're encouraged to edit them & use them as a base for more advanced use cases, and to reuse existing infrastructure where appropriate. These templates are designed to be a simple starting point for running XTDB on Azure, and should be modified to suit your specific requirements if being used in a production environment.
 
