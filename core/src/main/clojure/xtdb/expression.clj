@@ -16,7 +16,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.operator IProjectionSpec IRelationSelector)
+           (xtdb.operator ProjectionSpec SelectionSpec)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.util StringUtil)
            (xtdb.vector IListValueReader IValueReader IVectorPosition IVectorReader RelationReader)
@@ -1527,13 +1527,13 @@
                         (symbol (.getName col))
                         (.getField col)))))))
 
-(defn ->expression-projection-spec ^xtdb.operator.IProjectionSpec [col-name expr {:keys [col-types param-types]}]
+(defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [col-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var->col-type col-types})
                             :return-type)]
 
-    (reify IProjectionSpec
+    (reify ProjectionSpec
       (getColumnName [_] col-name)
 
       (getColumnType [_] widest-out-type)
@@ -1556,9 +1556,9 @@
             (.setValueCount out-vec row-count)
             (vr/vec->reader out-vec)))))))
 
-(defn ->expression-relation-selector ^xtdb.operator.IRelationSelector [expr input-types]
+(defn ->expression-selection-spec ^SelectionSpec [expr input-types]
   (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]
-    (reify IRelationSelector
+    (reify SelectionSpec
       (select [_ al in-rel params]
         (with-open [selection (.project projector al in-rel params)]
           (let [res (IntStream/builder)]

@@ -78,7 +78,7 @@
     (letfn [(select-relation [form col-types params-map]
               (with-open [param-rel (tu/open-params params-map)]
                 (let [input-types {:col-types col-types, :param-types (expr/->param-types param-rel)}]
-                  (alength (.select (expr/->expression-relation-selector (expr/form->expr form input-types) input-types)
+                  (alength (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
                                     tu/*allocator* in-rel param-rel)))))]
 
       (t/testing "selector"
@@ -91,7 +91,7 @@
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
-           (-> (.select (expr/->expression-relation-selector (expr/form->expr '(and true nil) {}) {})
+           (-> (.select (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
                         tu/*allocator* (vr/rel-reader [] 1) vw/empty-params)
                (alength)))))
 

@@ -14,7 +14,7 @@
   (:import (java.util.function IntPredicate)
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.operator.IRelationSelector
+           xtdb.operator.SelectionSpec
            xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -559,7 +559,7 @@
   (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
         search-uuid #uuid "80000000-0000-0000-0000-000000000000"
         after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
-        ^IRelationSelector iid-selector (scan/iid-selector (util/uuid->byte-buffer search-uuid))]
+        ^SelectionSpec iid-selector (scan/iid-selector (util/uuid->byte-buffer search-uuid))]
     (letfn [(test-uuids [uuids]
               (with-open [rel-wrt (-> (VectorSchemaRoot/create (Schema. [(types/->field "xt$iid" #xt.arrow/type [:fixed-size-binary 16] false)])
                                                                tu/*allocator*)

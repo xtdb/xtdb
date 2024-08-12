@@ -16,7 +16,7 @@
            org.apache.arrow.vector.complex.StructVector
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.ICursor
-           xtdb.operator.IProjectionSpec
+           xtdb.operator.ProjectionSpec
            xtdb.vector.IVectorReader
            xtdb.vector.RelationReader))
 
@@ -46,18 +46,18 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defrecord IdentityProjectionSpec [col-name col-type]
-  IProjectionSpec
+  ProjectionSpec
   (getColumnName [_] col-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
     (.readerForName in-rel (str col-name))))
 
-(defn ->identity-projection-spec ^xtdb.operator.IProjectionSpec [col-name field]
+(defn ->identity-projection-spec ^ProjectionSpec [col-name field]
   (->IdentityProjectionSpec col-name (types/field->col-type field)))
 
-(defn ->row-number-projection-spec ^xtdb.operator.IProjectionSpec [col-name]
+(defn ->row-number-projection-spec ^ProjectionSpec [col-name]
   (let [row-num (long-array [1])]
-    (reify IProjectionSpec
+    (reify ProjectionSpec
       (getColumnName [_] col-name)
       (getColumnType [_] :i64)
       (project [_ allocator in-rel _params]
@@ -69,8 +69,8 @@
             (aset row-num 0 (+ start-row-num row-count))
             (vw/vec-wtr->rdr row-num-wtr)))))))
 
-(defn ->star-projection-spec ^xtdb.operator.IProjectionSpec [col-name col-type]
-  (reify IProjectionSpec
+(defn ->star-projection-spec ^ProjectionSpec [col-name col-type]
+  (reify ProjectionSpec
     (getColumnName [_] col-name)
     (getColumnType [_] col-type)
     (project [_ allocator in-rel _params]
@@ -92,7 +92,7 @@
           (vr/vec->reader struct-vec))))))
 
 (defrecord RenameProjectionSpec [to-name from-name col-type]
-  IProjectionSpec
+  ProjectionSpec
   (getColumnName [_] to-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
@@ -103,12 +103,12 @@
                          :to-name to-name
                          :relation (into #{} (map #(.getName ^IVectorReader %)) in-rel)})))))
 
-(defn ->rename-projection-spec ^xtdb.operator.IProjectionSpec [to-name from-name field]
+(defn ->rename-projection-spec ^ProjectionSpec [to-name from-name field]
   (->RenameProjectionSpec to-name from-name (types/field->col-type field)))
 
 (deftype ProjectCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
-                        ^List #_<IProjectionSpec> projection-specs
+                        ^List #_<ProjectionSpec> projection-specs
                         ^Clock clock
                         params]
   ICursor
@@ -120,7 +120,7 @@
                            close-cols (ArrayList.)
                            out-cols (ArrayList.)]
                        (try
-                         (doseq [^IProjectionSpec projection-spec projection-specs]
+                         (doseq [^ProjectionSpec projection-spec projection-specs]
                            (let [out-col (.project projection-spec allocator read-rel params)]
                              (when-not (or (instance? IdentityProjectionSpec projection-spec)
                                            (instance? RenameProjectionSpec projection-spec))
@@ -164,8 +164,8 @@
                                                          expr (expr/form->expr form input-types)]
                                                      (expr/->expression-projection-spec col-name expr input-types)))))]
           {:fields (->> projection-specs
-                        (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
-                                            (comp types/col-type->field #(.getColumnType ^IProjectionSpec %))))))
+                        (into {} (map (juxt #(.getColumnName ^ProjectionSpec %)
+                                            (comp types/col-type->field #(.getColumnType ^ProjectionSpec %))))))
            :stats (:stats emitted-child-relation)
            :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))})))))
 

@@ -10,7 +10,7 @@
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
            (xtdb.metadata IMetadataManager)
-           xtdb.operator.IRelationSelector
+           xtdb.operator.SelectionSpec
            (xtdb.vector IRelationWriter IVectorWriter RelationReader)
            (xtdb.watermark Watermark)))
 
@@ -269,7 +269,7 @@
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor
-      (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
+      (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
                                           (.select rel (.select col-pred allocator rel params)))
                                         (-> out-rel
                                             (vr/with-absent-cols allocator col-names))

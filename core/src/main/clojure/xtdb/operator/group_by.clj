@@ -244,7 +244,7 @@
             Closeable
             (close [_] (.close out-vec))))))))
 
-(defn- ->projector ^xtdb.operator.IProjectionSpec [col-name form input-types]
+(defn- ->projector ^xtdb.operator.ProjectionSpec [col-name form input-types]
   (expr/->expression-projection-spec col-name (expr/form->expr form input-types) input-types))
 
 (defmethod ->aggregate-factory :sum [{:keys [from-name from-type] :as agg-opts}]

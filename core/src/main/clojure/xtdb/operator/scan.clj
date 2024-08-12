@@ -36,7 +36,7 @@
            xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
-           xtdb.operator.IRelationSelector
+           xtdb.operator.SelectionSpec
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorIndirection$Selection IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
@@ -177,7 +177,7 @@
               (.writeLong sys-to-wtr sys-to))))))))
 
 (defn iid-selector [^ByteBuffer iid-bb]
-  (reify IRelationSelector
+  (reify SelectionSpec
     (select [_ allocator rel-rdr _params]
       (with-open [arrow-buf (util/->arrow-buf-view allocator iid-bb)]
         (let [iid-ptr (ArrowBufPointer. arrow-buf 0 (.capacity iid-bb))
@@ -249,7 +249,7 @@
               is-valid-ptr (ArrowBufPointer.)]
           (reset-vsr-cache vsr-cache)
           (with-open [out-rel (vw/->rel-writer allocator)]
-            (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
+            (let [^SelectionSpec iid-pred (get col-preds "xt$iid")
                   merge-q (PriorityQueue. (Comparator/comparing #(.ev_ptr ^LeafPointer %) (EventRowPointer/comparator)))
                   calculate-polygon (bitemp/polygon-calculator temporal-bounds)
                   bitemp-consumer (->bitemporal-consumer out-rel col-names)
@@ -292,7 +292,7 @@
               (let [^RelationReader rel (cond-> (.realize content-rel-factory)
                                           (or (empty? (seq content-cols)) (seq temporal-cols))
                                           (vr/concat-rels (vw/rel-wtr->rdr out-rel)))
-                    ^RelationReader rel (reduce (fn [^RelationReader rel ^IRelationSelector col-pred]
+                    ^RelationReader rel (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
                                                   (.select rel (.select col-pred allocator rel params)))
                                                 rel
                                                 (vals (dissoc col-preds "xt$iid")))]
@@ -449,7 +449,7 @@
                              (let [input-types {:col-types (update-vals fields types/field->col-type)
                                                 :param-types (update-vals param-fields types/field->col-type)}]
                                (MapEntry/create col-name
-                                                (expr/->expression-relation-selector (expr/form->expr select-form input-types)
+                                                (expr/->expression-selection-spec (expr/form->expr select-form input-types)
                                                                                      input-types))))
                            (into {}))
 

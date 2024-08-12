@@ -8,7 +8,7 @@
   (:import java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            xtdb.ICursor
-           xtdb.operator.IRelationSelector
+           xtdb.operator.SelectionSpec
            xtdb.vector.RelationReader))
 
 (defmethod lp/ra-expr :select [_]
@@ -18,7 +18,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector, params]
+(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^SelectionSpec selector, params]
   ICursor
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
@@ -41,7 +41,7 @@
     (fn [inner-fields]
       (let [input-types {:col-types (update-vals inner-fields types/field->col-type)
                          :param-types (update-vals param-fields types/field->col-type)}
-            selector (expr/->expression-relation-selector (expr/form->expr predicate input-types) input-types)]
+            selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]
         {:fields inner-fields
          :->cursor (fn [{:keys [allocator params]} in-cursor]
                      (-> (SelectCursor. allocator in-cursor selector params)

@@ -5,7 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.vector.IVectorReader
 import xtdb.vector.RelationReader
 
-interface IProjectionSpec {
+interface ProjectionSpec {
     val columnName: Symbol
     val columnType: Any
 

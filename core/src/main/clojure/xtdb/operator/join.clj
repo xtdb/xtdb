@@ -24,7 +24,7 @@
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb ICursor)
            (xtdb.expression.map IRelationMap)
-           (xtdb.operator IProjectionSpec)
+           (xtdb.operator ProjectionSpec)
            (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :cross-join [_]
@@ -394,8 +394,8 @@
 
 (defn- projection-specs->fields [projection-specs]
   (->> projection-specs
-       (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
-                           (comp types/col-type->field #(.getColumnType ^IProjectionSpec %)))))))
+       (into {} (map (juxt #(.getColumnName ^ProjectionSpec %)
+                           (comp types/col-type->field #(.getColumnType ^ProjectionSpec %)))))))
 
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-fields] :as _args} f]
   (let [{left-fields :fields, ->left-cursor :->cursor} left

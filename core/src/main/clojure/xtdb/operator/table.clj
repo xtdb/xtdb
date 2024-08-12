@@ -15,7 +15,7 @@
            org.apache.arrow.vector.ZeroVector
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field)
            (xtdb ICursor)
-           (xtdb.operator IProjectionSpec)
+           (xtdb.operator ProjectionSpec)
            (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :table [_]
