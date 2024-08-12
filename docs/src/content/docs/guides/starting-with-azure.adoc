@@ -8,11 +8,13 @@ This guide will walk you through the process of configuring & running an XTDB No
 * Use **Azure Blob Storage** as the Remote Storage implementation.
 * Run a HTTP server on the node to allow interaction over REST - exposed to the internet via Azure Container Apps ingress configuration.
 
-NOTE: In addition to the HTTP server, the node will also run a prometheus metrics server on port `8080` and a pgwire server on port `5432`. These will not be covered within this guide and are not exposed from the container app in the sample terraform templates, but are available on the docker image for advanced usage. 
+NOTE: In addition to the HTTP server, the node will also run a Prometheus metrics server on port `8080` and a pgwire server on port `5432`. 
+These will not be covered within this guide and are not exposed from the container app in the sample Terraform templates, but are available on the Docker image for advanced usage. 
 
 All of the infrastructure will be running on Azure, setting up all the dependent resources, services and roles within a set of `terraform` templates, available in the https://github.com/xtdb/xtdb/tree/main/modules/azure/docs/azure-setup-guide/terraform[**XTDB repository**].
 
-While we provide numerous parameters to configure the templates, you're encouraged to edit them & use them as a base for more advanced use cases, and to reuse existing infrastructure where appropriate. These templates are designed to be a simple starting point for running XTDB on Azure, and should be modified to suit your specific requirements if being used in a production environment.
+While we provide numerous parameters to configure the templates, you're encouraged to edit them & use them as a base for more advanced use cases, and to reuse existing infrastructure where appropriate. 
+These templates are designed to be a simple starting point for running XTDB on Azure, and should be modified to suit your specific requirements if being used in a production environment.
 
 The guide assumes that you are using the default templates.
 
@@ -22,7 +24,7 @@ Before starting, ensure you have the following installed:
 
 * The **Azure CLI** - See the link:https://learn.microsoft.com/en-us/cli/azure/[Installation Instructions].
 * **Terraform** - See the link:https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli[Installation Instructions].
-* Download the contents of the folder containing the `terraform` templates, from the https://github.com/xtdb/xtdb/tree/main/azure-setup-guide/terraform[**XTDB repository**].
+* Download the contents of the folder containing the Terraform templates, from the https://github.com/xtdb/xtdb/tree/main/azure-setup-guide/terraform[**XTDB repository**].
 
 === Authenticating the Azure CLI
 
@@ -42,15 +44,19 @@ az account set --subscription "Subscription Name"
 
 This allows you to perform necessary operations on Azure via Terraform using the User Principal on the Azure CLI.
 
-NOTE: There are other ways to authenticate Terraform with Azure besides using the User Principal available via the Azure CLI. For other authentication scenarios, see the link:https://developer.hashicorp.com/terraform/language/settings/backends/azurerm[**azurerm backend authentication**] docs.
+NOTE: There are other ways to authenticate Terraform with Azure besides using the User Principal available via the Azure CLI. 
+For other authentication scenarios, see the link:https://developer.hashicorp.com/terraform/language/settings/backends/azurerm[**azurerm backend authentication**] docs.
 
 == Getting started with Terraform
 
 The following assumes that you are authenticated on the Azure CLI, have Terraform installed on your machine, and are located within the root `terraform` directory provided above.
 
-Before applying or creating any resources, initialize the Terraform working directory. This will download the necessary provider plugins for Azure, set up the sample modules, and configure the backend for storing the state.
+Before applying or creating any resources, initialize the Terraform working directory. 
+This will download the necessary provider plugins for Azure, set up the sample modules, and configure the backend for storing the state.
 
-First, create a new resource group to store the Terraform state. For this guide, we'll use "xtdbterraform" as the resource group name and "West Europe" as the location. These can be changed as appropriate.
+First, create a new resource group to store the Terraform state. 
+For this guide, we'll use "xtdbterraform" as the resource group name and "West Europe" as the location. 
+These can be changed as appropriate.
 
 ```bash
 az group create --name xtdbterraform --location "West Europe"
@@ -81,26 +87,32 @@ The directory is now initialized, and ready to be used to create the resources.
 
 == What is being deployed?
 
-The sample terraform directory contains several modules, each responsible for different parts of the infrastructure. If using the default configuration, the following will be created:
+The sample Terraform directory contains several modules, each responsible for different parts of the infrastructure. 
+If using the default configuration, the following will be created:
 
-* At the top level - an XTDB resource group, user assigned managed identity, and an environment for link:https://learn.microsoft.com/en-us/azure/container-apps/overview[Azure Container Apps].
-* "Remote Storage" infrastructure - contains the Azure infrastructure XTDB needs for using Azure Storage Blobs as Remote Storage. This sets up:
+* At the top level: an XTDB resource group, user assigned managed identity, and an environment for link:https://learn.microsoft.com/en-us/azure/container-apps/overview[Azure Container Apps].
+* **Remote Storage** infrastructure - contains the Azure infrastructure XTDB needs for using Azure Storage Blobs as Remote Storage. This sets up:
 ** A storage account, containing the blob storage container XTDB will use.
 ** An EventGrid system topic, subscribed to changes on the blob storage container.
 ** A service bus namespace with a service bus topic subscribed to the EventGrid topic. XTDB uses the service bus topic to track file changes in the storage container.
-* "Kafka" infrastructure - a basic Kafka deployment on Azure Container Apps. This sets up:
+* **Kafka** infrastructure - a basic Kafka deployment on Azure Container Apps. This sets up:
 ** An Azure Storage Share on the previously created storage account, used to persist Kafka Data.
-** A simple, unauthenticated docker image of Kafka, running on Azure Container Apps with the persistent storage mounted.
-* "XTDB App" infrastructure - sets up the XTDB node with the relevant resource references and settings passed as variables. This sets up:
+** A simple, unauthenticated Docker image of Kafka, running on Azure Container Apps with the persistent storage mounted.
+* **XTDB App** infrastructure - sets up the XTDB node with the relevant resource references and settings passed as variables. This sets up:
 ** An Azure Storage Share on the previously created storage account, used to store files for the XTDB disk cache. This is mounted to the Azure Container App environment.
 ** XTDB container app, running the "XTDB Azure Standalone Docker Image" from Github Container Registry. Configured with environment variables to update the internal configuration of the node, with the disk cache storage share mounted to the container app. Network configuration is set up to expose the node's HTTP server (running on port `3000`) to the internet over HTTP.
-** The standalone docker image sets up an XTDB node with **Kafka** as the link:https://docs.xtdb.com/config/tx-log.html[Transaction Log] and Azure Blob Storage as the link:https://docs.xtdb.com/config/storage.html[Remote Storage module].
+** The standalone Docker image sets up an XTDB node with **Kafka** as the link:https://docs.xtdb.com/config/tx-log.html[Transaction Log] and Azure Blob Storage as the link:https://docs.xtdb.com/config/storage.html[Remote Storage module].
 
-NOTE: The Kafka module deployed within these templates is simple and unauthenticated, and is **not** intended for production use. We allow XTDB itself to manage the Kafka topic creation and configuration in this example - in practice, we recommend using a production ready Kafka deployment, creating the topic in advance, and configuring XTDB to use it. See the XTDB link:https://docs.xtdb.com/config/tx-log/kafka.html#_setup[Kafka Setup Docs] for more information on Kafka configuration recommendations.
+NOTE: The Kafka module deployed within these templates is simple and unauthenticated, and is **not** intended for production use. 
+We allow XTDB itself to manage the Kafka topic creation and configuration in this example - in practice, we recommend using a production ready Kafka deployment, creating the topic in advance, and configuring XTDB to use it. 
+See the XTDB link:https://docs.xtdb.com/config/tx-log/kafka.html#_setup[Kafka Setup Docs] for more information on Kafka configuration recommendations.
 
 == Deploying the Infrastructure
 
-Before creating the Terraform resources, review and update the `terraform.tfvars` file to ensure the parameters are correctly set for your environment. At minimum, you need to set a unique and valid `storage_account_name` and `service_bus_namespace`. You may also wish to change resource tiers, the location of the resource group, or the maximum sizes of storage shares.
+Before creating the Terraform resources, review and update the `terraform.tfvars` file to ensure the parameters are correctly set for your environment:
+
+* You are **required** to set a unique and valid `storage_account_name` and `service_bus_namespace` for your environment. 
+* You may also wish to change resource tiers, the location of the resource group, or the maximum sizes of storage shares.
 
 To get a full list of the resources that will be deployed by the templates, run:
 ```bash
@@ -121,16 +133,19 @@ az containerapp logs show --resource-group xtdb-resources --name xtdb-node --for
 
 == Connecting to the Node
 
-With the infrastructure running, you should have a single XTDB node running on Azure Container Apps. To find the public domain name of the node, you can run the following:
+With the infrastructure running, you should have a single XTDB node running on Azure Container Apps. 
+To find the public domain name of the node, you can run the following:
 
 ```bash
 az containerapp show --resource-group xtdb-resources --name xtdb-node
 ```
 
-This will list the details of the container app - including the Fully Qualified Domain Name of the container app. You can use this to connect to the node via HTTP:
+This will list the details of the container app - including the fully-qualified domain name of the container app. 
+You can use this to connect to the node via HTTP:
 
 ```bash
 curl http://$FullyQualifiedDomainName/status
 ```
 
-If the above succeeds, you now have an XTDB node open to the internet over HTTP. For more information on performing operations on the node over HTTP, see the https://docs.xtdb.com/drivers/http/openapi/index.html#/[**HTTP API docs**]. 
+If the above succeeds, you now have an XTDB node open to the internet over HTTP. 
+For more information on performing operations on the node over HTTP, see the https://docs.xtdb.com/drivers/http/openapi/index.html#/[**HTTP API docs**]. 
