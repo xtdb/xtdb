@@ -87,6 +87,7 @@ export default defineConfig({
                     collapsed: true,
                     items: [
                         { label: 'Setting up a cluster on AWS', link: '/guides/starting-with-aws' },
+                        { label: 'Setting up a node on Azure', link: '/guides/starting-with-azure' },
                     ],
                 },
 
