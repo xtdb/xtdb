@@ -7,7 +7,7 @@ on:
       - kafka-connect-latest
 
 jobs:
-  deploy-standalone-docker:
+  build-connector:
     name: Build and Upload XTDB Kafka Connector
     runs-on: ubuntu-latest
     if: github.repository == 'xtdb/xtdb'
