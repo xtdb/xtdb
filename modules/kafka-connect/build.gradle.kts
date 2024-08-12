@@ -13,14 +13,19 @@ ext {
     set("labs", true)
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 dependencies {
+    fun testAndCompileOnly(name: String) {
+        compileOnly(name)
+        testImplementation(name)
+    }
+
     api(project(":xtdb-api"))
     api(project(":xtdb-http-client-jvm"))
 
     api(kotlin("stdlib-jdk8"))
-    compileOnly("org.apache.kafka", "connect-api", "3.8.0")
+    testAndCompileOnly("org.apache.kafka:connect-api:3.8.0")
 
     api("org.clojure", "tools.logging", "1.2.4")
     api("cheshire", "cheshire", "5.13.0")
@@ -33,6 +38,11 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
+}
+
+tasks.compileJava {
+    sourceCompatibility = "17"
+    targetCompatibility = "17"
 }
 
 tasks.shadowJar {

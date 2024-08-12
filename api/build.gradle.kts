@@ -38,7 +38,7 @@ dependencies {
     api("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 tasks.javadoc {
     exclude("xtdb/util/*")
