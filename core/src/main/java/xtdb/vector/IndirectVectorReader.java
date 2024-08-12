@@ -2,7 +2,6 @@ package xtdb.vector;
 
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
-import clojure.lang.Keyword;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
@@ -172,17 +171,17 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public Keyword getLeg(int idx) {
+    public String getLeg(int idx) {
         return reader.getLeg(indirection.getIndex(idx));
     }
 
     @Override
-    public List<Keyword> legs() {
+    public List<String> legs() {
         return reader.legs();
     }
 
     @Override
-    public IVectorReader legReader(Keyword legKey) {
+    public IVectorReader legReader(String legKey) {
         IVectorReader inner = reader.legReader(legKey);
         return inner == null ? null : new IndirectVectorReader(inner, indirection);
     }

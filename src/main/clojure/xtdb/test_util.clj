@@ -381,7 +381,7 @@
               valid-from-wtr (.colWriter data-wtr "xt$valid_from")
               valid-to-wtr (.colWriter data-wtr "xt$valid_to")
               op-wtr (.colWriter data-wtr "op")
-              put-wtr (.legWriter op-wtr :put)
+              put-wtr (.legWriter op-wtr "put")
               max-page-id (-> (keys page-idx->documents) sort last)]
           (doseq [i (range (inc max-page-id))]
             (doseq [[op doc] (get page-idx->documents i)]

@@ -82,9 +82,9 @@ interface VectorReader : AutoCloseable {
             override fun mapKeyReader() = Adapter(vector.mapKeyReader())
             override fun mapValueReader() = Adapter(vector.mapValueReader())
 
-            override fun getLeg(idx: Int): Keyword = Keyword.intern(vector.getLeg(idx))
+            override fun getLeg(idx: Int) = vector.getLeg(idx)
 
-            override fun legReader(legKey: Keyword) = vector.legReader(legKey.sym.toString())?.let { Adapter(it) }
+            override fun legReader(legKey: String) = vector.legReader(legKey)?.let { Adapter(it) }
 
             override fun legs() = error("legs")
 

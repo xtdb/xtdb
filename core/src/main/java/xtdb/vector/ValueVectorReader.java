@@ -202,17 +202,17 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public Keyword getLeg(int idx) {
+    public String getLeg(int idx) {
         return Types.toLeg(vector.getField().getFieldType().getType());
     }
 
     @Override
-    public List<Keyword> legs() {
+    public List<String> legs() {
         return List.of(Types.toLeg(vector.getField().getFieldType().getType()));
     }
 
     @Override
-    public IVectorReader legReader(Keyword legKey) {
+    public IVectorReader legReader(String legKey) {
         throw unsupported();
     }
 
@@ -243,7 +243,7 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public Keyword getLeg() {
+        public String getLeg() {
             return ValueVectorReader.this.getLeg(pos.getPosition());
         }
 
@@ -931,8 +931,8 @@ public class ValueVectorReader implements IVectorReader {
     public static class DuvReader extends ValueVectorReader {
         private final DenseUnionVector v;
 
-        private final List<Keyword> legs;
-        private final Map<Keyword, IVectorReader> legReaders = new ConcurrentHashMap<>();
+        private final List<String> legs;
+        private final Map<String, IVectorReader> legReaders = new ConcurrentHashMap<>();
 
         private DuvReader(DenseUnionVector v) {
             super(v);
@@ -940,7 +940,7 @@ public class ValueVectorReader implements IVectorReader {
 
             // only using getChildrenFromFields because DUV.getField is so expensive.
             List<? extends ValueVector> children = v.getChildrenFromFields();
-            this.legs = children.stream().map(c -> Keyword.intern(c.getName())).toList();
+            this.legs = children.stream().map(ValueVector::getName).toList();
         }
 
         @Override
@@ -959,21 +959,21 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public Keyword getLeg(int idx) {
+        public String getLeg(int idx) {
             return legs.get(getTypeId(idx));
         }
 
         @Override
-        public IVectorReader legReader(Keyword legKey) {
+        public IVectorReader legReader(String legKey) {
             return legReaders.computeIfAbsent(legKey, k -> {
-                var child = v.getChild(k.sym.toString());
+                var child = v.getChild(k);
                 if (child == null) return null;
                 return new IndirectVectorReader(ValueVectorReader.from(child), new DuvIndirection(v, ((byte) legs.indexOf(k))));
             });
         }
 
         @Override
-        public List<Keyword> legs() {
+        public List<String> legs() {
             return legs;
         }
 
@@ -983,7 +983,7 @@ public class ValueVectorReader implements IVectorReader {
 
             return new ValueReader() {
                 @Override
-                public Keyword getLeg() {
+                public String getLeg() {
                     return DuvReader.this.getLeg(pos.getPosition());
                 }
 

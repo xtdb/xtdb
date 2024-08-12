@@ -4,7 +4,7 @@ import clojure.lang.Keyword
 import java.nio.ByteBuffer
 
 class ValueBox : ValueWriter, ValueReader {
-    override var leg: Keyword? = null
+    override var leg: String? = null
         private set
 
     private var prim: Long = 0
@@ -90,9 +90,9 @@ class ValueBox : ValueWriter, ValueReader {
         this.obj = obj
     }
 
-    override fun legWriter(leg: Keyword): ValueWriter {
+    override fun legWriter(leg: String): ValueWriter {
         return object : BoxWriter() {
-            public override fun box(): ValueWriter {
+            override fun box(): ValueWriter {
                 this@ValueBox.leg = leg
                 return this@ValueBox
             }
@@ -100,6 +100,6 @@ class ValueBox : ValueWriter, ValueReader {
     }
 
     companion object {
-        private val NULL_LEG: Keyword = Keyword.intern("null")
+        private val NULL_LEG: String = "null".intern()
     }
 }

@@ -102,8 +102,8 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
     fun endList(): Unit = unsupported("endList")
 
     fun legWriter(leg: ArrowType): IVectorWriter = unsupported("legWriter")
-    override fun legWriter(leg: Keyword): IVectorWriter = unsupported("legWriter")
-    fun legWriter(leg: Keyword, fieldType: FieldType): IVectorWriter = unsupported("legWriter")
+    override fun legWriter(leg: String): IVectorWriter = unsupported("legWriter")
+    fun legWriter(leg: String, fieldType: FieldType): IVectorWriter = unsupported("legWriter")
 
     fun clear() {
         vector.clear()
@@ -150,11 +150,20 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
 
         field.type == ArrowType.Null.INSTANCE -> {
             // workaround for #3376
-            when  {
-                fieldType.type == ArrowType.List.INSTANCE -> ListVector(field.name, al, FieldType.nullable(ArrowType.List.INSTANCE), null).also { it.valueCount = vector.valueCount }
-                fieldType.type == SetType -> SetVector(field.name, al, FieldType.nullable(SetType), null).also { it.valueCount = vector.valueCount }
-                else -> Field(field.name, FieldType(writerPosition().position > 0 || fieldType.isNullable, fieldType.type, null), emptyList())
-                    .createVector(al).also { it.valueCount = vector.valueCount }
+            when (fieldType.type) {
+                ArrowType.List.INSTANCE ->
+                    ListVector(field.name, al, FieldType.nullable(ArrowType.List.INSTANCE), null)
+                        .also { it.valueCount = vector.valueCount }
+
+                SetType -> SetVector(field.name, al, FieldType.nullable(SetType), null)
+                    .also { it.valueCount = vector.valueCount }
+
+                else ->
+                    Field(
+                        field.name,
+                        FieldType(writerPosition().position > 0 || fieldType.isNullable, fieldType.type, null),
+                        emptyList()
+                    ).createVector(al).also { it.valueCount = vector.valueCount }
             }
         }
 

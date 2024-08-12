@@ -366,7 +366,7 @@
           (.loadBatch loader 0 rel)
           (let [rdr (.getRelReader rel)
                 ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
-                                                   (.legReader :leaf))
+                                                   (.legReader "leaf"))
                 {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]
             (->TableMetadata (ArrowHashTrie. nodes-vec) rel buf metadata-reader col-names page-idx-cache (AtomicInteger. 1))))))))
 

@@ -1,10 +1,9 @@
 package xtdb.arrow
 
-import clojure.lang.Keyword
 import java.nio.ByteBuffer
 
 interface ValueReader {
-    val leg: Keyword?
+    val leg: String?
 
     val isNull: Boolean
 

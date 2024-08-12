@@ -32,7 +32,7 @@ class DenseUnionVectorWriterTest {
             // first we add the not-nullable field
             UNION_FIELD_TYPE.createNewSingleVector("src", al, null).use { srcVec ->
                 val srcWriter = writerFor(srcVec)
-                val f64Writer = srcWriter.legWriter(Keyword.intern("f64"), FieldType.notNullable(MinorType.FLOAT8.type))
+                val f64Writer = srcWriter.legWriter("f64", FieldType.notNullable(MinorType.FLOAT8.type))
                 f64Writer.writeDouble(12.3)
 
                 destWriter.rowCopier(srcVec).copyRow(0)
@@ -41,7 +41,7 @@ class DenseUnionVectorWriterTest {
             // then we simulate a nullable field coming in
             UNION_FIELD_TYPE.createNewSingleVector("src", al, null).use { srcVec ->
                 val srcWriter = writerFor(srcVec)
-                val f64Writer = srcWriter.legWriter(Keyword.intern("f64"), FieldType.nullable(MinorType.FLOAT8.type))
+                val f64Writer = srcWriter.legWriter("f64", FieldType.nullable(MinorType.FLOAT8.type))
                 f64Writer.writeNull()
                 f64Writer.writeDouble(18.9)
 

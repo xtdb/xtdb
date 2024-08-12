@@ -1,6 +1,5 @@
 package xtdb.arrow
 
-import clojure.lang.Keyword
 import java.nio.ByteBuffer
 
 interface ValueWriter {
@@ -15,5 +14,5 @@ interface ValueWriter {
     fun writeBytes(v: ByteBuffer)
     fun writeObject(obj: Any?)
 
-    fun legWriter(leg: Keyword): ValueWriter
+    fun legWriter(leg: String): ValueWriter
 }

@@ -147,11 +147,11 @@
               rel-wtr3 (vw/->rel-writer tu/*allocator*)]
     (-> rel-wtr1
         (.colWriter "my-column" (FieldType/notNullable #xt.arrow/type :union))
-        (.legWriter :foo (FieldType/notNullable #xt.arrow/type :i64))
+        (.legWriter "foo" (FieldType/notNullable #xt.arrow/type :i64))
         (.writeLong 42))
     (-> rel-wtr2
         (.colWriter "my-column" (FieldType/notNullable #xt.arrow/type :union))
-        (.legWriter :foo (FieldType/notNullable #xt.arrow/type :f64))
+        (.legWriter "foo" (FieldType/notNullable #xt.arrow/type :f64))
         (.writeDouble 42.0))
     (t/is (thrown-with-msg?
            RuntimeException #"Field type mismatch"
@@ -191,7 +191,7 @@
               list-vec (ListVector/empty "my-list" tu/*allocator*)]
     (let [duv-wrt (vw/->writer duv)
           list-wrt (vw/->writer list-vec)
-          duv-list-wrt (.legWriter duv-wrt :list (FieldType/notNullable #xt.arrow/type :list))]
+          duv-list-wrt (.legWriter duv-wrt "list" (FieldType/notNullable #xt.arrow/type :list))]
       (.startList duv-list-wrt)
       (doto (-> duv-list-wrt
                 (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64)))
@@ -219,7 +219,7 @@
               struct-vec (StructVector/empty "my-struct" tu/*allocator*)]
     (let [duv-wrt (vw/->writer duv)
           struct-wrt (vw/->writer struct-vec)
-          duv-struct-wrt (.legWriter duv-wrt :struct (FieldType/notNullable #xt.arrow/type :struct))]
+          duv-struct-wrt (.legWriter duv-wrt "struct" (FieldType/notNullable #xt.arrow/type :struct))]
       (.startStruct duv-struct-wrt)
       (-> (.structKeyWriter duv-struct-wrt "foo" (FieldType/notNullable #xt.arrow/type :i64))
           (.writeLong 42))
@@ -270,8 +270,8 @@
                (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :camel-case-keyword))))))
 
 (deftest multivec-underlying-monomorphic-vectors-get-leg-test ; see #3343
-  (with-open [struct-int-vec (.createVector  (types/->field "foo" #xt.arrow/type :struct false
-                                                            (types/col-type->field "bar" :i64))
+  (with-open [struct-int-vec (.createVector (types/->field "foo" #xt.arrow/type :struct false
+                                                           (types/col-type->field "bar" :i64))
                                              tu/*allocator*)
               struct-str-vec (.createVector (types/->field "foo" #xt.arrow/type :struct false
                                                            (types/col-type->field "bar" :utf8))
@@ -280,10 +280,12 @@
               (if (instance? java.util.Map v)
                 (update-vals v #(if (instance? ValueReader %) (read-children (.readObject ^ValueReader %)) %))
                 v))
+
             (get-children-legs [v]
               (if (instance? java.util.Map v)
                 (update-vals v #(if (instance? ValueReader %) (.getLeg ^ValueReader %) %))
                 v))]
+
       (let [struct-int-wrt (vw/->writer struct-int-vec)
             struct-str-wrt (vw/->writer struct-str-vec)]
 
@@ -311,7 +313,7 @@
                      (.setPosition vpos i)
                      (read-children (.readObject value-rdr))))))
 
-        (t/is (= [{"bar" :i64} {"bar" :i64} {"bar" :utf8} {"bar" :utf8}]
+        (t/is (= [{"bar" "i64"} {"bar" "i64"} {"bar" "utf8"} {"bar" "utf8"}]
                  (for [i (range 4)]
                    (do
                      (.setPosition vpos i)

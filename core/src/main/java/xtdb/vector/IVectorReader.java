@@ -1,16 +1,14 @@
 package xtdb.vector;
 
-import clojure.lang.Keyword;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.api.query.IKeyFn;
-import xtdb.arrow.VectorPosition;
-import xtdb.arrow.VectorIndirection;
 import xtdb.arrow.RowCopier;
 import xtdb.arrow.ValueReader;
+import xtdb.arrow.VectorPosition;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
@@ -71,11 +69,11 @@ public interface IVectorReader extends AutoCloseable {
 
     IVectorReader mapValueReader();
 
-    Keyword getLeg(int idx);
+    String getLeg(int idx);
 
-    IVectorReader legReader(Keyword legKey);
+    IVectorReader legReader(String legKey);
 
-    List<Keyword> legs();
+    List<String> legs();
 
     default IVectorReader copy(BufferAllocator allocator) {
         return copyTo(getField().createVector(allocator)).withName(getName());

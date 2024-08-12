@@ -21,8 +21,7 @@
            org.apache.arrow.vector.types.UnionMode
            xtdb.IBufferPool
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment ITrieWriter LiveHashTrie LiveHashTrie$Leaf MergePlanNode)
-           (xtdb.vector IVectorReader RelationReader)
-           xtdb.watermark.ILiveTableWatermark))
+           (xtdb.vector IVectorReader RelationReader)))
 
 (def ^:private ^java.lang.ThreadLocal !msg-digest
   (ThreadLocal/withInitial
@@ -117,15 +116,15 @@
           node-wtr (.colWriter meta-rel-wtr "nodes")
           node-wp (.writerPosition node-wtr)
 
-          iid-branch-wtr (.legWriter node-wtr :branch-iid)
+          iid-branch-wtr (.legWriter node-wtr "branch-iid")
           iid-branch-el-wtr (.listElementWriter iid-branch-wtr)
 
-          recency-branch-wtr (.legWriter node-wtr :branch-recency)
+          recency-branch-wtr (.legWriter node-wtr "branch-recency")
           recency-el-wtr (.listElementWriter recency-branch-wtr)
           recency-wtr (.structKeyWriter recency-el-wtr "recency")
           recency-idx-wtr (.structKeyWriter recency-el-wtr "idx")
 
-          leaf-wtr (.legWriter node-wtr :leaf)
+          leaf-wtr (.legWriter node-wtr "leaf")
           page-idx-wtr (.structKeyWriter leaf-wtr "data-page-idx")
           page-meta-wtr (meta/->page-meta-wtr (.structKeyWriter leaf-wtr "columns"))
           !page-idx (AtomicInteger. 0)]
@@ -139,7 +138,7 @@
           (let [leaf-rdr (vw/rel-wtr->rdr data-rel-wtr)
                 put-rdr (-> leaf-rdr
                             (.readerForName "op")
-                            (.legReader :put))
+                            (.legReader "put"))
 
                 meta-pos (.getPosition node-wp)]
 

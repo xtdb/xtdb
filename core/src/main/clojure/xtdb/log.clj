@@ -163,7 +163,7 @@
             (types/col-type->field "default-tz" :utf8)]))
 
 (defn- ->xtql+args-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
-  (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
+  (let [xtql-writer (.legWriter op-writer "xtql" (FieldType/notNullable #xt.arrow/type :struct))
         xtql-op-writer (.structKeyWriter xtql-writer "op" (FieldType/notNullable #xt.arrow/type :transit))
         args-writer (.structKeyWriter xtql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-xtql+args! [^TxOp$XtqlAndArgs op+args]
@@ -186,7 +186,7 @@
       (.endStruct xtql-writer))))
 
 (defn- ->xtql-writer [^IVectorWriter op-writer]
-  (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
+  (let [xtql-writer (.legWriter op-writer "xtql" (FieldType/notNullable #xt.arrow/type :struct))
         xtql-op-writer (.structKeyWriter xtql-writer "op" (FieldType/notNullable #xt.arrow/type :transit))]
 
     ;; create this even if it's not required here
@@ -219,7 +219,7 @@
           (run! util/try-close vecs))))))
 
 (defn- ->sql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
-  (let [sql-writer (.legWriter op-writer :sql (FieldType/notNullable #xt.arrow/type :struct))
+  (let [sql-writer (.legWriter op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
         query-writer (.structKeyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
         args-writer (.structKeyWriter sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-sql! [^TxOp$Sql op]
@@ -233,7 +233,7 @@
       (.endStruct sql-writer))))
 
 (defn- ->sql-byte-args-writer [^IVectorWriter op-writer]
-  (let [sql-writer (.legWriter op-writer :sql (FieldType/notNullable #xt.arrow/type :struct))
+  (let [sql-writer (.legWriter op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
         query-writer (.structKeyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
         args-writer (.structKeyWriter sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-sql! [^TxOp$SqlByteArgs op]
@@ -247,7 +247,7 @@
       (.endStruct sql-writer))))
 
 (defn- ->put-writer [^IVectorWriter op-writer]
-  (let [put-writer (.legWriter op-writer :put-docs (FieldType/notNullable #xt.arrow/type :struct))
+  (let [put-writer (.legWriter op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))
         iids-writer (.structKeyWriter put-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
@@ -260,7 +260,7 @@
       (let [^IVectorWriter table-doc-writer
             (.computeIfAbsent table-doc-writers (util/->normal-form-str (.tableName op))
                               (fn [table]
-                                (doto (.legWriter doc-writer (keyword table) (FieldType/notNullable #xt.arrow/type :list))
+                                (doto (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :list))
                                   (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct)))))
 
             docs (.docs op)]
@@ -283,7 +283,7 @@
       (.endStruct put-writer))))
 
 (defn- ->delete-writer [^IVectorWriter op-writer]
-  (let [delete-writer (.legWriter op-writer :delete-docs (FieldType/notNullable #xt.arrow/type :struct))
+  (let [delete-writer (.legWriter op-writer "delete-docs" (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
         iids-writer (.structKeyWriter delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
@@ -307,7 +307,7 @@
         (.endStruct delete-writer)))))
 
 (defn- ->erase-writer [^IVectorWriter op-writer]
-  (let [erase-writer (.legWriter op-writer :erase-docs (FieldType/notNullable #xt.arrow/type :struct))
+  (let [erase-writer (.legWriter op-writer "erase-docs" (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.structKeyWriter erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
         iids-writer (.structKeyWriter erase-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
@@ -325,7 +325,7 @@
         (.endStruct erase-writer)))))
 
 (defn- ->call-writer [^IVectorWriter op-writer]
-  (let [call-writer (.legWriter op-writer :call (FieldType/notNullable #xt.arrow/type :struct))
+  (let [call-writer (.legWriter op-writer "call" (FieldType/notNullable #xt.arrow/type :struct))
         fn-iid-writer (.structKeyWriter call-writer "fn-iid" (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16]))
         args-list-writer (.structKeyWriter call-writer "args" (FieldType/notNullable #xt.arrow/type :transit))]
     (fn write-call! [^TxOp$Call op]
@@ -340,7 +340,7 @@
       (.endStruct call-writer))))
 
 (defn- ->abort-writer [^IVectorWriter op-writer]
-  (let [abort-writer (.legWriter op-writer :abort (FieldType/nullable #xt.arrow/type :null))]
+  (let [abort-writer (.legWriter op-writer "abort" (FieldType/nullable #xt.arrow/type :null))]
     (fn [^TxOp$Abort _op]
       (.writeNull abort-writer))))
 

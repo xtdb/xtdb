@@ -1,6 +1,5 @@
 package xtdb.arrow
 
-import clojure.lang.Keyword
 import java.nio.ByteBuffer
 
 internal abstract class BoxWriter : ValueWriter {
@@ -46,7 +45,7 @@ internal abstract class BoxWriter : ValueWriter {
         box().writeObject(obj)
     }
 
-    override fun legWriter(leg: Keyword): ValueWriter {
+    override fun legWriter(leg: String): ValueWriter {
         return box().legWriter(leg)
     }
 }

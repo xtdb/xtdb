@@ -69,7 +69,7 @@
 
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
                                                    ^IVectorReader tx-ops-rdr, ^Instant system-time]
-  (let [put-leg (.legReader tx-ops-rdr :put-docs)
+  (let [put-leg (.legReader tx-ops-rdr "put-docs")
         iids-rdr (.structKeyReader put-leg "iids")
         iid-rdr (.listElementReader iids-rdr)
         docs-rdr (.structKeyReader put-leg "documents")
@@ -77,15 +77,14 @@
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
         system-time-µs (time/instant->micros system-time)
         tables (->> (.legs docs-rdr)
-                    (into {} (map (fn [table]
-                                    (let [table-name (str (symbol table))
-                                          table-docs-rdr (.legReader docs-rdr table)
+                    (into {} (map (fn [table-name]
+                                    (let [table-docs-rdr (.legReader docs-rdr table-name)
                                           doc-rdr (.listElementReader table-docs-rdr)
                                           ^RelationReader table-rel-rdr (vr/rel-reader (for [sk (.structKeys doc-rdr)]
                                                                                          (.structKeyReader doc-rdr sk))
                                                                                        (.valueCount doc-rdr))
                                           live-table (.liveTable live-idx-tx table-name)]
-                                      (MapEntry/create table
+                                      (MapEntry/create table-name
                                                        {:id-rdr (.structKeyReader doc-rdr "xt$id")
 
                                                         :live-table live-table
@@ -126,7 +125,7 @@
         nil))))
 
 (defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
-  (let [delete-leg (.legReader tx-ops-rdr :delete-docs)
+  (let [delete-leg (.legReader tx-ops-rdr "delete-docs")
         table-rdr (.structKeyReader delete-leg "table")
         iids-rdr (.structKeyReader delete-leg "iids")
         iid-rdr (.listElementReader iids-rdr)
@@ -156,7 +155,7 @@
         nil))))
 
 (defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
-  (let [erase-leg (.legReader tx-ops-rdr :erase-docs)
+  (let [erase-leg (.legReader tx-ops-rdr "erase-docs")
         table-rdr (.structKeyReader erase-leg "table")
         iids-rdr (.structKeyReader erase-leg "iids")
         iid-rdr (.listElementReader iids-rdr)]
@@ -229,7 +228,7 @@
 
 (defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, q-src, wm-src
                                                ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
-  (let [call-leg (.legReader tx-ops-rdr :call)
+  (let [call-leg (.legReader tx-ops-rdr "call")
         fn-id-rdr (.structKeyReader call-leg "fn-id")
         fn-iid-rdr (.structKeyReader call-leg "fn-iid")
         args-rdr (.structKeyReader call-leg "args")
@@ -435,7 +434,7 @@
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src, ^IScanEmitter scan-emitter
                                               tx-opts]
-  (let [sql-leg (.legReader tx-ops-rdr :sql)
+  (let [sql-leg (.legReader tx-ops-rdr "sql")
         query-rdr (.structKeyReader sql-leg "query")
         args-rdr (.structKeyReader sql-leg "args")
         upsert-idxer (->upsert-rel-indexer live-idx-tx tx-opts)
@@ -490,7 +489,7 @@
 (defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
                                                ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src, ^IScanEmitter scan-emitter
                                                tx-opts]
-  (let [xtql-leg (.legReader tx-ops-rdr :xtql)
+  (let [xtql-leg (.legReader tx-ops-rdr "xtql")
         op-rdr (.structKeyReader xtql-leg "op")
         args-rdr (.structKeyReader xtql-leg "args")
         upsert-idxer (->upsert-rel-indexer live-idx-tx tx-opts)
@@ -557,7 +556,7 @@
                (doto (.structKeyWriter doc-writer "tx_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
                  (.writeLong system-time-µs))
 
-               (doto (.structKeyWriter doc-writer "committed" (FieldType/notNullable  #xt.arrow/type :bool))
+               (doto (.structKeyWriter doc-writer "committed" (FieldType/notNullable #xt.arrow/type :bool))
                  (.writeBoolean (nil? t)))
 
                (let [e-wtr (.structKeyWriter doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
@@ -620,13 +619,13 @@
                             (when-let [more-tx-ops
                                        (.recordCallable tx-timer
                                                         #(case (.getLeg tx-ops-rdr tx-op-idx)
-                                                           :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
-                                                           :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                           :put-docs (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
-                                                           :delete-docs (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
-                                                           :erase-docs (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                           :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
-                                                           :abort (throw abort-exn)))]
+                                                           "xtql" (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
+                                                           "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                           "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                           "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                           "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
+                                                           "call" (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
+                                                           "abort" (throw abort-exn)))]
                               (try
                                 (index-tx-ops more-tx-ops)
                                 (finally

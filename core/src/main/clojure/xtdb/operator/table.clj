@@ -137,7 +137,7 @@
      :->out-rel (fn [{:keys [allocator ^RelationReader params]}]
                   (util/with-open [list-rdr (.project projection-spec allocator (vr/rel-reader [] 1) params)]
                     (let [list-rdr (cond-> list-rdr
-                                     (instance? ArrowType$Union (.getType (.getField list-rdr))) (.legReader :list))]
+                                     (instance? ArrowType$Union (.getType (.getField list-rdr))) (.legReader "list"))]
 
                       (util/with-close-on-catch [el-rdr (.copy (or (some-> list-rdr .listElementReader (.withName (str out-col)))
                                                                    (vr/vec->reader (ZeroVector. (str out-col))))
@@ -171,10 +171,10 @@
      :->out-rel (fn [{:keys [^RelationReader params]}]
                   (let [vec-rdr (.readerForName params (str (symbol param)))
                         list-rdr (cond-> vec-rdr
-                                   (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.legReader :list))
+                                   (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.legReader "list"))
                         el-rdr (some-> list-rdr .listElementReader)
                         el-struct-rdr (cond-> el-rdr
-                                        (instance? ArrowType$Union (.getType (.getField el-rdr))) (.legReader :struct))]
+                                        (instance? ArrowType$Union (.getType (.getField el-rdr))) (.legReader "struct"))]
 
                     (vr/rel-reader (for [k (some-> el-struct-rdr .structKeys)
                                          :when (contains? fields (symbol k)) ]

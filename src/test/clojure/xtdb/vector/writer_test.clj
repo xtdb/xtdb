@@ -338,7 +338,7 @@
       (t/is (= (types/col-type->field "my-double" :f64)
                (-> rel-wtr
                    (.colWriter "my-union")
-                   (.legWriter :my-double)
+                   (.legWriter "my-double")
                    (.getField)))))))
 
 (deftest rel-writer-dynamic-struct-writing

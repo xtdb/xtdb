@@ -74,7 +74,7 @@
 
 (defn- live-rel->fields [^IRelationWriter live-rel]
   (let [live-rel-field (-> (.colWriter live-rel "op")
-                           (.legWriter :put)
+                           (.legWriter "put")
                            .getField)]
     (assert (= #xt.arrow/type :struct (.getType live-rel-field)))
     (into {} (map (comp (juxt #(.getName ^Field %) identity))) (.getChildren live-rel-field))))
@@ -218,7 +218,7 @@
                     (->live-trie (vw/vec-wtr->rdr iid-wtr))
                     iid-wtr (.colWriter rel "xt$system_from")
                     (.colWriter rel "xt$valid_from") (.colWriter rel "xt$valid_to")
-                    (.legWriter op-wtr :put) (.legWriter op-wtr :delete) (.legWriter op-wtr :erase))))))
+                    (.legWriter op-wtr "put") (.legWriter op-wtr "delete") (.legWriter op-wtr "erase"))))))
 
 (defn ->live-trie [log-limit page-limit iid-rdr]
   (-> (doto (LiveHashTrie/builder iid-rdr)

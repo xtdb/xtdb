@@ -1,7 +1,6 @@
 package xtdb.vector
 
 import clojure.lang.IFn
-import clojure.lang.Keyword
 import clojure.lang.RT
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
@@ -10,10 +9,10 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.VectorPosition
-import xtdb.arrow.VectorIndirection
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
+import xtdb.arrow.VectorIndirection
+import xtdb.arrow.VectorPosition
 import xtdb.toLeg
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
@@ -27,7 +26,7 @@ class IndirectMultiVectorReader(
 
     private val name = readers.filterNotNull().first().name
     private val fields: List<Field?> = readers.map { it?.field }
-    private val legReaders = ConcurrentHashMap<Keyword, IVectorReader>()
+    private val legReaders = ConcurrentHashMap<String, IVectorReader>()
     private val vectorField by lazy (LazyThreadSafetyMode.PUBLICATION){
         MERGE_FIELDS.applyTo(RT.seq(fields.filterNotNull())) as Field
     }
@@ -118,7 +117,7 @@ class IndirectMultiVectorReader(
     override fun mapValueReader(): IVectorReader =
         IndirectMultiVectorReader(readers.map { it?.mapValueReader() }, readerIndirection, vectorIndirections)
 
-    override fun getLeg(idx: Int): Keyword {
+    override fun getLeg(idx: Int): String {
         val reader = safeReader(idx)
         return when (val type = fields[readerIndirection[idx]]!!.fieldType.type) {
             is ArrowType.Union -> reader.getLeg(vectorIndirections[idx])
@@ -126,7 +125,7 @@ class IndirectMultiVectorReader(
         }
     }
 
-    override fun legReader(legKey: Keyword): IVectorReader {
+    override fun legReader(legKey: String): IVectorReader {
         return legReaders.computeIfAbsent(legKey) {
             val validReaders = readers.zip(fields).map { (reader, field) ->
                 if (reader == null) null
@@ -148,7 +147,7 @@ class IndirectMultiVectorReader(
 
                     override fun getIndex(idx: Int): Int {
                         val readerIdx = readerIndirection[idx]
-                        if (validReaders[readerIdx] != null) return readerIdx;
+                        if (validReaders[readerIdx] != null) return readerIdx
                         return -1
                     }
                 }, vectorIndirections
@@ -156,7 +155,7 @@ class IndirectMultiVectorReader(
         }
     }
 
-    override fun legs(): List<Keyword> {
+    override fun legs(): List<String> {
         return fields.flatMapIndexed { index: Int, field: Field? ->
             if (field != null) {
                 when (val type = field.fieldType.type) {
@@ -177,8 +176,8 @@ class IndirectMultiVectorReader(
             copier.copyRow(i)
         }
 
-        writer.syncValueCount();
-        return ValueVectorReader.from(vector);
+        writer.syncValueCount()
+        return ValueVectorReader.from(vector)
     }
 
     override fun transferTo(vector: ValueVector): IVectorReader {
@@ -210,7 +209,7 @@ class IndirectMultiVectorReader(
                 return valueReaders[readerIndirection[pos.position]]!!
             }
 
-            override val leg: Keyword?
+            override val leg: String?
                 get() = valueReader().leg
 
             override val isNull: Boolean

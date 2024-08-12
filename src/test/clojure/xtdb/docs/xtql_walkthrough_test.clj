@@ -4,9 +4,7 @@
             [clojure.test :as t :refer [deftest testing]]
             [xtdb.api :as xt]
             [xtdb.error :as err]
-            [xtdb.test-util :as tu])
-  (:import (xtdb JsonSerde)
-           (xtdb.api.tx TxOp)))
+            [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)
 

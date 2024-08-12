@@ -468,13 +468,13 @@
 (defn col-type->leg [col-type]
   (let [head (col-type-head col-type)]
     (case head
-      (:struct :list :set) head
+      (:struct :list :set) (str (symbol head))
       :union (let [without-null (-> (flatten-union-types col-type)
                                     (disj :null))]
                (if (= 1 (count without-null))
                  (recur (first without-null))
-                 :union))
-      (keyword (col-type->field-name col-type)))))
+                 (name :union)))
+      (col-type->field-name col-type))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type

@@ -90,7 +90,7 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
         is SetType -> "set"
         else -> throw UnsupportedOperationException("not supported for $type")
     }
-}).asKeyword
+})
 
 private val TS_TZ_MICRO_TYPE = ArrowType.Timestamp(MICROSECOND, "UTC")
 private val TS_MICRO_TYPE = ArrowType.Timestamp(MICROSECOND, null)

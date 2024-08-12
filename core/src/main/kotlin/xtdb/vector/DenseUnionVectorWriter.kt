@@ -130,8 +130,8 @@ class DenseUnionVectorWriter(
     private fun writerFor(child: ValueVector, typeId: Byte) =
         ChildWriter(writerFor(child, ::upsertChildField), typeId)
 
-    private val writersByLeg: MutableMap<Keyword, IVectorWriter> = vector.mapIndexed { typeId, child ->
-        Keyword.intern(child.name) to writerFor(child, typeId.toByte())
+    private val writersByLeg: MutableMap<String, IVectorWriter> = vector.mapIndexed { typeId, child ->
+        child.name to writerFor(child, typeId.toByte())
     }.toMap(HashMap())
 
     override fun writerPosition() = wp
@@ -158,9 +158,9 @@ class DenseUnionVectorWriter(
 
     override fun writeValue0(v: ValueReader) = throw UnsupportedOperationException()
 
-    private data class MissingLegException(val available: Set<Keyword>, val requested: Keyword) : NullPointerException()
+    private data class MissingLegException(val available: Set<String>, val requested: String) : NullPointerException()
 
-    override fun legWriter(leg: Keyword) =
+    override fun legWriter(leg: String) =
         writersByLeg[leg] ?: throw MissingLegException(writersByLeg.keys, leg)
 
     private fun promoteLeg(legWriter: IVectorWriter, fieldType: FieldType): IVectorWriter {
@@ -169,16 +169,16 @@ class DenseUnionVectorWriter(
         return writerFor(legWriter.promote(fieldType, vector.allocator), typeId).also { newLegWriter ->
             vector.replaceChild(typeId, newLegWriter.vector)
             upsertChildField(newLegWriter.field)
-            writersByLeg[Keyword.intern(newLegWriter.field.name)] = newLegWriter
+            writersByLeg[newLegWriter.field.name] = newLegWriter
         }
     }
 
     @Suppress("NAME_SHADOWING")
-    override fun legWriter(leg: Keyword, fieldType: FieldType): IVectorWriter {
+    override fun legWriter(leg: String, fieldType: FieldType): IVectorWriter {
         val isNew = leg !in writersByLeg
 
         var w: IVectorWriter = writersByLeg.computeIfAbsent(leg) { leg ->
-            val field = Field(leg.sym.name, fieldType, emptyList())
+            val field = Field(leg, fieldType, emptyList())
             val typeId = vector.registerNewTypeId(field)
 
             val child = vector.addVector(typeId, fieldType.createNewSingleVector(field.name, vector.allocator, null))
@@ -203,7 +203,7 @@ class DenseUnionVectorWriter(
     private fun duvRowCopier(src: DenseUnionVector): RowCopier {
         val copierMapping = src.map { childVec ->
             val childField = childVec.field
-            legWriter(Keyword.intern(childField.name), childField.fieldType).rowCopier(childVec)
+            legWriter(childField.name, childField.fieldType).rowCopier(childVec)
         }
 
         return RowCopier { srcIdx ->

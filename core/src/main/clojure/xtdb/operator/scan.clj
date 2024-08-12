@@ -123,7 +123,7 @@
 
 (defn rels->multi-vector-rel-factory ^xtdb.vector.IMultiVectorRelationFactory [leaf-rels, ^BufferAllocator allocator, col-names]
   (let [put-rdrs (mapv (fn [^RelationReader rel]
-                         [(.rowCount rel) (-> (.readerForName rel "op") (.legReader :put))])
+                         [(.rowCount rel) (-> (.readerForName rel "op") (.legReader "put"))])
                        leaf-rels)
         reader-indirection (IntArrayList.)
         vector-indirection (IntArrayList.)]
@@ -270,7 +270,7 @@
                 (when-let [^LeafPointer q-obj (.poll merge-q)]
                   (let [^EventRowPointer ev-ptr (.ev_ptr q-obj)]
                     (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
-                      (when (= :put (.getOp ev-ptr))
+                      (when (= "put" (.getOp ev-ptr))
                         (let [sys-from (.getSystemFrom ev-ptr)
                               idx (.getIndex ev-ptr)]
                           (dotimes [i (.getValidTimeRangeCount polygon)]
