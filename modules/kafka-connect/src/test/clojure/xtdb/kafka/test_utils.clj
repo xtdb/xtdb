@@ -2,7 +2,8 @@
 (ns xtdb.kafka.test-utils
   (:require [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import (java.net ServerSocket)))
+  (:import (java.net ServerSocket)
+           (xtdb.kafka.connect XtdbSinkConfig)))
 
 (def ^:dynamic *node-opts* {})
 #_{:clj-kondo/ignore [:uninitialized-var]}
@@ -23,3 +24,10 @@
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
+
+(defn ->config [config]
+  (XtdbSinkConfig/parse config))
+
+(comment
+  (->config {"url" "test"
+             "id.mode" "record_key"}))

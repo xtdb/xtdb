@@ -1,10 +1,9 @@
 (ns xtdb.kafka.connect-test
   (:require [clojure.test :as t]
-            [xtdb.kafka.test-utils :as tu :refer [*node*]]
+            [xtdb.kafka.test-utils :as tu :refer [*node* ->config]]
             [xtdb.kafka.connect :as kc]
             [xtdb.api :as xt])
-  (:import (xtdb.kafka.connect XtdbSinkConnector)
-           (org.apache.kafka.connect.sink SinkRecord)))
+  (:import (org.apache.kafka.connect.sink SinkRecord)))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -18,23 +17,11 @@
                value-schema value-value
                offset))
 
-(defn ->config [config]
-  (let [connector (XtdbSinkConnector.)]
-    (try
-      (.start connector config)
-      (first (.taskConfigs connector 1))
-      (finally
-        (.stop connector)))))
-
-(comment
-  (->config {XtdbSinkConnector/URL_CONFIG "test"
-             XtdbSinkConnector/ID_MODE_CONFIG "record_key"}))
-
 (t/deftest e2e-test
   (let [sink (partial kc/submit-sink-records *node*)]
     (t/testing "basic record_key"
-      (let [props (->config {XtdbSinkConnector/URL_CONFIG "url"
-                             XtdbSinkConnector/ID_MODE_CONFIG "record_key"})]
+      (let [props (->config {"url" "url"
+                             "id.mode" "record_key"})]
         (sink props [(->sink-record
                        {:topic "foo"
                         :key-value 1
@@ -44,12 +31,12 @@
              [{:xt/id 1
                :value {:a 1}}]))))
     (t/testing "full config"
-      (let [props (->config {XtdbSinkConnector/URL_CONFIG "url"
-                             XtdbSinkConnector/ID_MODE_CONFIG "record_value"
-                             XtdbSinkConnector/ID_FIELD_CONFIG "my-id-field"
-                             XtdbSinkConnector/VALID_FROM_FIELD_CONFIG "my-valid-from-field"
-                             XtdbSinkConnector/VALID_TO_FIELD_CONFIG "my-valid-to-field"
-                             XtdbSinkConnector/TABLE_NAME_FORMAT_CONFIG "pre_${topic}_post"})]
+      (let [props (->config {"url" "url"
+                             "id.mode" "record_value"
+                             "id.field" "my-id-field"
+                             "validFrom.field" "my-valid-from-field"
+                             "validTo.field" "my-valid-to-field"
+                             "table.name.format" "pre_${topic}_post"})]
         (sink props [(->sink-record
                        {:topic "foo"
                         :value-value {:my-id-field 1

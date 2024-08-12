@@ -60,7 +60,8 @@ data class XtdbSinkConfig(
     var tableNameFormat: String,
 ) {
     companion object {
-        internal fun parse(props: Map<String, String>): XtdbSinkConfig {
+        @JvmStatic
+        fun parse(props: Map<String, String>): XtdbSinkConfig {
             val parsedConfig = AbstractConfig(CONFIG_DEF, props)
             val idMode = parsedConfig.getString(ID_MODE_CONFIG)
             val idField = parsedConfig.getString(ID_FIELD_CONFIG)

@@ -1,36 +1,29 @@
 (ns xtdb.kafka.sink-connector-test
-  (:require [clojure.test :as t])
-  (:import (xtdb.kafka.connect XtdbSinkConnector)
-           (org.apache.kafka.common.config ConfigException)))
-
-(defn try-config [config]
-  (let [connector (XtdbSinkConnector.)]
-    (try
-      (.start connector config)
-      (finally
-        (.stop connector)))))
+  (:require [clojure.test :as t]
+            [xtdb.kafka.test-utils :refer [->config]])
+  (:import (org.apache.kafka.common.config ConfigException)))
 
 (t/deftest test-connector-config
   (t/testing "Missing url"
     (t/is (thrown? ConfigException
-                   (try-config {}))))
+                   (->config {}))))
   (t/testing "Missing id.mode"
     (t/is (thrown? ConfigException
-                   (try-config {XtdbSinkConnector/URL_CONFIG "http://localhost:3000"}))))
+                   (->config {"url" "http://localhost:3000"}))))
   (t/testing "Invalid id.mode"
     (t/is (thrown? ConfigException
-                   (try-config {XtdbSinkConnector/URL_CONFIG "http://localhost:3000"
-                                XtdbSinkConnector/ID_MODE_CONFIG "invalid"}))))
+                   (->config {"url" "http://localhost:3000"
+                              "id.mode" "invalid"}))))
   (t/testing "record_key"
     (t/testing "Valid config"
-      (try-config {XtdbSinkConnector/URL_CONFIG "http://localhost:3000"
-                   XtdbSinkConnector/ID_MODE_CONFIG "record_key"})))
+      (->config {"url" "http://localhost:3000"
+                 "id.mode" "record_key"})))
   (t/testing "record_value"
     (t/testing "Missing id.field"
       (t/is (thrown? ConfigException
-                     (try-config {XtdbSinkConnector/URL_CONFIG "http://localhost:3000"
-                                  XtdbSinkConnector/ID_MODE_CONFIG "record_value"}))))
+                     (->config {"url" "http://localhost:3000"
+                                "id.mode" "record_value"}))))
     (t/testing "Valid config"
-      (try-config {XtdbSinkConnector/URL_CONFIG "http://localhost:3000"
-                   XtdbSinkConnector/ID_MODE_CONFIG "record_value"
-                   XtdbSinkConnector/ID_FIELD_CONFIG "xt/id"}))))
+      (->config {"url" "http://localhost:3000"
+                 "id.mode" "record_value"
+                 "id.field" "xt/id"}))))
