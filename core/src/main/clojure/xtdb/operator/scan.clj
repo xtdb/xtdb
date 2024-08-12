@@ -32,6 +32,7 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.TransactionKey
+           xtdb.arrow.VectorIndirection
            (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
@@ -39,7 +40,7 @@
            xtdb.operator.SelectionSpec
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
-           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorIndirection$Selection IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
+           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -143,8 +144,8 @@
           (.add reader-indirection rdrIdx)
           (.add vector-indirection vecIdx))
         (realize [_]
-          (let [reader-selection (IVectorIndirection$Selection. (.toArray reader-indirection))
-                vector-selection (IVectorIndirection$Selection. (.toArray vector-indirection))]
+          (let [reader-selection (VectorIndirection/selection (.toArray reader-indirection))
+                vector-selection (VectorIndirection/selection (.toArray vector-indirection))]
             (RelationReader/from (mapv #(->indirect-multi-vec % reader-selection vector-selection) col-names))))))))
 
 (defn- ->content-rel-factory ^xtdb.vector.IMultiVectorRelationFactory [leaf-rdrs allocator content-col-names]

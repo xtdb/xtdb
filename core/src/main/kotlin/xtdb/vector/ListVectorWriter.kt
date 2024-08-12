@@ -9,10 +9,14 @@ import org.apache.arrow.vector.complex.replaceDataVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.VectorPosition
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ListValueReader
+import xtdb.arrow.ValueReader
 import xtdb.toFieldType
 
 class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
-    private val wp = IVectorPosition.build(vector.valueCount)
+    private val wp = VectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
     private fun upsertElField(elField: Field) {
@@ -72,7 +76,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     override fun writeObject0(obj: Any) {
         writeList {
             when (obj) {
-                is IListValueReader ->
+                is ListValueReader ->
                     for (i in 0..<obj.size()) {
                         try {
                             elWriter.writeValue(obj.nth(i))
@@ -94,7 +98,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         }
     }
 
-    override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override fun promoteChildren(field: Field) {
         if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
@@ -114,7 +118,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
 
             val innerCopier = listElementWriter().rowCopier(src.dataVector)
 
-            IRowCopier { srcIdx ->
+            RowCopier { srcIdx ->
                 wp.position.also {
                     if (src.isNull(srcIdx)) writeNull()
                     else writeList {

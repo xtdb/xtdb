@@ -1,9 +1,9 @@
-package xtdb.vector
+package xtdb.arrow
 
 import clojure.lang.Keyword
 import java.nio.ByteBuffer
 
-interface IValueWriter {
+interface ValueWriter {
     fun writeNull()
     fun writeBoolean(v: Boolean)
     fun writeByte(v: Byte)
@@ -15,5 +15,5 @@ interface IValueWriter {
     fun writeBytes(v: ByteBuffer)
     fun writeObject(obj: Any?)
 
-    fun legWriter(leg: Keyword): IValueWriter
+    fun legWriter(leg: Keyword): ValueWriter
 }

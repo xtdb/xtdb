@@ -10,18 +10,22 @@ import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.VectorPosition
+import xtdb.arrow.ValueWriter
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
 import xtdb.toLeg
 import xtdb.vector.extensions.SetType
 import xtdb.vector.extensions.SetVector
 import java.nio.ByteBuffer
 
-interface IVectorWriter : IValueWriter, AutoCloseable {
+interface IVectorWriter : ValueWriter, AutoCloseable {
     /**
      *  Maintains the next position to be written to.
      *
      *  Automatically incremented by the various `write` methods, and any [IVectorWriter.rowCopier]s.
      */
-    fun writerPosition(): IVectorPosition
+    fun writerPosition(): VectorPosition
 
     val vector: FieldVector
 
@@ -46,13 +50,13 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
         }
     }
 
-    fun rowCopier(src: ValueVector): IRowCopier
+    fun rowCopier(src: ValueVector): RowCopier
 
-    fun rowCopier(src: RelationReader): IRowCopier {
+    fun rowCopier(src: RelationReader): RowCopier {
         val wp = writerPosition()
         val copiers = src.map { it.rowCopier(structKeyWriter(it.name)) }
 
-        return IRowCopier { srcIdx ->
+        return RowCopier { srcIdx ->
             val pos = wp.position
             startStruct()
             copiers.forEach { it.copyRow(srcIdx) }
@@ -84,8 +88,8 @@ interface IVectorWriter : IValueWriter, AutoCloseable {
 
     fun writeObject0(obj: Any)
 
-    fun writeValue(v: IValueReader) = if (v.isNull) writeNull() else writeValue0(v)
-    fun writeValue0(v: IValueReader)
+    fun writeValue(v: ValueReader) = if (v.isNull) writeNull() else writeValue0(v)
+    fun writeValue0(v: ValueReader)
 
     fun structKeyWriter(key: String): IVectorWriter = unsupported("structKeyWriter")
     fun structKeyWriter(key: String, fieldType: FieldType): IVectorWriter = unsupported("structKeyWriter")

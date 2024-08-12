@@ -38,11 +38,12 @@
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
            (xtdb.api.tx TxOp TxOp$XtqlOp)
+           xtdb.arrow.RowCopier
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
-           (xtdb.vector IRowCopier IVectorReader RelationReader)
+           (xtdb.vector IVectorReader RelationReader)
            (xtdb.watermark IWatermarkSource Watermark)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -96,7 +97,7 @@
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [{:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^ILiveTableTx live-table, ^IRowCopier doc-copier]}
+        (let [{:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^ILiveTableTx live-table, ^RowCopier doc-copier]}
               (get tables (.getLeg docs-rdr tx-op-idx))
 
               valid-from (if (.isNull valid-from-rdr tx-op-idx)

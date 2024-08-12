@@ -10,6 +10,9 @@ import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.VectorPosition
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
 import xtdb.asKeyword
 import xtdb.toFieldType
 import xtdb.util.normalForm
@@ -18,7 +21,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType.Union as UNION_TYPE
 
 class StructVectorWriter(override val vector: StructVector, private val notify: FieldChangeListener?) : IVectorWriter,
     Iterable<Map.Entry<String, IVectorWriter>> {
-    private val wp = IVectorPosition.build(vector.valueCount)
+    private val wp = VectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
     private val childFields: MutableMap<String, Field> =
@@ -44,7 +47,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         writers.forEach { (_, w) -> w.clear() }
     }
 
-    override fun writeValue0(v: IValueReader) = writeObject(v.readObject())
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override fun writeNull() {
         super.writeNull()
@@ -61,11 +64,11 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
     private fun IVectorWriter.writeChildObject(v: Any?): IVectorWriter =
         try {
-            if (v is IValueReader) writeValue(v) else writeObject(v)
+            if (v is ValueReader) writeValue(v) else writeObject(v)
             this
         } catch (e: InvalidWriteObjectException) {
             promoteChild(this, e.obj.toFieldType()).also { promoted ->
-                if (v is IValueReader) promoted.writeValue(v) else promoted.writeObject(v)
+                if (v is ValueReader) promoted.writeValue(v) else promoted.writeObject(v)
             }
         }
 
@@ -140,8 +143,8 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     private inline fun childRowCopier(
         srcName: String,
         fieldType: FieldType,
-        toRowCopier: (IVectorWriter) -> IRowCopier,
-    ): IRowCopier {
+        toRowCopier: (IVectorWriter) -> RowCopier,
+    ): RowCopier {
         val childWriter = structKeyWriter(srcName, fieldType)
 
         return try {
@@ -171,7 +174,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
             val innerCopiers =
                 src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> w.rowCopier(child) } }
 
-            IRowCopier { srcIdx ->
+            RowCopier { srcIdx ->
                 wp.position.also {
                     if (src.isNull(srcIdx))
                         writeNull()
@@ -185,11 +188,11 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         else -> throw InvalidCopySourceException(src.field, field)
     }
 
-    override fun rowCopier(src: RelationReader): IRowCopier {
+    override fun rowCopier(src: RelationReader): RowCopier {
         val innerCopiers =
             src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> child.rowCopier(w) } }
 
-        return IRowCopier { srcIdx ->
+        return RowCopier { srcIdx ->
             wp.position.also {
                 writeStruct {
                     innerCopiers.forEach { it.copyRow(srcIdx) }

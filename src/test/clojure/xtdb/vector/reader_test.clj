@@ -7,7 +7,8 @@
             [xtdb.vector.writer :as vw])
   (:import [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.vector IVectorPosition IValueReader RelationWriter IndirectMultiVectorReader IVectorIndirection$Selection)))
+           (xtdb.arrow ValueReader VectorIndirection VectorPosition)
+           (xtdb.vector IndirectMultiVectorReader RelationWriter)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -241,7 +242,7 @@
       (t/is (= [#{1 2 3} #{4 5 6}]
                (tu/vec->vals (vw/vec-wtr->rdr  set-wrt))))
 
-      (let [pos (IVectorPosition/build)]
+      (let [pos (VectorPosition/build)]
         (.setPosition pos 0)
         (t/is (= #{1 2 3}
                  (.readObject (.valueReader (vw/vec-wtr->rdr set-wrt) pos)))
@@ -277,11 +278,11 @@
                                             tu/*allocator*)]
     (letfn [(read-children [v]
               (if (instance? java.util.Map v)
-                (update-vals v #(if (instance? IValueReader %) (read-children (.readObject ^IValueReader %)) %))
+                (update-vals v #(if (instance? ValueReader %) (read-children (.readObject ^ValueReader %)) %))
                 v))
             (get-children-legs [v]
               (if (instance? java.util.Map v)
-                (update-vals v #(if (instance? IValueReader %) (.getLeg ^IValueReader %) %))
+                (update-vals v #(if (instance? ValueReader %) (.getLeg ^ValueReader %) %))
                 v))]
       (let [struct-int-wrt (vw/->writer struct-int-vec)
             struct-str-wrt (vw/->writer struct-str-vec)]
@@ -292,10 +293,10 @@
 
       (let [int-rdr (vr/vec->reader struct-int-vec)
             str-rdr (vr/vec->reader struct-str-vec)
-            rdr-ind (IVectorIndirection$Selection. (int-array (concat (repeat 2 0) (repeat 2 1))))
-            vec-ind (IVectorIndirection$Selection. (int-array (concat (range 2) (range 2))))
+            rdr-ind (VectorIndirection/selection (int-array (concat (repeat 2 0) (repeat 2 1))))
+            vec-ind (VectorIndirection/selection (int-array (concat (range 2) (range 2))))
             indirect-rdr (IndirectMultiVectorReader. [int-rdr str-rdr] rdr-ind vec-ind)
-            vpos (xtdb.vector.IVectorPosition/build)
+            vpos (VectorPosition/build)
             value-rdr (.valueReader indirect-rdr vpos)]
 
         (t/is (= (types/->field "struct" #xt.arrow/type :struct false

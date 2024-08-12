@@ -4,10 +4,12 @@ import clojure.lang.Keyword
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.replaceChild
-import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.VectorPosition
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
 import xtdb.toArrowType
 import xtdb.toLeg
 import java.nio.ByteBuffer
@@ -16,7 +18,7 @@ class DenseUnionVectorWriter(
     override val vector: DenseUnionVector,
     private val notify: FieldChangeListener?,
 ) : IVectorWriter {
-    private val wp = IVectorPosition.build(vector.valueCount)
+    private val wp = VectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
     private val childFields: MutableMap<String, Field> =
@@ -96,23 +98,23 @@ class DenseUnionVectorWriter(
             writeValue(); inner.endList()
         }
 
-        override fun writeValue0(v: IValueReader) {
+        override fun writeValue0(v: ValueReader) {
             writeValue(); inner.writeValue0(v)
         }
 
-        override fun rowCopier(src: ValueVector): IRowCopier {
+        override fun rowCopier(src: ValueVector): RowCopier {
             val innerCopier = inner.rowCopier(src)
 
-            return IRowCopier { srcIdx ->
+            return RowCopier { srcIdx ->
                 writeValue()
                 innerCopier.copyRow(srcIdx)
             }
         }
 
-        override fun rowCopier(src: RelationReader): IRowCopier {
+        override fun rowCopier(src: RelationReader): RowCopier {
             val innerCopier = inner.rowCopier(src)
 
-            return IRowCopier { srcIdx ->
+            return RowCopier { srcIdx ->
                 writeValue()
                 innerCopier.copyRow(srcIdx)
             }
@@ -150,11 +152,11 @@ class DenseUnionVectorWriter(
     override fun writeObject0(obj: Any): Unit = legWriter(obj.toArrowType()).writeObject0(obj)
 
     // DUV overrides the nullable one because DUVs themselves can't be null.
-    override fun writeValue(v: IValueReader) {
+    override fun writeValue(v: ValueReader) {
         legWriter(v.leg!!).writeValue(v)
     }
 
-    override fun writeValue0(v: IValueReader) = throw UnsupportedOperationException()
+    override fun writeValue0(v: ValueReader) = throw UnsupportedOperationException()
 
     private data class MissingLegException(val available: Set<Keyword>, val requested: Keyword) : NullPointerException()
 
@@ -198,13 +200,13 @@ class DenseUnionVectorWriter(
 
     override fun legWriter(leg: ArrowType) = legWriter(leg.toLeg(), FieldType.notNullable(leg))
 
-    private fun duvRowCopier(src: DenseUnionVector): IRowCopier {
+    private fun duvRowCopier(src: DenseUnionVector): RowCopier {
         val copierMapping = src.map { childVec ->
             val childField = childVec.field
             legWriter(Keyword.intern(childField.name), childField.fieldType).rowCopier(childVec)
         }
 
-        return IRowCopier { srcIdx ->
+        return RowCopier { srcIdx ->
             copierMapping[src.getTypeId(srcIdx).also { check(it >= 0) }.toInt()]
                 .copyRow(src.getOffset(srcIdx))
         }
@@ -222,7 +224,7 @@ class DenseUnionVectorWriter(
         }
     }
 
-    private fun rowCopier0(src: ValueVector): IRowCopier {
+    private fun rowCopier0(src: ValueVector): RowCopier {
         val srcField = src.field
         return legWriter(srcField.type.toLeg(), srcField.fieldType).rowCopier(src)
     }

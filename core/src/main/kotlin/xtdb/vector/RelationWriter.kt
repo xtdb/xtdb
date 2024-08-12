@@ -2,10 +2,11 @@ package xtdb.vector
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.VectorPosition
 
 @Suppress("unused")
 class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
-    private val wp = IVectorPosition.build()
+    private val wp = VectorPosition.build()
     private val writers = mutableMapOf<String, IVectorWriter>()
 
     constructor(allocator: BufferAllocator, writers: List<IVectorWriter>) : this(allocator) {

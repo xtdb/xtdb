@@ -14,7 +14,8 @@
            (org.apache.arrow.vector NullVector)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
-           (xtdb.vector IVectorPosition IVectorReader RelationReader)))
+           (xtdb.arrow VectorPosition)
+           (xtdb.vector IVectorReader RelationReader)))
 
 (defmethod lp/ra-expr :apply [_]
   (s/cat :op #{:apply}
@@ -48,7 +49,7 @@
                           (.tryAdvance dep-cursor
                                        (reify Consumer
                                          (accept [_ dep-rel]
-                                           (let [vp (IVectorPosition/build)
+                                           (let [vp (VectorPosition/build)
                                                  match-vec (.readerForName ^RelationReader dep-rel "_expr")
                                                  match-rdr (.valueReader match-vec vp)]
                                              (dotimes [idx (.valueCount match-vec)]

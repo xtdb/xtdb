@@ -1,6 +1,8 @@
 package xtdb.vector
 
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.VectorPosition
+import xtdb.arrow.RowCopier
 
 interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {
     /**
@@ -8,7 +10,7 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
      *
      * This is incremented either by using the [IRelationWriter.rowCopier], or by explicitly calling [IRelationWriter.endRow]
      */
-    fun writerPosition(): IVectorPosition
+    fun writerPosition(): VectorPosition
 
     fun startRow()
     fun endRow()
@@ -24,10 +26,10 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
 
     fun colWriter(colName: String, fieldType: FieldType): IVectorWriter
 
-    fun rowCopier(inRel: RelationReader): IRowCopier {
+    fun rowCopier(inRel: RelationReader): RowCopier {
         val copiers = inRel.map { inVec -> inVec.rowCopier(colWriter(inVec.name)) }
 
-        return IRowCopier { srcIdx ->
+        return RowCopier { srcIdx ->
             val pos = writerPosition().position
 
             startRow()

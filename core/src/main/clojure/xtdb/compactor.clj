@@ -17,12 +17,12 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb Compactor IBufferPool)
+           xtdb.arrow.RowCopier
            xtdb.bitemporal.IPolygonReader
            (xtdb.metadata IMetadataManager)
            (xtdb.trie EventRowPointer HashTrieKt IDataRel MergePlanTask)
            (xtdb.util TemporalBounds)
            xtdb.vector.IRelationWriter
-           xtdb.vector.IRowCopier
            xtdb.vector.IVectorWriter
            xtdb.vector.RelationReader))
 
@@ -45,7 +45,7 @@
             vf-copier (-> (.readerForName data-rdr "xt$valid_from") (.rowCopier vf-wtr))
             vt-copier (-> (.readerForName data-rdr "xt$valid_to") (.rowCopier vt-wtr))
             op-copier (-> (.readerForName data-rdr "op") (.rowCopier op-wtr))]
-        (reify IRowCopier
+        (reify RowCopier
           (copyRow [_ ev-idx]
             (.startRow data-wtr)
             (let [pos (.copyRow iid-copier ev-idx)]
@@ -93,7 +93,7 @@
           (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
 
       (loop []
-        (when-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
+        (when-let [{:keys [^EventRowPointer ev-ptr, ^RowCopier row-copier] :as q-obj} (.poll merge-q)]
           (.copyRow row-copier (.getIndex ev-ptr))
 
           (.writeLong recency-wtr

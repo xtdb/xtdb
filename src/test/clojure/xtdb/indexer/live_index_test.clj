@@ -13,16 +13,15 @@
   (:import [java.nio ByteBuffer]
            java.time.Duration
            [java.util Random UUID]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
            (xtdb.api IndexerConfig)
            xtdb.api.storage.Storage$InMemoryStorageFactory
-           xtdb.arrow.Relation
+           (xtdb.arrow Relation VectorPosition)
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
-           xtdb.vector.IVectorPosition))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)))
 
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
@@ -48,7 +47,7 @@
       (let [live-idx-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))
             live-table-tx (.liveTable live-idx-tx "my-table")
             put-doc-wrt (.docWriter live-table-tx)]
-        (let [wp (IVectorPosition/build)]
+        (let [wp (VectorPosition/build)]
           (doseq [^UUID iid iids]
             (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
                      #(do

@@ -1,9 +1,9 @@
-package xtdb.vector
+package xtdb.arrow
 
 import clojure.lang.Keyword
 import java.nio.ByteBuffer
 
-interface IValueReader {
+interface ValueReader {
     val leg: Keyword?
 
     val isNull: Boolean

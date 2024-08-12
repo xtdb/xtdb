@@ -10,9 +10,10 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector IntVector)
-           [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList ArrowType$List ArrowType$Union Field]
+           [org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field]
            (xtdb ICursor)
-           (xtdb.vector IRowCopier IVectorReader IVectorWriter RelationReader)
+           (xtdb.arrow RowCopier)
+           (xtdb.vector IVectorReader IVectorWriter RelationReader)
            xtdb.vector.extensions.SetType))
 
 (s/def ::ordinality-column ::lp/column)
@@ -74,7 +75,7 @@
 
                                        (try
                                          (dotimes [n (.valueCount vec-rdr)]
-                                           (doseq [[^IVectorReader coll-rdr, ^IRowCopier el-copier] rdrs+copiers]
+                                           (doseq [[^IVectorReader coll-rdr, ^RowCopier el-copier] rdrs+copiers]
                                              (when (and coll-rdr (not (.isNull coll-rdr n)))
                                                (let [len (.getListCount coll-rdr n)
                                                      start-pos (.getListStartIndex coll-rdr n)]

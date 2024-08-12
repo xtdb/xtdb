@@ -8,7 +8,10 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.api.query.IKeyFn;
-import xtdb.vector.IVectorIndirection.Selection;
+import xtdb.arrow.RowCopier;
+import xtdb.arrow.ValueReader;
+import xtdb.arrow.VectorIndirection;
+import xtdb.arrow.VectorPosition;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -16,14 +19,16 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.IntStream;
 
+import static xtdb.arrow.VectorIndirection.selection;
+
 class IndirectVectorReader implements IVectorReader {
 
     private static final IFn VEC_TO_WRITER = Clojure.var("xtdb.vector.writer", "->writer");
 
     private final IVectorReader reader;
-    private final IVectorIndirection indirection;
+    private final VectorIndirection indirection;
 
-    IndirectVectorReader(IVectorReader reader, IVectorIndirection indirection) {
+    IndirectVectorReader(IVectorReader reader, VectorIndirection indirection) {
         if (reader instanceof IndirectVectorReader ivr) {
             this.reader = ivr.reader;
             var idxs = IntStream.range(0, indirection.valueCount())
@@ -32,7 +37,7 @@ class IndirectVectorReader implements IVectorReader {
                         return innerIdx < 0 ? innerIdx : ivr.indirection.getIndex(innerIdx);
                     })
                     .toArray();
-            this.indirection = new Selection(idxs);
+            this.indirection = selection(idxs);
         } else {
             this.reader = reader;
             this.indirection = indirection;
@@ -202,14 +207,14 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IRowCopier rowCopier(IVectorWriter writer) {
+    public RowCopier rowCopier(IVectorWriter writer) {
         var inner = reader.rowCopier(writer);
         return sourceIdx -> inner.copyRow(indirection.getIndex(sourceIdx));
     }
 
     @Override
     public IVectorReader select(int[] idxs) {
-        var sel = new Selection(Arrays.stream(idxs).map(indirection::getIndex).toArray());
+        var sel = selection(Arrays.stream(idxs).map(indirection::getIndex).toArray());
         return new IndirectVectorReader(reader, sel);
     }
 
@@ -219,8 +224,8 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IValueReader valueReader(IVectorPosition pos) {
-        return reader.valueReader(new IVectorPosition() {
+    public ValueReader valueReader(VectorPosition pos) {
+        return reader.valueReader(new VectorPosition() {
             @Override
             public int getPosition() {
                 return indirection.getIndex(pos.getPosition());

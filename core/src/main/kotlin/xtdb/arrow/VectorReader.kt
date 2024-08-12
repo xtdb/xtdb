@@ -93,7 +93,8 @@ interface VectorReader : AutoCloseable {
 
             override fun rowCopier(writer: IVectorWriter?) = error("rowCopier")
 
-            private inner class ValueReader(private val pos: IVectorPosition) : IValueReader {
+            private inner class ValueReader(private val pos: VectorPosition) :
+                xtdb.arrow.ValueReader {
 
                 override val leg get() = getLeg(pos.position)
 
@@ -110,7 +111,7 @@ interface VectorReader : AutoCloseable {
                 override fun readObject() = getObject(pos.position)
             }
 
-            override fun valueReader(pos: IVectorPosition): IValueReader = ValueReader(pos)
+            override fun valueReader(pos: VectorPosition): xtdb.arrow.ValueReader = ValueReader(pos)
 
             override fun close() = vector.close()
 

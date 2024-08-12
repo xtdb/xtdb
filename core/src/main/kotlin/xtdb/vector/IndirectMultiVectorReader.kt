@@ -10,6 +10,10 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorPosition
+import xtdb.arrow.VectorIndirection
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
 import xtdb.toLeg
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
@@ -17,8 +21,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class IndirectMultiVectorReader(
     private val readers: List<IVectorReader?>,
-    private val readerIndirection: IVectorIndirection,
-    private val vectorIndirections: IVectorIndirection,
+    private val readerIndirection: VectorIndirection,
+    private val vectorIndirections: VectorIndirection,
 ) : IVectorReader {
 
     private val name = readers.filterNotNull().first().name
@@ -137,7 +141,7 @@ class IndirectMultiVectorReader(
 
             IndirectMultiVectorReader(
                 validReaders,
-                object : IVectorIndirection {
+                object : VectorIndirection {
                     override fun valueCount(): Int {
                         return readerIndirection.valueCount()
                     }
@@ -181,14 +185,14 @@ class IndirectMultiVectorReader(
         throw unsupported()
     }
 
-    override fun rowCopier(writer: IVectorWriter): IRowCopier {
+    override fun rowCopier(writer: IVectorWriter): RowCopier {
         readers.map { it?.also { writer.promoteChildren(it.field) }}
         val rowCopiers = readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector()).rowCopier(writer) }
-        return IRowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
+        return RowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
     }
 
-    private fun indirectVectorPosition(pos: IVectorPosition): IVectorPosition {
-        return object : IVectorPosition {
+    private fun indirectVectorPosition(pos: VectorPosition): VectorPosition {
+        return object : VectorPosition {
             override var position: Int
                 get() = vectorIndirections[pos.position]
                 set(@Suppress("UNUSED_PARAMETER") value) {
@@ -197,12 +201,12 @@ class IndirectMultiVectorReader(
         }
     }
 
-    override fun valueReader(pos: IVectorPosition): IValueReader {
+    override fun valueReader(pos: VectorPosition): ValueReader {
         val indirectPos = indirectVectorPosition(pos)
         val valueReaders = readers.map { it?.valueReader(indirectPos) }.toTypedArray()
 
-        return object : IValueReader {
-            private fun valueReader(): IValueReader {
+        return object : ValueReader {
+            private fun valueReader(): ValueReader {
                 return valueReaders[readerIndirection[pos.position]]!!
             }
 

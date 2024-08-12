@@ -7,10 +7,17 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.api.query.IKeyFn;
+import xtdb.arrow.VectorPosition;
+import xtdb.arrow.VectorIndirection;
+import xtdb.arrow.RowCopier;
+import xtdb.arrow.ValueReader;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
+
+import static xtdb.arrow.VectorIndirection.selection;
+import static xtdb.arrow.VectorIndirection.slice;
 
 public interface IVectorReader extends AutoCloseable {
 
@@ -79,16 +86,16 @@ public interface IVectorReader extends AutoCloseable {
     IVectorReader transferTo(ValueVector vector);
 
     default IVectorReader select(int[] idxs) {
-        return new IndirectVectorReader(this, new IVectorIndirection.Selection(idxs));
+        return new IndirectVectorReader(this, selection(idxs));
     }
 
     default IVectorReader select(int startIdx, int len) {
-        return new IndirectVectorReader(this, new IVectorIndirection.Slice(startIdx, len));
+        return new IndirectVectorReader(this, slice(startIdx, len));
     }
 
-    IRowCopier rowCopier(IVectorWriter writer);
+    RowCopier rowCopier(IVectorWriter writer);
 
-    IValueReader valueReader(IVectorPosition pos);
+    ValueReader valueReader(VectorPosition pos);
 
     @Override
     void close();

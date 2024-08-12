@@ -14,11 +14,11 @@
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
+           xtdb.arrow.VectorPosition
            xtdb.IBufferPool
            (xtdb.indexer.live_index ILiveIndex TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)
-           xtdb.vector.IVectorPosition
            xtdb.watermark.ILiveTableWatermark))
 
 (defn uuid-equal-to-path? [uuid path]
@@ -44,7 +44,7 @@
 
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.docWriter live-table-tx)]
-            (let [wp (IVectorPosition/build)]
+            (let [wp (VectorPosition/build)]
               (dotimes [_n n]
                 (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
                          0 0
@@ -82,7 +82,7 @@
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.docWriter live-table-tx)]
 
-            (let [wp (IVectorPosition/build)]
+            (let [wp (VectorPosition/build)]
               (dotimes [_n n]
                 (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
                          (fn []
@@ -135,7 +135,7 @@
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.docWriter live-table-tx)]
 
-        (let [wp (IVectorPosition/build)]
+        (let [wp (VectorPosition/build)]
           (doseq [uuid uuids]
             (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
                      (fn []
@@ -178,7 +178,7 @@
                 live-table-tx (.liveTable live-index-tx table-name)
                 doc-wtr (.docWriter live-table-tx)]
 
-            (let [wp (IVectorPosition/build)]
+            (let [wp (VectorPosition/build)]
               (doseq [uuid uuids]
                 (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
                          (fn []

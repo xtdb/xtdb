@@ -4,17 +4,34 @@ import clojure.lang.*;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.*;
+import org.apache.arrow.vector.BitVector;
+import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.DateMilliVector;
+import org.apache.arrow.vector.DurationVector;
+import org.apache.arrow.vector.FixedSizeBinaryVector;
+import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.IntervalMonthDayNanoVector;
+import org.apache.arrow.vector.NullVector;
+import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.complex.*;
+import org.apache.arrow.vector.complex.DenseUnionVector;
+import org.apache.arrow.vector.complex.ListVector;
+import org.apache.arrow.vector.complex.MapVector;
+import org.apache.arrow.vector.complex.StructVector;
 import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.Types;
 import xtdb.api.query.IKeyFn;
+import xtdb.arrow.*;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
 import xtdb.vector.extensions.*;
+import xtdb.vector.extensions.KeywordVector;
+import xtdb.vector.extensions.TransitVector;
+import xtdb.vector.extensions.UuidVector;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -214,14 +231,14 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public IRowCopier rowCopier(IVectorWriter writer) {
+    public RowCopier rowCopier(IVectorWriter writer) {
         return writer.rowCopier(vector);
     }
 
-    private class BaseValueReader implements IValueReader {
-        private final IVectorPosition pos;
+    private class BaseValueReader implements ValueReader {
+        private final VectorPosition pos;
 
-        public BaseValueReader(IVectorPosition pos) {
+        public BaseValueReader(VectorPosition pos) {
             this.pos = pos;
         }
 
@@ -282,7 +299,7 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public IValueReader valueReader(IVectorPosition pos) {
+    public ValueReader valueReader(VectorPosition pos) {
         return new BaseValueReader(pos);
     }
 
@@ -628,7 +645,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IValueReader valueReader(IVectorPosition pos) {
+            public ValueReader valueReader(VectorPosition pos) {
                 return new BaseValueReader(pos) {
                     @Override
                     public Object readObject() {
@@ -651,7 +668,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IValueReader valueReader(IVectorPosition pos) {
+            public ValueReader valueReader(VectorPosition pos) {
                 return new BaseValueReader(pos) {
                     @Override
                     public PeriodDuration readObject() {
@@ -675,7 +692,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IValueReader valueReader(IVectorPosition pos) {
+            public ValueReader valueReader(VectorPosition pos) {
                 return new BaseValueReader(pos) {
                     @Override
                     public PeriodDuration readObject() {
@@ -695,7 +712,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IValueReader valueReader(IVectorPosition pos) {
+            public ValueReader valueReader(VectorPosition pos) {
                 return new BaseValueReader(pos) {
                     @Override
                     public Object readObject() {
@@ -736,11 +753,11 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IValueReader valueReader(IVectorPosition pos) {
+            public ValueReader valueReader(VectorPosition pos) {
                 var readers = structKeys().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
                 return new BaseValueReader(pos) {
                     @Override
-                    public Map<String, IValueReader> readObject() {
+                    public Map<String, ValueReader> readObject() {
                         return readers;
                     }
                 };
@@ -783,8 +800,8 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public IValueReader valueReader(IVectorPosition pos) {
-            var elPos = IVectorPosition.build();
+        public ValueReader valueReader(VectorPosition pos) {
+            var elPos = VectorPosition.build();
             var elValueReader = elReader.valueReader(elPos);
 
             return new BaseValueReader(pos) {
@@ -793,14 +810,14 @@ public class ValueVectorReader implements IVectorReader {
                     var startIdx = getListStartIndex(pos.getPosition());
                     var valueCount = getListCount(pos.getPosition());
 
-                    return new IListValueReader() {
+                    return new ListValueReader() {
                         @Override
                         public int size() {
                             return valueCount;
                         }
 
                         @Override
-                        public IValueReader nth(int elIdx) {
+                        public ValueReader nth(int elIdx) {
                             elPos.setPosition(startIdx + elIdx);
                             return elValueReader;
                         }
@@ -839,7 +856,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IValueReader valueReader(IVectorPosition pos) {
+            public ValueReader valueReader(VectorPosition pos) {
                 return new BaseValueReader(pos) {
                     @Override
                     public Object readObject() {
@@ -899,7 +916,7 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    private record DuvIndirection(DenseUnionVector v, byte typeId) implements IVectorIndirection {
+    private record DuvIndirection(DenseUnionVector v, byte typeId) implements VectorIndirection {
         @Override
         public int valueCount() {
             return v.getValueCount();
@@ -961,16 +978,16 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public IValueReader valueReader(IVectorPosition pos) {
+        public ValueReader valueReader(VectorPosition pos) {
             var legReaders = legs.stream().collect(Collectors.toMap(l -> l, l -> this.legReader(l).valueReader(pos)));
 
-            return new IValueReader() {
+            return new ValueReader() {
                 @Override
                 public Keyword getLeg() {
                     return DuvReader.this.getLeg(pos.getPosition());
                 }
 
-                private IValueReader legReader() {
+                private ValueReader legReader() {
                     return legReaders.get(getLeg());
                 }
 

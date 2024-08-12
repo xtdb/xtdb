@@ -7,6 +7,9 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.api.query.IKeyFn;
+import xtdb.arrow.VectorPosition;
+import xtdb.arrow.RowCopier;
+import xtdb.arrow.ValueReader;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
@@ -188,12 +191,12 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public IRowCopier rowCopier(IVectorWriter writer) {
+    public RowCopier rowCopier(IVectorWriter writer) {
         return reader.rowCopier(writer);
     }
 
     @Override
-    public IValueReader valueReader(IVectorPosition pos) {
+    public ValueReader valueReader(VectorPosition pos) {
         return reader.valueReader(pos);
     }
 

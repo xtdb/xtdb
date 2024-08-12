@@ -20,7 +20,8 @@
            (org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter)
            org.apache.arrow.vector.types.pojo.Field
            xtdb.ICursor
-           (xtdb.vector IRowCopier IVectorPosition IVectorReader RelationReader RelationWriter)))
+           (xtdb.arrow RowCopier VectorPosition)
+           (xtdb.vector IVectorReader RelationReader RelationWriter)))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
@@ -130,19 +131,19 @@
         vsrs (object-array (mapv #(.getVectorSchemaRoot ^ArrowStreamReader %) rdrs))
         rel-rdrs (object-array k)
         copiers (object-array k)
-        positions (object-array (repeatedly k #(IVectorPosition/build)))]
+        positions (object-array (repeatedly k #(VectorPosition/build)))]
     (try
       (with-open [root-out (fields->vsr allocator fields)
                   wrt (ArrowStreamWriter. root-out nil (io/output-stream out-file))
                   rel-wrt (vw/root->writer root-out)]
-        (let [rel-wrt-cnt (IVectorPosition/build)]
+        (let [rel-wrt-cnt (VectorPosition/build)]
           (letfn [(load-next-rel [i]
                     (when (aget rel-rdrs i)
                       (util/close (aget rel-rdrs i)))
                     (when (.loadNextBatch ^ArrowStreamReader (aget rdrs i))
                       (aset rel-rdrs i (vr/<-root (aget vsrs i)))
                       (aset copiers i (.rowCopier rel-wrt (aget rel-rdrs i)))
-                      (.setPosition ^IVectorPosition (aget positions i) 0)
+                      (.setPosition ^VectorPosition (aget positions i) 0)
                       true))]
             (.start wrt)
             (let [cmps (HashMap.)
@@ -150,12 +151,12 @@
                                        (if (< i j)
                                          (.compare ^java.util.Comparator
                                                    (.get cmps [i j])
-                                                   (.getPosition ^IVectorPosition (aget positions i))
-                                                   (.getPosition ^IVectorPosition (aget positions j)))
+                                                   (.getPosition ^VectorPosition (aget positions i))
+                                                   (.getPosition ^VectorPosition (aget positions j)))
                                          (* -1 (.compare ^java.util.Comparator
                                                          (.get cmps [j i])
-                                                         (.getPosition ^IVectorPosition (aget positions j))
-                                                         (.getPosition ^IVectorPosition (aget positions i)))))))]
+                                                         (.getPosition ^VectorPosition (aget positions j))
+                                                         (.getPosition ^VectorPosition (aget positions i)))))))]
               (doseq [i (range k)]
                 (load-next-rel i))
 
@@ -170,8 +171,8 @@
 
               (while (not (.isEmpty pq))
                 (let [^long i (.poll pq)
-                      ^IVectorPosition position (aget positions i)]
-                  (.copyRow ^IRowCopier (aget copiers i) (.getPositionAndIncrement position))
+                      ^VectorPosition position (aget positions i)]
+                  (.copyRow ^RowCopier (aget copiers i) (.getPositionAndIncrement position))
                   (if (< (.getPosition position) (.rowCount ^RelationReader (aget rel-rdrs i)))
                     (.add pq i)
                     (when (load-next-rel i)

@@ -11,7 +11,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.vector.IVectorIndirection.Selection
+import xtdb.arrow.VectorPosition
+import xtdb.arrow.ValueReader
+import xtdb.arrow.VectorIndirection.Companion.selection
 import org.apache.arrow.vector.types.Types.MinorType.DENSEUNION as DENSEUNION_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BOOL_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
@@ -52,13 +54,13 @@ class IndirectMultiVectorReaderTest {
         val rdr2 = ValueVectorReader.intVector(intVec2)
         val indirectRdr = IndirectMultiVectorReader(
             listOf(rdr1, rdr2),
-            Selection(intArrayOf(0, 1, 0, 1)),
-            Selection(intArrayOf(0, 0, 1, 1))
+            selection(intArrayOf(0, 1, 0, 1)),
+            selection(intArrayOf(0, 0, 1, 1))
         )
         val r = 0..3
         assertEquals(r.toList(), r.map { indirectRdr.getInt(it) })
 
-        val pos = IVectorPosition.build(0)
+        val pos = VectorPosition.build(0)
         val valueRdr = indirectRdr.valueReader(pos)
         assertEquals(r.toList(), r.map { valueRdr.readInt().also { pos.getPositionAndIncrement() } })
 
@@ -74,9 +76,9 @@ class IndirectMultiVectorReaderTest {
         vectorWriter.close()
     }
 
-    private fun readMaps(valueReader: IValueReader): Any? {
+    private fun readMaps(valueReader: ValueReader): Any? {
         return when (val o = valueReader.readObject()) {
-            is Map<*, *> -> o.mapValues { readMaps(it.value as IValueReader) }
+            is Map<*, *> -> o.mapValues { readMaps(it.value as ValueReader) }
             else -> o
         }
     }
@@ -105,14 +107,14 @@ class IndirectMultiVectorReaderTest {
         val rdr2 = ValueVectorReader.structVector(structVec2)
         val indirectRdr = IndirectMultiVectorReader(
             listOf(rdr1, rdr2),
-            Selection(intArrayOf(0, 1, 0, 1)),
-            Selection(intArrayOf(0, 0, 1, 1))
+            selection(intArrayOf(0, 1, 0, 1)),
+            selection(intArrayOf(0, 0, 1, 1))
         )
         val r = 0..3
         val expected = cycle(listOf(m1, m2)).take(4).toList()
         assertEquals(expected, r.map { indirectRdr.getObject(it) })
 
-        val pos = IVectorPosition.build(0)
+        val pos = VectorPosition.build(0)
         val valueRdr = indirectRdr.valueReader(pos)
         assertEquals(expected, r.map { readMaps(valueRdr).also { pos.getPositionAndIncrement() } })
 
@@ -145,14 +147,14 @@ class IndirectMultiVectorReaderTest {
         val rdr2 = ValueVectorReader.varCharVector(stringVec)
         val indirectRdr = IndirectMultiVectorReader(
             listOf(rdr1, rdr2),
-            Selection(intArrayOf(0, 1, 0, 1)),
-            Selection(intArrayOf(0, 0, 1, 1))
+            selection(intArrayOf(0, 1, 0, 1)),
+            selection(intArrayOf(0, 0, 1, 1))
         )
         val r = 0..3
         val expected = listOf(0, "first", 1, "second")
         assertEquals(expected, r.map { indirectRdr.getObject(it) })
 
-        val pos = IVectorPosition.build(0)
+        val pos = VectorPosition.build(0)
         val valueRdr = indirectRdr.valueReader(pos)
         assertEquals(expected, r.map { valueRdr.readObject().also { pos.getPositionAndIncrement() } })
 
@@ -196,14 +198,14 @@ class IndirectMultiVectorReaderTest {
         val rdr3 = ValueVectorReader.denseUnionVector(duvVec)
         val indirectRdr = IndirectMultiVectorReader(
             listOf(rdr1, rdr2, rdr3),
-            Selection(intArrayOf(0, 1, 2, 0, 1, 2)),
-            Selection(intArrayOf(0, 0, 0, 1, 1, 1))
+            selection(intArrayOf(0, 1, 2, 0, 1, 2)),
+            selection(intArrayOf(0, 0, 0, 1, 1, 1))
         )
         val r = 0..5
         val expected = listOf(0, "first", 2, 3, "fourth", "fifth")
         assertEquals(expected, r.map { indirectRdr.getObject(it) })
 
-        val pos = IVectorPosition.build(0)
+        val pos = VectorPosition.build(0)
         val valueRdr = indirectRdr.valueReader(pos)
         assertEquals(expected, r.map { valueRdr.readObject().also { pos.getPositionAndIncrement() } })
 
@@ -240,8 +242,8 @@ class IndirectMultiVectorReaderTest {
         val rdr2 = ValueVectorReader.denseUnionVector(duvVec2)
         val indirectRdr = IndirectMultiVectorReader(
             listOf(rdr1, rdr2),
-            Selection(intArrayOf(0, 1, 0, 1, 0, 1)),
-            Selection(intArrayOf(0, 0, 1, 1, 2, 2))
+            selection(intArrayOf(0, 1, 0, 1, 0, 1)),
+            selection(intArrayOf(0, 0, 1, 1, 2, 2))
         )
         val r = 0..5
         val expected = listOf(0, "first", null, 3, "fourth", null)
@@ -250,7 +252,7 @@ class IndirectMultiVectorReaderTest {
             else indirectRdr.getObject(it)
         })
 
-        val pos = IVectorPosition.build(0)
+        val pos = VectorPosition.build(0)
         val valueRdr = indirectRdr.valueReader(pos)
         assertEquals(expected, r.map {
             val res =
@@ -285,15 +287,15 @@ class IndirectMultiVectorReaderTest {
         val rdr1 = ValueVectorReader.denseUnionVector(duvVec1)
         val indirectRdr = IndirectMultiVectorReader(
             listOf(rdr1),
-            Selection(intArrayOf(0, 0)),
-            Selection(intArrayOf(0, 1))
+            selection(intArrayOf(0, 0)),
+            selection(intArrayOf(0, 1))
         )
 
         val r = 0..1
         val expected = listOf(0, 1)
         assertEquals(expected, r.map { indirectRdr.getObject(it) })
 
-        val pos = IVectorPosition.build(0)
+        val pos = VectorPosition.build(0)
         val valueRdr = indirectRdr.valueReader(pos)
         assertEquals(expected, r.map {
             val res = valueRdr.readInt()

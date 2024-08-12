@@ -1,6 +1,6 @@
-package xtdb.vector
+package xtdb.arrow
 
-interface IVectorPosition {
+interface VectorPosition {
     var position: Int
 
     fun getPositionAndIncrement() = position++
@@ -8,8 +8,8 @@ interface IVectorPosition {
     companion object {
         @JvmOverloads
         @JvmStatic
-        fun build(initialPosition: Int = 0): IVectorPosition {
-            return object : IVectorPosition {
+        fun build(initialPosition: Int = 0): VectorPosition {
+            return object : VectorPosition {
                 override var position: Int = initialPosition
             }
         }

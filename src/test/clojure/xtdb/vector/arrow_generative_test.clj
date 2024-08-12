@@ -16,7 +16,8 @@
            (java.nio ByteBuffer)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field FieldType)
-           (xtdb.vector IVectorIndirection$Selection IVectorReader IndirectMultiVectorReader)
+           xtdb.arrow.VectorIndirection
+           (xtdb.vector IVectorReader IndirectMultiVectorReader)
            (xtdb.types ClojureForm)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -164,8 +165,8 @@
           vec-indirects (mapcat #(range (.valueCount ^IVectorReader %)) rdrs)
           [rdr-indirects vec-indirects] (same-shuffle rdr-indirects vec-indirects)]
       (IndirectMultiVectorReader. rdrs
-                                  (IVectorIndirection$Selection. (int-array rdr-indirects))
-                                  (IVectorIndirection$Selection. (int-array vec-indirects))))))
+                                  (VectorIndirection/selection (int-array rdr-indirects))
+                                  (VectorIndirection/selection (int-array vec-indirects))))))
 
 #_
 (defspec ^:integration read-multi-vec 20

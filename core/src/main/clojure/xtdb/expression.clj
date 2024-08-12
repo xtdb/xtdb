@@ -16,11 +16,12 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
+           (xtdb.arrow ListValueReader ValueReader VectorPosition)
            (xtdb.operator ProjectionSpec SelectionSpec)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.util StringUtil)
-           (xtdb.vector IListValueReader IValueReader IVectorPosition IVectorReader RelationReader)
-           xtdb.vector.ValueBox))
+           (xtdb.vector IVectorReader RelationReader)
+           xtdb.arrow.ValueBox))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -256,7 +257,7 @@
     :milli `(.writeLong ~@args)))
 
 (doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
-                 :list IListValueReader, :set IListValueReader, :struct Map}]
+                 :list ListValueReader, :set ListValueReader, :struct Map}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
 
@@ -389,7 +390,7 @@
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
     {:return-type col-type
-     :batch-bindings [[vpos-sym `(IVectorPosition/build)]
+     :batch-bindings [[vpos-sym `(VectorPosition/build)]
                       (if (and extract-vecs-from-rel? extract-vec-from-rel?)
                         [var-rdr-sym `(.valueReader (.readerForName ~rel ~(str variable)) ~vpos-sym)]
                         [var-rdr-sym `(some-> ~variable (.valueReader ~vpos-sym))])]
@@ -1222,7 +1223,7 @@
     {:return-type val-type
      :continue-call (fn [f [struct-code]]
                       (continue-read f val-type (-> `(.get ~struct-code ~(str field))
-                                                    (with-tag IValueReader))))}
+                                                    (with-tag ValueReader))))}
 
     {:return-type :null, :->call-code (constantly nil)}))
 
@@ -1263,10 +1264,10 @@
                                                                                    (cont-b3-call return-type (->call-code [l-val-code r-val-code])))))
                                                                              (get r-field-types field)
                                                                              (-> `(.get ~r-sym ~(str field))
-                                                                                 (with-tag IValueReader))))
+                                                                                 (with-tag ValueReader))))
                                                             (get l-field-types field)
                                                             (-> `(.get ~l-sym ~(str field))
-                                                                (with-tag IValueReader))))
+                                                                (with-tag ValueReader))))
                                            (reduce (fn [l-code r-code]
                                                      `(let [~res-sym ~l-code]
                                                         (if (== -1 ~res-sym)
@@ -1312,7 +1313,7 @@
                                   [el-box `(ValueBox.)])))
      :continue (fn [f]
                  (f return-type
-                    `(reify IListValueReader
+                    `(reify ListValueReader
                        (~'size [_#] ~(count emitted-els))
 
                        (~'nth [_# idx#]
@@ -1371,7 +1372,7 @@
 (defn count-non-empty [m] 
   (loop [n 0, xs (vals m)]
     (if (seq xs)
-      (if (.isNull ^IValueReader (first xs))
+      (if (.isNull ^ValueReader (first xs))
         (recur n (rest xs))
         (recur (inc n) (rest xs)))
       n)))
@@ -1380,8 +1381,8 @@
   {:return-type :i32
    :->call-code #(do `(count-non-empty ~@%))})
 
-(defn trim-array-view ^xtdb.vector.IListValueReader [^long trimmed-value-count ^IListValueReader lst]
-  (reify IListValueReader
+(defn trim-array-view ^xtdb.arrow.ListValueReader [^long trimmed-value-count ^ListValueReader lst]
+  (reify ListValueReader
     (size [_] trimmed-value-count)
     (nth [_ idx] (.nth lst idx))))
 
@@ -1398,7 +1399,7 @@
                                                      {::err/message "Data exception - array element error."
                                                       :nlen ~n-sym}))
                              ~(f return-type (-> `(trim-array-view ~n-sym ~list-sym)
-                                                 (with-tag IListValueReader)))))))}))
+                                                 (with-tag ListValueReader)))))))}))
 
 (doseq [[op return-code] [[:= 1] [:<> -1]]]
   (defmethod codegen-call [op :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
