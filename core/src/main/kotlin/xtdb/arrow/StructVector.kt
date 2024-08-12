@@ -101,6 +101,18 @@ class StructVector(
             ByteFunctionHelpers.combineHash(hash, child.hashCode(idx, hasher))
         }
 
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is StructVector)
+        val childCopiers = src.children.map { (childName, child) ->
+            child.rowCopier(children[childName] ?: error("missing child vector: $childName"))
+        }
+
+        return RowCopier { srcIdx ->
+            childCopiers.forEach { it.copyRow(srcIdx) }
+            valueCount.also { endStruct() }
+        }
+    }
+
     override fun reset() {
         validityBuffer.reset()
         valueCount = 0

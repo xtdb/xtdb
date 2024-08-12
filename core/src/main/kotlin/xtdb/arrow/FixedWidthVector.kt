@@ -114,6 +114,16 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
         dataBuffer.hashCode(hasher, (idx * byteWidth).toLong(), byteWidth.toLong())
 
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is FixedWidthVector)
+        require(src.byteWidth == byteWidth)
+
+        return RowCopier { srcIdx ->
+            dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
+            valueCount++
+        }
+    }
+
     final override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)

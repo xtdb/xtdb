@@ -122,6 +122,13 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.writeBytes(byteArray)
     }
 
+    fun writeBytes(src: ExtensibleBuffer, start: Long, len: Long) {
+        ensureWritable(len)
+        val writerIndex = buf.writerIndex()
+        buf.setBytes(writerIndex, src.buf, start, len)
+        buf.writerIndex(writerIndex + len)
+    }
+
     fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
         (reuse ?: ArrowBufPointer()).apply { set(this@ExtensibleBuffer.buf, idx.toLong(), len.toLong()) }
 

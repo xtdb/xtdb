@@ -22,6 +22,13 @@ class NullVector(override val name: String) : Vector() {
 
     override fun writeObject0(value: Any) = error("NullVector writeObject0")
 
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = error("hashCode0 called on NullVector")
+
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is NullVector)
+        return RowCopier { valueCount.also { writeNull() } }
+    }
+
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
     }
@@ -30,8 +37,6 @@ class NullVector(override val name: String) : Vector() {
         val node = nodes.removeFirst() ?: error("missing node")
         valueCount = node.length
     }
-
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = error("hashCode0 called on NullVector")
 
     override fun reset() {
         valueCount = 0

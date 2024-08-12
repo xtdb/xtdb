@@ -48,6 +48,22 @@ class FixedSizeListVector(
             ByteFunctionHelpers.combineHash(hash, elVector.hashCode(idx * listSize + elIdx, hasher))
         }
 
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is FixedSizeListVector)
+        require(src.listSize == listSize)
+
+        val elCopier = src.rowCopier(elVector)
+        return RowCopier { srcIdx ->
+            val startIdx = src.getListStartIndex(srcIdx)
+
+            (startIdx until startIdx + listSize).forEach { elIdx ->
+                elCopier.copyRow(elIdx)
+            }
+
+            valueCount.also { endList() }
+        }
+    }
+
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)

@@ -75,6 +75,18 @@ class ListVector(
             ByteFunctionHelpers.combineHash(hash, elVector.hashCode(elIdx, hasher))
         }
 
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is ListVector)
+        val elCopier = src.rowCopier(elVector)
+        return RowCopier { srcIdx ->
+            (src.getListStartIndex(srcIdx) until src.getListEndIndex(srcIdx)).forEach { elIdx ->
+                elCopier.copyRow(elIdx)
+            }
+
+            valueCount.also { endList() }
+        }
+    }
+
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)

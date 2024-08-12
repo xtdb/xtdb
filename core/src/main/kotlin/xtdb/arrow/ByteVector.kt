@@ -20,4 +20,13 @@ class ByteVector(
     override fun writeObject0(value: Any) {
         if (value is Byte) writeByte(value) else TODO("not a Byte")
     }
+
+    override fun rowCopier0(src: VectorReader) =
+        if (src !is ByteVector) TODO("promote ${src::class.simpleName}")
+        else {
+            if (src.nullable) nullable = true
+            RowCopier { srcIdx ->
+                valueCount.also { writeBoolean(src.getBoolean(srcIdx)) }
+            }
+        }
 }

@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.nio.channels.WritableByteChannel
 import xtdb.vector.RelationReader as OldRelationReader
 
 interface RelationReader : Iterable<VectorReader>, AutoCloseable {
@@ -9,6 +10,8 @@ interface RelationReader : Iterable<VectorReader>, AutoCloseable {
 
     override fun close() = forEach { it.close() }
 
+    fun startUnload(ch: WritableByteChannel): RelationUnloader
+
     companion object {
         @JvmStatic
         fun from(oldReader: OldRelationReader) = object : RelationReader {
@@ -16,6 +19,8 @@ interface RelationReader : Iterable<VectorReader>, AutoCloseable {
 
             override operator fun get(colName: String) =
                 oldReader.readerForName(colName)?.let { VectorReader.from(it) }
+
+            override fun startUnload(ch: WritableByteChannel) = unsupported("startUnload")
 
             override fun iterator() = oldReader.asSequence().map { VectorReader.from(it) }.iterator()
         }

@@ -1,15 +1,14 @@
 package xtdb.vector
 
-import clojure.lang.Keyword
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.VectorPosition
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
+import xtdb.arrow.VectorPosition
 import xtdb.toArrowType
 import xtdb.toLeg
 import java.nio.ByteBuffer

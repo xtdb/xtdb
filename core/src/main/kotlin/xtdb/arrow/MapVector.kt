@@ -1,7 +1,6 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
-import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -32,15 +31,14 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun getListCount(idx: Int) = listVector.getListCount(idx)
     override fun getListStartIndex(idx: Int) = listVector.getListStartIndex(idx)
 
-    @Suppress("MemberVisibilityCanBePrivate")
-    internal fun getListEndIndex(idx: Int) = listVector.getListEndIndex(idx)
+    // this should technically be an unsorted hash, because maps are unordered
+    // but Arrow Java does it this way, so for now we'll be consistent with them.
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = listVector.hashCode(idx, hasher)
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
-        (getListStartIndex(idx) until getListEndIndex(idx)).fold(0) { hash, elIdx ->
-            // this should technically be an unsorted hash, because maps are unordered
-            // but Arrow Java does it this way, so for now we'll be consistent with them.
-            ByteFunctionHelpers.combineHash(hash, listVector.hashCode(elIdx, hasher))
-        }
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is MapVector)
+        return listVector.rowCopier0(src.listVector)
+    }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.unloadBatch(nodes, buffers)

@@ -63,8 +63,9 @@ interface VectorReader : AutoCloseable {
         override fun readObject() = getObject(pos.position)
     }
 
-    fun select(idxs: IntArray): VectorReader = IndirectVectorReader(this, selection(idxs))
+    fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun toList(): List<Any?> = List(valueCount) { getObject(it) }
+    fun rowCopier(dest: VectorWriter): RowCopier
 
     companion object {
         internal class NewToOldAdapter(private val vector: VectorReader) : IVectorReader {
@@ -149,6 +150,8 @@ interface VectorReader : AutoCloseable {
             override fun valueReader(pos: VectorPosition): ValueReader = old.valueReader(pos)
 
             override fun toList() = List(valueCount) { old.getObject(it) }
+
+            override fun rowCopier(dest: VectorWriter) = error("rowCopier")
 
             override fun close() = old.close()
         }

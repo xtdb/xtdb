@@ -30,6 +30,8 @@ interface VectorWriter : VectorReader, AutoCloseable {
     fun mapValueWriter(): VectorWriter = unsupported("mapValueWriter")
     fun mapValueWriter(fieldType: FieldType): VectorWriter = unsupported("mapValueWriter")
 
+    fun rowCopier0(src: VectorReader): RowCopier
+
     fun reset()
 
     fun writeAll(vals: Iterable<Any?>) = apply { vals.forEach { writeObject(it) } }

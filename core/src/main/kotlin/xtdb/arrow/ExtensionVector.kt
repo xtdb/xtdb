@@ -29,6 +29,11 @@ abstract class ExtensionVector : Vector() {
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         inner.loadBatch(nodes, buffers)
 
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is ExtensionVector)
+        return inner.rowCopier0(src.inner)
+    }
+
     override fun reset() = inner.reset()
     override fun close() = inner.close()
 }

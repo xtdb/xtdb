@@ -37,7 +37,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
     override fun iterator() = vectors.values.iterator()
 
-    inner class Unloader internal constructor(private val ch: WriteChannel) : AutoCloseable {
+    private inner class Unloader(private val ch: WriteChannel) : RelationUnloader {
 
         private val vectors = this@Relation.vectors.values
         private val schema = Schema(vectors.map { it.field })
@@ -49,7 +49,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             MessageSerializer.serialize(ch, schema)
         }
 
-        fun writeBatch() {
+        override fun writeBatch() {
             val nodes = mutableListOf<ArrowFieldNode>()
             val buffers = mutableListOf<ArrowBuf>()
 
@@ -61,12 +61,12 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             }
         }
 
-        fun endStream() {
+        override fun endStream() {
             ch.writeIntLittleEndian(MessageSerializer.IPC_CONTINUATION_TOKEN)
             ch.writeIntLittleEndian(0)
         }
 
-        fun endFile() {
+        override fun endFile() {
             endStream()
 
             val footerStart = ch.currentPosition
@@ -83,7 +83,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         }
     }
 
-    fun startUnload(ch: WritableByteChannel) = Unloader(WriteChannel(ch))
+    override fun startUnload(ch: WritableByteChannel): RelationUnloader = Unloader(WriteChannel(ch))
 
     private fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()

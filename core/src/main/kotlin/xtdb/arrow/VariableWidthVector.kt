@@ -68,6 +68,15 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         return dataBuffer.hashCode(hasher, start, end - start)
     }
 
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is VariableWidthVector)
+        return RowCopier { srcIdx ->
+            val start = offsetBuffer.getInt(srcIdx).toLong()
+            dataBuffer.writeBytes(src.dataBuffer, start, offsetBuffer.getInt(srcIdx + 1) - start)
+            valueCount++
+        }
+    }
+
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)

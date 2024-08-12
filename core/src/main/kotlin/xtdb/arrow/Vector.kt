@@ -42,6 +42,12 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
 
+    final override fun rowCopier(dest: VectorWriter) = dest.rowCopier0(this).let { copier ->
+        RowCopier { srcIdx ->
+            if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+        }
+    }
+
     override fun toList() = (0 until valueCount).map { getObject(it) }
 
     companion object {

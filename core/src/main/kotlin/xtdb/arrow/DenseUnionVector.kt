@@ -2,7 +2,6 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.Types.MinorType
@@ -18,7 +17,7 @@ class DenseUnionVector(
 
     private val legs = legs.toMutableList()
 
-    inner class LegReader(val typeId: Byte, val inner: VectorReader) : VectorReader {
+    inner class LegReader(private val typeId: Byte, private val inner: VectorReader) : VectorReader {
         override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val valueCount get() = this@DenseUnionVector.valueCount
@@ -44,6 +43,11 @@ class DenseUnionVector(
         override fun mapValueReader() = inner.mapValueReader()
 
         override fun hashCode(idx: Int, hasher: ArrowBufHasher) = inner.hashCode(getOffset(idx), hasher)
+
+        override fun rowCopier(dest: VectorWriter): RowCopier {
+            val innerCopier = dest.rowCopier0(inner)
+            return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
+        }
 
         override fun toList() = inner.toList()
 
@@ -88,6 +92,11 @@ class DenseUnionVector(
         override fun elementWriter(fieldType: FieldType) = inner.elementWriter(fieldType)
         override fun endList() = writeValueThen().endList()
 
+        override fun rowCopier0(src: VectorReader): RowCopier {
+            val innerCopier = inner.rowCopier0(src)
+            return RowCopier { srcIdx -> valueCount.also { writeValueThen(); innerCopier.copyRow(srcIdx) } }
+        }
+
         override fun reset() = inner.reset()
         override fun close() = Unit
 
@@ -101,7 +110,7 @@ class DenseUnionVector(
     internal fun typeIds() = (0 until valueCount).map { typeBuffer.getByte(it) }
 
     private val offsetBuffer = ExtensibleBuffer(allocator)
-    fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
+    private fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
     internal fun offsets() = (0 until valueCount).map { offsetBuffer.getInt(it) }
 
     private fun leg(idx: Int): Vector? {
@@ -159,6 +168,22 @@ class DenseUnionVector(
     override fun valueReader(pos: VectorPosition): ValueReader = TODO("DUV.valueReader")
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = leg(idx)!!.hashCode(idx, hasher)
+
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        return if (src is DenseUnionVector) {
+            val copierMapping = src.legs.map { childVec ->
+                val childField = childVec.field
+                legWriter(childField.name, childField.fieldType).rowCopier(childVec)
+            }
+
+            return RowCopier { srcIdx ->
+                copierMapping[src.getTypeId(srcIdx).also { check(it >= 0) }.toInt()]
+                    .copyRow(src.getOffset(srcIdx))
+            }
+        } else {
+            legWriter(src.name).rowCopier0(src)
+        }
+    }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
