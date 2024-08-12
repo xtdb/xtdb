@@ -1,0 +1,32 @@
+name: XTDB Kafka Connect
+run-name: XTDB Kafka Connect
+
+on:
+  push:
+    branches:
+      - kafka-connect-latest
+
+jobs:
+  build-connector:
+    name: Build and Upload XTDB Kafka Connector
+    runs-on: ubuntu-latest
+    if: github.repository == 'xtdb/xtdb'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Build Uberjar
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          arguments: :modules:xtdb-kafka-connect:shadowJar
+      - name: Upload Uberjar
+        uses: actions/upload-artifact@v4
+        with:
+          name: xtdb-kafka-connector
+          path: modules/kafka-connect/build/libs/xtdb-kafka-connect.jar
