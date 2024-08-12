@@ -11,7 +11,6 @@ import org.apache.arrow.vector.DurationVector;
 import org.apache.arrow.vector.FixedSizeBinaryVector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.IntervalMonthDayNanoVector;
-import org.apache.arrow.vector.NullVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.complex.DenseUnionVector;
@@ -219,14 +218,6 @@ public class ValueVectorReader implements IVectorReader {
     @Override
     public IVectorReader copyTo(ValueVector vector) {
         this.vector.makeTransferPair(vector).splitAndTransfer(0, valueCount());
-        return from(vector);
-    }
-
-    @Override
-    public IVectorReader transferTo(ValueVector vector) {
-        if (this.vector instanceof NullVector) return this;
-
-        this.vector.makeTransferPair(vector).transfer();
         return from(vector);
     }
 

@@ -180,10 +180,6 @@ class IndirectMultiVectorReader(
         return ValueVectorReader.from(vector)
     }
 
-    override fun transferTo(vector: ValueVector): IVectorReader {
-        throw unsupported()
-    }
-
     override fun rowCopier(writer: IVectorWriter): RowCopier {
         readers.map { it?.also { writer.promoteChildren(it.field) }}
         val rowCopiers = readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector()).rowCopier(writer) }

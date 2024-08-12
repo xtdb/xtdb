@@ -275,8 +275,7 @@
 
       (build [_ al]
         (let [sum-agg (.build sum-agg al)
-              count-agg (.build count-agg al)
-              res-vec (Float8Vector. (str to-name) al)]
+              count-agg (.build count-agg al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
@@ -284,12 +283,12 @@
               (.aggregate count-agg in-rel group-mapping))
 
             (finish [_]
-              (-> (.project projecter al (vr/rel-reader [(.finish sum-agg) (.finish count-agg)]) vw/empty-params)
-                  (.transferTo res-vec)))
+              (with-open [sum (.finish sum-agg)
+                          count (.finish count-agg)]
+                (.project projecter al (vr/rel-reader [sum count]) vw/empty-params)))
 
             Closeable
             (close [_]
-              (util/close res-vec)
               (util/close sum-agg)
               (util/close count-agg))))))))
 
@@ -328,8 +327,7 @@
       (build [_ al]
         (let [sumx-agg (.build sumx-agg al)
               sumx2-agg (.build sumx2-agg al)
-              countx-agg (.build countx-agg al)
-              res-vec (Float8Vector. (str to-name) al)]
+              countx-agg (.build countx-agg al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
@@ -340,14 +338,15 @@
                   (.aggregate countx-agg in-rel group-mapping))))
 
             (finish [_]
-              (-> (.project finish-projecter al
-                            (vr/rel-reader [(.finish sumx-agg) (.finish sumx2-agg) (.finish countx-agg)])
-                            vw/empty-params)
-                  (.transferTo res-vec)))
+              (with-open [sumx (.finish sumx-agg)
+                          sumx2 (.finish sumx2-agg)
+                          countx (.finish countx-agg)]
+                (.project finish-projecter al
+                          (vr/rel-reader [sumx sumx2 countx])
+                          vw/empty-params)))
 
             Closeable
             (close [_]
-              (util/try-close res-vec)
               (util/try-close sumx-agg)
               (util/try-close sumx2-agg)
               (util/try-close countx-agg))))))))
@@ -373,8 +372,8 @@
               (.aggregate variance-agg in-rel group-mapping))
 
             (finish [_]
-              (-> (.project finish-projecter al (vr/rel-reader [(.finish variance-agg)]) vw/empty-params)
-                  (.transferTo res-vec)))
+              (with-open [variance (.finish variance-agg)]
+                (.project finish-projecter al (vr/rel-reader [variance]) vw/empty-params)))
 
             Closeable
             (close [_]
@@ -587,13 +586,13 @@
                                   (doseq [^IAggregateSpec agg-spec aggregate-specs]
                                     (.aggregate agg-spec in-rel group-mapping))))))
 
-         (let [out-rel (vr/rel-reader (concat (.finish group-mapper)
-                                                  (map #(.finish ^IAggregateSpec %) aggregate-specs)))]
-           (if (pos? (.rowCount out-rel))
-             (do
-               (.accept c out-rel)
-               true)
-             false))
+         (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
+           (let [out-rel (vr/rel-reader (concat (.finish group-mapper) agg-cols))]
+             (if (pos? (.rowCount out-rel))
+               (do
+                 (.accept c out-rel)
+                 true)
+               false)))
          (finally
            (util/try-close group-mapper)
            (run! util/try-close aggregate-specs))))))

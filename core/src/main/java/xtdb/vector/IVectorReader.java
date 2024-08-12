@@ -81,8 +81,6 @@ public interface IVectorReader extends AutoCloseable {
 
     IVectorReader copyTo(ValueVector vector);
 
-    IVectorReader transferTo(ValueVector vector);
-
     default IVectorReader select(int[] idxs) {
         return new IndirectVectorReader(this, selection(idxs));
     }

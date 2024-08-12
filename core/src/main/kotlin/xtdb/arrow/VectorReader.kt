@@ -89,7 +89,6 @@ interface VectorReader : AutoCloseable {
             override fun legs() = error("legs")
 
             override fun copyTo(vector: ValueVector?) = error("copyTo")
-            override fun transferTo(vector: ValueVector?) = error("transferTo")
 
             override fun rowCopier(writer: IVectorWriter?) = error("rowCopier")
 

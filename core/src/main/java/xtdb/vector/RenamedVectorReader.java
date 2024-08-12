@@ -175,11 +175,6 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader transferTo(ValueVector vector) {
-        return new RenamedVectorReader(reader.transferTo(vector), colName);
-    }
-
-    @Override
     public IVectorReader select(int[] idxs) {
         return new RenamedVectorReader(reader.select(idxs), colName);
     }

@@ -201,11 +201,6 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader transferTo(ValueVector vector) {
-        return new IndirectVectorReader(reader.transferTo(vector), indirection);
-    }
-
-    @Override
     public RowCopier rowCopier(IVectorWriter writer) {
         var inner = reader.rowCopier(writer);
         return sourceIdx -> inner.copyRow(indirection.getIndex(sourceIdx));
