@@ -1,78 +1,129 @@
-# kafka-connect
+= kafka-connect
 
-## kafka-sink
+== kafka-sink
 
-## Config
+== Config
 
-### `url`
+=== `url`
 
 Destination URL of XTDB HTTP end point.
 
-Type: `String`
-Default: `None`
-Importance: `High`
+[cols="1,1"]
+|===
+|Type:
+|`String`
 
-### `id.mode`
+|Default:
+|`None`
+
+|Importance:
+|`High`
+|===
+
+=== `id.mode`
 
 Where to get the `_id` from.
 
 One of:
-- `record_key`
-  - The record key must be either a Struct or a primitive value
-  - If the key is a struct then `id.field` must be used to select a field to use as the `_id`
-  - **Required** if you want [tombstones](https://kafka.apache.org/documentation/#design_compactionbasics) to delete records
-- `record_value`
-  - `id.field` must be used to select a field to use as the `_id`
 
-Type: `String`
-Default: `None`
-Importance: `High`
+record_key::
+* The record key must be either a Struct or a primitive value
+* If the key is a struct then `id.field` must be used to select a field to use as the `_id`
+* *Required* if you want https://kafka.apache.org/documentation/#design_compactionbasics[tombstones] to delete records
+record_value::
+* `id.field` must be used to select a field to use as the `_id`
 
-### `id.field`
+[cols="1,1"]
+|===
+|Type:
+|`String`
+
+|Default:
+|`None`
+
+|Importance:
+|`High`
+|===
+
+=== `id.field`
 
 The field name to use as the `_id`.
 Leave blank if using a primitive `record_key`.
 
 The behaviour depends on `id.mode`:
-- `record_key`
-  - If the key is primitive then `id.field` *must* be empty string
-  - If the key is a Struct then must select a field from the Struct
-- `record_value`
-  - Must select a key from the Struct
 
-Type: `String`
-Default: `""`
-Importance: `Medium`
+record_key::
+* If the key is primitive then `id.field` *must* be empty string
+* If the key is a Struct then must select a field from the Struct
+record_value::
+* Must select a key from the Struct
 
-### `validFrom.field`
+[cols="1,1"]
+|===
+|Type:
+|`String`
+
+|Default:
+|`""`
+
+|Importance:
+|`Medium`
+|===
+
+=== `validFrom.field`
 
 The field name to use as `_valid_from`.
 Leave blank to use xtdb's default `_valid_from`.
 
-Default: `""`
-Type: `String`
-Importance: `Low`
+[cols="1,1"]
+|===
+|Type:
+|`String`
 
-### `validTo.field`
+|Default:
+|`""`
+
+|Importance:
+|`Low`
+|===
+
+=== `validTo.field`
 
 The field name to use as `_valid_from`.
 Leave blank to use xtdb's default `_valid_from`.
 
-Type: `String`
-Default: `""`
-Importance: `Low`
+[cols="1,1"]
+|===
+|Type:
+|`String`
 
-### `table.name.format`
+|Default:
+|`""`
+
+|Importance:
+|`Low`
+|===
+
+=== `table.name.format`
 
 A format string for the destination table name, which may contain `${topic}` as a placeholder for the originating topic name.
 
-Type: `String`
-Default: `"${topic}"`
-Importance: `Medium`
+[cols="1,1"]
+|===
+|Type:
+|`String`
 
-## Example config
+|Default:
+|`"${topic}"`
 
-```json
+|Importance:
+|`Medium`
+|===
+
+== Example config
+
+[source,json]
+----
 {
     "name": "xtdb-jdbc-sink-connector",
     "config": {
@@ -100,10 +151,11 @@ Importance: `Medium`
         "value.converter.schemas.enable": "true"
     }
 }
-```
+----
 
 With some data that looks like:
-```json
+[source,json]
+----
 {
     "schema": {
         "type": "struct",
@@ -123,21 +175,23 @@ With some data that looks like:
         "measurement": 0.8
     }
 }
-```
+----
 
 If storing datetimes with timezones is important to you, I would suggest
-writing a [custom transform](https://docs.confluent.io/platform/current/connect/transforms/custom.html).
+writing a https://docs.confluent.io/platform/current/connect/transforms/custom.html[custom transform].
 
-## Development
+== Development
 
 REPL:
 
-```bash
+[source,bash]
+----
 $ clj -M:dev
-```
+----
 
 Build:
 
-```bash
+[source,bash]
+----
 $ clj -T:build uber
-```
+----
