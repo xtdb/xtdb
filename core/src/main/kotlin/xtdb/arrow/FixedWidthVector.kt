@@ -18,7 +18,7 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
 
 sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : Vector() {
 
-    final override val arrowField: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
+    final override val field: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
     abstract val arrowType: ArrowType
 
     private val validityBuffer = ExtensibleBuffer(allocator)

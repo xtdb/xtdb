@@ -15,8 +15,8 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
             listVector.nullable = value
         }
 
-    override val arrowField: Field
-        get() = Field(name, FieldType(nullable, ArrowType.Map(keysSorted), null), listVector.arrowField.children)
+    override val field: Field
+        get() = Field(name, FieldType(nullable, ArrowType.Map(keysSorted), null), listVector.field.children)
 
     override var valueCount: Int
         get() = listVector.valueCount

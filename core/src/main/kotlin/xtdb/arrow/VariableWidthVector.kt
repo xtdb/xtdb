@@ -11,7 +11,7 @@ import java.nio.ByteBuffer
 
 abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
 
-    override val arrowField: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
+    override val field: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
     abstract val arrowType: ArrowType
 
     private val validityBuffer = ExtensibleBuffer(allocator)

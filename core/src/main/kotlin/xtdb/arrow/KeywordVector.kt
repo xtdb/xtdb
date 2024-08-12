@@ -6,7 +6,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.vector.extensions.KeywordType
 
 class KeywordVector(override val inner: Utf8Vector): ExtensionVector() {
-    override val arrowField: Field = Field(name, FieldType(nullable, KeywordType, null), emptyList())
+    override val field: Field = Field(name, FieldType(nullable, KeywordType, null), emptyList())
 
     override fun getObject0(idx: Int) = Keyword.intern(inner.getObject0(idx))
 

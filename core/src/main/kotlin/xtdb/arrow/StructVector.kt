@@ -15,8 +15,8 @@ class StructVector(
     private val children: SequencedMap<String, Vector> = LinkedHashMap()
 ) : Vector() {
 
-    override val arrowField =
-        Field(name, FieldType(nullable, ArrowType.Struct.INSTANCE, null), children.map { it.value.arrowField })
+    override val field =
+        Field(name, FieldType(nullable, ArrowType.Struct.INSTANCE, null), children.map { it.value.field })
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 
@@ -62,7 +62,7 @@ class StructVector(
                     repeat(valueCount) { newVec.writeNull() }
                 }
             } else {
-                val existingFieldType = v.arrowField.fieldType
+                val existingFieldType = v.field.fieldType
                 if (existingFieldType != fieldType) TODO("promotion to union")
                 v
             }

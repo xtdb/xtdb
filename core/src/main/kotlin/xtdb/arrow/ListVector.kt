@@ -14,8 +14,8 @@ class ListVector(
     private val elVector: Vector
 ) : Vector() {
 
-    override val arrowField: Field
-        get() = Field(name, FieldType(nullable, MinorType.LIST.type, null), listOf(elVector.arrowField))
+    override val field: Field
+        get() = Field(name, FieldType(nullable, MinorType.LIST.type, null), listOf(elVector.field))
 
     private val validityBuffer = ExtensibleBuffer(allocator)
     private val offsetBuffer = ExtensibleBuffer(allocator)
@@ -60,7 +60,7 @@ class ListVector(
     override fun elementWriter() = elVector
 
     override fun elementWriter(fieldType: FieldType): VectorWriter =
-        if (elVector.arrowField.fieldType == fieldType) elVector else TODO("promote elVector")
+        if (elVector.field.fieldType == fieldType) elVector else TODO("promote elVector")
 
     override fun endList() = writeNotNull(elVector.valueCount - lastOffset)
 

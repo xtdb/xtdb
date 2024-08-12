@@ -15,7 +15,7 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector() {
 
     private fun transitReader(v: ByteArray): Reader = TRANSIT_MSGPACK_READER.invoke(ByteArrayInputStream(v)) as Reader
 
-    override val arrowField: Field get() = Field(name, FieldType(nullable, UuidType, null), emptyList())
+    override val field: Field get() = Field(name, FieldType(nullable, UuidType, null), emptyList())
 
     override fun getObject0(idx: Int) = transitReader(inner.getBytes(idx)).read<Any>()
 

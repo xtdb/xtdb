@@ -15,8 +15,8 @@ class FixedSizeListVector(
     private val elVector: Vector
 ) : Vector() {
 
-    override val arrowField: Field
-        get() = Field(name, FieldType(nullable, ArrowType.FixedSizeList(listSize), null), listOf(elVector.arrowField))
+    override val field: Field
+        get() = Field(name, FieldType(nullable, ArrowType.FixedSizeList(listSize), null), listOf(elVector.field))
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 

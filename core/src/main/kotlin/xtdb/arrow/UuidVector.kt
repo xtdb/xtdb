@@ -8,7 +8,7 @@ import java.util.*
 
 class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector() {
 
-    override val arrowField: Field get() = Field(name, FieldType(nullable, UuidType, null), emptyList())
+    override val field: Field get() = Field(name, FieldType(nullable, UuidType, null), emptyList())
 
     override fun getObject0(idx: Int) =
         ByteBuffer.wrap(inner.getBytes(idx)).let { buf ->

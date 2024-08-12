@@ -37,7 +37,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
     inner class Unloader internal constructor(private val ch: WriteChannel) : AutoCloseable {
 
         private val vectors = this@Relation.vectors.values
-        private val schema = Schema(vectors.map { it.arrowField })
+        private val schema = Schema(vectors.map { it.field })
         private val recordBlocks = mutableListOf<ArrowBlock>()
 
         init {

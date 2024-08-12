@@ -9,7 +9,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 class NullVector(override val name: String) : Vector() {
     override var nullable: Boolean = true
 
-    override val arrowField: Field = Field(name, FieldType.nullable(ArrowType.Null.INSTANCE), emptyList())
+    override val field: Field = Field(name, FieldType.nullable(ArrowType.Null.INSTANCE), emptyList())
 
     override fun isNull(idx: Int) = true
 

@@ -20,7 +20,7 @@ class DenseUnionVector(
         override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val valueCount get() = this@DenseUnionVector.valueCount
-        override val arrowField get() = inner.arrowField
+        override val field get() = inner.field
 
         override fun isNull(idx: Int) = getTypeId(idx) != typeId || inner.isNull(getOffset(idx))
         override fun getBoolean(idx: Int) = inner.getBoolean(getOffset(idx))
@@ -90,7 +90,7 @@ class DenseUnionVector(
         override fun toList() = inner.toList()
     }
 
-    override val arrowField = Field(name, FieldType.notNullable(MinorType.DENSEUNION.type), legs.map { it.arrowField })
+    override val field = Field(name, FieldType.notNullable(MinorType.DENSEUNION.type), legs.map { it.field })
 
     private val typeBuffer = ExtensibleBuffer(allocator)
     private fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
@@ -140,7 +140,7 @@ class DenseUnionVector(
         for (i in legs.indices) {
             val leg = legs[i]
             if (leg.name == name) {
-                if (leg.arrowField.fieldType != fieldType) TODO("promotion")
+                if (leg.field.fieldType != fieldType) TODO("promotion")
 
                 return LegWriter(i.toByte(), leg)
             }

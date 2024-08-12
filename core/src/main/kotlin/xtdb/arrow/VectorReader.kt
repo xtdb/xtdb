@@ -14,7 +14,7 @@ interface VectorReader : AutoCloseable {
     val valueCount: Int
 
     val nullable: Boolean
-    val arrowField: Field
+    val field: Field
 
     fun isNull(idx: Int): Boolean
     fun getBoolean(idx: Int): Boolean = unsupported("getBoolean")
@@ -53,7 +53,7 @@ interface VectorReader : AutoCloseable {
 
             override fun withName(colName: String?) = TODO()
 
-            override fun getField() = vector.arrowField
+            override fun getField() = vector.field
 
             override fun isNull(idx: Int) = vector.isNull(idx)
             override fun getBoolean(idx: Int) = vector.getBoolean(idx)
@@ -114,6 +114,22 @@ interface VectorReader : AutoCloseable {
 
             override fun close() = vector.close()
 
+        }
+
+        @JvmStatic
+        fun fromOldReader(reader: IVectorReader) = object : VectorReader {
+            override val name: String get() = reader.name
+            override val valueCount: Int get() = reader.valueCount()
+            override val nullable: Boolean get() = reader.field.isNullable
+            override val field: Field get() = reader.field
+
+            override fun isNull(idx: Int) = reader.isNull(idx)
+
+            override fun getObject(idx: Int) = reader.getObject(idx)
+
+            override fun toList() = throw UnsupportedOperationException("toList")
+
+            override fun close() = reader.close()
         }
     }
 }
