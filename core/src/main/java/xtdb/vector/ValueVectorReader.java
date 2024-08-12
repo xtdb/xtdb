@@ -745,7 +745,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public ValueReader valueReader(VectorPosition pos) {
+                @SuppressWarnings("resource")
                 var readers = structKeys().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
+
                 return new BaseValueReader(pos) {
                     @Override
                     public Map<String, ValueReader> readObject() {

@@ -5,12 +5,14 @@
             [xtdb.vector.reader :as vr])
   (:import com.carrotsearch.hppc.IntArrayList
            java.nio.ByteBuffer
-           org.apache.arrow.memory.RootAllocator
+           (org.apache.arrow.memory RootAllocator)
+           (org.apache.arrow.memory.util ArrowBufPointer)
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            [org.apache.arrow.vector ValueVector]
            (org.roaringbitmap RoaringBitmap)
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           (xtdb.vector IVectorReader IVectorWriter RelationReader)))
+           (xtdb.arrow RelationReader VectorReader)
+           (xtdb.vector IVectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -31,18 +33,19 @@
 (def ^:const bloom-bit-mask (dec bloom-bits))
 (def ^:const bloom-k 3)
 
-(defn bloom-false-positive-probability?
-  (^double [^long n]
-   (bloom-false-positive-probability? n bloom-k bloom-bits))
-  (^double [^long n ^long k ^long m]
-   (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k)))
+(comment
+  (defn bloom-false-positive-probability?
+    (^double [^long n]
+     (bloom-false-positive-probability? n bloom-k bloom-bits))
+    (^double [^long n ^long k ^long m]
+     (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k))))
 
-(defn bloom->bitmap ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^IVectorReader bloom-rdr ^long idx]
-  (let [pointer (.getPointer bloom-rdr idx)
+(defn bloom->bitmap ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^VectorReader bloom-rdr ^long idx]
+  (let [pointer (.getPointer bloom-rdr idx (ArrowBufPointer.))
         nio-buffer (.nioBuffer (.getBuf pointer) (.getOffset pointer) (.getLength pointer))]
     (ImmutableRoaringBitmap. nio-buffer)))
 
-(defn bloom-contains? [^IVectorReader bloom-rdr
+(defn bloom-contains? [^VectorReader bloom-rdr
                        ^long idx
                        ^ints hashes]
   (let [^ImmutableRoaringBitmap bloom (bloom->bitmap bloom-rdr idx)]
@@ -59,9 +62,9 @@
   (^org.roaringbitmap.RoaringBitmap build []))
 
 (defn- ->bloom-builder
-  (^xtdb.bloom.BloomBuilder [^IVectorReader col] (->bloom-builder col bloom-k bloom-bit-mask))
-  (^xtdb.bloom.BloomBuilder [^IVectorReader col, ^long k, ^long mask]
-   (let [buf (IntArrayList. (* (.valueCount col) k))]
+  (^xtdb.bloom.BloomBuilder [^VectorReader col] (->bloom-builder col bloom-k bloom-bit-mask))
+  (^xtdb.bloom.BloomBuilder [^VectorReader col, ^long k, ^long mask]
+   (let [buf (IntArrayList. (* (.getValueCount col) k))]
      (reify BloomBuilder
        (add [_ idx]
          (let [hash-1 (.hashCode col idx SimpleHasher/INSTANCE)
@@ -75,9 +78,9 @@
 ;; Cassandra-style hashes:
 ;; https://www.researchgate.net/publication/220770131_Less_Hashing_Same_Performance_Building_a_Better_Bloom_Filter
 (defn bloom-hashes
-  (^ints [^IVectorReader col ^long idx]
+  (^ints [^VectorReader col ^long idx]
    (bloom-hashes col idx bloom-k bloom-bit-mask))
-  (^ints [^IVectorReader col ^long idx ^long k ^long mask]
+  (^ints [^VectorReader col ^long idx ^long k ^long mask]
    (let [hash-1 (.hashCode col idx SimpleHasher/INSTANCE)
          hash-2 (.hashCode col idx (MurmurHasher. hash-1))
          acc (int-array k)]
@@ -103,7 +106,7 @@
                    ~(continue (fn [return-type code]
                                 `(do
                                    ~(write-value-out! return-type code)
-                                   (bloom-hashes (vr/vec->reader ~expr/out-vec-sym) 0))))))
+                                   (bloom-hashes (VectorReader/from (vr/vec->reader ~expr/out-vec-sym)) 0))))))
               #_(doto (clojure.pprint/pprint))
               (eval))))
       (util/lru-memoize)))
@@ -115,9 +118,9 @@
                             (.createVector allocator))]
       (f params tmp-vec))))
 
-(defn write-bloom [^IVectorWriter bloom-wtr, ^IVectorReader col]
+(defn write-bloom [^IVectorWriter bloom-wtr, ^VectorReader col]
   (let [bloom-builder (->bloom-builder col)]
-    (dotimes [in-idx (.valueCount col)]
+    (dotimes [in-idx (.getValueCount col)]
       (when-not (.isNull col in-idx)
         (.add bloom-builder in-idx)))
 

@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.BitVectorHelper
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -140,4 +141,6 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     override fun close() {
         buf.close()
     }
+
+    fun hashCode(hasher: ArrowBufHasher, start: Long, len: Long) = hasher.hashCode(buf, start, len)
 }

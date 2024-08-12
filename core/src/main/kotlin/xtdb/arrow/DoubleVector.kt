@@ -10,7 +10,7 @@ class DoubleVector(
     override var nullable: Boolean
 ) : FixedWidthVector(allocator, Double.SIZE_BYTES) {
 
-    override val arrowType: ArrowType = MinorType.FLOAT4.type
+    override val arrowType: ArrowType = MinorType.FLOAT8.type
 
     override fun getDouble(idx: Int) = getDouble0(idx)
     override fun writeDouble(value: Double) = writeDouble0(value)

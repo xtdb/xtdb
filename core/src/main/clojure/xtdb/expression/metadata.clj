@@ -7,8 +7,8 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import java.util.function.IntPredicate
-           (xtdb.metadata IMetadataPredicate ITableMetadata)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.arrow RelationReader VectorReader)
+           (xtdb.metadata IMetadataPredicate ITableMetadata)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -156,9 +156,9 @@
                                (-> opts
                                    (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
         {:return-type :bool
-         :batch-bindings [[(-> col-sym (expr/with-tag IVectorReader))
-                           `(some-> (.structKeyReader ~types-rdr-sym ~(.getName col-field))
-                                    (.structKeyReader ~(name meta-value)))]]
+         :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
+                           `(some-> (.keyReader ~types-rdr-sym ~(.getName col-field))
+                                    (.keyReader ~(name meta-value)))]]
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
@@ -181,11 +181,11 @@
            :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag ITableMetadata))
                         ~(-> expr/params-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
-                     (let [~metadata-rdr-sym (.metadataReader ~table-metadata-sym)
-                           ~(-> cols-rdr-sym (expr/with-tag IVectorReader)) (.structKeyReader ~metadata-rdr-sym "columns")
-                           ~(-> col-rdr-sym (expr/with-tag IVectorReader)) (.listElementReader ~cols-rdr-sym)
-                           ~(-> types-rdr-sym (expr/with-tag IVectorReader)) (.structKeyReader ~col-rdr-sym "types")
-                           ~(-> bloom-rdr-sym (expr/with-tag IVectorReader)) (.structKeyReader ~col-rdr-sym "bloom")
+                     (let [~metadata-rdr-sym (VectorReader/from (.metadataReader ~table-metadata-sym))
+                           ~cols-rdr-sym (.keyReader ~metadata-rdr-sym "columns")
+                           ~col-rdr-sym (.elementReader ~cols-rdr-sym)
+                           ~types-rdr-sym (.keyReader ~col-rdr-sym "types")
+                           ~bloom-rdr-sym (.keyReader ~col-rdr-sym "bloom")
 
                            ~@(expr/batch-bindings emitted-expr)]
                        (reify IntPredicate
@@ -197,7 +197,8 @@
       (util/lru-memoize)))
 
 (defn ->metadata-selector ^xtdb.metadata.IMetadataPredicate [form col-types params]
-  (let [param-types (expr/->param-types params)
+  (let [params (RelationReader/from params)
+        param-types (expr/->param-types params)
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
                                                                    :col-types col-types})
                                             {:param-types param-types

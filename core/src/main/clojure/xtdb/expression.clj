@@ -16,11 +16,10 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader ValueReader VectorPosition)
+           (xtdb.arrow ListValueReader RelationReader ValueReader VectorPosition VectorReader)
            (xtdb.operator ProjectionSpec SelectionSpec)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.util StringUtil)
-           (xtdb.vector IVectorReader RelationReader)
            xtdb.arrow.ValueBox))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -278,6 +277,7 @@
 
                          ~@(->> inner-types
                                 (mapcat (fn [col-type]
+                                          ;; HACK
                                           [(types/col-type->leg col-type)
                                            (f col-type (read-value-code col-type reader-sym))])))))]
         (if (contains? inner-types :null)
@@ -358,7 +358,7 @@
                      (into {} (map (fn [val-type]
                                      (let [leg (types/col-type->leg val-type)]
                                        (MapEntry/create val-type {:leg leg
-                                                                  :sym (symbol (str box-sym "--" (str (symbol leg))))}))))))]
+                                                                  :sym (symbol (str box-sym "--" leg))}))))))]
       (-> emitted-expr
           (update :batch-bindings (fnil into []) (into [[box-sym `(ValueBox.)]]
                                                        (map (fn [{:keys [leg sym]}]
@@ -392,7 +392,7 @@
     {:return-type col-type
      :batch-bindings [[vpos-sym `(VectorPosition/build)]
                       (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                        [var-rdr-sym `(.valueReader (.readerForName ~rel ~(str variable)) ~vpos-sym)]
+                        [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)) ~vpos-sym)]
                         [var-rdr-sym `(some-> ~variable (.valueReader ~vpos-sym))])]
      :continue (fn [f]
                  `(do
@@ -1501,7 +1501,7 @@
                                        ~(-> out-vec-sym (with-tag ValueVector))]
                                     (let [~@(batch-bindings emitted-expr)
                                           ~@writer-bindings
-                                          row-count# (.rowCount ~rel-sym)]
+                                          row-count# (.getRowCount ~rel-sym)]
                                       (dotimes [~idx-sym row-count#]
                                         ~(continue (fn [t c]
                                                      (write-value-out! t c))))))
@@ -1516,17 +1516,10 @@
 
 (defn ->param-types [^RelationReader params]
   (->> params
-       (into {} (map (fn [^IVectorReader col]
+       (into {} (map (fn [^VectorReader col]
                        (MapEntry/create
                         (symbol (.getName col))
                         (types/field->col-type (.getField col))))))))
-
-(defn ->param-fields [^RelationReader params]
-  (->> params
-       (into {} (map (fn [^IVectorReader col]
-                       (MapEntry/create
-                        (symbol (.getName col))
-                        (.getField col)))))))
 
 (defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [col-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
@@ -1540,14 +1533,16 @@
       (getColumnType [_] widest-out-type)
 
       (project [_ allocator in-rel params]
-        (let [var->col-type (->> (seq in-rel)
-                                 (into {} (map (fn [^IVectorReader iv]
+        (let [in-rel (RelationReader/from in-rel)
+              params (RelationReader/from params)
+              var->col-type (->> (seq in-rel)
+                                 (into {} (map (fn [^VectorReader iv]
                                                  [(symbol (.getName iv))
                                                   (types/field->col-type (.getField iv))]))))
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types params)
                                                                           :var->col-type var->col-type})
-              row-count (.rowCount in-rel)]
+              row-count (.getRowCount in-rel)]
           (util/with-close-on-catch [out-vec (-> (types/col-type->field col-name return-type)
                                                  (.createVector allocator))]
             (doto out-vec

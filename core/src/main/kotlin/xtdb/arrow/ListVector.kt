@@ -2,6 +2,8 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ByteFunctionHelpers
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
@@ -64,8 +66,14 @@ class ListVector(
 
     override fun endList() = writeNotNull(elVector.valueCount - lastOffset)
 
-    override fun getListCount(idx: Int) = offsetBuffer.getInt(idx + 1) - offsetBuffer.getInt(idx)
+    override fun getListCount(idx: Int) = getListEndIndex(idx) - getListStartIndex(idx)
     override fun getListStartIndex(idx: Int) = offsetBuffer.getInt(idx)
+    internal fun getListEndIndex(idx: Int) = offsetBuffer.getInt(idx + 1)
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+        (getListStartIndex(idx) until getListEndIndex(idx)).fold(0) { hash, elIdx ->
+            ByteFunctionHelpers.combineHash(hash, elVector.hashCode(elIdx, hasher))
+        }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
@@ -84,6 +92,8 @@ class ListVector(
 
         valueCount = node.length
     }
+
+    override fun valueReader(pos: VectorPosition): ValueReader = TODO("List.valueReader")
 
     override fun reset() {
         validityBuffer.reset()

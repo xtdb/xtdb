@@ -32,7 +32,7 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.TransactionKey
-           xtdb.arrow.VectorIndirection
+           (xtdb.arrow VectorIndirection VectorReader)
            (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
@@ -331,10 +331,10 @@
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^ITableMetadata table-metadata ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    (let [metadata-rdr (.metadataReader table-metadata)
-          bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
-                        (.listElementReader)
-                        (.structKeyReader "bloom"))]
+    (let [metadata-rdr (VectorReader/from (.metadataReader table-metadata))
+          bloom-rdr (-> (.keyReader metadata-rdr "columns")
+                        (.elementReader)
+                        (.keyReader "bloom"))]
       (reify IntPredicate
         (test [_ page-idx]
           (boolean

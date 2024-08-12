@@ -96,7 +96,7 @@
                 os-2 (object-store prefix)]
       (os-test/put-edn os-1 (util/->path "alice") :alice)
       (os-test/put-edn os-2 (util/->path "alan") :alan)
-      (Thread/sleep wait-time-ms)
+      (Thread/sleep ^long wait-time-ms)
       (t/is (= (mapv util/->path ["alan" "alice"])
                (.listAllObjects ^ObjectStore os-1)))
 
@@ -111,7 +111,7 @@
       (t/is (os-test/put-edn os-2 (util/->path "alice") :alice))
 
       ;; Check alice is there
-      (Thread/sleep wait-time-ms)
+      (Thread/sleep ^long wait-time-ms)
       (t/is (= (mapv util/->path ["alice"])
                (.listAllObjects ^ObjectStore os-1)))
 

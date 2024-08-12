@@ -9,8 +9,10 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
+           xtdb.arrow.Relation
            (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :each tu/with-node)
@@ -127,7 +129,7 @@
                               (map (comp bucket->page-idx first)))
 
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          literal-selector (expr.meta/->metadata-selector '(and (< xt$id 11) (> xt$id 9)) '{xt$id :i64} {})
+          literal-selector (expr.meta/->metadata-selector '(and (< xt$id 11) (> xt$id 9)) '{xt$id :i64} vw/empty-params)
           meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
       (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
         (let [page-idx-pred (.build literal-selector table-metadata)]
@@ -143,7 +145,7 @@
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
+        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-params)
         meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
 
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]

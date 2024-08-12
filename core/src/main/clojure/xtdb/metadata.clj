@@ -26,7 +26,7 @@
                                                ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct
                                                ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union
                                                ArrowType$Utf8 Field FieldType)
-           xtdb.arrow.Relation
+           (xtdb.arrow Relation VectorReader)
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
@@ -286,7 +286,7 @@
                                                      (test [_ idx]
                                                        (not (.isNull content-col idx)))))
                                           (.count)))
-                (bloom/write-bloom bloom-wtr content-col)
+                (bloom/write-bloom bloom-wtr (VectorReader/from content-col))
 
                 (.startStruct types-wtr)
                 (doseq [^ContentMetadataWriter content-writer content-writers]
@@ -364,7 +364,7 @@
                                                 (.getSchema loader))]
         (let [nodes-vec (.get rel "nodes")]
           (.loadBatch loader 0 rel)
-          (let [rdr (.getRelReader rel)
+          (let [rdr (.getOldRelReader rel)
                 ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
                                                    (.legReader "leaf"))
                 {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]

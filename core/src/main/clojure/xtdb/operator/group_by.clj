@@ -18,8 +18,9 @@
            (org.apache.arrow.vector.complex ListVector)
            org.apache.arrow.vector.types.pojo.FieldType
            (xtdb ICursor)
+           (xtdb.arrow RelationReader VectorReader)
            (xtdb.expression.map IRelationMap IRelationMapBuilder)
-           (xtdb.vector IVectorReader IVectorWriter RelationReader)))
+           (xtdb.vector IVectorWriter)))
 
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?)
@@ -202,7 +203,7 @@
                             (let [~acc-col-sym (vr/vec->reader ~acc-sym)
                                   ~acc-writer-sym (vw/->writer ~acc-sym)
                                   ~@(expr/batch-bindings emitted-expr)]
-                              (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
+                              (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
                                   (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
                                     (.setValueCount ~acc-sym (inc ~group-idx-sym)))
@@ -228,10 +229,11 @@
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
-              (let [input-opts {:var->col-type (->> (seq in-rel)
+              (let [in-rel (RelationReader/from in-rel)
+                    input-opts {:var->col-type (->> (seq in-rel)
                                                     (into {acc-col-sym to-type}
-                                                          (map (juxt #(symbol (.getName ^IVectorReader %))
-                                                                     #(-> (.getField ^IVectorReader %) types/field->col-type)))))}
+                                                          (map (juxt #(symbol (.getName ^VectorReader %))
+                                                                     #(-> (.getField ^VectorReader %) types/field->col-type)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 

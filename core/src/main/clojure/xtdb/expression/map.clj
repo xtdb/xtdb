@@ -13,7 +13,8 @@
            (org.apache.arrow.vector NullVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (org.roaringbitmap IntConsumer RoaringBitmap)
-           (xtdb.vector RelationReader IVectorReader)
+           xtdb.arrow.RelationReader
+           (xtdb.vector IVectorReader)
            (com.carrotsearch.hppc IntObjectHashMap)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
@@ -111,9 +112,9 @@
                             {:var->col-type {left-vec (types/field->col-type (.getField left-col))
                                              right-vec (types/field->col-type (.getField right-col))}
                              :param-types param-types})]
-    (f (vr/rel-reader [(.withName left-col (str left-vec))])
-       (vr/rel-reader [(.withName right-col (str right-vec))])
-       params)))
+    (f (RelationReader/from (vr/rel-reader [(.withName left-col (str left-vec))]))
+       (RelationReader/from (vr/rel-reader [(.withName right-col (str right-vec))]))
+       (some-> params RelationReader/from))))
 
 (defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
   (let [col-types (update-vals (merge build-fields probe-fields) types/field->col-type)
@@ -127,7 +128,7 @@
                                                                     {:rel left-rel, :idx left-idx}
                                                                     {:rel right-rel, :idx right-idx})))))))
                             {:var->col-type col-types, :param-types param-types})]
-    (f probe-rel build-rel params)))
+    (f (RelationReader/from probe-rel) (RelationReader/from build-rel) (RelationReader/from params))))
 
 (defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntBinaryOperator comparator, ^long idx, remove-on-match?]
   (if-not hash-bitmap

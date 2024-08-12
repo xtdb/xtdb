@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -55,10 +56,17 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         dataBuffer.writeBytes(bytes)
     }
 
-    override fun getPointer(idx: Int, reuse: ArrowBufPointer?): ArrowBufPointer =
+    override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
         offsetBuffer.getInt(idx).let { start ->
             dataBuffer.getPointer(start, offsetBuffer.getInt(idx + 1) - start, reuse)
         }
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher): Int {
+        val start = offsetBuffer.getInt(idx).toLong()
+        val end = offsetBuffer.getInt(idx + 1).toLong()
+
+        return dataBuffer.hashCode(hasher, start, end - start)
+    }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))

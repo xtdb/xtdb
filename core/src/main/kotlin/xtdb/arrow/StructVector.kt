@@ -2,6 +2,8 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ByteFunctionHelpers
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -58,7 +60,7 @@ class StructVector(
     override fun keyWriter(name: String, fieldType: FieldType) =
         children.compute(name) { _, v ->
             if (v == null) {
-                fromField(Field(name, fieldType, emptyList()), allocator).also { newVec ->
+                fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
                     repeat(valueCount) { newVec.writeNull() }
                 }
             } else {
@@ -90,6 +92,13 @@ class StructVector(
                 (children[it.key] ?: TODO("promotion not supported yet")).writeObject(it.value)
             }
             endStruct()
+        }
+
+    override fun valueReader(pos: VectorPosition): ValueReader = TODO("Struct.valueReader")
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+        children.values.fold(0) { hash, child ->
+            ByteFunctionHelpers.combineHash(hash, child.hashCode(idx, hasher))
         }
 
     override fun reset() {

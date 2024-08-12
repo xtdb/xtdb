@@ -2,6 +2,8 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
@@ -40,6 +42,8 @@ class DenseUnionVector(
         override fun keyReader(name: String) = inner.keyReader(name)?.let { LegReader(typeId, it) }
         override fun mapKeyReader() = inner.mapKeyReader()
         override fun mapValueReader() = inner.mapValueReader()
+
+        override fun hashCode(idx: Int, hasher: ArrowBufHasher) = inner.hashCode(getOffset(idx), hasher)
 
         override fun toList() = inner.toList()
 
@@ -148,9 +152,13 @@ class DenseUnionVector(
 
         return LegWriter(
             legs.size.toByte(),
-            fromField(Field(name, fieldType, emptyList()), allocator).also { legs.add(it) }
+            fromField(allocator, Field(name, fieldType, emptyList())).also { legs.add(it) }
         )
     }
+
+    override fun valueReader(pos: VectorPosition): ValueReader = TODO("DUV.valueReader")
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = leg(idx)!!.hashCode(idx, hasher)
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))

@@ -10,15 +10,16 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.vector.RelationReader
+import xtdb.arrow.Vector.Companion.fromField
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
 import java.util.*
+import xtdb.vector.RelationReader as OldRelationReader
 
 private val MAGIC = "ARROW1".toByteArray()
 
-class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0) : AutoCloseable {
+class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationReader {
 
     @JvmOverloads
     constructor(vectors: List<Vector>, rowCount: Int = 0)
@@ -30,9 +31,11 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
 
     @JvmOverloads
     constructor(allocator: BufferAllocator, fields: List<Field>, rowCount: Int = 0)
-            : this(fields.map { fromField(it, allocator) }, rowCount)
+            : this(fields.map { fromField(allocator, it) }, rowCount)
 
     fun endRow() = ++rowCount
+
+    override fun iterator() = vectors.values.iterator()
 
     inner class Unloader internal constructor(private val ch: WriteChannel) : AutoCloseable {
 
@@ -229,6 +232,10 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
             buf.referenceManager.retain()
             return BufferLoader(buf, readFooter(buf))
         }
+
+        @JvmField
+        // naming from Oracle - zero cols, one row
+        val DUAL = Relation(emptyList(), 1)
     }
 
     /**
@@ -243,15 +250,13 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
         vectors.forEach { (_, vec) -> vec.close() }
     }
 
-    operator fun get(s: String) = vectors[s]
+    override operator fun get(colName: String) = vectors[colName]
 
     @Suppress("unused")
     fun toLists(): Map<String, List<*>> {
         return vectors.mapValues { it.value.toList() }
     }
 
-    val relReader: RelationReader
-        get() = RelationReader.from(
-            vectors.sequencedValues().map(VectorReader.Companion::Adapter), rowCount
-        )
+    val oldRelReader: OldRelationReader
+        get() = OldRelationReader.from(vectors.sequencedValues().map(VectorReader.Companion::NewToOldAdapter), rowCount)
 }

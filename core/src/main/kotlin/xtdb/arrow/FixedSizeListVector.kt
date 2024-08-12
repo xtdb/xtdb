@@ -2,6 +2,8 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ByteFunctionHelpers
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -37,6 +39,14 @@ class FixedSizeListVector(
 
         else -> TODO("unknown type")
     }
+
+    override fun getListCount(idx: Int) = listSize
+    override fun getListStartIndex(idx: Int) = idx * listSize
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+        (0 until listSize).fold(0) { hash, elIdx ->
+            ByteFunctionHelpers.combineHash(hash, elVector.hashCode(idx * listSize + elIdx, hasher))
+        }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))

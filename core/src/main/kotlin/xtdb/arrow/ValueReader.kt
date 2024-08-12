@@ -3,19 +3,19 @@ package xtdb.arrow
 import java.nio.ByteBuffer
 
 interface ValueReader {
-    val leg: String?
+    val leg: String? get() = unsupported("leg")
 
-    val isNull: Boolean
+    val isNull: Boolean get() = unsupported("isNull")
 
-    fun readBoolean(): Boolean
-    fun readByte(): Byte
-    fun readShort(): Short
-    fun readInt(): Int
-    fun readLong(): Long
+    fun readBoolean(): Boolean = unsupported("readBoolean")
+    fun readByte(): Byte = unsupported("readByte")
+    fun readShort(): Short = unsupported("readShort")
+    fun readInt(): Int = unsupported("readInt")
+    fun readLong(): Long = unsupported("readLong")
 
-    fun readFloat(): Float
-    fun readDouble(): Double
+    fun readFloat(): Float = unsupported("readFloat")
+    fun readDouble(): Double = unsupported("readDouble")
 
-    fun readBytes(): ByteBuffer
-    fun readObject(): Any?
+    fun readBytes(): ByteBuffer = unsupported("readBytes")
+    fun readObject(): Any? = unsupported("readObject")
 }
