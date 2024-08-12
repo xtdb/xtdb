@@ -25,6 +25,8 @@ dependencies {
     api("org.clojure", "tools.logging", "1.2.4")
     api("cheshire", "cheshire", "5.13.0")
     api("org.slf4j", "slf4j-api", "1.7.36")
+
+    testImplementation(project(":xtdb-core"))
 }
 
 kotlin {
