@@ -4,6 +4,7 @@
             [xtdb.azure.log :as tx-log]
             [xtdb.azure.object-store :as os]
             [xtdb.buffer-pool :as bp]
+            [xtdb.error :as err]
             [xtdb.log :as xtdb-log]
             [xtdb.node :as xtn]
             [xtdb.time :as time]
@@ -21,34 +22,43 @@
            [xtdb.api.log AzureEventHub AzureEventHub$Factory]
            [xtdb.api.storage AzureBlobStorage AzureBlobStorage$Factory]))
 
-(defmethod bp/->object-store-factory ::object-store [_ {:keys [storage-account container servicebus-namespace servicebus-topic-name prefix user-managed-identity-client-id]}]
+(defmethod bp/->object-store-factory ::object-store [_ {:keys [storage-account container servicebus-namespace servicebus-topic-name 
+                                                               prefix user-managed-identity-client-id
+                                                               storage-account-endpoint servicebus-namespace-fqdn]}]
   (cond-> (AzureBlobStorage/azureBlobStorage storage-account container servicebus-namespace servicebus-topic-name)
     prefix (.prefix (util/->path prefix))
-    user-managed-identity-client-id (.userManagedIdentityClientId user-managed-identity-client-id)))
+    user-managed-identity-client-id (.userManagedIdentityClientId user-managed-identity-client-id)
+    storage-account-endpoint (.storageAccountEndpoint storage-account-endpoint)
+    servicebus-namespace-fqdn (.serviceBusNamespaceFQDN servicebus-namespace-fqdn)))
 
 ;; No minimum block size in azure
 (def minimum-part-size 0)
 
-(defn open-object-store [^AzureBlobStorage$Factory factory]
-  (let [user-managed-identity-id (.getUserManagedIdentityClientId factory)
+(defn open-object-store [^AzureBlobStorage$Factory factory] 
+  (let [storage-account-endpoint (cond
+                                   (.getStorageAccountEndpoint factory) (.getStorageAccountEndpoint factory)
+                                   (.getStorageAccount factory) (format "https://%s.blob.core.windows.net" (.getStorageAccount factory))
+                                   :else (throw (err/illegal-arg :xtdb/missing-storage-account {::err/message "At least one of storageAccount or storageAccountEndpoint must be provided."})))
+        servicebus-namespace-fqdn (cond
+                                    (.getServiceBusNamespaceFQDN factory) (.getServiceBusNamespaceFQDN factory)
+                                    (.getServiceBusNamespace factory) (format "%s.servicebus.windows.net" (.getServiceBusNamespace factory))
+                                    :else (throw (err/illegal-arg :xtdb/missing-servicebus-namespace {::err/message "At least one of serviceBusNamespace or serviceBusNamespaceEndpoint must be provided."})))
+        user-managed-identity-id (.getUserManagedIdentityClientId factory)
         credential (.build (cond-> (DefaultAzureCredentialBuilder.)
-                             user-managed-identity-id (.managedIdentityClientId user-managed-identity-id)))
-        storage-account (.getStorageAccount factory)
+                             user-managed-identity-id (.managedIdentityClientId user-managed-identity-id))) 
         container (.getContainer factory)
-        servicebus-namespace (.getServiceBusNamespace factory)
         servicebus-topic-name (.getServiceBusTopicName factory)
         prefix (.getPrefix factory)
         prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)
         blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
-                                        (.endpoint (str "https://" storage-account ".blob.core.windows.net"))
+                                        (.endpoint storage-account-endpoint)
                                         (.credential credential)
                                         (.buildClient)))
         blob-client (.getBlobContainerClient blob-service-client container)
         file-name-cache (ConcurrentSkipListSet.)
         ;; Watch azure container for changes
-        file-list-watcher (azure-file-watch/open-file-list-watcher {:storage-account storage-account
-                                                                    :container container
-                                                                    :servicebus-namespace servicebus-namespace
+        file-list-watcher (azure-file-watch/open-file-list-watcher {:container container
+                                                                    :servicebus-namespace-fqdn servicebus-namespace-fqdn
                                                                     :servicebus-topic-name servicebus-topic-name
                                                                     :prefix prefix-with-version
                                                                     :blob-container-client blob-client

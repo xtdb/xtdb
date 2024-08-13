@@ -27,10 +27,9 @@
 (defn mk-short-uuid []
   (subs (str (UUID/randomUUID)) 0 8))
 
-(defn setup-topic-subscription [{:keys [^TokenCredential azure-credential servicebus-namespace servicebus-topic-name]}]
+(defn setup-topic-subscription [{:keys [^TokenCredential azure-credential servicebus-namespace-fqdn servicebus-topic-name]}]
   (let [servicebus-admin-client (-> (ServiceBusAdministrationClientBuilder.)
-                                    (.credential (format "%s.servicebus.windows.net" servicebus-namespace)
-                                                 azure-credential)
+                                    (.credential servicebus-namespace-fqdn azure-credential)
                                     (.buildClient))
 
         subscription-name (format "xtdb-topic-subscription-%s" (mk-short-uuid))]
@@ -43,7 +42,7 @@
      :servicebus-topic-name servicebus-topic-name
      :subscription-name subscription-name}))
 
-(defn open-file-list-watcher [{:keys [^BlobContainerClient blob-container-client ^TokenCredential azure-credential servicebus-namespace container ^Path prefix] :as opts} ^NavigableSet file-name-cache]
+(defn open-file-list-watcher [{:keys [^BlobContainerClient blob-container-client ^TokenCredential azure-credential servicebus-namespace-fqdn container ^Path prefix] :as opts} ^NavigableSet file-name-cache]
   (let [;; Create queue that will subscribe to sns topic for notifications
         {:keys [^ServiceBusAdministrationClient servicebus-admin-client servicebus-topic-name subscription-name]} (setup-topic-subscription opts)
 
@@ -54,7 +53,7 @@
         url-suffix (if prefix (str "/" prefix "/") "/")
         base-file-url (str (.getBlobContainerUrl blob-container-client) url-suffix)
         ^ServiceBusProcessorClient processor-client (-> (ServiceBusClientBuilder.)
-                                                        (.fullyQualifiedNamespace (format "%s.servicebus.windows.net" servicebus-namespace))
+                                                        (.fullyQualifiedNamespace servicebus-namespace-fqdn)
                                                         (.credential azure-credential)
                                                         (.processor)
                                                         (.topicName servicebus-topic-name)
