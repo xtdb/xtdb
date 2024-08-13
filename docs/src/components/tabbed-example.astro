@@ -1,0 +1,14 @@
+---
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+---
+
+<div data-no-swup>
+  <Tabs syncKey="psql">
+    <TabItem label="XT Play" icon="seti:db">
+      <slot name="1" />
+    </TabItem>
+    <TabItem label="psql" icon="laptop">
+      <slot name="2" />
+    </TabItem>
+  </Tabs>
+</div>

@@ -5,9 +5,9 @@ title: SQL Quickstart
 import Fiddle from '@components/fiddle.astro';
 import Txs from '@components/fiddle/txs.astro';
 import Query from '@components/fiddle/query.astro';
-import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Aside } from '@astrojs/starlight/components';
 import { Card, CardGrid } from '@astrojs/starlight/components';
+import TabbedExample from '@components/tabbed-example.astro';
 import TabCssFix from '@components/tabcssfix.astro';
 
 <TabCssFix></TabCssFix>
@@ -16,8 +16,8 @@ import TabCssFix from '@components/tabcssfix.astro';
 
 ### Insert a row into a new table
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
+<TabbedExample>
+  <div slot="1">
     <Aside title="'XT Play' allows you to try out XTDB live in your browser!">Feel free to edit the SQL in any of these boxes, just be aware that changes you make in one box don't carry over to the next.
     <details style="display: contents"><summary>Details...</summary><ul>
 <li>columns are ordered alphanumerically (this restriction will be lifted [soon](https://github.com/xtdb/xt-fiddle/issues/42))</li>
@@ -28,9 +28,8 @@ import TabCssFix from '@components/tabcssfix.astro';
 	   txs="INSERT INTO people (_id, name) VALUES (6, 'fred')" />
       <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
     </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </div>
+  <Card slot="2">
 If you don't already have XTDB running, follow the brief install steps described in [Installation via Docker](/intro/installation-via-docker).
 
 To run your first INSERT transaction, simply enter the following SQL statement into the `psql` prompt, press return, and you will see:
@@ -42,8 +41,7 @@ INSERT 0 0
 
 Note that XTDB doesn't currently return information about the number of rows inserted or modified by a statement when using `psql`.
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 Things to note:
 <ul><li>Tables in XTDB may be created dynamically during `INSERT`, where all columns and types are inferred automatically.</li><li>The only schema requirement is that every table in XTDB requires a user-provided `_id` primary key column, but all other columns are optional and dynamically typed by default. This means each row in XTDB can offer the flexibility of a document in a document database.</li><li>The `_` prefix convention (e.g. `_id`) is used for reserved columns and tables that XTDB handles automatically. For full details see [How XTDB works](/intro/data-model).</li></ul>
@@ -52,14 +50,13 @@ Things to note:
 
 Querying this data back again is a simple matter of:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
+<TabbedExample>
+  <div slot="1">
     <Fiddle magicContext="my-context">
       <Query q="SELECT * FROM people" />
     </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </div>
+  <Card slot="2">
 ```sql
 user=> SELECT * FROM people;
  _id | name
@@ -68,25 +65,21 @@ user=> SELECT * FROM people;
 (1 row)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 ### Evolve the table
 
 If we now INSERT another row with a slightly different shape, we can see that XTDB automatically handles the implicitly extended schema and allows us to return both rows:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Txs systemTime="2024-01-02"
-	   txs={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Txs systemTime="2024-01-02"
+         txs={`
 INSERT INTO people (_id, name, likes)
   VALUES (9, 'bob', ['fishing', 3.14, {nested:'data'}])`}/>
-      <Query q="SELECT * FROM people" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+    <Query q="SELECT * FROM people" />
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> INSERT INTO people (_id, name, likes)
   VALUES (9, 'bob', ['fishing', 3.14, {nested:'data'}]);
@@ -100,18 +93,16 @@ user=> SELECT * FROM people;
 ```
   <Aside>Due to Postgres' lack of support for polymorphic values and nested structures, the value returned back to the client in the `likes` column is actually a JSON-ified string representation of the data we previously inserted, however all original type information is preserved internally should it be needed.</Aside>
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 ### Handling ‘documents’
 
 XTDB is designed to work with JSON-like nested data as a first-class concept (i.e. not restricted to JSON or JSONB types). This means you can easily handle complex document-like nested data structures:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Txs systemTime="2024-01-03"
-	   txs={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Txs systemTime="2024-01-03"
+         txs={`
 UPDATE people
 SET info = {contact: [{loc: 'home',
                        tel: '123'},
@@ -119,11 +110,9 @@ SET info = {contact: [{loc: 'home',
                        tel: '456',
                        registered: DATE '2024-01-01'}]}
   WHERE people.name = 'fred'`}/>
-      <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+    <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> UPDATE people
 SET info = {contact: [{loc: 'home',
@@ -135,22 +124,18 @@ SET info = {contact: [{loc: 'home',
 UPDATE 0
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 You can then query this nested data intuitively:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SELECT (people.info).contact[2].tel
 FROM people
   WHERE people.name = 'fred'`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT (people.info).contact[2].tel
 FROM people
@@ -161,20 +146,16 @@ FROM people
 (1 row)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 You can also observe the inferred schema using the SQL standard's `INFORMATION_SCHEMA` facilities:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SELECT * FROM information_schema.columns`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT * FROM information_schema.columns;
  column_name |                                                                  data_type                                                                  | table_catalog | table_name | table_schema
@@ -190,8 +171,7 @@ user=> SELECT * FROM information_schema.columns;
 (8 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 Capturing fast-changing data may be powerful, but what if we made a mistake somewhere and wanted to undo a change? The thing that makes XTDB _most_ interesting is the approach to immutability and time-travel...
 
@@ -206,15 +186,12 @@ A key distinction between interacting with Postgres and interacting with XTDB (e
 
 The complete transaction log history is permanently stored within the system-maintained `_txs` table:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SELECT * FROM _txs ORDER BY _id DESC LIMIT 20 -- "recent transactions"`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT * FROM _txs ORDER BY _id DESC LIMIT 20;
  _id  | committed | error |            tx_time
@@ -225,8 +202,7 @@ user=> SELECT * FROM _txs ORDER BY _id DESC LIMIT 20;
 (3 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 XTDB relies on the immutable, append-only nature of the transaction log and its timestamps to automatically record all changes across the database. This approach means that queries can use the **reliable ordering** of the log to query **previous states** of the database using nothing more than a timestamp. More on that next!
 
@@ -240,16 +216,13 @@ A query like `SELECT * FROM people` will only show the 'current' version of ever
 
 Let's try deleting `fred` from the database...
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Txs systemTime="2024-01-04"
-	   txs="DELETE FROM people WHERE name = 'fred'" />
-      <Query q="SELECT * FROM people" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Txs systemTime="2024-01-04"
+         txs="DELETE FROM people WHERE name = 'fred'" />
+    <Query q="SELECT * FROM people" />
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> DELETE FROM people WHERE name = 'fred';
 DELETE 0
@@ -260,23 +233,19 @@ user=> SELECT * FROM people;
 (1 row)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 Despite having _seemingly_ deleted the latest version of the `fred` record, the prior two versions are not lost and can be retrieved using a couple of methods.
 
 The simplest way to observe the prior version of the `fred` record is to re-run the exact same query against an earlier 'basis'.
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SETTING DEFAULT SYSTEM_TIME TO AS OF DATE '2020-01-01'
 SELECT * FROM PEOPLE`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SETTING DEFAULT SYSTEM_TIME TO AS OF DATE '2020-01-01'
 SELECT * FROM PEOPLE;
@@ -285,8 +254,7 @@ SELECT * FROM PEOPLE;
 (0 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 Here we set the basis for the whole query by adjusting `DEFAULT SYSTEM_TIME`.
 This allows us to view exactly what the database looked like at the beginning of 2020.
@@ -300,17 +268,14 @@ Whenever you do not specify a basis like this, the latest available basis is use
 
 Now try setting the basis to a point in time shortly after our initial transaction:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SETTING DEFAULT SYSTEM_TIME TO AS OF DATE '2024-01-01' -- (try 02 and 03 also)
 SELECT * FROM PEOPLE`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
-  <Aside type="caution">The timestamp shown here is for illustration only, you should refer to the output of your recent transactions query for a suitable timestamp.
+  </Fiddle>
+  <Card slot="2">
+    <Aside type="caution">The timestamp shown here is for illustration only, you should refer to the output of your recent transactions query for a suitable timestamp.
 When querying against a real XTDB node (like you are), XTDB sets the `SYSTEM_TIME` of `INSERT`/`UPDATE`s to the current time.
 Therefore in the below query you must substitute the date for dates relative to what you see in the `_txs` table.</Aside>
 ```sql
@@ -322,8 +287,7 @@ SELECT * FROM PEOPLE;
 (1 row)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 We can see that on the 1st (our first `INSERT`) we have our original `fred` row, but try changing the date to the 2nd and the `bob` row appears!
 
@@ -347,16 +311,13 @@ You can avoid ever needing to reach for backups or ETL integrations with data wa
 
 The built-in system-time columns `_system_from` and `_system_to` are hidden from view by default but, when specified, can be accessed on every table using regular SQL:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SELECT name, _system_from
   FROM people`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT name, _system_from
   FROM people;
@@ -367,23 +328,19 @@ user=> SELECT name, _system_from
 (2 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 `_system_from` can take the place of the `modified_at` columns found across many application schemas. More details about these columns and how they are maintained can be found in [How XTDB Works](/intro/data-model).
 
 The full system-time history for a set of records in a table can be retrieved by specifying `FOR SYSTEM_TIME ALL` after the table reference:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SELECT name, likes, _system_from, _system_to
   FROM people FOR SYSTEM_TIME ALL`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT name, likes, _system_from, _system_to
   FROM people FOR SYSTEM_TIME ALL;
@@ -395,8 +352,7 @@ user=> SELECT name, likes, _system_from, _system_to
 (3 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 You can also run queries against individual tables at specific timestamps using `FOR SYSTEM_TIME AS_OF <timestamp>`, use temporal period operators (`OVERLAPS`, `PRECEDES` etc.) to understanding how data has change over time, and much more - see the [SQL reference documentation](/reference/main/sql/queries).
 
@@ -404,16 +360,13 @@ Here are some useful capabilities these temporal eatures enable...
 
 ### A delta of changes to a table since a given system-time
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SELECT name, _system_from, _system_to
   FROM people FOR SYSTEM_TIME BETWEEN DATE '2020-01-01' AND NOW`} />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT name, _system_from, _system_to
   FROM people FOR SYSTEM_TIME BETWEEN DATE '2020-01-01' AND NOW;
@@ -425,8 +378,7 @@ user=> SELECT name, _system_from, _system_to
 (3 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 #### Restore a deleted row
 
@@ -434,22 +386,19 @@ Because XTDB retains history, the regular SQL DELETE statement is essentially pe
 
 Here's how we can bring `fred` back to being visible and active in our database:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Txs systemTime="2024-01-05"
-	   txs={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Txs systemTime="2024-01-05"
+         txs={`
 INSERT INTO people (_id, name, info)
 SELECT _id, name, info
   FROM people FOR ALL SYSTEM_TIME
   WHERE _id = 6
   ORDER BY _system_to DESC
   LIMIT 1`}/>
-      <Query q="SELECT * FROM people" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+    <Query q="SELECT * FROM people" />
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> INSERT INTO people (_id, name, info)
 SELECT _id, name, info
@@ -466,24 +415,20 @@ user=> SELECT * FROM people;
 (2 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 ### ERASE as 'hard' delete
 
 Sometimes you do really want to forget the past though, and for circumstances where data does need to be erased ("hard deleted"), an `ERASE` operation is provided:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Txs systemTime="2024-01-06"
-	   txs={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Txs systemTime="2024-01-06"
+         txs={`
 ERASE FROM people WHERE _id = 6`}/>
-      <Query q="SELECT * FROM people" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+    <Query q="SELECT * FROM people" />
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> ERASE FROM people WHERE _id = 6;
 ERASE 0
@@ -494,8 +439,7 @@ user=> SELECT * FROM people;
 (1 row)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 The ERASE is effective as soon as the transaction is committed - no longer accessible to an application - and under the hood the relevant data is guaranteed to be fully erased only once all background index processing has completed and the changes have been written to the remote object storage.
 
@@ -528,18 +472,15 @@ Let's have a glimpse of what can you do with SQL to make use of valid-time...
 
 We can specify the `_valid_from` column during an INSERT statement to record when the organization (i.e. thinking beyond this particular database!) first became aware of the person `carol`:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Txs systemTime="2024-01-07"
-	   txs={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Txs systemTime="2024-01-07"
+         txs={`
 INSERT INTO people (_id, name, favorite_color, _valid_from)
   VALUES (2, 'carol', 'blue', DATE '2023-01-01')`}/>
-      <Query q="SELECT name, _valid_from, FROM people" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+    <Query q="SELECT name, _valid_from, FROM people" />
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> INSERT INTO people (_id, name, favorite_color, _valid_from)
   VALUES (2, 'carol', 'blue', DATE '2023-01-01');
@@ -552,21 +493,17 @@ user=> SELECT name, _valid_from FROM people;
 (2 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 ### What did you know?
 
 With backdated information now correctly loaded into XTDB, we can easily verify that we knew `carol` existed in the company records at a time before our current database was even created:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q="SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-10-01'" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q="SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-10-01'" />
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-10-01';
  _id | favorite_color | info | likes | name
@@ -575,26 +512,22 @@ user=> SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-10-01';
 (1 row)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 ### When did you know it?
 
 The 'bitemporal' combination of valid-time and system-time columns allows us to readily produce an auditable history about what we claimed to have known in the past:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Txs systemTime="2024-01-08"
-	   txs={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Txs systemTime="2024-01-08"
+         txs={`
 INSERT INTO people (_id, name, favorite_color, _valid_from)
   VALUES (2, 'carol', 'red', DATE '2023-09-01')`}/>
-      <Query q="SELECT name, favorite_color, _valid_from, _valid_to, _system_from, _system_to
+    <Query q="SELECT name, favorite_color, _valid_from, _valid_to, _system_from, _system_to
   FROM people FOR VALID_TIME ALL FOR SYSTEM_TIME ALL" />
-    </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  </Fiddle>
+  <Card slot="2">
 ```sql
 user=> SELECT name, favorite_color, _valid_from, _valid_to, _system_from, _system_to
 FROM people FOR VALID_TIME ALL FOR SYSTEM_TIME ALL;
@@ -607,24 +540,20 @@ FROM people FOR VALID_TIME ALL FOR SYSTEM_TIME ALL;
 (4 rows)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 ### "Please re-run yesterday's report using today's data"
 
 Perhaps most importantly for many applications, we can easily produce and later re-produce _correct_ reports against business-relevant timestamps without having to assemble wildly complex queries or maintain unnecessary ETL infrastructure:
 
-<Tabs syncKey="psql">
-  <TabItem label="XT Play" icon="seti:db">
-    <Fiddle magicContext="my-context">
-      <Query q={`
+<TabbedExample>
+  <Fiddle magicContext="my-context" slot="1">
+    <Query q={`
 SETTING DEFAULT VALID_TIME AS OF DATE '2023-10-01',
         DEFAULT SYSTEM_TIME AS OF DATE '2024-01-08'
 SELECT name, favorite_color , _valid_from, _system_from FROM people`}/>
     </Fiddle>
-  </TabItem>
-  <TabItem label="psql" icon="laptop">
-  <Card>
+  <Card slot="2">
 ```sql
 user=> SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-06-01';
  _id | favorite_color | info | likes | name
@@ -633,8 +562,7 @@ user=> SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-06-01';
 (1 row)
 ```
   </Card>
-  </TabItem>
-</Tabs>
+</TabbedExample>
 
 ## Summary
 
