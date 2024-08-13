@@ -1268,6 +1268,13 @@
        (and (< ~(:from p1) (coalesce ~(:to p2) xtdb/end-of-time))
             (> (coalesce ~(:to p1) xtdb/end-of-time) ~(:from p2))))))
 
+  (visitOverlapsFunction [this ctx]
+    (let [exprs (mapv #(.accept ^ParserRuleContext % this) (.periodPredicand ctx))]
+      (xt/template
+       (< (greatest ~@(map :from exprs))
+          (least ~@(for [{:keys [to]} exprs]
+                     (xt/template (coalesce ~to xtdb/end-of-time))))))))
+
   (visitPeriodEqualsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]

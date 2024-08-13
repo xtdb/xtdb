@@ -313,6 +313,7 @@ exprPrimary
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
     | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource (',' dateBinOrigin)? ')' # DateBinFunction
     | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource (',' dateBinOrigin)? ')' #RangeBinsFunction
+    | 'OVERLAPS' '(' periodPredicand ( ',' periodPredicand )+ ')' # OverlapsFunction
 
     // interval value functions
     | 'AGE' '(' expr ',' expr ')' # AgeFunction

@@ -1100,3 +1100,70 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/testing "Running"
     (t/is (= [{:uuid-literal #uuid "550e8400-e29b-41d4-a716-446655440000"}]
              (xt/q tu/*node* "SELECT UUID '550e8400-e29b-41d4-a716-446655440000' AS uuid_literal")))))
+
+(t/deftest test-least-nulls-high-3493
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-04', DATE '2020-01-07')"]
+                            [:sql "INSERT INTO bar (_id, _valid_from) VALUES (1, DATE '2020-01-05')"]
+                            [:sql "INSERT INTO baz (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-03', DATE '2020-01-06')"]])
+
+  ;; temporarily, until we have period intersections
+  (t/is (= [{:valid-from #xt.time/zoned-date-time "2020-01-05T00:00Z[UTC]",
+             :valid-to #xt.time/zoned-date-time "2020-01-06T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME TO ALL
+                            SELECT GREATEST(foo._valid_from, bar._valid_from, baz._valid_from) AS valid_from,
+                                   LEASTNH(foo._valid_to, bar._valid_to, baz._valid_to) AS valid_to
+                            FROM foo, bar, baz")))
+
+  (t/is (= [{:valid-from #xt.time/zoned-date-time "2020-01-05T00:00Z[UTC]",}]
+           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME TO ALL
+                            SELECT GREATEST(bar._valid_from) AS valid_from,
+                                   LEASTNH(bar._valid_to) AS valid_to
+                            FROM bar"))))
+
+(t/deftest timestamp-literal-exception-3562
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (1, TIMESTAMP '2005-07-31 12:30:45')"]
+                           [:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (2, TIMESTAMP '2005-07-31T12:30:45')"]
+                           [:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (3, '2005-07-31T12:30:30'::timestamp)"]
+                           [:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (4, '2005-07-31 12:30:30'::timestamp)"]])
+
+  (t/is (= #{{:xt/id 1, :date #xt.time/date-time "2005-07-31T12:30:45"}
+             {:xt/id 2, :date #xt.time/date-time "2005-07-31T12:30:45"}
+             {:xt/id 3, :date #xt.time/date-time "2005-07-31T12:30:30"}
+             {:xt/id 4, :date #xt.time/date-time "2005-07-31T12:30:30"}}
+           (set (xt/q tu/*node* "SELECT * FROM test")))))
+
+(t/deftest variadic-overlaps-3441
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2020-01-03')"]
+                           [:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (2, DATE '2020-01-03', DATE '2020-01-05')"]
+
+                           [:sql "INSERT INTO bar (_id, _valid_from, _valid_to) VALUES (3, DATE '2020-01-01', DATE '2020-01-04')"]
+                           [:sql "INSERT INTO bar (_id, _valid_from, _valid_to) VALUES (4, DATE '2020-01-04', DATE '2020-01-06')"]
+
+                           [:sql "INSERT INTO baz (_id, _valid_from, _valid_to) VALUES (5, DATE '2020-01-03', DATE '2020-01-06')"]
+                           [:sql "INSERT INTO baz (_id, _valid_from, _valid_to) VALUES (6, DATE '2020-01-01', DATE '2020-01-02')"]])
+
+  (t/is (= [{:foo 2, :bar 4} {:foo 2, :bar 3} {:foo 1, :bar 3}]
+           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+                            SELECT foo._id foo, bar._id bar
+                            FROM foo, bar
+                            WHERE OVERLAPS(foo.valid_time, bar.valid_time)")))
+
+  (t/is (= [{:foo 2, :baz 5} {:foo 1, :baz 6}]
+           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+                            SELECT foo._id foo, baz._id baz
+                            FROM foo, baz
+                            WHERE OVERLAPS(foo.valid_time, baz.valid_time)")))
+
+  (t/is (= [{:bar 4, :baz 5} {:bar 3, :baz 5} {:bar 3, :baz 6}]
+           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+                            SELECT bar._id bar, baz._id baz
+                            FROM bar, baz
+                            WHERE OVERLAPS(bar.valid_time, baz.valid_time)")))
+
+  (t/is (= [{:foo 2, :bar 4, :baz 5}
+            {:foo 2, :bar 3, :baz 5}
+            {:foo 1, :bar 3, :baz 6}]
+           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+                            SELECT foo._id foo, bar._id bar, baz._id baz
+                            FROM foo, bar, baz
+                            WHERE OVERLAPS(foo.valid_time, bar.valid_time, baz.valid_time)"))))

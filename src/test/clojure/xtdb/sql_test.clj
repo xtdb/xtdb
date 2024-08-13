@@ -1881,34 +1881,3 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
              :table-schema "public"}]
            (xt/q tu/*node* "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = 'foo'")
            (xt/q tu/*node* "SELECT * FROM information_schema.columns WHERE table_name = 'foo'"))))
-
-(t/deftest test-least-nulls-high-3493
-  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-04', DATE '2020-01-07')"]
-                            [:sql "INSERT INTO bar (_id, _valid_from) VALUES (1, DATE '2020-01-05')"]
-                            [:sql "INSERT INTO baz (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-03', DATE '2020-01-06')"]])
-
-  ;; temporarily, until we have period intersections
-  (t/is (= [{:valid-from #xt.time/zoned-date-time "2020-01-05T00:00Z[UTC]",
-             :valid-to #xt.time/zoned-date-time "2020-01-06T00:00Z[UTC]"}]
-           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME TO ALL
-                            SELECT GREATEST(foo._valid_from, bar._valid_from, baz._valid_from) AS valid_from,
-                                   LEASTNH(foo._valid_to, bar._valid_to, baz._valid_to) AS valid_to
-                            FROM foo, bar, baz")))
-
-  (t/is (= [{:valid-from #xt.time/zoned-date-time "2020-01-05T00:00Z[UTC]",}]
-           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME TO ALL
-                            SELECT GREATEST(bar._valid_from) AS valid_from,
-                                   LEASTNH(bar._valid_to) AS valid_to
-                            FROM bar"))))
-
-(t/deftest timestamp-literal-exception-3562
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (1, TIMESTAMP '2005-07-31 12:30:45')"]
-                           [:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (2, TIMESTAMP '2005-07-31T12:30:45')"]
-                           [:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (3, '2005-07-31T12:30:30'::timestamp)"]
-                           [:sql "INSERT INTO \"test\" (\"_id\", \"date\") VALUES (4, '2005-07-31 12:30:30'::timestamp)"]])
-
-  (t/is (= #{{:xt/id 1, :date #xt.time/date-time "2005-07-31T12:30:45"}
-             {:xt/id 2, :date #xt.time/date-time "2005-07-31T12:30:45"}
-             {:xt/id 3, :date #xt.time/date-time "2005-07-31T12:30:30"}
-             {:xt/id 4, :date #xt.time/date-time "2005-07-31T12:30:30"}}
-           (set (xt/q tu/*node* "SELECT * FROM test")))))
