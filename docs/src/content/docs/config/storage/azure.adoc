@@ -84,17 +84,29 @@ storage: !Remote
   objectStore: !Azure
     # -- required
 
-    # The storage account which has the storage container
+    # --- At least one of storageAccount or storageAccountEndpoint is required
+
+    # The name of the storage account which has the storage container
     # (Can be set as an !Env value)
     storageAccount: storage-account
+
+    # The full endpoint of the storage account which has the storage container
+    # (Can be set as an !Env value)
+    # storageAccountEndpoint: https://storage-account.privatelink.blob.core.windows.net
     
     # The name of the blob storage container to be used as the object store
     # (Can be set as an !Env value)
     container: xtdb-container
 
-    # The service bus namespace which contains the serviceBusTopicName
+    # --- At least one of serviceBusNamespace or serviceBusNamespaceFQDN is required
+
+    # The name of the service bus namespace which contains the serviceBusTopicName
     # (Can be set as an !Env value)
     serviceBusNamespace: xtdb-service-bus
+
+    # The fully qualified domain name of the service bus namespace which contains the serviceBusTopicName
+    # (Can be set as an !Env value)
+    # serviceBusNamespaceFQDN: xtdb-service-bus.privatelink.servicebus.windows.net
 
     # The name of the service bus topic which is collecting notifications from the container
     # (Can be set as an !Env value)

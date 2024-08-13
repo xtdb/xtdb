@@ -33,6 +33,8 @@ import java.nio.file.Path
  *       ) {
  *          prefix = Path.of("my/custom/prefix")
  *          userManagedIdentityClientId = "user-managed-identity-client-id"
+ *          storageAccountEndpoint = "https://xtdb-storage-account.privatelink.blob.core.windows.net"
+ *          serviceBusNamespaceFQDN = "xtdb-service-bus-namespace.privatelink.servicebus.windows.net"
  *       },
  *       localDiskCache = Paths.get("test-path")
  *    ),
@@ -56,9 +58,9 @@ object AzureBlobStorage {
      */
     @JvmStatic
     fun azureBlobStorage(
-        storageAccount: String,
+        storageAccount: String?,
         container: String,
-        serviceBusNamespace: String,
+        serviceBusNamespace: String?,
         serviceBusTopicName: String,
     ) = Factory(storageAccount, container, serviceBusNamespace, serviceBusTopicName)
 
@@ -78,7 +80,7 @@ object AzureBlobStorage {
     @Suppress("unused")
     @JvmSynthetic
     fun azureBlobStorage(
-        storageAccount: String, container: String, serviceBusNamespace: String, serviceBusTopicName: String,
+        storageAccount: String?, container: String, serviceBusNamespace: String?, serviceBusTopicName: String,
         configure: Factory.() -> Unit = {},
     ) = azureBlobStorage(storageAccount, container, serviceBusNamespace, serviceBusTopicName).also(configure)
 
@@ -88,18 +90,22 @@ object AzureBlobStorage {
      * @property serviceBusNamespace The name of the [Service Bus namespace](https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces) which contains the [serviceBusTopicName] collecting notifications from the [container]
      * @property serviceBusTopicName The name of the [Service Bus topic](https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions) which is collecting notifications from the [container]
      * @property prefix A file path to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory.
+     * @property userManagedIdentityClientId The client ID of the user managed identity to use for authentication, if applicable
+     * @property storageAccountEndpoint The full endpoint of the [storage account](https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview) which has the [container] to be used as an object store
+     * @property serviceBusNamespaceFQDN The fully qualified domain name of the [Service Bus namespace](https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces) which contains the [serviceBusTopicName] collecting notifications from the [container]
      */
     @Serializable
     @SerialName("!Azure")
     data class Factory(
-        val storageAccount: String,
+        val storageAccount: String? = null,
         val container: String,
-        val serviceBusNamespace: String,
+        var serviceBusNamespace: String? = null,
         val serviceBusTopicName: String,
         var prefix: Path? = null,
         var userManagedIdentityClientId: String? = null,
+        var storageAccountEndpoint: String? = null,
+        var serviceBusNamespaceFQDN: String? = null,
     ) : ObjectStoreFactory {
-
         /**
          * @param prefix A file path to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory.
          */
@@ -109,6 +115,16 @@ object AzureBlobStorage {
          * @param userManagedIdentityClientId The client ID of the user managed identity to use for authentication, if applicable
          */
         fun userManagedIdentityClientId(userManagedIdentityClientId: String) = apply { this.userManagedIdentityClientId = userManagedIdentityClientId }
+
+        /**
+         * @param storageAccountEndpoint The full endpoint of the [storage account](https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview) which has the [container] to be used as an object store
+         */
+        fun storageAccountEndpoint(storageAccountEndpoint: String) = apply { this.storageAccountEndpoint = storageAccountEndpoint }
+
+        /**
+         * @param serviceBusNamespaceFQDN The fully qualified domain name of the [Service Bus namespace](https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces) which contains the [serviceBusTopicName] collecting notifications from the [container]
+         */
+        fun serviceBusNamespaceFQDN(serviceBusNamespaceFQDN: String) = apply { this.serviceBusNamespaceFQDN = serviceBusNamespaceFQDN }
 
         override fun openObjectStore() = requiringResolve("xtdb.azure/open-object-store")(this) as ObjectStore
     }

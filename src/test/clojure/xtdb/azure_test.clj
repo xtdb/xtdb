@@ -104,6 +104,34 @@
       (t/is (= (mapv util/->path ["alan" "alice"])
                (.listAllObjects ^ObjectStore os-2))))))
 
+(t/deftest ^:azure qualified-connection-strings
+  (let [prefix (random-uuid)]
+    (t/testing "neither storageAccount nor storageAccountEndpoint provided - should throw illegal-arg"
+      (t/is (thrown-with-msg? IllegalArgumentException
+                              #"At least one of storageAccount or storageAccountEndpoint must be provided."
+                              (azure/open-object-store (-> (AzureBlobStorage/azureBlobStorage nil container servicebus-namespace servicebus-topic-name)
+                                                           (.prefix (util/->path (str prefix))))))))
+    
+    (t/testing "storageAccountEndpoint specified - should work correctly"
+      (with-open [os (azure/open-object-store (-> (AzureBlobStorage/azureBlobStorage nil container servicebus-namespace servicebus-topic-name)
+                                                  (.prefix (util/->path (str prefix)))
+                                                  (.storageAccountEndpoint "https://xtdbteststorageaccount.blob.core.windows.net")))]
+        (os-test/put-edn os (util/->path "alice") :alice)
+        (t/is (= (mapv util/->path ["alice"]) (.listAllObjects ^ObjectStore os)))))
+    
+    (t/testing "neither serviceBusNamespace or serviceBusNamespaceFQDN provided - should throw illegal-arg"
+      (t/is (thrown-with-msg? IllegalArgumentException
+                              #"At least one of serviceBusNamespace or serviceBusNamespaceEndpoint must be provided."
+                              (azure/open-object-store (-> (AzureBlobStorage/azureBlobStorage storage-account container nil servicebus-topic-name)
+                                                           (.prefix (util/->path (str prefix))))))))
+    
+    (t/testing "serviceBusNamespaceFQDN specified - should work correctly"
+      (with-open [os (azure/open-object-store (-> (AzureBlobStorage/azureBlobStorage storage-account container nil servicebus-topic-name)
+                                                  (.prefix (util/->path (str prefix)))
+                                                  (.serviceBusNamespaceFQDN "xtdb-test-storage-account-eventbus.servicebus.windows.net")))]
+        (os-test/put-edn os (util/->path "alan") :alan)
+        (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects ^ObjectStore os)))))))
+
 ;; Currently not testing this regularly:
 ;; Need to setup the event hub namespace `xtdb-test-eventhub` and configure to run.
 ;; Ensure your credentials have eventhub permissions for the eventhub namespace 

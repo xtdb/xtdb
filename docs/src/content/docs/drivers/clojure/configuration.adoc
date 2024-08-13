@@ -155,10 +155,14 @@ Main article: link:/config/storage/azure[Azure Blob Storage]
 {:storage [:remote
            {:object-store [:azure
                            {;; -- required
+                            ;; --- At least one of storage-account or storage-account-endpoint is required
                             :storage-account "storage-account"
+                            ;; :storage-account-endpoint "https://storage-account.privatelink.blob.core.windows.net"
                             :container "xtdb-container"
-                            :service-bus-namespace "xtdb-service-bus"
-                            :service-bus-topic-name "xtdb-service-bus-topic"
+                            ;; --- At least one of service-bus-namespace or service-bus-namespace-fqdn is required
+                            :servicebus-namespace "xtdb-service-bus"
+                            ;; :servicebus-namespace-fqdn "xtdb-service-bus.servicebus.windows.net"
+                            :servicebus-topic-name "xtdb-service-bus-topic"
 
                             ;; -- optional
 
