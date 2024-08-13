@@ -1,7 +1,7 @@
 (ns xtdb.time
   (:require [clojure.spec.alpha :as s]
             [xtdb.protocols :as xtp])
-  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime)
+  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
            (java.util Date)))
 
@@ -83,3 +83,18 @@
   (cond-> opts
     (not (or (contains? basis :at-tx) (contains? opts :after-tx)))
     (assoc :after-tx (xtp/latest-submitted-tx node))))
+
+(defn seconds-fraction->nanos ^long [seconds-fraction]
+  (if seconds-fraction
+    (* (Long/parseLong seconds-fraction)
+       (long (Math/pow 10 (- 9 (count seconds-fraction)))))
+    0))
+
+(defn parse-sql-timestamp-literal [ts-str]
+  (when-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?(?:\[([\w\/]+)\])?" ts-str)]
+    (let [ldt (LocalDateTime/of (parse-long y) (parse-long mons) (parse-long d)
+                                (parse-long h) (parse-long mins) (parse-long s) (seconds-fraction->nanos sf))]
+      (cond
+        zone (ZonedDateTime/ofLocal ldt (ZoneId/of zone) (some-> offset ZoneOffset/of))
+        offset (ZonedDateTime/of ldt (ZoneOffset/of offset))
+        :else ldt))))

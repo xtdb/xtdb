@@ -217,9 +217,8 @@
           (t/is (thrown-with-msg? RuntimeException
                                   #"'2022-08-01T05:34:56.789Z' has invalid format for type timestamp without timezone"
                                   (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-local :milli])))
-          (t/is (thrown-with-msg? RuntimeException
-                                  #"'2022-08-01 05:34:56.789' has invalid format for type timestamp without timezone"
-                                  (test-cast "2022-08-01 05:34:56.789" [:timestamp-local :milli]))))
+          (t/is (= #xt.time/date-time "2022-08-01T05:34:56.789"
+                   (test-cast "2022-08-01 05:34:56.789" [:timestamp-local :milli]))))
 
         (t/testing "tstz"
           (t/is (= #xt.time/zoned-date-time "2022-08-01T05:34:56.789Z[UTC]" (test-cast "2022-08-01T05:34:56.789Z" [:timestamp-tz :milli "UTC"])))

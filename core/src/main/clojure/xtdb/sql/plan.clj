@@ -6,6 +6,7 @@
             [xtdb.error :as err]
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
+            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -750,13 +751,7 @@
   PlanError
   (error-string [_] (format "Cannot parse integer: %s" s)))
 
-(defn seconds-fraction->nanos ^long [seconds-fraction]
-  (if seconds-fraction
-    (* (Long/parseLong seconds-fraction)
-       (long (Math/pow 10 (- 9 (count seconds-fraction)))))
-    0))
-
-(defrecord CannotParseDate [d-str msg] 
+(defrecord CannotParseDate [d-str msg]
   PlanError
   (error-string [_] (format "Cannot parse date: %s - failed with message %s" d-str msg)))
 
@@ -773,7 +768,7 @@
 (defn parse-time-literal [t-str env]
   (if-let [[_ h m s sf offset-str] (re-matches #"(\d{1,2}):(\d{1,2}):(\d{1,2})(?:\.(\d+))?([+-]\d{2}:\d{2})?" t-str)]
     (try
-      (let [local-time (LocalTime/of (parse-long h) (parse-long m) (parse-long s) (seconds-fraction->nanos sf))]
+      (let [local-time (LocalTime/of (parse-long h) (parse-long m) (parse-long s) (time/seconds-fraction->nanos sf))]
         (if offset-str
           (OffsetTime/of local-time (ZoneOffset/of ^String offset-str))
           local-time))
@@ -787,18 +782,11 @@
   (error-string [_] (format "Cannot parse timestamp: %s - failed with message %s" ts-str msg)))
 
 (defn parse-timestamp-literal [ts-str env]
-  (if-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?(?:\[([\w\/]+)\])?" ts-str)]
-    (try
-      (let [ldt (LocalDateTime/of (parse-long y) (parse-long mons) (parse-long d)
-                                  (parse-long h) (parse-long mins) (parse-long s) (seconds-fraction->nanos sf))]
-        (cond
-          zone (ZonedDateTime/ofLocal ldt (ZoneId/of zone) (some-> offset ZoneOffset/of))
-          offset (ZonedDateTime/of ldt (ZoneOffset/of offset))
-          :else ldt))
-      (catch Exception e
-        (add-err! env (->CannotParseTimestamp ts-str (.getMessage e)))))
-
-    (add-err! env (->CannotParseTimestamp ts-str nil))))
+  (try
+    (or (time/parse-sql-timestamp-literal ts-str)
+        (add-err! env (->CannotParseTimestamp ts-str nil)))
+    (catch Exception e
+      (add-err! env (->CannotParseTimestamp ts-str (.getMessage e))))))
 
 (defrecord CannotParseInterval [i-str msg]
   PlanError

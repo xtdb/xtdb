@@ -275,11 +275,11 @@
                              :fractional-precision fractional-precision}))))
 
 (defn parse-with-error-handling [date-type parse-fn s]
-  (try
-    (parse-fn s)
-    (catch DateTimeParseException _
+  (or (try
+        (parse-fn s)
+        (catch DateTimeParseException _))
       (throw (err/runtime-err :xtdb.expression/invalid-temporal-string
-                              {::err/message (format "String '%s' has invalid format for type %s" s date-type)})))))
+                              {::err/message (format "String '%s' has invalid format for type %s" s date-type)}))))
 
 (defn alter-precision [^long precision ^Temporal temporal]
   (if (= precision 0)
@@ -291,12 +291,20 @@
 (defn gen-alter-precision [precision] 
   (if precision (list `(alter-precision ~precision)) '()))
 
+(defn parse-ts-local [ts-str]
+  (parse-with-error-handling "timestamp without timezone"
+                             (fn [s]
+                               (let [res (time/parse-sql-timestamp-literal s)]
+                                 (when (instance? LocalDateTime res)
+                                   res)))
+                             ts-str))
+
 (defmethod expr/codegen-cast [:utf8 :timestamp-local] [{[_ tgt-tsunit :as target-type] :target-type {:keys [precision]} :cast-opts}]
   (when precision (ensure-fractional-precision-valid precision))
   {:return-type target-type
    :->call-code (fn [[s]]
                   (-> `(->> (expr/resolve-string ~s)
-                            (parse-with-error-handling "timestamp without timezone" #(LocalDateTime/parse %))
+                            parse-ts-local
                             ~@(gen-alter-precision precision))
                       (ldt->ts tgt-tsunit)))})
 
