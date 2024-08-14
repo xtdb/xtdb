@@ -16,7 +16,9 @@
   (:import java.lang.AutoCloseable
            [java.time Duration]
            org.apache.arrow.vector.types.pojo.Schema
-           [xtdb.trie LiveHashTrie$Leaf IDataRel]
+           [xtdb IBufferPool]
+           [xtdb.metadata IMetadataManager]
+           [xtdb.trie IDataRel LiveHashTrie$Leaf HashTrie]
            [xtdb.vector IVectorReader RelationReader]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -351,6 +353,37 @@
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction")))
                          (.resolve node-dir (tables-key "foo")) #"log-l(?!00|01)\d\d-(.+)\.arrow"))))))
+
+(t/deftest test-no-empty-pages-3580
+  (let [node-dir (util/->path "target/compactor/test-badly-distributed")]
+    (util/delete-dir node-dir)
+
+    (binding [c/*page-size* 8
+              c/*l1-file-size-rows* 32]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+        (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+              ^IMetadataManager meta-mgr (tu/component node :xtdb.metadata/metadata-manager)]
+          (letfn [(submit! [xs]
+                    (doseq [batch (partition-all 8 xs)]
+                      (xt/submit-tx node [(into [:put-docs :foo]
+                                                (for [x batch]
+                                                  {:xt/id x}))])))]
+
+            (submit! (take 512 (cycle (tu/bad-uuid-seq 8))))
+            (tu/then-await-tx node)
+            (c/compact-all! node (Duration/ofSeconds 5))
+
+            (let [table-path (util/->path (str util/tables-dir "/foo"))
+                  meta-files (trie/list-meta-files bp table-path)]
+              (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
+                (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-path trie-key))
+                                 ^IDataRel data-rel (first (trie/open-data-rels bp table-path [trie-key]))
+                                 page-rels (map #(.loadPage data-rel %) (.getLeaves trie))]
+
+                  ;; checking that every page relation has a positive row count
+                  (t/is (empty? (->> page-rels
+                                     (mapv #(.rowCount ^RelationReader %))
+                                     (filter zero?)))))))))))))
 
 (t/deftest test-l2-compaction-badly-distributed
   (let [node-dir (util/->path "target/compactor/test-l1-compaction-badly-distributed")]

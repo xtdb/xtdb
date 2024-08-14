@@ -130,22 +130,35 @@ fun writeRelation(
     val startPtr = ArrowBufPointer()
     val endPtr = ArrowBufPointer()
 
-    fun writeSubtree(depth: Int, sel: Selection): Int =
-        if (Thread.interrupted()) throw InterruptedException()
-        else if (sel.size <= pageLimit) {
+    /**
+     * Writes a subtree of the trie for a given selection over the relation.
+     *
+     * If the trie is empty, it is represented as an empty recency branch.
+     * If the trie data fits onto a single page, it is represented as a leaf pointing to one page.
+     * Otherwise, the trie is split by recency and IID branch interleaving (at the first 3 levels).
+     * There should be no recency nodes pointing to an empty subtrie. An IID branch might have a null child,
+     * but not every child can be null.
+     */
+
+    fun writeSubtree(depth: Int, sel: Selection): Int {
+
+        fun writeRecencyBranch(parts: SortedMap<InstantMicros, Selection>): Int =
+            trieWriter.writeRecencyBranch(
+                parts.mapValuesTo(sortedMapOf()) { innerSel ->
+                    writeSubtree(depth + 1, innerSel.value)
+                }
+            )
+
+        return if (Thread.interrupted()) throw InterruptedException()
+        else if (sel.isEmpty()) {
+            writeRecencyBranch(sortedMapOf())
+        } else if (sel.size <= pageLimit) {
             for (idx in sel) rowCopier.copyRow(idx)
 
             val pos = trieWriter.writeLeaf()
             trieDataWriter.clear()
             pos
         } else {
-            fun writeRecencyBranch(parts: SortedMap<InstantMicros, Selection>): Int =
-                trieWriter.writeRecencyBranch(
-                    parts.mapValuesTo(sortedMapOf()) { innerSel ->
-                        writeSubtree(depth + 1, innerSel.value)
-                    }
-                )
-
             // Year, IID[0], Quarter, IID[1], Month, IID[2..]
             // then, when we've run out of IID, or when the first and last IIDs are the same,
             // we know that it's all versions of the same IID, so we page by recency
@@ -173,6 +186,7 @@ fun writeRelation(
                 }
             }
         }
+    }
 
     writeSubtree(0, IntArray(relation.rowCount()) { idx -> idx })
 
