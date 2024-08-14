@@ -117,19 +117,28 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     }
 
     sealed class Loader : AutoCloseable {
-
-        interface Batch {
+        protected interface Batch {
             fun load(rel: Relation)
         }
 
         abstract val schema: Schema
-        val batchCount get() = batches.size
         protected abstract val batches: List<Batch>
+        val batchCount get() = batches.size
+
+        private var lastBatchIdx = -1
 
         fun loadBatch(idx: Int, al: BufferAllocator) = Relation(al, schema).also { loadBatch(idx, it) }
 
         fun loadBatch(idx: Int, rel: Relation) {
             batches[idx].load(rel)
+            lastBatchIdx = idx
+        }
+
+        fun loadNextBatch(rel: Relation): Boolean {
+            if (lastBatchIdx + 1 >= batchCount) return false
+
+            loadBatch(++lastBatchIdx, rel)
+            return true
         }
     }
 
@@ -161,7 +170,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     ) : Loader() {
         override val schema: Schema = footer.schema
 
-        inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
+        inner class Batch(private val idx: Int, private val block: ArrowBlock): Loader.Batch {
 
             override fun load(rel: Relation) {
                 val prefixSize =

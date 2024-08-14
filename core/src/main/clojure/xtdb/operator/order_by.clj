@@ -7,20 +7,20 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (clojure.lang IPersistentMap PersistentVector)
+  (:import (clojure.lang IPersistentMap)
            (java.io File OutputStream)
            (java.nio.channels Channels)
            java.nio.file.Path
-           (java.util HashMap PriorityQueue)
+           (java.util HashMap List PriorityQueue)
            (java.util Comparator)
-           (java.util.function Consumer ToIntFunction)
+           (java.util.function Consumer)
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector ValueVector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter)
-           org.apache.arrow.vector.types.pojo.Field
+           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader ArrowFileWriter)
+           (org.apache.arrow.vector.types.pojo Field)
+           (xtdb.arrow Relation Relation$Loader RowCopier VectorPosition VectorReader)
            xtdb.ICursor
-           (xtdb.arrow RowCopier VectorPosition VectorReader)
            (xtdb.vector IVectorReader RelationReader RelationWriter)))
 
 (s/def ::direction #{:asc :desc})
@@ -42,21 +42,15 @@
   (io/file tmp-dir (format "temp-sort-%d-%d.arrow" batch-idx file-idx)))
 
 (defn- write-rel [^BufferAllocator allocator, ^RelationReader rdr, ^OutputStream os]
-  (let [new-vecs (for [^IVectorReader col rdr]
-                   (let [new-vec (.createVector (-> (.getField col)
-                                                    (types/field-with-name (.getName col)))
-                                                allocator)]
-                     (.copyTo col new-vec)
-                     new-vec))]
-    (try
-      (with-open [root (VectorSchemaRoot. ^PersistentVector (vec new-vecs))]
-        (let [writer (ArrowStreamWriter. root nil (Channels/newChannel os))]
-          (.start writer)
-          (.writeBatch writer)
-          (.end writer)))
-      (catch Throwable e
-        (run! util/close new-vecs)
-        (throw e)))))
+  (util/with-close-on-catch [new-vecs (vec (for [^IVectorReader col rdr]
+                                             (let [new-vec (.createVector (-> (.getField col)
+                                                                              (types/field-with-name (.getName col)))
+                                                                          allocator)]
+                                               (.copyTo col new-vec)
+                                               new-vec)))]
+    (with-open [root (VectorSchemaRoot. ^List new-vecs)]
+      (doto (ArrowFileWriter. root nil (Channels/newChannel os))
+        (.start) (.writeBatch) (.end)))))
 
 (defn- sorted-idxs ^ints [^RelationReader read-rel, order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
@@ -99,11 +93,11 @@
       (recur (conj filenames filename) (inc file-idx))
       (mapv io/file filenames))))
 
-(defn mk-irel-comparator [^RelationReader irel1 ^RelationReader irel2 order-specs]
+(defn mk-rel-comparator [^Relation rel1, ^Relation rel2, order-specs]
   (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                          :or {direction :asc, null-ordering :nulls-last}}]]
-            (let [read-col1 (.readerForName irel1 (str column))
-                  read-col2 (.readerForName irel2 (str column))
+            (let [read-col1 (.get rel1 (str column))
+                  read-col2 (.get rel2 (str column))
                   col-comparator (expr.comp/->comparator read-col1 read-col2 null-ordering)
 
                   ^Comparator
@@ -116,101 +110,93 @@
           nil
           order-specs))
 
-(defn- fields->vsr ^VectorSchemaRoot [^BufferAllocator allocator fields]
-  (VectorSchemaRoot. ^PersistentVector (vec (for [[col-name field] fields]
-                                              (.createVector (types/field-with-name field (str col-name))
-                                                             allocator)))))
+(defn- rename-fields [fields]
+  (vec (for [[col-name field] fields]
+         (types/field-with-name field (str col-name)))))
 
-(defn k-way-merge [^BufferAllocator allocator filenames order-specs fields tmp-dir batch-idx file-idx]
+(defn k-way-merge [^BufferAllocator allocator filenames order-specs ^List fields tmp-dir batch-idx file-idx]
   (let [k (count filenames)
-        out-file (->file tmp-dir batch-idx file-idx)
-        rdrs (object-array (mapv #(ArrowStreamReader. (io/input-stream %) allocator) filenames))
-        vsrs (object-array (mapv #(.getVectorSchemaRoot ^ArrowStreamReader %) rdrs))
-        rel-rdrs (object-array k)
-        copiers (object-array k)
-        positions (object-array (repeatedly k #(VectorPosition/build)))]
-    (try
-      (with-open [root-out (fields->vsr allocator fields)
-                  wrt (ArrowStreamWriter. root-out nil (io/output-stream out-file))
-                  rel-wrt (vw/root->writer root-out)]
-        (let [rel-wrt-cnt (VectorPosition/build)]
+        out-file (->file tmp-dir batch-idx file-idx)]
+
+    (util/with-open [loaders (mapv (fn [file-name]
+                                     (try
+                                       (Relation/loader allocator (util/->file-channel (util/->path file-name)))
+                                       (catch Exception t
+                                         (throw (ex-info "unable to read file" {:file-name file-name} t)))))
+                                   filenames)
+                     rels (mapv #(Relation. allocator (.getSchema ^Relation$Loader %)) loaders)]
+
+      (let [copiers (object-array k)
+            positions (int-array k)]
+        (with-open [out-rel (Relation. allocator fields)
+                    out-unl (.startUnload out-rel (Channels/newChannel (io/output-stream out-file)))]
+          (dotimes [i k]
+            (aset copiers i (.rowCopier out-rel ^Relation (nth rels i))))
+
           (letfn [(load-next-rel [i]
-                    (when (aget rel-rdrs i)
-                      (util/close (aget rel-rdrs i)))
-                    (when (.loadNextBatch ^ArrowStreamReader (aget rdrs i))
-                      (aset rel-rdrs i (vr/<-root (aget vsrs i)))
-                      (aset copiers i (.rowCopier rel-wrt (aget rel-rdrs i)))
-                      (.setPosition ^VectorPosition (aget positions i) 0)
+                    (when (.loadNextBatch ^Relation$Loader (nth loaders i)
+                                          ^Relation (nth rels i))
+                      (aset positions i 0)
                       true))]
-            (.start wrt)
             (let [cmps (HashMap.)
                   pq (PriorityQueue. (fn [^long i ^long j]
                                        (if (< i j)
-                                         (.compare ^java.util.Comparator
-                                                   (.get cmps [i j])
-                                                   (.getPosition ^VectorPosition (aget positions i))
-                                                   (.getPosition ^VectorPosition (aget positions j)))
-                                         (* -1 (.compare ^java.util.Comparator
-                                                         (.get cmps [j i])
-                                                         (.getPosition ^VectorPosition (aget positions j))
-                                                         (.getPosition ^VectorPosition (aget positions i)))))))]
-              (doseq [i (range k)]
+                                         (.compare ^java.util.Comparator (.get cmps [i j])
+                                                   (aget positions i)
+                                                   (aget positions j))
+                                         (- (.compare ^java.util.Comparator (.get cmps [j i])
+                                                      (aget positions j)
+                                                      (aget positions i))))))]
+              (dotimes [i k]
                 (load-next-rel i))
 
               (doseq [i (range k)
                       j (range i)]
-                (.put cmps [j i] (mk-irel-comparator (aget rel-rdrs j) (aget rel-rdrs i) order-specs)))
+                (.put cmps [j i] (mk-rel-comparator (nth rels j) (nth rels i) order-specs)))
 
-              (doseq [i (range k)]
-                (when-let [^RelationReader rel-rdr (aget rel-rdrs i)]
-                  (when (pos-int? (.rowCount rel-rdr))
+              (dotimes [i k]
+                (when-let [^Relation rel (nth rels i)]
+                  (when (pos? (.getRowCount rel))
                     (.add pq i))))
 
               (while (not (.isEmpty pq))
                 (let [^long i (.poll pq)
-                      ^VectorPosition position (aget positions i)]
-                  (.copyRow ^RowCopier (aget copiers i) (.getPositionAndIncrement position))
-                  (if (< (.getPosition position) (.rowCount ^RelationReader (aget rel-rdrs i)))
+                      pos (aget positions i)]
+                  (aset positions i (inc pos))
+                  (.copyRow ^RowCopier (aget copiers i) pos)
+
+                  (if (< (inc pos) (.getRowCount ^Relation (nth rels i)))
                     (.add pq i)
                     (when (load-next-rel i)
-                      ;; TODO can this extra comparator creation be avoided?
-                      (let [new-rdr (aget rel-rdrs i)]
-                        (doseq [^long j (range k)
-                                :when (not= i j)]
-                          (if (< i j)
-                            (.put cmps [i j] (mk-irel-comparator new-rdr (aget rel-rdrs j) order-specs))
-                            (.put cmps [j i] (mk-irel-comparator (aget rel-rdrs j) new-rdr order-specs)))))
                       (.add pq i)))
+
                   ;; spill next chunk
-                  (when (< ^int *chunk-size* (.getPositionAndIncrement rel-wrt-cnt))
-                    (.syncRowCount rel-wrt)
-                    (.writeBatch wrt)
-                    (.clear rel-wrt)
-                    (.setPosition rel-wrt-cnt 0)
-                    (doseq [i (range k)]
-                      (aset copiers i (.rowCopier rel-wrt (aget rel-rdrs i))))))))
+                  (when (< ^int *chunk-size* (.getRowCount out-rel))
+                    (.writeBatch out-unl)
+                    (.clear out-rel)))))
+
             ;; spill remaining rows
-            (when (pos-int? (.getPosition rel-wrt-cnt))
-              (.syncRowCount rel-wrt)
-              (.writeBatch wrt))
-            (.end wrt)
-            out-file)))
-      (finally
-        (run! util/close rdrs)
-        (run! util/close vsrs)))))
+            (when (pos? (.getRowCount out-rel))
+              (.writeBatch out-unl))
+            (.endFile out-unl)
+            out-file))))))
 
 (def ^:private k-way-constant 4)
 
-(defn- external-sort [allocator ^ICursor in-cursor, order-specs, fields, tmp-dir, first-filename]
+(defn- external-sort [allocator in-cursor order-specs fields tmp-dir first-filename]
   (let [batches (write-out-rels allocator in-cursor order-specs tmp-dir first-filename)]
-    (loop [batches batches batch-idx 1]
+    (loop [batches batches
+           batch-idx 1]
       (if-not (< 1 (count batches))
         (first batches)
         (recur
          (loop [batches batches new-batches [] file-idx 0]
            (if-let [files (seq (take k-way-constant batches))]
-             (let [new-batch (k-way-merge allocator files order-specs fields tmp-dir batch-idx file-idx)]
-               (dorun (map io/delete-file files))
+             (let [new-batch (try
+                               (k-way-merge allocator files order-specs fields tmp-dir batch-idx file-idx)
+                               (finally
+                                 #_(run! io/delete-file files)))]
+               
                (recur (drop k-way-constant batches)
                       (conj new-batches new-batch)
                       (inc file-idx)))
@@ -223,14 +209,14 @@
                         order-specs
                         ^:unsynchronized-mutable ^boolean consumed?
                         ^:unsynchronized-mutable ^Path sort-dir
-                        ^:unsynchronized-mutable ^ArrowStreamReader reader
+                        ^:unsynchronized-mutable ^ArrowReader reader
                         ^:unsynchronized-mutable ^VectorSchemaRoot read-root
                         ^:unsynchronized-mutable ^File sorted-file]
   ICursor
   (tryAdvance [this c]
     (if-not consumed?
       (letfn [(load-next-batch []
-                (if (.loadNextBatch ^ArrowStreamReader (.reader this))
+                (if (.loadNextBatch ^ArrowReader (.reader this))
                   (with-open [out-rel (vr/<-root (.read-root this))]
                     (.accept c out-rel)
                     true)
@@ -240,10 +226,8 @@
                     false)))]
         (if-not (nil? reader)
           (load-next-batch)
-          (with-open [rel-writer (RelationWriter. allocator (for [[col-name ^Field field] static-fields]
-                                                              (-> (types/field-with-name field (str col-name))
-                                                                  (.createVector allocator)
-                                                                  vw/->writer)))]
+          (with-open [rel-writer (RelationWriter. allocator (for [^Field field static-fields]
+                                                              (vw/->writer (.createVector field allocator))))]
             (let [pos (.writerPosition rel-writer)]
               (while (and (<= (.getPosition pos) ^int *chunk-size*)
                           (.tryAdvance in-cursor
@@ -272,10 +256,9 @@
 
                     (let [sorted-file (external-sort allocator in-cursor order-specs static-fields tmp-dir first-filename)]
                       (set! (.sorted-file this) sorted-file)
-                      (set! (.reader this) (ArrowStreamReader. (io/input-stream sorted-file) allocator))
+                      (set! (.reader this) (ArrowFileReader. (util/->file-channel (util/->path sorted-file)) allocator))
                       (set! (.read-root this) (.getVectorSchemaRoot reader))
-                      (load-next-batch)))))))
-          ))
+                      (load-next-batch)))))))))
       false))
 
   (close [_]
@@ -288,4 +271,4 @@
     (fn [fields]
       {:fields fields
        :->cursor (fn [{:keys [allocator]} in-cursor]
-                   (OrderByCursor. allocator in-cursor fields order-specs false nil nil nil nil))})))
+                   (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil))})))
