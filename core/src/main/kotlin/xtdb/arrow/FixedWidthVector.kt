@@ -4,6 +4,8 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.BaseFixedWidthVector
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -136,6 +138,14 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
         dataBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing data buffer"))
 
         valueCount = node.length
+    }
+
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is BaseFixedWidthVector)
+        validityBuffer.loadBuffer(vec.validityBuffer)
+        dataBuffer.loadBuffer(vec.dataBuffer)
+
+        valueCount = vec.valueCount
     }
 
     final override fun reset() {

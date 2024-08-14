@@ -6,6 +6,7 @@ import org.apache.arrow.flatbuf.Message
 import org.apache.arrow.flatbuf.RecordBatch
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
@@ -39,6 +40,11 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     fun endRow() = ++rowCount
 
     override fun iterator() = vectors.values.iterator()
+
+    fun loadFromArrow(root: VectorSchemaRoot) {
+        vectors.forEach { (name, vec) -> vec.loadFromArrow(root.getVector(name)) }
+        rowCount = root.rowCount
+    }
 
     private inner class Unloader(private val ch: WriteChannel) : RelationUnloader {
 
@@ -237,6 +243,9 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         @JvmField
         // naming from Oracle - zero cols, one row
         val DUAL = Relation(emptyList(), 1)
+
+        @JvmStatic
+        fun fromRoot(vsr: VectorSchemaRoot) = Relation(vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
     }
 
     /**
@@ -254,9 +263,23 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     override operator fun get(colName: String) = vectors[colName]
 
     @Suppress("unused")
-    fun toLists(): Map<String, List<*>> {
-        return vectors.mapValues { it.value.toList() }
-    }
+    @JvmOverloads
+    fun toTuples(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
+        (0..<rowCount).map { idx -> vectors.map { it.value.getObject(idx, keyFn) } }
+
+    @Suppress("unused")
+    @JvmOverloads
+    fun toMaps(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
+        (0..<rowCount).map { idx ->
+            PersistentHashMap.create(
+                vectors.entries.associate {
+                    Pair(
+                        keyFn.denormalize(it.key),
+                        it.value.getObject(idx, keyFn)
+                    )
+                }
+            ) as Map<*, *>
+        }
 
     val oldRelReader: OldRelationReader
         get() = OldRelationReader.from(vectors.sequencedValues().map(VectorReader.Companion::NewToOldAdapter), rowCount)

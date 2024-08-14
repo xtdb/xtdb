@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import org.apache.arrow.vector.VectorSchemaRoot
 import java.nio.channels.WritableByteChannel
 import xtdb.vector.RelationReader as OldRelationReader
 

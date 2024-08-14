@@ -6,6 +6,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.DateUnit.DAY
@@ -21,6 +22,7 @@ import xtdb.vector.extensions.KeywordType
 import xtdb.vector.extensions.TransitType
 import xtdb.vector.extensions.UuidType
 import java.time.ZoneId
+import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 internal fun Any.unsupported(op: String): Nothing =
     throw UnsupportedOperationException("$op unsupported on ${this::class.simpleName}")
@@ -42,6 +44,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
     internal abstract fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
+    internal abstract fun loadFromArrow(vec: ValueVector)
 
     override fun toList() = (0 until valueCount).map { getObject(it) }
 
@@ -139,5 +142,10 @@ sealed class Vector : VectorReader, VectorWriter {
                 }
             })
         }
+
+        @JvmStatic
+        fun fromArrow(vec: ValueVector): Vector =
+            (if (vec is ArrowNullVector) NullVector(vec.name) else fromField(vec.allocator, vec.field))
+                .apply { loadFromArrow(vec) }
     }
 }

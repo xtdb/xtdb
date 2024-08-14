@@ -3,7 +3,9 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import xtdb.vector.extensions.XtExtensionVector
 
 abstract class ExtensionVector : Vector() {
     protected abstract val inner: Vector
@@ -28,6 +30,11 @@ abstract class ExtensionVector : Vector() {
 
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         inner.loadBatch(nodes, buffers)
+
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is XtExtensionVector<*>)
+        inner.loadFromArrow(vec.underlyingVector)
+    }
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is ExtensionVector)

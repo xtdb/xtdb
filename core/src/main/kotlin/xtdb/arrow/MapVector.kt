@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -40,12 +41,6 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         require(src is MapVector)
         return listVector.rowCopier0(src.listVector)
     }
-
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        listVector.unloadBatch(nodes, buffers)
-
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        listVector.loadBatch(nodes, buffers)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any {
         val startIdx = listVector.getListStartIndex(idx)
@@ -92,6 +87,14 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun mapKeyWriter(fieldType: FieldType) = elementWriter().mapKeyWriter(fieldType)
     override fun mapValueWriter() = elementWriter().mapValueWriter()
     override fun mapValueWriter(fieldType: FieldType) = elementWriter().mapValueWriter(fieldType)
+
+    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.unloadBatch(nodes, buffers)
+
+    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.loadBatch(nodes, buffers)
+
+    override fun loadFromArrow(vec: ValueVector) = listVector.loadFromArrow(vec)
 
     override fun reset() = listVector.reset()
     override fun close() = listVector.close()

@@ -4,6 +4,8 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.BaseVariableWidthVector
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -93,6 +95,14 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         dataBuffer.loadBuffer(buffers.removeFirst() ?: error("missing data buffer"))
 
         valueCount = node.length
+    }
+
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is BaseVariableWidthVector)
+
+        validityBuffer.loadBuffer(vec.validityBuffer)
+        offsetBuffer.loadBuffer(vec.offsetBuffer)
+        dataBuffer.loadBuffer(vec.dataBuffer)
     }
 
     override fun reset() {

@@ -3,12 +3,12 @@
             [next.jdbc :as jdbc]
             [xtdb.flight-sql]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
-            [xtdb.vector.reader :as vr])
+            [xtdb.types :as types])
   (:import (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.pojo.Schema))
+           org.apache.arrow.vector.types.pojo.Schema
+           xtdb.arrow.Relation))
 
 (def ^:private ^:dynamic *port* nil)
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
@@ -42,10 +42,12 @@
     (with-open [stream (.getStream *client* ticket empty-call-opts)]
       (let [root (.getRoot stream)
             !res (atom [])]
-        (while (.next stream)
-          ;; if this were a real client chances are they wouldn't just
-          ;; eagerly turn the roots into Clojure maps...
-          (swap! !res into (vr/rel->rows (vr/<-root root) #xt/key-fn :snake-case-keyword)))
+        (with-open [rel (Relation/fromRoot root)]
+          (while (.next stream)
+            ;; if this were a real client chances are they wouldn't just
+            ;; eagerly turn the roots into Clojure maps...
+            (.loadFromArrow rel root)
+            (swap! !res into (.toMaps rel))))
 
         @!res))))
 

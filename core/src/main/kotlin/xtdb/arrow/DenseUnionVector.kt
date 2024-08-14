@@ -3,11 +3,13 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
 class DenseUnionVector(
     private val allocator: BufferAllocator,
@@ -219,6 +221,16 @@ class DenseUnionVector(
         legs.forEach { it.loadBatch(nodes, buffers) }
 
         valueCount = node.length
+    }
+
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is ArrowDenseUnionVector)
+        typeBuffer.loadBuffer(vec.typeBuffer)
+        offsetBuffer.loadBuffer(vec.offsetBuffer)
+
+        legs.forEach { it.loadFromArrow(vec.getChild(it.name)) }
+
+        valueCount = vec.valueCount
     }
 
     override fun reset() {

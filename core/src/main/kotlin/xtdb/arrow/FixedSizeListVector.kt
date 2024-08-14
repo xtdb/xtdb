@@ -4,11 +4,13 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
 
 class FixedSizeListVector(
     allocator: BufferAllocator,
@@ -78,6 +80,15 @@ class FixedSizeListVector(
         elVector.loadBatch(nodes, buffers)
 
         valueCount = node.length
+    }
+
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is ArrowFixedSizeListVector)
+
+        validityBuffer.loadBuffer(vec.validityBuffer)
+        elVector.loadFromArrow(vec.dataVector)
+
+        valueCount = vec.valueCount
     }
 
     override fun reset() {

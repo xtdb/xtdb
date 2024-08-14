@@ -4,6 +4,8 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
+import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -36,22 +38,6 @@ class StructVector(
     override fun writeNull() {
         validityBuffer.writeBit(valueCount++, 0)
         writeAbsents()
-    }
-
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.unloadBuffer(buffers)
-
-        children.sequencedValues().forEach { it.unloadBatch(nodes, buffers) }
-    }
-
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
-
-        validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
-        children.sequencedValues().forEach { it.loadBatch(nodes, buffers) }
-
-        valueCount = node.length
     }
 
     override fun keyReader(name: String) = children[name]
@@ -120,6 +106,30 @@ class StructVector(
             childCopiers.forEach { it.copyRow(srcIdx) }
             valueCount.also { endStruct() }
         }
+    }
+
+    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
+        validityBuffer.unloadBuffer(buffers)
+
+        children.sequencedValues().forEach { it.unloadBatch(nodes, buffers) }
+    }
+
+    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        val node = nodes.removeFirst() ?: error("missing node")
+
+        validityBuffer.loadBuffer(buffers.removeFirst() ?: error("missing validity buffer"))
+        children.sequencedValues().forEach { it.loadBatch(nodes, buffers) }
+
+        valueCount = node.length
+    }
+
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is NonNullableStructVector)
+        validityBuffer.loadBuffer(vec.validityBuffer)
+        children.sequencedValues().forEach { it.loadFromArrow(vec.getChild(it.name)) }
+
+        valueCount = vec.valueCount
     }
 
     override fun reset() {
