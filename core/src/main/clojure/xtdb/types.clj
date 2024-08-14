@@ -745,12 +745,11 @@
 (def ^{:tag 'long} unix-pg-epoch-diff-in-micros (* (.toEpochMilli (.toInstant (.atStartOfDay pg-epoch) ZoneOffset/UTC)) 1000))
 
 (def pg-types
-  {:unknown {:typname "unknown"
-             :col-type :null
-             :oid 0
-             ;;unknown is only an input (param) type therefore needs no write fn
-             ;;untyped nulls are returned as text in result sets
-             :read-text (fn [_env _ba] nil)}
+  {:default {:typname "default" :col-type :default :oid 0}
+   ;;default oid is currently only used to describe a parameter without a known type
+   ;;these are not supported in DML and for queries are defaulted to text by the backend
+   ;;therefore need to read/write fns.
+   ;;Note
 
    :int8 (let [typlen 8]
            {:typname "int8"

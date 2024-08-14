@@ -143,7 +143,9 @@
                                 :explain (s/explain-data ::lp/logical-plan query)})))
 
      (let [param-count (or (:param-count (meta query)) 0)
-           param-types-with-defaults (->> (concat param-types (repeat :utf8))
+           param-types-with-defaults (->> (concat
+                                           (mapv #(if (= :default %) :utf8 %) param-types)
+                                           (repeat :utf8))
                                           (take param-count))
            tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
            scan-cols (->> tables

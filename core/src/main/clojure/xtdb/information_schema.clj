@@ -150,7 +150,7 @@
   rel-wtr)
 
 (defn pg-type [^IRelationWriter rel-wtr]
-  (doseq [{:keys [oid typname] :as x} (vals types/pg-types)]
+  (doseq [{:keys [oid typname] :as x} (remove #(= 0 (:oid %)) (vals types/pg-types))]
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col

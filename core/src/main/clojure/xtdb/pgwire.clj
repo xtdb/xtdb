@@ -1097,7 +1097,8 @@
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
   (let [{:keys [session transaction]} @conn-state
         ^Clock clock (:clock session)
-        _ (when-not (= (count param-fields) (count params))
+        _ (when (or (not= (count param-fields) (count params))
+                    (some #(= 0 (:column-oid %)) param-fields))
             (log/error "Missing types for params in DML statement")
             (cmd-send-error
              conn

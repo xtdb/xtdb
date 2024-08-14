@@ -283,14 +283,6 @@
               :typnamespace -2125819141,
               :typbasetype 0}
              {:typtypmod -1,
-              :oid 0,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "unknown",
-              :typnamespace -2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
               :oid 23,
               :typtype "b",
               :typowner 1376455703,
