@@ -23,7 +23,7 @@
            java.util.List
            (org.postgresql.util PGobject PSQLException)
            (org.pg.enums OID)
-           (org.pg.error PGError)))
+           (org.pg.error PGError PGErrorResponse)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -1562,18 +1562,38 @@
                (pg/execute conn "SELECT $1 v" {:params ["1"]}))
             "given text params query is executable")
 
+      (t/is (= [{:v "1"}]
+               (pg/execute conn "SELECT $1 v" {:params ["1"]
+                                               :oids [OID/DEFAULT]}))
+            "params declared with the default oid (0) by clients are
+             treated as unspecified and therefore considered text")
+
       (t/is (thrown-with-msg?
              PGError #"cannot text-encode a value: 1, OID: TEXT, type: java.lang.Long"
              (pg/execute conn "SELECT $1 v" {:params [1]}))
             "non text params error"))
 
-    (t/is (thrown?
-           PGError
-           (pg/execute conn "INSERT INTO foo(xt$id, v) VALUES (1, $1)" {:params ["1"]}))
-          "dml with unspecified params error")
-    ;;this is because we rely on sending the query string to the server to infer the param count
-    ;;which allows us to correctly describe the number of defaulted params.
-    ))
+    (testing "params with unspecified types in DML error"
+      ;;postgres is able to infer the type of the param from context such as the column type
+      ;;of base tables referenced in the query and the operations present. However we are currently
+      ;;not able to do this, because the EE isn't yet powerful enough to work in reverese and requires
+      ;;all param types to be known, but also because we can't guarentee the types of any base tables
+      ;;before executing a DML statement, as this isn't fixed until the indexer has indexed the tx.
+      ;;
+      ;;Therefore we choose to error in this case to avoid any surprising and unexecpted behaviour
+      (t/is (thrown?
+             PGError
+             (pg/execute conn "INSERT INTO foo(xt$id, v) VALUES (1, $1)" {:params ["1"]}))
+            "dml with unspecified params error")
+
+
+      (t/is (thrown-with-msg?
+             PGErrorResponse
+             #"Missing types for params - Client must specify types for all params in DML statements"
+             (pg/execute conn "INSERT INTO foo(xt$id, v) VALUES (1, $1)" {:params ["1"]
+                                                                          :oids [OID/DEFAULT]}))
+            "params declared with the default oid (0) by clients are
+             treated as unspecified and therefore also error"))))
 
 (deftest test-postgres-native-params
   (with-open [conn (pg-conn {})]
