@@ -1,5 +1,6 @@
 (ns xtdb.kafka
   (:require [clojure.java.io :as io]
+            [clojure.tools.logging :as ctl]
             [xtdb.api :as xt]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
@@ -15,7 +16,7 @@
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
-           [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
+           [org.apache.kafka.common.errors InterruptException TopicAuthorizationException TopicExistsException UnknownTopicOrPartitionException]
            org.apache.kafka.common.TopicPartition
            [xtdb.api Xtdb$Config TransactionKey]
            [xtdb.api.log Kafka Kafka$Factory Log Log$Record Log$Subscriber]))
@@ -117,13 +118,16 @@
     (util/try-close consumer)
     (util/try-close producer)))
 
-(defn ensure-topic-exists [kafka-config {:keys [topic-name replication-factor create-topic? topic-config]}]
-  (with-open [admin-client (AdminClient/create ^Map kafka-config)]
+(defn ensure-topic-exists [kafka-config {:keys [topic-name replication-factor create-topic? topic-config]}] 
+  (with-open [admin-client (AdminClient/create ^Map kafka-config)] 
     (or (when-let [^TopicDescription
                    desc (-> (try
                               (let [^List topics [topic-name]]
                                 (-> @(.all (.describeTopics admin-client topics))
                                     (util/rethrowing-cause)))
+                              (catch TopicAuthorizationException e
+                                (ctl/errorf "Failed to auth when calling 'describeTopics' on %s" topic-name)
+                                (throw e))
                               (catch UnknownTopicOrPartitionException _))
                             (get topic-name))]
           (let [partition-count (count (.partitions desc))]
