@@ -94,7 +94,15 @@ class StructVector(
             endStruct()
         }
 
-    override fun valueReader(pos: VectorPosition): ValueReader = TODO("Struct.valueReader")
+    override fun valueReader(pos: VectorPosition): ValueReader {
+        val readers = children.mapValues { it.value.valueReader(pos) }
+
+        return object : ValueReader {
+            override val isNull get() = this@StructVector.isNull(pos.position)
+
+            override fun readObject() = if (isNull) null else readers
+        }
+    }
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
         children.values.fold(0) { hash, child ->

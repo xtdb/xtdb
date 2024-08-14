@@ -39,7 +39,7 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
         else dataBuffer.getBit(idx)
 
     protected fun writeBoolean0(value: Boolean) {
-        dataBuffer.setBit(valueCount, if (value) 1 else 0)
+        dataBuffer.writeBit(valueCount, if (value) 1 else 0)
         writeNotNull()
     }
 
@@ -120,7 +120,7 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
 
         return RowCopier { srcIdx ->
             dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
-            valueCount++
+            valueCount.also { writeNotNull() }
         }
     }
 

@@ -45,7 +45,7 @@ interface VectorReader : AutoCloseable {
     fun keyReader(name: String): VectorReader? = unsupported("keyReader")
 
     fun legReader(name: String): VectorReader? = unsupported("legWriter")
-    fun getLeg(idx: Int): String = unsupported("getLeg")
+    fun getLeg(idx: Int): String? = unsupported("getLeg")
 
     fun valueReader(pos: VectorPosition) = object : ValueReader {
         override val leg get() = getLeg(pos.position)
@@ -65,9 +65,28 @@ interface VectorReader : AutoCloseable {
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun toList(): List<Any?> = List(valueCount) { getObject(it) }
-    fun rowCopier(dest: VectorWriter): RowCopier
+
+    fun rowCopier(dest: VectorWriter) = dest.rowCopier0(this).let { copier ->
+        RowCopier { srcIdx ->
+            if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+        }
+    }
 
     companion object {
+        fun toString(reader: VectorReader): String = reader.run {
+            val content = when {
+                valueCount == 0 -> ""
+                valueCount <= 5 -> toList().joinToString(", ", prefix = " [", postfix = "]")
+                else -> listOf(
+                    getObject(0).toString(), getObject(1).toString(), getObject(2).toString(),
+                    "...",
+                    getObject(valueCount - 2).toString(), getObject(valueCount - 1).toString()
+                ).joinToString(", ", prefix = " [", postfix = "]")
+            }
+
+            return "(${this::class.simpleName}[$valueCount]$content)"
+        }
+
         internal class NewToOldAdapter(private val vector: VectorReader) : IVectorReader {
 
             override fun hashCode(idx: Int, hasher: ArrowBufHasher?) = TODO("Not yet implemented")

@@ -45,7 +45,7 @@ class DenseUnionVector(
         override fun hashCode(idx: Int, hasher: ArrowBufHasher) = inner.hashCode(getOffset(idx), hasher)
 
         override fun rowCopier(dest: VectorWriter): RowCopier {
-            val innerCopier = dest.rowCopier0(inner)
+            val innerCopier = inner.rowCopier(dest)
             return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
         }
 
@@ -113,23 +113,21 @@ class DenseUnionVector(
     private fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
     internal fun offsets() = (0 until valueCount).map { offsetBuffer.getInt(it) }
 
-    private fun leg(idx: Int): Vector? {
-        val typeId = getTypeId(idx)
-        return if (typeId >= 0) legs[getTypeId(idx).toInt()] else null
-    }
+    private fun leg(idx: Int) = getTypeId(idx).takeIf { it >= 0 }?.let { legs[it.toInt()] }
 
-    override fun isNull(idx: Int) = leg(idx)?.isNull(idx) ?: false
+    override fun isNull(idx: Int) = leg(idx)?.isNull(getOffset(idx)) ?: true
 
     override fun writeNull() {
         typeBuffer.writeByte(-1)
         offsetBuffer.writeInt(0)
+        valueCount++
     }
 
     override fun getObject(idx: Int) = leg(idx)?.getObject(getOffset(idx))
     override fun getObject0(idx: Int) = throw UnsupportedOperationException()
     override fun writeObject0(value: Any) = throw UnsupportedOperationException()
 
-    override fun getLeg(idx: Int) = leg(idx)!!.name
+    override fun getLeg(idx: Int) = leg(idx)?.name
 
     override fun legReader(name: String): VectorReader? {
         for (i in legs.indices) {
@@ -165,25 +163,44 @@ class DenseUnionVector(
         )
     }
 
-    override fun valueReader(pos: VectorPosition): ValueReader = TODO("DUV.valueReader")
+    override fun valueReader(pos: VectorPosition): ValueReader {
+        val legReaders = legs
+            .mapIndexed { typeId, leg -> LegReader(typeId.toByte(), leg) }
+            .associate { it.name to it.valueReader(pos) }
+
+        return object : ValueReader {
+            override val leg get() = this@DenseUnionVector.getLeg(pos.position)
+
+            private val legReader get() = legReaders[leg]
+
+            override val isNull: Boolean get() = legReader?.isNull ?: true
+            override fun readBoolean() = legReader!!.readBoolean()
+            override fun readByte() = legReader!!.readByte()
+            override fun readShort() = legReader!!.readShort()
+            override fun readInt() = legReader!!.readInt()
+            override fun readLong() = legReader!!.readLong()
+            override fun readFloat() = legReader!!.readFloat()
+            override fun readDouble() = legReader!!.readDouble()
+            override fun readBytes() = legReader!!.readBytes()
+            override fun readObject() = legReader?.readObject()
+        }
+    }
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = leg(idx)!!.hashCode(idx, hasher)
 
-    override fun rowCopier0(src: VectorReader): RowCopier {
-        return if (src is DenseUnionVector) {
+    override fun rowCopier0(src: VectorReader) =
+        if (src is DenseUnionVector) {
             val copierMapping = src.legs.map { childVec ->
                 val childField = childVec.field
-                legWriter(childField.name, childField.fieldType).rowCopier(childVec)
+                childVec.rowCopier(legWriter(childField.name, childField.fieldType))
             }
 
-            return RowCopier { srcIdx ->
-                copierMapping[src.getTypeId(srcIdx).also { check(it >= 0) }.toInt()]
-                    .copyRow(src.getOffset(srcIdx))
+            RowCopier { srcIdx ->
+                copierMapping[src.getTypeId(srcIdx).toInt().also { check(it >= 0) }].copyRow(src.getOffset(srcIdx))
             }
         } else {
             legWriter(src.name).rowCopier0(src)
         }
-    }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))

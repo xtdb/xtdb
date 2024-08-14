@@ -71,9 +71,10 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is VariableWidthVector)
         return RowCopier { srcIdx ->
-            val start = offsetBuffer.getInt(srcIdx).toLong()
-            dataBuffer.writeBytes(src.dataBuffer, start, offsetBuffer.getInt(srcIdx + 1) - start)
-            valueCount++
+            val start = src.offsetBuffer.getInt(srcIdx).toLong()
+            val len = src.offsetBuffer.getInt(srcIdx + 1) - start
+            dataBuffer.writeBytes(src.dataBuffer, start, len)
+            valueCount.also { writeNotNull(len.toInt()) }
         }
     }
 

@@ -21,11 +21,9 @@ class BitVector(al: BufferAllocator, override val name: String, override var nul
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = if (getBoolean(idx)) 17 else 19
 
-    override fun rowCopier0(src: VectorReader): RowCopier {
+    override fun rowCopier0(src: VectorReader) =
         if (src !is BitVector) TODO("promote ${src::class.simpleName}")
-        return if (src !is BitVector || (!nullable && src.nullable)) TODO("rowCopier")
         else RowCopier { srcIdx ->
             valueCount.apply { if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx)) }
         }
-    }
 }
