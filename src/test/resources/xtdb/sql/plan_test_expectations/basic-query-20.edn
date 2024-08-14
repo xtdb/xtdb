@@ -1,5 +1,5 @@
 [:top
- {:offset nil, :limit 10}
+ {:skip nil, :limit 10}
  [:project
   [{movie_title si.1/movie_title}]
   [:rename si.1 [:scan {:table stars_in} [movie_title]]]]]

@@ -6,8 +6,8 @@
            xtdb.ICursor
            xtdb.vector.RelationReader))
 
-(s/def ::skip nat-int?)
-(s/def ::limit nat-int?)
+(s/def ::skip (s/nilable nat-int?))
+(s/def ::limit (s/nilable nat-int?))
 
 (defmethod lp/ra-expr :top [_]
   (s/cat :op #{:λ :top}

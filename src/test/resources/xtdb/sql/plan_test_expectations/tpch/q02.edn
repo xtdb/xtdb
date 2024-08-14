@@ -1,5 +1,5 @@
 [:top
- {:offset nil, :limit 100}
+ {:skip nil, :limit 100}
  [:project
   [{s_acctbal s.2/s_acctbal}
    {s_name s.2/s_name}

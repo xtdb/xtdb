@@ -1,5 +1,5 @@
 [:top
- {:offset nil, :limit 10}
+ {:skip nil, :limit 10}
  [:project
   [{l_orderkey l.3/l_orderkey}
    revenue

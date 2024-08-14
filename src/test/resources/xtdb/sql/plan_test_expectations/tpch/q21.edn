@@ -1,5 +1,5 @@
 [:top
- {:offset nil, :limit 100}
+ {:skip nil, :limit 100}
  [:project
   [{s_name s.1/s_name} numwait]
   [:order-by

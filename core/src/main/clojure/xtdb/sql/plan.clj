@@ -1782,9 +1782,9 @@
             (or offset-clause limit-clause)
             (update :plan (fn [plan]
                             (let [expr-visitor (->ExprPlanVisitor env scope)]
-                              [:top {:offset (some-> offset-clause
-                                                     (.offsetRowCount)
-                                                     (.accept expr-visitor))
+                              [:top {:skip (some-> offset-clause
+                                                   (.offsetRowCount)
+                                                   (.accept expr-visitor))
 
                                      :limit (when limit-clause
                                               (or (some-> (.fetchFirstRowCount limit-clause)

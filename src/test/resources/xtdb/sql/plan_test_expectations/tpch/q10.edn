@@ -1,5 +1,5 @@
 [:top
- {:offset nil, :limit 20}
+ {:skip nil, :limit 20}
  [:project
   [{c_custkey c.1/c_custkey}
    {c_name c.1/c_name}
