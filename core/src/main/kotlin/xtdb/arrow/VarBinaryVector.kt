@@ -10,11 +10,11 @@ class VarBinaryVector(al: BufferAllocator, override val name: String, override v
 
     override val arrowType: ArrowType = Types.MinorType.VARBINARY.type
 
-    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getBytes(idx)
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByteArray(idx)
 
-    override fun writeObject0(value: Any) = when {
-        value is ByteArray -> writeBytes(value)
-        value is ByteBuffer -> writeBytes(value)
+    override fun writeObject0(value: Any) = when (value) {
+        is ByteArray -> writeBytes(ByteBuffer.wrap(value))
+        is ByteBuffer -> writeBytes(value)
         else -> TODO("unknown type: ${value::class.simpleName}")
     }
 }

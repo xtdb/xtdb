@@ -38,7 +38,7 @@
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
-           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
@@ -262,7 +262,7 @@
                   content-rel-factory (->content-rel-factory leaf-rdrs allocator content-cols)]
 
               (doseq [[idx leaf-rdr] (map-indexed vector leaf-rdrs)
-                      :let [ev-ptr (EventRowPointer. leaf-rdr path)]]
+                      :let [ev-ptr (EventRowPointer$Arrow. leaf-rdr path)]]
                 (when (.isValid ev-ptr is-valid-ptr path)
                   (.add merge-q (->LeafPointer ev-ptr idx))))
 

@@ -29,7 +29,7 @@ interface VectorReader : AutoCloseable {
     fun getLong(idx: Int): Long = unsupported("getLong")
     fun getFloat(idx: Int): Float = unsupported("getFloat")
     fun getDouble(idx: Int): Double = unsupported("getDouble")
-    fun getBytes(idx: Int): ByteArray = unsupported("getBytes")
+    fun getBytes(idx: Int): ByteBuffer = unsupported("getBytes")
     fun getPointer(idx: Int, reuse: ArrowBufPointer = ArrowBufPointer()): ArrowBufPointer = unsupported("getPointer")
 
     fun getObject(idx: Int): Any? = getObject(idx) { it }
@@ -44,9 +44,11 @@ interface VectorReader : AutoCloseable {
     fun mapKeyReader(): VectorReader = unsupported("mapKeyReader")
     fun mapValueReader(): VectorReader = unsupported("mapValueReader")
 
+    val keys: Set<String>? get() = null
     fun keyReader(name: String): VectorReader? = unsupported("keyReader")
 
-    fun legReader(name: String): VectorReader? = unsupported("legWriter")
+    val legs: Set<String>? get() = null
+    fun legReader(name: String): VectorReader? = unsupported("legReader")
     fun getLeg(idx: Int): String? = unsupported("getLeg")
 
     fun valueReader(pos: VectorPosition) = object : ValueReader {
@@ -61,12 +63,12 @@ interface VectorReader : AutoCloseable {
         override fun readLong() = getLong(pos.position)
         override fun readFloat() = getFloat(pos.position)
         override fun readDouble() = getDouble(pos.position)
-        override fun readBytes(): ByteBuffer = ByteBuffer.wrap(getBytes(pos.position))
+        override fun readBytes() = getBytes(pos.position)
         override fun readObject() = getObject(pos.position)
     }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
-    fun toList(): List<Any?> = List(valueCount) { getObject(it) }
+    val asList get() = List(valueCount) { getObject(it) }
 
     fun rowCopier(dest: VectorWriter) = dest.rowCopier0(this).let { copier ->
         RowCopier { srcIdx ->
@@ -78,7 +80,7 @@ interface VectorReader : AutoCloseable {
         fun toString(reader: VectorReader): String = reader.run {
             val content = when {
                 valueCount == 0 -> ""
-                valueCount <= 5 -> toList().joinToString(", ", prefix = " [", postfix = "]")
+                valueCount <= 5 -> asList.joinToString(", ", prefix = " [", postfix = "]")
                 else -> listOf(
                     getObject(0).toString(), getObject(1).toString(), getObject(2).toString(),
                     "...",
@@ -109,7 +111,7 @@ interface VectorReader : AutoCloseable {
             override fun getLong(idx: Int) = vector.getLong(idx)
             override fun getFloat(idx: Int) = vector.getFloat(idx)
             override fun getDouble(idx: Int) = vector.getDouble(idx)
-            override fun getBytes(idx: Int): ByteBuffer = ByteBuffer.wrap(vector.getBytes(idx))
+            override fun getBytes(idx: Int) = vector.getBytes(idx)
 
             override fun getPointer(idx: Int) = vector.getPointer(idx)
             override fun getPointer(idx: Int, reuse: ArrowBufPointer) = vector.getPointer(idx, reuse)
@@ -132,7 +134,7 @@ interface VectorReader : AutoCloseable {
 
             override fun legReader(legKey: String) = vector.legReader(legKey)?.let { NewToOldAdapter(it) }
 
-            override fun legs() = error("legs")
+            override fun legs() = vector.legs?.toList()
 
             override fun copyTo(vector: ValueVector?) = error("copyTo")
 
@@ -158,19 +160,20 @@ interface VectorReader : AutoCloseable {
             override fun getLong(idx: Int) = old.getLong(idx)
             override fun getFloat(idx: Int) = old.getFloat(idx)
             override fun getDouble(idx: Int) = old.getDouble(idx)
-            override fun getBytes(idx: Int): ByteArray = old.getBytes(idx).array()
+            override fun getBytes(idx: Int): ByteBuffer = old.getBytes(idx)
             override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? = old.getObject(idx, keyFn)
 
             override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer = old.getPointer(idx, reuse)
 
             override fun hashCode(idx: Int, hasher: ArrowBufHasher) = old.hashCode(idx, hasher)
 
+            override val keys: Set<String>? get() = old.structKeys()?.toSet()
             override fun keyReader(name: String) = old.structKeyReader(name)?.let { OldToNewAdapter(it) }
             override fun elementReader() = OldToNewAdapter(old.listElementReader())
 
             override fun valueReader(pos: VectorPosition): ValueReader = old.valueReader(pos)
 
-            override fun toList() = List(valueCount) { old.getObject(it) }
+            override val asList get() = List(valueCount) { old.getObject(it) }
 
             override fun rowCopier(dest: VectorWriter) = error("rowCopier")
 

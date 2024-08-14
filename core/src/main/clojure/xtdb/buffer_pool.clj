@@ -19,7 +19,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
-           (xtdb IArrowWriter IBufferPool)
+           (xtdb ArrowWriter IBufferPool)
            (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
            xtdb.api.Xtdb$Config
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
@@ -91,26 +91,21 @@
              (distinct)
              (vec)))))
 
-  (openArrowWriter [this k vsr]
+  (openArrowWriter [this k rel]
     (let [baos (ByteArrayOutputStream.)]
       (util/with-close-on-catch [write-ch (Channels/newChannel baos)
-                                 aw (ArrowFileWriter. vsr nil write-ch)]
+                                 unl (.startUnload rel write-ch)]
 
-        (try
-          (.start aw)
-          (catch ClosedByInterruptException e
-            (throw (InterruptedException.))))
-
-        (reify IArrowWriter
-          (writeBatch [_] (.writeBatch aw))
+        (reify ArrowWriter
+          (writeBatch [_] (.writeBatch unl))
 
           (end [_]
-            (.end aw)
+            (.endFile unl)
             (.close write-ch)
             (.putObject this k (ByteBuffer/wrap (.toByteArray baos))))
 
           (close [_]
-            (close-arrow-writer aw)
+            (util/close unl)
             (when (.isOpen write-ch)
               (.close write-ch)))))))
 
@@ -181,24 +176,19 @@
                        (.relativize disk-store path)))))
         [])))
 
-  (openArrowWriter [_ k vsr]
+  (openArrowWriter [_ k rel]
     (let [tmp-path (create-tmp-path disk-store)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
-                                 aw (ArrowFileWriter. vsr nil file-ch)]
-        (try
-          (.start aw)
-          (catch ClosedByInterruptException e
-            (throw (InterruptedException.))))
-
-        (reify IArrowWriter
+                                 unl (.startUnload rel file-ch)]
+        (reify ArrowWriter
           (writeBatch [_]
             (try
-              (.writeBatch aw)
+              (.writeBatch unl)
               (catch ClosedByInterruptException e
                 (throw (InterruptedException.)))))
 
           (end [_]
-            (.end aw)
+            (.endFile unl)
             (.close file-ch)
 
             (let [file-path (.resolve disk-store k)]
@@ -206,7 +196,7 @@
               (util/atomic-move tmp-path file-path)))
 
           (close [_]
-            (close-arrow-writer aw)
+            (util/close unl)
             (when (.isOpen file-ch)
               (.close file-ch)))))))
 
@@ -366,21 +356,16 @@
 
   (listObjects [_ dir] (.listObjects object-store dir))
 
-  (openArrowWriter [_ k vsr]
+  (openArrowWriter [_ k rel]
     (let [tmp-path (create-tmp-path local-disk-cache)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
-                                 aw (ArrowFileWriter. vsr nil file-ch)]
+                                 unl (.startUnload rel file-ch)]
 
-        (try
-          (.start aw)
-          (catch ClosedByInterruptException _e
-            (throw (InterruptedException.))))
-
-        (reify IArrowWriter
-          (writeBatch [_] (.writeBatch aw))
+        (reify ArrowWriter
+          (writeBatch [_] (.writeBatch unl))
 
           (end [_]
-            (.end aw)
+            (.endFile unl)
             (.close file-ch)
 
             (upload-arrow-file allocator object-store k tmp-path)
@@ -397,7 +382,7 @@
                                                       {:pinned? pinned? :file-size (util/size-on-disk buffer-cache-path)})))))))
 
           (close [_]
-            (close-arrow-writer aw)
+            (util/close unl)
             (when (.isOpen file-ch)
               (.close file-ch)))))))
 

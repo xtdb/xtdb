@@ -51,7 +51,7 @@ class MapVectorTest {
             mapVec.writeObject(m2)
             mapVec.writeObject(m3)
 
-            assertEquals(listOf(m1, m2, m3), mapVec.toList())
+            assertEquals(listOf(m1, m2, m3), mapVec.asList)
         }
     }
 
@@ -81,7 +81,7 @@ class MapVectorTest {
                 rel.endRow()
 
                 unloader.writeBatch()
-                rel.reset()
+                rel.clear()
 
                 map.writeObject(m3)
                 rel.endRow()
@@ -100,17 +100,17 @@ class MapVectorTest {
                 loader.loadBatch(0, rel)
 
                 assertEquals(2, rel.rowCount)
-                assertEquals(listOf(m1, m2), mapVec.toList())
+                assertEquals(listOf(m1, m2), mapVec.asList)
 
                 loader.loadBatch(1, rel)
 
                 assertEquals(1, rel.rowCount)
-                assertEquals(listOf(m3), mapVec.toList())
+                assertEquals(listOf(m3), mapVec.asList)
 
                 loader.loadBatch(0, rel)
 
                 assertEquals(2, rel.rowCount)
-                assertEquals(listOf(m1, m2), mapVec.toList())
+                assertEquals(listOf(m1, m2), mapVec.asList)
             }
         }
 

@@ -16,13 +16,13 @@
            (java.nio.file.attribute FileAttribute)
            (java.util.concurrent CompletableFuture)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector IntVector VectorSchemaRoot)
+           (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
+           xtdb.arrow.Relation
            xtdb.buffer_pool.RemoteBufferPool
            xtdb.IBufferPool
-           (xtdb.multipart IMultipartUpload SupportsMultipart)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)))
+           (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (defonce tmp-dirs (atom []))
 
@@ -173,11 +173,11 @@
                       (fn [& args]
                         (reset! multipart-branch-taken true)
                         (apply upload-multipart-buffers args))]
-          (with-open [vsr (VectorSchemaRoot/create schema tu/*allocator*)
-                      w (.openArrowWriter bp (util/->path "aw") vsr)]
-            (let [^IntVector v (.getVector vsr "a")]
-              (.setValueCount v 10)
-              (dotimes [x 10] (.set v x x))
+          (with-open [rel (Relation. tu/*allocator* schema)
+                      w (.openArrowWriter bp (util/->path "aw") rel)]
+            (let [v (.get rel "a")]
+              (dotimes [x 10]
+                (.writeInt v x))
               (.writeBatch w)
               (.end w))))
 
@@ -256,5 +256,6 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (let [schema (Schema. [(types/col-type->field "a" :i32)])]
       (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir))
-                  _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) (VectorSchemaRoot/create schema tu/*allocator*))]
+                  rel (Relation. tu/*allocator* schema)
+                  _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
         (t/is (= [] (.listAllObjects bp)))))))

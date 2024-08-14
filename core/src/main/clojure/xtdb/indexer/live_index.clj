@@ -21,6 +21,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            xtdb.IBufferPool
            (xtdb.api IndexerConfig TransactionKey)
+           (xtdb.arrow Relation RelationReader)
            xtdb.metadata.IMetadataManager
            (xtdb.trie LiveHashTrie)
            (xtdb.util RefCounter RowCounter)
@@ -178,18 +179,19 @@
         (close [_]))))
 
   (finishChunk [_ first-row next-row]
-    (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)
-          row-count (.rowCount live-rel-rdr)]
+    (.syncRowCount live-rel)
+    (let [row-count (.getPosition (.writerPosition live-rel))]
       (when (pos? row-count)
         (let [!fut (CompletableFuture/runAsync
                     (fn []
-                      (trie/write-live-trie! allocator buffer-pool
-                                             (util/table-name->table-path table-name)
-                                             (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)
-                                             live-trie live-rel-rdr)))
+                      (with-open [data-rel (.openAsRelation live-rel)]
+                        (trie/write-live-trie! allocator buffer-pool
+                                               (util/table-name->table-path table-name)
+                                               (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)
+                                               live-trie data-rel))))
               table-metadata (MapEntry/create table-name
                                               {:fields (live-rel->fields live-rel)
-                                               :row-count (.rowCount live-rel-rdr)})]
+                                               :row-count row-count})]
           (-> !fut
               (.thenApply (fn [_] table-metadata)))))))
 

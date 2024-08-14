@@ -96,6 +96,6 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
 
     override fun loadFromArrow(vec: ValueVector) = listVector.loadFromArrow(vec)
 
-    override fun reset() = listVector.reset()
+    override fun clear() = listVector.clear()
     override fun close() = listVector.close()
 }

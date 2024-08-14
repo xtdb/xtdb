@@ -10,6 +10,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
 abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
@@ -41,27 +42,26 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         validityBuffer.writeBit(valueCount++, 1)
     }
 
-    override fun getBytes(idx: Int): ByteArray {
+    override fun getBytes(idx: Int): ByteBuffer {
         val start = offsetBuffer.getInt(idx)
         val end = offsetBuffer.getInt(idx + 1)
-        val res = ByteArray(end - start)
-        return dataBuffer.getBytes(start, res)
+        return dataBuffer.getBytes(start, end - start)
     }
 
-    override fun writeBytes(bytes: ByteArray) {
-        writeNotNull(bytes.size)
-        dataBuffer.writeBytes(bytes)
-    }
-
-    protected fun writeBytes(bytes: ByteBuffer) {
-        writeNotNull(bytes.remaining())
-        dataBuffer.writeBytes(bytes)
+    override fun writeBytes(buf: ByteBuffer) {
+        writeNotNull(buf.remaining())
+        dataBuffer.writeBytes(buf.duplicate())
     }
 
     override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
         offsetBuffer.getInt(idx).let { start ->
             dataBuffer.getPointer(start, offsetBuffer.getInt(idx + 1) - start, reuse)
         }
+
+    protected fun getByteArray(idx: Int): ByteArray {
+        val buf = getBytes(idx)
+        return ByteArray(buf.remaining()).also { buf.duplicate().get(it) }
+    }
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher): Int {
         val start = offsetBuffer.getInt(idx).toLong()
@@ -105,10 +105,10 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         dataBuffer.loadBuffer(vec.dataBuffer)
     }
 
-    override fun reset() {
-        validityBuffer.reset()
-        offsetBuffer.reset()
-        dataBuffer.reset()
+    override fun clear() {
+        validityBuffer.clear()
+        offsetBuffer.clear()
+        dataBuffer.clear()
         valueCount = 0
         lastOffset = 0
     }

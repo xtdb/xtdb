@@ -11,8 +11,7 @@
            [org.apache.arrow.vector ValueVector]
            (org.roaringbitmap RoaringBitmap)
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           (xtdb.arrow RelationReader VectorReader)
-           (xtdb.vector IVectorWriter)))
+           (xtdb.arrow RelationReader VectorReader VectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -118,7 +117,7 @@
                             (.createVector allocator))]
       (f params tmp-vec))))
 
-(defn write-bloom [^IVectorWriter bloom-wtr, ^VectorReader col]
+(defn write-bloom [^VectorWriter bloom-wtr, ^VectorReader col]
   (let [bloom-builder (->bloom-builder col)]
     (dotimes [in-idx (.getValueCount col)]
       (when-not (.isNull col in-idx)

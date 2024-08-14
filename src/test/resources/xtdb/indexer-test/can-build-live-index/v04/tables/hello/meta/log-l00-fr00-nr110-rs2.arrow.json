@@ -22,7 +22,7 @@
           "name" : "list"
         },
         "children" : [{
-          "name" : "$data$",
+          "name" : "union",
           "nullable" : true,
           "type" : {
             "name" : "int",
@@ -39,7 +39,7 @@
           "keysSorted" : true
         },
         "children" : [{
-          "name" : "entries",
+          "name" : "recency-el",
           "nullable" : false,
           "type" : {
             "name" : "struct"
@@ -86,7 +86,7 @@
             "name" : "list"
           },
           "children" : [{
-            "name" : "$data$",
+            "name" : "struct",
             "nullable" : false,
             "type" : {
               "name" : "struct"
@@ -242,7 +242,7 @@
         "VALIDITY" : [ ],
         "OFFSET" : [0],
         "children" : [{
-          "name" : "$data$",
+          "name" : "union",
           "count" : 0,
           "VALIDITY" : [ ],
           "DATA" : [ ]
@@ -253,7 +253,7 @@
         "VALIDITY" : [ ],
         "OFFSET" : [0],
         "children" : [{
-          "name" : "entries",
+          "name" : "recency-el",
           "count" : 0,
           "VALIDITY" : [ ],
           "children" : [{
@@ -283,7 +283,7 @@
           "VALIDITY" : [1],
           "OFFSET" : [0,6],
           "children" : [{
-            "name" : "$data$",
+            "name" : "struct",
             "count" : 6,
             "VALIDITY" : [1,1,1,1,1,1],
             "children" : [{

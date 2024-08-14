@@ -12,7 +12,7 @@ class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector() 
     override val field: Field get() = Field(name, FieldType(nullable, UuidType, null), emptyList())
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
-        ByteBuffer.wrap(inner.getBytes(idx)).let { buf ->
+        ByteBuffer.wrap(inner.getObject0(idx, keyFn)).let { buf ->
             UUID(buf.getLong(), buf.getLong())
         }
 

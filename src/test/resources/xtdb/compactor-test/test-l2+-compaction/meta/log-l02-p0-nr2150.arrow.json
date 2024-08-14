@@ -22,7 +22,7 @@
           "name" : "list"
         },
         "children" : [{
-          "name" : "$data$",
+          "name" : "union",
           "nullable" : true,
           "type" : {
             "name" : "int",
@@ -39,7 +39,7 @@
           "keysSorted" : true
         },
         "children" : [{
-          "name" : "entries",
+          "name" : "recency-el",
           "nullable" : false,
           "type" : {
             "name" : "struct"
@@ -86,7 +86,7 @@
             "name" : "list"
           },
           "children" : [{
-            "name" : "$data$",
+            "name" : "struct",
             "nullable" : false,
             "type" : {
               "name" : "struct"
@@ -207,7 +207,7 @@
         "VALIDITY" : [1,1,1,1,1],
         "OFFSET" : [0,4,8,12,16,20],
         "children" : [{
-          "name" : "$data$",
+          "name" : "union",
           "count" : 20,
           "VALIDITY" : [1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,0,0],
           "DATA" : [0,1,2,3,6,7,8,9,0,13,14,15,5,11,12,17,19,0,0,0]
@@ -218,7 +218,7 @@
         "VALIDITY" : [1,1,1,1,1],
         "OFFSET" : [0,1,2,3,4,5],
         "children" : [{
-          "name" : "entries",
+          "name" : "recency-el",
           "count" : 5,
           "VALIDITY" : [1,1,1,1,1],
           "children" : [{
@@ -248,7 +248,7 @@
           "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1],
           "OFFSET" : [0,5,10,15,20,25,30,35,40,45,50,55,60],
           "children" : [{
-            "name" : "$data$",
+            "name" : "struct",
             "count" : 60,
             "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
             "children" : [{

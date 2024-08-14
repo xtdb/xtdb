@@ -13,10 +13,10 @@ import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 
 class ListVector(
-    allocator: BufferAllocator,
+    private val allocator: BufferAllocator,
     override val name: String,
     override var nullable: Boolean,
-    private val elVector: Vector
+    private var elVector: Vector
 ) : Vector() {
 
     override val field: Field
@@ -65,7 +65,14 @@ class ListVector(
     override fun elementWriter() = elVector
 
     override fun elementWriter(fieldType: FieldType): VectorWriter =
-        if (elVector.field.fieldType == fieldType) elVector else TODO("promote elVector")
+        when {
+            elVector.field.fieldType == fieldType -> elVector
+
+            elVector is NullVector && elVector.valueCount == 0 ->
+                fromField(allocator, Field("els", fieldType, emptyList())).also { elVector = it }
+
+            else -> TODO("promote elVector")
+        }
 
     override fun endList() = writeNotNull(elVector.valueCount - lastOffset)
 
@@ -80,7 +87,7 @@ class ListVector(
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is ListVector)
-        val elCopier = src.rowCopier(elVector)
+        val elCopier = src.elVector.rowCopier(elVector)
         return RowCopier { srcIdx ->
             (src.getListStartIndex(srcIdx) until src.getListEndIndex(srcIdx)).forEach { elIdx ->
                 elCopier.copyRow(elIdx)
@@ -120,10 +127,10 @@ class ListVector(
 
     override fun valueReader(pos: VectorPosition): ValueReader = TODO("List.valueReader")
 
-    override fun reset() {
-        validityBuffer.reset()
-        offsetBuffer.reset()
-        elVector.reset()
+    override fun clear() {
+        validityBuffer.clear()
+        offsetBuffer.clear()
+        elVector.clear()
         valueCount = 0
         lastOffset = 0
     }

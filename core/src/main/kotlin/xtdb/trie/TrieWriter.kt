@@ -1,13 +1,13 @@
 package xtdb.trie
 
-import xtdb.vector.IRelationWriter
+import xtdb.arrow.Relation
 import java.util.*
 
 typealias InstantMicros = Long
 typealias RowIndex = Int
 
-interface ITrieWriter : AutoCloseable {
-    val dataWriter: IRelationWriter
+interface TrieWriter : AutoCloseable {
+    val dataRel: Relation
 
     fun writeLeaf(): RowIndex
     fun writeIidBranch(idxs: IntArray): RowIndex

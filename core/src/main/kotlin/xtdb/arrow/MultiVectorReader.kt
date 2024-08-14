@@ -62,7 +62,7 @@ class MultiVectorReader(
 
     override fun getDouble(idx: Int): Double = reader(idx).getDouble(vectorIndirections[idx])
 
-    override fun getBytes(idx: Int): ByteArray = reader(idx).getBytes(vectorIndirections[idx])
+    override fun getBytes(idx: Int): ByteBuffer = reader(idx).getBytes(vectorIndirections[idx])
 
     override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
         reader(idx).getPointer(vectorIndirections[idx], reuse)

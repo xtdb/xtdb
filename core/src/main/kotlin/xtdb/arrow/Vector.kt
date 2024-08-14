@@ -19,6 +19,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
 import xtdb.vector.extensions.KeywordType
+import xtdb.vector.extensions.SetType
 import xtdb.vector.extensions.TransitType
 import xtdb.vector.extensions.UuidType
 import java.time.ZoneId
@@ -46,7 +47,7 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
-    override fun toList() = (0 until valueCount).map { getObject(it) }
+    override val asList get() = (0 until valueCount).map { getObject(it) }
 
     override fun toString() = VectorReader.toString(this)
 
@@ -66,12 +67,17 @@ sealed class Vector : VectorReader, VectorWriter {
                     )
 
                 override fun visit(type: ArrowType.List) =
-                    ListVector(al, name, isNullable, fromField(al, field.children[0]))
+                    ListVector(
+                        al, name, isNullable,
+                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_")
+                    )
 
                 override fun visit(type: LargeList) = TODO("Not yet implemented")
 
                 override fun visit(type: FixedSizeList) =
-                    FixedSizeListVector(al, name, isNullable, type.listSize, fromField(al, field.children[0]))
+                    FixedSizeListVector(
+                        al, name, isNullable, type.listSize,
+                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_"))
 
                 override fun visit(type: ListView) = TODO("Not yet implemented")
 
@@ -138,6 +144,12 @@ sealed class Vector : VectorReader, VectorWriter {
                     KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))
                     UuidType -> UuidVector(FixedSizeBinaryVector(al, name, isNullable, 16))
                     TransitType -> TransitVector(VarBinaryVector(al, name, isNullable))
+                    SetType ->
+                        SetVector(
+                            ListVector(
+                                al, name, isNullable,
+                                field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_")))
+
                     else -> error("unknown extension: $type")
                 }
             })

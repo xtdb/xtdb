@@ -1,16 +1,15 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.Types.MinorType.*
-import org.apache.arrow.vector.types.pojo.ArrowType.*
+import org.apache.arrow.vector.types.pojo.ArrowType.Bool
+import org.apache.arrow.vector.types.pojo.ArrowType.Struct
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.vector.writerFor
 
 fun <T> cycle(list: List<T>): Sequence<T> {
     return sequence {
@@ -57,7 +56,7 @@ class MultiVectorReaderTest {
                 IntVector(alloc, "my-int", false).use { resVec ->
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
-                    assertEquals(r.toList(), resVec.toList())
+                    assertEquals(r.toList(), resVec.asList)
                 }
             }
         }
@@ -101,7 +100,7 @@ class MultiVectorReaderTest {
                 Vector.fromField(alloc, structField).use { resVec ->
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
-                    assertEquals(expected, resVec.toList())
+                    assertEquals(expected, resVec.asList)
                 }
             }
         }
@@ -125,7 +124,7 @@ class MultiVectorReaderTest {
 
                 val r = 0..3
                 val expected = listOf(0, "first", 1, "second")
-                assertEquals(expected, indirectRdr.toList())
+                assertEquals(expected, indirectRdr.asList)
 
                 val pos = VectorPosition.build(0)
                 val valueRdr = indirectRdr.valueReader(pos)
@@ -139,7 +138,7 @@ class MultiVectorReaderTest {
                 Vector.fromField(alloc, duvField).use { resVec ->
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
-                    assertEquals(expected, resVec.toList())
+                    assertEquals(expected, resVec.asList)
                 }
             }
         }
@@ -172,7 +171,7 @@ class MultiVectorReaderTest {
 
                     val r = 0..5
                     val expected = listOf(0, "first", 2, 3, "fourth", "fifth")
-                    assertEquals(expected, indirectRdr.toList())
+                    assertEquals(expected, indirectRdr.asList)
 
                     val pos = VectorPosition.build(0)
                     val valueRdr = indirectRdr.valueReader(pos)
@@ -182,7 +181,7 @@ class MultiVectorReaderTest {
                         val rowCopier = indirectRdr.rowCopier(resVec)
                         r.forEach { rowCopier.copyRow(it) }
 
-                        assertEquals(expected, resVec.toList())
+                        assertEquals(expected, resVec.asList)
                     }
                 }
             }
@@ -215,7 +214,7 @@ class MultiVectorReaderTest {
                 )
                 val r = 0..5
                 val expected = listOf(0, "first", null, 3, "fourth", null)
-                assertEquals(expected, indirectRdr.toList())
+                assertEquals(expected, indirectRdr.asList)
 
                 val pos = VectorPosition.build(0)
                 val valueRdr = indirectRdr.valueReader(pos)
@@ -229,7 +228,7 @@ class MultiVectorReaderTest {
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
 
-                    assertEquals(expected, resVec.toList())
+                    assertEquals(expected, resVec.asList)
                 }
             }
         }
@@ -253,7 +252,7 @@ class MultiVectorReaderTest {
 
             val r = 0..1
             val expected = listOf(0, 1)
-            assertEquals(expected, indirectRdr.toList())
+            assertEquals(expected, indirectRdr.asList)
 
             val pos = VectorPosition.build(0)
             val valueRdr = indirectRdr.valueReader(pos)

@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.ipc ArrowStreamReader ArrowStreamWriter)
            org.apache.arrow.vector.types.pojo.Field
            xtdb.ICursor
-           (xtdb.arrow RowCopier VectorPosition)
+           (xtdb.arrow RowCopier VectorPosition VectorReader)
            (xtdb.vector IVectorReader RelationReader RelationWriter)))
 
 (s/def ::direction #{:asc :desc})
@@ -43,10 +43,9 @@
 
 (defn- write-rel [^BufferAllocator allocator, ^RelationReader rdr, ^OutputStream os]
   (let [new-vecs (for [^IVectorReader col rdr]
-                   (let [^ValueVector new-vec (.createVector (-> (.getField col)
-                                                                 (types/field-with-name (.getName col)))
-                                                             allocator)]
-
+                   (let [new-vec (.createVector (-> (.getField col)
+                                                    (types/field-with-name (.getName col)))
+                                                allocator)]
                      (.copyTo col new-vec)
                      new-vec))]
     (try
@@ -64,25 +63,24 @@
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                                       :or {direction :asc, null-ordering :nulls-last}}]]
-                         (let [read-col (.readerForName read-rel (str column))
+                         (let [read-col (VectorReader/from (.readerForName read-rel (str column)))
                                col-comparator (expr.comp/->comparator read-col read-col null-ordering)
 
-                               ^Comparator
-                               comparator (cond-> (reify Comparator
-                                                    (compare [_ left right]
-                                                      (.applyAsInt col-comparator left right)))
+                               comparator (cond-> ^Comparator (fn [left right]
+                                                                (.applyAsInt col-comparator left right))
                                             (= :desc direction) (.reversed))]
                            (if acc
                              (.thenComparing acc comparator)
                              comparator)))
                        nil
                        order-specs))
-      (.mapToInt (reify ToIntFunction
-                   (applyAsInt [_ x] x)))
+      (.mapToInt identity)
       (.toArray)))
 
 (defn- write-out-rels [allocator ^ICursor in-cursor, order-specs tmp-dir first-filename]
-  (loop [filenames [first-filename] file-idx 1] ;; file-idx 1 as first-filename contains 0
+  (loop [filenames [first-filename]
+         ;; file-idx 1 as first-filename contains 0
+         file-idx 1]
     (if-let [filename (with-open [rel-writer (vw/->rel-writer allocator)]
                         (let [pos (.writerPosition rel-writer)]
                           (while (and (<= (.getPosition pos) ^int *chunk-size*)
@@ -109,9 +107,8 @@
                   col-comparator (expr.comp/->comparator read-col1 read-col2 null-ordering)
 
                   ^Comparator
-                  comparator (cond-> (reify Comparator
-                                       (compare [_ left right]
-                                         (.applyAsInt col-comparator left right)))
+                  comparator (cond-> ^Comparator (fn [left right]
+                                                   (.applyAsInt col-comparator left right))
                                (= :desc direction) (.reversed))]
               (if acc
                 (.thenComparing acc comparator)

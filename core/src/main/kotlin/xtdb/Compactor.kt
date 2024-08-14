@@ -7,9 +7,9 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.RecencyGranularity.*
 import xtdb.trie.HashTrie
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
-import xtdb.trie.ITrieWriter
-import xtdb.vector.IVectorReader
-import xtdb.vector.RelationReader
+import xtdb.trie.TrieWriter
+import xtdb.arrow.VectorReader
+import xtdb.arrow.RelationReader
 import java.time.Instant
 import java.time.LocalTime.MIDNIGHT
 import java.time.OffsetDateTime
@@ -27,7 +27,7 @@ internal fun Selection.partitionSlices(partIdxs: IntArray) =
         if (cur == nxt) null else sliceArray(cur..<nxt)
     }
 
-internal fun Selection.iidPartitions(iidReader: IVectorReader, level: Int): Array<Selection?> {
+internal fun Selection.iidPartitions(iidReader: VectorReader, level: Int): Array<Selection?> {
     val iidPtr = ArrowBufPointer()
 
     // for each partition, find the starting index in the selection
@@ -75,7 +75,7 @@ internal fun InstantMicros.recencyBucket(depth: RecencyGranularity): InstantMicr
 }
 
 internal fun IntArray.recencyPartitions(
-    recencies: IVectorReader,
+    recencies: VectorReader,
     depth: RecencyGranularity,
 ): SortedMap<InstantMicros, Selection> {
     val res = sortedMapOf<InstantMicros, IntArrayList>()
@@ -89,7 +89,7 @@ internal fun IntArray.recencyPartitions(
 }
 
 internal fun IntArray.recencyPartitions(
-    recencies: IVectorReader,
+    recencies: VectorReader,
     pageLimit: Int,
 ): SortedMap<InstantMicros, Selection> {
     if (isEmpty()) return sortedMapOf()
@@ -118,14 +118,14 @@ internal fun IntArray.recencyPartitions(
 @Suppress("unused")
 @JvmOverloads
 fun writeRelation(
-    trieWriter: ITrieWriter,
+    trieWriter: TrieWriter,
     relation: RelationReader,
-    recencies: IVectorReader,
+    recencies: VectorReader,
     pageLimit: Int = 256,
 ) {
-    val trieDataWriter = trieWriter.dataWriter
-    val rowCopier = trieDataWriter.rowCopier(relation)
-    val iidReader = relation.readerForName("xt\$iid")
+    val trieDataRel = trieWriter.dataRel
+    val rowCopier = trieDataRel.rowCopier(relation)
+    val iidReader = relation["xt\$iid"]!!
 
     val startPtr = ArrowBufPointer()
     val endPtr = ArrowBufPointer()
@@ -156,7 +156,7 @@ fun writeRelation(
             for (idx in sel) rowCopier.copyRow(idx)
 
             val pos = trieWriter.writeLeaf()
-            trieDataWriter.clear()
+            trieDataRel.clear()
             pos
         } else {
             // Year, IID[0], Quarter, IID[1], Month, IID[2..]
@@ -188,7 +188,7 @@ fun writeRelation(
         }
     }
 
-    writeSubtree(0, IntArray(relation.rowCount()) { idx -> idx })
+    writeSubtree(0, IntArray(relation.rowCount) { idx -> idx })
 
     trieWriter.end()
 }

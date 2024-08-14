@@ -10,16 +10,14 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-test :refer [->trie-file-name]]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import java.lang.AutoCloseable
+           [java.nio ByteBuffer]
            [java.time Duration]
-           org.apache.arrow.vector.types.pojo.Schema
            [xtdb IBufferPool]
+           (xtdb.arrow Relation RelationReader)
            [xtdb.metadata IMetadataManager]
-           [xtdb.trie IDataRel LiveHashTrie$Leaf HashTrie]
-           [xtdb.vector IVectorReader RelationReader]))
+           [xtdb.trie HashTrie IDataRel LiveHashTrie$Leaf]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -164,9 +162,7 @@
 
 (deftype LiveDataRel [^RelationReader live-rel]
   IDataRel
-  (getSchema [_]
-    (Schema. (for [^IVectorReader rdr live-rel]
-               (.getField rdr))))
+  (getSchema [_] (.getSchema live-rel))
 
   (loadPage [_ leaf]
     (.select live-rel (.getData ^LiveHashTrie$Leaf leaf)))
@@ -192,84 +188,84 @@
                   [{:xt/id "foo", :v 2}
                    {:xt/id "bar", :v 2}])
 
-    (let [segments [(-> (trie/->Segment (.compactLogs (li/live-trie lt0)))
-                        (assoc :data-rel (->LiveDataRel (vw/rel-wtr->rdr (li/live-rel lt0)))))
-                    (-> (trie/->Segment (.compactLogs (li/live-trie lt1)))
-                        (assoc :data-rel (->LiveDataRel (vw/rel-wtr->rdr (li/live-rel lt1)))))]]
+    (with-open [live-rel0 (.openAsRelation (li/live-rel lt0))
+                live-rel1 (.openAsRelation (li/live-rel lt1))]
 
-      (t/testing "merge segments"
-        (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
-                         recency-wtr (c/open-recency-wtr tu/*allocator*)]
+      (let [segments [(-> (trie/->Segment (.compactLogs (li/live-trie lt0)))
+                          (assoc :data-rel (->LiveDataRel live-rel0)))
+                      (-> (trie/->Segment (.compactLogs (li/live-trie lt1)))
+                          (assoc :data-rel (->LiveDataRel live-rel1)))]]
 
-          (c/merge-segments-into data-rel-wtr recency-wtr segments nil)
+        (t/testing "merge segments"
+          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
+                           recency-wtr (c/open-recency-wtr tu/*allocator*)]
 
-          (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                     :xt/system-from (time/->zdt #inst "2023")
-                     :xt/valid-from (time/->zdt #inst "2023")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 2, :xt/id "bar"}}
-                    {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                     :xt/system-from (time/->zdt #inst "2021")
-                     :xt/valid-from (time/->zdt #inst "2021")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 1, :xt/id "bar"}}
-                    {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                     :xt/system-from (time/->zdt #inst "2020")
-                     :xt/valid-from (time/->zdt #inst "2020")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 0, :xt/id "bar"}}
-                    {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
-                     :xt/system-from (time/->zdt #inst "2023")
-                     :xt/valid-from (time/->zdt #inst "2023")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 2, :xt/id "foo"}}
-                    {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
-                     :xt/system-from (time/->zdt #inst "2022")
-                     :xt/valid-from (time/->zdt #inst "2022")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 1, :xt/id "foo"}}
-                    {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
-                     :xt/system-from (time/->zdt #inst "2020")
-                     :xt/valid-from (time/->zdt #inst "2020")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 0, :xt/id "foo"}}]
+            (c/merge-segments-into data-rel recency-wtr segments nil)
 
-                   (-> (vw/rel-wtr->rdr data-rel-wtr)
-                       (vr/rel->rows)
-                       (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))
+            (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                       :xt/system-from (time/->zdt #inst "2023")
+                       :xt/valid-from (time/->zdt #inst "2023")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 2, :xt/id "bar"}}
+                      {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                       :xt/system-from (time/->zdt #inst "2021")
+                       :xt/valid-from (time/->zdt #inst "2021")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 1, :xt/id "bar"}}
+                      {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                       :xt/system-from (time/->zdt #inst "2020")
+                       :xt/valid-from (time/->zdt #inst "2020")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 0, :xt/id "bar"}}
+                      {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                       :xt/system-from (time/->zdt #inst "2023")
+                       :xt/valid-from (time/->zdt #inst "2023")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 2, :xt/id "foo"}}
+                      {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                       :xt/system-from (time/->zdt #inst "2022")
+                       :xt/valid-from (time/->zdt #inst "2022")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 1, :xt/id "foo"}}
+                      {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                       :xt/system-from (time/->zdt #inst "2020")
+                       :xt/valid-from (time/->zdt #inst "2020")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 0, :xt/id "foo"}}]
 
-          (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")
-                    (time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
-                   (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals)))))
+                     (->> (.toMaps data-rel)
+                          (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))
 
-      (t/testing "merge segments with path predicate"
-        (util/with-open [data-rel-wtr (trie/open-log-data-wtr tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
-                         recency-wtr (c/open-recency-wtr tu/*allocator*)]
+            (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")
+                      (time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
+                     (-> recency-wtr .getAsList)))))
 
-          (c/merge-segments-into data-rel-wtr recency-wtr segments (byte-array [2]))
+        (t/testing "merge segments with path predicate"
+          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
+                           recency-wtr (c/open-recency-wtr tu/*allocator*)]
+            (c/merge-segments-into data-rel recency-wtr segments (byte-array [2]))
 
-          (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                     :xt/system-from (time/->zdt #inst "2023")
-                     :xt/valid-from (time/->zdt #inst "2023")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 2, :xt/id "bar"}}
-                    {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                     :xt/system-from (time/->zdt #inst "2021")
-                     :xt/valid-from (time/->zdt #inst "2021")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 1, :xt/id "bar"}}
-                    {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                     :xt/system-from (time/->zdt #inst "2020")
-                     :xt/valid-from (time/->zdt #inst "2020")
-                     :xt/valid-to (time/->zdt time/end-of-time)
-                     :op {:v 0, :xt/id "bar"}}]
+            (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                       :xt/system-from (time/->zdt #inst "2023")
+                       :xt/valid-from (time/->zdt #inst "2023")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 2, :xt/id "bar"}}
+                      {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                       :xt/system-from (time/->zdt #inst "2021")
+                       :xt/valid-from (time/->zdt #inst "2021")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 1, :xt/id "bar"}}
+                      {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                       :xt/system-from (time/->zdt #inst "2020")
+                       :xt/valid-from (time/->zdt #inst "2020")
+                       :xt/valid-to (time/->zdt time/end-of-time)
+                       :op {:v 0, :xt/id "bar"}}]
 
-                   (-> (vw/rel-wtr->rdr data-rel-wtr)
-                       (vr/rel->rows)
-                       (->> (mapv #(update % :xt/iid util/byte-buffer->uuid))))))
+                     (->> (.toMaps data-rel)
+                          (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))
 
-          (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
-                   (-> recency-wtr vw/vec-wtr->rdr tu/vec->vals))))))))
+            (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
+                     (.getAsList recency-wtr)))))))))
 
 (defn tables-key ^String [table] (str "objects/" bp/version "/tables/" table))
 
@@ -295,19 +291,19 @@
 
           (submit! (range 100))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 100) (q)))
 
           (submit! (range 100 200))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 200) (q)))
 
           (submit! (range 200 500))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 500) (q)))
 
@@ -377,12 +373,11 @@
                   meta-files (trie/list-meta-files bp table-path)]
               (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-path trie-key))
-                                 ^IDataRel data-rel (first (trie/open-data-rels bp table-path [trie-key]))
-                                 page-rels (map #(.loadPage data-rel %) (.getLeaves trie))]
+                                 ^IDataRel data-rel (first (trie/open-data-rels bp table-path [trie-key]))]
 
                   ;; checking that every page relation has a positive row count
-                  (t/is (empty? (->> page-rels
-                                     (mapv #(.rowCount ^RelationReader %))
+                  (t/is (empty? (->> (mapv #(.loadPage data-rel %) (.getLeaves trie))
+                                     (map #(.getRowCount ^RelationReader %))
                                      (filter zero?)))))))))))))
 
 (t/deftest test-l2-compaction-badly-distributed
@@ -406,19 +401,19 @@
 
           (submit! (tu/bad-uuid-seq 100))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (tu/bad-uuid-seq 100) (q)))
 
           (submit! (tu/bad-uuid-seq 100 200))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (tu/bad-uuid-seq 200) (q)))
 
           (submit! (tu/bad-uuid-seq 200 500))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (tu/bad-uuid-seq 500) (q))))))))
 

@@ -51,7 +51,8 @@ class IntervalDayTimeVector(
             buf.clear()
             buf.putInt(value.period.days)
             buf.putInt(value.duration.toMillis().toInt())
-            writeBytes(buf.array())
+            buf.flip()
+            writeBytes(buf)
         } else TODO("unknown type: ${value::class.simpleName}")
 }
 
@@ -77,6 +78,7 @@ class IntervalMonthDayNanoVector(
             buf.putInt(value.period.toTotalMonths().toInt())
             buf.putInt(value.period.days)
             buf.putLong(value.duration.toNanos())
-            writeBytes(buf.array())
+            buf.flip()
+            writeBytes(buf)
         } else TODO("unknown type: ${value::class.simpleName}")
 }

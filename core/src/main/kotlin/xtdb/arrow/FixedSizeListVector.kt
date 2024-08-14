@@ -91,9 +91,9 @@ class FixedSizeListVector(
         valueCount = vec.valueCount
     }
 
-    override fun reset() {
-        validityBuffer.reset()
-        elVector.reset()
+    override fun clear() {
+        validityBuffer.clear()
+        elVector.clear()
         valueCount = 0
     }
 

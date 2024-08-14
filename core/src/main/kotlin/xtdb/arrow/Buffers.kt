@@ -104,10 +104,7 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.writeDouble(value)
     }
 
-    fun getBytes(start: Int, out: ByteArray): ByteArray {
-        buf.getBytes(start.toLong(), out)
-        return out
-    }
+    fun getBytes(start: Int, len: Int): ByteBuffer = buf.nioBuffer(start.toLong(), len)
 
     fun writeBytes(bytes: ByteArray) {
         ensureWritable(bytes.size.toLong())
@@ -139,7 +136,7 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf = arrowBuf.also { it.referenceManager.retain() }
     }
 
-    fun reset() {
+    fun clear() {
         buf.setZero(0, buf.capacity())
         buf.readerIndex(0)
         buf.writerIndex(0)

@@ -29,6 +29,7 @@ import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
 import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.KeywordVector;
+import xtdb.vector.extensions.SetVector;
 import xtdb.vector.extensions.TransitVector;
 import xtdb.vector.extensions.UuidVector;
 

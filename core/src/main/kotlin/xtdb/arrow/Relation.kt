@@ -25,6 +25,8 @@ private val MAGIC = "ARROW1".toByteArray()
 
 class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationReader {
 
+    override val schema get() = Schema(vectors.sequencedValues().map { it.field })
+
     @JvmOverloads
     constructor(vectors: List<Vector>, rowCount: Int = 0)
             : this(vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
@@ -41,12 +43,21 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
     override fun iterator() = vectors.values.iterator()
 
+    fun rowCopier(rel: RelationReader): RowCopier {
+        val copiers = rel.map { it.rowCopier(vectors[it.name] ?: error("missing ${it.name} vector")) }
+
+        return RowCopier { srcIdx ->
+            copiers.forEach { it.copyRow(srcIdx) }
+            endRow()
+        }
+    }
+
     fun loadFromArrow(root: VectorSchemaRoot) {
         vectors.forEach { (name, vec) -> vec.loadFromArrow(root.getVector(name)) }
         rowCount = root.rowCount
     }
 
-    private inner class Unloader(private val ch: WriteChannel) : RelationUnloader {
+    inner class RelationUnloader(private val ch: WriteChannel) : AutoCloseable {
 
         private val vectors = this@Relation.vectors.values
         private val schema = Schema(vectors.map { it.field })
@@ -58,7 +69,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             MessageSerializer.serialize(ch, schema)
         }
 
-        override fun writeBatch() {
+        fun writeBatch() {
             val nodes = mutableListOf<ArrowFieldNode>()
             val buffers = mutableListOf<ArrowBuf>()
 
@@ -70,12 +81,12 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             }
         }
 
-        override fun endStream() {
+        fun endStream() {
             ch.writeIntLittleEndian(MessageSerializer.IPC_CONTINUATION_TOKEN)
             ch.writeIntLittleEndian(0)
         }
 
-        override fun endFile() {
+        fun endFile() {
             endStream()
 
             val footerStart = ch.currentPosition
@@ -92,7 +103,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         }
     }
 
-    override fun startUnload(ch: WritableByteChannel): RelationUnloader = Unloader(WriteChannel(ch))
+    fun startUnload(ch: WritableByteChannel): RelationUnloader = RelationUnloader(WriteChannel(ch))
 
     private fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()
@@ -105,53 +116,54 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         rowCount = recordBatch.length
     }
 
-    interface Loader : AutoCloseable {
-        val schema: Schema
-        val batchCount: Int
-        fun loadBatch(idx: Int, al: BufferAllocator): Relation
-        fun loadBatch(idx: Int, rel: Relation): Relation
+    sealed class Loader : AutoCloseable {
+
+        interface Batch {
+            fun load(rel: Relation)
+        }
+
+        abstract val schema: Schema
+        val batchCount get() = batches.size
+        protected abstract val batches: List<Batch>
+
+        fun loadBatch(idx: Int, al: BufferAllocator) = Relation(al, schema).also { loadBatch(idx, it) }
+
+        fun loadBatch(idx: Int, rel: Relation) {
+            batches[idx].load(rel)
+        }
     }
 
     private class ChannelLoader(
         private val al: BufferAllocator,
         private val ch: SeekableReadChannel,
         footer: ArrowFooter
-    ) : Loader {
-        inner class LoaderBatch(private val idx: Int, private val block: ArrowBlock) {
-            fun load(rel: Relation): Relation {
+    ) : Loader() {
+        inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
+            override fun load(rel: Relation) {
                 ch.setPosition(block.offset)
 
                 (MessageSerializer.deserializeRecordBatch(ch, block, al)
                     ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
 
                     .use { batch -> rel.load(batch) }
-
-                return rel
             }
         }
 
         override val schema: Schema = footer.schema
-        private val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
+        override val batches = footer.recordBatches.mapIndexed(::Batch)
 
-        override val batchCount = batches.size
-
-        override fun loadBatch(idx: Int, al: BufferAllocator) = loadBatch(idx, Relation(al, schema))
-        override fun loadBatch(idx: Int, rel: Relation) = batches[idx].load(rel)
-
-        override fun close() {
-            ch.close()
-        }
+        override fun close() = ch.close()
     }
 
     private class BufferLoader(
         private val buf: ArrowBuf,
         footer: ArrowFooter
-    ) : Loader {
+    ) : Loader() {
         override val schema: Schema = footer.schema
 
-        inner class LoaderBatch(private val idx: Int, private val block: ArrowBlock) {
+        inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
 
-            fun load(rel: Relation): Relation {
+            override fun load(rel: Relation) {
                 val prefixSize =
                     if (buf.getInt(block.offset) == MessageSerializer.IPC_CONTINUATION_TOKEN) 8L else 4L
 
@@ -167,17 +179,10 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
                     ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
 
                     .use { batch -> rel.load(batch) }
-
-                return rel
             }
         }
 
-        private val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
-
-        override val batchCount = batches.size
-
-        override fun loadBatch(idx: Int, rel: Relation) = batches[idx].load(rel)
-        override fun loadBatch(idx: Int, al: BufferAllocator) = loadBatch(idx, Relation(al, schema))
+        override val batches = footer.recordBatches.mapIndexed(::Batch)
 
         override fun close() = buf.close()
     }
@@ -240,6 +245,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             return BufferLoader(buf, readFooter(buf))
         }
 
+        @Suppress("unused")
         @JvmField
         // naming from Oracle - zero cols, one row
         val DUAL = Relation(emptyList(), 1)
@@ -251,8 +257,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     /**
      * Resets the row count and all vectors, leaving the buffers allocated.
      */
-    fun reset() {
-        vectors.forEach { (_, vec) -> vec.reset() }
+    fun clear() {
+        vectors.forEach { (_, vec) -> vec.clear() }
         rowCount = 0
     }
 

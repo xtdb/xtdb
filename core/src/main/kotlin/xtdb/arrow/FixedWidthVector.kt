@@ -11,6 +11,7 @@ import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import java.nio.ByteBuffer
 
 internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
     TimeUnit.SECOND -> seconds
@@ -99,14 +100,15 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
         writeNotNull()
     }
 
-    protected fun getBytes0(idx: Int): ByteArray {
-        val start = idx * byteWidth
-        val res = ByteArray(byteWidth)
-        return dataBuffer.getBytes(start, res)
+    protected fun getBytes0(idx: Int) = dataBuffer.getBytes(idx * byteWidth, byteWidth)
+
+    protected fun getByteArray(idx: Int): ByteArray {
+        val buf = getBytes0(idx)
+        return ByteArray(buf.remaining()).also { buf.duplicate().get(it) }
     }
 
-    override fun writeBytes(bytes: ByteArray) {
-        dataBuffer.writeBytes(bytes)
+    override fun writeBytes(buf: ByteBuffer) {
+        dataBuffer.writeBytes(buf)
         writeNotNull()
     }
 
@@ -148,9 +150,9 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
         valueCount = vec.valueCount
     }
 
-    final override fun reset() {
-        validityBuffer.reset()
-        dataBuffer.reset()
+    final override fun clear() {
+        validityBuffer.clear()
+        dataBuffer.clear()
         valueCount = 0
     }
 

@@ -47,7 +47,7 @@ class NullVector(override val name: String) : Vector() {
         valueCount = vec.valueCount
     }
 
-    override fun reset() {
+    override fun clear() {
         valueCount = 0
     }
 
