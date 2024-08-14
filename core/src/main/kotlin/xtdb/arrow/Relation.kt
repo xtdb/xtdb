@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer
 import org.apache.arrow.flatbuf.Message
 import org.apache.arrow.flatbuf.RecordBatch
@@ -10,6 +11,8 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.api.query.IKeyFn
+import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.Vector.Companion.fromField
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
@@ -170,9 +173,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         override fun loadBatch(idx: Int, rel: Relation) = batches[idx].load(rel)
         override fun loadBatch(idx: Int, al: BufferAllocator) = loadBatch(idx, Relation(al, schema))
 
-        override fun close() {
-            buf.close()
-        }
+        override fun close() = buf.close()
     }
 
     companion object {

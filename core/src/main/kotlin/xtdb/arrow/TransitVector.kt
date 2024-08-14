@@ -4,6 +4,7 @@ import clojure.lang.IFn
 import com.cognitect.transit.Reader
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 import xtdb.types.ClojureForm
 import xtdb.util.requiringResolve
 import xtdb.vector.extensions.UuidType
@@ -17,7 +18,7 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector() {
 
     override val field: Field get() = Field(name, FieldType(nullable, UuidType, null), emptyList())
 
-    override fun getObject0(idx: Int) = transitReader(inner.getBytes(idx)).read<Any>()
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = transitReader(inner.getBytes(idx)).read<Any>()
 
     override fun writeObject0(value: Any) =
         when (value) {

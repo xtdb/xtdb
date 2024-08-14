@@ -7,6 +7,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 
 class DenseUnionVector(
     private val allocator: BufferAllocator,
@@ -32,7 +33,7 @@ class DenseUnionVector(
         override fun getFloat(idx: Int) = inner.getFloat(getOffset(idx))
         override fun getDouble(idx: Int) = inner.getDouble(getOffset(idx))
         override fun getBytes(idx: Int) = inner.getBytes(getOffset(idx))
-        override fun getObject(idx: Int) = inner.getObject(getOffset(idx))
+        override fun getObject(idx: Int, keyFn: IKeyFn<*>) = inner.getObject(getOffset(idx), keyFn)
 
         override fun getListCount(idx: Int) = inner.getListCount(getOffset(idx))
         override fun getListStartIndex(idx: Int) = inner.getListStartIndex(getOffset(idx))
@@ -123,8 +124,8 @@ class DenseUnionVector(
         valueCount++
     }
 
-    override fun getObject(idx: Int) = leg(idx)?.getObject(getOffset(idx))
-    override fun getObject0(idx: Int) = throw UnsupportedOperationException()
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>) = leg(idx)?.getObject(getOffset(idx), keyFn)
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
     override fun writeObject0(value: Any) = throw UnsupportedOperationException()
 
     override fun getLeg(idx: Int) = leg(idx)?.name

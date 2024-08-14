@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 
 class FixedSizeListVector(
     allocator: BufferAllocator,
@@ -26,8 +27,8 @@ class FixedSizeListVector(
     override fun writeNull() = validityBuffer.writeBit(valueCount++, 0)
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
-    override fun getObject0(idx: Int): List<*> {
-        return (idx * listSize until (idx + 1) * listSize).map { elVector.getObject(it) }
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): List<*> {
+        return (idx * listSize until (idx + 1) * listSize).map { elVector.getObject(it, keyFn) }
     }
 
     override fun writeObject0(value: Any) = when (value) {

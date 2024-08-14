@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.api.query.IKeyFn
 
 class ByteVector(
     allocator: BufferAllocator,
@@ -15,7 +16,7 @@ class ByteVector(
     override fun getByte(idx: Int) = getByte0(idx)
     override fun writeByte(value: Byte) = writeByte0(value)
 
-    override fun getObject0(idx: Int) = getByte(idx)
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByte(idx)
 
     override fun writeObject0(value: Any) {
         if (value is Byte) writeByte(value) else TODO("not a Byte")

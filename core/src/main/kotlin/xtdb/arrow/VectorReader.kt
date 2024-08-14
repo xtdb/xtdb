@@ -31,7 +31,9 @@ interface VectorReader : AutoCloseable {
     fun getDouble(idx: Int): Double = unsupported("getDouble")
     fun getBytes(idx: Int): ByteArray = unsupported("getBytes")
     fun getPointer(idx: Int, reuse: ArrowBufPointer = ArrowBufPointer()): ArrowBufPointer = unsupported("getPointer")
-    fun getObject(idx: Int): Any?
+
+    fun getObject(idx: Int): Any? = getObject(idx) { it }
+    fun getObject(idx: Int, keyFn: IKeyFn<*>): Any?
 
     fun hashCode(idx: Int, hasher: ArrowBufHasher): Int
 
@@ -157,7 +159,7 @@ interface VectorReader : AutoCloseable {
             override fun getFloat(idx: Int) = old.getFloat(idx)
             override fun getDouble(idx: Int) = old.getDouble(idx)
             override fun getBytes(idx: Int): ByteArray = old.getBytes(idx).array()
-            override fun getObject(idx: Int): Any? = old.getObject(idx)
+            override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? = old.getObject(idx, keyFn)
 
             override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer = old.getPointer(idx, reuse)
 

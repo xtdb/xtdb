@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 
 class ListVector(
     allocator: BufferAllocator,
@@ -42,11 +43,11 @@ class ListVector(
         validityBuffer.writeBit(valueCount++, 1)
     }
 
-    override fun getObject0(idx: Int): List<*> {
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): List<*> {
         val start = offsetBuffer.getInt(idx)
         val end = offsetBuffer.getInt(idx + 1)
 
-        return (start until end).map { elVector.getObject(it) }
+        return (start until end).map { elVector.getObject(it, keyFn) }
     }
 
     override fun writeObject0(value: Any) = when (value) {

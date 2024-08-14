@@ -6,6 +6,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 
 class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
 
@@ -46,7 +47,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.loadBatch(nodes, buffers)
 
-    override fun getObject0(idx: Int): Any {
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any {
         val startIdx = listVector.getListStartIndex(idx)
         val entryCount = listVector.getListCount(idx)
 
@@ -56,7 +57,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
 
         return (0 until entryCount).associate { elIdx ->
             (startIdx + elIdx).let { entryIdx ->
-                keyReader.getObject(entryIdx) to valueReader.getObject(entryIdx)
+                keyReader.getObject(entryIdx, keyFn) to valueReader.getObject(entryIdx, keyFn)
             }
         }
     }

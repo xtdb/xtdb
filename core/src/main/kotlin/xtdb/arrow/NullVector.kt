@@ -6,6 +6,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 
 class NullVector(override val name: String) : Vector() {
     override var nullable: Boolean = true
@@ -18,7 +19,7 @@ class NullVector(override val name: String) : Vector() {
         valueCount++
     }
 
-    override fun getObject0(idx: Int) = error("NullVector getObject0")
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = error("NullVector getObject0")
 
     override fun writeObject0(value: Any) = error("NullVector writeObject0")
 

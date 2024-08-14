@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.api.query.IKeyFn
 import xtdb.types.IntervalDayTime
 import xtdb.types.IntervalMonthDayNano
 import xtdb.types.IntervalYearMonth
@@ -21,7 +22,7 @@ class IntervalYearMonthVector(
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
 
-    override fun getObject0(idx: Int) = IntervalYearMonth(Period.ofMonths(getInt(idx)))
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = IntervalYearMonth(Period.ofMonths(getInt(idx)))
 
     override fun writeObject0(value: Any) =
         if (value is IntervalYearMonth) writeInt(value.period.toTotalMonths().toInt())
@@ -36,7 +37,7 @@ class IntervalDayTimeVector(
 
     override val arrowType: ArrowType = MinorType.INTERVALDAY.type
 
-    override fun getObject0(idx: Int) =
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         IntervalDayTime(
             Period.ofDays(getInt0(idx * 2)),
             Duration.ofMillis(getInt0(idx * 2 + 1).toLong())
@@ -62,7 +63,7 @@ class IntervalMonthDayNanoVector(
 
     override val arrowType: ArrowType = MinorType.INTERVALMONTHDAYNANO.type
 
-    override fun getObject0(idx: Int) =
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         IntervalMonthDayNano(
             Period.of(0, getInt0(idx * 4), getInt0(idx * 4 + 1)),
             Duration.ofNanos(getLong0(idx * 2 + 1))

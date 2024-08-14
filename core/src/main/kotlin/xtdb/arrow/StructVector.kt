@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 import java.util.*
 
 class StructVector(
@@ -80,9 +81,9 @@ class StructVector(
     override fun mapKeyWriter(): VectorWriter = children.sequencedValues().firstOrNull() ?: TODO("auto-creation")
     override fun mapValueWriter(): VectorWriter = children.sequencedValues().lastOrNull() ?: TODO("auto-creation")
 
-    override fun getObject0(idx: Int): Any =
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any =
         children.sequencedEntrySet()
-            .associateBy({ it.key }, { it.value.getObject(idx) })
+            .associateBy({ keyFn.denormalize(it.key) }, { it.value.getObject(idx, keyFn) })
             .filterValues { it != null }
 
     override fun writeObject0(value: Any) =

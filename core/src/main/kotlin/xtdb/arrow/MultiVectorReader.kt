@@ -6,6 +6,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
+import xtdb.api.query.IKeyFn
 import xtdb.toLeg
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
@@ -22,7 +23,7 @@ class MultiVectorReader(
     private val legReaders = ConcurrentHashMap<String, VectorReader>()
     override val nullable get() = this.field.isNullable
 
-    override val field by lazy (LazyThreadSafetyMode.PUBLICATION){
+    override val field by lazy(LazyThreadSafetyMode.PUBLICATION) {
         MERGE_FIELDS.applyTo(RT.seq(fields.filterNotNull())) as Field
     }
 
@@ -66,13 +67,10 @@ class MultiVectorReader(
     override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
         reader(idx).getPointer(vectorIndirections[idx], reuse)
 
-    override fun getObject(idx: Int): Any? = reader(idx).getObject(vectorIndirections[idx])
-
-//    override fun getObject(idx: Int, keyFn: IKeyFn<*>?): Any? =
-//        safeReader(idx).getObject(vectorIndirections[idx], keyFn)
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? = reader(idx).getObject(vectorIndirections[idx], keyFn)
 
     override fun keyReader(name: String) =
-        MultiVectorReader( readers.map { it?.keyReader(name) }, readerIndirection, vectorIndirections )
+        MultiVectorReader(readers.map { it?.keyReader(name) }, readerIndirection, vectorIndirections)
 
 //    override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys() }.toSet()
 
@@ -160,13 +158,14 @@ class MultiVectorReader(
         return RowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
     }
 
-    private fun indirectVectorPosition(pos: VectorPosition): VectorPosition {
-        return object : VectorPosition {
+    private fun indirectVectorPosition(pos: VectorPosition) =
+        object : VectorPosition {
             override var position: Int
                 get() = vectorIndirections[pos.position]
+
+                @Suppress("UNUSED_PARAMETER")
                 set(value) = error("set indirectVectorPosition")
         }
-    }
 
     override fun valueReader(pos: VectorPosition): ValueReader {
         val indirectPos = indirectVectorPosition(pos)

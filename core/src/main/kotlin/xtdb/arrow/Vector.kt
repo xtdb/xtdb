@@ -16,6 +16,7 @@ import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
+import xtdb.api.query.IKeyFn
 import xtdb.vector.extensions.KeywordType
 import xtdb.vector.extensions.TransitType
 import xtdb.vector.extensions.UuidType
@@ -29,8 +30,8 @@ sealed class Vector : VectorReader, VectorWriter {
     abstract override var nullable: Boolean; internal set
     override var valueCount: Int = 0; internal set
 
-    internal abstract fun getObject0(idx: Int): Any
-    override fun getObject(idx: Int) = if (isNull(idx)) null else getObject0(idx)
+    internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>) = if (isNull(idx)) null else getObject0(idx, keyFn)
 
     protected abstract fun writeObject0(value: Any)
     override fun writeObject(value: Any?) = if (value == null) writeNull() else writeObject0(value)
