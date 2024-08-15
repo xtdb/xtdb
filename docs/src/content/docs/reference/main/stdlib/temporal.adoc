@@ -263,7 +263,7 @@ e.g.
 -> `[{_from: '2020-01-01T12:00Z', _to: '2020-01-01T13:00Z', _weight: 0.6}, {_from: '2020-01-01T13:00Z', _to: '2020-01-01T14:00Z', _weight: 0.4}]`
 
 | `(extract "field" date-time)` | `EXTRACT(field FROM date_time)`
-| Extracts the given field from the date-time. Field must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE` or `SECOND`. Datetimes with timezones additionally support field values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE`.
+| Extracts the given field from the date-time. Field must be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` or `SECOND`. Datetimes with timezones additionally support field values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE`.
 
 | `(extract "field" date)` | `EXTRACT(field FROM date)`
 | Extracts the given field from the date. Field must be one of `YEAR`, `MONTH` or `DAY`.
