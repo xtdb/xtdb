@@ -1,8 +1,3 @@
-# Auctionmark Params
-auctionmark_duration     = "PT10M"
-auctionmark_scale_factor = 0.1
-
-# Deployment Options
-eventhub_topic_suffix = "v1"
-run_single_node   = false # no deployment by default
-slack_webhook_url = ""
+kubernetes_namespace            = "cloud-benchmark"
+kubernetes_service_account_name = "xtdb-service-account"
+kubernetes_vm_size              = "Standard_D2_v2"

@@ -9,8 +9,8 @@ WORKDIR /usr/local/lib/xtdb
 ENTRYPOINT ["java", \
     "-Dclojure.main.report=stderr", \
     "-Dlogback.configurationFile=logback.xml", \
-    "-Xmx1500m", "-Xms1500m", \
-    "-XX:MaxDirectMemorySize=2000m", \
+    "-Xmx2000m", "-Xms2000m", \
+    "-XX:MaxDirectMemorySize=1500m", \
     "-XX:MaxMetaspaceSize=500m", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \

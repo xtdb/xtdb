@@ -16,6 +16,7 @@ For local development, you will need the following:
 * To run the various scripts and commands within this folder, you will need the `az` command line tool, and to be authenticated with it.
 * `docker` available on your machine.
 * `terraform` available on your machine.
+* `kubectl` available on your machine.
 
 === Authenticating with Azure
 
@@ -50,7 +51,7 @@ It will build the local image as `xtdb-azure-bench:latest`.
 All of the config for setting up the infrastructure on Azure is handled by Terraform - and the files are within the `terraform` directory. 
 
 * The `main.tf` file contains the main configuration for the Azure resources.
-* Most of the general config that you will need to change when running auctionmark (ie, environment variables for auctionmark, node count, etc), can be edited within the `terraform.tfvars` file. 
+* Can update the names of a few things within `terraform.tfvars` - though this is not expected to change so much from the default values. The only thing that may be expected to change is the `kubernetes_vm_size` if you wish to run more than one pod/multiple nodes.
 
 Prior to deploying any of the infra using terraform, you will need to initialize the terraform directory. From the `terraform` directory:
 ```bash
@@ -77,7 +78,7 @@ To actually deploy the infra, you can run:
 terraform apply
 ```
 
-NOTE: By default - we will create all of the required Azure infrastructure, but will not create container app. See below to scale up/run the application itself.
+This will setup all of the azure resources we use and a base 
 
 == Pushing the Docker Image to Azure
 
@@ -98,60 +99,64 @@ Finally, to push the image to the Azure Container Registry, you can run:
 docker push cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench
 ```
 
-== Deploying the Container App
+== Deploying the Benchmark Containers
 
-Deploying/running the container app is as simple as updating the `terraform.tfvars` file and applying the terraform config. Within the file, you can update a number of Auctionmark/XTDB options/parameters prior to running the container app.
 
-You can either update the file and run `terraform apply` again, or you can set the parameters using the terraform CLI.
+Before trying to deploy the benchmark containers, you will need to ensure that you have the necessary permissions to deploy to the Kubernetes cluster. You can do this by running the following command:
+```
+az aks get-credentials --resource-group cloud-benchmark-resources --name cloud-benchmark-cluster
+```
 
-Ie, to run with a single node:
+This will configure your `kubectl` to use the credentials for the Kubernetes cluster. 
+
+Before deploying anything, must ensure all of the necessary pieces of config are set within the ConfigMap/match the values/names of the terraform architecture, run the following in the terraform directory:
+```
+terraform outputs
+```
+
+Ensure that the contents of the files under `kubernetes` match the values of the terraform outputs.
+
+The config for the deployments/jobs live under `kubernetes` - within these, you can set/configure any of the necessary parameters for running the image on the cluster. When ready to run a single node auctionmark job, run the following command from the base of this directory:
+```
+kubectl apply -f kubernetes/single-node-auctionmark.yaml
+```
+
+You can see the status of job creation using the following:
+```
+kubectl get jobs --namespace cloud-benchmark
+```
+
+Trail the logs of the single node run by running:
+```
+kubectl logs job.batch/xtdb-single-node-auctionmark --namespace cloud-benchmark -f
+```
+
+== Clear up between runs
+
+If you want to totally clear up data between runs, you'll want to do the following:
+
+* Clear up the job/pods
+* Empty the Azure Storage Blobs Container
+* Delete the Persistent Storage volume used by the TxLog
+* Delete the Persistent Storage volume containing the Local Disk Caches
+
+.Clear up the Workload
+
+To clear up the workload, you can do the following
 ```bash
-terraform apply -var run_single_node=true
+kubectl delete jobs xtdb-single-node-auctionmark --namespace cloud-benchmark
 ```
 
-NOTE: The `run_single_node` variable is a boolean, and will default to `false`. If you wish to destroy a running container app, ensure this is false and simply re-run `terraform apply`.
-
-=== Monitoring Logs
-
-To watch the container logs on a single node run, you can run:
-
+.Command to empty the Azure Storage Blob Container:
 ```bash
-az containerapp logs show --resource-group cloud-benchmark-resources --name cloud-benchmark-single-node  --tail 100 --format text --follow
+./clear-azure-storage.sh
 ```
 
-This will print the last 100 lines of the logs, and then follow the logs as they are printed.
+.Deleting Persistent Storage Volumes:
+You can remove the Persistent Storage volumes within the google cloud UI, but will need to be careful to ensure they are both removed from GKE and deleted within Compute Engine's storage as well. You will need to ensure any pods are closed/deleted first, and then to delete them, you can do the following:
+```bash
+kubectl delete pvc xtdb-pvc-log --namespace cloud-benchmark
+kubectl delete pvc xtdb-pvc-local-caches --namespace cloud-benchmark
+``` 
 
-
-== Clearing up resources
-
-Between runs it can be useful to entirely clear all of the persisted data from the Container App. This can be done in a few steps:
-
-=== Clearing up the Object Store
-
-To clear up _most_ of the storage used by the XTDB node, you can run the following script:
-
-```
-./scripts/clear-azure-storage.sh
-```
-
-This will delete:
-
-* The Contents of the Azure Blob Storage container.
-
-=== Clearing eventhub
-
-We cannot clear the actual contents of Azure Event Hub very easily, but if we want to reset from a relatively clean state we should be able to "bump" the topic version within `main.tf` and reapply the terraform config. This will create a new Event Hub with a new name, and the old one will be deleted.
-
-To assist with this, I've added a variable to the `terraform.tfvars` file called `eventhub_topic_suffix`. This defaults to "v1", but you can update this whenever you need to reset the Event Hub.
-
-=== Clearing up the File Share
-
-To clear up the file share contents (ie, which we mount to the app container and persist our local disk cache) is somewhat more complex within the CLI. I would recommend using the Azure Portal to do this:
-
-* Go to the Azure "Storage Browser" page.
-* Navigate to the storage account we use for azure auctionmark, `xtdbazurebenchmark`
-* Navigate to the "File Shares" section.
-* Go to `cloudbenchmarkshare`.
-* Delete the contents of the share.
-
-
+NOTE: You do not necessarily _need_ to delete all of the above between runs - you can also change the kubernetes config map to use slightly different directory names (ie, changing bucket prefix, new local-disk-cache directory, etc) to avoid conflicts between runs. 
