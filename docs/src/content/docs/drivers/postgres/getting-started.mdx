@@ -22,6 +22,62 @@ The advantage of embracing wire protocol compatibility is that many PostgreSQL c
 
 <div data-no-swup>
   <Tabs>
+    <TabItem label="Python">
+This example uses the [Psycopg 3](https://www.psycopg.org/psycopg3/) database adapter.
+
+```python
+import asyncio
+import psycopg as pg
+
+DB_PARAMS = {
+    "host": "localhost",
+    "port": 5432
+}
+
+async def insert_trades(conn, trades):
+    if not isinstance(trades, list) or len(trades) == 0:
+        raise ValueError("Trades must be a non-empty list")
+
+    query = """
+    INSERT INTO trades (_id, name, quantity) VALUES (%s, %s, %s)
+    """
+
+    async with conn.cursor() as cur:
+        for trade in trades:
+            trade_values = (trade["_id"], trade["name"], trade["quantity"])
+            await cur.execute(query, trade_values)
+    # support for executeMany is coming soon https://github.com/xtdb/xtdb/issues/3597
+
+async def get_trades_over(conn, quantity):
+    query = """
+    SELECT * FROM trades WHERE quantity > %s
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(query, (quantity,))
+        return await cur.fetchall()
+
+async def main():
+    trades = [
+        {"_id": 1, "name": "Trade1", "quantity": 1001},
+        {"_id": 2, "name": "Trade2", "quantity": 15},
+        {"_id": 3, "name": "Trade3", "quantity": 200},
+    ]
+
+    try:
+        async with await pg.AsyncConnection.connect(**DB_PARAMS, autocommit=True) as conn:
+            conn.adapters.register_dumper(str, pg.types.string.StrDumperVarchar) // required for now https://github.com/xtdb/xtdb/issues/3589
+            await insert_trades(conn, trades)
+            print("Trades inserted successfully")
+
+            result = await get_trades_over(conn, 100)
+            print(result)
+    except Exception as error:
+        print(f"Error occurred: {error}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+    </TabItem>
     <TabItem label="Node.js">
 This example uses the [`postgres`](https://www.npmjs.com/package/postgres) package.
 
@@ -33,16 +89,18 @@ import postgres from 'postgres';
 const sql = postgres({
   host: "localhost",
   port: 5432,
-  fetch_types: false, // currently required to be 'false'
+  fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
   // debug: console.log
 });
 
-// Mapping of domain JavaScript types to Postgres OIDs
+// Mapping for all needed JavaScript types to Postgres OIDs - a simpler strategy will be provided soon https://github.com/xtdb/xtdb/issues/3606
 const typeToOid = {
-  number: 23,  // Postgres OID for 'int4' (note that 20/'int8' will coerce to string by default due JS 53-bit numeric precision)
+  number: 23,  // Postgres OID for 'int4'
   string: 25   // Postgres OID for 'text
 };
-// for the full list of OIDs see "Supported types" for the Postgres Driver at https://docs.xtdb.com
+// All other types will be coerced to strings
+// Note that this includes int8 (OID 20) due to JavaScript's 53-bit numeric precision
+// For the full list of OIDs see "Supported types" for the Postgres Driver at https://docs.xtdb.com
 
 function objsToTypedObjs(objs) {
   return objs.map(o => {
@@ -105,61 +163,12 @@ async function main() {
 main();
 ```
     </TabItem>
-    <TabItem label="Python">
-This example uses the [Psycopg 3](https://www.psycopg.org/psycopg3/) database adapter.
-
-```python
-import asyncio
-import psycopg as pg
-
-DB_PARAMS = {
-    "host": "localhost",
-    "port": 5432
-}
-
-async def insert_trades(conn, trades):
-    if not isinstance(trades, list) or len(trades) == 0:
-        raise ValueError("Trades must be a non-empty list")
-
-    query = """
-    INSERT INTO trades (_id, name, quantity) VALUES (%s, %s, %s)
-    """
-
-    trade_values = [(trade["_id"], trade["name"], trade["quantity"]) for trade in trades]
-
-    async with conn.cursor() as cur:
-        await cur.executemany(query, trade_values)
-
-async def get_trades_over(conn, quantity):
-    query = """
-    SELECT * FROM trades WHERE quantity > %s
-    """
-    async with conn.cursor() as cur:
-        await cur.execute(query, (quantity,))
-        return await cur.fetchall()
-
-async def main():
-    trades = [
-        {"_id": 1, "name": "Trade1", "quantity": 1001},
-        {"_id": 2, "name": "Trade2", "quantity": 15},
-        {"_id": 3, "name": "Trade3", "quantity": 200},
-    ]
-
-    try:
-        async with await pg.AsyncConnection.connect(**DB_PARAMS,
-                                                    autocommit=True) as conn:
-            conn.adapters.register_dumper(str, pg.types.string.StrDumperVarchar)
-            await insert_trades(conn, trades)
-            print("Trades inserted successfully")
-
-            result = await get_trades_over(conn, 100)
-            print(result)
-    except Exception as error:
-        print(f"Error occurred: {error}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
+    <TabItem label="Coming soon...">
+    <ul>
+      <li>Go</li>
+      <li>Rust</li>
+      <li>Want to help? Get in touch: <a href="mailto:hello@xtdb.com">hello@xtdb.com</a> or feel free to open an issue!</li>
+    </ul>
     </TabItem>
   </Tabs>
 </div>
@@ -201,7 +210,7 @@ The definitive list of types and Postgres OIDs supported are available alongside
 ### Main caveats
 
 1. You can use `BEGIN READ WRITE` and `COMMIT`/`ROLLBACK` to execute multiple statements in a single atomic transaction, however transaction are fundamentally non-interactive (see [How XTDB works](/intro/data-model) for details) and this means you can't query in the middle of a transaction. All reads back to the client must happen outside of transactions.
-2. JSON-ification of results - generic Postgres drivers can't comprehensively handle the 'polymorphic' and nested types that XTDB supports internally, so many complex structures will be return using JSON columns. Given the lack of [DDL](https://en.wikipedia.org/wiki/Data_definition_language) functionality present in XTDB currently (we're [working on it](https://github.com/xtdb/xtdb/issues/3411)), it is therefore important that you control the data you insert into a given column if you want to avoid a monomorphic (simple) type being unexpectedly later returned as a JSON string because the type definition was inadvertently widened by an errant INSERT for an unrelated row. For example, if you INSERT row X with a number for column `foo` and then query it back you will see that same number, however if you then INSERT row Y with a string for column `foo` now row X will now always return column `foo` as string (i.e. it's now JSON). This widening behaviour cannot be undone using the supported XTDB APIs. Please get in touch if you run into difficulties.
+2. JSON-ification of results - generic Postgres drivers can't comprehensively handle the 'polymorphic' and nested types that XTDB supports internally, so many complex structures will be return using JSON columns. Given the lack of [DDL](https://en.wikipedia.org/wiki/Data_definition_language) functionality present in XTDB currently (we're [working on it](https://github.com/xtdb/xtdb/issues/3411)), it is therefore important that you control the data you insert into a given column if you want to avoid a monomorphic (simple) type being unexpectedly later returned as a JSON string because the type definition was inadvertently widened by an errant INSERT for an unrelated row. For example, if you INSERT row X with a number for column `foo` and then query it back you will see that same number, however if you then INSERT row Y with a string for column `foo` now row X will now always return column `foo` as string (i.e. it's now JSON). This widening behaviour cannot be undone using the supported XTDB APIs. Please get in touch if you run into difficulties: <a href="mailto:hello@xtdb.com">hello@xtdb.com</a>
 3. Lack of `SHOW` and SQL 'window functions' precludes various tools from working.
 4. Transactions do not [yet](https://github.com/xtdb/xtdb/issues/3463) return the information that is needed to correlate clients, so it is recommended to only issue write transactions from a single client for the time being (or use the HTTP API).
 5. Certain classes of error messages may be opaque to the client - it may therefore be best to debug queries using the HTTP API during the development workflow for now.
