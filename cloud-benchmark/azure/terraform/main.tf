@@ -121,7 +121,7 @@ resource "azurerm_kubernetes_cluster" "cloud_benchmark" {
   dns_prefix          = "cloud-benchmark-cluster"
 
   default_node_pool {
-    name       = "default"
+    name       = "system"
     node_count = 1
     vm_size    = "Standard_D2_v2"
     upgrade_settings {
@@ -140,6 +140,16 @@ resource "azurerm_kubernetes_cluster" "cloud_benchmark" {
 
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
+}
+
+resource "azurerm_kubernetes_cluster_node_pool" "cloud_benchmark_nodes" {
+  name                  = "benchmark"
+  kubernetes_cluster_id = azurerm_kubernetes_cluster.cloud_benchmark.id
+  vm_size               = var.kubernetes_vm_size
+  node_count            = 1
+  node_labels           = {
+    "nodepool" = "benchmark"
+  }
 }
 
 resource "azurerm_role_assignment" "cloud_benchmark_cluster_role" {

@@ -73,6 +73,8 @@ spec:
         app: "xtdb-single-node-auctionmark"
         azure.workload.identity/use: "true" 
     spec:
+      nodeSelector:
+        nodepool: "benchmark"
       serviceAccountName: "xtdb-service-account"
       restartPolicy: "Never"
       volumes:
