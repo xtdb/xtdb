@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "cloud-benchmark"
+  labels:
+    name: "cloud-benchmark"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "xtdb-service-account"
+  namespace: "cloud-benchmark"
+---
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "xtdb-pvc-log"
+  namespace: "cloud-benchmark"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "50Gi"
+  storageClassName: "managed-csi"
+---
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "xtdb-pvc-local-caches"
+  namespace: "cloud-benchmark"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "50Gi"
+  storageClassName: "managed-csi"
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "xtdb-env-config"
+  namespace: "cloud-benchmark"
+data:
+  CLOUD_PLATFORM_NAME: "Azure"
+  XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID: "c76c6e6a-59e2-4172-8097-6c48d36cdb92"
+  XTDB_AZURE_STORAGE_ACCOUNT: "xtdbazurebenchmark"
+  XTDB_AZURE_STORAGE_CONTAINER: "xtdbazurebenchmarkcontainer"
+  XTDB_AZURE_SERVICE_BUS_NAMESPACE: "cloud-benchmark-eventbus"
+  XTDB_AZURE_SERVICE_BUS_TOPIC_NAME: "cloud-benchmark-servicebus-topic"
+  XTDB_LOCAL_LOG_PATH: "/var/lib/xtdb/log/local-log-1"
+  AUCTIONMARK_DURATION: "PT1H"
+  AUCTIONMARK_SCALE_FACTOR: "0.1"
+  AUCTIONMARK_LOAD_PHASE: "True"
+  AUCTIONMARK_LOAD_PHASE_ONLY: "False"
+---
+apiVersion: "batch/v1"
+kind: "Job"
+metadata:
+  name: "xtdb-single-node-auctionmark"
+  namespace: "cloud-benchmark"
+  labels:
+    app: "xtdb-single-node-auctionmark"
+spec:
+  completions: 1
+  parallelism: 1
+  # No retries
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: "xtdb-single-node-auctionmark"
+        azure.workload.identity/use: "true" 
+    spec:
+      serviceAccountName: "xtdb-service-account"
+      restartPolicy: "Never"
+      volumes:
+        - name: "xtdb-pvc-log-vol"
+          persistentVolumeClaim:
+            claimName: "xtdb-pvc-log"
+        - name: "xtdb-pvc-local-caches-vol"
+          persistentVolumeClaim:
+            claimName: "xtdb-pvc-local-caches"
+      containers:
+      - name: "xtdb-azure-bench-1"
+        image: "cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest"
+        volumeMounts:
+        - mountPath: "/var/lib/xtdb/log"
+          name: "xtdb-pvc-log-vol"
+        - mountPath: "/var/lib/xtdb/buffers"
+          name: "xtdb-pvc-local-caches-vol"
+        resources:
+          requests:
+            memory: "4056Mi"
+          limits:
+            memory: "4056Mi"
+        envFrom:
+        - configMapRef:
+            name: "xtdb-env-config"
+        env:
+        - name: "XTDB_LOCAL_DISK_CACHE"
+          value: "/var/lib/xtdb/buffers/disk-cache-1"
