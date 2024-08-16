@@ -35,33 +35,148 @@
         "name" : "branch-recency",
         "nullable" : false,
         "type" : {
-          "name" : "map",
-          "keysSorted" : true
+          "name" : "struct"
         },
         "children" : [{
-          "name" : "entries",
-          "nullable" : false,
+          "name" : "columns",
+          "nullable" : true,
           "type" : {
-            "name" : "struct"
+            "name" : "list"
           },
           "children" : [{
-            "name" : "recency",
+            "name" : "$data$",
             "nullable" : false,
             "type" : {
-              "name" : "timestamp",
-              "unit" : "MICROSECOND",
-              "timezone" : "UTC"
+              "name" : "struct"
             },
-            "children" : [ ]
-          },{
-            "name" : "idx",
-            "nullable" : true,
+            "children" : [{
+              "name" : "col-name",
+              "nullable" : false,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            },{
+              "name" : "root-col?",
+              "nullable" : false,
+              "type" : {
+                "name" : "bool"
+              },
+              "children" : [ ]
+            },{
+              "name" : "count",
+              "nullable" : false,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            },{
+              "name" : "types",
+              "nullable" : false,
+              "type" : {
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "timestamp-tz-micro-utc",
+                "nullable" : true,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "min",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "timestamp",
+                    "unit" : "MICROSECOND",
+                    "timezone" : "UTC"
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "max",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "timestamp",
+                    "unit" : "MICROSECOND",
+                    "timezone" : "UTC"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "fixed-size-binary",
+                "nullable" : true,
+                "type" : {
+                  "name" : "bool"
+                },
+                "children" : [ ]
+              },{
+                "name" : "i64",
+                "nullable" : true,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "min",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "max",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                }]
+              }]
+            },{
+              "name" : "bloom",
+              "nullable" : true,
+              "type" : {
+                "name" : "binary"
+              },
+              "children" : [ ]
+            }]
+          }]
+        },{
+          "name" : "recencies",
+          "nullable" : false,
+          "type" : {
+            "name" : "map",
+            "keysSorted" : true
+          },
+          "children" : [{
+            "name" : "entries",
+            "nullable" : false,
             "type" : {
-              "name" : "int",
-              "bitWidth" : 32,
-              "isSigned" : true
+              "name" : "struct"
             },
-            "children" : [ ]
+            "children" : [{
+              "name" : "recency",
+              "nullable" : false,
+              "type" : {
+                "name" : "timestamp",
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
+              },
+              "children" : [ ]
+            },{
+              "name" : "idx",
+              "nullable" : true,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 32,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            }]
           }]
         }]
       },{
@@ -216,21 +331,99 @@
         "name" : "branch-recency",
         "count" : 3,
         "VALIDITY" : [1,1,1],
-        "OFFSET" : [0,1,2,3],
         "children" : [{
-          "name" : "entries",
+          "name" : "columns",
           "count" : 3,
           "VALIDITY" : [1,1,1],
+          "OFFSET" : [0,5,10,15],
           "children" : [{
-            "name" : "recency",
+            "name" : "$data$",
+            "count" : 15,
+            "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            "children" : [{
+              "name" : "col-name",
+              "count" : 15,
+              "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+              "OFFSET" : [0,14,27,38,44,49,63,76,87,93,98,112,125,136,142,147],
+              "DATA" : ["xt$system_from","xt$valid_from","xt$valid_to","xt$iid","xt$id","xt$system_from","xt$valid_from","xt$valid_to","xt$iid","xt$id","xt$system_from","xt$valid_from","xt$valid_to","xt$iid","xt$id"]
+            },{
+              "name" : "root-col?",
+              "count" : 15,
+              "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+              "DATA" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            },{
+              "name" : "count",
+              "count" : 15,
+              "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+              "DATA" : ["47","47","47","47","47","47","47","47","47","47","47","47","47","47","47"]
+            },{
+              "name" : "types",
+              "count" : 15,
+              "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+              "children" : [{
+                "name" : "timestamp-tz-micro-utc",
+                "count" : 15,
+                "VALIDITY" : [1,1,1,0,0,1,1,1,0,0,1,1,1,0,0],
+                "children" : [{
+                  "name" : "min",
+                  "count" : 15,
+                  "VALIDITY" : [1,1,1,0,0,1,1,1,0,0,1,1,1,0,0],
+                  "DATA" : [1577836800000000,1577836800000000,9223372036854775807,0,0,1577836800000000,1577836800000000,9223372036854775807,0,0,1577836800000000,1577836800000000,9223372036854775807,0,0]
+                },{
+                  "name" : "max",
+                  "count" : 15,
+                  "VALIDITY" : [1,1,1,0,0,1,1,1,0,0,1,1,1,0,0],
+                  "DATA" : [1586044800000000,1586044800000000,9223372036854775807,0,0,1586044800000000,1586044800000000,9223372036854775807,0,0,1586044800000000,1586044800000000,9223372036854775807,0,0]
+                }]
+              },{
+                "name" : "fixed-size-binary",
+                "count" : 15,
+                "VALIDITY" : [0,0,0,1,0,0,0,0,1,0,0,0,0,1,0],
+                "DATA" : [0,0,0,1,0,0,0,0,1,0,0,0,0,1,0]
+              },{
+                "name" : "i64",
+                "count" : 15,
+                "VALIDITY" : [0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+                "children" : [{
+                  "name" : "min",
+                  "count" : 15,
+                  "VALIDITY" : [0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+                  "DATA" : ["0","0","0","0","3","0","0","0","0","3","0","0","0","0","3"]
+                },{
+                  "name" : "max",
+                  "count" : 15,
+                  "VALIDITY" : [0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+                  "DATA" : ["0","0","0","0","571","0","0","0","0","571","0","0","0","0","571"]
+                }]
+              }]
+            },{
+              "name" : "bloom",
+              "count" : 15,
+              "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+              "OFFSET" : [0,394,788,810,1228,1646,2040,2434,2456,2874,3292,3686,4080,4102,4520,4938],
+              "DATA" : ["3a300000100000000000080001000600020008000300090004000600050003000600080007000b0008000400090009000a0005000b0006000c0007000d0004000e0009000f000a00880000009a000000a8000000ba000000ce000000dc000000e4000000f60000000e010000180100002c0100003801000046010000560100006001000074010000174ba261506f1a84cf99b49dafbcbac4ccfaec3bb93f2563ba7ecbc669ecf9ee641d5e3c6f6599807aa194affdef4df569fe811b371c7f42db5c8c83e29e92becdef86fc28fe0a1b064bf974ce79827f38a027fd31703874559e4adce71f12249a38dc5db4779a85bba6edc0f3e1ff3c7a460653fa5b1581b1a01ba257c02bcd52d52eea0aff0b02a03d9b5c1b73f69f4c01ae0ec31cd222272bce50fc7565aacede72fbe52f9e6d596ff5836dbbafcd99068820833f7d5ec49866d192f624007c3a43571e5f2a6ecf758ab52fc2380afd9133c452e149f92e03d4048a0b3426834153446e9071e09afbe6fbb80756270161fc7f8c96049a139d82ab0ebca7cc08db","3a300000100000000000080001000600020008000300090004000600050003000600080007000b0008000400090009000a0005000b0006000c0007000d0004000e0009000f000a00880000009a000000a8000000ba000000ce000000dc000000e4000000f60000000e010000180100002c0100003801000046010000560100006001000074010000174ba261506f1a84cf99b49dafbcbac4ccfaec3bb93f2563ba7ecbc669ecf9ee641d5e3c6f6599807aa194affdef4df569fe811b371c7f42db5c8c83e29e92becdef86fc28fe0a1b064bf974ce79827f38a027fd31703874559e4adce71f12249a38dc5db4779a85bba6edc0f3e1ff3c7a460653fa5b1581b1a01ba257c02bcd52d52eea0aff0b02a03d9b5c1b73f69f4c01ae0ec31cd222272bce50fc7565aacede72fbe52f9e6d596ff5836dbbafcd99068820833f7d5ec49866d192f624007c3a43571e5f2a6ecf758ab52fc2380afd9133c452e149f92e03d4048a0b3426834153446e9071e09afbe6fbb80756270161fc7f8c96049a139d82ab0ebca7cc08db","3a3000000100000000000200100000000000b4146829","3a300000100000000000080001000800020007000300080004000b00050008000600050007000d0008000300090007000a0005000b0008000c000b000d0005000e0009000f000900880000009a000000ac000000bc000000ce000000e6000000f80000000401000020010000280100003801000044010000560100006e0100007a0100008e010000071b3c2d40324449635ffd6d127fa49d0ff2dc0c47287a70908b768d87ab07accfc7b0eb9823b62ec84bdc6a7f9431c198c470e34712b04763697db686beaabfecd43aee14ff6c041710132bf150a4591b5a1b65e57cd0a118c659e31ae6f70db217483bed5c5d62ee824d8c7abbfefa3a183a22b845fc6270972ba30703d720f723c62ae233ce42914fb75f356156a51cc406c89cdb60eb9e83f69795a12bba4e0604612bc3eccbe3d0fde3aef11cfc3d22b733da48829b15b89ee9ed0b6d190d25ef775e92d09292b22dda13e0940d8d1b2639d157de62baa0aaa9beaae3b371b666d9b5fd271579365e57d57c28b384fc4919961f2986b7929cad5fb22ec9eeca1bd45be2c5123335f43e235d576fb376347b12942a9621e8","3a30000010000000000037000100010002000500030004000400050005000500060004000700040008000600090003000a0007000b0004000c0003000d0009000e0004000f00060088000000f8000000fc00000008010000120100001e0100002a010000340100003e0100004c01000054010000640100006e010000760100008a01000094010000030022002400460049004e0062006b0076007c007d00800089008e0098009f00a600b500ca00d000d100da00fe000201090113011d01230133013a015601580177017a0189019101a601c201cc01ce01e401ed01f601f701100219021e023b02180733090412ec27eb4d6baa15f536feb85249fbe7194b1b36e556e891f2c6f6d21dcc466957dfca2ee0e31caa339f34d478417d39b29d0ad32cfb319bc914d0a5e4243bd56a51835d8b84ae5b035e4bb6be41c534e0ac00df03e2044f3f0f7b2cf1f1f8c41ebd639e7b34e6000f5a31b0637385e292ae967aa282e5be063761e3813ae39bf01c0363200e90acd48006a819c73f574a24522973cc83d885a8b125ce42956da0a0ad89c362e7da45b1576682f5a325c257c3ade1","3a300000100000000000080001000600020008000300090004000600050003000600080007000b0008000400090009000a0005000b0006000c0007000d0004000e0009000f000a00880000009a000000a8000000ba000000ce000000dc000000e4000000f60000000e010000180100002c0100003801000046010000560100006001000074010000174ba261506f1a84cf99b49dafbcbac4ccfaec3bb93f2563ba7ecbc669ecf9ee641d5e3c6f6599807aa194affdef4df569fe811b371c7f42db5c8c83e29e92becdef86fc28fe0a1b064bf974ce79827f38a027fd31703874559e4adce71f12249a38dc5db4779a85bba6edc0f3e1ff3c7a460653fa5b1581b1a01ba257c02bcd52d52eea0aff0b02a03d9b5c1b73f69f4c01ae0ec31cd222272bce50fc7565aacede72fbe52f9e6d596ff5836dbbafcd99068820833f7d5ec49866d192f624007c3a43571e5f2a6ecf758ab52fc2380afd9133c452e149f92e03d4048a0b3426834153446e9071e09afbe6fbb80756270161fc7f8c96049a139d82ab0ebca7cc08db","3a300000100000000000080001000600020008000300090004000600050003000600080007000b0008000400090009000a0005000b0006000c0007000d0004000e0009000f000a00880000009a000000a8000000ba000000ce000000dc000000e4000000f60000000e010000180100002c0100003801000046010000560100006001000074010000174ba261506f1a84cf99b49dafbcbac4ccfaec3bb93f2563ba7ecbc669ecf9ee641d5e3c6f6599807aa194affdef4df569fe811b371c7f42db5c8c83e29e92becdef86fc28fe0a1b064bf974ce79827f38a027fd31703874559e4adce71f12249a38dc5db4779a85bba6edc0f3e1ff3c7a460653fa5b1581b1a01ba257c02bcd52d52eea0aff0b02a03d9b5c1b73f69f4c01ae0ec31cd222272bce50fc7565aacede72fbe52f9e6d596ff5836dbbafcd99068820833f7d5ec49866d192f624007c3a43571e5f2a6ecf758ab52fc2380afd9133c452e149f92e03d4048a0b3426834153446e9071e09afbe6fbb80756270161fc7f8c96049a139d82ab0ebca7cc08db","3a3000000100000000000200100000000000b4146829","3a300000100000000000080001000800020007000300080004000b00050008000600050007000d0008000300090007000a0005000b0008000c000b000d0005000e0009000f000900880000009a000000ac000000bc000000ce000000e6000000f80000000401000020010000280100003801000044010000560100006e0100007a0100008e010000071b3c2d40324449635ffd6d127fa49d0ff2dc0c47287a70908b768d87ab07accfc7b0eb9823b62ec84bdc6a7f9431c198c470e34712b04763697db686beaabfecd43aee14ff6c041710132bf150a4591b5a1b65e57cd0a118c659e31ae6f70db217483bed5c5d62ee824d8c7abbfefa3a183a22b845fc6270972ba30703d720f723c62ae233ce42914fb75f356156a51cc406c89cdb60eb9e83f69795a12bba4e0604612bc3eccbe3d0fde3aef11cfc3d22b733da48829b15b89ee9ed0b6d190d25ef775e92d09292b22dda13e0940d8d1b2639d157de62baa0aaa9beaae3b371b666d9b5fd271579365e57d57c28b384fc4919961f2986b7929cad5fb22ec9eeca1bd45be2c5123335f43e235d576fb376347b12942a9621e8","3a30000010000000000037000100010002000500030004000400050005000500060004000700040008000600090003000a0007000b0004000c0003000d0009000e0004000f00060088000000f8000000fc00000008010000120100001e0100002a010000340100003e0100004c01000054010000640100006e010000760100008a01000094010000030022002400460049004e0062006b0076007c007d00800089008e0098009f00a600b500ca00d000d100da00fe000201090113011d01230133013a015601580177017a0189019101a601c201cc01ce01e401ed01f601f701100219021e023b02180733090412ec27eb4d6baa15f536feb85249fbe7194b1b36e556e891f2c6f6d21dcc466957dfca2ee0e31caa339f34d478417d39b29d0ad32cfb319bc914d0a5e4243bd56a51835d8b84ae5b035e4bb6be41c534e0ac00df03e2044f3f0f7b2cf1f1f8c41ebd639e7b34e6000f5a31b0637385e292ae967aa282e5be063761e3813ae39bf01c0363200e90acd48006a819c73f574a24522973cc83d885a8b125ce42956da0a0ad89c362e7da45b1576682f5a325c257c3ade1","3a300000100000000000080001000600020008000300090004000600050003000600080007000b0008000400090009000a0005000b0006000c0007000d0004000e0009000f000a00880000009a000000a8000000ba000000ce000000dc000000e4000000f60000000e010000180100002c0100003801000046010000560100006001000074010000174ba261506f1a84cf99b49dafbcbac4ccfaec3bb93f2563ba7ecbc669ecf9ee641d5e3c6f6599807aa194affdef4df569fe811b371c7f42db5c8c83e29e92becdef86fc28fe0a1b064bf974ce79827f38a027fd31703874559e4adce71f12249a38dc5db4779a85bba6edc0f3e1ff3c7a460653fa5b1581b1a01ba257c02bcd52d52eea0aff0b02a03d9b5c1b73f69f4c01ae0ec31cd222272bce50fc7565aacede72fbe52f9e6d596ff5836dbbafcd99068820833f7d5ec49866d192f624007c3a43571e5f2a6ecf758ab52fc2380afd9133c452e149f92e03d4048a0b3426834153446e9071e09afbe6fbb80756270161fc7f8c96049a139d82ab0ebca7cc08db","3a300000100000000000080001000600020008000300090004000600050003000600080007000b0008000400090009000a0005000b0006000c0007000d0004000e0009000f000a00880000009a000000a8000000ba000000ce000000dc000000e4000000f60000000e010000180100002c0100003801000046010000560100006001000074010000174ba261506f1a84cf99b49dafbcbac4ccfaec3bb93f2563ba7ecbc669ecf9ee641d5e3c6f6599807aa194affdef4df569fe811b371c7f42db5c8c83e29e92becdef86fc28fe0a1b064bf974ce79827f38a027fd31703874559e4adce71f12249a38dc5db4779a85bba6edc0f3e1ff3c7a460653fa5b1581b1a01ba257c02bcd52d52eea0aff0b02a03d9b5c1b73f69f4c01ae0ec31cd222272bce50fc7565aacede72fbe52f9e6d596ff5836dbbafcd99068820833f7d5ec49866d192f624007c3a43571e5f2a6ecf758ab52fc2380afd9133c452e149f92e03d4048a0b3426834153446e9071e09afbe6fbb80756270161fc7f8c96049a139d82ab0ebca7cc08db","3a3000000100000000000200100000000000b4146829","3a300000100000000000080001000800020007000300080004000b00050008000600050007000d0008000300090007000a0005000b0008000c000b000d0005000e0009000f000900880000009a000000ac000000bc000000ce000000e6000000f80000000401000020010000280100003801000044010000560100006e0100007a0100008e010000071b3c2d40324449635ffd6d127fa49d0ff2dc0c47287a70908b768d87ab07accfc7b0eb9823b62ec84bdc6a7f9431c198c470e34712b04763697db686beaabfecd43aee14ff6c041710132bf150a4591b5a1b65e57cd0a118c659e31ae6f70db217483bed5c5d62ee824d8c7abbfefa3a183a22b845fc6270972ba30703d720f723c62ae233ce42914fb75f356156a51cc406c89cdb60eb9e83f69795a12bba4e0604612bc3eccbe3d0fde3aef11cfc3d22b733da48829b15b89ee9ed0b6d190d25ef775e92d09292b22dda13e0940d8d1b2639d157de62baa0aaa9beaae3b371b666d9b5fd271579365e57d57c28b384fc4919961f2986b7929cad5fb22ec9eeca1bd45be2c5123335f43e235d576fb376347b12942a9621e8","3a30000010000000000037000100010002000500030004000400050005000500060004000700040008000600090003000a0007000b0004000c0003000d0009000e0004000f00060088000000f8000000fc00000008010000120100001e0100002a010000340100003e0100004c01000054010000640100006e010000760100008a01000094010000030022002400460049004e0062006b0076007c007d00800089008e0098009f00a600b500ca00d000d100da00fe000201090113011d01230133013a015601580177017a0189019101a601c201cc01ce01e401ed01f601f701100219021e023b02180733090412ec27eb4d6baa15f536feb85249fbe7194b1b36e556e891f2c6f6d21dcc466957dfca2ee0e31caa339f34d478417d39b29d0ad32cfb319bc914d0a5e4243bd56a51835d8b84ae5b035e4bb6be41c534e0ac00df03e2044f3f0f7b2cf1f1f8c41ebd639e7b34e6000f5a31b0637385e292ae967aa282e5be063761e3813ae39bf01c0363200e90acd48006a819c73f574a24522973cc83d885a8b125ce42956da0a0ad89c362e7da45b1576682f5a325c257c3ade1"]
+            }]
+          }]
+        },{
+          "name" : "recencies",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "OFFSET" : [0,1,2,3],
+          "children" : [{
+            "name" : "entries",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
-          },{
-            "name" : "idx",
-            "count" : 3,
-            "VALIDITY" : [1,1,1],
-            "DATA" : [19,21,23]
+            "children" : [{
+              "name" : "recency",
+              "count" : 3,
+              "VALIDITY" : [1,1,1],
+              "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
+            },{
+              "name" : "idx",
+              "count" : 3,
+              "VALIDITY" : [1,1,1],
+              "DATA" : [19,21,23]
+            }]
           }]
         }]
       },{

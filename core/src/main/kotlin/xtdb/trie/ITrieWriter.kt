@@ -1,6 +1,7 @@
 package xtdb.trie
 
 import xtdb.vector.IRelationWriter
+import xtdb.vector.RelationReader
 import java.util.*
 
 typealias InstantMicros = Long
@@ -11,7 +12,7 @@ interface ITrieWriter : AutoCloseable {
 
     fun writeLeaf(): RowIndex
     fun writeIidBranch(idxs: IntArray): RowIndex
-    fun writeRecencyBranch(idxBuckets: SortedMap<InstantMicros, RowIndex>): RowIndex
+    fun writeRecencyBranch(idxBuckets: SortedMap<InstantMicros, RowIndex>, subTrieData: RelationReader?): RowIndex
 
     fun end()
 
