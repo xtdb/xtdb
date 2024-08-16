@@ -284,7 +284,7 @@
 
       (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any)
 
-      (derive :list :any) (derive :struct :any) (derive :set :any)))
+      (derive :list :any) (derive :struct :any) (derive :set :any) (derive :map :any)))
 
 (def num-types (descendants col-type-hierarchy :num))
 (def date-time-types (descendants col-type-hierarchy :date-time))
@@ -468,7 +468,7 @@
 (defn col-type->leg [col-type]
   (let [head (col-type-head col-type)]
     (case head
-      (:struct :list :set) (str (symbol head))
+      (:struct :list :set :map) (str (symbol head))
       :union (let [without-null (-> (flatten-union-types col-type)
                                     (disj :null))]
                (if (= 1 (count without-null))
@@ -529,6 +529,13 @@
 
 (defmethod arrow-type->col-type SetType [_ data-field]
   [:set (field->col-type data-field)])
+
+(defmethod col-type->field* :map [col-name nullable? [_ {:keys [sorted?]} inner-col-type]]
+  (->field col-name (ArrowType$Map. (boolean sorted?)) nullable?
+           (col-type->field inner-col-type)))
+
+(defmethod arrow-type->col-type ArrowType$Map [^ArrowType$Map arrow-field data-field]
+  [:map {:sorted? (.getKeysSorted arrow-field)} (field->col-type data-field)])
 
 (defn unnest-field [^Field field]
   (condp = (class (.getType field))
