@@ -142,12 +142,14 @@ fun writeRelation(
 
     fun writeSubtree(depth: Int, sel: Selection): Int {
 
-        fun writeRecencyBranch(parts: SortedMap<InstantMicros, Selection>): Int =
+        fun writeRecencyBranch(parts: SortedMap<InstantMicros, Selection>, subTrieData: RelationReader?): Int =
             trieWriter.writeRecencyBranch(
                 parts.mapValuesTo(sortedMapOf()) { innerSel ->
                     writeSubtree(depth + 1, innerSel.value)
-                }
+                },
+                subTrieData
             )
+        fun writeRecencyBranch(parts: SortedMap<InstantMicros, Selection>): Int = writeRecencyBranch(parts, null)
 
         return if (Thread.interrupted()) throw InterruptedException()
         else if (sel.isEmpty()) {
@@ -163,9 +165,9 @@ fun writeRelation(
             // then, when we've run out of IID, or when the first and last IIDs are the same,
             // we know that it's all versions of the same IID, so we page by recency
             when (depth) {
-                0 -> writeRecencyBranch(sel.recencyPartitions(recencies, YEAR))
-                2 -> writeRecencyBranch(sel.recencyPartitions(recencies, QUARTER))
-                4 -> writeRecencyBranch(sel.recencyPartitions(recencies, MONTH))
+                0 -> writeRecencyBranch(sel.recencyPartitions(recencies, YEAR), relation.select(sel))
+                2 -> writeRecencyBranch(sel.recencyPartitions(recencies, QUARTER), relation.select(sel))
+                4 -> writeRecencyBranch(sel.recencyPartitions(recencies, MONTH), relation.select(sel))
 
                 else -> {
                     val iidDepth = when (depth) {
@@ -192,4 +194,3 @@ fun writeRelation(
 
     trieWriter.end()
 }
-

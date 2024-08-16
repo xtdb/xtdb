@@ -1,10 +1,12 @@
 package xtdb.trie
 
 import xtdb.arrow.Vector
+import xtdb.util.TemporalBounds
 
 private const val NIL = "nil"
 private const val BRANCH_IID = "branch-iid"
 private const val BRANCH_RECENCY = "branch-recency"
+private const val RECENCY_KEY = "recencies"
 private const val LEAF = "leaf"
 private const val DATA_PAGE_IDX = "data-page-idx"
 
@@ -15,8 +17,9 @@ class ArrowHashTrie(private val nodesVec: Vector) :
     private val iidBranchElVec = iidBranchVec.elementReader()
 
     private val recencyBranchVec = nodesVec.legReader(BRANCH_RECENCY)!!
-    private val recencyVec = recencyBranchVec.mapKeyReader()
-    private val recencyIdxVec = recencyBranchVec.mapValueReader()
+    private val recencyToIdxVec = recencyBranchVec.keyReader(RECENCY_KEY)!!
+    private val recencyVec = recencyToIdxVec.mapKeyReader()
+    private val recencyIdxVec = recencyToIdxVec.mapValueReader()
 
     private val dataPageIdxVec = nodesVec.legReader(LEAF)!!.keyReader(DATA_PAGE_IDX)!!
 
@@ -43,8 +46,8 @@ class ArrowHashTrie(private val nodesVec: Vector) :
 
         override val iidChildren = null
 
-        private val startIdx = recencyBranchVec.getListStartIndex(branchVecIdx)
-        private val count = recencyBranchVec.getListCount(branchVecIdx)
+        private val startIdx = recencyToIdxVec.getListStartIndex(branchVecIdx)
+        private val count = recencyToIdxVec.getListCount(branchVecIdx)
 
         override val recencies: RecencyArray
             get() = RecencyArray(count) { idx ->
@@ -54,6 +57,9 @@ class ArrowHashTrie(private val nodesVec: Vector) :
         override fun recencyNode(idx: Int) =
             checkNotNull(forIndex(path, recencyIdxVec.getInt(startIdx + idx)))
 
+        fun temporalBounds(): TemporalBounds {
+            TODO("Add temporal bounds for earlier pruning!")
+        }
     }
 
     inner class Leaf(override val path: ByteArray, private val leafOffset: Int) : Node {

@@ -78,11 +78,12 @@
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 4))) false
                            (types/col-type->field "nil" :null)
                            (types/col-type->field "branch-iid" [:list [:union #{:null :i32}]])
-                           (types/->field "branch-recency" (types/->arrow-type [:map {:sorted? true}]) false
-                                          (types/->field "recency-el" (types/->arrow-type :struct) false
-                                                         (types/col-type->field "recency" types/temporal-col-type)
-                                                         (types/col-type->field "idx" [:union #{:null :i32}])))
-
+                           (types/->field "branch-recency" (types/->arrow-type :struct) false
+                                          (types/col-type->field "columns" [:union #{:null meta/metadata-col-type}])
+                                          (types/->field "recencies" (types/->arrow-type [:map {:sorted? true}]) false
+                                                         (types/->field "recency-el" (types/->arrow-type :struct) false
+                                                                        (types/col-type->field "recency" types/temporal-col-type)
+                                                                        (types/col-type->field "idx" [:union #{:null :i32}]))))
                            (types/col-type->field "leaf" [:struct {'data-page-idx :i32
                                                                    'columns meta/metadata-col-type}]))]))
 
@@ -120,7 +121,10 @@
           iid-branch-el-wtr (.listElementWriter iid-branch-wtr)
 
           recency-branch-wtr (.legWriter node-wtr "branch-recency")
-          recency-el-wtr (.listElementWriter recency-branch-wtr)
+          recency-meta-wtr-raw (.structKeyWriter recency-branch-wtr "columns")
+          recency-meta-wtr (meta/->page-meta-wtr recency-meta-wtr-raw)
+          recency-to-idx-wtr (.structKeyWriter recency-branch-wtr "recencies")
+          recency-el-wtr (.listElementWriter recency-to-idx-wtr)
           recency-wtr (.structKeyWriter recency-el-wtr "recency")
           recency-idx-wtr (.structKeyWriter recency-el-wtr "idx")
 
@@ -161,17 +165,31 @@
 
             meta-pos))
 
-        (writeRecencyBranch [_ buckets]
+        (writeRecencyBranch [_ buckets sub-trie-data]
           (let [pos (.getPosition node-wp)]
-            (.startList recency-branch-wtr)
+            (.startStruct recency-branch-wtr)
 
+            (if sub-trie-data
+              (let [put-rdr (-> sub-trie-data
+                                (.readerForName "op")
+                                (.legReader "put"))]
+                (.writeMetadata recency-meta-wtr (into [(.readerForName sub-trie-data "xt$system_from")
+                                                        (.readerForName sub-trie-data "xt$valid_from")
+                                                        (.readerForName sub-trie-data "xt$valid_to")
+                                                        (.readerForName sub-trie-data "xt$iid")]
+                                                       (map #(.structKeyReader put-rdr %))
+                                                       (.structKeys put-rdr))))
+              (.writeNull recency-meta-wtr-raw))
+
+            (.startList recency-to-idx-wtr)
             (doseq [[^long recency, ^long idx] buckets]
               (.startStruct recency-el-wtr)
               (.writeLong recency-wtr recency)
               (.writeInt recency-idx-wtr idx)
               (.endStruct recency-el-wtr))
+            (.endList recency-to-idx-wtr)
 
-            (.endList recency-branch-wtr)
+            (.endStruct recency-branch-wtr)
             (.endRow meta-rel-wtr)
 
             pos))
