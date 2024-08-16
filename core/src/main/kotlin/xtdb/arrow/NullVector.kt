@@ -1,15 +1,19 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
+import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 class NullVector(override val name: String) : Vector() {
     override var nullable: Boolean = true
 
-    override val arrowField: Field = Field(name, FieldType.nullable(ArrowType.Null.INSTANCE), emptyList())
+    override val field: Field = Field(name, FieldType.nullable(ArrowType.Null.INSTANCE), emptyList())
 
     override fun isNull(idx: Int) = true
 
@@ -17,9 +21,16 @@ class NullVector(override val name: String) : Vector() {
         valueCount++
     }
 
-    override fun getObject0(idx: Int) = error("NullVector getObject0")
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = error("NullVector getObject0")
 
     override fun writeObject0(value: Any) = error("NullVector writeObject0")
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = error("hashCode0 called on NullVector")
+
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is NullVector)
+        return RowCopier { valueCount.also { writeNull() } }
+    }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
@@ -30,7 +41,13 @@ class NullVector(override val name: String) : Vector() {
         valueCount = node.length
     }
 
-    override fun reset() {
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is ArrowNullVector)
+
+        valueCount = vec.valueCount
+    }
+
+    override fun clear() {
         valueCount = 0
     }
 

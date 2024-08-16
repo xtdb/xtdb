@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.api.query.IKeyFn
 import java.time.*
 import java.time.ZoneOffset.UTC
 import java.time.temporal.ChronoUnit
@@ -27,7 +28,7 @@ class TimestampLocalVector(
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)
 
-    override fun getObject0(idx: Int): LocalDateTime = LocalDateTime.ofInstant(unit.toInstant(getLong(idx)), UTC)
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): LocalDateTime = LocalDateTime.ofInstant(unit.toInstant(getLong(idx)), UTC)
 
     override fun writeObject0(value: Any) = writeLong(when (value) {
         is LocalDateTime -> unit.toLong(value.toEpochSecond(UTC), value.nano)
@@ -48,7 +49,7 @@ class TimestampTzVector(
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)
 
-    override fun getObject0(idx: Int): ZonedDateTime = ZonedDateTime.ofInstant(unit.toInstant(getLong(idx)), zone)
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): ZonedDateTime = ZonedDateTime.ofInstant(unit.toInstant(getLong(idx)), zone)
 
     override fun writeObject0(value: Any) = writeLong(when (value) {
         is ZonedDateTime -> unit.toLong(value.toEpochSecond(), value.nano)

@@ -1,24 +1,31 @@
 package xtdb.arrow
 
+import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer
 import org.apache.arrow.flatbuf.Message
 import org.apache.arrow.flatbuf.RecordBatch
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.vector.RelationReader
+import xtdb.api.query.IKeyFn
+import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+import xtdb.arrow.Vector.Companion.fromField
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
 import java.util.*
+import xtdb.vector.RelationReader as OldRelationReader
 
 private val MAGIC = "ARROW1".toByteArray()
 
-class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0) : AutoCloseable {
+class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationReader {
+
+    override val schema get() = Schema(vectors.sequencedValues().map { it.field })
 
     @JvmOverloads
     constructor(vectors: List<Vector>, rowCount: Int = 0)
@@ -30,14 +37,30 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
 
     @JvmOverloads
     constructor(allocator: BufferAllocator, fields: List<Field>, rowCount: Int = 0)
-            : this(fields.map { fromField(it, allocator) }, rowCount)
+            : this(fields.map { fromField(allocator, it) }, rowCount)
 
     fun endRow() = ++rowCount
 
-    inner class Unloader internal constructor(private val ch: WriteChannel) : AutoCloseable {
+    override fun iterator() = vectors.values.iterator()
+
+    fun rowCopier(rel: RelationReader): RowCopier {
+        val copiers = rel.map { it.rowCopier(vectors[it.name] ?: error("missing ${it.name} vector")) }
+
+        return RowCopier { srcIdx ->
+            copiers.forEach { it.copyRow(srcIdx) }
+            endRow()
+        }
+    }
+
+    fun loadFromArrow(root: VectorSchemaRoot) {
+        vectors.forEach { (name, vec) -> vec.loadFromArrow(root.getVector(name)) }
+        rowCount = root.rowCount
+    }
+
+    inner class RelationUnloader(private val ch: WriteChannel) : AutoCloseable {
 
         private val vectors = this@Relation.vectors.values
-        private val schema = Schema(vectors.map { it.arrowField })
+        private val schema = Schema(vectors.map { it.field })
         private val recordBlocks = mutableListOf<ArrowBlock>()
 
         init {
@@ -80,7 +103,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
         }
     }
 
-    fun startUnload(ch: WritableByteChannel) = Unloader(WriteChannel(ch))
+    fun startUnload(ch: WritableByteChannel): RelationUnloader = RelationUnloader(WriteChannel(ch))
 
     private fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()
@@ -93,53 +116,63 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
         rowCount = recordBatch.length
     }
 
-    interface Loader : AutoCloseable {
-        val schema: Schema
-        val batchCount: Int
-        fun loadBatch(idx: Int, al: BufferAllocator): Relation
-        fun loadBatch(idx: Int, rel: Relation): Relation
+    sealed class Loader : AutoCloseable {
+        protected interface Batch {
+            fun load(rel: Relation)
+        }
+
+        abstract val schema: Schema
+        protected abstract val batches: List<Batch>
+        val batchCount get() = batches.size
+
+        private var lastBatchIdx = -1
+
+        fun loadBatch(idx: Int, al: BufferAllocator) = Relation(al, schema).also { loadBatch(idx, it) }
+
+        fun loadBatch(idx: Int, rel: Relation) {
+            batches[idx].load(rel)
+            lastBatchIdx = idx
+        }
+
+        fun loadNextBatch(rel: Relation): Boolean {
+            if (lastBatchIdx + 1 >= batchCount) return false
+
+            loadBatch(++lastBatchIdx, rel)
+            return true
+        }
     }
 
     private class ChannelLoader(
         private val al: BufferAllocator,
         private val ch: SeekableReadChannel,
         footer: ArrowFooter
-    ) : Loader {
-        inner class LoaderBatch(private val idx: Int, private val block: ArrowBlock) {
-            fun load(rel: Relation): Relation {
+    ) : Loader() {
+        inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
+            override fun load(rel: Relation) {
                 ch.setPosition(block.offset)
 
                 (MessageSerializer.deserializeRecordBatch(ch, block, al)
                     ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
 
                     .use { batch -> rel.load(batch) }
-
-                return rel
             }
         }
 
         override val schema: Schema = footer.schema
-        private val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
+        override val batches = footer.recordBatches.mapIndexed(::Batch)
 
-        override val batchCount = batches.size
-
-        override fun loadBatch(idx: Int, al: BufferAllocator) = loadBatch(idx, Relation(al, schema))
-        override fun loadBatch(idx: Int, rel: Relation) = batches[idx].load(rel)
-
-        override fun close() {
-            ch.close()
-        }
+        override fun close() = ch.close()
     }
 
     private class BufferLoader(
         private val buf: ArrowBuf,
         footer: ArrowFooter
-    ) : Loader {
+    ) : Loader() {
         override val schema: Schema = footer.schema
 
-        inner class LoaderBatch(private val idx: Int, private val block: ArrowBlock) {
+        inner class Batch(private val idx: Int, private val block: ArrowBlock): Loader.Batch {
 
-            fun load(rel: Relation): Relation {
+            override fun load(rel: Relation) {
                 val prefixSize =
                     if (buf.getInt(block.offset) == MessageSerializer.IPC_CONTINUATION_TOKEN) 8L else 4L
 
@@ -155,21 +188,12 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
                     ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
 
                     .use { batch -> rel.load(batch) }
-
-                return rel
             }
         }
 
-        private val batches = footer.recordBatches.mapIndexed(::LoaderBatch)
+        override val batches = footer.recordBatches.mapIndexed(::Batch)
 
-        override val batchCount = batches.size
-
-        override fun loadBatch(idx: Int, rel: Relation) = batches[idx].load(rel)
-        override fun loadBatch(idx: Int, al: BufferAllocator) = loadBatch(idx, Relation(al, schema))
-
-        override fun close() {
-            buf.close()
-        }
+        override fun close() = buf.close()
     }
 
     companion object {
@@ -229,13 +253,21 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
             buf.referenceManager.retain()
             return BufferLoader(buf, readFooter(buf))
         }
+
+        @Suppress("unused")
+        @JvmField
+        // naming from Oracle - zero cols, one row
+        val DUAL = Relation(emptyList(), 1)
+
+        @JvmStatic
+        fun fromRoot(vsr: VectorSchemaRoot) = Relation(vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
     }
 
     /**
      * Resets the row count and all vectors, leaving the buffers allocated.
      */
-    fun reset() {
-        vectors.forEach { (_, vec) -> vec.reset() }
+    fun clear() {
+        vectors.forEach { (_, vec) -> vec.clear() }
         rowCount = 0
     }
 
@@ -243,15 +275,27 @@ class Relation(val vectors: SequencedMap<String, Vector>, var rowCount: Int = 0)
         vectors.forEach { (_, vec) -> vec.close() }
     }
 
-    operator fun get(s: String) = vectors[s]
+    override operator fun get(colName: String) = vectors[colName]
 
     @Suppress("unused")
-    fun toLists(): Map<String, List<*>> {
-        return vectors.mapValues { it.value.toList() }
-    }
+    @JvmOverloads
+    fun toTuples(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
+        (0..<rowCount).map { idx -> vectors.map { it.value.getObject(idx, keyFn) } }
 
-    val relReader: RelationReader
-        get() = RelationReader.from(
-            vectors.sequencedValues().map(VectorReader.Companion::Adapter), rowCount
-        )
+    @Suppress("unused")
+    @JvmOverloads
+    fun toMaps(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
+        (0..<rowCount).map { idx ->
+            PersistentHashMap.create(
+                vectors.entries.associate {
+                    Pair(
+                        keyFn.denormalize(it.key),
+                        it.value.getObject(idx, keyFn)
+                    )
+                }
+            ) as Map<*, *>
+        }
+
+    val oldRelReader: OldRelationReader
+        get() = OldRelationReader.from(vectors.sequencedValues().map(VectorReader.Companion::NewToOldAdapter), rowCount)
 }

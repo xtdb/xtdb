@@ -9,10 +9,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.RowCopier
-import xtdb.arrow.ValueReader
-import xtdb.arrow.VectorIndirection
-import xtdb.arrow.VectorPosition
+import xtdb.arrow.*
 import xtdb.toLeg
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer

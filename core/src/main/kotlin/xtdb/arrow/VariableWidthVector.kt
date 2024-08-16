@@ -3,15 +3,19 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.BaseVariableWidthVector
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
 abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
 
-    override val arrowField: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
+    override val field: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
     abstract val arrowType: ArrowType
 
     private val validityBuffer = ExtensibleBuffer(allocator)
@@ -38,27 +42,43 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         validityBuffer.writeBit(valueCount++, 1)
     }
 
-    override fun getBytes(idx: Int): ByteArray {
+    override fun getBytes(idx: Int): ByteBuffer {
         val start = offsetBuffer.getInt(idx)
         val end = offsetBuffer.getInt(idx + 1)
-        val res = ByteArray(end - start)
-        return dataBuffer.getBytes(start, res)
+        return dataBuffer.getBytes(start, end - start)
     }
 
-    override fun writeBytes(bytes: ByteArray) {
-        writeNotNull(bytes.size)
-        dataBuffer.writeBytes(bytes)
+    override fun writeBytes(buf: ByteBuffer) {
+        writeNotNull(buf.remaining())
+        dataBuffer.writeBytes(buf.duplicate())
     }
 
-    protected fun writeBytes(bytes: ByteBuffer) {
-        writeNotNull(bytes.remaining())
-        dataBuffer.writeBytes(bytes)
-    }
-
-    override fun getPointer(idx: Int, reuse: ArrowBufPointer?): ArrowBufPointer =
+    override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
         offsetBuffer.getInt(idx).let { start ->
             dataBuffer.getPointer(start, offsetBuffer.getInt(idx + 1) - start, reuse)
         }
+
+    protected fun getByteArray(idx: Int): ByteArray {
+        val buf = getBytes(idx)
+        return ByteArray(buf.remaining()).also { buf.duplicate().get(it) }
+    }
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher): Int {
+        val start = offsetBuffer.getInt(idx).toLong()
+        val end = offsetBuffer.getInt(idx + 1).toLong()
+
+        return dataBuffer.hashCode(hasher, start, end - start)
+    }
+
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is VariableWidthVector)
+        return RowCopier { srcIdx ->
+            val start = src.offsetBuffer.getInt(srcIdx).toLong()
+            val len = src.offsetBuffer.getInt(srcIdx + 1) - start
+            dataBuffer.writeBytes(src.dataBuffer, start, len)
+            valueCount.also { writeNotNull(len.toInt()) }
+        }
+    }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
@@ -77,10 +97,18 @@ abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
         valueCount = node.length
     }
 
-    override fun reset() {
-        validityBuffer.reset()
-        offsetBuffer.reset()
-        dataBuffer.reset()
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is BaseVariableWidthVector)
+
+        validityBuffer.loadBuffer(vec.validityBuffer)
+        offsetBuffer.loadBuffer(vec.offsetBuffer)
+        dataBuffer.loadBuffer(vec.dataBuffer)
+    }
+
+    override fun clear() {
+        validityBuffer.clear()
+        offsetBuffer.clear()
+        dataBuffer.clear()
         valueCount = 0
         lastOffset = 0
     }

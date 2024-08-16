@@ -17,30 +17,14 @@
            [org.apache.arrow.flight.sql FlightSqlProducer]
            [org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery]
            [org.apache.arrow.memory BufferAllocator]
-           [org.apache.arrow.vector FieldVector VectorSchemaRoot]
+           [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
            [xtdb.api.tx TxOps]
+           xtdb.arrow.Relation
            [xtdb.indexer IIndexer]
-           [xtdb.query BoundQuery IQuerySource PreparedQuery]
-           [xtdb.vector IVectorReader]))
-
-;;;; populate-root temporarily copied from test-util
-
-(defn- populate-root ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root rows]
-  (.clear root)
-
-  (let [field-vecs (.getFieldVectors root)
-        row-count (count rows)]
-    (doseq [^FieldVector field-vec field-vecs
-            :let [field-name (.getName (.getField field-vec))]]
-      (vw/write-vec! field-vec (map (fn [row] (get row field-name)) rows)))
-
-    (.setRowCount root row-count)
-    root))
-
-;;;; end populate-root
+           [xtdb.query BoundQuery IQuerySource PreparedQuery]))
 
 (defn- new-id ^com.google.protobuf.ByteString []
   (ByteString/copyFrom (util/uuid->bytes (random-uuid))))
@@ -70,11 +54,11 @@
 
 (defn- flight-stream->rows [^FlightStream flight-stream]
   (let [root (.getRoot flight-stream)
-        rows (ArrayList.)
-        col-rdrs (vec (vr/<-root root))]
-    (while (.next flight-stream)
-      (dotimes [row-idx (.getRowCount root)]
-        (.add rows (mapv #(.getObject ^IVectorReader % row-idx) col-rdrs))))
+        rows (ArrayList.)]
+    (with-open [rel (Relation/fromRoot root)]
+      (while (.next flight-stream)
+        (.loadFromArrow rel root)
+        (.addAll rows (.toTuples rel))))
 
     (vec rows)))
 

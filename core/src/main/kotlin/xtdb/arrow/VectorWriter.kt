@@ -1,8 +1,9 @@
 package xtdb.arrow
 
 import org.apache.arrow.vector.types.pojo.FieldType
+import java.nio.ByteBuffer
 
-interface VectorWriter : AutoCloseable {
+interface VectorWriter : VectorReader, AutoCloseable {
     fun writeNull()
     fun writeBoolean(value: Boolean): Unit = unsupported("writeBoolean")
     fun writeByte(value: Byte): Unit = unsupported("writeByte")
@@ -11,7 +12,7 @@ interface VectorWriter : AutoCloseable {
     fun writeLong(value: Long): Unit = unsupported("writeLong")
     fun writeFloat(value: Float): Unit = unsupported("writeFloat")
     fun writeDouble(value: Double): Unit = unsupported("writeDouble")
-    fun writeBytes(bytes: ByteArray): Unit = unsupported("writeBytes")
+    fun writeBytes(buf: ByteBuffer): Unit = unsupported("writeBytes")
     fun writeObject(value: Any?)
 
     fun keyWriter(name: String): VectorWriter = unsupported("keyWriter")
@@ -30,7 +31,9 @@ interface VectorWriter : AutoCloseable {
     fun mapValueWriter(): VectorWriter = unsupported("mapValueWriter")
     fun mapValueWriter(fieldType: FieldType): VectorWriter = unsupported("mapValueWriter")
 
-    fun reset()
+    fun rowCopier0(src: VectorReader): RowCopier
 
-    fun toList(): List<Any?>
+    fun clear()
+
+    fun writeAll(vals: Iterable<Any?>) = apply { vals.forEach { writeObject(it) } }
 }

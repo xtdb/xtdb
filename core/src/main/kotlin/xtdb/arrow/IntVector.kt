@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.api.query.IKeyFn
 
 class IntVector(
     allocator: BufferAllocator,
@@ -15,7 +16,7 @@ class IntVector(
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
 
-    override fun getObject0(idx: Int) = getInt(idx)
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getInt(idx)
 
     override fun writeObject0(value: Any) {
         if (value is Int) writeInt(value) else TODO("not an Int")

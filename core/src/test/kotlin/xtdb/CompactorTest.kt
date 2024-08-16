@@ -2,16 +2,14 @@ package xtdb
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.FixedSizeBinaryVector
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.util.requiringResolve
-import xtdb.vector.IVectorReader
+import xtdb.arrow.FixedSizeBinaryVector
+import xtdb.arrow.VectorReader
 import java.nio.ByteBuffer
 import java.util.*
-import xtdb.vector.ValueVectorReader.from as vecReader
 
 internal fun UUID.toBytes(): ByteArray =
     ByteBuffer.allocate(16).run {
@@ -19,26 +17,16 @@ internal fun UUID.toBytes(): ByteArray =
         putLong(leastSignificantBits)
     }.array()
 
-internal fun <V> usingIidReader(allocator: BufferAllocator, iids: List<UUID>, f: (IVectorReader) -> V): V =
-    FixedSizeBinaryVector("xt\$iid", allocator, 16).use { vec ->
-        vec.allocateNew(iids.size)
-
-        iids.forEachIndexed { index, iid ->
-            vec.set(index, iid.toBytes())
-        }
+internal fun <V> usingIidReader(allocator: BufferAllocator, iids: List<UUID>, f: (VectorReader) -> V): V =
+    FixedSizeBinaryVector(allocator, "xt\$iid", false, 16).use { vec ->
+        iids.forEach { vec.writeBytes(ByteBuffer.wrap(it.toBytes())) }
 
         vec.valueCount = iids.size
 
-        f(vecReader(vec))
+        f(vec)
     }
 
 internal class CompactorTest {
-
-    companion object {
-        init {
-            requiringResolve("xtdb.vector.reader/vec->reader")
-        }
-    }
 
     private lateinit var allocator: BufferAllocator
 

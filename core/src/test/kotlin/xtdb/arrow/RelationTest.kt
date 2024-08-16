@@ -64,7 +64,7 @@ class RelationTest {
                         rel.endRow()
 
                         unloader.writeBatch()
-                        rel.reset()
+                        rel.clear()
 
                         i32.writeInt(3)
                         utf8.writeObject("world!")
@@ -130,7 +130,7 @@ class RelationTest {
                     rel.endRow()
 
                     unloader.writeBatch()
-                    rel.reset()
+                    rel.clear()
 
                     listVec.writeObject(list2)
                     rel.endRow()
@@ -188,7 +188,7 @@ class RelationTest {
 
         val duvValues = listOf(12, "hello", "world!", 34, null)
 
-        assertEquals(duvValues, duv.toList())
+        assertEquals(duvValues, duv.asList)
 
         val buf = ByteArrayOutputStream()
 
@@ -201,7 +201,7 @@ class RelationTest {
 
         loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
             loader.loadBatch(0, allocator).use { rel ->
-                assertEquals(duvValues, rel["duv"]!!.toList())
+                assertEquals(duvValues, rel["duv"]!!.asList)
             }
         }
     }

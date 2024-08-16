@@ -1,6 +1,7 @@
 package xtdb.vector
 
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.Relation
 import xtdb.arrow.VectorPosition
 import xtdb.arrow.RowCopier
 
@@ -39,6 +40,8 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
             pos
         }
     }
+    
+    fun openAsRelation(): Relation
 
     fun clear() {
         this.forEach { it.value.clear() }

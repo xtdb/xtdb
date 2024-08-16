@@ -42,7 +42,7 @@ class StructVectorTest {
             structVec.writeObject(m2)
             structVec.writeObject(m3)
 
-            assertEquals(listOf(m1, m2, m3), structVec.toList())
+            assertEquals(listOf(m1, m2, m3), structVec.asList)
         }
     }
 
@@ -74,7 +74,7 @@ class StructVectorTest {
                     mapOf("i32" to 8),
                     mapOf("i32" to 12, "utf8" to "world!")
                 ),
-                structVec.toList()
+                structVec.asList
             )
         }
     }
@@ -103,7 +103,7 @@ class StructVectorTest {
                     mapOf("i32" to 8, "utf8" to "Hello"),
                     mapOf("i32" to 12, "utf8" to "world!")
                 ),
-                structVec.toList()
+                structVec.asList
             )
         }
 
@@ -133,7 +133,7 @@ class StructVectorTest {
                     rel.endRow()
 
                     unloader.writeBatch()
-                    rel.reset()
+                    rel.clear()
 
                     structVec.writeObject(m3)
                     rel.endRow()

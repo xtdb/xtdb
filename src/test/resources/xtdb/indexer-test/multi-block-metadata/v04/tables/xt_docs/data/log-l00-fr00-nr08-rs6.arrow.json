@@ -61,7 +61,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [ ]
+              "typeIds" : [0,1]
             },
             "children" : [{
               "name" : "i64",
@@ -86,7 +86,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [ ]
+              "typeIds" : [0,1]
             },
             "children" : [{
               "name" : "utf8",
@@ -169,7 +169,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [ ]
+              "typeIds" : [0,1,2,3]
             },
             "children" : [{
               "name" : "f64",

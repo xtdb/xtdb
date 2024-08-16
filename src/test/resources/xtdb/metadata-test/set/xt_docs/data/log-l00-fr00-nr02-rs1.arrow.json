@@ -68,7 +68,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [ ]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "utf8",

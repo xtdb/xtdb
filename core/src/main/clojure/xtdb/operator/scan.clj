@@ -32,13 +32,13 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.TransactionKey
-           xtdb.arrow.VectorIndirection
+           (xtdb.arrow VectorIndirection VectorReader)
            (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
-           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
@@ -262,7 +262,7 @@
                   content-rel-factory (->content-rel-factory leaf-rdrs allocator content-cols)]
 
               (doseq [[idx leaf-rdr] (map-indexed vector leaf-rdrs)
-                      :let [ev-ptr (EventRowPointer. leaf-rdr path)]]
+                      :let [ev-ptr (EventRowPointer$Arrow. leaf-rdr path)]]
                 (when (.isValid ev-ptr is-valid-ptr path)
                   (.add merge-q (->LeafPointer ev-ptr idx))))
 
@@ -331,10 +331,10 @@
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^ITableMetadata table-metadata ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    (let [metadata-rdr (.metadataReader table-metadata)
-          bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
-                        (.listElementReader)
-                        (.structKeyReader "bloom"))]
+    (let [metadata-rdr (VectorReader/from (.metadataReader table-metadata))
+          bloom-rdr (-> (.keyReader metadata-rdr "columns")
+                        (.elementReader)
+                        (.keyReader "bloom"))]
       (reify IntPredicate
         (test [_ page-idx]
           (boolean

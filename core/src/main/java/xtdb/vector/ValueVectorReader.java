@@ -29,6 +29,7 @@ import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
 import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.KeywordVector;
+import xtdb.vector.extensions.SetVector;
 import xtdb.vector.extensions.TransitVector;
 import xtdb.vector.extensions.UuidVector;
 
@@ -745,7 +746,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public ValueReader valueReader(VectorPosition pos) {
+                @SuppressWarnings("resource")
                 var readers = structKeys().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
+
                 return new BaseValueReader(pos) {
                     @Override
                     public Map<String, ValueReader> readObject() {

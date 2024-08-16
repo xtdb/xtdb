@@ -1,6 +1,6 @@
 package xtdb
 
-interface IArrowWriter : AutoCloseable {
+interface ArrowWriter : AutoCloseable {
     fun writeBatch()
     fun end()
 }

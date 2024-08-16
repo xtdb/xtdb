@@ -6,7 +6,8 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import (java.time LocalTime)
            (xtdb.metadata IMetadataManager ITableMetadata)))
 
@@ -47,7 +48,7 @@
 
           (util/with-open [params (tu/open-params {'?name "Ivan"})]
             (t/testing "only needs to scan chunk 1, page 1"
-              (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})
+              (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-params)
                     param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
                 (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))
                   (fn [^ITableMetadata table-metadata]
@@ -89,7 +90,7 @@
 
       (t/testing "only needs to scan chunk 1, page 1"
         (util/with-open [params (tu/open-params {'?name "Ivan"})]
-          (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})
+          (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-params)
                 param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params)]
             (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 4 3))
               (fn [^ITableMetadata table-metadata]

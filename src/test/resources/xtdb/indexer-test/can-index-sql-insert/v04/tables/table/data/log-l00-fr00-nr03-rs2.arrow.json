@@ -80,7 +80,7 @@
           "type" : {
             "name" : "union",
             "mode" : "Dense",
-            "typeIds" : [ ]
+            "typeIds" : [0,1]
           },
           "children" : [{
             "name" : "i64",

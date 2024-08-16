@@ -26,7 +26,7 @@
                                                ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct
                                                ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union
                                                ArrowType$Utf8 Field FieldType)
-           xtdb.arrow.Relation
+           (xtdb.arrow Relation VectorReader VectorWriter)
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
@@ -115,65 +115,63 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface NestedMetadataWriter
-  (^xtdb.metadata.ContentMetadataWriter appendNestedMetadata [^xtdb.vector.IVectorReader contentCol]))
+  (^xtdb.metadata.ContentMetadataWriter appendNestedMetadata [^xtdb.arrow.VectorReader contentCol]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defprotocol MetadataWriterFactory
   (type->metadata-writer [arrow-type write-col-meta! types-vec]))
 
-(defn- ->bool-type-handler [^IVectorWriter types-wtr, arrow-type]
-  (let [bit-wtr (.structKeyWriter types-wtr (if (instance? ArrowType$FixedSizeBinary arrow-type)
-                                              "fixed-size-binary"
-                                              (name (types/arrow-type->leg arrow-type)))
-                                  (FieldType/nullable #xt.arrow/type :bool))]
+(defn- ->bool-type-handler [^VectorWriter types-wtr, arrow-type]
+  (let [bit-wtr (.keyWriter types-wtr (if (instance? ArrowType$FixedSizeBinary arrow-type)
+                                        "fixed-size-binary"
+                                        (name (types/arrow-type->leg arrow-type)))
+                            (FieldType/nullable #xt.arrow/type :bool))]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ _content-col]
         (reify ContentMetadataWriter
           (writeContentMetadata [_]
             (.writeBoolean bit-wtr true)))))))
 
-(defn- ->min-max-type-handler [^IVectorWriter types-wtr, arrow-type]
-  ;; we get vectors out here because this code was largely written pre writers.
-  (let [types-wp (.writerPosition types-wtr)
+(defn- ->min-max-type-handler [^VectorWriter types-wtr, arrow-type]
+  (let [struct-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type)) (FieldType/nullable #xt.arrow/type :struct))
 
-        struct-wtr (.structKeyWriter types-wtr (name (types/arrow-type->leg arrow-type)) (FieldType/nullable #xt.arrow/type :struct))
-
-        min-wtr (.structKeyWriter struct-wtr "min" (FieldType/nullable arrow-type))
-        ^FieldVector min-vec (.getVector min-wtr)
-        min-wp (.writerPosition min-wtr)
-
-        max-wtr (.structKeyWriter struct-wtr "max" (FieldType/nullable arrow-type))
-        ^FieldVector max-vec (.getVector max-wtr)
-        max-wp (.writerPosition max-wtr)]
+        min-wtr (.keyWriter struct-wtr "min" (FieldType/nullable arrow-type))
+        max-wtr (.keyWriter struct-wtr "max" (FieldType/nullable arrow-type))]
 
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-col]
         (reify ContentMetadataWriter
           (writeContentMetadata [_]
-            (.startStruct struct-wtr)
 
-            (let [pos (.getPosition types-wp)
-                  min-copier (.rowCopier content-col min-wtr)
+            (let [min-copier (.rowCopier content-col min-wtr)
                   max-copier (.rowCopier content-col max-wtr)
 
-                  min-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr min-wtr) :nulls-last)
-                  max-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr max-wtr) :nulls-first)]
+                  min-comparator (expr.comp/->comparator content-col content-col :nulls-last)
+                  max-comparator (expr.comp/->comparator content-col content-col :nulls-first)]
 
-              (.writeNull min-wtr)
-              (.writeNull max-wtr)
+              (loop [value-idx 0
+                     min-idx -1
+                     max-idx -1]
+                (if (= value-idx (.getValueCount content-col))
+                  (do
+                    (if (neg? min-idx)
+                      (.writeNull min-wtr)
+                      (.copyRow min-copier min-idx))
+                    (if (neg? max-idx)
+                      (.writeNull max-wtr)
+                      (.copyRow max-copier max-idx)))
 
-              (dotimes [value-idx (.valueCount content-col)]
-                (when (and (not (.isNull content-col value-idx))
-                           (or (.isNull min-vec pos)
-                               (neg? (.applyAsInt min-comparator value-idx pos))))
-                  (.setPosition min-wp pos)
-                  (.copyRow min-copier value-idx))
-
-                (when (and (not (.isNull content-col value-idx))
-                           (or (.isNull max-vec pos)
-                               (pos? (.applyAsInt max-comparator value-idx pos))))
-                  (.setPosition max-wp pos)
-                  (.copyRow max-copier value-idx)))
+                  (recur (inc value-idx)
+                         (if (and (not (.isNull content-col value-idx))
+                                  (or (neg? min-idx)
+                                      (neg? (.applyAsInt min-comparator value-idx min-idx))))
+                           value-idx
+                           min-idx)
+                         (if (and (not (.isNull content-col value-idx))
+                                  (or (neg? max-idx)
+                                      (pos? (.applyAsInt max-comparator value-idx max-idx))))
+                           value-idx
+                           max-idx))))
 
               (.endStruct struct-wtr))))))))
 
@@ -198,67 +196,63 @@
 
 (extend-protocol MetadataWriterFactory
   ArrowType$List
-  (type->metadata-writer [arrow-type write-col-meta! ^IVectorWriter types-wtr]
-    (let [types-wp (.writerPosition types-wtr)
-          list-type-wtr (.structKeyWriter types-wtr (name (types/arrow-type->leg arrow-type))
-                                          (FieldType/nullable #xt.arrow/type :i32))]
+  (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
+    (let [list-type-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type))
+                                    (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
-          (write-col-meta! (.listElementReader ^IVectorReader content-col))
+          (write-col-meta! (.elementReader ^VectorReader content-col))
 
-          (let [data-meta-idx (dec (.getPosition types-wp))]
+          (let [data-meta-idx (dec (.getValueCount types-wtr))]
             (reify ContentMetadataWriter
               (writeContentMetadata [_]
                 (.writeInt list-type-wtr data-meta-idx))))))))
 
   SetType
-  (type->metadata-writer [arrow-type write-col-meta! ^IVectorWriter types-wtr]
-    (let [types-wp (.writerPosition types-wtr)
-          set-type-wtr (.structKeyWriter types-wtr (name (types/arrow-type->leg arrow-type))
-                                         (FieldType/nullable #xt.arrow/type :i32))]
+  (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
+    (let [set-type-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type))
+                                   (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
-          (write-col-meta! (.listElementReader ^IVectorReader content-col))
+          (write-col-meta! (.elementReader ^VectorReader content-col))
 
-          (let [data-meta-idx (dec (.getPosition types-wp))]
+          (let [data-meta-idx (dec (.getValueCount types-wtr))]
             (reify ContentMetadataWriter
               (writeContentMetadata [_]
                 (.writeInt set-type-wtr data-meta-idx))))))))
 
   ArrowType$Struct
-  (type->metadata-writer [arrow-type write-col-meta! ^IVectorWriter types-wtr]
-    (let [types-wp (.writerPosition types-wtr)
-          struct-type-wtr (.structKeyWriter types-wtr
-                                            (str (name (types/arrow-type->leg arrow-type)) "-" (count (seq types-wtr)))
-                                            (FieldType/nullable #xt.arrow/type :list))
-          struct-type-el-wtr (.listElementWriter struct-type-wtr (FieldType/nullable #xt.arrow/type :i32))]
+  (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
+    (let [struct-type-wtr (.keyWriter types-wtr
+                                      (str (name (types/arrow-type->leg arrow-type)) "-" (count (seq types-wtr)))
+                                      (FieldType/nullable #xt.arrow/type :list))
+          struct-type-el-wtr (.elementWriter struct-type-wtr (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
-          (let [struct-keys (.structKeys content-col)
+          (let [struct-keys (.getKeys content-col)
                 sub-col-idxs (IntStream/builder)]
 
             (doseq [^String struct-key struct-keys]
-              (write-col-meta! (.structKeyReader content-col struct-key))
-              (.add sub-col-idxs (dec (.getPosition types-wp))))
+              (write-col-meta! (.keyReader content-col struct-key))
+              (.add sub-col-idxs (dec (.getValueCount types-wtr))))
 
             (reify ContentMetadataWriter
               (writeContentMetadata [_]
-                (.startList struct-type-wtr)
                 (doseq [sub-col-idx (.toArray (.build sub-col-idxs))]
                   (.writeInt struct-type-el-wtr sub-col-idx))
                 (.endList struct-type-wtr)))))))))
 
-(defn ->page-meta-wtr ^xtdb.metadata.IPageMetadataWriter [^IVectorWriter cols-wtr]
-  (let [col-wtr (.listElementWriter cols-wtr)
-        col-name-wtr (.structKeyWriter col-wtr "col-name")
-        root-col-wtr (.structKeyWriter col-wtr "root-col?")
-        count-wtr (.structKeyWriter col-wtr "count")
-        types-wtr (.structKeyWriter col-wtr "types")
-        bloom-wtr (.structKeyWriter col-wtr "bloom")
+(defn ->page-meta-wtr ^xtdb.metadata.IPageMetadataWriter [^VectorWriter cols-wtr]
+  (let [col-wtr (.elementWriter cols-wtr)
+        col-name-wtr (.keyWriter col-wtr "col-name")
+        root-col-wtr (.keyWriter col-wtr "root-col?")
+        count-wtr (.keyWriter col-wtr "count")
+        types-wtr (.keyWriter col-wtr "types")
+        bloom-wtr (.keyWriter col-wtr "bloom")
 
         type-metadata-writers (HashMap.)]
 
-    (letfn [(->nested-meta-writer [^IVectorReader content-col]
+    (letfn [(->nested-meta-writer [^VectorReader content-col]
               (when-let [^Field field (first (-> (.getField content-col)
                                                  (types/flatten-union-field)
                                                  (->> (remove #(= ArrowType$Null/INSTANCE (.getType ^Field %))))
@@ -270,25 +264,22 @@
                                           (type->metadata-writer arrow-type (partial write-col-meta! false) types-wtr))))
                     (.appendNestedMetadata content-col))))
 
-            (write-col-meta! [root-col?, ^IVectorReader content-col]
+            (write-col-meta! [root-col?, ^VectorReader content-col]
               (let [content-writers (->> (if (instance? ArrowType$Union (.getType (.getField content-col)))
-                                           (->> (.legs content-col)
+                                           (->> (.getLegs content-col)
                                                 (mapv (fn [leg]
                                                         (->nested-meta-writer (.legReader content-col leg)))))
                                            [(->nested-meta-writer content-col)])
                                          (remove nil?))]
-
-                (.startStruct col-wtr)
                 (.writeBoolean root-col-wtr root-col?)
                 (.writeObject col-name-wtr (.getName content-col))
-                (.writeLong count-wtr (-> (IntStream/range 0 (.valueCount content-col))
+                (.writeLong count-wtr (-> (IntStream/range 0 (.getValueCount content-col))
                                           (.filter (reify IntPredicate
                                                      (test [_ idx]
                                                        (not (.isNull content-col idx)))))
                                           (.count)))
                 (bloom/write-bloom bloom-wtr content-col)
 
-                (.startStruct types-wtr)
                 (doseq [^ContentMetadataWriter content-writer content-writers]
                   (.writeContentMetadata content-writer))
                 (.endStruct types-wtr)
@@ -297,9 +288,8 @@
 
       (reify IPageMetadataWriter
         (writeMetadata [_ cols]
-          (.startList cols-wtr)
-          (doseq [^IVectorReader col cols
-                  :when (pos? (.valueCount col))]
+          (doseq [^VectorReader col cols
+                  :when (pos? (.getValueCount col))]
             (write-col-meta! true col))
           (.endList cols-wtr))))))
 
@@ -364,7 +354,7 @@
                                                 (.getSchema loader))]
         (let [nodes-vec (.get rel "nodes")]
           (.loadBatch loader 0 rel)
-          (let [rdr (.getRelReader rel)
+          (let [rdr (.getOldRelReader rel)
                 ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
                                                    (.legReader "leaf"))
                 {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)]

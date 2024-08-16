@@ -6,7 +6,6 @@
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             xtdb.expression.temporal
-            [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.operator.apply
@@ -31,7 +30,7 @@
             [xtdb.xtql :as xtql]
             [xtdb.xtql.edn :as xtql.edn])
   (:import clojure.lang.MapEntry
-           (com.github.benmanes.caffeine.cache Caffeine Cache)
+           (com.github.benmanes.caffeine.cache Cache Caffeine)
            java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util.concurrent ConcurrentHashMap)
@@ -44,6 +43,7 @@
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter
+           xtdb.vector.IVectorReader
            xtdb.watermark.IWatermarkSource))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -128,6 +128,13 @@
     (mapv #(hash-map (str %) (get fields %)) ordered-outer-projection)
     (mapv #(hash-map (key %) (val %)) fields)))
 
+(defn ->param-fields [params]
+  (->> params
+       (into {} (map (fn [^IVectorReader col]
+                       (MapEntry/create
+                        (symbol (.getName col))
+                        (.getField col)))))))
+
 (defn prepare-ra ^xtdb.query.PreparedQuery
   ;; this one used from zero-dep tests
   (^xtdb.query.PreparedQuery [query] (prepare-ra query {:ref-ctr (RefCounter.)} {}))
@@ -179,7 +186,7 @@
            (util/with-close-on-catch [args (open-args allocator args)]
              ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
              (let [params (or params args)
-                   {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (expr/->param-fields params))
+                   {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->param-fields params))
                    {:keys [current-time]} basis
                    current-time (or current-time (.instant expr/*clock*))
                    clock (Clock/fixed current-time default-tz)]

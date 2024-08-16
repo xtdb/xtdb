@@ -2,8 +2,8 @@ package xtdb.operator
 
 import clojure.lang.Symbol
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.vector.IVectorReader
 import xtdb.vector.RelationReader
+import xtdb.vector.IVectorReader
 
 interface ProjectionSpec {
     val columnName: Symbol

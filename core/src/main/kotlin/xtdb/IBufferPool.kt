@@ -1,10 +1,9 @@
 package xtdb
 
 import org.apache.arrow.memory.ArrowBuf
-import org.apache.arrow.vector.VectorSchemaRoot
+import xtdb.arrow.Relation
 import java.nio.ByteBuffer
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
 
 interface IBufferPool : AutoCloseable {
     fun getBuffer(key: Path): ArrowBuf
@@ -25,5 +24,5 @@ interface IBufferPool : AutoCloseable {
      */
     fun listObjects(dir: Path): Iterable<Path>
 
-    fun openArrowWriter(k: Path, vsr: VectorSchemaRoot): IArrowWriter
+    fun openArrowWriter(k: Path, rel: Relation): ArrowWriter
 }

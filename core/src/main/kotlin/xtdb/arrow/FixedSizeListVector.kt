@@ -2,10 +2,15 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.ByteFunctionHelpers
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
+import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
 
 class FixedSizeListVector(
     allocator: BufferAllocator,
@@ -15,8 +20,8 @@ class FixedSizeListVector(
     private val elVector: Vector
 ) : Vector() {
 
-    override val arrowField: Field
-        get() = Field(name, FieldType(nullable, ArrowType.FixedSizeList(listSize), null), listOf(elVector.arrowField))
+    override val field: Field
+        get() = Field(name, FieldType(nullable, ArrowType.FixedSizeList(listSize), null), listOf(elVector.field))
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 
@@ -24,8 +29,8 @@ class FixedSizeListVector(
     override fun writeNull() = validityBuffer.writeBit(valueCount++, 0)
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
-    override fun getObject0(idx: Int): List<*> {
-        return (idx * listSize until (idx + 1) * listSize).map { elVector.getObject(it) }
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): List<*> {
+        return (idx * listSize until (idx + 1) * listSize).map { elVector.getObject(it, keyFn) }
     }
 
     override fun writeObject0(value: Any) = when (value) {
@@ -36,6 +41,30 @@ class FixedSizeListVector(
         }
 
         else -> TODO("unknown type")
+    }
+
+    override fun getListCount(idx: Int) = listSize
+    override fun getListStartIndex(idx: Int) = idx * listSize
+
+    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+        (0 until listSize).fold(0) { hash, elIdx ->
+            ByteFunctionHelpers.combineHash(hash, elVector.hashCode(idx * listSize + elIdx, hasher))
+        }
+
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        require(src is FixedSizeListVector)
+        require(src.listSize == listSize)
+
+        val elCopier = src.rowCopier(elVector)
+        return RowCopier { srcIdx ->
+            val startIdx = src.getListStartIndex(srcIdx)
+
+            (startIdx until startIdx + listSize).forEach { elIdx ->
+                elCopier.copyRow(elIdx)
+            }
+
+            valueCount.also { endList() }
+        }
     }
 
     override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
@@ -53,9 +82,18 @@ class FixedSizeListVector(
         valueCount = node.length
     }
 
-    override fun reset() {
-        validityBuffer.reset()
-        elVector.reset()
+    override fun loadFromArrow(vec: ValueVector) {
+        require(vec is ArrowFixedSizeListVector)
+
+        validityBuffer.loadBuffer(vec.validityBuffer)
+        elVector.loadFromArrow(vec.dataVector)
+
+        valueCount = vec.valueCount
+    }
+
+    override fun clear() {
+        validityBuffer.clear()
+        elVector.clear()
         valueCount = 0
     }
 

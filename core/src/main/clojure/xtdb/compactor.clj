@@ -17,14 +17,11 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb Compactor IBufferPool)
-           xtdb.arrow.RowCopier
+           (xtdb.arrow Relation RelationReader RowCopier Vector VectorWriter)
            xtdb.bitemporal.IPolygonReader
            (xtdb.metadata IMetadataManager)
-           (xtdb.trie EventRowPointer HashTrieKt IDataRel MergePlanTask)
-           (xtdb.util TemporalBounds)
-           xtdb.vector.IRelationWriter
-           xtdb.vector.IVectorWriter
-           xtdb.vector.RelationReader))
+           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask)
+           (xtdb.util TemporalBounds)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defprotocol PCompactor
@@ -33,21 +30,20 @@
 
 (def ^:dynamic *ignore-signal-block?* false)
 
-(defn- ->reader->copier [^IRelationWriter data-wtr]
-  (let [iid-wtr (.colWriter data-wtr "xt$iid")
-        sf-wtr (.colWriter data-wtr "xt$system_from")
-        vf-wtr (.colWriter data-wtr "xt$valid_from")
-        vt-wtr (.colWriter data-wtr "xt$valid_to")
-        op-wtr (.colWriter data-wtr "op")]
+(defn- ->reader->copier [^Relation data-wtr]
+  (let [iid-wtr (.get data-wtr "xt$iid")
+        sf-wtr (.get data-wtr "xt$system_from")
+        vf-wtr (.get data-wtr "xt$valid_from")
+        vt-wtr (.get data-wtr "xt$valid_to")
+        op-wtr (.get data-wtr "op")]
     (fn reader->copier [^RelationReader data-rdr]
-      (let [iid-copier (-> (.readerForName data-rdr "xt$iid") (.rowCopier iid-wtr))
-            sf-copier (-> (.readerForName data-rdr "xt$system_from") (.rowCopier sf-wtr))
-            vf-copier (-> (.readerForName data-rdr "xt$valid_from") (.rowCopier vf-wtr))
-            vt-copier (-> (.readerForName data-rdr "xt$valid_to") (.rowCopier vt-wtr))
-            op-copier (-> (.readerForName data-rdr "op") (.rowCopier op-wtr))]
+      (let [iid-copier (-> (.get data-rdr "xt$iid") (.rowCopier iid-wtr))
+            sf-copier (-> (.get data-rdr "xt$system_from") (.rowCopier sf-wtr))
+            vf-copier (-> (.get data-rdr "xt$valid_from") (.rowCopier vf-wtr))
+            vt-copier (-> (.get data-rdr "xt$valid_to") (.rowCopier vt-wtr))
+            op-copier (-> (.get data-rdr "op") (.rowCopier op-wtr))]
         (reify RowCopier
           (copyRow [_ ev-idx]
-            (.startRow data-wtr)
             (let [pos (.copyRow iid-copier ev-idx)]
               (.copyRow sf-copier ev-idx)
               (.copyRow vf-copier ev-idx)
@@ -57,8 +53,8 @@
 
               pos)))))))
 
-(defn merge-segments-into [^IRelationWriter data-rel-wtr, ^IVectorWriter recency-wtr, segments, ^bytes path-filter]
-  (let [reader->copier (->reader->copier data-rel-wtr)
+(defn merge-segments-into [^Relation data-rel, ^VectorWriter recency-wtr, segments, ^bytes path-filter]
+  (let [reader->copier (->reader->copier data-rel)
         calculate-polygon (bitemp/polygon-calculator)
 
         is-valid-ptr (ArrowBufPointer.)]
@@ -87,7 +83,7 @@
 
       (doseq [^RelationReader data-rdr data-rdrs
               :when data-rdr
-              :let [ev-ptr (EventRowPointer. data-rdr path)
+              :let [ev-ptr (EventRowPointer$XtArrow. data-rdr path)
                     row-copier (reader->copier data-rdr)]]
         (when (.isValid ev-ptr is-valid-ptr path)
           (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
@@ -106,7 +102,7 @@
 
     nil))
 
-(defn ->log-data-rel-schema [data-rels]
+(defn ->log-data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [data-rels]
   (trie/data-rel-schema (->> (for [^IDataRel data-rel data-rels]
                                (-> (.getSchema data-rel)
                                    (.findField "op")
@@ -114,9 +110,11 @@
                                    types/field->col-type))
                              (apply types/merge-col-types))))
 
-(defn open-recency-wtr [allocator]
-  (vw/->vec-writer allocator "xt$recency"
-                   (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])))
+(defn open-recency-wtr ^xtdb.arrow.Vector [allocator]
+  (Vector/fromField allocator
+                    (Field. "xt$recency"
+                            (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])
+                            nil)))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
                             {:keys [page-size]} {:keys [^Path table-path path trie-keys out-trie-key]}]
@@ -134,14 +132,14 @@
                            data-rels)
             schema (->log-data-rel-schema (map :data-rel segments))]
 
-        (util/with-open [data-rel-wtr (trie/open-log-data-wtr allocator schema)
+        (util/with-open [data-rel (Relation. allocator schema)
                          recency-wtr (open-recency-wtr allocator)]
-          (merge-segments-into data-rel-wtr recency-wtr segments path)
+          (merge-segments-into data-rel recency-wtr segments path)
 
           (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
                                                            schema table-path out-trie-key)]
 
-            (Compactor/writeRelation trie-wtr (vw/rel-wtr->rdr data-rel-wtr) (vw/vec-wtr->rdr recency-wtr) page-size)))))
+            (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))))
 
     (log/debugf "compacted '%s' -> '%s'." table-path out-trie-key)
 

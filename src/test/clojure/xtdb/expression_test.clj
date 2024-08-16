@@ -17,6 +17,7 @@
            (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
+           xtdb.arrow.RelationReader
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
 
@@ -77,7 +78,7 @@
   (with-open [in-rel (tu/open-rel (->data-vecs))]
     (letfn [(select-relation [form col-types params-map]
               (with-open [param-rel (tu/open-params params-map)]
-                (let [input-types {:col-types col-types, :param-types (expr/->param-types param-rel)}]
+                (let [input-types {:col-types col-types, :param-types (expr/->param-types (RelationReader/from param-rel))}]
                   (alength (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
                                     tu/*allocator* in-rel param-rel)))))]
 

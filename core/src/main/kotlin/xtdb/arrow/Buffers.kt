@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.BitVectorHelper
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -103,10 +104,7 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.writeDouble(value)
     }
 
-    fun getBytes(start: Int, out: ByteArray): ByteArray {
-        buf.getBytes(start.toLong(), out)
-        return out
-    }
+    fun getBytes(start: Int, len: Int): ByteBuffer = buf.nioBuffer(start.toLong(), len)
 
     fun writeBytes(bytes: ByteArray) {
         ensureWritable(bytes.size.toLong())
@@ -121,6 +119,13 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.writeBytes(byteArray)
     }
 
+    fun writeBytes(src: ExtensibleBuffer, start: Long, len: Long) {
+        ensureWritable(len)
+        val writerIndex = buf.writerIndex()
+        buf.setBytes(writerIndex, src.buf, start, len)
+        buf.writerIndex(writerIndex + len)
+    }
+
     fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
         (reuse ?: ArrowBufPointer()).apply { set(this@ExtensibleBuffer.buf, idx.toLong(), len.toLong()) }
 
@@ -131,7 +136,7 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf = arrowBuf.also { it.referenceManager.retain() }
     }
 
-    fun reset() {
+    fun clear() {
         buf.setZero(0, buf.capacity())
         buf.readerIndex(0)
         buf.writerIndex(0)
@@ -140,4 +145,6 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
     override fun close() {
         buf.close()
     }
+
+    fun hashCode(hasher: ArrowBufHasher, start: Long, len: Long) = hasher.hashCode(buf, start, len)
 }

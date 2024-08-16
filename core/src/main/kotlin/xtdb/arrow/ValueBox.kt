@@ -100,6 +100,6 @@ class ValueBox : ValueWriter, ValueReader {
     }
 
     companion object {
-        private val NULL_LEG: String = "null".intern()
+        private val NULL_LEG = "null".intern()
     }
 }

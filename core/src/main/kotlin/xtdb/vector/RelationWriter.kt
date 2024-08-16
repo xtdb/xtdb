@@ -2,6 +2,8 @@ package xtdb.vector
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.Relation
+import xtdb.arrow.Vector
 import xtdb.arrow.VectorPosition
 
 @Suppress("unused")
@@ -35,6 +37,8 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
                     it.populateWithAbsents(wp.position)
                     writers[colName] = it
                 }
+
+    override fun openAsRelation() = Relation(writers.values.map { Vector.fromArrow(it.vector) }, wp.position)
 
     override fun close() {
         writers.values.forEach(IVectorWriter::close)

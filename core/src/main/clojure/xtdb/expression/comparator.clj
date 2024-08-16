@@ -3,6 +3,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import java.util.function.IntBinaryOperator
+           xtdb.arrow.VectorReader
            (xtdb.vector IVectorReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -82,8 +83,8 @@
                                  {:var->col-type {left-col-sym left-col-type, right-col-sym right-col-type}
                                   :extract-vecs-from-rel? false})]
 
-          (-> `(fn [~(-> left-col-sym (expr/with-tag IVectorReader))
-                    ~(-> right-col-sym (expr/with-tag IVectorReader))]
+          (-> `(fn [~(-> left-col-sym (expr/with-tag VectorReader))
+                    ~(-> right-col-sym (expr/with-tag VectorReader))]
                  (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx-sym ~right-idx-sym]
@@ -92,7 +93,7 @@
               (eval))))
       (util/lru-memoize)))
 
-(defn ->comparator ^java.util.function.IntBinaryOperator [^IVectorReader left-col, ^IVectorReader right-col, null-ordering]
+(defn ->comparator ^java.util.function.IntBinaryOperator [^VectorReader left-col, ^VectorReader right-col, null-ordering]
   (let [left-field (.getField left-col)
         right-field (.getField right-col)
         f (build-comparator (types/field->col-type left-field)

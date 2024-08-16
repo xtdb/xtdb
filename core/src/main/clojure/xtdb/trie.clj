@@ -13,21 +13,18 @@
            java.security.MessageDigest
            (java.util ArrayList Arrays List)
            (java.util.concurrent.atomic AtomicInteger)
-           (java.util.function IntConsumer Supplier)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
-           org.apache.arrow.vector.ipc.message.ArrowFooter
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
+           (xtdb.arrow Relation Relation$Loader)
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment ITrieWriter LiveHashTrie LiveHashTrie$Leaf MergePlanNode)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment LiveHashTrie LiveHashTrie$Leaf MergePlanNode TrieWriter)))
 
 (def ^:private ^java.lang.ThreadLocal !msg-digest
   (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (MessageDigest/getInstance "SHA-256")))))
+   (fn []
+     (MessageDigest/getInstance "SHA-256"))))
 
 (defn ->iid ^ByteBuffer [eid]
   (if (uuid? eid)
@@ -104,82 +101,67 @@
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
      (vw/root->writer root))))
 
-(defn open-trie-writer ^xtdb.trie.ITrieWriter [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                                               ^Schema data-schema, ^Path table-path, trie-key]
-  (util/with-close-on-catch [data-vsr (VectorSchemaRoot/create data-schema allocator)
-                             data-file-wtr (.openArrowWriter buffer-pool (->table-data-file-path table-path trie-key) data-vsr)
-                             meta-vsr (VectorSchemaRoot/create meta-rel-schema allocator)]
+(defn open-trie-writer ^TrieWriter [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+                                    ^Schema data-schema, ^Path table-path, trie-key]
+  (util/with-close-on-catch [data-rel (Relation. allocator data-schema)
+                             data-file-wtr (.openArrowWriter buffer-pool (->table-data-file-path table-path trie-key) data-rel)
+                             meta-rel (Relation. allocator meta-rel-schema)]
 
-    (let [data-rel-wtr (vw/root->writer data-vsr)
-          meta-rel-wtr (vw/root->writer meta-vsr)
-
-          node-wtr (.colWriter meta-rel-wtr "nodes")
-          node-wp (.writerPosition node-wtr)
+    (let [node-wtr (.get meta-rel "nodes")
 
           iid-branch-wtr (.legWriter node-wtr "branch-iid")
-          iid-branch-el-wtr (.listElementWriter iid-branch-wtr)
+          iid-branch-el-wtr (.elementWriter iid-branch-wtr)
 
           recency-branch-wtr (.legWriter node-wtr "branch-recency")
-          recency-el-wtr (.listElementWriter recency-branch-wtr)
-          recency-wtr (.structKeyWriter recency-el-wtr "recency")
-          recency-idx-wtr (.structKeyWriter recency-el-wtr "idx")
+          recency-el-wtr (.elementWriter recency-branch-wtr)
+          recency-wtr (.keyWriter recency-el-wtr "recency")
+          recency-idx-wtr (.keyWriter recency-el-wtr "idx")
 
           leaf-wtr (.legWriter node-wtr "leaf")
-          page-idx-wtr (.structKeyWriter leaf-wtr "data-page-idx")
-          page-meta-wtr (meta/->page-meta-wtr (.structKeyWriter leaf-wtr "columns"))
+          page-idx-wtr (.keyWriter leaf-wtr "data-page-idx")
+          page-meta-wtr (meta/->page-meta-wtr (.keyWriter leaf-wtr "columns"))
           !page-idx (AtomicInteger. 0)]
 
-      (reify ITrieWriter
-        (getDataWriter [_] data-rel-wtr)
+      (reify TrieWriter
+        (getDataRel [_] data-rel)
 
         (writeLeaf [_]
-          (.syncRowCount data-rel-wtr)
-
-          (let [leaf-rdr (vw/rel-wtr->rdr data-rel-wtr)
-                put-rdr (-> leaf-rdr
-                            (.readerForName "op")
+          (let [put-rdr (-> data-rel
+                            (.get "op")
                             (.legReader "put"))
 
-                meta-pos (.getPosition node-wp)]
+                meta-pos (.getValueCount node-wtr)]
 
-            (.startStruct leaf-wtr)
-
-            (.writeMetadata page-meta-wtr (into [(.readerForName leaf-rdr "xt$system_from")
-                                                 (.readerForName leaf-rdr "xt$valid_from")
-                                                 (.readerForName leaf-rdr "xt$valid_to")
-                                                 (.readerForName leaf-rdr "xt$iid")]
-                                                (map #(.structKeyReader put-rdr %))
-                                                (.structKeys put-rdr)))
+            (.writeMetadata page-meta-wtr (into [(.get data-rel "xt$system_from")
+                                                 (.get data-rel "xt$valid_from")
+                                                 (.get data-rel "xt$valid_to")
+                                                 (.get data-rel "xt$iid")]
+                                                (map #(.keyReader put-rdr %))
+                                                (.getKeys put-rdr)))
 
             (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
             (.endStruct leaf-wtr)
-            (.endRow meta-rel-wtr)
+            (.endRow meta-rel)
 
             (.writeBatch data-file-wtr)
-            (.clear data-rel-wtr)
-            (.clear data-vsr)
+            (.clear data-rel)
 
             meta-pos))
 
         (writeRecencyBranch [_ buckets]
-          (let [pos (.getPosition node-wp)]
-            (.startList recency-branch-wtr)
-
+          (let [pos (.getValueCount node-wtr)]
             (doseq [[^long recency, ^long idx] buckets]
-              (.startStruct recency-el-wtr)
               (.writeLong recency-wtr recency)
               (.writeInt recency-idx-wtr idx)
               (.endStruct recency-el-wtr))
 
             (.endList recency-branch-wtr)
-            (.endRow meta-rel-wtr)
+            (.endRow meta-rel)
 
             pos))
 
         (writeIidBranch [_ idxs]
-          (let [pos (.getPosition node-wp)]
-            (.startList iid-branch-wtr)
-
+          (let [pos (.getValueCount node-wtr)]
             (dotimes [n (alength idxs)]
               (let [idx (aget idxs n)]
                 (if (= idx -1)
@@ -187,26 +169,23 @@
                   (.writeInt iid-branch-el-wtr idx))))
 
             (.endList iid-branch-wtr)
-            (.endRow meta-rel-wtr)
+            (.endRow meta-rel)
 
             pos))
 
         (end [_]
           (.end data-file-wtr)
 
-          (.syncSchema meta-vsr)
-          (.syncRowCount meta-rel-wtr)
-
-          (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-path trie-key) meta-vsr)]
+          (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-path trie-key) meta-rel)]
             (.writeBatch meta-file-wtr)
             (.end meta-file-wtr)))
 
         AutoCloseable
         (close [_]
-          (util/close [data-vsr data-file-wtr meta-vsr]))))))
+          (util/close [data-rel data-file-wtr meta-rel]))))))
 
-(defn write-live-trie-node [^ITrieWriter trie-wtr, ^HashTrie$Node node, ^RelationReader data-rel]
-  (let [copier (.rowCopier (.getDataWriter trie-wtr) data-rel)]
+(defn write-live-trie-node [^TrieWriter trie-wtr, ^HashTrie$Node node, ^Relation data-rel]
+  (let [copier (.rowCopier (.getDataRel trie-wtr) data-rel)]
     (letfn [(write-node! [^HashTrie$Node node]
               (if-let [children (.getIidChildren node)]
                 (let [child-count (alength children)
@@ -222,9 +201,8 @@
 
                 (let [^LiveHashTrie$Leaf leaf node]
                   (-> (Arrays/stream (.getData leaf))
-                      (.forEach (reify IntConsumer
-                                  (accept [_ idx]
-                                    (.copyRow copier idx)))))
+                      (.forEach (fn [idx]
+                                  (.copyRow copier idx))))
 
                   (.writeLeaf trie-wtr))))]
 
@@ -232,12 +210,8 @@
 
 (defn write-live-trie! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                         ^Path table-path, trie-key,
-                        ^LiveHashTrie trie, ^RelationReader data-rel]
-  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool
-                                              (Schema. (for [^IVectorReader rdr data-rel]
-                                                         (.getField rdr)))
-                                              table-path trie-key)]
-
+                        ^LiveHashTrie trie, ^Relation data-rel]
+  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-path trie-key)]
     (let [trie (.compactLogs trie)]
       (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)
 
@@ -367,37 +341,33 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel
   (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
-  (^xtdb.vector.RelationReader loadPage [trie-leaf]))
+  (^xtdb.arrow.RelationReader loadPage [trie-leaf]))
 
 (deftype ArrowDataRel [^ArrowBuf buf
-                       ^ArrowFooter footer
-                       ^List arrow-blocks
-                       ^List vsrs-to-close]
+                       ^Relation$Loader loader
+                       ^List rels-to-close]
   IDataRel
-  (getSchema [_] (.getSchema footer))
+  (getSchema [_] (.getSchema loader))
 
   (loadPage [_ trie-leaf]
-    (let [page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-leaf)
-          {:keys [root ^VectorLoader loader]} (util/arrow-buf->root+loader buf)]
-      (.add vsrs-to-close root)
-      (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) buf)]
-        (.load loader rb))
-
-      (vr/<-root root)))
+    (let [rel (Relation. (.getAllocator (.getReferenceManager buf)) (.getSchema loader))]
+      (.add rels-to-close rel)
+      (.loadBatch loader (.getDataPageIndex ^ArrowHashTrie$Leaf trie-leaf) rel)
+      rel))
 
   AutoCloseable
   (close [_]
-    (util/close vsrs-to-close)
+    (util/close rels-to-close)
+    (util/close loader)
     (util/close buf)))
 
 (defn open-data-rels [^IBufferPool buffer-pool, ^Path table-path, trie-keys]
   (util/with-close-on-catch [data-bufs (ArrayList.)]
     (->> trie-keys
          (mapv (fn [trie-key]
-                 (.add data-bufs (.getBuffer buffer-pool (->table-data-file-path table-path trie-key)))
-                 (let [data-buf (.get data-bufs (dec (.size data-bufs)))
-                       arrow-footer (util/read-arrow-footer data-buf)]
-                   (ArrowDataRel. data-buf arrow-footer (.getRecordBatches arrow-footer) (ArrayList.))))))))
+                 (let [data-buf (.getBuffer buffer-pool (->table-data-file-path table-path trie-key))]
+                   (.add data-bufs data-buf)
+                   (ArrowDataRel. data-buf (Relation/loader data-buf) (ArrayList.))))))))
 
 (defn load-data-page [^MergePlanNode merge-plan-node]
   (let [{:keys [^IDataRel data-rel]} (.getSegment merge-plan-node)
