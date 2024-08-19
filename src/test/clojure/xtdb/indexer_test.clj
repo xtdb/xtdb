@@ -543,8 +543,8 @@
 
 (t/deftest bug-catch-closed-by-interrupt-exception-740
   (let [e (ClosedByInterruptException.)]
-    (with-redefs [idx/->sql-indexer (fn [& _args]
-                                      (throw e))
+    (with-redefs [idx/->put-docs-indexer (fn [& _args]
+                                           (throw e))
                   log/log* (let [log* log/log*]
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)

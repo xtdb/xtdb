@@ -8,7 +8,8 @@
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.sql.plan :as plan])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
@@ -258,7 +259,7 @@
     (fn write-put! [^TxOp$PutDocs op]
       (.startStruct put-writer)
       (let [^IVectorWriter table-doc-writer
-            (.computeIfAbsent table-doc-writers (util/->normal-form-str (.tableName op))
+            (.computeIfAbsent table-doc-writers (.tableName op)
                               (fn [table]
                                 (doto (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :list))
                                   (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct)))))
@@ -269,11 +270,11 @@
 
         (.startList iids-writer)
         (doseq [doc docs
-                :let [eid (->> doc
-                               (some (fn [e]
-                                       (when (.equals "xt$id" (util/->normal-form-str (key e)))
-                                         e)))
-                               val)]]
+                :let [eid (val (or (->> doc
+                                        (some (fn [e]
+                                                (when (.equals "xt$id" (util/->normal-form-str (key e)))
+                                                  e))))
+                                   (throw (err/illegal-arg :missing-id {:doc doc}))))]]
           (.writeBytes iid-writer (trie/->iid eid)))
         (.endList iids-writer))
 
@@ -347,7 +348,7 @@
 (defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator]
   (.createVector tx-ops-field allocator))
 
-(defn write-tx-ops! [^BufferAllocator allocator, ^IVectorWriter op-writer, tx-ops]
+(defn write-tx-ops! [^BufferAllocator allocator, ^IVectorWriter op-writer, tx-ops, {:keys [default-tz]}]
   (let [!write-xtql+args! (delay (->xtql+args-writer op-writer allocator))
         !write-xtql! (delay (->xtql-writer op-writer))
         !write-sql! (delay (->sql-writer op-writer allocator))
@@ -362,7 +363,14 @@
       (condp instance? tx-op
         TxOp$XtqlAndArgs (@!write-xtql+args! tx-op)
         TxOp$XtqlOp (@!write-xtql! tx-op)
-        TxOp$Sql (@!write-sql! tx-op)
+
+        TxOp$Sql (let [^TxOp$Sql tx-op tx-op]
+                   (if-let [put-docs-ops (plan/sql->put-docs-ops (.sql tx-op) (.argRows tx-op) {:default-tz default-tz})]
+                     (doseq [op put-docs-ops]
+                       (@!write-put! op))
+
+                     (@!write-sql! tx-op)))
+
         TxOp$SqlByteArgs (@!write-sql-byte-args! tx-op)
         TxOp$PutDocs (@!write-put! tx-op)
         TxOp$DeleteDocs (@!write-delete! tx-op)
@@ -371,7 +379,7 @@
         TxOp$Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz]}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz] :as opts}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
     (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
@@ -383,9 +391,7 @@
       (.writeObject default-tz-writer (str default-tz))
 
       (.startList ops-list-writer)
-      (write-tx-ops! allocator
-                     (.listElementWriter ops-list-writer)
-                     tx-ops)
+      (write-tx-ops! allocator (.listElementWriter ops-list-writer) tx-ops opts)
       (.endList ops-list-writer)
 
       (.setRowCount root 1)

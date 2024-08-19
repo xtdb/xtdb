@@ -4,7 +4,8 @@
             [xtdb.time :as time]
             [xtdb.xtql.edn :as xtql.edn])
   (:import [java.util List]
-           (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOps TxOp$Update TxOp$XtqlAndArgs)))
+           (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update TxOp$XtqlAndArgs TxOps)
+           (xtdb.util NormalForm)))
 
 (defmulti parse-tx-op
   (fn [tx-op]
@@ -33,7 +34,7 @@
     (throw (err/illegal-arg :xtdb.tx/invalid-table
                             {::err/message "expected table name" :table table-name})))
 
-  (str (symbol table-name)))
+  (NormalForm/normalForm (str (symbol table-name))))
 
 (defn- expect-eid [eid]
   (if-not (eid? eid)

@@ -18,8 +18,8 @@ import xtdb.util.normalForm
 import java.nio.ByteBuffer
 import java.time.Instant
 
-private const val XT_TXS = "xt/tx_fns"
-private const val XT_ID = "xt/id"
+private const val XT_TXS = "xt\$tx_fns"
+private const val XT_ID = "xt\$id"
 private const val FN = "fn"
 
 sealed interface TxOp {

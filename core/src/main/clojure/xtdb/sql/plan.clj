@@ -11,10 +11,11 @@
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet LinkedHashSet List Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
            (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           xtdb.api.tx.TxOps
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
 
@@ -1744,6 +1745,50 @@
   PlanError
   (error-string [_] "INSERT does not contain mandatory _id column"))
 
+(defrecord TableRowsVisitor [env scope out-col-syms]
+  SqlVisitor
+  (visitTableValueConstructor [this ctx] (.accept (.rowValueList ctx) this))
+
+  (visitRowValueList [_ ctx]
+    (let [expr-plan-visitor (->ExprPlanVisitor env scope)
+          col-syms (or out-col-syms
+                       (-> (.rowValueConstructor ctx 0)
+                           (.accept
+                            (reify SqlVisitor
+                              (visitSingleExprRowConstructor [_ _ctx]
+                                '[xt$column_1])
+
+                              (visitMultiExprRowConstructor [_ ctx]
+                                (->> (.expr ctx)
+                                     (into [] (map-indexed (fn [idx _]
+                                                             (->col-sym (str "xt$column_" (inc idx))))))))))))
+
+          col-keys (mapv keyword col-syms)
+
+          col-count (count col-keys)
+
+          row-visitor (reify SqlVisitor
+                        (visitSingleExprRowConstructor [_ ctx]
+                          (let [expr (.expr ctx)]
+                            (if (not= 1 col-count)
+                              (add-err! env (->ColumnCountMismatch col-count 1))
+                              {(first col-keys) (.accept expr expr-plan-visitor)})))
+
+                        (visitMultiExprRowConstructor [_ ctx]
+                          (let [exprs (.expr ctx)]
+                            (if (not= (count exprs) col-count)
+                              (add-err! env (->ColumnCountMismatch col-count (count exprs)))
+                              (->> (map (fn [col ^ParserRuleContext expr]
+                                          (MapEntry/create col
+                                                           (.accept expr expr-plan-visitor)))
+                                        col-keys
+                                        exprs)
+                                   (into {}))))))]
+
+      {:rows (->> (.rowValueConstructor ctx)
+                  (mapv #(.accept ^ParserRuleContext % row-visitor)))
+       :col-syms col-syms})))
+
 (defrecord QueryPlanVisitor [env scope]
   SqlVisitor
   (visitWrappedQuery [this ctx] (-> (.queryExpressionBody ctx) (.accept this)))
@@ -1944,47 +1989,11 @@
   (visitTableValueConstructor [this ctx] (-> (.rowValueList ctx) (.accept this)))
 
   (visitRowValueList [{{:keys [!id-count]} :env, :keys [out-col-syms]} ctx]
-    (let [expr-plan-visitor (->ExprPlanVisitor env scope)
-          col-syms (or out-col-syms
-                       (-> (.rowValueConstructor ctx 0)
-                           (.accept
-                            (reify SqlVisitor
-                              (visitSingleExprRowConstructor [_ ctx]
-                                '[xt$column_1])
-
-                              (visitMultiExprRowConstructor [_ ctx]
-                                (->> (.expr ctx)
-                                     (into [] (map-indexed (fn [idx _]
-                                                             (->col-sym (str "xt$column_" (inc idx))))))))))))
-
-          col-keys (mapv keyword col-syms)
-
-          unique-table-alias (symbol (str "xt.values." (swap! !id-count inc)))
-
-          col-count (count col-keys)
-
-          row-visitor (reify SqlVisitor
-                        (visitSingleExprRowConstructor [_ ctx]
-                          (let [expr (.expr ctx)]
-                            (if (not= 1 col-count)
-                              (add-err! env (->ColumnCountMismatch col-count 1))
-                              {(first col-keys) (.accept expr expr-plan-visitor)})))
-
-                        (visitMultiExprRowConstructor [_ ctx]
-                          (let [exprs (.expr ctx)]
-                            (if (not= (count exprs) col-count)
-                              (add-err! env (->ColumnCountMismatch col-count (count exprs)))
-                              (->> (map (fn [col ^ParserRuleContext expr]
-                                          (MapEntry/create col
-                                                           (.accept expr expr-plan-visitor)))
-                                        col-keys
-                                        exprs)
-                                   (into {}))))))]
-
+    (let [unique-table-alias (symbol (str "xt.values." (swap! !id-count inc)))
+          {:keys [rows col-syms]} (.accept ctx (->TableRowsVisitor env scope out-col-syms))]
       (->QueryExpr [:rename unique-table-alias
                     [:table col-syms
-                     (->> (.rowValueConstructor ctx)
-                          (mapv #(.accept ^ParserRuleContext % row-visitor)))]]
+                     rows]]
 
                    (->> col-syms
                         (mapv #(->col-sym (str unique-table-alias) (str %)))))))
@@ -2346,17 +2355,19 @@
   (doseq [warning @!warnings]
     (log/warn (error-string warning))))
 
+(defn- ->env [{:keys [table-info default-tz]}]
+  {:!errors (atom [])
+   :!warnings (atom [])
+   :!id-count (atom 0)
+   :!param-count (atom 0)
+   :table-info (xform-table-info table-info)
+   :default-tz default-tz})
+
 (defn plan-expr
   ([sql] (plan-expr sql {}))
 
-  ([sql {:keys [scope table-info]}]
-   (let [!errors (atom [])
-         !warnings (atom [])
-         env {:!errors !errors
-              :!warnings !warnings
-              :!id-count (atom 0)
-              :!param-count (atom 0)
-              :table-info (xform-table-info table-info)}
+  ([sql {:keys [scope] :as opts}]
+   (let [{:keys [!errors !warnings] :as env} (->env opts)
          parser (->parser sql)
          plan (-> (.expr parser)
                   #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
@@ -2441,3 +2452,76 @@
                    SELECT foo.id, baz.id
                    FROM foo, foo AS baz"
                   {:table-info {"bar" #{"id"}}}))
+
+(defrecord SqlToPutsVisitor [env scope arg-rows]
+  SqlVisitor
+  (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
+  (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
+  (visitUpdateStmt [_ _])
+  (visitDeleteStmt [_ _])
+  (visitEraseStmt [_ _])
+  (visitAssertStatement [_ _])
+  (visitQueryExpr [_ _])
+
+  (visitInsertStatement [this ctx]
+    (let [table-name (str (identifier-sym (.tableName ctx)))]
+      (when-let [rows (-> (.insertColumnsAndSource ctx) (.accept this))]
+        (letfn [(->const [v arg-row]
+                  (letfn [(->const* [obj]
+                            (cond
+                              (symbol? obj) (val (or (find arg-row obj) (throw (RuntimeException.))))
+                              (seq? obj) (throw (RuntimeException.))
+                              (vector? obj) (mapv ->const* obj)
+                              (set? obj) (into #{} (map ->const*) obj)
+                              (map? obj) (->> obj
+                                              (into {} (map (fn [[k v]]
+                                                              (MapEntry/create (str (symbol k))
+                                                                               (->const* v))))))
+                              :else obj))]
+                    (->const* v)))
+
+                (->inst [v]
+                  (when v
+                    (cond
+                      (instance? LocalDate v) (->inst (.atStartOfDay ^LocalDate v))
+                      (instance? LocalDateTime v) (-> ^LocalDateTime v
+                                                      (ZonedDateTime/of (or (:default-tz env)
+                                                                            ZoneOffset/UTC))
+                                                      ->inst)
+                      :else (time/->instant v))))]
+          (->> (for [arg-row (or arg-rows [[]])
+                     row rows]
+                 (->const row (->> arg-row
+                                   (into {} (map-indexed (fn [idx v]
+                                                           (MapEntry/create (symbol (str "?_" idx)) v)))))))
+
+               (group-by (juxt (comp ->inst #(get % "xt$valid_from"))
+                               (comp ->inst #(get % "xt$valid_to"))))
+
+               (into [] (map (fn [[[vf vt] rows]]
+                               (-> (TxOps/putDocs table-name ^List (mapv #(dissoc % "xt$valid_from" "xt$valid_to") rows))
+                                   (.during vf vt))))))))))
+
+  (visitInsertFromSubquery [_ _])
+
+  (visitInsertValues [_ ctx]
+    (let [out-col-syms (->> (.columnName (.columnNameList ctx))
+                            (mapv identifier-sym))
+          {:keys [rows]} (-> (.tableValueConstructor ctx)
+                             (.accept (->TableRowsVisitor env scope out-col-syms)))]
+      rows)))
+
+(defn sql->put-docs-ops
+  ([sql arg-rows] (sql->put-docs-ops sql arg-rows {}))
+
+  ([sql arg-rows {:keys [scope] :as opts}]
+   (try
+     (let [{:keys [!errors !warnings] :as env} (->env opts)
+           put-docs-ops (-> (parse-statement sql)
+                            (.accept (->SqlToPutsVisitor env scope arg-rows)))]
+       (when (and (empty? @!errors) (empty? @!warnings))
+         put-docs-ops))
+
+     ;; eventually we could deal with these on pre-submit
+     (catch IllegalArgumentException _)
+     (catch RuntimeException _))))

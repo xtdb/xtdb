@@ -5,7 +5,9 @@
             [xtdb.logical-plan :as lp]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
-            [xtdb.test-util :as tu]))
+            [xtdb.sql.plan :as plan]
+            [xtdb.test-util :as tu])
+  (:import xtdb.api.tx.TxOps))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -1782,17 +1784,15 @@
   (t/is (= [{:doc-count 2}] (xt/q tu/*node* "SELECT COUNT(*) doc_count FROM docs"))))
 
 (deftest test-date-id-caught-3446
-  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* [[:sql "INSERT into readings (_id, value) VALUES (DATE '2020-01-06', 4)"]])]
-    (t/is (false? committed?))
-    (t/is (thrown-with-msg? RuntimeException
-                            #"Invalid ID type: java.time.LocalDate"
-                            (throw error)))
+  (t/is (thrown-with-msg? RuntimeException
+                          #"Invalid ID type: java.time.LocalDate"
+                          (xt/execute-tx tu/*node* [[:sql "INSERT into readings (_id, value) VALUES (DATE '2020-01-06', 4)"]])))
 
-    (t/testing "node continues"
-      (xt/execute-tx tu/*node* [[:put-docs :readings {:xt/id 1 :value 4}]])
+  (t/testing "node continues"
+    (xt/execute-tx tu/*node* [[:put-docs :readings {:xt/id 1 :value 4}]])
 
-      (t/is (= [{:xt/id 1, :value 4}]
-               (xt/q tu/*node* "SELECT * FROM readings"))))))
+    (t/is (= [{:xt/id 1, :value 4}]
+             (xt/q tu/*node* "SELECT * FROM readings")))))
 
 (deftest test-disallow-col-refs-in-period-specs-3447
   (t/is (thrown-with-msg? IllegalArgumentException
@@ -1881,3 +1881,37 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
              :table-schema "public"}]
            (xt/q tu/*node* "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = 'foo'")
            (xt/q tu/*node* "SELECT * FROM information_schema.columns WHERE table_name = 'foo'"))))
+
+(t/deftest test-sql->put-docs-3484
+  (let [opts {:table-info {"foo" #{"bar"}}}]
+    (t/testing "non-inserts"
+      (t/is (nil? (plan/sql->put-docs-ops "UPDATE foo SET bar = baz" nil opts)))
+      (t/is (nil? (plan/sql->put-docs-ops "DELETE FROM foo WHERE bar = 1" nil opts)))
+      (t/is (nil? (plan/sql->put-docs-ops "ERASE FROM foo WHERE bar = 1" nil opts))))
+
+    (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO baz (bar) SELECT bar FROM foo" nil))
+          "excludes insert-from-subquery"))
+
+  (t/is (= [(TxOps/putDocs "foo" [{"xt$id" 1, "v" 2}])]
+           (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2)" nil)))
+
+  (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2 + 3)" nil))
+        "excludes expressions")
+
+  (t/is (= [(-> (TxOps/putDocs "foo" [{"xt$id" 1} {"xt$id" 2}])
+                (.startingFrom #xt.time/instant "2020-07-31T23:00:00Z"))
+            (-> (TxOps/putDocs "foo" [{"xt$id" 3}])
+                (.startingFrom #xt.time/instant "2021-01-01T00:00:00Z"))]
+
+           (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil
+                                   {:default-tz #xt.time/zone "Europe/London"}))
+        "groups by valid-from")
+
+  (t/testing "with args"
+    (t/is (= [(-> (TxOps/putDocs "foo" [{"xt$id" 1} {"xt$id" 3}])
+                  (.startingFrom #xt.time/instant "2020-01-01T00:00:00Z"))
+              (-> (TxOps/putDocs "foo" [{"xt$id" 2} {"xt$id" 4}])
+                  (.startingFrom #xt.time/instant "2020-01-02T00:00:00Z"))]
+
+             (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
+                                     '[[1 2] [3 4]])))))

@@ -79,15 +79,13 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
             val structPos = wp.position
 
             for ((k, v) in obj) {
-                val normalKey = normalForm(
-                    when (k) {
-                        is Keyword -> k.sym.toString()
-                        is String -> k
-                        else -> throw IllegalArgumentException("invalid struct key: '$k'")
-                    }
-                )
+                val key = when (k) {
+                    is Keyword -> normalForm(k.sym.toString())
+                    is String -> k
+                    else -> throw IllegalArgumentException("invalid struct key: '$k'")
+                }
 
-                val writer = writers[normalKey] ?: newChildWriter(normalKey, v.toFieldType())
+                val writer = writers[key] ?: newChildWriter(key, v.toFieldType())
 
                 if (writer.writerPosition().position != structPos)
                     throw xtdb.IllegalArgumentException(

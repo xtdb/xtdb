@@ -119,7 +119,7 @@
 
 (t/deftest can-write-opts
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-opts.json")
-                         [[:sql "INSERT INTO foo (id) VALUES (0)"]]
+                         [[:sql "INSERT INTO foo (_id) VALUES (0)"]]
 
                          {:system-time (time/->instant #inst "2021")
                           :default-tz #xt.time/zone "Europe/London"}))

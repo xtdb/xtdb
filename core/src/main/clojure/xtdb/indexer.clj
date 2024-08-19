@@ -274,7 +274,7 @@
             ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
             (when-not (or (nil? res) (true? res))
               (util/with-close-on-catch [tx-ops-vec (xt-log/open-tx-ops-vec allocator)]
-                (xt-log/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
+                (xt-log/write-tx-ops! allocator (vw/->writer tx-ops-vec) res tx-opts)
                 (.setValueCount tx-ops-vec (count res))
                 tx-ops-vec)))
 

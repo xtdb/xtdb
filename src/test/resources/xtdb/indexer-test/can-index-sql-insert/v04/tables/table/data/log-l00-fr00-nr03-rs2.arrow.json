@@ -50,6 +50,13 @@
           "name" : "struct"
         },
         "children" : [{
+          "name" : "bar",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
           "name" : "xt$id",
           "nullable" : false,
           "type" : {
@@ -65,13 +72,6 @@
             "name" : "int",
             "bitWidth" : 64,
             "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "bar",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
           },
           "children" : [ ]
         },{
@@ -150,6 +150,12 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
+          "name" : "bar",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,5,10],
+          "DATA" : ["world","hello"]
+        },{
           "name" : "xt$id",
           "count" : 2,
           "VALIDITY" : [1,1],
@@ -159,12 +165,6 @@
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["1","2"]
-        },{
-          "name" : "bar",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "OFFSET" : [0,5,10],
-          "DATA" : ["world","hello"]
         },{
           "name" : "baz",
           "count" : 2,
