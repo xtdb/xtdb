@@ -112,7 +112,7 @@ SELECT t2.data FROM t2
 #true
 #true
 
-# SEE #244
+# SEE #2148
 #SELECT t2.data, t1.data FROM t2, t2 AS t1
 
 # testing ARRAY round trip
@@ -135,7 +135,7 @@ SELECT t3.data[2] FROM t3
 7
 3
 
-skipif xtdb # see #546
+skipif xtdb # see #2342
 query TT nosort
 SELECT t3.data, t2.data FROM t3, t3 AS t2
 ----

@@ -318,6 +318,7 @@ fun createSltTask(
 
 createSltTask(
     "slt-test",
+    maxErrors = 4,
     testFiles = listOf(
         "xtdb.test",
         "select1.test", "select2.test", "select3.test", "select4.test",

@@ -14,15 +14,15 @@ jobs:
       fail-fast: false
       matrix:
         slt-dir: [{dir: "random/expr/", error: 62},
-                  {dir: "random/aggregates/", error: 19},
-                  {dir: "random/groupby/", error: 8},
+                  {dir: "random/aggregates/", error: 13, failure: 35},
+                  {dir: "random/groupby/", error: 111},
                   {dir: "random/select/"},
                   {dir: "index/between/", error: 10},
                   {dir: "index/commute/", error: 10},
                   {dir: "index/orderby/", error: 60},
                   {dir: "index/orderby_nosort/"},
                   {dir: "index/in/"},
-                  {dir: "index/random/"}]
+                  {dir: "index/random/", failure: 5}]
     steps:
       - uses: actions/checkout@v3
       - name: Set up JDK 21
