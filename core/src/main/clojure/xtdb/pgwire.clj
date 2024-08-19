@@ -1095,38 +1095,38 @@
           (read-text session param))))))
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
-  (let [{:keys [session transaction]} @conn-state
-        ^Clock clock (:clock session)
-        _ (when (or (not= (count param-fields) (count params))
-                    (some #(= 0 (:column-oid %)) param-fields))
-            (log/error "Missing types for params in DML statement")
-            (cmd-send-error
-             conn
-             (err-protocol-violation "Missing types for params - Client must specify types for all params in DML statements")))
-        xtify-param (->xtify-param session stmt)
-        xt-params (vec (map-indexed xtify-param params))
+  (if (or (not= (count param-fields) (count params))
+          (some #(= 0 (:column-oid %)) param-fields))
+    (do (log/error "Missing types for params in DML statement")
+        (cmd-send-error
+         conn
+         (err-protocol-violation "Missing types for params - Client must specify types for all params in DML statements")))
+    (let [{:keys [session transaction]} @conn-state
+          ^Clock clock (:clock session)
+          xtify-param (->xtify-param session stmt)
+          xt-params (vec (map-indexed xtify-param params))
 
-        stmt {:query query,
-              :transformed-query transformed-query
-              :params xt-params}]
+          stmt {:query query,
+                :transformed-query transformed-query
+                :params xt-params}]
 
-    (if transaction
-      ;; we buffer the statement in the transaction (to be flushed with COMMIT)
-      (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
+      (if transaction
+        ;; we buffer the statement in the transaction (to be flushed with COMMIT)
+        (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
 
-      (execute-tx conn [stmt] {:default-tz (.getZone clock)}))
+        (execute-tx conn [stmt] {:default-tz (.getZone clock)}))
 
-    (cmd-write-msg conn msg-command-complete
-                   {:command (case dml-type
-                               ;; insert <oid> <rows>
-                               ;; oid is always 0 these days, its legacy thing in the pg protocol
-                               ;; rows is 0 for us cus async
-                               :insert "INSERT 0 0"
-                               ;; otherwise head <rows>
-                               :delete "DELETE 0"
-                               :update "UPDATE 0"
-                               :erase "ERASE 0"
-                               :assert "ASSERT")})))
+      (cmd-write-msg conn msg-command-complete
+                     {:command (case dml-type
+                                 ;; insert <oid> <rows>
+                                 ;; oid is always 0 these days, its legacy thing in the pg protocol
+                                 ;; rows is 0 for us cus async
+                                 :insert "INSERT 0 0"
+                                 ;; otherwise head <rows>
+                                 :delete "DELETE 0"
+                                 :update "UPDATE 0"
+                                 :erase "ERASE 0"
+                                 :assert "ASSERT")}))))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
