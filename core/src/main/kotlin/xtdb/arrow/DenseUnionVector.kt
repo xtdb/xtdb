@@ -10,6 +10,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.toLeg
 import java.nio.ByteBuffer
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
@@ -214,7 +215,7 @@ class DenseUnionVector(
                 copierMapping[src.getTypeId(srcIdx).toInt().also { check(it >= 0) }].copyRow(src.getOffset(srcIdx))
             }
         } else {
-            legWriter(src.name).rowCopier0(src)
+            legWriter(src.field.type.toLeg()).rowCopier0(src)
         }
 
     override fun rowCopier(dest: VectorWriter) =

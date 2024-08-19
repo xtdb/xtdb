@@ -68,11 +68,19 @@
     (xt/submit-tx node (for [i (range 20 40)]
                          [:put-docs :xt_docs {:xt/id i :foo {:bar "forty-two"}}]))
 
-    (t/is (= #{{:bar 42} {:bar "forty-two"}}
-             (set (tu/query-ra
-                   '[:project [{bar (. foo :bar) }]
-                     [:scan {:table xt_docs} [foo]]]
-                   {:node node}))))))
+    (t/is (= {{:bar 42} 20, {:bar "forty-two"} 20}
+             (frequencies (tu/query-ra
+                           '[:project [{bar (. foo :bar) }]
+                             [:scan {:table xt_docs} [foo]]]
+                           {:node node}))))
+
+    (c/compact-all! node #xt.time/duration "PT1S")
+
+    (t/is (= {{:bar 42} 20, {:bar "forty-two"} 20}
+             (frequencies (tu/query-ra
+                           '[:project [{bar (. foo :bar) }]
+                             [:scan {:table xt_docs} [foo]]]
+                           {:node node}))))))
 
 (t/deftest test-row-copying-different-struct-types-between-chunk-boundaries-3338
   (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 20}})]

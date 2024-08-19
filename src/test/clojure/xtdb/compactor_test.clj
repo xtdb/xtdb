@@ -331,19 +331,19 @@
 
           (submit! (range 500))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (set (range 500)) (set (q))))
 
           (submit! (range 500 1000))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (set (range 1000)) (set (q))))
 
           (submit! (range 1000 2000))
           (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 5))
+          (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (set (range 2000)) (set (q))))
 

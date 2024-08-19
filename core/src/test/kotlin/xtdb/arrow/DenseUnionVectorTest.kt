@@ -46,6 +46,28 @@ class DenseUnionVectorTest {
             assertEquals(listOf(0, 1, 1, 0, 1).map { it.toByte() }, duv.typeIds())
             assertEquals(listOf(0, 0, 1, 1, 2), duv.offsets())
         }
+    }
 
+    @Test
+    fun `scalar into DUV #3609`() {
+        IntVector(allocator, "my-int", false).use { myIntVec ->
+            myIntVec.writeInt(32)
+            myIntVec.writeInt(64)
+
+            DenseUnionVector(
+                allocator, "dest", false,
+                listOf(
+                    Utf8Vector(allocator, "utf8", false),
+                    IntVector(allocator, "i32", true)
+                )
+            ).use { destVec ->
+                myIntVec.rowCopier(destVec).run {
+                    copyRow(1)
+                    copyRow(0)
+                }
+
+                assertEquals(listOf(64, 32), destVec.asList)
+            }
+        }
     }
 }
