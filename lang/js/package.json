@@ -4,7 +4,8 @@
   "type": "module",
   "description": "A JavaScript client library for XTDB",
   "scripts": {
-    "prepare": "rimraf dist && tsc"
+    "prepare": "rimraf dist && tsc",
+    "test": "mocha"
   },
   "main": "dist/index.mjs",
   "files": [
@@ -21,10 +22,13 @@
   "license": "MPL-2.0",
   "devDependencies": {
     "@types/luxon": "^3.4.2",
+    "mocha": "^10.7.3",
+    "postgres": "^3.4.4",
     "rimraf": "^3.0.2",
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "luxon": "^3.4.4"
+    "luxon": "^3.4.4",
+    "mocha-junit-reporter": "^2.2.1"
   }
 }
