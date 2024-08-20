@@ -230,7 +230,7 @@
 
 (def ^:private col-type->rw-fn
   '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double,
-    :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long
+    :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :tstz-range Object
     :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes, :uri Bytes
 
     :list Object, :set Object, :struct Object :transit Object})
@@ -239,7 +239,7 @@
 (defmethod write-value-code :null [_ w & _args] `(.writeNull ~w))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
-           :timestamp-tz :timestamp-local :time-local :duration
+           :timestamp-tz :timestamp-local :time-local :duration :tstz-range
            :utf8 :varbinary :uuid :uri :keyword :transit]
         :let [rw-fn (col-type->rw-fn k)]]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))

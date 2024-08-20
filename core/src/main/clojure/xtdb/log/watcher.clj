@@ -43,7 +43,11 @@
                         (with-open [tx-ops-ch (util/->seekable-byte-channel (.getRecord record))
                                     sr (ArrowStreamReader. tx-ops-ch allocator)
                                     tx-root (.getVectorSchemaRoot sr)]
-                          (.loadNextBatch sr)
+                          (try
+                            (.loadNextBatch sr)
+                            (catch Throwable t
+                              (prn (.getSchema tx-root))
+                              (throw t)))
 
                           (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
                                 record-tx (.getTxKey record)

@@ -58,7 +58,7 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
         else -> listVector(v)
     }
 
-    override fun visit(v: FixedSizeListVector, value: Any?): IVectorReader = throw UnsupportedOperationException()
+    override fun visit(v: FixedSizeListVector, value: Any?): IVectorReader = fixedSizeListVector(v)
     override fun visit(v: LargeListVector, value: Any?): IVectorReader = throw UnsupportedOperationException()
     override fun visit(v: NonNullableStructVector, value: Any?): IVectorReader = structVector(v)
     override fun visit(v: UnionVector, value: Any?): IVectorReader = throw UnsupportedOperationException()
@@ -70,6 +70,7 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
         is UuidVector -> uuidVector(v)
         is UriVector -> uriVector(v)
         is TransitVector -> transitVector(v)
+        is TsTzRangeVector -> tstzRangeVector(v)
         is SetVector -> setVector(v)
         else -> ValueVectorReader(v)
     }

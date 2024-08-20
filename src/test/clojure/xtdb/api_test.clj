@@ -731,7 +731,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 (deftest test-plan-q
   (doseq [batch (->> (range 2000)
                      (map #(hash-map :xt/id % :num %))
-                     (partition-all 1000)) ]
+                     (partition-all 1000))]
     (xt/execute-tx tu/*node* [(into [:put-docs :docs] batch)]))
 
   (t/is (= 10 (->> (xt/plan-q tu/*node* "SELECT docs.num FROM docs LIMIT 10")
@@ -744,3 +744,31 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                                          UNION ALL
                                          (SELECT 1 / 0)")
                    (reduce (fn [acc _] (let [acc (inc acc)] (if (== 10 acc) (reduced acc) acc))) 0)))))
+
+(t/deftest first-class-tstz-ranges
+  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :dave, :name "Dave"}]])
+  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :claire, :name "Claire"}]])
+  (xt/submit-tx tu/*node* [[:delete-docs :users :dave]])
+
+  (t/is (= [{:name "Dave", :xt/valid-time #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z"
+                                                          #xt.time/zoned-date-time "2020-01-03T00:00Z"]}
+            {:name "Claire", :xt/valid-time #xt/tstz-range [#xt.time/zoned-date-time "2020-01-02T00:00Z" nil]}]
+           (xt/q tu/*node* "SELECT name, _valid_time FROM users FOR ALL VALID_TIME")))
+
+  (xt/submit-tx tu/*node* [[:put-docs :foo
+                            {:xt/id 1, :for-range (tu/->tstz-range #inst "2020-01-01" nil)}]
+
+                           [:sql "INSERT INTO foo (_id, for_range)
+                                  VALUES (2, ?)"
+                            [(tu/->tstz-range #inst "2020-03-01" #inst "2021-01-01")]]
+
+                           [:sql "INSERT INTO foo (_id, for_range)
+                                  VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"]])
+
+  (t/is (= #{{:xt/id 1,
+              :for-range #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z" nil]}
+             {:xt/id 2,
+              :for-range #xt/tstz-range [#xt.time/zoned-date-time "2020-03-01T00:00Z" #xt.time/zoned-date-time "2021-01-01T00:00Z"]}
+             {:xt/id 3,
+              :for-range #xt/tstz-range [#xt.time/zoned-date-time "2021-08-01T00:00Z" #xt.time/zoned-date-time "2022-01-01T00:00Z"]}}
+           (set (xt/q tu/*node* "SELECT * FROM foo")))))

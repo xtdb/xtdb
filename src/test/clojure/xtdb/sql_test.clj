@@ -1849,9 +1849,6 @@ VALUES
                {:value 580, :xt/valid-from (zdt 27), :xt/valid-to (zdt 30)}}
              (q)))))
 
-(t/deftest test-contains-period-datetime
-  (t/is (= [{:contains false}] (xt/q tu/*node* "SELECT PERIOD(TIMESTAMP '2024-01-01T00:00:00', TIMESTAMP '2024-01-02T00:00:00') CONTAINS TIMESTAMP '2024-01-02T00:00:00' AS `contains`"))))
-
 (t/deftest contains-precedence-bug-3473
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs1 (_id) VALUES (1)"]
                            [:sql "INSERT INTO docs2 (_id) VALUES (1)"]])

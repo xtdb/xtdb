@@ -17,10 +17,7 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.types.ClojureForm
-import xtdb.types.IntervalDayTime
-import xtdb.types.IntervalMonthDayNano
-import xtdb.types.IntervalYearMonth
+import xtdb.types.*
 import xtdb.vector.extensions.*
 import java.math.BigDecimal
 import java.net.URI
@@ -88,6 +85,7 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
         is UuidType -> "uuid"
         is UriType -> "uri"
         is SetType -> "set"
+        is TsTzRangeType -> "tstz-range"
         else -> throw UnsupportedOperationException("not supported for $type")
     }
 })
@@ -139,6 +137,8 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     is IntervalYearMonth -> MinorType.INTERVALYEAR.type
     is IntervalDayTime -> MinorType.INTERVALDAY.type
     is IntervalMonthDayNano, is PeriodDuration -> MinorType.INTERVALMONTHDAYNANO.type
+
+    is ZonedDateTimeRange -> TsTzRangeType
 
     else -> throw UnsupportedOperationException("unknown object type: ${obj.javaClass}")
 }

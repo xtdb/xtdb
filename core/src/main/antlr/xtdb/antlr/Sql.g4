@@ -196,10 +196,21 @@ expr
     | expr 'NOT'? 'LIKE_REGEX' xqueryPattern ('FLAG' xqueryOptionFlag)? # LikeRegexPredicate
     | expr postgresRegexOperator xqueryPattern # PostgresRegexPredicate
     | expr 'IS' 'NOT'? 'NULL' # NullPredicate
+
+    // period predicates
+    | expr 'OVERLAPS' expr # PeriodOverlapsPredicate
+    | expr 'EQUALS' expr # PeriodEqualsPredicate
+    | expr 'CONTAINS' expr # PeriodContainsPredicate
+    | expr 'PRECEDES' expr # PeriodPrecedesPredicate
+    | expr 'SUCCEEDS' expr # PeriodSucceedsPredicate
+    | expr 'IMMEDIATELY' 'PRECEDES' expr # PeriodImmediatelyPrecedesPredicate
+    | expr 'IMMEDIATELY' 'SUCCEEDS' expr # PeriodImmediatelySucceedsPredicate
+
     | expr compOp quantifier subquery # QuantifiedComparisonPredicate
     | 'NOT' expr #UnaryNotExpr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
+
     | numericExpr #NumericExpr0
     ;
 
@@ -236,16 +247,6 @@ exprPrimary
     | objectConstructor # ObjectExpr
 
     | 'EXISTS' subquery # ExistsPredicate
-
-    // period predicates
-    | periodPredicand 'OVERLAPS' periodPredicand # PeriodOverlapsPredicate
-    | periodPredicand 'EQUALS' periodPredicand # PeriodEqualsPredicate
-    | periodPredicand 'CONTAINS' periodPredicand # PeriodContainsPeriodPredicate
-    | periodPredicand 'CONTAINS' pointInTimePredicand # PeriodContainsPointPredicate
-    | periodPredicand 'PRECEDES' periodPredicand # PeriodPrecedesPredicate
-    | periodPredicand 'SUCCEEDS' periodPredicand # PeriodSucceedsPredicate
-    | periodPredicand 'IMMEDIATELY' 'PRECEDES' periodPredicand # PeriodImmediatelyPrecedesPredicate
-    | periodPredicand 'IMMEDIATELY' 'SUCCEEDS' periodPredicand # PeriodImmediatelySucceedsPredicate
 
     | (schemaName '.')? 'HAS_TABLE_PRIVILEGE' '('
         ( userString ',' )?
@@ -314,7 +315,10 @@ exprPrimary
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
     | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource (',' dateBinOrigin)? ')' # DateBinFunction
     | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource (',' dateBinOrigin)? ')' #RangeBinsFunction
-    | 'OVERLAPS' '(' periodPredicand ( ',' periodPredicand )+ ')' # OverlapsFunction
+    | 'OVERLAPS' '(' expr ( ',' expr )+ ')' # OverlapsFunction
+    | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
+    | (identifierChain '.')? '_VALID_TIME' # ValidTimeField
+    | (identifierChain '.')? '_SYSTEM_TIME' # SystemTimeField
 
     // interval value functions
     | 'AGE' '(' expr ',' expr ')' # AgeFunction
@@ -447,7 +451,7 @@ dateTruncSource : expr ;
 dateTruncTimeZone : characterString ;
 
 dateBinSource : expr ;
-rangeBinsSource : periodPredicand ;
+rangeBinsSource : expr ;
 dateBinOrigin : expr ;
 
 /// §6.34 <interval value function>
@@ -698,16 +702,6 @@ postgresRegexOperator : '~' | '~*' | '!~' | '!~*' ;
 
 quantifier : 'ALL' | 'SOME' | 'ANY' ;
 
-periodPredicand
-    : (tableName '.')? periodColumnName # PeriodColumnReference
-    | 'PERIOD' '(' periodStartValue ',' periodEndValue ')' # PeriodValueConstructor
-    ;
-
-periodColumnName : '_VALID_TIME' | '_SYSTEM_TIME' ;
-periodStartValue : numericExpr ;
-periodEndValue : numericExpr ;
-
-pointInTimePredicand : numericExpr ;
 /// §8.21 <search condition>
 
 searchCondition : expr ;

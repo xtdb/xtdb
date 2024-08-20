@@ -12,7 +12,7 @@
            (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)
            (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -86,6 +86,9 @@
 
   IntervalMonthDayNano
   (value->col-type [_] [:interval :month-day-nano])
+
+  ZonedDateTimeRange
+  (value->col-type [_] :tstz-range)
 
   PeriodDuration
   (value->col-type [_] [:interval :month-day-nano]))

@@ -154,29 +154,29 @@
     (is (= [{:last-updated "2001"}]
            (query-at-tx
             "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME
-             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2002-01-01 00:00:00')"
+             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00Z', TIMESTAMP '2002-01-01 00:00:00Z')"
             tx)))
 
     (is (= [{:l-updated "2003"}]
            (query-at-tx
             "SELECT bar.l_updated FROM bar FOR ALL VALID_TIME
-             WHERE bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
+             WHERE bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00Z', TIMESTAMP '2003-01-01 00:00:00Z')"
             tx)))
 
     (is (= []
            (query-at-tx
             "SELECT foo.last_updated, bar.l_updated FROM foo, bar
-             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
+             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00Z', TIMESTAMP '2001-01-01 00:00:00Z')
              AND
-             bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
+             bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00Z', TIMESTAMP '2001-01-01 00:00:00Z')"
             tx)))
 
     (is (= [{:last-updated "2001", :l-updated "2003"}]
            (query-at-tx
             "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated, bar.l_updated FROM foo, bar
-             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
-               AND bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
+             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00Z', TIMESTAMP '2001-01-01 00:00:00Z')
+               AND bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00Z', TIMESTAMP '2003-01-01 00:00:00Z')"
             tx)))
 
     (is (= []

@@ -89,8 +89,7 @@
                 ^Set field-set (.computeIfAbsent field-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
             (case (:op expr)
               :literal (do
-                         (.add field-set (let [arrow-type (vw/value->arrow-type v)]
-                                           (types/->field-default-name arrow-type (nil? v) nil)))
+                         (.add field-set (types/col-type->field (vw/value->col-type v)))
                          (.put out-row k v))
 
               :param (let [{:keys [param]} expr]

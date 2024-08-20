@@ -1273,8 +1273,8 @@
         expr)))
 
   (visitPeriodOverlapsPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
-          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
       (or (when-let [[f1 t1] (<-period-literal p1)]
             (when-let [[f2 t2] (<-period-literal p2)]
               (xt/template
@@ -1284,7 +1284,7 @@
 
   (visitOverlapsFunction [this ctx]
     ;; HACK assumes all are period literals for now, won't be able to do this with first-class periods
-    (let [exprs (mapv (comp <-period-literal #(.accept ^ParserRuleContext % this)) (.periodPredicand ctx))]
+    (let [exprs (mapv (comp <-period-literal #(.accept ^ParserRuleContext % this)) (.expr ctx))]
       (xt/template
        (< (greatest ~@(map first exprs))
           (least ~@(map (fn [[_ to]]
@@ -1292,8 +1292,8 @@
                         exprs))))))
 
   (visitPeriodEqualsPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
-          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
       (or (when-let [[f1 t1] (<-period-literal p1)]
             (when-let [[f2 t2] (<-period-literal p2)]
               (xt/template
@@ -1301,9 +1301,9 @@
                     (null-eq ~t1 ~t2)))))
           (xt/template (equals? ~p1 ~p2)))))
 
-  (visitPeriodContainsPeriodPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
-          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+  (visitPeriodContainsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
       (or (when-let [[f1 t1] (<-period-literal p1)]
             (when-let [[f2 t2] (<-period-literal p2)]
               (xt/template
@@ -1312,19 +1312,9 @@
                         (coalesce ~t2 xtdb/end-of-time))))))
           (xt/template (contains? ~p1 ~p2)))))
 
-  (visitPeriodContainsPointPredicate [this ctx]
-    (let [period (-> (.periodPredicand ctx) (.accept this))
-          pit (-> (.pointInTimePredicand ctx) (.accept this))]
-      (when-let [[from to] (<-period-literal period)]
-        ;; TODO this currently duplicates the expr, but emitting a `let`
-        ;; probably won't get optimised into scan preds
-        (xt/template
-         (and (<= ~from ~pit)
-              (> (coalesce ~to xtdb/end-of-time) ~pit))))))
-
   (visitPeriodPrecedesPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
-          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
       (or (when-let [[_ t1] (<-period-literal p1)]
             (when-let [[f2 _] (<-period-literal p2)]
               (xt/template
@@ -1332,8 +1322,8 @@
           (xt/template (precedes? ~p1 ~p2)))))
 
   (visitPeriodSucceedsPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
-          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
       (or (when-let [[f1 _t1] (<-period-literal p1)]
             (when-let [[_f2 t2] (<-period-literal p2)]
               (xt/template
@@ -1341,8 +1331,8 @@
           (xt/template (succeeds? ~p1 ~p2)))))
 
   (visitPeriodImmediatelyPrecedesPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
-          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
       (or (when-let [[_f1 t1] (<-period-literal p1)]
             (when-let [[f2 _t2] (<-period-literal p2)]
               (xt/template
@@ -1350,29 +1340,30 @@
           (xt/template (immediately-precedes? ~p1 ~p2)))))
 
   (visitPeriodImmediatelySucceedsPredicate [this ctx]
-    (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
-          p2 (-> (.periodPredicand ctx 1) (.accept this))]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
       (or (when-let [[f1 _t1] (<-period-literal p1)]
             (when-let [[_f2 t2] (<-period-literal p2)]
               (xt/template
                (= ~f1 (coalesce ~t2 xtdb/end-of-time)))))
           (xt/template (immediately-succeeds? ~p1 ~p2)))))
 
-  (visitPeriodColumnReference [_ ctx]
-    (let [tn (identifier-sym (.tableName ctx))
-          pcn (-> (.periodColumnName ctx) (.getText) (str/upper-case))]
-      (case pcn
-        "_VALID_TIME" (xt/template (period ~(find-decl scope ['xt$valid_from tn])
-                                           ~(find-decl scope ['xt$valid_to tn])))
-        "_SYSTEM_TIME" (xt/template (period ~(find-decl scope ['xt$system_from tn])
-                                            ~(find-decl scope ['xt$system_to tn]))))))
+  (visitValidTimeField [_ ctx]
+    (let [chain (rseq (mapv identifier-sym (some-> (.identifierChain ctx) (.identifier))))]
+      (-> (xt/template (period ~(find-decl scope (into ['xt$valid_from] chain))
+                               ~(find-decl scope (into ['xt$valid_to] chain))))
+          (vary-meta assoc :identifier 'xt$valid_time))))
 
-  (visitPeriodValueConstructor [this ctx]
+  (visitSystemTimeField [_ ctx]
+    (let [chain (rseq (mapv identifier-sym (some-> (.identifierChain ctx) (.identifier))))]
+      (-> (xt/template (period ~(find-decl scope (into ['xt$system_from] chain))
+                               ~(find-decl scope (into ['xt$system_to] chain))))
+          (vary-meta assoc :identifier 'xt$system_time))))
+  
+  (visitTsTzRangeConstructor [this ctx]
     (xt/template
-     (period ~(some-> (.periodStartValue ctx) (.numericExpr) (.accept this))
-             ~(some-> (.periodEndValue ctx) (.numericExpr) (.accept this)))))
-
-  (visitPointInTimePredicand [this ctx] (.accept (.numericExpr ctx) this))
+     (period ~(some-> (.expr ctx 0) (.accept this))
+             ~(some-> (.expr ctx 1) (.accept this)))))
 
   (visitHasTablePrivilegePredicate [_ _] true)
   (visitHasSchemaPrivilegePredicate [_ _] true)
@@ -1405,7 +1396,7 @@
                          vector))))
 
   (visitRangeBinsFunction [this ctx]
-    (let [p (-> (.rangeBinsSource ctx) .periodPredicand (.accept this))]
+    (let [p (-> (.rangeBinsSource ctx) (.expr) (.accept this))]
       (if-let [[from to] (<-period-literal p)]
         (xt/template
          (range-bins ~(-> (.intervalLiteral ctx) (.accept this))

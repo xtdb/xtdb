@@ -250,7 +250,5 @@ class IndirectMultiVectorReader(
         readers.map { it?.close() }
     }
 
-    override fun toString(): String {
-        return "(IndirectMultiVectorReader ".plus(readers.map { it.toString() }.toString()).plus(")")
-    }
+    override fun toString() = "(IndirectMultiVectorReader ${readers.map { it.toString() }})"
 }

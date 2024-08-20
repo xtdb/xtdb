@@ -7,10 +7,9 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            [java.io Writer]
-           [java.lang Math]
-           [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer]
-           [java.time LocalDate LocalDateTime ZonedDateTime ZoneId ZoneOffset OffsetDateTime]
+           [java.nio.charset StandardCharsets]
+           [java.time LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
            [java.util UUID]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
@@ -18,7 +17,7 @@
            xtdb.api.query.IKeyFn
            xtdb.Types
            [xtdb.vector IVectorReader]
-           (xtdb.vector.extensions TransitType KeywordType SetType UriType UuidType)))
+           (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -111,6 +110,7 @@
   ArrowType$Union (<-arrow-type [^ArrowType$Union arrow-type]
                     (if (= UnionMode/Dense (.getMode arrow-type)) :union :sparse-union))
 
+  TsTzRangeType (<-arrow-type [_] :tstz-range)
   KeywordType (<-arrow-type [_] :keyword)
   UuidType (<-arrow-type [_] :uuid)
   UriType (<-arrow-type [_] :uri)
@@ -135,6 +135,7 @@
     :utf8 (.getType Types$MinorType/VARCHAR)
     :varbinary (.getType Types$MinorType/VARBINARY)
 
+    :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
     :uuid UuidType/INSTANCE
     :uri UriType/INSTANCE
@@ -282,6 +283,8 @@
       (derive :time-local :any) (derive :interval :any) (derive :duration :any)
       (derive :fixed-size-binary :varbinary) (derive :varbinary :any) (derive :utf8 :any)
 
+      (derive :tstz-range :any)
+
       (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any)
 
       (derive :list :any) (derive :struct :any) (derive :set :any) (derive :map :any)))
@@ -361,15 +364,15 @@
                                            (let [default-field-mapping (if acc {#xt.arrow/type :null nil} nil)
                                                  children (.getChildren field)]
                                              (as-> acc acc
-                                                   (reduce (fn [acc ^Field field]
-                                                             (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
-                                                           acc
-                                                           children)
-                                                   (reduce (fn [acc null-k]
-                                                             (update acc null-k merge-field* null-field))
-                                                           acc
-                                                           (set/difference (set (keys acc))
-                                                                           (set (map #(.getName ^Field %) children))))))))
+                                               (reduce (fn [acc ^Field field]
+                                                         (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
+                                                       acc
+                                                       children)
+                                               (reduce (fn [acc null-k]
+                                                         (update acc null-k merge-field* null-field))
+                                                       acc
+                                                       (set/difference (set (keys acc))
+                                                                       (set (map #(.getName ^Field %) children))))))))
                 (assoc acc (.getType field) nil))))
 
           (kv->field [[arrow-type opts] {:keys [nullable?] :or {nullable? false}}]
@@ -388,6 +391,9 @@
                                                           opts))
 
               ArrowType$Null (->field-default-name #xt.arrow/type :null true nil)
+
+              TsTzRangeType (->field-default-name #xt.arrow/type :tstz-range true
+                                                  [(->field "$data" temporal-arrow-type false)])
 
               (->field-default-name arrow-type nullable? nil)))
 
@@ -448,6 +454,11 @@
   ;; TODO decide on how deal with precision that is out of this range but still fits into
   ;; a 128 bit decimal
   (->field col-name (ArrowType$Decimal/createDecimal 38 19 (int 128)) nullable?))
+
+
+(defmethod col-type->field* :tstz-range [col-name nullable? _col-type]
+  (->field col-name TsTzRangeType/INSTANCE nullable?
+           (->field "$data" temporal-arrow-type false)))
 
 (defmethod col-type->field* :keyword [col-name nullable? _col-type]
   (->field col-name KeywordType/INSTANCE nullable?))
@@ -663,6 +674,7 @@
 
 ;;; extension types
 
+(defmethod arrow-type->col-type TsTzRangeType [_ _] :tstz-range)
 (defmethod arrow-type->col-type KeywordType [_] :keyword)
 (defmethod arrow-type->col-type UriType [_] :uri)
 (defmethod arrow-type->col-type UuidType [_] :uuid)

@@ -15,8 +15,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.error :as err])
+            [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            (java.io FileOutputStream)
@@ -24,7 +23,7 @@
            (java.nio.channels Channels)
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           (java.time Instant InstantSource LocalTime Period YearMonth ZoneOffset ZoneId)
+           (java.time Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
            (java.util LinkedList TreeMap)
            (java.util.function Consumer IntConsumer)
@@ -39,8 +38,9 @@
            xtdb.api.query.IKeyFn
            xtdb.arrow.Relation
            xtdb.indexer.live_index.ILiveTable
-           xtdb.util.RowCounter
+           xtdb.types.ZonedDateTimeRange
            (xtdb.util TemporalBounds TemporalDimension)
+           xtdb.util.RowCounter
            (xtdb.vector IVectorReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
@@ -165,6 +165,9 @@
 
 (defn with-mock-clock [f]
   (with-opts {:log [:in-memory {:instant-src (->mock-clock)}]} f))
+
+(defn ->tstz-range ^xtdb.types.ZonedDateTimeRange [from to]
+  (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
 (defn finish-chunk! [node]
   (then-await-tx node)

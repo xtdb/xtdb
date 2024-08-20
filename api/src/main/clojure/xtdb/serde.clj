@@ -14,7 +14,7 @@
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$XtqlAndArgs TxOp$XtqlOp TxOps TxOptions)
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)))
 
 (defrecord TxKey [tx-id system-time]
   TransactionKey
@@ -76,6 +76,18 @@
 
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))
+
+(defn- render-tstz-range [^ZonedDateTimeRange range]
+  [(.getFrom range) (.getTo range)])
+
+(defmethod print-dup ZonedDateTimeRange [^ZonedDateTimeRange tstz-range, ^Writer w]
+  (.write w (str "#xt/tstz-range " (pr-str (render-tstz-range tstz-range)))))
+
+(defmethod print-method ZonedDateTimeRange [tstz-range w]
+  (print-dup tstz-range w))
+
+(defn tstz-range-reader [[from to]]
+  (ZonedDateTimeRange. (time/->zdt from) (time/->zdt to)))
 
 (defn- render-binding [binding]
   (xtql.edn/unparse-binding identity identity binding))
@@ -260,7 +272,7 @@
 (def transit-read-handlers
   (merge transit/default-read-handlers
          tl/transit-read-handlers
-         {"xtdb/clj-form" (transit/read-handler #(ClojureForm. %))
+         {"xtdb/clj-form" (transit/read-handler ClojureForm/new)
           "xtdb/tx-key" (transit/read-handler map->TxKey)
           "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
           "xtdb/key-fn" (transit/read-handler read-key-fn)
@@ -271,6 +283,7 @@
           "xtdb.interval/year-month" interval-ym-reader
           "xtdb.interval/day-time" interval-dt-reader
           "xtdb.interval/month-day-nano" interval-mdn-reader
+          "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
           "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
           "xtdb.tx/sql" (transit/read-handler sql-op-reader)
           "xtdb.tx/xtql" (transit/read-handler xtql-reader)
@@ -307,6 +320,9 @@
           IntervalMonthDayNano (transit/write-handler "xtdb.interval/month-day-nano"
                                                       #(vector (str (.period ^IntervalMonthDayNano %))
                                                                (str (.duration ^IntervalMonthDayNano %))))
+
+          ZonedDateTimeRange (transit/write-handler "xtdb/tstz-range" render-tstz-range)
+
           Binding (transit/write-handler "xtdb.query/binding" render-binding)
           XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
 

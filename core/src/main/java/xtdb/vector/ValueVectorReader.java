@@ -14,6 +14,7 @@ import org.apache.arrow.vector.IntervalMonthDayNanoVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.complex.DenseUnionVector;
+import org.apache.arrow.vector.complex.FixedSizeListVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.MapVector;
 import org.apache.arrow.vector.complex.StructVector;
@@ -568,6 +569,32 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
+    public static IVectorReader tstzRangeVector(TsTzRangeVector v) {
+        var inner = fixedSizeListVector(v.getUnderlyingVector());
+
+        return new ValueVectorReader(v) {
+            @Override
+            public IVectorReader listElementReader() {
+                return inner.listElementReader();
+            }
+
+            @Override
+            public int getListStartIndex(int idx) {
+                return inner.getListStartIndex(idx);
+            }
+
+            @Override
+            public int getListCount(int idx) {
+                return inner.getListCount(idx);
+            }
+
+            @Override
+            public ValueReader valueReader(VectorPosition pos) {
+                return inner.valueReader(pos);
+            }
+        };
+    }
+
     public static IVectorReader timeSecVector(TimeSecVector v) {
         return new ValueVectorReader(v) {
             @Override
@@ -825,6 +852,72 @@ public class ValueVectorReader implements IVectorReader {
         return new ListVectorReader(v);
     }
 
+    private static class FixedSizeListVectorReader extends ValueVectorReader {
+        private final FixedSizeListVector v;
+        private final IVectorReader elReader;
+
+        public FixedSizeListVectorReader(FixedSizeListVector v) {
+            super(v);
+            this.v = v;
+            this.elReader = from(v.getDataVector());
+        }
+
+        @Override
+        Object getObject0(int idx, IKeyFn<?> keyFn) {
+            var startIdx = getListStartIndex(idx);
+            return PersistentVector.create(
+                    IntStream.range(0, getListCount(idx))
+                            .mapToObj(elIdx -> elReader.getObject(startIdx + elIdx, keyFn))
+                            .toList());
+        }
+
+        @Override
+        public IVectorReader listElementReader() {
+            return elReader;
+        }
+
+        @Override
+        public int getListStartIndex(int idx) {
+            return v.getElementStartIndex(idx);
+        }
+
+        @Override
+        public int getListCount(int idx) {
+            return v.getElementEndIndex(idx) - v.getElementStartIndex(idx);
+        }
+
+        @Override
+        public ValueReader valueReader(VectorPosition pos) {
+            var elPos = VectorPosition.build();
+            var elValueReader = elReader.valueReader(elPos);
+
+            return new BaseValueReader(pos) {
+                @Override
+                public Object readObject() {
+                    var startIdx = getListStartIndex(pos.getPosition());
+                    var valueCount = getListCount(pos.getPosition());
+
+                    return new ListValueReader() {
+                        @Override
+                        public int size() {
+                            return valueCount;
+                        }
+
+                        @Override
+                        public ValueReader nth(int elIdx) {
+                            elPos.setPosition(startIdx + elIdx);
+                            return elValueReader;
+                        }
+                    };
+                }
+            };
+        }
+    }
+
+    public static IVectorReader fixedSizeListVector(FixedSizeListVector v) {
+        return new FixedSizeListVectorReader(v);
+    }
+
     public static IVectorReader setVector(SetVector v) {
         var listReader = listVector(v.getUnderlyingVector());
 
@@ -941,6 +1034,12 @@ public class ValueVectorReader implements IVectorReader {
         public boolean isNull(int idx) {
             byte typeId = getTypeId(idx);
             return typeId < 0 || v.getVectorByType(typeId).isNull(v.getOffset(idx));
+        }
+
+        @SuppressWarnings("resource")
+        @Override
+        public long getLong(int idx) {
+            return legReader(getLeg(idx)).getLong(idx);
         }
 
         @SuppressWarnings("resource")

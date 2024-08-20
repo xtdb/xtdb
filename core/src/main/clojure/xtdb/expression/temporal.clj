@@ -2,18 +2,17 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
+            [xtdb.expression.macro :as macro]
             [xtdb.time :as time]
-            [xtdb.types :as types]
-            [xtdb.expression.macro :as macro])
+            [xtdb.types :as types])
   (:import (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.format DateTimeParseException)
            (java.time.temporal ChronoField ChronoUnit Temporal)
-           [java.util Map]
            (org.apache.arrow.vector PeriodDuration)
            [xtdb DateTruncator]
-           (xtdb.arrow ListValueReader ValueReader ValueBox)))
+           (xtdb.arrow ListValueReader ValueBox ValueReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -897,6 +896,18 @@
          :batch-bindings batch-bindings
          :->call-code (comp cmp ->call-code)}))))
 
+;;;; Periods
+
+(defmethod expr/codegen-call [:= :tstz-range :tstz-range] [_]
+  {:return-type :bool
+   :->call-code (fn [[x y]]
+                  (let [x-sym (gensym 'x)
+                        y-sym (gensym 'y)]
+                    `(let [~x-sym ~x
+                           ~y-sym ~y]
+                       (and (= (from ~x-sym) (from ~y-sym))
+                            (= (to ~x-sym) (to ~y-sym))))))})
+
 ;;;; Intervals
 
 (defn pd-add ^PeriodDuration [^PeriodDuration pd1 ^PeriodDuration pd2]
@@ -1549,50 +1560,45 @@
 (defn invalid-period-err [^long from-µs, ^long to-µs]
   (let [from (time/micros->instant from-µs)
         to (time/micros->instant to-µs)]
-    (err/runtime-err :core2.temporal/invalid-period
-                     {::err/message
-                      (format "From cannot be greater than to when constructing a period - from: %s, to %s" from to)
+    (err/runtime-err :xtdb/invalid-period
+                     {::err/message (format "From cannot be greater than to when constructing a period - from: %s, to %s" from to)
                       :from from
                       :to to})))
 
-(defn ->period ^java.util.Map [^long from, ^long to]
-  ;; TODO error assumes micros
-  (when (> from to)
+(defn ->period ^xtdb.arrow.ListValueReader [^long from, ^long to]
+  (when (>= from to)
     (throw (invalid-period-err from to)))
 
-  {"xt$from" (doto (ValueBox.) (.writeLong from))
-   "xt$to" (doto (ValueBox.) (.writeLong to))})
+  (let [from (doto (ValueBox.) (.writeLong from))
+        to (doto (ValueBox.) (.writeLong to))]
+    (reify ListValueReader
+      (size [_] 2)
+      (nth [_ idx]
+        (case idx 0 from, 1 to)))))
 
-(defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[from-type to-type] :arg-types}]
-  {:return-type [:struct {'xt$from from-type, 'xt$to to-type}]
+(defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[[_ from-tsunit _from-tz] [_ to-tsunit _to-tz]] :arg-types}]
+  {:return-type :tstz-range
    :->call-code (fn [[from-code to-code]]
-                  (-> `(->period ~from-code ~to-code)
-                      (expr/with-tag Map)))})
+                  `(->period ~(with-conversion from-code from-tsunit :micro)
+                             ~(with-conversion to-code to-tsunit :micro)))})
 
-(defn ->open-ended-period [^long from]
-  {"xt$from" (doto (ValueBox.) (.writeLong from))
-   "xt$to" (doto (ValueBox.) (.writeNull))})
-
-(defmethod expr/codegen-call [:period :timestamp-tz :null] [{[from-type _to-type] :arg-types}]
-  {:return-type [:struct {'xt$from from-type, 'xt$to :null}]
+(defmethod expr/codegen-call [:period :timestamp-tz :null] [{[[_ from-tsunit _from-tz]] :arg-types}]
+  {:return-type :tstz-range
    :->call-code (fn [[from-code _to-code]]
-                  (-> `(->open-ended-period ~from-code)
-                      (expr/with-tag Map)))})
+                  `(->period ~(with-conversion from-code from-tsunit :micro)
+                             Long/MAX_VALUE))})
 
-(defn from ^long [^Map period]
-  (.readLong ^ValueReader (.get period "xt$from")))
+(defn from ^long [^ListValueReader period]
+  (.readLong ^ValueReader (.nth period 0)))
 
-(defn to ^long [^Map period]
-  (let [rdr ^ValueReader (.get period "xt$to")]
-    (if (.isNull rdr)
-      Long/MAX_VALUE
-      (.readLong ^ValueReader rdr))))
+(defn to ^long [^ListValueReader period]
+  (.readLong ^ValueReader (.nth period 1)))
 
 (defn temporal-contains-point? [p1 ^long ts]
   (and (<= (from p1) ts)
        (> (to p1) ts)))
 
-(defmethod expr/codegen-call [:contains? :struct :timestamp-tz] [_]
+(defmethod expr/codegen-call [:contains? :tstz-range :timestamp-tz] [_]
   {:return-type :bool
    :->call-code (fn [[p1-code ts-code]]
                   `(temporal-contains-point? ~p1-code ~ts-code))})
@@ -1680,13 +1686,13 @@
                               [:lags `lags?]
                               [:strictly_lags `strictly-lags?]
                               [:immediately_lags `immediately-lags?]]]
-  (defmethod expr/codegen-call [pred-name :struct :struct] [_]
+  (defmethod expr/codegen-call [pred-name :tstz-range :tstz-range] [_]
     {:return-type :bool
      :->call-code (fn [[p1-code p2-code]]
                     `(~pred-sym ~p1-code ~p2-code))})
 
   ;; add aliases with `?` suffix
-  (defmethod expr/codegen-call [(keyword (str (name pred-name) "?")) :struct :struct] [expr]
+  (defmethod expr/codegen-call [(keyword (str (name pred-name) "?")) :tstz-range :tstz-range] [expr]
     (expr/codegen-call (assoc expr :f pred-name))))
 
 (defmethod macro/macroexpand1-call :date_bin [{:keys [args]}]
