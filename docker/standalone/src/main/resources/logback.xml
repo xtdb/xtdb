@@ -14,4 +14,6 @@
     <logger name="kafka" level="ERROR" />
     <logger name="org.apache.arrow" level="WARN" />
     <logger name="org.eclipse.jetty" level="WARN" />
+
+    <include optional="true" file="/config/logback_include.xml" />
 </configuration>
