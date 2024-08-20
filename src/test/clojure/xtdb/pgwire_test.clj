@@ -17,7 +17,7 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection Types)
+           (java.sql Connection Types Timestamp)
            (java.time Clock Instant ZoneId ZoneOffset LocalDate OffsetDateTime LocalDateTime)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
@@ -1612,3 +1612,34 @@
 
       (t/is (= [{:_id 1, :v 1}]
                (pg/query conn "SELECT * FROM foo"))))))
+
+(deftest test-java-sql-timestamp
+  (testing "java.sql.Timestamp"
+    (with-open [conn (jdbc-conn "prepareThreshold" -1)
+                stmt (.prepareStatement conn "SELECT ? AS v")]
+
+      (.setObject stmt 1 (Timestamp/from #xt.time/instant "2030-01-04T12:44:55Z"))
+
+      (with-open [rs (.executeQuery stmt)]
+
+        ;;treated as text because pgjdbc sets the param oid to 0/unspecified
+        ;;will error in DML
+        ;;https://github.com/pgjdbc/pgjdbc/blob/84bdec6015472f309de7becf41df7fd8e423d0ac/pgjdbc/src/main/java/org/postgresql/jdbc/PgPreparedStatement.java#L1454
+        (t/is (= [{"v" "text"}]
+                 (result-metadata stmt)
+                 (result-metadata rs)))
+
+        (t/is (= [{"v" "2030-01-04 12:44:55+00"}] (rs->maps rs)))))))
+
+(deftest test-java-time-instant
+  (with-open [conn (pg-conn {})]
+
+    (t/is (= [{:v #xt.time/date-time "2030-01-04T12:44:55"}]
+             (pg/execute conn "SELECT $1 v" {:params [#xt.time/instant "2030-01-04T12:44:55Z"]
+                                             :oids [OID/TIMESTAMP]}))
+          "when reading param, zone is ignored and instant is treated as a timestamp")
+
+    (t/is (= [{:v #xt.time/offset-date-time "2030-01-04T12:44:55Z"}]
+             (pg/execute conn "SELECT $1 v" {:params [#xt.time/instant "2030-01-04T12:44:55Z"]
+                                             :oids [OID/TIMESTAMPTZ]}))
+          "when reading param, zone is honored (UTC) and instant is treated as a timestamptz")))
