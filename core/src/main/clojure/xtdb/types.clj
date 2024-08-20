@@ -741,7 +741,9 @@
       (.parseCaseInsensitive)
       (.append iso-local-date-time-formatter-with-space)
       (.parseLenient)
+      (.optionalStart)
       (.appendOffset "+HH:MM:ss", "+00:00")
+      (.optionalEnd)
       (.parseStrict)
       (.toFormatter)))
 
@@ -862,7 +864,7 @@
                                 (let [micros (+ (-> ba ByteBuffer/wrap .getLong) unix-pg-epoch-diff-in-micros)]
                                   (LocalDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
                  :read-text (fn [_env ba]
-                             (LocalDateTime/parse (read-utf8 ba) iso-local-date-time-formatter-with-space))
+                             (LocalDateTime/parse (read-utf8 ba) iso-offset-date-time-formatter-with-space))
                  :write-binary (fn [_env ^IVectorReader rdr idx]
                                  (let [micros (- (.getLong rdr idx) unix-pg-epoch-diff-in-micros)
                                        bb (doto (ByteBuffer/allocate typlen)
@@ -870,7 +872,7 @@
                                    (.array bb)))
                  :write-text (fn [_env ^IVectorReader rdr idx]
                                (-> ^LocalDateTime (.getObject rdr idx)
-                                   (.format iso-local-date-time-formatter-with-space)
+                                   (.format iso-offset-date-time-formatter-with-space)
                                    (utf8)))})
 
    :timestamptz (let [typlen 8]
