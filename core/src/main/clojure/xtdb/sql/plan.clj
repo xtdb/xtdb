@@ -893,12 +893,16 @@
       (if (instance? SqlParser$WithTimeZoneContext
                      (.withOrWithoutTimeZone ctx))
         {:->cast-fn (fn [ve]
-                      (list* 'cast-tstz ve
-                             [{:precision precision :unit time-unit}]))}
+                      (list 'cast-tstz ve
+                             {:precision precision, :unit time-unit}))}
 
         {:cast-type [:timestamp-local time-unit]
          :cast-opts (when precision
                       {:precision precision})})))
+
+  (visitTimestampTzType [_ _]
+    {:->cast-fn (fn [ve]
+                  (list 'cast-tstz ve {:unit :micro}))})
 
   (visitDurationType [_ ctx]
     (let [precision (some-> (.precision ctx) (.getText) (parse-long))

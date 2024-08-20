@@ -79,7 +79,7 @@ literal
     | BINARY_STRING #BinaryStringLiteral
     | 'DATE' characterString #DateLiteral
     | 'TIME' characterString #TimeLiteral
-    | 'TIMESTAMP' characterString #TimestampLiteral
+    | 'TIMESTAMP' withOrWithoutTimeZone? characterString #TimestampLiteral
     | intervalLiteral #IntervalLiteral0
     | 'DURATION' characterString #DurationLiteral
     | 'UUID' characterString #UUIDLiteral
@@ -163,6 +163,7 @@ dataType
     | 'DATE' # DateType
     | 'TIME' ('(' precision ')')? withOrWithoutTimeZone? # TimeType
     | 'TIMESTAMP' ('(' precision ')')? withOrWithoutTimeZone? # TimestampType
+    | 'TIMESTAMPTZ' #TimestampTzType
     | 'INTERVAL' intervalQualifier? # IntervalType
     | 'VARCHAR' # CharacterStringType
     | 'DURATION' ('(' precision ')')? # DurationType

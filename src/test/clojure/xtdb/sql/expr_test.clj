@@ -1132,6 +1132,31 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
              {:xt/id 4, :date #xt.time/date-time "2005-07-31T12:30:30"}}
            (set (xt/q tu/*node* "SELECT * FROM test")))))
 
+(t/deftest timestamptz-literals-and-casts-3612
+  (t/is (= [{:v #xt.time/zoned-date-time "2005-07-31T12:30:30+01:00"}]
+           (xt/q tu/*node* "SELECT TIMESTAMP WITHOUT TIME ZONE '2005-07-31 12:30:30+01:00' AS v")))
+
+  (t/is (= [{:v #xt.time/zoned-date-time "2005-07-31T12:30:30+01:00"}]
+           (xt/q tu/*node* "SELECT TIMESTAMP WITH TIME ZONE '2005-07-31 12:30:30+01:00' v")))
+
+  (t/is (= [{:v #xt.time/zoned-date-time "2021-10-21T11:34Z"}]
+           (xt/q tu/*node* "SELECT '2021-10-21 12:34:00+01:00'::timestamptz v")))
+
+  (t/is (= [{:v #xt.time/zoned-date-time "2021-10-21T11:34Z"}]
+           (xt/q tu/*node* "SELECT '2021-10-21T12:34:00+01:00'::timestamptz v")))
+
+  (t/is (= [{:v #xt.time/zoned-date-time "2021-10-21T11:34Z"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21 12:34:00+01:00' AS TIMESTAMP WITH TIME ZONE) v")))
+
+  (t/is (= [{:v #xt.time/zoned-date-time "2021-10-21T11:34Z"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00+01:00' AS TIMESTAMP WITH TIME ZONE) v")))
+
+  (t/is (= [{:v #xt.time/zoned-date-time "2021-10-21T12:34+01:00"}]
+           (xt/q tu/*node* "SELECT TIMESTAMP WITH TIME ZONE '2021-10-21 12:34:00+01:00' v")))
+
+  (t/is (= [{:v #xt.time/zoned-date-time "2021-10-21T12:34+01:00"}]
+           (xt/q tu/*node* "SELECT TIMESTAMP WITH TIME ZONE '2021-10-21T12:34:00+01:00' v"))))
+
 (t/deftest variadic-overlaps-3441
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2020-01-03')"]
                            [:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (2, DATE '2020-01-03', DATE '2020-01-05')"]

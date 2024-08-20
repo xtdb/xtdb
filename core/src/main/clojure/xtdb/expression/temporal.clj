@@ -308,12 +308,20 @@
                             ~@(gen-alter-precision precision))
                       (ldt->ts tgt-tsunit)))})
 
+(defn parse-tstz [ts-str]
+  (parse-with-error-handling "timestamp with timezone"
+                             (fn [s]
+                               (let [res (time/parse-sql-timestamp-literal s)]
+                                 (when (instance? ZonedDateTime res)
+                                   res)))
+                             ts-str))
+
 (defmethod expr/codegen-cast [:utf8 :timestamp-tz] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
   (when precision (ensure-fractional-precision-valid precision))
   {:return-type target-type
    :->call-code (fn [[s]] 
                   (-> `(->> (expr/resolve-string ~s)
-                            (parse-with-error-handling "timestamp with timezone" #(ZonedDateTime/parse %))
+                            (parse-with-error-handling "timestamp with timezone" parse-tstz)
                             ~@(gen-alter-precision precision))
                       (zdt->ts tgt-tsunit)))})
 
