@@ -1665,10 +1665,10 @@
 
 (doseq [[pred-name pred-sym] [[:contains `temporal-contains?]
                               [:strictly_contains `temporal-strictly-contains?]
-                              [:overlaps? `overlaps?]
+                              [:overlaps `overlaps?]
                               [:strictly_overlaps `strictly-overlaps?]
-                              [:equals? `equals?]
-                              [:precedes? `precedes?]
+                              [:equals `equals?]
+                              [:precedes `precedes?]
                               [:strictly_precedes `strictly-precedes?]
                               [:immediately_precedes `immediately-precedes?]
                               [:succeeds `succeeds?]

@@ -10,7 +10,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
-           (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
            (java.util Collection HashMap HashSet LinkedHashSet List Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
@@ -817,6 +817,12 @@
     (catch Exception e
       (add-err! env (->CannotParseDuration d-str (.getMessage e))))))
 
+(defn- <-period-literal [expr]
+  (when (and (seq? expr)
+             (= 'period (first expr))
+             (= 3 (count expr)))
+    (rest expr)))
+
 (defrecord CannotParseUUID [u-str msg]
   PlanError
   (error-string [_] (format "Cannot parse UUID: %s - failed with message %s" u-str msg)))
@@ -1269,78 +1275,102 @@
   (visitPeriodOverlapsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (xt/template
-       (and (< ~(:from p1) (coalesce ~(:to p2) xtdb/end-of-time))
-            (> (coalesce ~(:to p1) xtdb/end-of-time) ~(:from p2))))))
+      (or (when-let [[f1 t1] (<-period-literal p1)]
+            (when-let [[f2 t2] (<-period-literal p2)]
+              (xt/template
+               (and (< ~f1 (coalesce ~t2 xtdb/end-of-time))
+                    (> (coalesce ~t1 xtdb/end-of-time) ~f2)))))
+          (xt/template (overlaps? ~p1 ~p2)))))
 
   (visitOverlapsFunction [this ctx]
-    (let [exprs (mapv #(.accept ^ParserRuleContext % this) (.periodPredicand ctx))]
+    ;; HACK assumes all are period literals for now, won't be able to do this with first-class periods
+    (let [exprs (mapv (comp <-period-literal #(.accept ^ParserRuleContext % this)) (.periodPredicand ctx))]
       (xt/template
-       (< (greatest ~@(map :from exprs))
-          (least ~@(for [{:keys [to]} exprs]
-                     (xt/template (coalesce ~to xtdb/end-of-time))))))))
+       (< (greatest ~@(map first exprs))
+          (least ~@(map (fn [[_ to]]
+                          (xt/template (coalesce ~to xtdb/end-of-time)))
+                        exprs))))))
 
   (visitPeriodEqualsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (xt/template
-       (and (= ~(:from p1) ~(:from p2))
-            (null-eq ~(:to p1) ~(:to p2))))))
+      (or (when-let [[f1 t1] (<-period-literal p1)]
+            (when-let [[f2 t2] (<-period-literal p2)]
+              (xt/template
+               (and (= ~f1 ~f2)
+                    (null-eq ~t1 ~t2)))))
+          (xt/template (equals? ~p1 ~p2)))))
 
   (visitPeriodContainsPeriodPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (xt/template
-       (and (<= ~(:from p1) ~(:from p2))
-            (>= (coalesce ~(:to p1) xtdb/end-of-time)
-                (coalesce ~(:to p2) xtdb/end-of-time))))))
+      (or (when-let [[f1 t1] (<-period-literal p1)]
+            (when-let [[f2 t2] (<-period-literal p2)]
+              (xt/template
+               (and (<= ~f1 ~f2)
+                    (>= (coalesce ~t1 xtdb/end-of-time)
+                        (coalesce ~t2 xtdb/end-of-time))))))
+          (xt/template (contains? ~p1 ~p2)))))
 
   (visitPeriodContainsPointPredicate [this ctx]
     (let [period (-> (.periodPredicand ctx) (.accept this))
           pit (-> (.pointInTimePredicand ctx) (.accept this))]
-      ;; TODO this currently duplicates the expr, but emitting a `let`
-      ;; probably won't get optimised into scan preds
-      (xt/template
-       (and (<= ~(:from period) ~pit)
-            (> (coalesce ~(:to period) xtdb/end-of-time) ~pit)))))
+      (when-let [[from to] (<-period-literal period)]
+        ;; TODO this currently duplicates the expr, but emitting a `let`
+        ;; probably won't get optimised into scan preds
+        (xt/template
+         (and (<= ~from ~pit)
+              (> (coalesce ~to xtdb/end-of-time) ~pit))))))
 
   (visitPeriodPrecedesPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (xt/template
-       (<= (coalesce ~(:to p1) xtdb/end-of-time) ~(:from p2)))))
+      (or (when-let [[_ t1] (<-period-literal p1)]
+            (when-let [[f2 _] (<-period-literal p2)]
+              (xt/template
+               (<= (coalesce ~t1 xtdb/end-of-time) ~f2))))
+          (xt/template (precedes? ~p1 ~p2)))))
 
   (visitPeriodSucceedsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (xt/template
-       (>= ~(:from p1) (coalesce ~(:to p2) xtdb/end-of-time)))))
+      (or (when-let [[f1 _t1] (<-period-literal p1)]
+            (when-let [[_f2 t2] (<-period-literal p2)]
+              (xt/template
+               (>= ~f1 (coalesce ~t2 xtdb/end-of-time)))))
+          (xt/template (succeeds? ~p1 ~p2)))))
 
   (visitPeriodImmediatelyPrecedesPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (xt/template
-       (= (coalesce ~(:to p1) xtdb/end-of-time) ~(:from p2)))))
+      (or (when-let [[_f1 t1] (<-period-literal p1)]
+            (when-let [[f2 _t2] (<-period-literal p2)]
+              (xt/template
+               (= (coalesce ~t1 xtdb/end-of-time) ~f2))))
+          (xt/template (immediately-precedes? ~p1 ~p2)))))
 
   (visitPeriodImmediatelySucceedsPredicate [this ctx]
     (let [p1 (-> (.periodPredicand ctx 0) (.accept this))
           p2 (-> (.periodPredicand ctx 1) (.accept this))]
-      (xt/template
-       (= ~(:from p1) (coalesce ~(:to p2) xtdb/end-of-time)))))
+      (or (when-let [[f1 _t1] (<-period-literal p1)]
+            (when-let [[_f2 t2] (<-period-literal p2)]
+              (xt/template
+               (= ~f1 (coalesce ~t2 xtdb/end-of-time)))))
+          (xt/template (immediately-succeeds? ~p1 ~p2)))))
 
   (visitPeriodColumnReference [_ ctx]
     (let [tn (identifier-sym (.tableName ctx))
           pcn (-> (.periodColumnName ctx) (.getText) (str/upper-case))]
       (case pcn
-        "VALID_TIME" {:from (find-decl scope ['xt$valid_from tn])
-                      :to (find-decl scope ['xt$valid_to tn])}
-        "SYSTEM_TIME" {:from (find-decl scope ['xt$system_from tn])
-                       :to (find-decl scope ['xt$system_to tn])})))
+        "_VALID_TIME" (xt/template (period ~(find-decl scope ['xt$valid_from tn])
+                                           ~(find-decl scope ['xt$valid_to tn])))
+        "_SYSTEM_TIME" (xt/template (period ~(find-decl scope ['xt$system_from tn])
+                                            ~(find-decl scope ['xt$system_to tn]))))))
 
   (visitPeriodValueConstructor [this ctx]
-    (let [sv (some-> (.periodStartValue ctx) (.numericExpr) (.accept this))
-          ev (some-> (.periodEndValue ctx) (.numericExpr) (.accept this))]
-      {:from sv :to ev}))
+    (xt/template
+     (period ~(some-> (.periodStartValue ctx) (.numericExpr) (.accept this))
+             ~(some-> (.periodEndValue ctx) (.numericExpr) (.accept this)))))
 
   (visitPointInTimePredicand [this ctx] (.accept (.numericExpr ctx) this))
 
@@ -1375,15 +1405,18 @@
                          vector))))
 
   (visitRangeBinsFunction [this ctx]
-    (let [{:keys [from to]} (-> (.rangeBinsSource ctx) .periodPredicand (.accept this))]
-      (xt/template
-       (range-bins ~(-> (.intervalLiteral ctx) (.accept this))
-                   ~from
-                   ~to
-                   ~@(some-> (.dateBinOrigin ctx)
-                             .expr
-                             (.accept this)
-                             vector)))))
+    (let [p (-> (.rangeBinsSource ctx) .periodPredicand (.accept this))]
+      (if-let [[from to] (<-period-literal p)]
+        (xt/template
+         (range-bins ~(-> (.intervalLiteral ctx) (.accept this))
+                     ~from
+                     ~to
+                     ~@(some-> (.dateBinOrigin ctx)
+                               .expr
+                               (.accept this)
+                               vector)))
+
+        (throw (UnsupportedOperationException. "TODO")))))
 
   (visitAgeFunction [this ctx]
     (let [ve1 (-> (.expr ctx 0) (.accept this))

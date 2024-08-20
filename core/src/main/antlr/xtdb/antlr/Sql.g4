@@ -703,7 +703,7 @@ periodPredicand
     | 'PERIOD' '(' periodStartValue ',' periodEndValue ')' # PeriodValueConstructor
     ;
 
-periodColumnName : 'VALID_TIME' | 'SYSTEM_TIME' ;
+periodColumnName : '_VALID_TIME' | '_SYSTEM_TIME' ;
 periodStartValue : numericExpr ;
 periodEndValue : numericExpr ;
 

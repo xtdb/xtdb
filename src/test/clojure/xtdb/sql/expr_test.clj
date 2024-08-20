@@ -926,20 +926,20 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     '(and (<= f/xt$valid_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
           (>= (coalesce f/xt$valid_to xtdb/end-of-time)
               (coalesce #xt.time/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time)))
-    "foo.VALID_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo._VALID_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (<= f/xt$valid_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
           (> (coalesce f/xt$valid_to xtdb/end-of-time) #xt.time/zoned-date-time "2000-01-01T00:00Z"))
-    "foo.VALID_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
+    "foo._VALID_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
 
     ;; also testing all period-predicate permutations
     '(and (< f/xt$valid_from (coalesce #xt.time/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time))
           (> (coalesce f/xt$valid_to xtdb/end-of-time) #xt.time/zoned-date-time "2000-01-01T00:00Z"))
-    "foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (< f/xt$valid_from (coalesce f/xt$valid_to xtdb/end-of-time))
           (> (coalesce f/xt$valid_to xtdb/end-of-time) f/xt$valid_from))
-    "foo.VALID_TIME OVERLAPS foo.VALID_TIME"
+    "foo._VALID_TIME OVERLAPS foo._VALID_TIME"
 
     '(and (< #xt.time/zoned-date-time "2000-01-01T00:00Z" (coalesce #xt.time/zoned-date-time "2003-01-01T00:00Z" xtdb/end-of-time))
           (> (coalesce #xt.time/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time) #xt.time/zoned-date-time "2002-01-01T00:00Z"))
@@ -948,38 +948,38 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
     '(and (= f/xt$system_from #xt.time/zoned-date-time "2000-01-01T00:00Z")
           (null-eq f/xt$system_to #xt.time/zoned-date-time "2001-01-01T00:00Z"))
-    "foo.SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo._SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(<= (coalesce f/xt$valid_to xtdb/end-of-time) #xt.time/zoned-date-time "2000-01-01T00:00Z")
-    "foo.VALID_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo._VALID_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(>= f/xt$system_from (coalesce #xt.time/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time))
-    "foo.SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo._SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(= (coalesce f/xt$valid_to xtdb/end-of-time) #xt.time/zoned-date-time "2000-01-01T00:00Z")
-    "foo.VALID_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo._VALID_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(= f/xt$valid_from (coalesce #xt.time/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time))
-    "foo.VALID_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
+    "foo._VALID_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
 
 (t/deftest test-period-predicates-point-in-time
   (t/are [expected sql] (= expected (plan-expr-with-foo sql))
 
     '(and (<= f/xt$valid_from f/a)
           (> (coalesce f/xt$valid_to xtdb/end-of-time) f/a))
-    "foo.valid_time CONTAINS foo.a"
+    "foo._valid_time CONTAINS foo.a"
 
     '(and (<= f/xt$valid_from #xt.time/zoned-date-time "2010-01-01T11:10:11Z")
           (> (coalesce f/xt$valid_to xtdb/end-of-time) #xt.time/zoned-date-time "2010-01-01T11:10:11Z"))
-    "foo.valid_time CONTAINS TIMESTAMP '2010-01-01T11:10:11Z'"
+    "foo._valid_time CONTAINS TIMESTAMP '2010-01-01T11:10:11Z'"
 
     '(and (<= f/xt$valid_from f/a)
           (>= (coalesce f/xt$valid_to xtdb/end-of-time) (coalesce f/a xtdb/end-of-time)))
-    "foo.valid_time CONTAINS PERIOD(foo.a, foo.a)"
+    "foo._valid_time CONTAINS PERIOD(foo.a, foo.a)"
 
     '(and (<= f/xt$valid_from f/xt$system_from)
           (> (coalesce f/xt$valid_to xtdb/end-of-time) f/xt$system_from))
-    "foo.valid_time CONTAINS foo.xt$system_from"))
+    "foo._valid_time CONTAINS foo.xt$system_from"))
 
 (t/deftest test-coalesce
   (t/testing "planning"
@@ -1023,15 +1023,15 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 (t/deftest test-period-predicates-point-in-time-errors
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"line 1:66 no viable alternative at input"
-         (sql-test/plan-sql "SELECT f.foo FROM foo f WHERE f.valid_time OVERLAPS f.other_column"
+         #"line 1:67 no viable alternative at input"
+         (sql-test/plan-sql "SELECT f.foo FROM foo f WHERE f._valid_time OVERLAPS f.other_column"
                             {:table-info {"foo" #{"foo" "other_column"}}})))
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"line 1:52 no viable alternative at input"
+         #"line 1:53 no viable alternative at input"
          (sql-test/plan-sql
-          "SELECT f.foo FROM foo f WHERE f.valid_time OVERLAPS TIMESTAMP '2010-01-01T11:10:11Z'"
+          "SELECT f.foo FROM foo f WHERE f._valid_time OVERLAPS TIMESTAMP '2010-01-01T11:10:11Z'"
           {:table-info {"foo" #{"foo"}}}))))
 
 (t/deftest test-min-long-value-275
@@ -1171,19 +1171,19 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
            (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT foo._id foo, bar._id bar
                             FROM foo, bar
-                            WHERE OVERLAPS(foo.valid_time, bar.valid_time)")))
+                            WHERE OVERLAPS(foo._valid_time, bar._valid_time)")))
 
   (t/is (= [{:foo 2, :baz 5} {:foo 1, :baz 6}]
            (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT foo._id foo, baz._id baz
                             FROM foo, baz
-                            WHERE OVERLAPS(foo.valid_time, baz.valid_time)")))
+                            WHERE OVERLAPS(foo._valid_time, baz._valid_time)")))
 
   (t/is (= [{:bar 4, :baz 5} {:bar 3, :baz 5} {:bar 3, :baz 6}]
            (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT bar._id bar, baz._id baz
                             FROM bar, baz
-                            WHERE OVERLAPS(bar.valid_time, baz.valid_time)")))
+                            WHERE OVERLAPS(bar._valid_time, baz._valid_time)")))
 
   (t/is (= [{:foo 2, :bar 4, :baz 5}
             {:foo 2, :bar 3, :baz 5}
@@ -1191,4 +1191,4 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
            (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT foo._id foo, bar._id bar, baz._id baz
                             FROM foo, bar, baz
-                            WHERE OVERLAPS(foo.valid_time, bar.valid_time, baz.valid_time)"))))
+                            WHERE OVERLAPS(foo._valid_time, bar._valid_time, baz._valid_time)"))))

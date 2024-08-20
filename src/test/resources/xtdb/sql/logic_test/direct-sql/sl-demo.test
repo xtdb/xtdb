@@ -664,7 +664,7 @@ FOR ALL VALID_TIME AS P2
 WHERE P1.property_number = 7797
   AND P2.property_number <> P1.property_number
   AND P1.customer_number = P2.customer_number
-  AND P1.VALID_TIME OVERLAPS P2.VALID_TIME
+  AND P1._VALID_TIME OVERLAPS P2._VALID_TIME
 ----
 3621
 1998-01-15T00:00Z[UTC]
@@ -688,7 +688,7 @@ FROM Prop_Owner FOR ALL SYSTEM_TIME AS P1,
 WHERE P1.property_number = 7797
   AND P2.property_number <> P1.property_number
   AND P1.customer_number = P2.customer_number
-  AND P1.SYSTEM_TIME OVERLAPS P2.SYSTEM_TIME
+  AND P1._SYSTEM_TIME OVERLAPS P2._SYSTEM_TIME
 ----
 
 
@@ -703,8 +703,8 @@ FROM Prop_Owner FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS P1,
 WHERE P1.property_number = 7797
   AND P2.property_number <> P1.property_number
   AND P1.customer_number = P2.customer_number
-  AND P1.VALID_TIME OVERLAPS P2.VALID_TIME
-  AND P1.SYSTEM_TIME OVERLAPS P2.SYSTEM_TIME
+  AND P1._VALID_TIME OVERLAPS P2._VALID_TIME
+  AND P1._SYSTEM_TIME OVERLAPS P2._SYSTEM_TIME
 ----
 3621
 1998-01-15T00:00Z[UTC]
@@ -725,7 +725,7 @@ FOR ALL VALID_TIME AS P2
 WHERE P1.property_number = 7797
   AND P2.property_number <> P1.property_number
   AND P1.customer_number = P2.customer_number
-  AND P1.SYSTEM_TIME OVERLAPS P2.SYSTEM_TIME
+  AND P1._SYSTEM_TIME OVERLAPS P2._SYSTEM_TIME
 ----
 3621
 2020-01-08T00:00Z[UTC]
@@ -741,7 +741,7 @@ FOR ALL SYSTEM_TIME AS P2
 WHERE P1.property_number = 7797
   AND P2.property_number <> P1.property_number
   AND P1.customer_number = P2.customer_number
-  AND P1.SYSTEM_TIME CONTAINS PERIOD(P2.xt$system_from, P2.xt$system_to)
+  AND P1._SYSTEM_TIME CONTAINS PERIOD(P2.xt$system_from, P2.xt$system_to)
 ----
 
 
@@ -755,8 +755,8 @@ FROM Prop_Owner FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS P1,
 WHERE P1.property_number = 7797
   AND P2.property_number <> P1.property_number
   AND P1.customer_number = P2.customer_number
-  AND P1.VALID_TIME OVERLAPS P2.VALID_TIME
-  AND P1.SYSTEM_TIME CONTAINS PERIOD(P2.xt$system_from, P2.xt$system_to)
+  AND P1._VALID_TIME OVERLAPS P2._VALID_TIME
+  AND P1._SYSTEM_TIME CONTAINS PERIOD(P2.xt$system_from, P2.xt$system_to)
 ----
 3621
 1998-01-15T00:00Z[UTC]
@@ -770,7 +770,7 @@ SELECT P2.property_number, P2.xt$system_from AS Recorded_Start
  WHERE P1.property_number = 7797
    AND P2.property_number <> P1.property_number
    AND P1.customer_number = P2.customer_number
-   AND P1.SYSTEM_TIME CONTAINS PERIOD(P2.xt$system_from, P2.xt$system_to)
+   AND P1._SYSTEM_TIME CONTAINS PERIOD(P2.xt$system_from, P2.xt$system_to)
 ----
 3621
 2020-01-08T00:00Z[UTC]

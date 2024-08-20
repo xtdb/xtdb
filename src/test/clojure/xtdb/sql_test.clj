@@ -977,7 +977,7 @@
                 FROM foo FOR SYSTEM_TIME FROM DATE '2001-01-01' TO DATE '2002-01-01'
                 WHERE foo._valid_from = 4 AND foo._valid_to > 10
                 AND foo._system_from = 20 AND foo._system_to <= 23
-                AND foo.VALID_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"
+                AND foo._VALID_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"
               {:table-info {"foo" {}}}))))
 
 (deftest test-sql-insert-plan
@@ -1021,7 +1021,7 @@
                               {:table-info {"foo" #{"bar" "baz" "quux"}}})))
 
   (t/is (=plan-file "test-sql-update-plan-with-period-references"
-                    (plan-sql "UPDATE foo FOR ALL VALID_TIME SET bar = (foo.SYSTEM_TIME OVERLAPS foo.VALID_TIME)"
+                    (plan-sql "UPDATE foo FOR ALL VALID_TIME SET bar = (foo._SYSTEM_TIME OVERLAPS foo._VALID_TIME)"
                               {:table-info {"foo" #{"bar" "baz"}}}))))
 
 (deftest dml-target-table-aliases
@@ -1053,7 +1053,7 @@
       (plan-sql
         "SELECT foo.name foo_name, bar.name bar_name
         FROM foo, bar
-        WHERE foo.SYSTEM_TIME OVERLAPS bar.SYSTEM_TIME"
+        WHERE foo._SYSTEM_TIME OVERLAPS bar._SYSTEM_TIME"
         {:table-info {"foo" #{"name"}
                       "bar" #{"name"}}}))))
 
@@ -1062,13 +1062,13 @@
          "test-valid-time-correlated-subquery-where"
          (plan-sql "SELECT (SELECT foo.name
                     FROM foo
-                    WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM bar"
+                    WHERE foo._VALID_TIME OVERLAPS bar._VALID_TIME) FROM bar"
                    {:table-info {"foo" #{"name"}
                                  "bar" #{}}})))
 
   (t/is (=plan-file
          "test-valid-time-correlated-subquery-projection"
-         (plan-sql "SELECT (SELECT (foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM foo)
+         (plan-sql "SELECT (SELECT (foo._VALID_TIME OVERLAPS bar._VALID_TIME) FROM foo)
                     FROM bar"
                    {:table-info {"foo" #{"name"}
                                  "bar" #{}}}))))
@@ -1078,7 +1078,7 @@
    (=plan-file
     "test-derived-columns-with-periods-period-predicate"
     (plan-sql
-     "SELECT f.VALID_TIME OVERLAPS f.SYSTEM_TIME
+     "SELECT f._VALID_TIME OVERLAPS f._SYSTEM_TIME
         FROM foo
         AS f (_system_from, _system_to, _valid_from, _valid_to)"
      {:table-info {"foo" #{}}})))
@@ -1860,13 +1860,13 @@ VALUES
 SELECT 1 AS one
 FROM docs1 FOR VALID_TIME ALL AS d1
 JOIN docs2 FOR VALID_TIME ALL AS d2
-    ON d1.VALID_TIME CONTAINS d2._valid_from AND d1._id = d2._id")))
+    ON d1._VALID_TIME CONTAINS d2._valid_from AND d1._id = d2._id")))
 
   (t/is (= [{:one 1}] (xt/q tu/*node* "
 SELECT 1 AS one
 FROM docs1 FOR VALID_TIME ALL AS d1
 JOIN docs2 FOR VALID_TIME ALL AS d2
-    ON d1._id = d2._id AND d1.VALID_TIME CONTAINS d2._valid_from"))))
+    ON d1._id = d2._id AND d1._VALID_TIME CONTAINS d2._valid_from"))))
 
 (t/deftest unescapes-escaped-quotes-3467
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (' ''foo'' ')"]])

@@ -126,22 +126,22 @@
 
       (is (= [{:last-updated "2000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last-updated "3000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '3000-01-01 00:00:00', TIMESTAMP '3001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '3000-01-01 00:00:00', TIMESTAMP '3001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last-updated "3000"} {:last-updated "4000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4000-01-01 00:00:00', TIMESTAMP '4001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4000-01-01 00:00:00', TIMESTAMP '4001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last-updated "3000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
               tx))))))
 
 (deftest app-time-multiple-tables
@@ -154,35 +154,35 @@
     (is (= [{:last-updated "2001"}]
            (query-at-tx
             "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME
-             WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2002-01-01 00:00:00')"
+             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2002-01-01 00:00:00')"
             tx)))
 
     (is (= [{:l-updated "2003"}]
            (query-at-tx
             "SELECT bar.l_updated FROM bar FOR ALL VALID_TIME
-             WHERE bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
+             WHERE bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
             tx)))
 
     (is (= []
            (query-at-tx
             "SELECT foo.last_updated, bar.l_updated FROM foo, bar
-             WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
+             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
              AND
-             bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
+             bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
             tx)))
 
     (is (= [{:last-updated "2001", :l-updated "2003"}]
            (query-at-tx
             "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated, bar.l_updated FROM foo, bar
-             WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
-               AND bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
+             WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
+               AND bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
             tx)))
 
     (is (= []
            (query-at-tx
             "SELECT foo.last_updated, bar.name FROM foo, bar
-             WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME" tx)))))
+             WHERE foo._VALID_TIME OVERLAPS bar._VALID_TIME" tx)))))
 
 (deftest app-time-joins
   (let [tx (xt/submit-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2016", :valid-to #inst "2019"}
@@ -194,7 +194,7 @@
            (query-at-tx
             "SELECT foo.name, bar.also_name
              FROM foo, bar
-             WHERE foo.VALID_TIME SUCCEEDS bar.VALID_TIME"
+             WHERE foo._VALID_TIME SUCCEEDS bar._VALID_TIME"
             tx)))
 
     (is (= [{:name "Bill" :also-name "Jeff"}]
@@ -202,7 +202,7 @@
             "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.name, bar.also_name
              FROM foo, bar
-             WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME"
+             WHERE foo._VALID_TIME OVERLAPS bar._VALID_TIME"
             tx)))))
 
 (deftest test-inconsistent-valid-time-range-2494
