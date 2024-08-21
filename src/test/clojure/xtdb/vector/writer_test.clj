@@ -33,7 +33,8 @@
                                              (types/->field "$data$" #xt.arrow/type :null true))
 
                               (types/->field "set" #xt.arrow/type :set false
-                                             (types/->field "$data$" #xt.arrow/type :null true)))
+                                             ;; FIXME
+                                             #_(types/->field "$data$" #xt.arrow/type :null true)))
 
                (.getField duv-wtr))
 

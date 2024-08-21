@@ -6,7 +6,8 @@
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.compactor :as c])
   (:import (java.lang AutoCloseable)
            (java.time Duration ZoneId)))
 
@@ -765,10 +766,17 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                            [:sql "INSERT INTO foo (_id, for_range)
                                   VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"]])
 
-  (t/is (= #{{:xt/id 1,
-              :for-range #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z" nil]}
-             {:xt/id 2,
-              :for-range #xt/tstz-range [#xt.time/zoned-date-time "2020-03-01T00:00Z" #xt.time/zoned-date-time "2021-01-01T00:00Z"]}
-             {:xt/id 3,
-              :for-range #xt/tstz-range [#xt.time/zoned-date-time "2021-08-01T00:00Z" #xt.time/zoned-date-time "2022-01-01T00:00Z"]}}
-           (set (xt/q tu/*node* "SELECT * FROM foo")))))
+  (let [expected #{{:xt/id 1,
+                    :for-range #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z" nil]}
+                   {:xt/id 2,
+                    :for-range #xt/tstz-range [#xt.time/zoned-date-time "2020-03-01T00:00Z" #xt.time/zoned-date-time "2021-01-01T00:00Z"]}
+                   {:xt/id 3,
+                    :for-range #xt/tstz-range [#xt.time/zoned-date-time "2021-08-01T00:00Z" #xt.time/zoned-date-time "2022-01-01T00:00Z"]}}]
+
+    (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))
+
+    (when (= tu/*node-type* :in-memory)
+      (tu/finish-chunk! tu/*node*)
+      (c/compact-all! tu/*node* #xt.time/duration "PT2S")
+
+      (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo")))))))

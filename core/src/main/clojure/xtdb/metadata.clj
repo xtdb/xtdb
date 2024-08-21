@@ -7,8 +7,7 @@
             xtdb.expression.temporal
             [xtdb.serde :as serde]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import (com.cognitect.transit TransitFactory)
            (com.github.benmanes.caffeine.cache Cache Caffeine RemovalListener)
            (java.io ByteArrayInputStream ByteArrayOutputStream)
@@ -20,19 +19,14 @@
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector FieldVector)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date
-                                               ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int
-                                               ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct
-                                               ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union
-                                               ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow Relation VectorReader VectorWriter)
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader IVectorWriter)
-           (xtdb.vector.extensions KeywordType SetType TransitType UriType UuidType)))
+           (xtdb.vector IVectorReader)
+           (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (def arrow-read-handlers
   {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
@@ -180,7 +174,8 @@
   ArrowType$Null (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
   ArrowType$Bool (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
   ArrowType$FixedSizeBinary (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
-  TransitType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type)))
+  TransitType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
+  TsTzRangeType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type)))
 
 (extend-protocol MetadataWriterFactory
   ArrowType$Int (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))

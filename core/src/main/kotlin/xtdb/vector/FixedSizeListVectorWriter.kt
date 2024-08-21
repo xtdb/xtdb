@@ -115,7 +115,7 @@ internal class FixedSizeListVectorWriter(
                 || src.field.fieldType != field.fieldType)
                 throw InvalidCopySourceException(src.field, field)
 
-            val innerCopier = listElementWriter().rowCopier(src.dataVector)
+            val innerCopier = listElementWriter(src.dataVector.field.fieldType).rowCopier(src.dataVector)
 
             RowCopier { srcIdx ->
                 wp.position.also {

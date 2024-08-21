@@ -9,7 +9,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.util.TransferPair
 
-abstract class XtExtensionVector<V : FieldVector>(private val field: Field, allocator: BufferAllocator, underlyingVector: V) :
+abstract class XtExtensionVector<V : FieldVector>(internal var field: Field, allocator: BufferAllocator, underlyingVector: V) :
     ExtensionTypeVector<V>(field, allocator, underlyingVector) {
 
     constructor(name: String, allocator: BufferAllocator, fieldType: FieldType, underlyingVector: V)

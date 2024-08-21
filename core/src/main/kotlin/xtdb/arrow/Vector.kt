@@ -18,10 +18,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
-import xtdb.vector.extensions.KeywordType
-import xtdb.vector.extensions.SetType
-import xtdb.vector.extensions.TransitType
-import xtdb.vector.extensions.UuidType
+import xtdb.vector.extensions.*
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
@@ -144,6 +141,12 @@ sealed class Vector : VectorReader, VectorWriter {
                     KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))
                     UuidType -> UuidVector(FixedSizeBinaryVector(al, name, isNullable, 16))
                     TransitType -> TransitVector(VarBinaryVector(al, name, isNullable))
+                    TsTzRangeType -> TsTzRangeVector(
+                        FixedSizeListVector(
+                            al, name, isNullable, 2,
+                            field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_"))
+                    )
+
                     SetType ->
                         SetVector(
                             ListVector(

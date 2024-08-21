@@ -32,6 +32,7 @@ import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.KeywordVector;
 import xtdb.vector.extensions.SetVector;
 import xtdb.vector.extensions.TransitVector;
+import xtdb.vector.extensions.TsTzRangeVector;
 import xtdb.vector.extensions.UuidVector;
 
 import java.net.URI;

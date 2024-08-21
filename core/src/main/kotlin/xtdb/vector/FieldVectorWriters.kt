@@ -34,6 +34,7 @@ import xtdb.vector.extensions.*
 import xtdb.vector.extensions.KeywordVector
 import xtdb.vector.extensions.SetVector
 import xtdb.vector.extensions.TransitVector
+import xtdb.vector.extensions.TsTzRangeVector
 import xtdb.vector.extensions.UuidVector
 import java.math.BigDecimal
 import java.net.URI
@@ -358,10 +359,10 @@ abstract class ExtensionVectorWriter(
     notify: FieldChangeListener? = null,
 ) :
     ScalarVectorWriter(vector) {
-    override var field: Field = vector.field
+    override val field get() = vector.field
 
     internal val inner = writerFor(vector.underlyingVector) {
-        field = Field(field.name, field.fieldType, it.children)
+        vector.field = Field(field.name, field.fieldType, it.children)
         notify(field)
     }
 
@@ -440,7 +441,12 @@ internal class TransitVectorWriter(vector: TransitVector) : ExtensionVectorWrite
     override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
 }
 
-internal class TsTzRangeVectorWriter(vector: TsTzRangeVector) : ExtensionVectorWriter(vector, null) {
+internal class TsTzRangeVectorWriter(vector: TsTzRangeVector, notify: FieldChangeListener?) :
+    ExtensionVectorWriter(vector, notify) {
+
+    override fun listElementWriter(): IVectorWriter =
+        inner.listElementWriter(FieldType.notNullable(Timestamp(MICROSECOND, "UTC")))
+
     override fun writeObject0(obj: Any) = when (obj) {
         is ZonedDateTimeRange -> {
             startList()
@@ -547,7 +553,7 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
         is UuidVector -> UuidVectorWriter(vec)
         is UriVector -> UriVectorWriter(vec)
         is TransitVector -> TransitVectorWriter(vec)
-        is TsTzRangeVector -> TsTzRangeVectorWriter(vec)
+        is TsTzRangeVector -> TsTzRangeVectorWriter(vec) { notify(vec.field) }
         is SetVector -> SetVectorWriter(vec) { notify(vec.field) }
         else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")
     }

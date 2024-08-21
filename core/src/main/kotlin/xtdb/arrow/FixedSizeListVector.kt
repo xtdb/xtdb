@@ -46,6 +46,10 @@ class FixedSizeListVector(
     override fun getListCount(idx: Int) = listSize
     override fun getListStartIndex(idx: Int) = idx * listSize
 
+    override fun endList() {
+        writeNotNull()
+    }
+
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
         (0 until listSize).fold(0) { hash, elIdx ->
             ByteFunctionHelpers.combineHash(hash, elVector.hashCode(idx * listSize + elIdx, hasher))
@@ -55,7 +59,7 @@ class FixedSizeListVector(
         require(src is FixedSizeListVector)
         require(src.listSize == listSize)
 
-        val elCopier = src.rowCopier(elVector)
+        val elCopier = src.elVector.rowCopier(elVector)
         return RowCopier { srcIdx ->
             val startIdx = src.getListStartIndex(srcIdx)
 
