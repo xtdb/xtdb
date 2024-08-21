@@ -908,6 +908,21 @@
                        (and (= (from ~x-sym) (from ~y-sym))
                             (= (to ~x-sym) (to ~y-sym))))))})
 
+(defmethod expr/codegen-call [:* :tstz-range :tstz-range] [_]
+  {:return-type [:union #{:null :tstz-range}]
+   :continue-call (fn [f [x y]]
+                    (let [x-sym (gensym 'x)
+                          y-sym (gensym 'y)
+                          min-to (gensym 'min-to)
+                          max-from (gensym 'max)]
+                      `(let [~x-sym ~x
+                             ~y-sym ~y
+                             ~max-from (Math/max (from ~x-sym) (from ~y-sym))
+                             ~min-to (Math/min (to ~x-sym) (to ~y-sym))]
+                         (if (< ~max-from ~min-to)
+                           ~(f :tstz-range `(->period ~max-from ~min-to))
+                           ~(f :null nil)))))})
+
 ;;;; Intervals
 
 (defn pd-add ^PeriodDuration [^PeriodDuration pd1 ^PeriodDuration pd2]

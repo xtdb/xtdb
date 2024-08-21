@@ -4,13 +4,14 @@
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
+            [xtdb.api :as xt]
             [xtdb.expression-test :as et]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
            (org.apache.arrow.vector PeriodDuration)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)))
+           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -1695,3 +1696,47 @@
       (t/is (= [[0 15 0.08] [15 30 0.6] [30 45 0.32]]
                (f 13 38))
             "contains"))))
+
+(t/deftest test-period-intersection-3493
+  (t/is (= (tu/->tstz-range #xt.time/zoned-date-time "2021-01-01T00:00Z"
+                            #xt.time/zoned-date-time "2022-01-01T00:00Z")
+           (et/project1 '(* p1 p2)
+                        {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
+                         :p2 (tu/->tstz-range #inst "2021-01-01", #inst "2023-01-01")}))
+        "overlaps")
+
+  (t/is (= (tu/->tstz-range #xt.time/zoned-date-time "2020-01-01T00:00Z"
+                            #xt.time/zoned-date-time "2022-01-01T00:00Z")
+           (et/project1 '(* p1 p2)
+                        {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
+                         :p2 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")}))
+        "equals")
+
+  (t/is (= (tu/->tstz-range #xt.time/zoned-date-time "2020-01-01T00:00Z"
+                            #xt.time/zoned-date-time "2022-01-01T00:00Z")
+           (et/project1 '(* p1 p2)
+                        {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
+                         :p2 (tu/->tstz-range #inst "2020-01-01", #inst "2024-01-01")}))
+        "starts")
+
+  (t/is (= (tu/->tstz-range #xt.time/zoned-date-time "2021-01-01T00:00Z"
+                            #xt.time/zoned-date-time "2022-01-01T00:00Z")
+           (et/project1 '(* p1 p2)
+                        {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2023-01-01")
+                         :p2 (tu/->tstz-range #inst "2021-01-01", #inst "2022-01-01")}))
+        "contains")
+
+  (t/is (nil? (et/project1 '(* p1 p2)
+                           {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
+                            :p2 (tu/->tstz-range #inst "2023-01-01", #inst "2025-01-01")}))
+        "succeeds")
+
+  (t/is (nil? (et/project1 '(* p1 p2)
+                           {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
+                            :p2 (tu/->tstz-range #inst "2022-01-01", #inst "2024-01-01")}))
+        "immediately succeeds")
+
+  (t/is (nil? (et/project1 '(* p1 p2)
+                           {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
+                            :p2 nil}))
+        "one-side nil"))
