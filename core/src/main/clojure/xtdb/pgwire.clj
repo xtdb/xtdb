@@ -1084,7 +1084,7 @@
 (defn- ->xtify-param [session {:keys [param-format param-fields]}]
   (fn xtify-param [param-idx param]
     (when-not (nil? param)
-      (let [param-oid (:column-oid (nth param-fields param-idx))
+      (let [param-oid (:oid (nth param-fields param-idx))
             param-format (nth param-format param-idx nil)
             param-format (or param-format (nth param-format param-idx :text))
             mapping (get types/pg-types-by-oid param-oid)
@@ -1096,7 +1096,7 @@
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
   (if (or (not= (count param-fields) (count params))
-          (some #(= 0 (:column-oid %)) param-fields))
+          (some #(= 0 (:oid %)) param-fields))
     (do (log/error "Missing types for params in DML statement")
         (cmd-send-error
          conn
@@ -1188,7 +1188,7 @@
 
 (defn cmd-send-parameter-description [conn {:keys [param-fields]}]
   (log/trace "Sending Parameter Description - " {:param-fields param-fields})
-  (cmd-write-msg conn msg-parameter-description {:parameter-oids (mapv :column-oid param-fields)}))
+  (cmd-write-msg conn msg-parameter-description {:parameter-oids (mapv :oid param-fields)}))
 
 (defn cmd-describe-prepared-stmt [conn {:keys [fields] :as stmt}]
   (cmd-send-parameter-description conn stmt)
@@ -1331,6 +1331,17 @@
   [conn]
   (.flush ^OutputStream (:out conn)))
 
+(defn resolve-defaulted-params [declared-params inferred-params]
+  (let [declared-params (vec declared-params)]
+    (map-indexed
+     (fn [idx inf-param]
+       (if-let [dec-param (nth declared-params idx nil)]
+         (if (= :default (:col-type dec-param))
+           inf-param
+           dec-param)
+         inf-param))
+     inferred-params)))
+
 (defn parse
   "Responds to a msg-parse message that creates a prepared-statement."
   [{:keys [conn-state cid server node] :as conn}
@@ -1352,7 +1363,8 @@
         err (or err
                 (when-some [oid (first unsupported-arg-types)]
                   (err-protocol-violation (format "parameter type oid(%s) currently unsupported by xt" oid)))
-                (permissibility-err conn stmt))]
+                (permissibility-err conn stmt))
+        param-types (map types/pg-types-by-oid arg-types)]
 
     (if err
       (cmd-send-error conn err)
@@ -1361,7 +1373,7 @@
               (let [{:keys [^Clock clock, latest-submitted-tx] :as session} (:session @conn-state)
                     query-opts {:after-tx latest-submitted-tx
                                 :tx-timeout (Duration/ofSeconds 1)
-                                :param-types (map #(get-in types/pg-types-by-oid [% :col-type]) arg-types)
+                                :param-types (map :col-type param-types)
                                 :default-tz (.getZone clock)}
                     pq (.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt) query-opts)]
 
@@ -1369,7 +1381,10 @@
                                  stmt
                                  :prepared-stmt pq
                                  :fields (map types/field->pg-type (.columnFields pq))
-                                 :param-fields (map types/field->pg-type (.paramFields pq)))
+                                 :param-fields (->> (.paramFields pq)
+                                                    (map types/field->pg-type)
+                                                    (map #(set/rename-keys % {:column-oid :oid}))
+                                                    (resolve-defaulted-params param-types)))
                  :prep-outcome :success})
 
               (catch InterruptedException e
@@ -1381,9 +1396,7 @@
                  conn
                  (err-pg-exception e "unexpected server error compiling query"))))
 
-            {:prepared-stmt (assoc stmt :param-fields (->> arg-types
-                                                           (map types/pg-types-by-oid)
-                                                           (map #(set/rename-keys % {:oid :column-oid}))))
+            {:prepared-stmt (assoc stmt :param-fields param-types)
              ;; NOTE this means that for DML statments we assume the number and type of params is exactly
              ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
              ;; If a client subsequently binds a different number of params we will send an error msg

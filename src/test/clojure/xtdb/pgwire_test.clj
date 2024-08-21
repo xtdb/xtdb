@@ -1643,3 +1643,23 @@
              (pg/execute conn "SELECT $1 v" {:params [#xt.time/instant "2030-01-04T12:44:55Z"]
                                              :oids [OID/TIMESTAMPTZ]}))
           "when reading param, zone is honored (UTC) and instant is treated as a timestamptz")))
+
+(deftest test-declared-param-types-are-honored
+  (t/testing "Declared param type VARCHAR is honored, even though it maps to utf8 which XTDB maps to text"
+    ;;case applies anytime we have multiple pg types that map to the same xt type, as we choose a single pg type
+    ;;for the return type.
+    (with-open [conn (jdbc-conn "prepareThreshold" -1)
+                stmt (.prepareStatement conn "SELECT ? x, ? y")]
+
+      (.setString stmt 1 "foo")
+      (.setObject stmt 2 "bar" Types/OTHER)
+
+      (t/is (= ["varchar" "text"]
+               (param-metadata stmt)))
+
+      (t/is (= [{"x" "text"} {"y" "text"}]
+               (result-metadata stmt)))
+
+      (t/is (=
+             [{"x" "foo", "y" "bar"}]
+             (rs->maps (.executeQuery stmt)))))))
