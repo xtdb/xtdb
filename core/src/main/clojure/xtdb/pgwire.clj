@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.expression :as expr]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.query]
@@ -22,7 +23,6 @@
            [java.util.function Consumer]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
-           (xtdb JsonSerde)
            (xtdb.antlr SqlVisitor)
            [xtdb.api PgwireServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
@@ -31,7 +31,7 @@
            xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
-           [xtdb.vector RelationReader IVectorReader]))
+           [xtdb.vector IVectorReader RelationReader]))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -274,7 +274,7 @@
 (defn- statement-head [s]
   (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
-(defn- interpret-sql [sql]
+(defn- interpret-sql [sql {:keys [default-tz]}]
   (let [sql-trimmed (trim-sql sql)]
     (or (when (str/blank? sql-trimmed)
           {:statement-type :empty-query})
@@ -294,34 +294,48 @@
                                    (.accept (plan/->ExprPlanVisitor nil nil)))})
 
                      (visitSetSessionCharacteristicsStatement [this ctx]
-                       (let [[^ParserRuleContext sc & more-scs] (.sessionCharacteristic ctx)]
-                         (assert (nil? more-scs) "pgwire only supports one for now")
+                       {:statement-type :set-session-characteristics
+                        :session-characteristics
+                        (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.sessionCharacteristic ctx))})
 
-                         (into {:statement-type :set-session-characteristics
-                                :session-characteristics [(.accept sc this)]})))
-
-                     (visitSessionCharacteristic [this ctx]
-                       (let [[^ParserRuleContext txc & more-txcs] (.transactionMode ctx)]
-                         (assert (nil? more-txcs) "pgwire only supports one for now")
-                         (.accept txc this)))
+                     (visitSessionTxCharacteristics [this ctx]
+                       (let [[^ParserRuleContext session-mode & more-modes] (.sessionTxMode ctx)]
+                         (assert (nil? more-modes) "pgwire only supports one for now")
+                         (.accept session-mode this)))
 
                      (visitSetTransactionStatement [this ctx]
-                       (into {:statement-type :set-transaction}
-                             (.accept (.transactionCharacteristics ctx) this)))
+                       {:statement-type :set-transaction
+                        :tx-characteristics (.accept (.transactionCharacteristics ctx) this)})
 
                      (visitStartTransactionStatement [this ctx]
-                       (into {:statement-type :begin}
-                             (some-> (.transactionCharacteristics ctx) (.accept this))))
+                       {:statement-type :begin
+                        :tx-characteristics (some-> (.transactionCharacteristics ctx) (.accept this))})
 
                      (visitTransactionCharacteristics [this ctx]
-                       (let [[^ParserRuleContext txc & more-txcs] (.transactionMode ctx)]
-                         (assert (nil? more-txcs) "pgwire only supports one for now")
-                         (.accept txc this)))
+                       (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.transactionMode ctx)))
 
                      (visitIsolationLevel [_ _] {})
+                     (visitSessionIsolationLevel [_ _] {})
 
                      (visitReadWriteTransaction [_ _] {:access-mode :read-write})
                      (visitReadOnlyTransaction [_ _] {:access-mode :read-only})
+
+                     (visitReadWriteSession [_ _] {:access-mode :read-write})
+                     (visitReadOnlySession [_ _] {:access-mode :read-only})
+
+                     (visitTransactionSystemTime [_ ctx]
+                       {:tx-system-time (.accept (.dateTimeLiteral ctx)
+                                                 (reify SqlVisitor
+                                                   (visitDateLiteral [_ ctx]
+                                                     (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
+                                                         (.atStartOfDay)
+                                                         (.atZone ^ZoneId default-tz)))
+
+                                                   (visitTimestampLiteral [_ ctx]
+                                                     (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
+                                                       (cond
+                                                         (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts ^ZoneId default-tz)
+                                                         (instance? ZonedDateTime ts) ts)))))})
 
                      (visitCommitStatement [_ _] {:statement-type :commit})
                      (visitRollbackStatement [_ _] {:statement-type :rollback})
@@ -1070,12 +1084,12 @@
 (def supported-param-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node]} dml-buf {:keys [default-tz]}]
+(defn- execute-tx [{:keys [node]} dml-buf tx-opts]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql transformed-query params])
                      dml-buf)]
     (try
-      (some-> (ex-message (:error (xt/execute-tx node tx-ops {:default-tz default-tz})))
+      (some-> (ex-message (:error (xt/execute-tx node tx-ops tx-opts)))
               err-protocol-violation)
       (catch Throwable e
         (log/debug e "Error on execute-tx")
@@ -1194,19 +1208,18 @@
   (cmd-send-parameter-description conn stmt)
   (cmd-send-row-description conn fields))
 
-(defn cmd-begin [{:keys [node conn-state] :as conn} access-mode]
+(defn cmd-begin [{:keys [node conn-state] :as conn} tx-opts]
   (swap! conn-state
          (fn [{:keys [session] :as st}]
            (let [{:keys [^Clock clock latest-submitted-tx]} session]
              (-> st
                  (assoc :transaction
-                        {:basis {:current-time (.instant clock)
-                                 :at-tx (time/max-tx (:latest-completed-tx (xt/status node))
-                                                     latest-submitted-tx)}
-
-                         :access-mode (or access-mode
-                                          (:access-mode (:next-transaction session))
-                                          (:access-mode session))})
+                        (-> {:basis {:current-time (.instant clock)
+                                     :at-tx (time/max-tx (:latest-completed-tx (xt/status node))
+                                                         latest-submitted-tx)}}
+                            (into (:characteristics session))
+                            (into (:next-transaction session))
+                            (into tx-opts)))
 
                  ;; clear :next-transaction variables for now
                  ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
@@ -1216,11 +1229,12 @@
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{{:keys [failed err dml-buf]} :transaction, {:keys [^Clock clock]} :session} @conn-state]
+  (let [{{:keys [failed err dml-buf tx-system-time]} :transaction, {:keys [^Clock clock]} :session} @conn-state]
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (execute-tx conn dml-buf {:default-tz (.getZone clock)})]
+      (if-let [err (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                             :system-time tx-system-time})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))
@@ -1256,10 +1270,12 @@
   (set-session-parameter conn parameter value)
   (cmd-write-msg conn msg-command-complete {:command "SET"}))
 
-(defn cmd-set-transaction [{:keys [conn-state] :as conn} {:keys [access-mode]}]
+(defn cmd-set-transaction [{:keys [conn-state] :as conn} tx-opts]
   ;; set the access mode for the next transaction
   ;; intention is BEGIN then can take these parameters as a preference to those in the session
-  (when access-mode (swap! conn-state assoc-in [:session :next-transaction :access-mode] access-mode))
+  (when tx-opts
+    (swap! conn-state update-in [:session :next-transaction] (fnil into {}) tx-opts))
+
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
 (defn cmd-set-time-zone [{:keys [conn-state] :as conn} ^ZoneId tz]
@@ -1267,12 +1283,7 @@
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
-  ;;TODO assumes that all session characteristics are single entry map due to access-mode returning this.
-  ;;I think how we pass around sessions variables/transaction access-mode etc. wants a bit of a refactor,
-  ;;associng everything onto the portal seems fragile.
-  (doseq [sc session-characteristics
-          :let [[k v] (first sc)]]
-    (swap! conn-state assoc-in [:session k] v))
+  (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
   (cmd-write-msg conn msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
 (defn- permissibility-err
@@ -1353,11 +1364,7 @@
                         :cid cid
                         :arg-types arg-types})
 
-  (let [{:keys [err statement-type] :as stmt} (try
-                                                (interpret-sql query)
-                                                (catch Throwable t
-                                                  (prn (ex-message t))
-                                                  (throw t)))
+  (let [{:keys [err statement-type] :as stmt} (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))})
         unsupported-arg-types (remove supported-param-oids arg-types)
         stmt (when-not err (assoc stmt :arg-types arg-types))
         err (or err
@@ -1467,18 +1474,18 @@
   [{:keys [conn-state] :as conn}
    {:keys [portal-name _limit]}]
   ;;TODO implement limit for queries that return rows
-  (if-some [{:keys [statement-type canned-response access-mode parameter tz value session-characteristics] :as portal}
+  (if-some [{:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}
             (get-in @conn-state [:portals portal-name])]
 
     (case statement-type
       :empty-query (cmd-write-msg conn msg-empty-query)
       :canned-response (cmd-write-canned-response conn canned-response)
-      :set-session-characteristics (cmd-set-session-characteristics conn session-characteristics)
       :set-session-parameter (cmd-set-session-parameter conn parameter value)
-      :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
+      :set-session-characteristics (cmd-set-session-characteristics conn session-characteristics)
+      :set-transaction (cmd-set-transaction conn tx-characteristics)
       :set-time-zone (cmd-set-time-zone conn tz)
       :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
-      :begin (cmd-begin conn access-mode)
+      :begin (cmd-begin conn tx-characteristics)
       :rollback (cmd-rollback conn)
       :commit (cmd-commit conn)
       :query (cmd-exec-query conn portal)

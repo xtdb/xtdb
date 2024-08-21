@@ -1095,6 +1095,38 @@
                :_valid_to nil}]
              (q conn ["SETTING DEFAULT VALID_TIME AS OF NOW SELECT version, _valid_from, _valid_to FROM foo"]))))))
 
+(t/deftest test-setting-import-system-time-3616
+  (with-open [conn (jdbc-conn)]
+    (let [sql #(q conn [%])]
+      (t/testing "as part of START TRANSACTION"
+        (sql "SET TIME ZONE 'Europe/London'")
+        (sql "START TRANSACTION READ WRITE, AT SYSTEM_TIME DATE '2021-08-01'")
+        (sql "INSERT INTO foo (_id, version) VALUES ('foo', 0)")
+        (sql "COMMIT")
+
+        (is (= [{:version 0,
+                 :_system_from #inst "2021-07-31T23:00:00.000000000-00:00"}]
+               (q conn ["SELECT version, _system_from FROM foo"]))))
+
+      (t/testing "with SET TRANSACTION"
+        (sql "SET TRANSACTION READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00'")
+        (sql "BEGIN")
+        (sql "INSERT INTO foo (_id, version) VALUES ('foo', 1)")
+        (sql "COMMIT")
+
+        (is (= [{:version 0,
+                 :_system_from #inst "2021-07-31T23:00:00.000000000-00:00"}
+                {:version 1,
+                 :_system_from #inst "2021-08-02T23:00:00.000000000-00:00"}]
+               (q conn ["SELECT version, _system_from FROM foo FOR ALL VALID_TIME ORDER BY version"]))))
+
+      (t/testing "past system time"
+        (sql "SET TRANSACTION READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-02T00:00:00Z'")
+        (sql "BEGIN")
+        (sql "INSERT INTO foo (_id, version) VALUES ('foo', 2)")
+        (t/is (thrown-with-msg? PSQLException #"specified system-time older than current tx"
+                                (sql "COMMIT")))))))
+
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
 (deftest implicit-transaction-stop-gap-test

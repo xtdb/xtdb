@@ -935,6 +935,20 @@
   PlanError
   (error-string [_] "Aggregates are not allowed in this context"))
 
+(def ^xtdb.antlr.SqlVisitor string-literal-visitor
+  (reify SqlVisitor
+    (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
+
+    (visitSqlStandardString [_ ctx]
+      (let [text (.getText ctx)]
+        (-> text
+            (subs 1 (dec (count text)))
+            (str/replace #"''" "'"))))
+
+    (visitCEscapesString [_ ctx]
+      (let [str (.getText ctx)]
+        (StringUtil/parseCString (subs str 2 (dec (count str))))))))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (-> (.expr ctx) (.accept this)))
@@ -948,17 +962,11 @@
     (or (parse-long (.getText ctx))
         (add-err! env (->CannotParseInteger (.getText ctx)))))
 
-  (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
+  (visitCharacterStringLiteral [_ ctx] (.accept ctx string-literal-visitor))
+  (visitSqlStandardString [_ ctx] (.accept ctx string-literal-visitor))
+  (visitCEscapesString [_ ctx] (.accept ctx string-literal-visitor))
 
-  (visitSqlStandardString [_ ctx]
-    (let [text (.getText ctx)]
-      (-> text
-          (subs 1 (dec (count text)))
-          (str/replace #"''" "'"))))
-
-  (visitCEscapesString [_ ctx]
-    (let [str (.getText ctx)]
-      (StringUtil/parseCString (subs str 2 (dec (count str))))))
+  (visitDateTimeLiteral0 [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
 
   (visitDateLiteral [this ctx] (parse-date-literal (.accept (.characterString ctx) this) env))
   (visitTimeLiteral [this ctx] (parse-time-literal (.accept (.characterString ctx) this) env))

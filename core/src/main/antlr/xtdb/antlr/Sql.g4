@@ -64,22 +64,25 @@ settingDefaultTimePeriod : 'SETTING'
 defaultValidTimePeriod : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification ;
 defaultSystemTimePeriod : 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification ;
 
-sessionCharacteristic : 'TRANSACTION' transactionMode (',' transactionMode)* ;
-
 //// §5 Lexical Elements
 
 /// §5.3 Literals
 
 intervalLiteral : 'INTERVAL' (PLUS | MINUS)? characterString intervalQualifier? ;
 
+dateTimeLiteral
+    : 'DATE' characterString #DateLiteral
+    | 'TIMESTAMP' withOrWithoutTimeZone? characterString #TimestampLiteral
+    ;
+
+
 literal
     : ('+' | '-')? UNSIGNED_FLOAT #FloatLiteral
     | ('+' | '-')? UNSIGNED_INTEGER #IntegerLiteral
     | characterString #CharacterStringLiteral
     | BINARY_STRING #BinaryStringLiteral
-    | 'DATE' characterString #DateLiteral
+    | dateTimeLiteral #DateTimeLiteral0
     | 'TIME' characterString #TimeLiteral
-    | 'TIMESTAMP' withOrWithoutTimeZone? characterString #TimestampLiteral
     | intervalLiteral #IntervalLiteral0
     | 'DURATION' characterString #DurationLiteral
     | 'UUID' characterString #UUIDLiteral
@@ -785,11 +788,24 @@ updateSource : expr ;
 
 /// §17.3 <transaction characteristics>
 
+sessionCharacteristic
+    : 'TRANSACTION' sessionTxMode (',' sessionTxMode)* # SessionTxCharacteristics
+    ;
+
+sessionTxMode
+    : 'ISOLATION' 'LEVEL' levelOfIsolation  # SessionIsolationLevel
+    | 'READ' 'ONLY' # ReadOnlySession
+    | 'READ' 'WRITE' # ReadWriteSession
+    ;
+
 transactionCharacteristics : transactionMode (',' transactionMode)* ;
+
 transactionMode
     : 'ISOLATION' 'LEVEL' levelOfIsolation  # IsolationLevel
     | 'READ' 'ONLY' # ReadOnlyTransaction
-    | 'READ' 'WRITE' # ReadWriteTransaction ;
+    | 'READ' 'WRITE' # ReadWriteTransaction
+    | 'AT' 'SYSTEM_TIME' dateTimeLiteral #TransactionSystemTime
+    ;
 
 levelOfIsolation
     : 'READ' 'UNCOMMITTED' # ReadUncommittedIsolation
