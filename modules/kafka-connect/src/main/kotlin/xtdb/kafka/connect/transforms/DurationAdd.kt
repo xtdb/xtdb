@@ -21,7 +21,7 @@ private const val TIMESTAMP_FIELD = "timestamp.field"
 private const val DURATION_FIELD = "duration.field"
 private const val DURATION_UNIT = "duration.unit"
 private const val OUTPUT_FIELD = "output.field"
-private const val PURPOSE = "to add the output field to."
+private const val PURPOSE = "add the output field"
 
 @Suppress("unused")
 class DurationAdd<R : ConnectRecord<R>> : Transformation<R> {
