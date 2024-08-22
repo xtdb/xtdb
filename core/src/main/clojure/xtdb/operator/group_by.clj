@@ -85,7 +85,7 @@
     (.close group-mapping)
     (util/try-close rel-map)))
 
-(defn- ->group-mapper [^BufferAllocator allocator, group-fields]
+(defn ->group-mapper [^BufferAllocator allocator, group-fields]
   (let [gm-vec (IntVector. "group-mapping" allocator)]
     (if-let [group-col-names (not-empty (set (keys group-fields)))]
       (GroupMapper. group-col-names

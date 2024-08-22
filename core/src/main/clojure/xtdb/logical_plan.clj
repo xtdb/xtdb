@@ -265,6 +265,11 @@
     [:arrow _path]
     []
 
+    [:window specs relation]
+    (concat
+     (->> specs :projections (map ->projected-column))
+     (relation-columns relation))
+
     (throw (err/illegal-arg ::cannot-calculate-relation-cols
                             {::err/message (str "cannot calculate columns for: " (pr-str relation-in))
                              :relation relation-in}))))
@@ -1263,4 +1268,3 @@
                             {::err/message (s/explain-str ::logical-plan plan)
                              :plan plan
                              :explain-data (s/explain-data ::logical-plan plan)}))))
-

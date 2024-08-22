@@ -19,19 +19,21 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader ArrowFileWriter)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader RowCopier VectorPosition VectorReader)
+           (xtdb.arrow Relation Relation$Loader RowCopier VectorReader)
            xtdb.ICursor
            (xtdb.vector IVectorReader RelationReader RelationWriter)))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
 
+(s/def ::order-specs (s/coll-of (-> (s/cat :column ::lp/column
+                                           :spec-opts (s/? (s/keys :opt-un [::direction ::null-ordering])))
+                                    (s/nonconforming))
+                                :kind vector?))
+
 (defmethod lp/ra-expr :order-by [_]
   (s/cat :op '#{:τ :tau :order-by order-by}
-         :order-specs (s/coll-of (-> (s/cat :column ::lp/column
-                                            :spec-opts (s/? (s/keys :opt-un [::direction ::null-ordering])))
-                                     (s/nonconforming))
-                                 :kind vector?)
+         :order-specs ::order-specs
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -52,7 +54,7 @@
       (doto (ArrowFileWriter. root nil (Channels/newChannel os))
         (.start) (.writeBatch) (.end)))))
 
-(defn- sorted-idxs ^ints [^RelationReader read-rel, order-specs]
+(defn sorted-idxs ^ints [^RelationReader read-rel, order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
@@ -110,7 +112,7 @@
           nil
           order-specs))
 
-(defn- rename-fields [fields]
+(defn rename-fields [fields]
   (vec (for [[col-name field] fields]
          (types/field-with-name field (str col-name)))))
 
@@ -196,7 +198,7 @@
                                (k-way-merge allocator files order-specs fields tmp-dir batch-idx file-idx)
                                (finally
                                  #_(run! io/delete-file files)))]
-               
+
                (recur (drop k-way-constant batches)
                       (conj new-batches new-batch)
                       (inc file-idx)))

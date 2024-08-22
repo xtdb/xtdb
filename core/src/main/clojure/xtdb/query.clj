@@ -16,6 +16,7 @@
             xtdb.operator.order-by
             xtdb.operator.project
             xtdb.operator.rename
+            xtdb.operator.window
             [xtdb.operator.scan :as scan]
             xtdb.operator.select
             xtdb.operator.set
