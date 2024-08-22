@@ -21,6 +21,7 @@ interface ILiveIndexWatermark : AutoCloseable {
 class Watermark(
     @JvmField val txBasis: TransactionKey?,
     @JvmField val liveIndex: ILiveIndexWatermark?,
+    @JvmField val schema: Map<String, Any>
 ) : AutoCloseable {
     private val refCount = AtomicInteger(1)
 

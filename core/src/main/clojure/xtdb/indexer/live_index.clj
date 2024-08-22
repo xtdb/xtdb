@@ -1,5 +1,6 @@
 (ns xtdb.indexer.live-index
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.set :as set]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
             [xtdb.compactor :as c]
@@ -238,6 +239,15 @@
       AutoCloseable
       (close [_] (util/close wms)))))
 
+(defn ->schema [^ILiveIndexWatermark live-index-wm ^IMetadataManager metadata-mgr]
+  (merge-with set/union
+              (update-vals (.allColumnFields metadata-mgr)
+                           (comp set keys))
+              (update-vals (some-> live-index-wm
+                                   (.allColumnFields))
+                           (comp set keys))))
+
+
 (deftype LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr, compactor
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
@@ -280,7 +290,11 @@
               (set! (.-latest-completed-tx this-idx) tx-key)
 
               (let [^Watermark old-wm (.shared-wm this-idx)
-                    ^Watermark shared-wm (Watermark. (.latestCompletedTx this-idx) (open-live-idx-wm tables))]
+                    ^Watermark shared-wm (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
+                                           (Watermark.
+                                            (.latestCompletedTx this-idx)
+                                            live-index-wm
+                                            (->schema live-index-wm metadata-mgr)))]
                 (set! (.shared-wm this-idx) shared-wm)
                 (some-> old-wm .close))
 
@@ -357,7 +371,12 @@
 
           (util/close tables)
           (.clear tables)
-          (set! (.shared-wm this) (Watermark. latest-completed-tx (open-live-idx-wm tables)))
+          (set! (.shared-wm this)
+                (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
+                  (Watermark.
+                   latest-completed-tx
+                   live-index-wm
+                   (->schema live-index-wm metadata-mgr))))
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
@@ -394,7 +413,7 @@
                      latest-completed-tx latest-completed-tx
                      tables
 
-                     (Watermark. nil (open-live-idx-wm tables))
+                     (Watermark. nil (open-live-idx-wm tables) (->schema nil metadata-mgr))
                      (StampedLock.)
                      (RefCounter.)
 

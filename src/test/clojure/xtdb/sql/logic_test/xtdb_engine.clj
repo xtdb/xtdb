@@ -38,8 +38,7 @@
   node)
 
 (defn- node->table-info [node]
-  (scan/tables-with-cols (util/component node :xtdb/indexer)
-                         (util/component node ::scan/scan-emitter)))
+  (scan/tables-with-cols (util/component node :xtdb/indexer)))
 
 (defn- execute-sql-query [node sql-statement variables {:keys [direct-sql] :as opts}]
   (let [!cache (atom {})
