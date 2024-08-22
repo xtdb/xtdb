@@ -39,7 +39,7 @@ class DurationAdd<R : ConnectRecord<R>> : Transformation<R> {
             )
 
             define(
-                DURATION_UNIT, Type.STRING, "S", MEDIUM,
+                DURATION_UNIT, Type.STRING, "SECONDS", MEDIUM,
                 "The unit of the duration (from Java ChronoUnit). (Defaults to seconds)"
             )
 
