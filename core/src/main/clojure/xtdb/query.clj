@@ -200,7 +200,7 @@
                      (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
                                                           (.scanFields scan-emitter wm
                                                                        (mapcat #(map (partial vector (key %)) (val %))
-                                                                               (scan/tables-with-cols wm-src scan-emitter))))]
+                                                                               (scan/tables-with-cols wm-src))))]
 
                        ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
                        ;;especially given our "per path schema" principal.
@@ -253,9 +253,9 @@
     (reify
       IQuerySource
       (prepareRaQuery [_ query wm-src query-opts]
-        (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src (:scan-emitter deps)))))
+        (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src))))
       (planQuery [_ query wm-src query-opts]
-        (let [table-info (scan/tables-with-cols wm-src (:scan-emitter deps))
+        (let [table-info (scan/tables-with-cols wm-src)
               plan-query-opts
               (-> query-opts
                   (select-keys

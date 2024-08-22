@@ -57,8 +57,6 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IScanEmitter
-  (tableColNames [^xtdb.watermark.Watermark wm, ^String table-name])
-  (allTableColNames [^xtdb.watermark.Watermark wm])
   (scanFields [^xtdb.watermark.Watermark wm, scan-cols])
   (emitScan [scan-expr scan-fields param-fields]))
 
@@ -111,9 +109,9 @@
 
       bounds)))
 
-(defn tables-with-cols [^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
+(defn tables-with-cols [^IWatermarkSource wm-src]
   (with-open [^Watermark wm (.openWatermark wm-src)]
-    (.allTableColNames scan-emitter wm)))
+    (.schema wm)))
 
 (defn temporal-column? [col-name]
   (contains? #{"xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to"}
@@ -377,21 +375,6 @@
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
   (reify IScanEmitter
-    (tableColNames [_ wm table-name]
-      (into #{} cat [(keys (.columnFields metadata-mgr table-name))
-                     (some-> (.liveIndex wm)
-                             (.liveTable table-name)
-                             (.columnFields)
-                             keys)]))
-
-    (allTableColNames [_ wm]
-      (merge-with set/union
-                  (update-vals (.allColumnFields metadata-mgr)
-                               (comp set keys))
-                  (update-vals (some-> (.liveIndex wm)
-                                       (.allColumnFields))
-                               (comp set keys))))
-
     (scanFields [_ wm scan-cols]
       (letfn [(->field [[table col-name]]
                 (let [table (str table)

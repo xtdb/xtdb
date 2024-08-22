@@ -7,6 +7,7 @@
             [xtdb.error :as err]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
+            [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
             [xtdb.operator.scan :as scan]
             [xtdb.query :as q]
@@ -40,7 +41,7 @@
            (xtdb.api.tx TxOp TxOp$XtqlOp)
            xtdb.arrow.RowCopier
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
-           (xtdb.operator.scan IScanEmitter)
+           xtdb.metadata.IMetadataManager
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
            (xtdb.vector IVectorReader RelationReader)
@@ -432,7 +433,7 @@
                                                 (.withName col (str "?_" idx))))))))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
-                                              ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src, ^IScanEmitter scan-emitter
+                                              ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
                                               tx-opts]
   (let [sql-leg (.legReader tx-ops-rdr "sql")
         query-rdr (.structKeyReader sql-leg "query")
@@ -443,8 +444,7 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)
-              tables-with-cols (scan/tables-with-cols wm-src scan-emitter)
-              compiled-query (sql/compile-query query-str {:table-info tables-with-cols})
+              compiled-query (sql/compile-query query-str {:table-info (scan/tables-with-cols wm-src)})
               param-count (:param-count (meta compiled-query))]
           ;; TODO handle error
           (zmatch (r/vector-zip compiled-query)
@@ -487,7 +487,7 @@
                           (.withName col (str "?" (.getName col)))))))))
 
 (defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
-                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src, ^IScanEmitter scan-emitter
+                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
                                                tx-opts]
   (let [xtql-leg (.legReader tx-ops-rdr "xtql")
         op-rdr (.structKeyReader xtql-leg "op")
@@ -497,12 +497,11 @@
         erase-idxer (->erase-rel-indexer live-idx-tx)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [xtql-op (.form ^ClojureForm (.getObject op-rdr tx-op-idx))
-              tables-with-cols (scan/tables-with-cols wm-src scan-emitter)]
+        (let [xtql-op (.form ^ClojureForm (.getObject op-rdr tx-op-idx))]
           (when-not (instance? TxOp$XtqlOp xtql-op)
             (throw (UnsupportedOperationException. "unknown XTQL DML op")))
 
-          (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info tables-with-cols))
+          (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info (scan/tables-with-cols wm-src)))
             [:insert query-opts inner-query]
             (foreach-arg-row allocator args-rdr tx-op-idx
                              (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
@@ -566,7 +565,7 @@
                (.endStruct doc-writer)))))
 
 (deftype Indexer [^BufferAllocator allocator
-                  ^IScanEmitter scan-emitter
+                  ^IMetadataManager metadata-mgr
                   ^IQuerySource q-src
                   ^ILiveIndex live-idx
 
@@ -600,7 +599,9 @@
 
                   wm-src (reify IWatermarkSource
                            (openWatermark [_]
-                             (Watermark. nil (.openWatermark live-idx-tx))))
+                             (util/with-close-on-catch [live-index-wm (.openWatermark live-idx-tx)]
+                               (Watermark. nil live-index-wm
+                                           (li/->schema live-index-wm metadata-mgr)))))
 
                   tx-opts {:basis {:at-tx tx-key, :current-time system-time}
                            :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
@@ -613,8 +614,8 @@
                               !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time))
                               !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr))
                               !call-idxer (delay (->call-indexer allocator q-src wm-src tx-ops-rdr tx-opts))
-                              !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src scan-emitter tx-opts))
-                              !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src scan-emitter tx-opts))]
+                              !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
+                              !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
                           (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
                             (when-let [more-tx-ops
                                        (.recordCallable tx-timer
@@ -689,15 +690,15 @@
 
 (defmethod ig/prep-key :xtdb/indexer [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
+          :metadata-mgr (ig/ref ::meta/metadata-manager)
           :live-index (ig/ref :xtdb.indexer/live-index)
           :q-src (ig/ref ::q/query-source)
           :metrics-registry (ig/ref :xtdb.metrics/registry)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator scan-emitter, q-src, live-index metrics-registry]}]
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator metadata-mgr, q-src, live-index metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
-    (->Indexer allocator scan-emitter q-src live-index
+    (->Indexer allocator metadata-mgr q-src live-index
 
                nil ;; indexer-error
 

@@ -619,3 +619,15 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                    :valid-from #xt.time/zoned-date-time "2023-03-26T01:00Z[UTC]",
                    :valid-to #xt.time/zoned-date-time "2023-03-26T01:05Z[UTC]"}]
              (xt/q node "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _valid_from")))))
+
+(t/deftest test-wm-schema-is-updated-within-a-tx
+  (with-open [node (xtn/start-node)]
+    (xt/submit-tx node [[:sql "INSERT INTO t1(_id, foo) VALUES(1, 100)"]
+                        [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 2, 200, 2000)"]
+                        [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 3, x.foo, x.bar FROM (SELECT * FROM t1 WHERE bar = 2000) AS x)"]])
+
+    (t/is (=
+           [{:xt/id 2, :bar 2000, :foo 200}
+            {:xt/id 1, :foo 100}
+            {:xt/id 3, :bar 2000, :foo 200}]
+           (xt/q node "SELECT * FROM t1")))))
