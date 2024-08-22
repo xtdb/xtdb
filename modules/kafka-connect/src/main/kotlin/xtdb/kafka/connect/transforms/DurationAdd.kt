@@ -10,6 +10,7 @@ import org.apache.kafka.connect.errors.DataException
 import org.apache.kafka.connect.transforms.Transformation
 import org.apache.kafka.connect.transforms.util.Requirements.requireMap
 import org.apache.kafka.connect.transforms.util.SimpleConfig
+import java.util.Date
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -84,6 +85,7 @@ class DurationAdd<R : ConnectRecord<R>> : Transformation<R> {
         val value = requireMap(record.value(), PURPOSE).toMutableMap()
 
         val ts = when (val tsValue = value[timestampField]) {
+            is Date -> tsValue.toInstant()
             is Instant -> tsValue
             is String -> Instant.parse(tsValue)
             else -> throw DataException("""invalid timestamp: "$tsValue"""")
