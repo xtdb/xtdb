@@ -16,6 +16,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.Vector.Companion.fromField
 import java.nio.ByteBuffer
+import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
 import java.util.*
@@ -64,38 +65,54 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         private val recordBlocks = mutableListOf<ArrowBlock>()
 
         init {
-            ch.write(MAGIC)
-            ch.align()
-            MessageSerializer.serialize(ch, schema)
+            try {
+                ch.write(MAGIC)
+                ch.align()
+                MessageSerializer.serialize(ch, schema)
+            } catch (_: ClosedByInterruptException) {
+                throw InterruptedException()
+            }
         }
 
         fun writeBatch() {
-            val nodes = mutableListOf<ArrowFieldNode>()
-            val buffers = mutableListOf<ArrowBuf>()
+            try {
+                val nodes = mutableListOf<ArrowFieldNode>()
+                val buffers = mutableListOf<ArrowBuf>()
 
-            vectors.forEach { it.unloadBatch(nodes, buffers) }
+                vectors.forEach { it.unloadBatch(nodes, buffers) }
 
-            ArrowRecordBatch(rowCount, nodes, buffers).use { recordBatch ->
-                MessageSerializer.serialize(ch, recordBatch)
-                    .also { recordBlocks.add(it) }
+                ArrowRecordBatch(rowCount, nodes, buffers).use { recordBatch ->
+                    MessageSerializer.serialize(ch, recordBatch)
+                        .also { recordBlocks.add(it) }
+                }
+            } catch (_: ClosedByInterruptException) {
+                throw InterruptedException()
             }
         }
 
         fun endStream() {
-            ch.writeIntLittleEndian(MessageSerializer.IPC_CONTINUATION_TOKEN)
-            ch.writeIntLittleEndian(0)
+            try {
+                ch.writeIntLittleEndian(MessageSerializer.IPC_CONTINUATION_TOKEN)
+                ch.writeIntLittleEndian(0)
+            } catch (_: ClosedByInterruptException) {
+                throw InterruptedException()
+            }
         }
 
         fun endFile() {
-            endStream()
+            try {
+                endStream()
 
-            val footerStart = ch.currentPosition
-            ch.write(ArrowFooter(schema, emptyList(), recordBlocks), false)
+                val footerStart = ch.currentPosition
+                ch.write(ArrowFooter(schema, emptyList(), recordBlocks), false)
 
-            val footerLength = ch.currentPosition - footerStart
-            check(footerLength > 0) { "Footer length must be positive" }
-            ch.writeIntLittleEndian(footerLength.toInt())
-            ch.write(MAGIC)
+                val footerLength = ch.currentPosition - footerStart
+                check(footerLength > 0) { "Footer length must be positive" }
+                ch.writeIntLittleEndian(footerLength.toInt())
+                ch.write(MAGIC)
+            } catch (_: ClosedByInterruptException) {
+                throw InterruptedException()
+            }
         }
 
         override fun close() {
@@ -170,7 +187,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     ) : Loader() {
         override val schema: Schema = footer.schema
 
-        inner class Batch(private val idx: Int, private val block: ArrowBlock): Loader.Batch {
+        inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
 
             override fun load(rel: Relation) {
                 val prefixSize =
