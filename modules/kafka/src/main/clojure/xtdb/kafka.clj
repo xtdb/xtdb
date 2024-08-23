@@ -4,9 +4,9 @@
             [xtdb.api :as xt]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util]
-            [xtdb.serde :as serde])
+            [xtdb.util :as util])
   (:import java.io.Closeable
            java.lang.AutoCloseable
            java.nio.file.Path
@@ -18,8 +18,8 @@
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
            [org.apache.kafka.common.errors InterruptException TopicAuthorizationException TopicExistsException UnknownTopicOrPartitionException]
            org.apache.kafka.common.TopicPartition
-           [xtdb.api Xtdb$Config TransactionKey]
-           [xtdb.api.log Kafka Kafka$Factory Log Log$Record Log$Subscriber]))
+           [xtdb.api Xtdb$Config]
+           [xtdb.api.log Kafka Kafka$Factory Log TxLog$Record TxLog$Subscriber]))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -59,10 +59,10 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (Log$Record. (serde/->TxKey (.offset record) (Instant/ofEpochMilli (.timestamp record)))
-               (.value record)))
+  (TxLog$Record. (serde/->TxKey (.offset record) (Instant/ofEpochMilli (.timestamp record)))
+                 (.value record)))
 
-(defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^Log$Subscriber subscriber]
+(defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^TxLog$Subscriber subscriber]
   (doto (.newThread log/subscription-thread-factory
                     (fn []
                       (let [thread (Thread/currentThread)]
@@ -79,7 +79,7 @@
                             (doseq [record (poll-consumer consumer poll-duration)]
                               (when (Thread/interrupted)
                                 (throw (InterruptedException.)))
-                              (.acceptRecord subscriber (->log-record record)))
+                              (.accept subscriber (->log-record record)))
 
                             (when-not (Thread/interrupted)
                               (recur)))
@@ -93,7 +93,7 @@
                      ^TopicPartition tp
                      ^Duration poll-duration]
   Log
-  (appendRecord [_ record]
+  (appendTx [_ record]
     (let [fut (CompletableFuture.)]
       (.send producer (ProducerRecord. (.topic tp) nil record)
              (reify Callback
@@ -104,13 +104,13 @@
                                                  (Instant/ofEpochMilli (.timestamp record-metadata))))))))
       fut))
 
-  (readRecords [_ after-tx-id limit]
+  (readTxs [_ after-tx-id limit]
     (seek-consumer consumer tp after-tx-id)
 
     (->> (poll-consumer consumer poll-duration)
          (into [] (comp (take limit) (map ->log-record)))))
 
-  (subscribe [this after-tx-id subscriber]
+  (subscribeTxs [this after-tx-id subscriber]
     (handle-subscriber this after-tx-id subscriber))
 
   Closeable

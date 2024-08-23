@@ -49,7 +49,7 @@
                                        (.put (byte xt-log/hb-flush-chunk))
                                        (.putLong (or latest-chunk-tx-id -1))
                                        .flip)
-                        ^TransactionKey tx-key @(.appendRecord log record-buf)]
+                        ^TransactionKey tx-key @(.appendTx log record-buf)]
                     (reset! !last-flush-tx-id (.getTxId tx-key))))
                 (catch InterruptedException _)
                 (catch ClosedByInterruptException _)

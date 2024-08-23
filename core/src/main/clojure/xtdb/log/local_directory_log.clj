@@ -16,7 +16,7 @@
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log Log Logs Log$Record Logs$LocalLogFactory)
+           (xtdb.api.log Log Logs TxLog$Record Logs$LocalLogFactory)
            (xtdb.log INotifyingSubscriberHandler)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
@@ -27,7 +27,7 @@
                             ^ExecutorService pool, ^BlockingQueue queue, ^Future append-loop-future
                             ^:volatile-mutable ^FileChannel log-channel]
   Log
-  (readRecords [_ after-offset limit]
+  (readTxs [_ after-offset limit]
     (when-not log-channel
       (let [log-path (.resolve root-path "LOG")]
         (when (util/path-exists log-path)
@@ -55,23 +55,23 @@
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (Log$Record. (serde/->TxKey offset system-time) (ByteBuffer/wrap record))))
+                                  (TxLog$Record. (serde/->TxKey offset system-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
-                     (+ offset header-size (.capacity ^ByteBuffer (.getRecord ^Log$Record record)) footer-size))
+                     (+ offset header-size (.capacity ^ByteBuffer (.getRecord ^TxLog$Record record)) footer-size))
               (if after-offset
                 (subvec acc 1)
                 acc)))))))
 
-  (appendRecord [_ record]
+  (appendTx [_ record]
     (if (.isShutdown pool)
       (throw (IllegalStateException. "writer is closed"))
       (let [f (CompletableFuture.)]
         (.put queue (MapEntry/create f record))
         f)))
 
-  (subscribe [this after-tx-id subscriber]
+  (subscribeTxs [this after-tx-id subscriber]
     (.subscribe subscriber-handler this after-tx-id subscriber))
 
   Closeable
@@ -117,14 +117,14 @@
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (Log$Record. (serde/->TxKey offset system-time) record)))
+                      (.set elements n (MapEntry/create f (TxLog$Record. (serde/->TxKey offset system-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)
                   (throw t)))
               (.flush log-out)
               (.force log-channel true)
-              (doseq [[^CompletableFuture f, ^Log$Record log-record] elements]
+              (doseq [[^CompletableFuture f, ^TxLog$Record log-record] elements]
                 (let [tx-key (.getTxKey log-record)]
                   (.notifyTx subscriber-handler tx-key)
                   (.complete f (.getTxKey log-record))))))
