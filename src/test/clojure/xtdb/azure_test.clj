@@ -11,22 +11,18 @@
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import (com.azure.identity DefaultAzureCredentialBuilder)
-           (com.azure.storage.blob BlobContainerClient)
+  (:import (com.azure.storage.blob BlobContainerClient)
            (com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions)
            (java.io Closeable)
            (java.nio ByteBuffer)
            (java.nio.file Path)
            (java.time Duration)
-           (xtdb.api.log Log)
            (xtdb.api.storage AzureBlobStorage ObjectStore)
            (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
-(def resource-group-name "azure-modules-test")
 (def storage-account "xtdbteststorageaccount")
 (def container "xtdb-test-object-store")
-(def eventhub-namespace "xtdb-test-eventhub")
 (def servicebus-namespace "xtdb-test-storage-account-eventbus")
 (def servicebus-topic-name "xtdb-test-storage-bus-topic")
 (def config-present? (some? (and (System/getenv "AZURE_CLIENT_ID")
@@ -131,46 +127,6 @@
                                                   (.serviceBusNamespaceFQDN "xtdb-test-storage-account-eventbus.servicebus.windows.net")))]
         (os-test/put-edn os (util/->path "alan") :alan)
         (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects ^ObjectStore os)))))))
-
-;; Currently not testing this regularly:
-;; Need to setup the event hub namespace `xtdb-test-eventhub` and configure to run.
-;; Ensure your credentials have eventhub permissions for the eventhub namespace 
-;; As this costs a set price per month, we test it occasionally when changes are made to it
-;; We do not currently have a set of log tests, so we just submit + query a document
-(t/deftest ^:azure test-eventhub-log
-  (util/with-tmp-dirs #{local-disk-cache}
-    (let [event-hub-name (str "xtdb.azure-test-hub." (random-uuid))]
-      (try
-        (t/testing "creating a new eventhub with create-event-hub, sending a message"
-          (with-open [node (xtn/start-node {:log [:azure {:namespace eventhub-namespace
-                                                          :resource-group-name resource-group-name
-                                                          :event-hub-name event-hub-name
-                                                          :create-event-hub? true
-                                                          :max-wait-time "PT1S"
-                                                          :poll-sleep-duration "PT1S"
-                                                          :retention-period-in-days 1}]
-                                            :storage [:local {:path local-disk-cache}]})]
-            (t/testing "EventHubLog successfully created"
-              (let [log (get-in node [:system :xtdb/log])]
-                (t/is (instance? Log log))))
-            
-            (t/is (xt/execute-tx node [[:put-docs :foo {:xt/id "foo"}]]))
-            (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}])))))) 
-        
-        (t/testing "connecting to previously created event-hub"
-          (with-open [node (xtn/start-node {:log [:azure {:namespace eventhub-namespace
-                                                          :event-hub-name event-hub-name
-                                                          :max-wait-time "PT1S"
-                                                          :poll-sleep-duration "PT1S"}]
-                                            :storage [:local {:path local-disk-cache}]})]
-            ;; Allow the log to catch up 
-            (Thread/sleep wait-time-ms)
-            (t/is (= [{:e "foo"}] (xt/q node '(from :foo [{:xt/id e}]))))))
-        
-        (finally
-          ;; Clearup eventhub 
-          (let [credential (.build (DefaultAzureCredentialBuilder.))]
-            (azure/delete-event-hub-if-exists credential resource-group-name eventhub-namespace event-hub-name)))))))
 
 (defn list-filenames [^BlobContainerClient blob-container-client ^Path prefix ^ListBlobsOptions list-opts]
   (->> (.listBlobs blob-container-client list-opts nil)
