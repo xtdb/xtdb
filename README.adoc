@@ -1,6 +1,6 @@
 image::img/xtdb-logo-banner.svg[XTDB Logo]
 
-https://xtdb.com[XTDB] is an open-source immutable database with comprehensive time-travel. XTDB has been built to simplify application development and address complex data compliance requirements. XTDB can be used via SQL and https://docs.xtdb.com/intro/what-is-xtql.html[XTQL].
+https://xtdb.com[XTDB] is an open-source immutable database with comprehensive time-travel. XTDB has been built to simplify application development and address complex data compliance requirements. XTDB can be used via SQL and https://docs.xtdb.com/tutorials/introducing-xtql.html[XTQL].
 
 XTDB 2.x is currently in early access; if you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb/tree/1.x.
 
@@ -9,7 +9,7 @@ Major features:
 * Immutable - while it's optimised for current-time queries, you can audit the full history of your database at any point, with the need for snapshots.
 * 'Bitemporal' - all data is accurately versioned as updates are made ('system' time), but it also allows you to separately record and query when that data is, was, or will become valid in your business domain ('valid' time).
 * Dynamic - you don't need to specify schema up-front before documents (rows with arbitrarily nested data) can be inserted.
-* Speaks both SQL and https://docs.xtdb.com/intro/what-is-xtql.html[XTQL].
+* Speaks both SQL and https://docs.xtdb.com/tutorials/introducing-xtql.html[XTQL].
 +
 XTQL is a data-oriented, composable query language - designed from the ground up to be amenable to both hand-written and generated queries.
 It is heavily inspired by the theoretical bases of both Datalog and the relational algebra.
