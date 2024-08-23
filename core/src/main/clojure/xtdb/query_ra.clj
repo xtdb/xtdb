@@ -1,6 +1,5 @@
 (ns xtdb.query-ra
   (:require [xtdb.indexer :as idx]
-            [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
@@ -10,11 +9,12 @@
             [xtdb.vector.writer :as vw])
   (:import (java.util.function Consumer)
            (xtdb ICursor)
-           (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.vector RelationReader)))
+           xtdb.util.RefCounter
+           (xtdb.vector RelationReader)
+           (xtdb.watermark IWatermarkSource Watermark)))
 
 (defn- <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
@@ -44,7 +44,14 @@
        (let [^PreparedQuery pq (if node
                                  (let [^IQuerySource q-src (util/component node ::q/query-source)]
                                    (.prepareRaQuery q-src query indexer query-opts))
-                                 (q/prepare-ra query))
+                                 (q/prepare-ra
+                                  query
+                                  {:ref-ctr (RefCounter.)
+                                   :wm-src
+                                   (reify IWatermarkSource
+                                     (openWatermark [_]
+                                       (Watermark. nil nil {})))}
+                                  {}))
              bq (.bind pq (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz])
                               (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
