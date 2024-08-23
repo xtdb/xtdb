@@ -17,7 +17,7 @@
            xtdb.api.query.IKeyFn
            xtdb.Types
            [xtdb.vector IVectorReader]
-           (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
+           (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType RegClassType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -112,6 +112,7 @@
 
   TsTzRangeType (<-arrow-type [_] :tstz-range)
   KeywordType (<-arrow-type [_] :keyword)
+  RegClassType (<-arrow-type [_] :regclass)
   UuidType (<-arrow-type [_] :uuid)
   UriType (<-arrow-type [_] :uri)
   TransitType (<-arrow-type [_] :transit))
@@ -137,6 +138,7 @@
 
     :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
+    :regclass RegClassType/INSTANCE
     :uuid UuidType/INSTANCE
     :uri UriType/INSTANCE
     :transit TransitType/INSTANCE
@@ -285,7 +287,7 @@
 
       (derive :tstz-range :any)
 
-      (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any)
+      (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any) (derive :regclass :any)
 
       (derive :list :any) (derive :struct :any) (derive :set :any) (derive :map :any)))
 
@@ -462,6 +464,9 @@
 
 (defmethod col-type->field* :keyword [col-name nullable? _col-type]
   (->field col-name KeywordType/INSTANCE nullable?))
+
+(defmethod col-type->field* :regclass [col-name nullable? _col-type]
+  (->field col-name RegClassType/INSTANCE nullable?))
 
 (defmethod col-type->field* :uuid [col-name nullable? _col-type]
   (->field col-name UuidType/INSTANCE nullable?))
@@ -676,6 +681,7 @@
 
 (defmethod arrow-type->col-type TsTzRangeType [_ _] :tstz-range)
 (defmethod arrow-type->col-type KeywordType [_] :keyword)
+(defmethod arrow-type->col-type RegClassType [_] :regclass)
 (defmethod arrow-type->col-type UriType [_] :uri)
 (defmethod arrow-type->col-type UuidType [_] :uuid)
 (defmethod arrow-type->col-type TransitType [_] :transit)
@@ -964,6 +970,16 @@
                               ba ^bytes (byte-array (.remaining bb))]
                           (.get bb ba)
                           ba))}
+   :regclass {:typname "regclass"
+              :col-type :regclass
+              :oid 2205
+              ;;skipping read impl, unsure if anything can/would send a regclass param
+              :write-text (fn [_env ^IVectorReader rdr idx]
+                            ;;postgres returns the table name rather than a string of the
+                            ;;oid here, however regclass is usually not returned from queries
+                            ;;could reimplement oid -> table name resolution here or in getObject
+                            ;;if the user cannot adjust the query to cast to varchar/text
+                            (utf8 (Integer/toUnsignedString (.getInt rdr idx))))}
    :boolean {:typname "boolean"
              :col-type :bool
              :typlen 1
@@ -1001,6 +1017,7 @@
       :uuid :uuid
       :bool :boolean
       :null :text
+      :regclass :regclass
       [:date :day] :date
       [:timestamp-local :micro] :timestamp}
      col-type

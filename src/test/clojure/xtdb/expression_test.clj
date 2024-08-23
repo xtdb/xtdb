@@ -42,6 +42,7 @@
                     expr (expr/form->expr form input-types)]
                 (with-open [project-col (.project (expr/->expression-projection-spec "c" expr input-types)
                                                   tu/*allocator* in-rel
+                                                  {}
                                                   vw/empty-params)]
                   (tu/<-reader project-col))))]
 
@@ -80,7 +81,7 @@
               (with-open [param-rel (tu/open-params params-map)]
                 (let [input-types {:col-types col-types, :param-types (expr/->param-types (RelationReader/from param-rel))}]
                   (alength (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
-                                    tu/*allocator* in-rel param-rel)))))]
+                                    tu/*allocator* in-rel {} param-rel)))))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) {'a :f64} {})))
@@ -93,7 +94,7 @@
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
            (-> (.select (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
-                        tu/*allocator* (vr/rel-reader [] 1) vw/empty-params)
+                        tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-params)
                (alength)))))
 
 (defn project
@@ -330,7 +331,7 @@
         input-types {:col-types col-types, :param-types {}}
         expr (expr/form->expr form input-types)]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
-                                   tu/*allocator* rel vw/empty-params)]
+                                   tu/*allocator* rel {} vw/empty-params)]
       {:res (tu/<-reader out-ivec)
        :res-type (types/field->col-type (.getField out-ivec))})))
 

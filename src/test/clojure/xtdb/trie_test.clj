@@ -586,7 +586,7 @@
                 (let [^ICursor trie-cursor (scan/->TrieCursor al (.iterator ^Iterable merge-tasks) out-rel
                                                               ["xt$id" "foo"] {}
                                                               (TemporalBounds.)
-                                                              nil
+                                                              {} nil
                                                               (scan/->vsr-cache buffer-pool al)
                                                               buffer-pool)]
 

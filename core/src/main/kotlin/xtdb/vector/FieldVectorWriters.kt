@@ -408,6 +408,13 @@ internal class KeywordVectorWriter(vector: KeywordVector) : ExtensionVectorWrite
     override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
 }
 
+internal class RegClassVectorWriter(vector: RegClassVector) : ExtensionVectorWriter(vector, null) {
+    override fun writeObject0(obj: Any) =
+        if (obj !is RegClass) throw InvalidWriteObjectException(field, obj)
+        else super.writeObject0(obj.oid)
+
+    override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
+}
 internal class UuidVectorWriter(vector: UuidVector) : ExtensionVectorWriter(vector, null) {
     override fun writeObject0(obj: Any) =
         if (obj !is UUID) throw InvalidWriteObjectException(field, obj)
@@ -550,6 +557,7 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
 
     override fun visit(vec: ExtensionTypeVector<*>, notify: FieldChangeListener?): IVectorWriter = when (vec) {
         is KeywordVector -> KeywordVectorWriter(vec)
+        is RegClassVector -> RegClassVectorWriter(vec)
         is UuidVector -> UuidVectorWriter(vec)
         is UriVector -> UriVectorWriter(vec)
         is TransitVector -> TransitVectorWriter(vec)

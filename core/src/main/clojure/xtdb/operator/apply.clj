@@ -240,7 +240,7 @@
                                    (tryAdvance [_ c]
                                      (.tryAdvance dep-cursor (reify Consumer
                                                                (accept [_ in-rel]
-                                                                 (with-open [match-vec (.project projection-spec allocator in-rel params)]
+                                                                 (with-open [match-vec (.project projection-spec allocator in-rel {} params)]
                                                                    (.accept c (vr/rel-reader [match-vec])))))))
 
                                    (close [_] (.close dep-cursor))))))

@@ -7,7 +7,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (clojure.lang Keyword MapEntry)
+  (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
@@ -17,10 +17,10 @@
            (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow ListValueReader RelationReader ValueReader VectorPosition VectorReader)
+           xtdb.arrow.ValueBox
            (xtdb.operator ProjectionSpec SelectionSpec)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.util StringUtil)
-           xtdb.arrow.ValueBox))
+           (xtdb.util StringUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -170,6 +170,7 @@
 
 (def idx-sym (gensym 'idx))
 (def rel-sym (gensym 'rel))
+(def schema-sym (gensym 'schema))
 (def params-sym (gensym 'params))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -257,6 +258,9 @@
   (case date-unit
     :day `(.writeInt ~@args)
     :milli `(.writeLong ~@args)))
+
+(defmethod write-value-code :regclass [_ & args]
+  `(.writeInt ~@args))
 
 (doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
                  :list ListValueReader, :set ListValueReader, :struct Map}]
@@ -1500,6 +1504,7 @@
           (assert return-type (pr-str expr))
           {:!projection-fn (delay
                              (-> `(fn [~(-> rel-sym (with-tag RelationReader))
+                                       ~(-> schema-sym (with-tag IPersistentMap))
                                        ~(-> params-sym (with-tag RelationReader))
                                        ~(-> out-vec-sym (with-tag ValueVector))]
                                     (let [~@(batch-bindings emitted-expr)
@@ -1535,7 +1540,7 @@
 
       (getColumnType [_] widest-out-type)
 
-      (project [_ allocator in-rel params]
+      (project [_ allocator in-rel schema params]
         (let [in-rel (RelationReader/from in-rel)
               params (RelationReader/from params)
               var->col-type (->> (seq in-rel)
@@ -1551,15 +1556,15 @@
             (doto out-vec
               (.setInitialCapacity row-count)
               (.allocateNew))
-            (@!projection-fn in-rel params out-vec)
+            (@!projection-fn in-rel schema params out-vec)
             (.setValueCount out-vec row-count)
             (vr/vec->reader out-vec)))))))
 
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
   (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]
     (reify SelectionSpec
-      (select [_ al in-rel params]
-        (with-open [selection (.project projector al in-rel params)]
+      (select [_ al in-rel schema params]
+        (with-open [selection (.project projector al in-rel schema params)]
           (let [res (IntStream/builder)]
             (dotimes [idx (.valueCount selection)]
               (when (.getBoolean selection idx)

@@ -186,7 +186,7 @@
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
-        "attrelid" (.writeInt col-wtr (hash table))
+        "attrelid" (.writeInt col-wtr (Math/abs ^Integer (hash table)))
         "attname" (.writeObject col-wtr (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name))
         "atttypid" (.writeInt col-wtr column-oid)
         "attlen" (.writeInt col-wtr (or typlen -1))
@@ -242,17 +242,25 @@
     (util/close vsr)
     (some-> out-rel .close)))
 
-(defn ->cursor [allocator derived-table-schema table col-names col-preds params ^IMetadataManager metadata-mgr ^Watermark wm]
+(defn namespace-public-tables [tables]
+  (update-keys
+   tables
+   (fn [table]
+     (let [parts (str/split table #"\$")]
+       (if (= 1 (count parts))
+         (symbol "public" (first parts))
+         (symbol (str/join "." (butlast parts)) (last parts)))))))
+
+(defn ->cursor [allocator derived-table-schema table col-names col-preds schema params ^IMetadataManager metadata-mgr ^Watermark wm]
   (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (or (vals (select-keys derived-table-schema col-names)) [])) allocator)]
+    ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
+    ;;should be types/merge-fields as per scan-fields
     (let [schema-info (-> (merge-with merge
                                       (.allColumnFields metadata-mgr)
                                       (some-> (.liveIndex wm)
                                               (.allColumnFields)))
-                          (update-keys (fn [table]
-                                         (let [parts (str/split table #"\$")]
-                                           (if (= 1 (count parts))
-                                             (symbol "public" (first parts))
-                                             (symbol (str/join "." (butlast parts)) (last parts)))))))
+                          (namespace-public-tables))
+
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (case table
                                      information_schema/tables (tables out-rel-wtr schema-info)
@@ -270,7 +278,7 @@
 
       ;;TODO reuse relation selector code from tri cursor
       (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                          (.select rel (.select col-pred allocator rel params)))
+                                          (.select rel (.select col-pred allocator rel schema params)))
                                         (-> out-rel
                                             (vr/with-absent-cols allocator col-names))
                                         (vals col-preds)) root))))

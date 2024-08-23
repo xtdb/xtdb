@@ -6,6 +6,7 @@
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             xtdb.expression.temporal
+            xtdb.expression.pg
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.operator.apply
@@ -220,7 +221,8 @@
                                        :basis (-> basis
                                                   (update :at-tx (fnil identity (some-> wm .txBasis)))
                                                   (assoc :current-time current-time))
-                                       :params params})
+                                       :params params
+                                       :schema (scan/tables-with-cols wm-src)})
                             (wrap-cursor wm allocator clock ref-ctr fields)))
 
                       (catch Throwable t
