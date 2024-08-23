@@ -287,7 +287,7 @@
             (finish [_]
               (with-open [sum (.finish sum-agg)
                           count (.finish count-agg)]
-                (.project projecter al (vr/rel-reader [sum count]) vw/empty-params)))
+                (.project projecter al (vr/rel-reader [sum count]) {} vw/empty-params)))
 
             Closeable
             (close [_]
@@ -334,7 +334,7 @@
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [in-vec (.readerForName in-rel (str from-name))]
-                (with-open [x2 (.project x2-projecter al (vr/rel-reader [in-vec]) vw/empty-params)]
+                (with-open [x2 (.project x2-projecter al (vr/rel-reader [in-vec]) {} vw/empty-params)]
                   (.aggregate sumx-agg in-rel group-mapping)
                   (.aggregate sumx2-agg (vr/rel-reader [x2]) group-mapping)
                   (.aggregate countx-agg in-rel group-mapping))))
@@ -345,6 +345,7 @@
                           countx (.finish countx-agg)]
                 (.project finish-projecter al
                           (vr/rel-reader [sumx sumx2 countx])
+                          {}
                           vw/empty-params)))
 
             Closeable
@@ -375,7 +376,7 @@
 
             (finish [_]
               (with-open [variance (.finish variance-agg)]
-                (.project finish-projecter al (vr/rel-reader [variance]) vw/empty-params)))
+                (.project finish-projecter al (vr/rel-reader [variance]) {} vw/empty-params)))
 
             Closeable
             (close [_]

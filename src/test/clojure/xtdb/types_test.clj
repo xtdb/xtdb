@@ -13,9 +13,9 @@
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType)
-           (xtdb.types IntervalDayTime IntervalYearMonth)
+           (xtdb.types IntervalDayTime IntervalYearMonth RegClass)
            (xtdb.vector IVectorWriter)
-           (xtdb.vector.extensions KeywordVector TransitVector UriVector UuidVector)))
+           (xtdb.vector.extensions KeywordVector TransitVector UriVector UuidVector RegClassVector)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -354,3 +354,9 @@
                   l-rdr (.legReader rdr (.getLeg rdr 0))]
 
         (t/is (= val (read-binary {} (write-binary {} l-rdr 0))))))))
+
+(t/deftest test-regclass-rountrip
+  (let [vs [(RegClass. 101)]]
+    (t/is (= {:vs vs
+              :vec-types [RegClassVector]}
+             (test-round-trip vs)))))

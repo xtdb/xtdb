@@ -84,6 +84,7 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
         is TransitType -> "transit"
         is UuidType -> "uuid"
         is UriType -> "uri"
+        is RegClassType -> "regclass"
         is SetType -> "set"
         is TsTzRangeType -> "tstz-range"
         else -> throw UnsupportedOperationException("not supported for $type")
@@ -123,6 +124,7 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     is ByteBuffer -> MinorType.VARBINARY.type
     is UUID -> UuidType
     is URI -> UriType
+    is RegClass -> RegClassType
     is Keyword -> KeywordType
     is ClojureForm -> TransitType
     is IllegalArgumentException -> TransitType

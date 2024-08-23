@@ -134,7 +134,7 @@
               :attname "col1",
               :attisdropped false}
              {:atttypmod -1,
-              :attrelid -598393539,
+              :attrelid 598393539,
               :attidentity "",
               :attgenerated "",
               :attnotnull false,
@@ -144,7 +144,7 @@
               :attname "error",
               :attisdropped false}
              {:atttypmod -1,
-              :attrelid -598393539,
+              :attrelid 598393539,
               :attidentity "",
               :attgenerated "",
               :attnotnull false,
@@ -154,7 +154,7 @@
               :attname "_id",
               :attisdropped false}
              {:atttypmod -1,
-              :attrelid -598393539,
+              :attrelid 598393539,
               :attidentity "",
               :attgenerated "",
               :attnotnull false,
@@ -164,7 +164,7 @@
               :attname "tx_time",
               :attisdropped false}
              {:atttypmod -1,
-              :attrelid -598393539,
+              :attrelid 598393539,
               :attidentity "",
               :attgenerated "",
               :attnotnull false,
@@ -320,6 +320,14 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "timestamptz",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 2205,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "regclass",
               :typnamespace -2125819141,
               :typbasetype 0}}
            (set (tu/query-ra '[:scan

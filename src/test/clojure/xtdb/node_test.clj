@@ -14,7 +14,8 @@
            [xtdb.api.tx TxOps]
            [xtdb.node.impl IXtdbInternal]
            [xtdb.query IQuerySource]
-           [java.time ZonedDateTime]))
+           [java.time ZonedDateTime]
+           xtdb.types.RegClass))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -863,3 +864,31 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
            (t/is (= [[{:v 44}]]
                     (tu/<-cursor cursor))))))))
+
+(deftest test-schema-ee-entry-points
+  ;;test is using regclass to verify that expected EE entrypoints have access
+  ;;to the new schema variable
+  (xt/submit-tx tu/*node* [[:put-docs :bar {:xt/id 1, :col 904292726}]
+                           [:put-docs :bar {:xt/id 2, :col 1111}]])
+
+
+  (t/is (= [{:v (RegClass. 904292726)}]
+           (tu/query-ra
+            '[:project [{v (cast "bar" :regclass)}]
+              [:table [{}]]]
+            {:node tu/*node*}))
+        "project")
+
+  (t/is (= [{:v 904292726}]
+           (tu/query-ra
+            '[:select (= (cast "bar" :regclass) v)
+              [:table [{v 904292726} {v 111}]]]
+            {:node tu/*node*}))
+        "select")
+
+  (t/is (= [{:col 904292726}]
+           (tu/query-ra
+            '[:scan {:table bar}
+              [{col (= col (cast "bar" :regclass))}]]
+            {:node tu/*node*}))
+        "scan pred"))
