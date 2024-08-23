@@ -10,6 +10,8 @@ import org.apache.kafka.connect.errors.DataException
 import org.apache.kafka.connect.transforms.Transformation
 import org.apache.kafka.connect.transforms.util.Requirements.requireMap
 import org.apache.kafka.connect.transforms.util.SimpleConfig
+import org.apache.kafka.connect.transforms.field.SingleFieldPath;
+import org.apache.kafka.connect.transforms.field.FieldSyntaxVersion;
 import java.util.Date
 import java.time.Duration
 import java.time.Instant
@@ -27,38 +29,48 @@ private const val PURPOSE = "add the output field"
 class DurationAdd<R : ConnectRecord<R>> : Transformation<R> {
 
     companion object {
-        private val CONFIG_DEF = ConfigDef().apply {
-            define(
-                TIMESTAMP_FIELD, Type.STRING, HIGH,
-                "The field name to expect the timestamp in."
-            )
+        private val CONFIG_DEF = FieldSyntaxVersion.appendConfigTo(
+            ConfigDef().apply {
+                define(
+                    TIMESTAMP_FIELD, Type.STRING, HIGH,
+                    "The field name to expect the timestamp in."
+                )
 
-            define(
-                DURATION_FIELD, Type.STRING, HIGH,
-                "The field name to expect the duration in."
-            )
+                define(
+                    DURATION_FIELD, Type.STRING, HIGH,
+                    "The field name to expect the duration in."
+                )
 
-            define(
-                DURATION_UNIT, Type.STRING, "SECONDS", MEDIUM,
-                "The unit of the duration (from Java ChronoUnit). (Defaults to seconds)"
-            )
+                define(
+                    DURATION_UNIT, Type.STRING, "SECONDS", MEDIUM,
+                    "The unit of the duration (from Java ChronoUnit). (Defaults to seconds)"
+                )
 
-            define(
-                OUTPUT_FIELD, Type.STRING, HIGH,
-                "The field name to output the result to."
-            )
-        }
+                define(
+                    OUTPUT_FIELD, Type.STRING, HIGH,
+                    "The field name to output the result to. Limited to V1 field syntax (currently)."
+                )
+            }
+        )
     }
 
-    private var timestampField: String? = null
-    private var durationField: String? = null
+    private var timestampField: SingleFieldPath? = null
+    private var durationField: SingleFieldPath? = null
     private var durationUnit: TemporalUnit = ChronoUnit.SECONDS
     private var outputField: String? = null
 
     override fun configure(configs: MutableMap<String, *>) {
+
         SimpleConfig(CONFIG_DEF, configs).run {
-            timestampField = getString(TIMESTAMP_FIELD) ?: throw ConfigException(TIMESTAMP_FIELD, null)
-            durationField = getString(DURATION_FIELD) ?: throw ConfigException(DURATION_FIELD, null)
+            val fieldSyntaxVersion = FieldSyntaxVersion.fromConfig(this)
+            timestampField = getString(TIMESTAMP_FIELD).let { 
+                if (it != null) SingleFieldPath(it, fieldSyntaxVersion)
+                else throw ConfigException(TIMESTAMP_FIELD, null)
+            }
+            durationField = getString(DURATION_FIELD).let {
+                if (it != null) SingleFieldPath(it, fieldSyntaxVersion)
+                else throw ConfigException(DURATION_FIELD, null)
+            }
             durationUnit = getString(DURATION_UNIT).let {
                 try {
                     ChronoUnit.valueOf(it)
@@ -84,14 +96,14 @@ class DurationAdd<R : ConnectRecord<R>> : Transformation<R> {
     private fun applySchemaless(record: R): R {
         val value = requireMap(record.value(), PURPOSE).toMutableMap()
 
-        val ts = when (val tsValue = value[timestampField]) {
+        val ts = when (val tsValue = timestampField?.valueFrom(value)) {
             is Date -> tsValue.toInstant()
             is Instant -> tsValue
             is String -> Instant.parse(tsValue)
             else -> throw DataException("""invalid timestamp: "$tsValue"""")
         }
 
-        val duration = when (val durValue = value[durationField]) {
+        val duration = when (val durValue = durationField?.valueFrom(value)) {
             is Long -> durValue
             is String -> durValue.toLong()
             else -> throw DataException("""invalid duration value: "$durValue"""")
