@@ -10,7 +10,6 @@ resources:
     bucket_location: EUROPE-WEST2
     bucket_location_type: region
     object_store_bucketname: xtdb-am-bench-object-store
-    notifications_pubsub_topic_name: xtdb-am-bench-object-store-notif-topic
 
     # Custom Role Config - role name should have unique suffix each time
     custom_role_name: xtdb_auctionmark_bench_role

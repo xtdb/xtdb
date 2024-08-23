@@ -16,7 +16,7 @@ import java.time.Duration
 
 object Kafka {
     @JvmStatic
-    fun kafka(bootstrapServers: String, topicName: String) = Factory(bootstrapServers, topicName)
+    fun kafka(bootstrapServers: String, txTopic: String, filesTopic: String) = Factory(bootstrapServers, txTopic, filesTopic)
 
     /**
      * Used to set configuration options for Kafka as an XTDB Transaction Log.
@@ -29,21 +29,22 @@ object Kafka {
      * Xtdb.openNode {
      *    txLog = KafkaLogFactory(
      *              bootstrapServers = "localhost:9092",
-     *              topicName = "xtdb_topic",
-     *              autoCreateTopic = true,
-     *              replicationFactor = 1,
-     *              pollDuration = Duration.ofSeconds(1)
+     *              txTopic = "xtdb_txs",
+     *              filesTopic = "xtdb_file_notifs",
+     *              autoCreateTopics = true,
+     *              txPollDuration = Duration.ofSeconds(1)
+     *              filePollDuration = Duration.ofSeconds(5)
      *            ),
      *    ...
      * }
      * ```
      *
      * @property bootstrapServers A comma-separated list of host:port pairs to use for establishing the initial connection to the Kafka cluster.
-     * @property topicName Name of the Kafka topic to use for the transaction log.
-     * @property autoCreateTopic Whether to automatically create the topic, if it does not already exist.
-     * @property replicationFactor The [replication factor](https://kafka.apache.org/documentation/#replication.factor) of the transaction log topic (if it is automatically created by XTDB).
-     * @property pollDuration The maximum amount of time to block waiting for records to be returned by the Kafka consumer.
-     * @property topicConfig A map of [topic configuration options](https://kafka.apache.org/documentation/#topicconfigs) to use when creating the transaction log topic (if it is automatically created by XTDB).
+     * @property txTopic Name of the Kafka topic to use for the transaction log.
+     * @property filesTopic Name of the Kafka topic to use for the file notifications.
+     * @property autoCreateTopics Whether to automatically create the topic, if it does not already exist.
+     * @property txPollDuration The maximum amount of time to block waiting for TX records to be returned by the Kafka consumer.
+     * @property filePollDuration The maximum amount of time to block waiting for file notifications to be returned by the Kafka consumer.
      * @property propertiesMap A map of Kafka connection properties, supplied directly to the Kafka client.
      * @property propertiesFile Path to a Java properties file containing Kafka connection properties, supplied directly to the Kafka client.
      */
@@ -51,19 +52,18 @@ object Kafka {
     @SerialName("!Kafka")
     data class Factory(
         val bootstrapServers: String,
-        val topicName: String,
-        var autoCreateTopic: Boolean = true,
-        var replicationFactor: Int = 1,
-        var pollDuration: Duration = Duration.ofSeconds(1),
-        var topicConfig: Map<String, String> = emptyMap(),
+        val txTopic: String,
+        val filesTopic: String,
+        var autoCreateTopics: Boolean = true,
+        var txPollDuration: Duration = Duration.ofSeconds(1),
+        var filePollDuration: Duration = Duration.ofSeconds(5),
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null
     ) : Log.Factory {
 
-        fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
-        fun replicationFactor(replicationFactor: Int) = apply { this.replicationFactor = replicationFactor }
-        fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
-        fun topicConfig(topicConfig: Map<String, String>) = apply { this.topicConfig = topicConfig }
+        fun autoCreateTopics(autoCreateTopic: Boolean) = apply { this.autoCreateTopics = autoCreateTopic }
+        fun txPollDuration(pollDuration: Duration) = apply { this.txPollDuration = pollDuration }
+        fun filePollDuration(pollDuration: Duration) = apply { this.filePollDuration = pollDuration }
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
 
@@ -81,6 +81,6 @@ object Kafka {
     }
 }
 
-fun Xtdb.Config.kafka(bootstrapServers: String, topicName: String, configure: Kafka.Factory.() -> Unit = {}) {
-    txLog = Kafka.kafka(bootstrapServers, topicName).also(configure)
+fun Xtdb.Config.kafka(bootstrapServers: String, txTopic: String, filesTopic: String, configure: Kafka.Factory.() -> Unit = {}) {
+    txLog = Kafka.kafka(bootstrapServers, txTopic, filesTopic).also(configure)
 }

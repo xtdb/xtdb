@@ -1,25 +1,27 @@
 (ns xtdb.buffer-pool
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.file-list-cache :as flc]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
-           (com.github.benmanes.caffeine.cache AsyncCache Cache Caffeine RemovalListener Weigher Policy$Eviction)
+           (com.github.benmanes.caffeine.cache AsyncCache Cache Caffeine Policy$Eviction RemovalListener Weigher)
            [java.io ByteArrayOutputStream Closeable File]
+           [java.lang AutoCloseable]
            (java.nio ByteBuffer)
            (java.nio.channels Channels ClosedByInterruptException)
            [java.nio.file FileVisitOption Files LinkOption Path]
-           [java.nio.file.attribute FileAttribute BasicFileAttributes]
-           [java.util NavigableMap TreeMap]
+           [java.nio.file.attribute BasicFileAttributes FileAttribute]
+           [java.util NavigableMap SortedSet TreeMap]
            (java.util NavigableMap)
-           [java.util.concurrent CompletableFuture ForkJoinPool TimeUnit]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListSet ForkJoinPool TimeUnit]
            [java.util.function BiFunction]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            (xtdb ArrowWriter IBufferPool)
+           (xtdb.api.log FileListCache FileListCache$Subscriber)
            (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
            xtdb.api.Xtdb$Config
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
@@ -56,14 +58,6 @@
   (.. memory-store asMap (compute k (reify BiFunction
                                       (apply [_ _k v]
                                         (retain (or v (f))))))))
-
-(defn- close-arrow-writer [^ArrowFileWriter aw]
-  ;; arrow wraps InterruptExceptions
-  ;; https://github.com/apache/arrow/blob/d10f468b0603da41a285c60a38b095a30b91e2c1/java/vector/src/main/java/org/apache/arrow/vector/ipc/ArrowWriter.java#L217-L222
-  (try
-    (util/close aw)
-    (catch Throwable t
-      (throw (util/unroll-interrupt-ex t)))))
 
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
@@ -234,12 +228,21 @@
   (let [bp-path (util/tmp-dir "tmp-buffer-pool")
         storage-root (.resolve bp-path storage-root)]
     (util/copy-dir dir storage-root)
-    (.openStorage (Storage/localStorage bp-path) allocator)))
+    (open-local-storage allocator (Storage/localStorage bp-path))))
 
 (defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
   (.storage config (cond-> (Storage/localStorage (util/->path path))
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
+
+(defn- list-files-under-prefix [^SortedSet !os-file-names ^Path prefix]
+  (let [prefix-depth (.getNameCount prefix)]
+    (->> (.tailSet ^SortedSet !os-file-names prefix)
+         (take-while #(.startsWith ^Path % prefix))
+         (keep (fn [^Path path]
+                 (when (> (.getNameCount path) prefix-depth)
+                   (.subpath path 0 (inc prefix-depth)))))
+         (distinct))))
 
 (defn- upload-multipart-buffers [object-store k nio-buffers]
   (let [^IMultipartUpload upload @(.startMultipart ^SupportsMultipart object-store k)]
@@ -313,7 +316,10 @@
                              ^Cache memory-store
                              ^Path local-disk-cache
                              ^AsyncCache local-disk-cache-evictor
+                             ^FileListCache file-list-cache
                              ^ObjectStore object-store
+                             ^SortedSet !os-file-names
+                             ^AutoCloseable os-file-name-subscription
                              !evictor-max-weight]
   IBufferPool
   (getBuffer [_ k]
@@ -353,9 +359,11 @@
 
             buf))))
 
-  (listAllObjects [_] (.listAllObjects object-store))
+  (listAllObjects [_]
+    (vec !os-file-names))
 
-  (listObjects [_ dir] (.listObjects object-store dir))
+  (listObjects [_ dir]
+    (list-files-under-prefix !os-file-names dir))
 
   (openArrowWriter [_ k rel]
     (let [tmp-path (create-tmp-path local-disk-cache)]
@@ -370,6 +378,8 @@
             (.close file-ch)
 
             (upload-arrow-file allocator object-store k tmp-path)
+
+            (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [k]}))
 
             (let [buffer-cache-path (.resolve local-disk-cache k)]
               (update-evictor-key local-disk-cache-evictor k
@@ -388,14 +398,15 @@
               (.close file-ch)))))))
 
   (putObject [_ k buffer]
-    @(.putObject object-store k buffer))
+    @(-> (.putObject object-store k buffer)
+         (.thenApply (fn [_]
+                       (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [k]}))))))
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
     (.invalidate memory-store k)
     (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
 
-  Closeable
   (close [_]
     (free-memory memory-store)
     (util/close object-store)
@@ -444,13 +455,25 @@
     (log/debugf "%s%% of total disk space on filestore %s is %s bytes" percentage (.name file-store) disk-size-limit)
     disk-size-limit))
 
-(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory]
+(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory, ^FileListCache file-list-cache]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
-    (let [^Path local-disk-cache (.getLocalDiskCache factory)
+    (let [!os-file-names (ConcurrentSkipListSet.)
+          !os-file-name-subscription (promise)
+          ^Path local-disk-cache (.getLocalDiskCache factory)
           local-disk-size-limit (or (.getMaxDiskCacheBytes factory)
                                     (calculate-limit-from-percentage-of-disk local-disk-cache (.getMaxDiskCachePercentage factory)))
           ^AsyncCache local-disk-cache-evictor (->local-disk-cache-evictor local-disk-size-limit local-disk-cache)
           !evictor-max-weight (atom local-disk-size-limit)]
+
+      (.subscribeFileNotifications file-list-cache
+                                   (reify FileListCache$Subscriber
+                                     (accept [_ {:keys [added]}]
+                                       (.addAll !os-file-names added))
+
+                                     (onSubscribe [_ subscription]
+                                       (deliver !os-file-name-subscription subscription))))
+
+      (.addAll !os-file-names (.listAllObjects object-store))
 
       ;; Add watcher to max-weight atom - when it changes, update the cache max weight
       (add-watch !evictor-max-weight :update-cache-max-weight
@@ -462,9 +485,8 @@
       
       (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                           (->memory-buffer-cache (.getMaxCacheBytes factory))
-                          local-disk-cache
-                          local-disk-cache-evictor
-                          object-store
+                          local-disk-cache local-disk-cache-evictor
+                          file-list-cache object-store !os-file-names !os-file-name-subscription
                           !evictor-max-weight))))
 
 (defmulti ->object-store-factory
@@ -525,10 +547,11 @@
 
 (defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
   {:allocator (ig/ref :xtdb/allocator)
-   :factory factory})
+   :factory factory
+   :file-list-cache (ig/ref :xtdb/log)})
 
-(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory]}]
-  (.openStorage factory allocator))
+(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileListCache file-list-cache]}]
+  (.openStorage factory allocator file-list-cache))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^IBufferPool buffer-pool]
   (util/close buffer-pool))

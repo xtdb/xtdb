@@ -28,7 +28,7 @@ When it comes to adding the environment variables/secrets to Github, see https:/
 * Need to ensure the base `s3-stack` is setup via CloudFormation
 ** See the S3 README for more info here.
 * Setup the CI IAM User/Access Key found under `ci-credential-setup/ci-iam-user.yml` on CloudFormation:
-** This takes the **desired name of the CI IAM User**, the **name of the test s3 bucket created by the s3-stack** and the **Arn of the SNS topic created by the s3-stack** as input.
+** This takes the **desired name of the CI IAM User** and the **name of the test s3 bucket created by the s3-stack** as input.
 ** This will create an IAM user for the CI, setup the necessary permissions on the user and create an access key for said user and then store it on `SecretsManager`.
 ** The stack will output a link to the secret, but it will be located under the current region SecretsManager under the key "/ci/credentials/<CIUSERNAME>" 
 * The secret in secrets manager will contain "ACCESS_KEY" and "SECRET_KEY". Using these, we can set the vars/secrets on the github actions:

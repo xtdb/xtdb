@@ -1,22 +1,20 @@
 (ns xtdb.azure.object-store
   (:require [clojure.tools.logging :as log]
             [xtdb.object-store :as os]
-            [xtdb.file-list :as file-list]
             [xtdb.util :as util])
   (:import [com.azure.core.util BinaryData]
            [com.azure.storage.blob BlobContainerClient]
+           [com.azure.storage.blob.models BlobItem BlobRange BlobStorageException DownloadRetryOptions ListBlobsOptions]
            [com.azure.storage.blob.specialized BlockBlobClient]
-           [com.azure.storage.blob.models BlobRange BlobStorageException DownloadRetryOptions]
            [java.io ByteArrayOutputStream Closeable]
-           [java.lang AutoCloseable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
-           [java.util NavigableSet ArrayList List Base64 Base64$Encoder]
+           [java.util ArrayList Base64 Base64$Encoder List]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
-           [reactor.core Exceptions Exceptions$ReactiveException]
+           [reactor.core Exceptions]
            xtdb.api.storage.ObjectStore
-           [xtdb.multipart SupportsMultipart IMultipartUpload]))
+           [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 (defn- get-blob [^BlobContainerClient blob-container-client blob-name]
   (try
@@ -69,7 +67,7 @@
 (defn random-block-id []
   (.encodeToString base-64-encoder (.getBytes (str (random-uuid)))))
 
-(defrecord MultipartUpload [^BlockBlobClient block-blob-client on-complete ^List !staged-block-ids]
+(defrecord MultipartUpload [^BlockBlobClient block-blob-client ^List !staged-block-ids]
   IMultipartUpload
   (uploadPart [_  buf]
     (CompletableFuture/completedFuture
@@ -86,21 +84,18 @@
 
   (complete [_]
     (CompletableFuture/completedFuture
-     (do
-       ;; Commit the staged blocks - if already exists, abort the upload and complete
-       (try
-         (.commitBlockList block-blob-client !staged-block-ids)
-         (catch BlobStorageException e
-           (if (= 409 (.getStatusCode e))
-             (log/infof "Blob already exists for %s - aborting multipart upload" (.getBlobUrl block-blob-client))
-             (throw e)))
-         (catch Throwable e
-           (let [unwrapped-e (Exceptions/unwrap e)]
-             (when (instance? InterruptedException unwrapped-e)
-               (log/infof "Multipart upload completion interrupted for %s - aborting multipart operation" (.getBlobUrl block-blob-client)))
-             (throw unwrapped-e))))
-       ;; Run passed in on-complete function (adds the key to the filename cache)
-       (on-complete))))
+     ;; Commit the staged blocks - if already exists, abort the upload and complete
+     (try
+       (.commitBlockList block-blob-client !staged-block-ids)
+       (catch BlobStorageException e
+         (if (= 409 (.getStatusCode e))
+           (log/infof "Blob already exists for %s - aborting multipart upload" (.getBlobUrl block-blob-client))
+           (throw e)))
+       (catch Throwable e
+         (let [unwrapped-e (Exceptions/unwrap e)]
+           (when (instance? InterruptedException unwrapped-e)
+             (log/infof "Multipart upload completion interrupted for %s - aborting multipart operation" (.getBlobUrl block-blob-client)))
+           (throw unwrapped-e))))))
 
   (abort [_]
     (CompletableFuture/completedFuture
@@ -113,13 +108,13 @@
          (log/infof "Blob already exists for %s - nothing further to abort/commit" (.getBlobUrl block-blob-client))
          (if (= 409 (.getStatusCode e)) nil (throw e)))))))
 
-(defn- start-multipart [^BlobContainerClient blob-container-client blob-name on-complete-fn]
-  (let [block-blob-client (-> blob-container-client 
-                              (.getBlobClient blob-name) 
+(defn- start-multipart [^BlobContainerClient blob-container-client blob-name]
+  (let [block-blob-client (-> blob-container-client
+                              (.getBlobClient blob-name)
                               (.getBlockBlobClient))]
-    (->MultipartUpload block-blob-client on-complete-fn (ArrayList.))))
+    (->MultipartUpload block-blob-client (ArrayList.))))
 
-(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client ^Path prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
+(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client ^Path prefix multipart-minimum-part-size]
   ObjectStore
   (getObject [_ k]
     (let [prefixed-key (util/prefix-key prefix k)]
@@ -143,33 +138,29 @@
 
   (putObject [_ k buf]
     (let [prefixed-key (util/prefix-key prefix k)]
-      (CompletableFuture/completedFuture 
-       (do
-         (put-blob blob-container-client (str prefixed-key) buf)
-         (.add file-name-cache k)))))
+      (CompletableFuture/completedFuture
+       (put-blob blob-container-client (str prefixed-key) buf))))
 
   (listAllObjects [_this]
-    (into [] file-name-cache))
-
-  (listObjects [_this dir]
-    (file-list/list-files-under-prefix file-name-cache dir))
+    (let [list-blob-opts (cond-> (ListBlobsOptions.)
+                           prefix (.setPrefix (str prefix)))]
+      (->> (.listBlobs blob-container-client list-blob-opts nil)
+           (.iterator)
+           (iterator-seq)
+           (mapv (fn [^BlobItem blob-item]
+                   (cond->> (util/->path (.getName blob-item))
+                     prefix (.relativize prefix)))))))
 
   (deleteObject [_ k]
     (let [prefixed-key (util/prefix-key prefix k)]
       (CompletableFuture/completedFuture
-       (do 
-         (delete-blob blob-container-client (str prefixed-key))
-         (.remove file-name-cache k)))))
-  
+       (delete-blob blob-container-client (str prefixed-key)))))
+
   SupportsMultipart
   (startMultipart [_ k]
     (let [prefixed-key (util/prefix-key prefix k)]
       (CompletableFuture/completedFuture
-       (start-multipart blob-container-client
-                        (str prefixed-key)
-                        (fn [] (.add file-name-cache k))))))
-
+       (start-multipart blob-container-client (str prefixed-key)))))
+  
   Closeable
-  (close [_]
-    (.close file-list-watcher)
-    (.clear file-name-cache)))
+  (close [_]))

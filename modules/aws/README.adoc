@@ -37,25 +37,16 @@ The paramaterized stack expects the following to be provided:
 
 The CloudFormation stack will create the following resources within the specified region in AWS:
 
-* The S3 bucket, with the user confirgured bucket name.
-* An SNS topic which receives notifications from the S3 bucket around object creation/deletion
-** An SNS topic policy to allow the bucket to publish to the topic.
+* The S3 bucket, with the user configured bucket name.
 * An IAM Role, with all of the relevant permissions for:
 ** Using the created S3 bucket (Get, Put, Delete and List).
-** Subscribe to the SNS topic.
-** Creating and operating on SQS queues
-*** Said queues handle their own permissions, and subscribe to the SNS topic.
 
 === Outputs
 
 Using the CloudFormation template will output a number of things, some of which will be needed configuring your node:
 
 * The S3 Bucket Name (**this will be used in config**)
-* The SNS Topic ARN (**this will be used in config**)
-* ARN of the created XTDB IAM Role (this, or something with equivalent permissions, will be required to use all of the above) 
-
-NOTE: The SNS topic and SQS queues are used to a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3.
-If not using the CloudFormation template, ensure that you at have a similar setup with the SNS topic setup to receive notifications from your bucket, and that XTDB having all the relevant permissions it needs with S3, SNS, and SQS.
+* ARN of the created XTDB IAM Role (this, or something with equivalent permissions, will be required to use all of the above)
 
 == Authentication
 
@@ -72,8 +63,7 @@ We can swap out the implementation of the object store with one based on S3. To 
 
 [source,clojure]
 ----
-{:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store",
-                                        :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"}]
+{:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store"}]
                     :local-disk-cache "local-disk-cache"}]}
 ----
 
@@ -86,11 +76,6 @@ These are the following parameters that can be passed within the config for our 
 | `bucket`
 | String 
 | The name of the https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html[S3 Bucket] to use an an object store
-| Yes
-
-| `sns-topic-arn`
-| String
-| The https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html[ARN] of the https://aws.amazon.com/sns/[SNS topic] which is collecting notifications from the S3 bucket you are using. 
 | Yes
 
 |`prefix`
@@ -117,7 +102,6 @@ By default, we get credentials through the usual AWS credentials provider.
 [source,clojure]
 ----
 {:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store",
-                                        :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"
                                         :configurator (fn [_] (reify S3Configurator...))}]
                     :local-disk-cache "local-disk-cache"}]}
 ----

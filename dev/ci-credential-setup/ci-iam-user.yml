@@ -10,10 +10,6 @@ Parameters:
     Type: String
     Description: Name of the S3 test bucket created by the s3 stack
 
-  SNSTopicArn:
-    Type: String
-    Description: Arn of the SNS topic created by the s3 stack
-
 Resources:
   CIUser:
     Type: AWS::IAM::User
@@ -34,29 +30,6 @@ Resources:
               Resource:
                 -  !Join [ '', [ 'arn:aws:s3:::', !Ref TestS3BucketName] ]
                 -  !Join [ '', [ 'arn:aws:s3:::', !Ref TestS3BucketName, '/*'] ]
-        - PolicyName: SNSAccess
-          PolicyDocument:
-            Statement:
-            - Effect: Allow
-              Action:
-                - 'sns:Subscribe'
-                - 'sns:Unsubscribe'
-              Resource:
-                - !Ref SNSTopicArn 
-        - PolicyName: SQSAccess
-          PolicyDocument:
-            Statement:
-            - Effect: Allow
-              Action:
-                - 'sqs:CreateQueue'
-                - 'sqs:GetQueueUrl'
-                - 'sqs:GetQueueAttributes'
-                - 'sqs:DeleteQueue'
-                - 'sqs:DeleteMessage'
-                - 'sqs:ReceiveMessage'
-                - 'sqs:SetQueueAttributes'
-              Resource:
-                - '*'
 
   CIUserAccessKey:
     Type: AWS::IAM::AccessKey

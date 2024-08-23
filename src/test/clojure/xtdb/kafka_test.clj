@@ -1,16 +1,16 @@
 (ns xtdb.kafka-test
   (:require [clojure.test :as t]
-            [xtdb.api :as xt] 
+            [xtdb.api :as xt]
+            [xtdb.kafka]
             [xtdb.node :as xtn]
-            [xtdb.test-util :as tu]
-            [xtdb.kafka])
-  (:import [java.util UUID]
-           [xtdb.api.log Log]))
+            [xtdb.test-util :as tu])
+  (:import [xtdb.api.log Log]))
 
 (t/deftest ^:requires-docker ^:kafka test-kafka
-  (let [topic-name (str "xtdb.kafka-test." (UUID/randomUUID))]
+  (let [test-uuid (random-uuid)]
     (with-open [node (xtn/start-node {:log [:kafka {:bootstrap-servers "localhost:9092"
-                                                    :topic-name topic-name}]})]
+                                                    :tx-topic (str "xtdb.kafka-test.tx-" test-uuid)
+                                                    :files-topic (str "xtdb.kafka-test.files-" test-uuid)}]})]
       (t/is (= true
                (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))))
 
@@ -19,13 +19,12 @@
                             {:node node}))))))
 
 (t/deftest ^:requires-docker ^:kafka test-kafka-setup-with-provided-opts
-  (let [topic-name (str "xtdb.kafka-test." (UUID/randomUUID))]
-    (with-open [node (xtn/start-node {:log [:kafka {:topic-name topic-name
+  (let [test-uuid (random-uuid)]
+    (with-open [node (xtn/start-node {:log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" test-uuid)
+                                                    :files-topic (str "xtdb.kafka-test.files-" test-uuid)
                                                     :bootstrap-servers "localhost:9092"
-                                                    :create-topic? true
-                                                    :replication-factor 1
-                                                    :poll-duration "PT2S"
-                                                    :topic-config {}
+                                                    :create-topics? true
+                                                    :tx-poll-duration "PT2S"
                                                     :properties-map {}
                                                     :properties-file nil}]})]
       (t/testing "KafkaLog successfully created"

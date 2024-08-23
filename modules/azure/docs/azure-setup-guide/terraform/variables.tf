@@ -25,27 +25,6 @@ variable "storage_account_name" {
   }
 }
 
-variable "service_bus_namespace" {
-  description = "The unique name for the service bus namespace across Azure."
-  type        = string
-  validation {
-    condition     = length(var.service_bus_namespace) >= 6 && length(var.service_bus_namespace) <= 50 && can(regex("^[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z0-9]$", var.service_bus_namespace)) && !can(regex(".*(-sb|-mgmt)$", var.service_bus_namespace))
-    error_message = "The service bus namespace name must be 6 to 50 characters long, contain only letters, numbers, and hyphens, start with a letter, end with a letter or number, and not end with '-sb' or '-mgmt'."
-  }
-}
-
-variable "service_bus_sku" {
-  description = "The SKU for the service bus."
-  type        = string
-  default     = "Standard"
-}
-
-variable "service_bus_message_ttl" {
-  description = "The time-to-live for messages in the service bus."
-  type        = string
-  default     = "PT30M"
-}
-
 variable "kafka_persisent_data_max_size_gb" {
   description = "The size in Gigabytes of the storage share to store Kafka data in."
   type        = number

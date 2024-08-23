@@ -15,6 +15,7 @@
            (org.apache.arrow.memory RootAllocator)
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
+           xtdb.api.log.FileListCache
            xtdb.arrow.Relation
            (xtdb.metadata ITableMetadata)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrieKt MergePlanNode MergePlanTask)

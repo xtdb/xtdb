@@ -31,7 +31,6 @@ data:
   CLOUD_PLATFORM_NAME: "Google Cloud"
   XTDB_GCP_PROJECT_ID: "xtdb-scratch"
   XTDB_GCP_BUCKET: "xtdb-am-bench-object-store"
-  XTDB_GCP_PUBSUB_TOPIC: "xtdb-am-bench-object-store-notif-topic"
   XTDB_GCP_BUCKET_PREFIX: "run-1"
   XTDB_GCP_LOCAL_LOG_PATH: "/var/lib/xtdb/log/local-log-1"
   AUCTIONMARK_DURATION: "PT1H"

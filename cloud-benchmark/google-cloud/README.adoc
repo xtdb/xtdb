@@ -22,7 +22,6 @@ In order to deploy the necessary infrastructure on Google Cloud, you will need t
 * An existing Google Cloud project with the following activated APIs:
 ** Cloud Deployment Manager API
 ** Cloud Storage API
-** Pub/Sub API
 ** IAM API
 ** Compute Engine API
 ** Kubernetes Engine API
@@ -74,7 +73,8 @@ docker push europe-west1-docker.pkg.dev/xtdb-scratch/xtdb-google-cloud-bench-rep
 
 == Setting up the infra on Google Cloud
 
-Within this directory is a subdirectory, `deployment-manager`, that contains the Google Cloud Deployment Manager configuration for setting up all the necessary infra on Google Cloud. We also provide a script to create the deployment, `create-google-cloud-deployment.sh`.
+Within this directory is a subdirectory, `deployment-manager`, that contains the Google Cloud Deployment Manager configuration for setting up all the necessary infra on Google Cloud.
+We also provide a script to create the deployment, `create-google-cloud-deployment.sh`.
 
 You can edit the configuration for the deployment under the `xtdb-google-cloud-bench.yaml` file.
 
@@ -86,10 +86,7 @@ To create the initial deployment, run the following command:
 This will set up the following:
 
 * A Cloud Storage bucket
-* A Pub/Sub topic, subscribed to notifications from the Cloud Storage bucket.
-* A custom role for all of the necessary permissions for XTDB to use the above:
-** Using the bucket (get, create, delete, list, and update storage objects)
-** Creating, consuming, and deleting subscriptions on PubSub topics.
+* A custom role for all of the necessary permissions for XTDB to use the bucket (get, create, delete, list, and update storage objects)
 * A service account with the custom role attached.
 * A Kubernetes cluster with a single node pool.
 

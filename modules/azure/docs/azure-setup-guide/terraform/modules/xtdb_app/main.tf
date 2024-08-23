@@ -41,7 +41,7 @@ resource "azurerm_container_app" "xtdb_app" {
     min_replicas = 1
 
     container {
-      image = "ghcr.io/xtdb/xtdb-azure-ea:latest"
+      image = "ghcr.io/danmason/xtdb-azure-ea:test"
       name  = "xtdb-node"
 
       cpu    = 2
@@ -63,16 +63,6 @@ resource "azurerm_container_app" "xtdb_app" {
       }
 
       env {
-        name  = "XTDB_AZURE_SERVICE_BUS_NAMESPACE"
-        value = var.service_bus_namespace
-      }
-
-      env {
-        name  = "XTDB_AZURE_SERVICE_BUS_TOPIC_NAME"
-        value = var.service_bus_topic
-      }
-
-      env {
         name  = "XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID"
         value = var.user_assigned_identity_client_id
       }
@@ -83,8 +73,13 @@ resource "azurerm_container_app" "xtdb_app" {
       }
 
       env {
-        name  = "XTDB_TOPIC_NAME"
-        value = var.xtdb_topic_name
+        name  = "XTDB_TX_TOPIC"
+        value = var.xtdb_tx_topic
+      }
+
+      env {
+        name  = "XTDB_FILES_TOPIC"
+        value = var.xtdb_files_topic
       }
 
       volume_mounts {

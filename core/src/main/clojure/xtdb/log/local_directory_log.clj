@@ -16,7 +16,7 @@
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log Log Logs TxLog$Record Logs$LocalLogFactory)
+           (xtdb.api.log FileListCache Log Logs TxLog$Record Logs$LocalLogFactory)
            (xtdb.log INotifyingSubscriberHandler)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
@@ -25,7 +25,8 @@
 
 (deftype LocalDirectoryLog [^Path root-path, ^INotifyingSubscriberHandler subscriber-handler
                             ^ExecutorService pool, ^BlockingQueue queue, ^Future append-loop-future
-                            ^:volatile-mutable ^FileChannel log-channel]
+                            ^:volatile-mutable ^FileChannel log-channel
+                            ^FileListCache file-list-cache]
   Log
   (readTxs [_ after-offset limit]
     (when-not log-channel
@@ -74,7 +75,9 @@
   (subscribeTxs [this after-tx-id subscriber]
     (.subscribe subscriber-handler this after-tx-id subscriber))
 
-  Closeable
+  (appendFileNotification [_ n] (.appendFileNotification file-list-cache n))
+  (subscribeFileNotifications [_ subscriber] (.subscribeFileNotifications file-list-cache subscriber))
+
   (close [_]
     (when log-channel
       (.close log-channel))
@@ -192,4 +195,4 @@
           append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue (.getInstantSource factory)
                                                                           {:buffer-size buffer-size
                                                                            :subscriber-handler subscriber-handler}))]
-      (->LocalDirectoryLog root-path subscriber-handler pool queue append-loop-future nil))))
+      (->LocalDirectoryLog root-path subscriber-handler pool queue append-loop-future nil FileListCache/SOLO))))

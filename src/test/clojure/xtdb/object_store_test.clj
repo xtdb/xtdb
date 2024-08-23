@@ -13,7 +13,8 @@
            [java.util NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            [java.util.function Supplier]
-           [xtdb.api.storage ObjectStore ObjectStoreFactory]))
+           [xtdb.api.storage ObjectStore ObjectStoreFactory]
+           [xtdb.buffer_pool RemoteBufferPool]))
 
 (defn- get-edn [^ObjectStore obj-store, ^Path k]
   (-> (let [^ByteBuffer buf @(.getObject obj-store k)]
@@ -79,11 +80,7 @@
 
   (listAllObjects [_this]
     (vec (.keySet os)))
-
-  (listObjects [_this prefix]
-    (->> (.keySet (.tailMap os prefix))
-         (into [] (take-while #(.startsWith ^Path % (util/->path prefix))))))
-
+  
   (deleteObject [_this k]
     (.remove os k)
     (CompletableFuture/completedFuture nil))
@@ -119,38 +116,6 @@
     @(.deleteObject obj-store alice-key)
 
     (t/is (thrown? IllegalStateException (get-edn obj-store alice-key)))))
-
-(defn test-list-objects
-  [^ObjectStore obj-store]
-  (put-edn obj-store (util/->path "bar/alice") :alice)
-  (put-edn obj-store (util/->path "foo/alan") :alan)
-  (put-edn obj-store (util/->path "bar/bob") :bob)
-  (put-edn obj-store (util/->path "bar/baz/dan") :dan)
-  (put-edn obj-store (util/->path "bar/baza/james") :james)
-
-  (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"])
-           (.listAllObjects obj-store)))
-
-  (t/is (= (mapv util/->path ["foo/alan"])
-           (.listObjects obj-store (util/->path "foo"))))
-
-  (t/testing "call listObjects with a prefix ended with a slash - should work the same"
-    (t/is (= (mapv util/->path ["foo/alan"])
-             (.listObjects obj-store (util/->path "foo/")))))
-
-  (t/testing "calling listObjects with prefix on directory with subdirectories - should only return top level keys"
-    (t/is (= (mapv util/->path ["bar/alice" "bar/baz" "bar/baza" "bar/bob"])
-             (.listObjects obj-store (util/->path "bar")))))
-
-  (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
-    (t/is (= (mapv util/->path ["bar/baz/dan"])
-             (.listObjects obj-store (util/->path "bar/baz")))))
-
-     ;; Delete an object
-  @(.deleteObject obj-store (util/->path "bar/alice"))
-
-  (t/is (= (mapv util/->path ["bar/baz" "bar/baza" "bar/bob"])
-           (.listObjects obj-store (util/->path "bar")))))
 
 (defn test-range [^ObjectStore obj-store]
   (let [digits-key (util/->path "digits")]

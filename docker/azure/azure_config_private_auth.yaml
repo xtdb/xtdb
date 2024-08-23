@@ -1,6 +1,7 @@
 txLog: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-  topicName: !Env XTDB_TOPIC_NAME
+  txTopic: !Env XTDB_TX_TOPIC
+  filesTopic: !Env XTDB_FILES_TOPIC
   propertiesMap:
     sasl.mechanism: !Env KAFKA_SASL_MECHANISM
     security.protocol: !Env KAFKA_SECURITY_PROTOCOL
@@ -10,8 +11,6 @@ storage: !Remote
   objectStore: !Azure
     storageAccountEndpoint: !Env XTDB_AZURE_STORAGE_ACCOUNT_ENDPOINT
     container: !Env XTDB_AZURE_STORAGE_CONTAINER
-    serviceBusNamespaceFQDN: !Env XTDB_AZURE_SERVICE_BUS_NAMESPACE_FQDN
-    serviceBusTopicName: !Env XTDB_AZURE_SERVICE_BUS_TOPIC_NAME
     prefix: "xtdb-object-store"
     userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
   localDiskCache: !Env XTDB_LOCAL_DISK_CACHE

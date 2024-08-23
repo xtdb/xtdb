@@ -8,7 +8,8 @@
   (:import (org.apache.arrow.memory ArrowBuf)
            (java.time InstantSource)
            xtdb.IBufferPool
-           xtdb.api.storage.Storage))
+           xtdb.api.storage.Storage
+           xtdb.api.log.Logs))
 
 (defn- random-maps [n]
   (let [nb-ks 5
@@ -39,6 +40,7 @@
 (deftest ^:integration concurrent-buffer-pool-test
   (populate-node node-opts)
   (tu/with-system {:xtdb/allocator {}
+                   :xtdb/log (Logs/localLog (.resolve (.toPath node-dir) "logs"))
                    :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))}
     (fn []
       (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)

@@ -34,16 +34,6 @@ variable "storage_account_container_name" {
   type        = string
 }
 
-variable "service_bus_namespace" {
-  description = "The name of the service bus namespace used by the XTDB node."
-  type        = string
-}
-
-variable "service_bus_topic" {
-  description = "The name of the service bus topic used by the XTDB node."
-  type        = string
-}
-
 variable "local_disk_cache_max_size_gb" {
   description = "The size of the local disk cache in GB."
   type        = number
@@ -55,7 +45,12 @@ variable "kafka_bootstrap_servers" {
   type        = string
 }
 
-variable "xtdb_topic_name" {
+variable "xtdb_tx_topic" {
   description = "The name of the Kafka topic to use as the XTDB Transaction Log."
+  type        = string
+}
+
+variable "xtdb_files_topic" {
+  description = "The name of the Kafka topic to use for XTDB object-store file notifications."
   type        = string
 }
