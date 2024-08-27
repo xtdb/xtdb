@@ -1239,10 +1239,19 @@
                             (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"]))))))
 
 (deftest runtime-error-commit-test
-  (with-open [conn (jdbc-conn)]
-    (q conn ["START TRANSACTION READ WRITE"])
-    (q conn ["INSERT INTO foo (_id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
-    (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error." (q conn ["COMMIT"])))))
+  (t/testing "in tx"
+    (with-open [conn (jdbc-conn)]
+      (q conn ["START TRANSACTION READ WRITE"])
+      (q conn ["INSERT INTO foo (_id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
+      (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error." (q conn ["COMMIT"])))))
+
+  (t/testing "autocommit #3563"
+    (with-open [conn (jdbc-conn)]
+      (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error."
+                              (q conn ["INSERT INTO foo (_id) VALUES (TRIM(LEADING 'abc' FROM ''))"])))
+
+      (t/is (thrown-with-msg? PSQLException #"ERROR: Parameter error: 0 provided, 2 expected"
+                              (q conn ["INSERT INTO tbl1 (_id, foo) VALUES ($1, $2)"]))))))
 
 (deftest test-column-order
   (with-open [conn (jdbc-conn)]

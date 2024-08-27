@@ -1088,30 +1088,33 @@
 
           stmt {:query query,
                 :transformed-query transformed-query
-                :params xt-params}]
+                :params xt-params}
+
+          cmd-complete-msg {:command (case dml-type
+                                        ;; insert <oid> <rows>
+                                        ;; oid is always 0 these days, its legacy thing in the pg protocol
+                                        ;; rows is 0 for us cus async
+                                        :insert "INSERT 0 0"
+                                        ;; otherwise head <rows>
+                                        :delete "DELETE 0"
+                                        :update "UPDATE 0"
+                                        :erase "ERASE 0"
+                                        :assert "ASSERT")}]
 
       (if transaction
         ;; we buffer the statement in the transaction (to be flushed with COMMIT)
-        (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
+        (do
+          (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
+          (cmd-write-msg conn msg-command-complete cmd-complete-msg))
 
-        (execute-tx conn [stmt] {:default-tz (.getZone clock)}))
-
-      (cmd-write-msg conn msg-command-complete
-                     {:command (case dml-type
-                                 ;; insert <oid> <rows>
-                                 ;; oid is always 0 these days, its legacy thing in the pg protocol
-                                 ;; rows is 0 for us cus async
-                                 :insert "INSERT 0 0"
-                                 ;; otherwise head <rows>
-                                 :delete "DELETE 0"
-                                 :update "UPDATE 0"
-                                 :erase "ERASE 0"
-                                 :assert "ASSERT")}))))
+        (if-let [err (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
+          (cmd-send-error conn err)
+          (cmd-write-msg conn msg-command-complete cmd-complete-msg))))))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
   [conn
-   {:keys [query fields bound-query] :as portal}]
+   {:keys [bound-query] :as portal}]
   (let [result-cursor
         (try
           (.openCursor ^BoundQuery bound-query)
