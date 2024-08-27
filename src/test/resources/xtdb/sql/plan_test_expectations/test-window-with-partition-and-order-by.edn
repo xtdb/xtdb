@@ -1,0 +1,14 @@
+[:project
+ [{y docs.1/y} {xt$column_2 xt$row_number_2}]
+ [:window
+  {:windows
+   {window-name3
+    {:partition-cols [docs.1/y],
+     :order-specs
+     [[xt$ob4 {:direction :asc, :null-ordering :nulls-last}]]}},
+   :projections
+   [{xt$row_number_2
+     {:window-agg (row-number), :window-name window-name3}}]}
+  [:map
+   [{xt$ob4 docs.1/z}]
+   [:rename docs.1 [:scan {:table docs} [y z]]]]]]
