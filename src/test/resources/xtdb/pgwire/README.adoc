@@ -1,0 +1,8 @@
+= Pgwire test certs
+
+To regenerate these:
+
+1. Private key: `openssl genpkey -algorithm RSA -out xtdb.example.com.key -pkeyopt rsa_keygen_bits:2048`
+2. Self-signed cert: `openssl req -new -x509 -key xtdb.example.com.key -out xtdb.example.com.crt -days 365 -subj "/CN=xtdb.example.com"`
+3. Convert those to a `.p12` file, to be imported into Java's keystore: `openssl pkcs12 -export -in xtdb.example.com.crt -inkey xtdb.example.com.key -out xtdb.example.com.p12 -name xtdb -passout pass:password123`
+4. Java keystore: `keytool -importkeystore -deststorepass password123 -destkeystore xtdb.jks -srckeystore xtdb.example.com.p12 -srcstoretype PKCS12 -alias xtdb`

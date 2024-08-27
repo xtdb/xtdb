@@ -4,7 +4,6 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.expression :as expr]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.query]
@@ -17,10 +16,13 @@
            [java.lang Thread$State]
            [java.net ServerSocket Socket SocketException]
            [java.nio.charset StandardCharsets]
+           [java.nio.file Path]
+           [java.security KeyStore]
            [java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map]
            [java.util.concurrent ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
+           [javax.net.ssl HandshakeCompletedListener KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.antlr SqlVisitor)
@@ -484,48 +486,14 @@
    ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
    80877102 :cancel
    ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
-   ;; xt does not yet support ssl
    80877103 :ssl
    ;; gssapi encoding is not supported by xt, and we tell the client that
    80877104 :gssenc})
-
-(def ^:private ssl-responses
-  {:unsupported (byte \N)
-   ;; for docs, xtdb does not yet support ssl
-   :supported (byte \S)})
 
 (defn- read-version [^DataInputStream in]
   (let [{:keys [^DataInputStream msg-in] :as msg} (read-untyped-msg in)
         version (.readInt msg-in)]
     (assoc msg :version (version-messages version))))
-
-(defn- buggy-client-not-closed-after-ssl-unsupported-msg?
-  "There appears to be a bug in the JDBC driver which causes it to leave its conn hanging
-  if ssl is required and the server does not support it.
-
-  For now, we timeout after 1 second if we do not receive a follow up to the ssl msg."
-  [^DataInputStream in]
-  (let [wait-until (+ (System/currentTimeMillis) 1000)]
-    (loop []
-      (cond
-        ;; at least 4 bytes available
-        (<= 4 (.available in))
-        false
-
-        ;; time left
-        (< (System/currentTimeMillis) wait-until)
-        ;; one nice thing about sleep is if we are interrupted
-        ;; (as we've been asked to close)
-        ;; we get an exception here
-        (if (try
-              (Thread/sleep 1)
-              true
-              (catch InterruptedException _ false))
-          (recur)
-          true)
-
-        ;; timed out
-        :else true))))
 
 ;;; server impl
 
@@ -959,46 +927,56 @@
   (cmd-send-error conn err)
   (cmd-terminate conn))
 
-(defn cmd-startup
-  "A command that negotiates startup with the client, including ssl negotiation, and sending the state of the servers
-  :parameters."
-  [conn]
-  (let [in (:in conn)
-        ^DataOutputStream out (:out conn)
+(defn- upgrade-conn-to-ssl [{:keys [^Socket socket, ^DataOutputStream out], {:keys [^SSLContext ssl-ctx]} :server, :as conn}]
+  (if (and ssl-ctx (not (instance? SSLSocket socket)))
+    ;; upgrade the socket, then wait for the client's next startup message
 
-        {:keys [version] :as msg} (read-version in)
+    (do
+      (log/trace "upgrading to SSL")
 
-        err
-        (case version
-          :gssenc (err-protocol-violation "GSSAPI is not supported")
-          nil)
+      (.writeByte out (byte \S))
 
-        ;; tell the client ssl is unsupported if requested
-        {:keys [err, version, msg-in]}
-        (cond
-          err (assoc msg :err err)
+      (let [^SSLSocket ssl-socket (-> (.getSocketFactory ssl-ctx)
+                                      (.createSocket socket
+                                                     (-> (.getInetAddress socket)
+                                                         (.getHostAddress))
+                                                     (.getPort socket)
+                                                     true))]
+        (try
+          (.setUseClientMode ssl-socket false)
+          (.startHandshake ssl-socket)
+          (log/trace "SSL handshake successful")
+          (catch Exception e
+            (log/debug e "error in SSL handshake")
+            (throw e)))
 
-          (= :ssl version)
-          (do (.writeByte out (ssl-responses :unsupported))
-              ;; buggy jdbc driver fix
-              (if (buggy-client-not-closed-after-ssl-unsupported-msg? in)
-                (do
-                  (cmd-terminate conn)
-                  (assoc msg :err (err-protocol-violation "Took too long respond after SSL request")))
-                ;; re-read version
-                (read-version in)))
+        (assoc conn
+               :socket ssl-socket
+               :in (DataInputStream. (.getInputStream ssl-socket))
+               :out (DataOutputStream. (.getOutputStream ssl-socket)))))
 
-          :else msg)
+    ;; unsupported - recur and give the client another chance to say hi
+    (do
+      (.writeByte out (byte \N))
+      conn)))
 
-        gsenc-err (when (= :gssenc version) (err-protocol-violation "GSSAPI is not supported"))
-        err (or err gsenc-err)]
-
-    (if err
-      (cmd-startup-err conn err)
+(defn cmd-startup [conn]
+  (loop [{:keys [in] :as conn} conn]
+    (let [{:keys [version msg-in]} (read-version in)]
       (case version
-        :cancel (cmd-startup-cancel conn msg-in)
-        :30 (cmd-startup-pg30 conn msg-in)
-        (cmd-startup-err conn (err-protocol-violation "Unknown protocol version"))))))
+        :gssenc (doto conn
+                  (cmd-startup-err (err-protocol-violation "GSSAPI is not supported")))
+
+        :ssl (recur (upgrade-conn-to-ssl conn))
+
+        :cancel (doto conn
+                  (cmd-startup-cancel msg-in))
+
+        :30 (doto conn
+              (cmd-startup-pg30 msg-in))
+
+        (doto conn
+          (cmd-startup-err (err-protocol-violation "Unknown protocol version")))))))
 
 (defn cmd-enqueue-cmd
   "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue).
@@ -1565,13 +1543,9 @@
 
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
-
 (defn- conn-loop [{:keys [cid, server, ^Socket socket, in, conn-state], !conn-closing? :!closing?, :as conn}]
   (let [{:keys [port], !server-closing? :!closing?} server]
-    (cmd-startup conn)
-
     (loop []
-
       (cond
         ;; the connection is closing right now
         ;; let it close.
@@ -1626,25 +1600,30 @@
   [{:keys [server-state, port] :as server} ^Socket conn-socket, node]
   (let [close-promise (promise)
         {:keys [cid] :as conn} (util/with-close-on-catch [_ conn-socket]
-                                   (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
-                                         in (DataInputStream. (.getInputStream conn-socket))
-                                         out (DataOutputStream. (.getOutputStream conn-socket))
+                                 (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
 
-                                         create-node? (nil? node)
+                                       create-node? (nil? node)
 
-                                         node (or node
-                                                  (do
-                                                    (log/debug "starting in-memory node")
-                                                    (xtn/start-node)))]
-                                     (map->Connection {:cid cid,
-                                                       :server server,
-                                                       :node node
-                                                       :close-node? create-node?
-                                                       :socket conn-socket, :in in, :out out
-                                                       :!closing? (atom false)
-                                                       :conn-state (atom {:close-promise close-promise
-                                                                          :session {:access-mode :read-only
-                                                                                    :clock (:clock @server-state)}})})))]
+                                       node (or node
+                                                (do
+                                                  (log/debug "starting in-memory node")
+                                                  (xtn/start-node)))]
+                                   (try
+                                     (-> (map->Connection {:cid cid,
+                                                           :server server,
+                                                           :node node
+                                                           :close-node? create-node?
+                                                           :socket conn-socket,
+                                                           :in (DataInputStream. (.getInputStream conn-socket)),
+                                                           :out (DataOutputStream. (.getOutputStream conn-socket))
+                                                           :!closing? (atom false)
+                                                           :conn-state (atom {:close-promise close-promise
+                                                                              :session {:access-mode :read-only
+                                                                                        :clock (:clock @server-state)}})})
+                                         (cmd-startup))
+                                     (catch Throwable t
+                                       (log/warn t "error on conn startup")))))]
+
     (try
       (swap! server-state assoc-in [:connections cid] conn)
 
@@ -1731,7 +1710,7 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   ([node] (serve node {}))
-  ([node {:keys [port num-threads drain-wait]
+  ([node {:keys [port num-threads drain-wait ssl-ctx]
           :or {port 5432
                num-threads 42
                drain-wait 5000}}]
@@ -1747,7 +1726,8 @@
                                                                   "server_encoding" "UTF8"
                                                                   "client_encoding" "UTF8"
                                                                   "DateStyle" "ISO"
-                                                                  "integer_datetimes" "on"}})})
+                                                                  "integer_datetimes" "on"}})
+                                :ssl-ctx ssl-ctx})
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
                              (.uncaughtExceptionHandler util/uncaught-exception-handler)
@@ -1759,16 +1739,30 @@
        (.start accept-thread)
        server))))
 
-(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads]}]
+(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads ssl]}]
   (.module config (cond-> (PgwireServer$Factory.)
                     (some? port) (.port port)
-                    (some? num-threads) (.numThreads num-threads))))
+                    (some? num-threads) (.numThreads num-threads)
+                    (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl)))))
+
+(defn- ->ssl-ctx [^Path ks-path, ^String ks-password]
+  (let [ks-password (.toCharArray ks-password)
+        ks (with-open [ks-file (util/open-input-stream ks-path)]
+             (doto (KeyStore/getInstance "JKS")
+               (.load ks-file ks-password)))
+        kmf (doto (KeyManagerFactory/getInstance (KeyManagerFactory/getDefaultAlgorithm))
+              (.init ks ks-password))]
+    (doto (SSLContext/getInstance "TLS")
+      (.init (.getKeyManagers kmf) nil nil))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [node ^PgwireServer$Factory module]
+(defn open-server ^xtdb.pgwire.Server [node ^PgwireServer$Factory module]
   (let [port (.getPort module)
         num-threads (.getNumThreads module)
-        {:keys [port] :as srv} (serve node {:port port, :num-threads num-threads})]
+        {:keys [port] :as srv} (serve node {:port port,
+                                            :num-threads num-threads
+                                            :ssl-ctx (when-let [ssl (.getSsl module)]
+                                                       (->ssl-ctx (.getKeyStore ssl) (.getKeyStorePassword ssl)))})]
     (log/info "PGWire server started on port:" port)
     srv))
 

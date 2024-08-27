@@ -1,6 +1,7 @@
 (ns xtdb.pgwire-test
-  (:require [clojure.data.json :as json]
-            [clojure.data.csv :as csv]
+  (:require [clojure.data.csv :as csv]
+            [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
@@ -17,13 +18,13 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection Types Timestamp)
-           (java.time Clock Instant ZoneId ZoneOffset LocalDate OffsetDateTime LocalDateTime)
+           (java.sql Connection Timestamp Types)
+           (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
-           (org.postgresql.util PGobject PSQLException)
            (org.pg.enums OID)
-           (org.pg.error PGError PGErrorResponse)))
+           (org.pg.error PGError PGErrorResponse)
+           (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -43,7 +44,7 @@
    (when-not *port*
      (set! *server* (->> (merge {:num-threads 1}
                                 opts
-                                {:port 0})
+                                {:port 0, :drain-wait 250})
                          (pgwire/serve *node*)))
      (set! *port* (:port *server*)))))
 
@@ -130,16 +131,6 @@
     (-> (for [idx (range 1 (inc (.getParameterCount md)))]
           (.getParameterTypeName md idx))
         (vec))))
-
-(deftest ssl-test
-  (t/are [sslmode expect] (= expect (try-sslmode sslmode))
-    "disable" :ok
-    "allow" :ok
-    "prefer" :ok
-
-    "require" :unsupported
-    "verify-ca" :unsupported
-    "verify-full" :unsupported))
 
 (defn- try-gssencmode [gssencmode]
   (try
@@ -637,6 +628,32 @@
     (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select 'ping' ping")]
       (is (= 0 exit))
       (is (str/includes? out " ping\n(1 row)")))))
+
+(deftest ssl-test
+  (t/testing "no SSL config supplied"
+    (t/are [sslmode expect] (= expect (try-sslmode sslmode))
+      "disable" :ok
+      "allow" :ok
+      "prefer" :ok
+
+      "require" :unsupported
+      "verify-ca" :unsupported
+      "verify-full" :unsupported))
+
+  (with-open [node (xtn/start-node {:pgwire-server {:port 0
+                                                    :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
+                                                          :keystore-password "password123"}}})]
+    (binding [*port* (.getPgPort node)]
+      (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
+        (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
+        (t/is (= [{:_id 1}]
+                 (jdbc/execute! conn ["SELECT * FROM foo"]))))
+
+      (when (psql-available?)
+        (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo")]
+          (is (= 0 exit))
+          (is (str/includes? out "You are connected"))
+          (is (str/includes? out "SSL connection (protocol: TLSv1.3")))))))
 
 (when (psql-available?)
   (deftest psql-interactive-test
