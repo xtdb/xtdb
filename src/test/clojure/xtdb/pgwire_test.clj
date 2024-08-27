@@ -1723,3 +1723,17 @@
       (t/is (=
              [{"x" "foo", "y" "bar"}]
              (rs->maps (.executeQuery stmt)))))))
+
+(deftest test-show-latest-submitted-tx
+  (with-open [conn (jdbc-conn)]
+    (t/is (= [] (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
+
+    (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
+
+    (t/is (= [{:tx_id 0, :system_time #inst "2020-01-01"}]
+             (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
+
+    (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
+
+    (t/is (= [{:tx_id 1, :system_time #inst "2020-01-02"}]
+             (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))))

@@ -54,6 +54,7 @@ directlyExecutableStatement
     | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
     | 'SET' identifier ( 'TO' | '=' ) literal #SetSessionVariableStatement
     | 'SHOW' showVariable # ShowVariableStatement
+    | 'SHOW' 'LATEST' 'SUBMITTED' 'TRANSACTION' # ShowLatestSubmittedTransactionStatement
     ;
 
 showVariable
@@ -138,6 +139,7 @@ identifier
         | 'COMMITTED' | 'UNCOMMITTED'
         | 'TIMEZONE'
         | 'VERSION'
+        | 'LATEST' | 'SUBMITTED'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -661,7 +663,6 @@ queryTerm
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
     ;
     
-
 orderByClause : 'ORDER' 'BY' sortSpecificationList ;
 
 offsetAndLimit

@@ -39,7 +39,8 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IXtdbInternal
   (^xtdb.query.PreparedQuery prepareQuery [^java.lang.String query, query-opts])
-  (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts]))
+  (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts])
+  (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
 
 (defn- mapify-query-opts-with-defaults [{:keys [basis] :as query-opts} default-tz latest-submitted-tx default-key-fn]
   ;;not all callers care about all defaulted query opts returned here
@@ -141,6 +142,13 @@
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
+
+  (prepareRaQuery [_ plan query-opts]
+    (let [{:keys [after-tx tx-timeout] :as query-opts}
+         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
+     (.awaitTx indexer after-tx tx-timeout)
+
+     (.prepareRaQuery q-src plan wm-src query-opts)))
 
   Closeable
   (close [_]

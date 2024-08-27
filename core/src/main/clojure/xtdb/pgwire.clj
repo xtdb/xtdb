@@ -4,14 +4,14 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.expression :as expr]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.query]
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.expression :as expr])
+            [xtdb.util :as util])
   (:import [clojure.lang PersistentQueue]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang Thread$State]
@@ -23,7 +23,7 @@
            [java.util List Map]
            [java.util.concurrent ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
-           [javax.net.ssl HandshakeCompletedListener KeyManagerFactory SSLContext SSLSocket]
+           [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.antlr SqlVisitor)
@@ -261,7 +261,7 @@
 (defn- statement-head [s]
   (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
-(defn- interpret-sql [sql {:keys [default-tz]}]
+(defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx]}]
   (let [sql-trimmed (trim-sql sql)]
     (or (when (str/blank? sql-trimmed)
           {:statement-type :empty-query})
@@ -369,7 +369,14 @@
                        {:statement-type :query, :query sql, :transformed-query sql-trimmed})
 
                      (visitShowVariableStatement [_ _]
-                       {:statement-type :query, :query sql, :transformed-query sql-trimmed})))
+                       {:statement-type :query, :query sql, :transformed-query sql-trimmed})
+
+                     (visitShowLatestSubmittedTransactionStatement [_ _]
+                       {:statement-type :query, :query sql, :transformed-query sql-trimmed
+                        :ra-plan [:table '[tx_id system_time]
+                                  (if-let [{:keys [tx-id system-time]} latest-submitted-tx]
+                                    [{:tx_id tx-id, :system_time system-time}]
+                                    [])]})))
 
           (catch Exception e
             {:err (err-pg-exception e "error parsing sql")})))))
@@ -1055,8 +1062,7 @@
                        [:sql transformed-query params])
                      dml-buf)]
     (try
-      (some-> (ex-message (:error (xt/execute-tx node tx-ops tx-opts)))
-              err-protocol-violation)
+      (xt/execute-tx node tx-ops tx-opts)
       (catch Throwable e
         (log/debug e "Error on execute-tx")
         (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
@@ -1107,9 +1113,12 @@
           (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
           (cmd-write-msg conn msg-command-complete cmd-complete-msg))
 
-        (if-let [err (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
-          (cmd-send-error conn err)
-          (cmd-write-msg conn msg-command-complete cmd-complete-msg))))))
+        (let [{:keys [error] :as tx-res} (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
+          (if error
+            (cmd-send-error conn (err-protocol-violation (ex-message error)))
+            (do
+              (cmd-write-msg conn msg-command-complete cmd-complete-msg)
+              (swap! conn-state assoc :latest-submitted-tx tx-res))))))))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
@@ -1125,7 +1134,6 @@
             (log/error e)
             (cmd-send-error conn (err-pg-exception e "unexpected server error opening cursor for portal"))
             :failed-to-open-cursor))]
-
 
     (when-not (= result-cursor :failed-to-open-cursor)
       (try
@@ -1179,8 +1187,8 @@
 
 (defn cmd-begin [{:keys [node conn-state] :as conn} tx-opts]
   (swap! conn-state
-         (fn [{:keys [session] :as st}]
-           (let [{:keys [^Clock clock latest-submitted-tx]} session]
+         (fn [{:keys [session latest-submitted-tx] :as st}]
+           (let [{:keys [^Clock clock]} session]
              (-> st
                  (assoc :transaction
                         (-> {:basis {:current-time (.instant clock)
@@ -1202,14 +1210,22 @@
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                             :system-time tx-system-time})]
-        (do
-          (swap! conn-state update :transaction assoc :failed true, :err err)
-          (cmd-send-error conn err))
-        (do
-          (swap! conn-state dissoc :transaction)
-          (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))))
+      (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                                                 :system-time tx-system-time})]
+       
+        (if error
+          (do
+            (swap! conn-state (fn [conn-state]
+                                (-> conn-state
+                                    (update :transaction assoc :failed true, :err error)
+                                    (assoc :latest-submitted-tx tx-res))))
+            (cmd-send-error conn (err-protocol-violation (ex-message error))))
+          (do
+            (swap! conn-state (fn [conn-state]
+                                (-> conn-state
+                                    (dissoc :transaction)
+                                    (assoc :latest-submitted-tx tx-res))))
+            (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
@@ -1324,7 +1340,7 @@
 
 (defn parse
   "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state cid server node] :as conn}
+  [{:keys [conn-state cid server ^IXtdbInternal node] :as conn}
    {:keys [stmt-name query arg-types]}]
 
   (log/trace "Parsing" {:stmt-name stmt-name,
@@ -1333,7 +1349,10 @@
                         :cid cid
                         :arg-types arg-types})
 
-  (let [{:keys [err statement-type] :as stmt} (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))})
+  (let [{:keys [session latest-submitted-tx]} @conn-state
+        {:keys [^Clock clock]} session
+        {:keys [err statement-type] :as stmt} (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
+                                                                    :latest-submitted-tx latest-submitted-tx})
         unsupported-arg-types (remove supported-param-oids arg-types)
         stmt (when-not err (assoc stmt :arg-types arg-types))
         err (or err
@@ -1346,21 +1365,23 @@
       (cmd-send-error conn err)
       (-> (if (= :query statement-type)
             (try
-              (let [{:keys [^Clock clock, latest-submitted-tx] :as session} (:session @conn-state)
+              (let [{:keys [ra-plan, ^String transformed-query]} stmt
                     query-opts {:after-tx latest-submitted-tx
                                 :tx-timeout (Duration/ofSeconds 1)
                                 :param-types (map :col-type param-types)
                                 :default-tz (.getZone clock)}
-                    pq (.prepareQuery ^IXtdbInternal node ^String (:transformed-query stmt) query-opts)]
 
-                {:prepared-stmt (assoc
-                                 stmt
-                                 :prepared-stmt pq
-                                 :fields (map types/field->pg-type (.columnFields pq))
-                                 :param-fields (->> (.paramFields pq)
-                                                    (map types/field->pg-type)
-                                                    (map #(set/rename-keys % {:column-oid :oid}))
-                                                    (resolve-defaulted-params param-types)))
+                    ^PreparedQuery pq (if ra-plan
+                                        (.prepareRaQuery node ra-plan query-opts)
+                                        (.prepareQuery node ^String transformed-query query-opts))]
+
+                {:prepared-stmt (assoc stmt
+                                       :prepared-stmt pq
+                                       :fields (map types/field->pg-type (.columnFields pq))
+                                       :param-fields (->> (.paramFields pq)
+                                                          (map types/field->pg-type)
+                                                          (map #(set/rename-keys % {:column-oid :oid}))
+                                                          (resolve-defaulted-params param-types)))
                  :prep-outcome :success})
 
               (catch InterruptedException e
@@ -1368,15 +1389,14 @@
                 (throw e))
               (catch Throwable e
                 (log/error e)
-                (cmd-send-error
-                 conn
-                 (err-pg-exception e "unexpected server error compiling query"))))
+                (cmd-send-error conn (err-pg-exception e "unexpected server error compiling query"))))
 
             {:prepared-stmt (assoc stmt :param-fields param-types)
              ;; NOTE this means that for DML statments we assume the number and type of params is exactly
              ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
              ;; If a client subsequently binds a different number of params we will send an error msg
              :prep-outcome :success})
+
           (assoc :stmt-name stmt-name)))))
 
 (defn cmd-parse
@@ -1472,11 +1492,9 @@
   (swap! conn-state assoc :protocol :simple)
 
   (let [portal-name ""
-        {:keys [prepared-stmt prep-outcome stmt-name] :as x}
-        (parse conn {:query query :stmt-name ""})]
+        {:keys [prepared-stmt prep-outcome stmt-name]} (parse conn {:query query :stmt-name ""})]
 
     (when (= :success prep-outcome)
-
       (swap! conn-state assoc-in [:prepared-statements stmt-name] prepared-stmt)
 
       (when (= :success (cmd-bind conn {:portal-name portal-name
