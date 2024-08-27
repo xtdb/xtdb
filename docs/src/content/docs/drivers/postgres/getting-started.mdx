@@ -12,9 +12,9 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 <TabCssFix></TabCssFix>
 
-XTDB supports the Postgres wire protocol (often referred to as 'PGWire') as the primary API interface.
+XTDB supports the Postgres wire protocol and is therefore compatible with several Postgres tools. However, XTDB is not designed to support drop-in replacement with Postgres and full compatibility with Postgres is not a goal for XTDB.
 
-Whilst XTDB offers some level of compatibility with Postgres' actual SQL dialect, there are many syntactic and functional capabilities which Postgres offers that are not supported in XTDB, and users should generally always refer to XTDB's [SQL documentation](/reference/main/sql/queries).
+More specifically, whilst XTDB offers some level of compatibility with Postgres' actual SQL dialect, there are many syntactic and functional capabilities which Postgres offers that are not supported in XTDB, and users should generally always refer to XTDB's [SQL documentation](/reference/main/sql/queries).
 
 The advantage of embracing wire protocol compatibility is that many PostgreSQL clients or drivers are able to connect to XTDB seamlessly and run many useful queries without issue. There will always be exceptions and this page will document them as comprehensively as possible.
 
