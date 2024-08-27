@@ -295,9 +295,6 @@ exprPrimary
     | 'LEAST' '(' expr (',' expr)* ')' # LeastFunction
     | 'GREATEST' '(' expr (',' expr)* ')' # GreatestFunction
 
-    // this is _temporary_, until we have period intersections
-    | 'LEASTNH' '(' expr (',' expr)* ')' # LeastNullsHighFunction
-
     // string value functions
     | 'SUBSTRING' '('
         expr

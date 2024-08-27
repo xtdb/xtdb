@@ -1166,13 +1166,6 @@
     (let [nves (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))]
       (list* 'least nves)))
 
-  (visitLeastNullsHighFunction [this ctx]
-    (let [nves (for [^ParserRuleContext expr (.expr ctx)]
-                 (xt/template
-                  (coalesce ~(.accept expr this) xtdb/end-of-time)))]
-      (xt/template
-       (nullif (least ~@nves) xtdb/end-of-time))))
-
   (visitGreatestFunction [this ctx]
     (let [nves (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))]
       (list* 'greatest nves)))
