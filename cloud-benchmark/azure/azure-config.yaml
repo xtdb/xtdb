@@ -17,3 +17,4 @@ storage: !Remote
   localDiskCache: !Env XTDB_LOCAL_DISK_CACHE
 
 metrics: !AzureMonitor
+  instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY
