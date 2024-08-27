@@ -116,6 +116,12 @@ terraform outputs
 
 Ensure that the contents of the files under `kubernetes` match the values of the terraform outputs.
 
+We must also ensure that we have both a namespace and a service account for the benchmark to run under. To create these, you can run the following:
+```
+kubectl create namespace cloud-benchmark
+kubectl create serviceaccount xtdb-service-account --namespace cloud-benchmark 
+```
+
 The config for the deployments/jobs live under `kubernetes` - within these, you can set/configure any of the necessary parameters for running the image on the cluster. When ready to run a single node auctionmark job, run the following command from the base of this directory:
 ```
 kubectl apply -f kubernetes/single-node-auctionmark.yaml
@@ -131,25 +137,69 @@ Trail the logs of the single node run by running:
 kubectl logs job.batch/xtdb-single-node-auctionmark --namespace cloud-benchmark -f
 ```
 
+=== Multinode Benchmarking
+
+Running a multi-node benchmark is similar, though requires a few more steps.
+
+Firstly, update the terraform config to have the correct amount of memory/cpu for the nodes you wish to run. 
+
+* This can be altered with the `kubernetes_vm_size` variable in the `terraform.tfvars` file.
+* You will need to set a `temporary_name_for_rotation` when resizing the node pool.
+
+We will also need to update the node config and push a new image, as we are now using Kafka as the txLog and running multiple nodes - update the contents of the `azure-config.yaml` file:
+
+* Switch the txLog implementation to `kafka`, adding the relevant config/env vars.
+* Set a reasonable maxDiskCachePercentage size depending on number of nodes running.
+
+After this, push a new image to the Azure Container Registry. 
+
+To set up all the necessary kafka pods that will be used/shared by the nodes txLog, run the following:
+
+```
+kubectl apply -f kubernetes/kafka.yaml
+```
+
+This will setup a kafka service the pods can connect to, alongside the persistent volume claim for kafka.
+
+When the kafka pods are ready, you can then deploy the multi-node benchmark by running the following:
+```
+kubectl apply -f kubernetes/multi-node-auctionmark.yaml
+```
+
+
 == Clear up between runs
 
 If you want to totally clear up data between runs, you'll want to do the following:
 
 * Clear up the job/pods
+** Clear up the Kafka deployment (if running a multi-node benchmark)
 * Empty the Azure Storage Blobs Container
 * Delete the Persistent Storage volume used by the TxLog
+** Delete the Persistent Storage volume used by Kafka (if running a multi-node benchmark)
 * Delete the Persistent Storage volume containing the Local Disk Caches
 
-.Clear up the Workload
+.Clear up the XTDB job
 
-To clear up the workload, you can do the following
+To clear up the single node workload, you can run:
 ```bash
 kubectl delete jobs xtdb-single-node-auctionmark --namespace cloud-benchmark
 ```
 
+For the multi-node workload, you can run:
+```bash
+kubectl delete jobs xtdb-multi-node-auctionmark --namespace cloud-benchmark
+```
+
+.Clear up the Kafka deployment
+
+To clear up the Kafka deployment, you can run:
+```bash
+kubectl delete deployment kafka-app --namespace cloud-benchmark
+```
+
 .Command to empty the Azure Storage Blob Container:
 ```bash
-./clear-azure-storage.sh
+./scripts/clear-azure-storage.sh
 ```
 
 .Deleting Persistent Storage Volumes:
@@ -157,6 +207,11 @@ You can remove the Persistent Storage volumes within the google cloud UI, but wi
 ```bash
 kubectl delete pvc xtdb-pvc-log --namespace cloud-benchmark
 kubectl delete pvc xtdb-pvc-local-caches --namespace cloud-benchmark
+# If running a multi-node benchmark with Kafka
+kubectl delete pvc kafka-pvc --namespace cloud-benchmark
 ``` 
 
-NOTE: You do not necessarily _need_ to delete all of the above between runs - you can also change the kubernetes config map to use slightly different directory names (ie, changing bucket prefix, new local-disk-cache directory, etc) to avoid conflicts between runs. 
+There is a helper script to do _all_ of the above, which can be run by:
+```bash
+./scripts/clear-azure-bench.sh
+```
