@@ -160,3 +160,25 @@ kubectl delete pvc xtdb-pvc-local-caches --namespace cloud-benchmark
 ``` 
 
 NOTE: You do not necessarily _need_ to delete all of the above between runs - you can also change the kubernetes config map to use slightly different directory names (ie, changing bucket prefix, new local-disk-cache directory, etc) to avoid conflicts between runs. 
+
+== Monitoring
+
+To see the benchmark metrics you need to supply an application insights instrumentation key via an environment variable in the `single-node-auctionmark.yaml` or `multi-node-auctionmark.yaml` file as below:
+
+```yaml
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  ...
+data:
+  XTDB_AZURE_INSTRUMENTATION_KEY: "<instrumentation-key>"
+  ...
+```
+
+You can retrieve the instrumentation key from terraform state as follows:
+
+```bash
+terraform output -raw insights_instrumentation_key
+```
+
+After a while you should be able to see the metrics in the Azure portal under the Application Insights resource, navigating to Monitoring > Metrics and looking under Metric Namespace > Custom.
