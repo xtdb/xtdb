@@ -1912,3 +1912,17 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
              (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
                                      '[[1 2] [3 4]])))))
+
+(t/deftest show-canned-responses
+  (t/is (= [{:standard-conforming-strings "on"}]
+           (xt/q tu/*node* "SHOW STANDARD_CONFORMING_STRINGS")))
+
+  (t/is (= [{:transaction-isolation "read committed"}]
+           (xt/q tu/*node* "SHOW TRANSACTION ISOLATION LEVEL")))
+
+  (t/is (= [{:version "PostgreSQL 16"}]
+           (xt/q tu/*node* "SELECT pg_catalog.version()")))
+
+  (t/is (= [{:timezone "America/New_York"}]
+           (xt/q tu/*node* "SHOW TIME ZONE"
+                 {:default-tz #xt.time/zone "America/New_York"}))))

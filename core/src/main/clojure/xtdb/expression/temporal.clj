@@ -1568,6 +1568,11 @@
   (assert (integer? precision) "precision must be literal for now")
   (local-time precision))
 
+(defmethod expr/codegen-call [:current_timezone] [_]
+  {:return-type :utf8
+   :->call-code (fn [_]
+                  (expr/emit-value String `(str (.getZone expr/*clock*))))})
+
 (defmethod expr/codegen-call [:abs :num] [{[numeric-type] :arg-types}]
   {:return-type numeric-type
    :->call-code #(do `(Math/abs ~@%))})

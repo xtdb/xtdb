@@ -10,7 +10,8 @@
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.expression :as expr])
   (:import [clojure.lang PersistentQueue]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang Thread$State]
@@ -234,22 +235,6 @@
     :cols []
     :rows (fn [_conn] [])}
 
-   {:q "select pg_catalog.version()"
-    :cols [{:column-name "version" :column-oid oid-varchar}]
-    :rows (fn [_conn] [["PostgreSQL 14.2"]])}
-   {:q "show standard_conforming_strings"
-    :cols [{:column-name "standard_conforming_strings" :column-oid oid-varchar}]
-    :rows (fn [_conn] [["on"]])}
-
-   {:q "show transaction isolation level"
-    :cols [{:column-name "transaction_isolation" :column-oid oid-varchar}]
-    :rows (fn [_conn] [["read committed"]])}
-
-   {:q "show timezone"
-    :cols [{:column-name "TimeZone" :column-oid oid-varchar}]
-    :rows (fn [{:keys [conn-state]}]
-            [[(str (.getZone ^Clock (get-in @conn-state [:session :clock])))]])}
-
    ;; jdbc meta getKeywords (hibernate)
    ;; I think this should work, but it causes some kind of low level issue, likely
    ;; because our query protocol impl is broken, or partially implemented.
@@ -381,6 +366,9 @@
                         :query sql, :transformed-query sql-trimmed})
 
                      (visitQueryExpr [_ _]
+                       {:statement-type :query, :query sql, :transformed-query sql-trimmed})
+
+                     (visitShowVariableStatement [_ _]
                        {:statement-type :query, :query sql, :transformed-query sql-trimmed})))
 
           (catch Exception e
@@ -1722,7 +1710,7 @@
                                 :!closing? (atom false)
                                 :server-state (atom {:clock (Clock/systemDefaultZone)
                                                      :drain-wait drain-wait
-                                                     :parameters {"server_version" "16"
+                                                     :parameters {"server_version" expr/postgres-server-version
                                                                   "server_encoding" "UTF8"
                                                                   "client_encoding" "UTF8"
                                                                   "DateStyle" "ISO"

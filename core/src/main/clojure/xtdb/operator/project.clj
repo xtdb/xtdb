@@ -30,7 +30,9 @@
                                        :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
                                        ;; don't do this for params, because they aren't real cols
                                        ;; the EE handles these through `:extend`
-                                       :rename (s/map-of ::lp/column (s/and ::lp/column #(not (str/starts-with? (name %) "?")))
+                                       :rename (s/map-of ::lp/column (s/and ::lp/column
+                                                                            #(not (str/starts-with? (name %) "?"))
+                                                                            (complement '#{xtdb/postgres-server-version xtdb/end-of-time}))
                                                          :conform-keys true, :count 1)
                                        :extend ::lp/column-expression))
          :relation ::lp/ra-expression))

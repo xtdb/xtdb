@@ -685,6 +685,7 @@
                     " 'SET'"
                     " 'COMMIT'"
                     " 'ROLLBACK'"
+                    " 'SHOW'"
                     " 'SETTING'"
                     " '('"
                     " 'WITH'"
@@ -951,7 +952,7 @@
   (require-server {:num-threads 2})
   (with-open [conn (jdbc-conn)]
 
-    (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "TimeZone")
+    (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "timezone")
           exec #(.execute (.createStatement %1) %2)
           default-tz (str (.getZone (Clock/systemDefaultZone)))]
 
@@ -1204,6 +1205,7 @@
                   " 'SET'"
                   " 'COMMIT'"
                   " 'ROLLBACK'"
+                  " 'SHOW'"
                   " 'SETTING'"
                   " '('"
                   " 'WITH'"
@@ -1558,7 +1560,7 @@
              (send "SET TIME ZONE '+03:21';\n")
              (read)
              (send "SHOW timezone;\n")
-             (t/is (= [["TimeZone"] ["+03:21"]] (read)))
+             (t/is (= [["timezone"] ["+03:21"]] (read)))
 
              (send "SELECT
                     TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,
@@ -1579,7 +1581,7 @@
              (send "SET TIME ZONE 'GMT';\n")
              (read)
              (send "SHOW timezone;\n")
-             (t/is (= [["TimeZone"] ["GMT"]] (read))))
+             (t/is (= [["timezone"] ["GMT"]] (read))))
 
              (send "SELECT
                     TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,

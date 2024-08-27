@@ -14,10 +14,12 @@
            (java.util Collection HashMap HashSet LinkedHashSet List Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
-           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$PostgresVersionFunctionContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
            xtdb.api.tx.TxOps
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
+
+(def ^:const postgres-server-version "16")
 
 (defn- ->insertion-ordered-set [coll]
   (LinkedHashSet. ^Collection (vec coll)))
@@ -703,13 +705,14 @@
                                                            (.accept (.getChild sl-elem 0)
                                                                     (reify SqlVisitor
                                                                       (visitDerivedColumn [_ ctx]
-                                                                        [(let [expr (.accept (.expr ctx)
-                                                                                             (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs, :!aggs !aggs}))]
-                                                                           (if-let [as-clause (.asClause ctx)]
-                                                                             (let [col-name (->col-sym (identifier-sym as-clause))]
-                                                                               (->ProjectedCol {col-name expr} col-name))
+                                                                        (let [expr-ctx (.expr ctx)]
+                                                                          [(let [expr (.accept expr-ctx
+                                                                                               (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs, :!aggs !aggs}))]
+                                                                             (if-let [as-clause (.asClause ctx)]
+                                                                               (let [col-name (->col-sym (identifier-sym as-clause))]
+                                                                                 (->ProjectedCol {col-name expr} col-name))
 
-                                                                             (->projected-col-expr col-idx expr)))])
+                                                                               (->projected-col-expr col-idx expr)))]))
 
                                                                       (visitQualifiedAsterisk [_ ctx]
                                                                         (let [[table-name schema-name] (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
@@ -1649,7 +1652,11 @@
   (visitOffsetRowCount [this ctx]
     (if-let [ps (.parameterSpecification ctx)]
       (.accept ps this)
-      (parse-long (.getText ctx)))))
+      (parse-long (.getText ctx))))
+
+  (visitPostgresVersionFunction [_ _]
+    (-> 'xtdb/postgres-server-version
+        (vary-meta assoc :identifier 'version))))
 
 (defn- wrap-predicates [plan predicate]
   (or (when (list? predicate)
@@ -2351,7 +2358,21 @@
       (->AssertStmt (->QueryExpr (-> [:table [{}]]
                                      (apply-sqs (not-empty (into {} !subqs)))
                                      (wrap-predicates predicate))
-                                 [])))))
+                                 []))))
+
+  (visitShowVariableStatement [this ctx] (.accept (.showVariable ctx) this))
+
+  (visitShowStandardConformingStrings [_ _]
+    (->QueryExpr [:table [{:standard_conforming_strings "on"}]]
+                 [(->col-sym 'standard_conforming_strings)]))
+
+  (visitShowTransactionIsolationLevel [_ _]
+    (->QueryExpr [:table [{:transaction_isolation "read committed"}]]
+                 [(->col-sym 'transaction_isolation)]))
+
+  (visitShowTimeZone [_ _]
+    (->QueryExpr [:table [{:timezone '(current-timezone)}]]
+                 [(->col-sym 'timezone)])))
 
 (defn add-throwing-error-listener [^Recognizer x]
   (doto x
@@ -2498,6 +2519,7 @@
   (visitEraseStmt [_ _])
   (visitAssertStatement [_ _])
   (visitQueryExpr [_ _])
+  (visitShowVariableStatement [_ _])
 
   (visitInsertStatement [this ctx]
     (let [table-name (str (identifier-sym (.tableName ctx)))]

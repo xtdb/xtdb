@@ -53,7 +53,14 @@ directlyExecutableStatement
     | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
     | 'SET' identifier ( 'TO' | '=' ) literal #SetSessionVariableStatement
+    | 'SHOW' showVariable # ShowVariableStatement
     ;
+
+showVariable
+   : 'TRANSACTION' 'ISOLATION' 'LEVEL' # ShowTransactionIsolationLevel
+   | 'STANDARD_CONFORMING_STRINGS' # ShowStandardConformingStrings
+   | ('TIME' 'ZONE' | 'TIMEZONE') # ShowTimeZone
+   ;
 
 settingDefaultTimePeriod : 'SETTING'
    ( (defaultValidTimePeriod (',' defaultSystemTimePeriod)?)
@@ -129,6 +136,8 @@ identifier
         | 'START' | 'END'
         | 'AGE'
         | 'COMMITTED' | 'UNCOMMITTED'
+        | 'TIMEZONE'
+        | 'VERSION'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -262,6 +271,8 @@ exprPrimary
         schemaString ','
         privilegeString
       ')' # HasSchemaPrivilegePredicate
+
+    | (schemaName '.')? 'VERSION' '(' ')' #PostgresVersionFunction
 
     // numeric value functions
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
