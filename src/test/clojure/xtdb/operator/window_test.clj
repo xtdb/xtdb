@@ -84,4 +84,27 @@
                          {:a 2 :b 70}
                          {:a 3 :b 80}
                          {:a 3 :b 90}]]))
-          "partition by + order-by")))
+          "partition by + order-by")
+
+    ;; see min/max comment in window.clj
+    #_(t/is (= #{{:a 1, :b 20, :min-b 20}
+                 {:a 1, :b 10, :min-b 10}
+                 {:a 1, :b 50, :min-b 10}
+                 {:a 1, :b 60, :min-b 10}
+                 {:a 2, :b 30, :min-b 30}
+                 {:a 2, :b 40, :min-b 30}
+                 {:a 2, :b 70, :min-b 30}
+                 {:a 3, :b 80, :min-b 80}
+                 {:a 3, :b 90, :min-b 80}}
+               (run-test '{:partition-cols [a]}
+                         '{min-b (min b)}
+                         [[{:a 1 :b 20}
+                           {:a 1 :b 10}
+                           {:a 2 :b 30}
+                           {:a 2 :b 40}]
+                          [{:a 1 :b 50}
+                           {:a 1 :b 60}
+                           {:a 2 :b 70}
+                           {:a 3 :b 80}
+                           {:a 3 :b 90}]]))
+            "only partition by")))

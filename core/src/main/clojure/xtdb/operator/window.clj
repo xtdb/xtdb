@@ -13,6 +13,7 @@
            (com.carrotsearch.hppc LongLongMap LongLongHashMap)
            (java.io Closeable)
            (java.util LinkedList List Spliterator)
+           (java.util TreeSet)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector)
            (xtdb ICursor)
@@ -85,7 +86,7 @@
             ^LongLongMap group-to-cnt (LongLongHashMap.)]
         (reify
           IWindowFnSpec
-          (aggregate [_ group-mapping sortMapping]
+          (aggregate [_ group-mapping sortMapping _in-rel]
             (let [offset (.getValueCount out-vec)
                   row-count (.getValueCount group-mapping)]
               (.setValueCount out-vec (+ offset row-count))
@@ -96,6 +97,38 @@
           Closeable
           (close [_] (.close out-vec)))))))
 
+
+(comment
+  ;; not using the EE
+  (doseq [op [:min :max]]
+    (defmethod ->window-fn-factory op [{:keys [to-name from-name from-type]}]
+      (reify IWindowFnSpecFactory
+        (getToColumnName [_] to-name)
+        (getToColumnField [_] (types/col-type->field from-type))
+
+        (build [_ al]
+          (let [^IVectorWriter out-vec (-> (types/col-type->field to-name from-type)
+                                           (.createVector al)
+                                           vw/->writer)
+                ^TreeSet min-max-map (TreeSet.)]
+            (reify
+              IWindowFnSpec
+              (aggregate [_ group-mapping sortMapping in-rel]
+                (let [in-vec (.readerForName in-rel (str from-name))
+                      row-count (.getValueCount group-mapping)]
+                  (loop [previous-group nil idx 0]
+                    (when (< idx row-count)
+                      (let [sort-idx (aget sortMapping idx)
+                            group-idx (.get group-mapping sort-idx)]
+                        (when (not= group-idx previous-group)
+                          (.clear min-max-map))
+                        (.add min-max-map (.getObject in-vec sort-idx))
+                        (.writeObject out-vec (if (= op :min) (.first min-max-map) (.last min-max-map)))
+                        (recur group-idx (inc idx)))))
+                  (vw/vec-wtr->rdr out-vec)))
+
+              Closeable
+              (close [_] (.close out-vec)))))))))
 
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
@@ -129,7 +162,7 @@
                    sort-mapping (order-by/sorted-idxs (vr/rel-reader (conj (seq rel-rdr) (vw/vec-wtr->rdr grouping-wtr)))
                                                       (into [[(symbol grouping-vec-name)]] order-specs))]
                (doseq [^IWindowFnSpec window-spec window-specs]
-                 (.aggregate window-spec (.getVector grouping-wtr) sort-mapping))
+                 (.aggregate window-spec (.getVector grouping-wtr) sort-mapping rel-rdr))
 
                (util/with-open [window-cols (->> window-specs
                                                  (mapv #(.aggregate ^IWindowFnSpec % (.getVector grouping-wtr) sort-mapping rel-rdr)))]
@@ -168,8 +201,12 @@
                                                [:nullary agg-opts]
                                                (select-keys agg-opts [:f])
 
-                                               [:unary _agg-opts]
-                                               (throw (UnsupportedOperationException.)))))))
+                                               [:unary agg-opts]
+                                               (let [{:keys [f from-column]} agg-opts]
+                                                 {:f f
+                                                  :from-name from-column
+                                                  :from-type (-> (get fields from-column types/null-field)
+                                                                 types/field->col-type)}))))))
               fields (-> (into fields
                                (->> window-fn-factories
                                     (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory  %)
