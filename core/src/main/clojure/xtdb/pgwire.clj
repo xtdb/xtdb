@@ -1365,24 +1365,33 @@
       (cmd-send-error conn err)
       (-> (if (= :query statement-type)
             (try
-              (let [{:keys [ra-plan, ^String transformed-query]} stmt
-                    query-opts {:after-tx latest-submitted-tx
-                                :tx-timeout (Duration/ofSeconds 1)
-                                :param-types (map :col-type param-types)
-                                :default-tz (.getZone clock)}
+              (let [param-col-types (mapv :col-type param-types)]
+                (if (some nil? param-col-types)
+                  (cmd-send-error conn
+                                  (err-protocol-violation (str "Unsupported param-types in query: "
+                                                               (pr-str (->> param-types
+                                                                            (into [] (comp (filter (comp nil? :col-type))
+                                                                                           (map :typname)
+                                                                                           (distinct))))))))
 
-                    ^PreparedQuery pq (if ra-plan
-                                        (.prepareRaQuery node ra-plan query-opts)
-                                        (.prepareQuery node ^String transformed-query query-opts))]
+                  (let [{:keys [ra-plan, ^String transformed-query]} stmt
+                        query-opts {:after-tx latest-submitted-tx
+                                    :tx-timeout (Duration/ofSeconds 1)
+                                    :param-types param-col-types
+                                    :default-tz (.getZone clock)}
 
-                {:prepared-stmt (assoc stmt
-                                       :prepared-stmt pq
-                                       :fields (map types/field->pg-type (.columnFields pq))
-                                       :param-fields (->> (.paramFields pq)
-                                                          (map types/field->pg-type)
-                                                          (map #(set/rename-keys % {:column-oid :oid}))
-                                                          (resolve-defaulted-params param-types)))
-                 :prep-outcome :success})
+                        ^PreparedQuery pq (if ra-plan
+                                            (.prepareRaQuery node ra-plan query-opts)
+                                            (.prepareQuery node ^String transformed-query query-opts))]
+
+                    {:prepared-stmt (assoc stmt
+                                           :prepared-stmt pq
+                                           :fields (map types/field->pg-type (.columnFields pq))
+                                           :param-fields (->> (.paramFields pq)
+                                                              (map types/field->pg-type)
+                                                              (map #(set/rename-keys % {:column-oid :oid}))
+                                                              (resolve-defaulted-params param-types)))
+                     :prep-outcome :success})))
 
               (catch InterruptedException e
                 (log/trace e "Interrupt thrown compiling query")
