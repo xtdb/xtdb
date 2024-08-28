@@ -319,7 +319,8 @@ exprPrimary
       ')' # OverlayFunction
 
     | 'CURRENT_USER' # CurrentUserFunction
-    | 'CURRENT_SCHEMA' # CurrentSchemaFunction
+    | 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
+    | 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
     | 'CURRENT_DATABASE' # CurrentDatabaseFunction
 
     | currentInstantFunction # CurrentInstantFunction0
