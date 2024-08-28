@@ -47,7 +47,7 @@ object AnySerde : KSerializer<Any> {
         }
     }
 
-    fun JsonElement.toValue(): Any = when (this) {
+    fun JsonElement.toValue(): Any? = when (this) {
         is JsonArray -> map { it.toValue() }
         is JsonObject -> {
             val type = (this["@type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
@@ -83,6 +83,8 @@ object AnySerde : KSerializer<Any> {
                 }
             }
         }
+
+        is JsonNull -> null
 
         is JsonPrimitive -> if (isString) content else booleanOrNull ?: longOrNull ?: doubleOrNull
         ?: throw jsonIAE("unknown-json-primitive", this)
@@ -138,7 +140,8 @@ object AnySerde : KSerializer<Any> {
     }
 
     override fun deserialize(decoder: Decoder) =
-        decoder.decodeSerializableValue(JsonElement.serializer()).toValue()
+        // top-level will be not-null, nested values may not be
+        decoder.decodeSerializableValue(JsonElement.serializer()).toValue()!!
 
     override fun serialize(encoder: Encoder, value: Any) =
         encoder.encodeSerializableValue(JsonElement.serializer(), value.toJsonElement())
