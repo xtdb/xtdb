@@ -11,8 +11,18 @@ describe("connects to XT", function() {
       port: process.env.PG_PORT,
       fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
       types: {
-        int4: { to: 23 },
-	bool: {to: 16}
+        bool: {to: 16},
+        int: {
+          to: 20,
+          from: [23, 20], // int4, int8
+          parse: parseInt
+        },
+        json: {
+          to: 114,
+          from: [114],
+          serialize: JSON.stringify,
+          parse: JSON.parse
+        }
       }
     })
   })
@@ -22,9 +32,9 @@ describe("connects to XT", function() {
   })
 
   it("should return the inserted row", async () => {
-    await sql`INSERT INTO foo (_id, msg) VALUES (${sql.typed.int4(1)}, 'Hello world!')`
+    await sql`INSERT INTO foo (_id, msg) VALUES (${sql.typed.int(1)}, 'Hello world!')`
 
-    assert.deepStrictEqual([...await sql`SELECT * FROM foo`],
+    assert.deepStrictEqual([...await sql`SELECT _id, msg FROM foo`],
                            [{_id: 1, msg: 'Hello world!'}])
   })
 
@@ -35,4 +45,13 @@ describe("connects to XT", function() {
                            [{_id: '1', bool: true}])
   })*/
 
+  it("should round-trip JSON", async () => {
+    await sql`INSERT INTO foo (_id, json) VALUES (${sql.typed.int(2)}, ${sql.typed.json({a: 1})})`
+
+    assert.deepStrictEqual([...await sql`SELECT _id, json FROM foo WHERE _id = 2`],
+                           [{_id: 2, json: {a: 1}}])
+
+    assert.deepStrictEqual([...await sql`SELECT _id, (json).a FROM foo WHERE _id = 2`],
+                           [{_id: 2, a: 1}])
+  })
 })

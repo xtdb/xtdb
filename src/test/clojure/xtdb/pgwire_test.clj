@@ -18,13 +18,14 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection Timestamp Types)
+           (java.sql Connection PreparedStatement ResultSet Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
            (org.pg.enums OID)
            (org.pg.error PGError PGErrorResponse)
-           (org.postgresql.util PGobject PSQLException)))
+           (org.postgresql.util PGobject PSQLException)
+           xtdb.JsonSerde))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -214,38 +215,28 @@
   and properties of their json representation.
 
   :sql the SQL expression that produces the value
-  :json-type the expected Jackson JsonNodeType
 
-  :json (optional) a json string that we expect back from pgwire
   :clj (optional) a clj value that we expect from clojure.data.json/read-str
   :clj-pred (optional) a fn that returns true if the parsed arg (via data.json/read-str) is what we expect"
   (letfn [(string [s]
-            {:sql (str "'" s "'")
-             :json-type JsonNodeType/STRING
-             :clj s})
+            {:sql (str "'" s "'"), :clj s})
+
           (integer [i]
-            {:sql (str i)
-             :json-type JsonNodeType/NUMBER
-             :clj-pred #(= (bigint %) (bigint i))})
+            {:sql (str i), :clj-pred #(= (bigint %) (bigint i))})
+
           (decimal [n & {:keys [add-zero]}]
             (let [d1 (bigdec n)
                   d2 (if add-zero (.setScale d1 1) d1)]
               {:sql (.toPlainString d2)
-               :json-type JsonNodeType/NUMBER
-               :json (str d1)
                :clj-pred #(= (bigdec %) (bigdec n))}))]
 
     ;;JSON NULL is a bit strange to test in that it as an element in an array
     ;;is perhaps one of the only ways its likely to appear in XTDB data.
     ;;as we return a SQL null at the top level and in maps omit the entry entirely
     ;;as ABSENT = NULL
-    [{:sql "ARRAY[NULL]"
-      :json-type JsonNodeType/ARRAY
-      :clj [nil]}
+    [{:sql "ARRAY[NULL]", :clj [nil]}
 
-     {:sql "true"
-      :json-type JsonNodeType/BOOLEAN
-      :clj true}
+     {:sql "true", :clj true}
 
      (string "hello, world")
      (string "")
@@ -272,53 +263,27 @@
 
      ;; dates / times
 
-     {:sql "DATE '2021-12-24'"
-      :json-type JsonNodeType/STRING
-      :clj "2021-12-24"}
-     {:sql "TIMESTAMP '2021-03-04 03:04:11'"
-      :json-type JsonNodeType/STRING
-      :clj "2021-03-04T03:04:11"}
-     {:sql "TIMESTAMP '2021-03-04 03:04:11+02:00'"
-      :json-type JsonNodeType/STRING
-      :clj "2021-03-04T03:04:11+02:00"}
-     {:sql "TIMESTAMP '2021-12-24 11:23:44.003'"
-      :json-type JsonNodeType/STRING
-      :clj "2021-12-24T11:23:44.003"}
+     {:sql "DATE '2021-12-24'", :clj "2021-12-24"}
+     {:sql "TIMESTAMP '2021-03-04 03:04:11'", :clj "2021-03-04T03:04:11"}
+     {:sql "TIMESTAMP '2021-03-04 03:04:11+02:00'", :clj "2021-03-04T03:04:11+02:00"}
+     {:sql "TIMESTAMP '2021-12-24 11:23:44.003'", :clj "2021-12-24T11:23:44.003"}
 
-     {:sql "INTERVAL '1' YEAR"
-      :json-type JsonNodeType/STRING
-      :clj "P12M"}
-     {:sql "INTERVAL '1' MONTH"
-      :json-type JsonNodeType/STRING
-      :clj "P1M"}
+     {:sql "INTERVAL '1' YEAR", :clj "P12M"}
+     {:sql "INTERVAL '1' MONTH", :clj "P1M"}
 
-     {:sql "DATE '2021-12-24' - DATE '2021-12-23'"
-      :json-type JsonNodeType/NUMBER
-      :clj 1}
+     {:sql "DATE '2021-12-24' - DATE '2021-12-23'", :clj 1}
 
      ;; arrays
 
-     {:sql "ARRAY []"
-      :json-type JsonNodeType/ARRAY
-      :clj []}
-
-     {:sql "ARRAY [42]"
-      :json-type JsonNodeType/ARRAY
-      :clj [42]}
-
-     {:sql "ARRAY ['2022-01-02']"
-      :json-type JsonNodeType/ARRAY
-      :json "[\"2022-01-02\"]"
-      :clj ["2022-01-02"]}
-
-     {:sql "ARRAY [ARRAY ['42'], 42, '42']"
-      :json-type JsonNodeType/ARRAY
-      :clj [["42"] 42 "42"]}]))
+     {:sql "ARRAY []", :clj []}
+     {:sql "ARRAY [42]", :clj [42]}
+     {:sql "ARRAY ['2022-01-02']", :clj ["2022-01-02"]}
+     {:sql "ARRAY [ARRAY ['42'], 42, '42']", :clj [["42"] 42 "42"]}]))
 
 (deftest json-representation-test
   (with-open [conn (jdbc-conn)]
-    (doseq [{:keys [json-type, json, sql, clj, clj-pred] :as example} json-representation-examples]
-      (testing (str "SQL expression " sql " should parse to " clj " (" (when json (str json ", ")) json-type ")")
+    (doseq [{:keys [sql, clj, clj-pred]} json-representation-examples]
+      (testing (str "SQL expression " sql " should parse to " clj)
         (with-open [stmt (.prepareStatement conn (format "SELECT a FROM (VALUES (%s), (ARRAY [])) a (a)" sql))]
           ;; empty array to force polymoprhic/json return
           (with-open [rs (.executeQuery stmt)]
@@ -329,18 +294,9 @@
               (is (instance? PGobject (.getObject rs 1)))
               (is (= "json" (.getType ^PGobject (.getObject rs 1)))))
 
-            (testing (str "json parses to " (str json-type))
-              (let [obj-mapper (ObjectMapper.)
-                    json-str (str (.getObject rs 1))
-                    ^JsonNode read-value (.readValue obj-mapper json-str ^Class JsonNode)]
-                ;; use strings to get a better report
-                (is (= (str json-type) (str (.getNodeType read-value))))
-                (when json
-                  (is (= json json-str) "json string should be = to :json"))))
-
             (testing "json parses to expected clj value"
-              (let [clj-value (json/read-str (str (.getObject rs 1)))]
-                (when (contains? example :clj)
+              (let [clj-value (JsonSerde/decode (str (.getObject rs 1)))]
+                (when clj
                   (is (= clj clj-value) "parsed value should = :clj"))
                 (when clj-pred
                   (is (clj-pred clj-value) "parsed value should pass :clj-pred"))))))))))
@@ -1306,6 +1262,38 @@
            res
            (sql "SELECT * FROM foo"))
           "binary"))))
+
+(defn- as-json-param [v]
+  (-> (constantly v)
+      (with-meta {'next.jdbc.prepare/set-parameter
+                  (fn [v, ^PreparedStatement stmt, ^long idx]
+                    (.setObject stmt idx (doto (PGobject.)
+                                           (.setType "json")
+                                           (.setValue (JsonSerde/encode (v))))))})))
+
+(extend-protocol result-set/ReadableColumn
+  PGobject
+  (read-column-by-index [^PGobject obj _rs-meta _idx]
+    (if (= "json" (.getType obj))
+      (JsonSerde/decode (.getValue obj))
+      obj)))
+
+(deftest test-json-type
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO foo (_id, json, scalar) VALUES (0, ?, ?)"
+                         (as-json-param {:a 1 :b 2})
+                         (as-json-param 42)])
+
+    (jdbc/execute! conn ["INSERT INTO foo (_id, json) VALUES (1, ?)"
+                         (as-json-param {:a 2, :c {:d 3}})])
+
+    (t/is (= [{:_id 1, :json {"a" 2, "c" {"d" 3}}, :scalar nil}
+              {:_id 0, :json {"a" 1, "b" 2}, :scalar 42}]
+             (jdbc/execute! conn ["SELECT * FROM foo"])))
+
+    (t/is (= [{:_id 1, :a 2, :b nil, :c {"d" 3}, :d 3}
+              {:_id 0, :a 1, :b 2, :c nil, :d nil}]
+             (jdbc/execute! conn ["SELECT _id, (json).a, (json).b, (json).c, (json).c.d FROM foo"])))))
 
 (deftest test-odbc-queries
   (with-open [conn (jdbc-conn)]
