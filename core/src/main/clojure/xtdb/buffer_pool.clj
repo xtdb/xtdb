@@ -261,6 +261,7 @@
 
       (catch Throwable upload-loop-t
         (try
+          (log/infof "Error caught in upload-multipart-buffers - aborting multipart upload of %s" k)
           @(.abort upload)
           (catch Throwable abort-t
             (.addSuppressed upload-loop-t abort-t)))

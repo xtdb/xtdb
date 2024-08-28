@@ -6,16 +6,10 @@ XTDB 2.x is currently in early access; if you are looking for a stable release o
 
 Major features:
 
-* Immutable - while it's optimised for current-time queries, you can audit the full history of your database at any point, with the need for snapshots.
+* Immutable - XTDB is optimised for current-time queries, but you can audit the full history of your database at any point, without needing snapshots or accessing backups.
 * 'Bitemporal' - all data is accurately versioned as updates are made ('system' time), but it also allows you to separately record and query when that data is, was, or will become valid in your business domain ('valid' time).
 * Dynamic - you don't need to specify schema up-front before documents (rows with arbitrarily nested data) can be inserted.
-* Speaks both SQL and https://docs.xtdb.com/tutorials/introducing-xtql.html[XTQL].
-+
-XTQL is a data-oriented, composable query language - designed from the ground up to be amenable to both hand-written and generated queries.
-It is heavily inspired by the theoretical bases of both Datalog and the relational algebra.
-+
-It also supports SQL, for compatibility with existing experience and tooling.
-Particularly, it supports the bitemporal functionality as specified in the SQL:2011 standard.
+* Speaks both SQL and https://docs.xtdb.com/tutorials/introducing-xtql.html[XTQL] - a full SQL dialect that implements the bitemporal functionality as specified in the SQL:2011 standard, available over both HTTP and the Postgres wire protocol for compatibility with existing experience and Postgres-related tooling.
 * Cloud native - the ACID, columnar engine is built on Apache Arrow and designed for object storage
 * It is written and supported by https://juxt.pro[JUXT^].
 

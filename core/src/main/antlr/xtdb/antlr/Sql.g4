@@ -53,7 +53,15 @@ directlyExecutableStatement
     | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
     | 'SET' identifier ( 'TO' | '=' ) literal #SetSessionVariableStatement
+    | 'SHOW' showVariable # ShowVariableStatement
+    | 'SHOW' 'LATEST' 'SUBMITTED' 'TRANSACTION' # ShowLatestSubmittedTransactionStatement
     ;
+
+showVariable
+   : 'TRANSACTION' 'ISOLATION' 'LEVEL' # ShowTransactionIsolationLevel
+   | 'STANDARD_CONFORMING_STRINGS' # ShowStandardConformingStrings
+   | ('TIME' 'ZONE' | 'TIMEZONE') # ShowTimeZone
+   ;
 
 settingDefaultTimePeriod : 'SETTING'
    ( (defaultValidTimePeriod (',' defaultSystemTimePeriod)?)
@@ -129,6 +137,9 @@ identifier
         | 'START' | 'END'
         | 'AGE'
         | 'COMMITTED' | 'UNCOMMITTED'
+        | 'TIMEZONE'
+        | 'VERSION'
+        | 'LATEST' | 'SUBMITTED'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -263,6 +274,8 @@ exprPrimary
         privilegeString
       ')' # HasSchemaPrivilegePredicate
 
+    | (schemaName '.')? 'VERSION' '(' ')' #PostgresVersionFunction
+
     // numeric value functions
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
     | 'EXTRACT' '(' extractField 'FROM' extractSource ')' # ExtractFunction
@@ -283,9 +296,6 @@ exprPrimary
     | ( 'CEIL' | 'CEILING' ) '(' expr ')' # CeilingFunction
     | 'LEAST' '(' expr (',' expr)* ')' # LeastFunction
     | 'GREATEST' '(' expr (',' expr)* ')' # GreatestFunction
-
-    // this is _temporary_, until we have period intersections
-    | 'LEASTNH' '(' expr (',' expr)* ')' # LeastNullsHighFunction
 
     // string value functions
     | 'SUBSTRING' '('
@@ -653,7 +663,6 @@ queryTerm
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
     ;
     
-
 orderByClause : 'ORDER' 'BY' sortSpecificationList ;
 
 offsetAndLimit

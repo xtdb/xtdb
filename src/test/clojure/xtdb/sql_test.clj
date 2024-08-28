@@ -1563,7 +1563,7 @@
   (t/testing "incorrect number of args on all arg-row"
     (t/is (= (serde/->tx-aborted 2
                                  #xt.time/instant "2020-01-03T00:00:00Z"
-                                 #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "1 arguments were provided and 2 arguments were provided" {:param-count 2, :arg-count 1}])
+                                 #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "Parameter error: 1 provided, 2 expected" {:param-count 2, :arg-count 1}])
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))))
 
   (t/testing "incorrect number of args on one row"
@@ -1912,3 +1912,17 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
              (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
                                      '[[1 2] [3 4]])))))
+
+(t/deftest show-canned-responses
+  (t/is (= [{:standard-conforming-strings "on"}]
+           (xt/q tu/*node* "SHOW STANDARD_CONFORMING_STRINGS")))
+
+  (t/is (= [{:transaction-isolation "read committed"}]
+           (xt/q tu/*node* "SHOW TRANSACTION ISOLATION LEVEL")))
+
+  (t/is (= [{:version "PostgreSQL 16"}]
+           (xt/q tu/*node* "SELECT pg_catalog.version()")))
+
+  (t/is (= [{:timezone "America/New_York"}]
+           (xt/q tu/*node* "SHOW TIME ZONE"
+                 {:default-tz #xt.time/zone "America/New_York"}))))

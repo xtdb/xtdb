@@ -207,6 +207,9 @@
 
 (def write-truncate-open-opts #{:create :write :truncate-existing})
 
+(defn open-input-stream ^java.io.InputStream [^Path path]
+  (Files/newInputStream path (into-array OpenOption [(standard-open-options :read)])))
+
 (defn ->file-channel
   (^java.nio.channels.FileChannel [^Path path]
    (->file-channel path #{:read}))

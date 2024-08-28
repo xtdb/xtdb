@@ -30,10 +30,13 @@
     f)
   :default ::default)
 
+(def postgres-server-version "16")
+
 (defn form->expr [form {:keys [col-types param-types locals] :as env}]
   (cond
     (symbol? form) (cond
                      (= 'xtdb/end-of-time form) {:op :literal, :literal time/end-of-time}
+                     (= 'xtdb/postgres-server-version form) {:op :literal, :literal (str "PostgreSQL " postgres-server-version)}
                      (contains? locals form) {:op :local, :local form}
                      (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
                      (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}

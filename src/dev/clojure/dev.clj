@@ -35,7 +35,9 @@
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
                        :http-server {}
                        :metrics [:prometheus {:port 8080}]
-                       :pgwire-server {:port 5433}
+                       :pgwire-server {:port 5433
+                                       :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
+                                             :keystore-password "password123"}}
                        :flight-sql-server {:port 52358}}}})
 
 (ir/set-prep! (fn [] standalone-config))

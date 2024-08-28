@@ -5,5 +5,6 @@
          (cider-clojure-cli-aliases . ":xtdb:dev")))
  (clojure-mode . ((eval . (define-clojure-indent
                             (match 1)
-                            (for-all 1)))
+                            (for-all 1)
+                            (as-> 2)))
                   (eval . (add-to-list 'cider-test-defining-forms "def-slt-test")))))

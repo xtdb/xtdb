@@ -425,7 +425,7 @@
       (let [arg-count (count (seq args))]
         (if (not= arg-count param-count)
           (throw (err/runtime-err :xtdb.indexer/incorrect-sql-arg-count
-                                  {::err/message (format "%s arguments were provided and %s arguments were provided" arg-count param-count)
+                                  {::err/message (format "Parameter error: %d provided, %d expected" arg-count param-count)
                                    :param-count param-count
                                    :arg-count arg-count}))
           (f (vr/rel-reader (->> args

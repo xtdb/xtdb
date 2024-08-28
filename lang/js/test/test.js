@@ -11,7 +11,8 @@ describe("connects to XT", function() {
       port: process.env.PG_PORT,
       fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
       types: {
-        int: { to: 23 }
+        int4: { to: 23 },
+	bool: {to: 16}
       }
     })
   })
@@ -21,9 +22,17 @@ describe("connects to XT", function() {
   })
 
   it("should return the inserted row", async () => {
-    await sql`INSERT INTO foo (_id, msg) VALUES (${sql.typed.int(1)}, 'Hello world!')`
+    await sql`INSERT INTO foo (_id, msg) VALUES (${sql.typed.int4(1)}, 'Hello world!')`
 
     assert.deepStrictEqual([...await sql`SELECT * FROM foo`],
                            [{_id: 1, msg: 'Hello world!'}])
   })
+
+  /*it("JSON-like types can be roundtripped", async () => {
+    await sql`INSERT INTO foo2 (_id, bool) VALUES (1, ${sql.typed.bool(true)})`
+
+    assert.deepStrictEqual([...await sql`SELECT * FROM foo2`],
+                           [{_id: '1', bool: true}])
+  })*/
+
 })

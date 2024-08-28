@@ -1,6 +1,7 @@
 (ns xtdb.pgwire-test
-  (:require [clojure.data.json :as json]
-            [clojure.data.csv :as csv]
+  (:require [clojure.data.csv :as csv]
+            [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
@@ -17,13 +18,13 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection Types Timestamp)
-           (java.time Clock Instant ZoneId ZoneOffset LocalDate OffsetDateTime LocalDateTime)
+           (java.sql Connection Timestamp Types)
+           (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
-           (org.postgresql.util PGobject PSQLException)
            (org.pg.enums OID)
-           (org.pg.error PGError PGErrorResponse)))
+           (org.pg.error PGError PGErrorResponse)
+           (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -43,7 +44,7 @@
    (when-not *port*
      (set! *server* (->> (merge {:num-threads 1}
                                 opts
-                                {:port 0})
+                                {:port 0, :drain-wait 250})
                          (pgwire/serve *node*)))
      (set! *port* (:port *server*)))))
 
@@ -130,16 +131,6 @@
     (-> (for [idx (range 1 (inc (.getParameterCount md)))]
           (.getParameterTypeName md idx))
         (vec))))
-
-(deftest ssl-test
-  (t/are [sslmode expect] (= expect (try-sslmode sslmode))
-    "disable" :ok
-    "allow" :ok
-    "prefer" :ok
-
-    "require" :unsupported
-    "verify-ca" :unsupported
-    "verify-full" :unsupported))
 
 (defn- try-gssencmode [gssencmode]
   (try
@@ -638,6 +629,32 @@
       (is (= 0 exit))
       (is (str/includes? out " ping\n(1 row)")))))
 
+(deftest ssl-test
+  (t/testing "no SSL config supplied"
+    (t/are [sslmode expect] (= expect (try-sslmode sslmode))
+      "disable" :ok
+      "allow" :ok
+      "prefer" :ok
+
+      "require" :unsupported
+      "verify-ca" :unsupported
+      "verify-full" :unsupported))
+
+  (with-open [node (xtn/start-node {:pgwire-server {:port 0
+                                                    :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
+                                                          :keystore-password "password123"}}})]
+    (binding [*port* (.getPgPort node)]
+      (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
+        (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
+        (t/is (= [{:_id 1}]
+                 (jdbc/execute! conn ["SELECT * FROM foo"]))))
+
+      (when (psql-available?)
+        (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo")]
+          (is (= 0 exit))
+          (is (str/includes? out "You are connected"))
+          (is (str/includes? out "SSL connection (protocol: TLSv1.3")))))))
+
 (when (psql-available?)
   (deftest psql-interactive-test
     (psql-session
@@ -668,6 +685,7 @@
                     " 'SET'"
                     " 'COMMIT'"
                     " 'ROLLBACK'"
+                    " 'SHOW'"
                     " 'SETTING'"
                     " '('"
                     " 'WITH'"
@@ -934,7 +952,7 @@
   (require-server {:num-threads 2})
   (with-open [conn (jdbc-conn)]
 
-    (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "TimeZone")
+    (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "timezone")
           exec #(.execute (.createStatement %1) %2)
           default-tz (str (.getZone (Clock/systemDefaultZone)))]
 
@@ -1187,6 +1205,7 @@
                   " 'SET'"
                   " 'COMMIT'"
                   " 'ROLLBACK'"
+                  " 'SHOW'"
                   " 'SETTING'"
                   " '('"
                   " 'WITH'"
@@ -1220,10 +1239,19 @@
                             (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"]))))))
 
 (deftest runtime-error-commit-test
-  (with-open [conn (jdbc-conn)]
-    (q conn ["START TRANSACTION READ WRITE"])
-    (q conn ["INSERT INTO foo (_id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
-    (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error." (q conn ["COMMIT"])))))
+  (t/testing "in tx"
+    (with-open [conn (jdbc-conn)]
+      (q conn ["START TRANSACTION READ WRITE"])
+      (q conn ["INSERT INTO foo (_id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
+      (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error." (q conn ["COMMIT"])))))
+
+  (t/testing "autocommit #3563"
+    (with-open [conn (jdbc-conn)]
+      (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error."
+                              (q conn ["INSERT INTO foo (_id) VALUES (TRIM(LEADING 'abc' FROM ''))"])))
+
+      (t/is (thrown-with-msg? PSQLException #"ERROR: Parameter error: 0 provided, 2 expected"
+                              (q conn ["INSERT INTO tbl1 (_id, foo) VALUES ($1, $2)"]))))))
 
 (deftest test-column-order
   (with-open [conn (jdbc-conn)]
@@ -1541,7 +1569,7 @@
              (send "SET TIME ZONE '+03:21';\n")
              (read)
              (send "SHOW timezone;\n")
-             (t/is (= [["TimeZone"] ["+03:21"]] (read)))
+             (t/is (= [["timezone"] ["+03:21"]] (read)))
 
              (send "SELECT
                     TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,
@@ -1562,7 +1590,7 @@
              (send "SET TIME ZONE 'GMT';\n")
              (read)
              (send "SHOW timezone;\n")
-             (t/is (= [["TimeZone"] ["GMT"]] (read))))
+             (t/is (= [["timezone"] ["GMT"]] (read))))
 
              (send "SELECT
                     TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,
@@ -1695,3 +1723,27 @@
       (t/is (=
              [{"x" "foo", "y" "bar"}]
              (rs->maps (.executeQuery stmt)))))))
+
+(deftest test-show-latest-submitted-tx
+  (with-open [conn (jdbc-conn)]
+    (t/is (= [] (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
+
+    (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
+
+    (t/is (= [{:tx_id 0, :system_time #inst "2020-01-01"}]
+             (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
+
+    (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
+
+    (t/is (= [{:tx_id 1, :system_time #inst "2020-01-02"}]
+             (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))))
+
+(t/deftest test-psql-bind-3572
+  #_ ; FIXME #3622
+  (when (psql-available?)
+    (psql-session
+     (fn [send read]
+       (send "INSERT INTO tbl1 (_id, foo) VALUES ($1, $2) \\bind 'a' 'b' \\g")
+       (read)
+       (send "SELECT * FROM tbl1 WHERE _id = $1 \\bind 'a' \\g")
+       (t/is (= [["_id" "foo"] ["a" "b"]] (read)))))))
