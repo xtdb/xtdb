@@ -35,9 +35,6 @@ DB_PARAMS = {
 }
 
 async def insert_trades(conn, trades):
-    if not isinstance(trades, list) or len(trades) == 0:
-        raise ValueError("Trades must be a non-empty list")
-
     query = """
     INSERT INTO trades (_id, name, quantity) VALUES (%s, %s, %s)
     """
@@ -46,7 +43,6 @@ async def insert_trades(conn, trades):
         for trade in trades:
             trade_values = (trade["_id"], trade["name"], trade["quantity"])
             await cur.execute(query, trade_values)
-    # support for executeMany is coming soon https://github.com/xtdb/xtdb/issues/3597
 
 async def get_trades_over(conn, quantity):
     query = """
@@ -65,7 +61,7 @@ async def main():
 
     try:
         async with await pg.AsyncConnection.connect(**DB_PARAMS, autocommit=True) as conn:
-            conn.adapters.register_dumper(str, pg.types.string.StrDumperVarchar) // required for now https://github.com/xtdb/xtdb/issues/3589
+            conn.adapters.register_dumper(str, pg.types.string.StrDumperVarchar) # required for now https://github.com/xtdb/xtdb/issues/3589
             await insert_trades(conn, trades)
             print("Trades inserted successfully")
 
