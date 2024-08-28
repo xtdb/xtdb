@@ -1737,3 +1737,13 @@
 
     (t/is (= [{:tx_id 1, :system_time #inst "2020-01-02"}]
              (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))))
+
+(t/deftest test-psql-bind-3572
+  #_ ; FIXME #3622
+  (when (psql-available?)
+    (psql-session
+     (fn [send read]
+       (send "INSERT INTO tbl1 (_id, foo) VALUES ($1, $2) \\bind 'a' 'b' \\g")
+       (read)
+       (send "SELECT * FROM tbl1 WHERE _id = $1 \\bind 'a' \\g")
+       (t/is (= [["_id" "foo"] ["a" "b"]] (read)))))))
