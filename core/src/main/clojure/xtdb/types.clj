@@ -6,7 +6,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           [java.io Writer]
+           [java.io ByteArrayInputStream Writer]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
            [java.time LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
@@ -15,7 +15,7 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            xtdb.api.query.IKeyFn
-           xtdb.Types
+           (xtdb JsonSerde Types)
            [xtdb.vector IVectorReader]
            (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType RegClassType)))
 
@@ -989,7 +989,9 @@
                            (utf8 (if (.getBoolean rdr idx) "t" "f")))}
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
-          :oid 114}})
+          :oid 114
+          :read-text (fn [_env ba]
+                       (JsonSerde/decode (ByteArrayInputStream. ba)))}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
