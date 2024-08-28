@@ -1293,7 +1293,14 @@
 
     (t/is (= [{:_id 1, :a 2, :b nil, :c {"d" 3}, :d 3}
               {:_id 0, :a 1, :b 2, :c nil, :d nil}]
-             (jdbc/execute! conn ["SELECT _id, (json).a, (json).b, (json).c, (json).c.d FROM foo"])))))
+             (jdbc/execute! conn ["SELECT _id, (json).a, (json).b, (json).c, (json).c.d FROM foo"])))
+
+    ;; we don't currently support JSON as a _query_ param-type, because we have to prepare the statement
+    ;; without the dynamic arg values, and we can't know the type of the JSON arg until we see the value
+    (t/is (thrown-with-msg? PSQLException
+                            #"ERROR: Unsupported param-types in query: \[\"json\"\]"
+                            (jdbc/execute! conn ["SELECT * FROM foo WHERE json = ?"
+                                                 (as-json-param {:a 2, :c {:d 3}})])))))
 
 (deftest test-odbc-queries
   (with-open [conn (jdbc-conn)]
