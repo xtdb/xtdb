@@ -40,6 +40,12 @@
                                              :keystore-password "password123"}}
                        :flight-sql-server {:port 52358}}}})
 
+(comment
+  (do
+    (halt)
+    (util/delete-dir (util/->path dev-node-dir))
+    (go)))
+
 (ir/set-prep! (fn [] standalone-config))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
