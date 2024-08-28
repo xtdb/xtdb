@@ -18,3 +18,4 @@ storage: !Remote
   maxDiskCachePercentage: 25
 
 metrics: !AzureMonitor
+  instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY

@@ -68,6 +68,13 @@ resource "azurerm_log_analytics_workspace" "cloud_benchmark" {
   retention_in_days   = 30
 }
 
+resource "azurerm_application_insights" "cloud_benchmark" {
+  name                = "cloud-benchmark-insights"
+  resource_group_name = azurerm_resource_group.cloud_benchmark.name
+  location            = azurerm_resource_group.cloud_benchmark.location
+  application_type    = "web"
+}
+
 # User Assigned Identity & Roles
 resource "azurerm_user_assigned_identity" "cloud_benchmark" {
   location            = azurerm_resource_group.cloud_benchmark.location
@@ -186,4 +193,9 @@ output "service_bus_namespace" {
 
 output "service_bus_topic" {
   value = azurerm_servicebus_topic.cloud_benchmark.name
+}
+
+output "insights_instrumentation_key" {
+  sensitive = true
+  value = azurerm_application_insights.cloud_benchmark.instrumentation_key
 }
